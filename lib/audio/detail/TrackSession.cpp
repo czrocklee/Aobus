@@ -26,9 +26,13 @@ namespace ao::audio::detail
 {
   namespace
   {
-    constexpr std::uint32_t kPrerollTargetMs = 200;
-    constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
-    constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
+    constexpr std::uint32_t kPrerollTargetMs = 500;
+    constexpr std::uint32_t kDecodeHighWatermarkMs = 1500;
+    // MemorySource synchronously decodes the entire track on the caller's thread
+    // during initialization. We disable it by setting the budget to 0 to avoid
+    // blocking the GTK main thread. All tracks now use StreamingSource, which
+    // decodes on a background thread.
+    constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 0;
 
     std::uint64_t bytesPerSecond(Format const& format) noexcept
     {

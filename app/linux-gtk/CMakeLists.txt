@@ -8,6 +8,7 @@ add_custom_command(
             ${CMAKE_CURRENT_SOURCE_DIR}/aobus.gresource.xml
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/aobus.gresource.xml
             ${CMAKE_CURRENT_SOURCE_DIR}/app.css
+            ${CMAKE_CURRENT_SOURCE_DIR}/layout/default_layout.yaml
 )
 set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/resources.c PROPERTIES COMPILE_OPTIONS "-Wno-overlength-strings")
 
@@ -32,7 +33,8 @@ add_library(aobus-gtk-lib STATIC
     track/TrackColumnController.cpp
     track/TrackColumnViewHost.cpp
     track/ColumnVisibilityModel.cpp
-    track/TrackFilterController.cpp
+    track/TrackQuickFilter.cpp
+    track/TrackPresentationButton.cpp
     track/TrackSelectionController.cpp
     track/TrackListAdapter.cpp
     track/TrackListModel.cpp
@@ -86,6 +88,7 @@ add_library(aobus-gtk-lib STATIC
     layout/components/PlaybackComponents.cpp
     layout/components/SemanticComponents.cpp
     layout/components/StatusComponents.cpp
+    layout/components/TrackComponents.cpp
     layout/editor/LayoutEditorDialog.cpp
 )
 

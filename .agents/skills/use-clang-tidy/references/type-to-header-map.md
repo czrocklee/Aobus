@@ -121,7 +121,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | :--- | :--- | :--- |
 | `GDK_KEY_*` (GDK_KEY_Up, GDK_KEY_Escape, etc.) | `<gdk/gdkkeysyms.h>` | C header |
 | `GDK_BUTTON_PRIMARY` / `GDK_BUTTON_SECONDARY` | `<gdk/gdk.h>` | C header, or use umbrella |
-| `GTK_STYLE_PROVIDER_PRIORITY_USER` | `<gtk/gtkstyleprovider.h>` | C header |
+| `GTK_STYLE_PROVIDER_PRIORITY_USER` / `GTK_STYLE_PROVIDER_PRIORITY_APPLICATION` | `<gtk/gtkstyleprovider.h>` | C header |
 | `GTK_INVALID_LIST_POSITION` | `<gtk/gtk.h>` | C macro, NOLINT recommended |
 | `TRUE` / `FALSE` | `<glib/gmacros.h>` | C macros for gboolean |
 | `gssize` / `guint` / `gpointer` | `<glib.h>` | C typedefs, NOLINT recommended |

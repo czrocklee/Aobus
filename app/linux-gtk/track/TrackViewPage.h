@@ -5,7 +5,6 @@
 
 #include "tag/TagPopover.h"
 #include "track/TrackColumnViewHost.h"
-#include "track/TrackFilterController.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
 #include "track/TrackPresentationStore.h"
@@ -19,10 +18,7 @@
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
-#include <gtkmm/entry.h>
-#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
-#include <gtkmm/menubutton.h>
 #include <gtkmm/multiselection.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
@@ -69,7 +65,6 @@ namespace ao::gtk
 
     ListId getListId() const noexcept { return _listId; }
 
-    TrackFilterController& filterController() noexcept { return *_filterController; }
     TrackSelectionController& selectionController() noexcept { return _viewHost->selectionController(); }
 
     // Stable signals forwarded from the current view host generation
@@ -90,29 +85,20 @@ namespace ao::gtk
 
     void setPlayingTrackId(std::optional<TrackId> optPlayingTrackId);
 
+    void applyPresentation(rt::TrackPresentationSpec const& presentation);
+    void applyPresentation(rt::TrackListPresentationSnapshot const& snapshot);
+
   private:
-    void setupPresentationControls();
     void setupHeaderFactory();
     void setupStatusBar();
     void setupColumnViewStyles(Gtk::ColumnView& view);
     void updateSectionHeaders();
-
-    void populatePresentationOptions();
-    void onPresentationSelected(std::string_view presentationId);
-    void onCreateCustomViewClicked();
-    void applyPresentation(rt::TrackPresentationSpec const& presentation);
-    void applyPresentation(rt::TrackListPresentationSnapshot const& snapshot);
 
     void rebuildColumnView(TrackColumnLayout const& layout);
 
     void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row, TrackColumn column, std::string const& newValue);
 
     // Child widgets
-    Gtk::Box _controlsBar{Gtk::Orientation::HORIZONTAL};
-    Gtk::Entry _filterEntry;
-    Gtk::MenuButton _presentationButton;
-    Gtk::Popover _presentationPopover;
-    Gtk::Box _presentationMenuBox{Gtk::Orientation::VERTICAL};
     Gtk::Label _statusLabel;
     Gtk::ScrolledWindow _scrolledWindow;
     Gtk::Popover _contextPopover;
@@ -127,14 +113,13 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
-    rt::TrackPresentationSpec _activePresentation;
     std::optional<TrackId> _optPlayingTrackId;
 
     sigc::scoped_connection _themeRefreshConnection;
+    sigc::scoped_connection _modelChangedConnection;
 
     // Controllers (owned)
     std::unique_ptr<TrackColumnViewHost> _viewHost;
-    std::unique_ptr<TrackFilterController> _filterController;
 
     // Signals
     CreateSmartListRequestedSignal _createSmartListRequested;

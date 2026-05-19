@@ -6,6 +6,7 @@
 #include "layout/components/PlaybackComponents.h"
 #include "layout/components/SemanticComponents.h"
 #include "layout/components/StatusComponents.h"
+#include "layout/components/TrackComponents.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -108,6 +109,7 @@ namespace ao::gtk::layout
     registerContainerComponents(registry);
     registerPlaybackComponents(registry);
     registerSemanticComponents(registry);
+    registerTrackComponents(registry);
     registerStatusComponents(registry);
   }
 

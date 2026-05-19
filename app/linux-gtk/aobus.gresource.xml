@@ -2,5 +2,6 @@
 <gresources>
   <gresource prefix="/org/aobus">
     <file preprocess="xml-stripblanks">app.css</file>
+    <file>layout/default_layout.yaml</file>
   </gresource>
 </gresources>

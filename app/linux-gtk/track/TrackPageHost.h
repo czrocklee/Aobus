@@ -4,6 +4,7 @@
 #pragma once
 
 #include "library_io/PlaylistExporter.h"
+#include "track/TrackViewPage.h"
 #include <ao/Type.h>
 #include <gtkmm/stack.h>
 #include <runtime/AppRuntime.h>
@@ -69,6 +70,7 @@ namespace ao::gtk
     }
 
     Gtk::Stack& stack() { return _stack; }
+    TrackPresentationStore& presentationStore() { return _presentationStore; }
 
     void clear();
     void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
@@ -104,6 +106,7 @@ namespace ao::gtk
     rt::Subscription _focusSub;
     rt::Subscription _viewDestroyedSub;
     rt::Subscription _projectionChangedSub;
+    rt::Subscription _presentationChangedSub;
 
     std::map<rt::ViewId, TrackPageContext> _trackPages;
     std::optional<TrackId> _optPlayingTrackId;

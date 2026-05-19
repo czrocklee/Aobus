@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/document/LayoutDocument.h"
-#include "layout/LayoutConstants.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/document/LayoutYaml.h"
 #include <ao/utility/Log.h>
 
+#include <giomm/resource.h>
+#include <glib.h> // NOLINT(misc-include-cleaner)
+#include <glibmm/error.h>
 #include <yaml-cpp/yaml.h>
 
 #include <charconv>
@@ -14,6 +16,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <type_traits>
 #include <utility>
@@ -188,7 +191,7 @@ namespace YAML
   Node convert<LayoutDocument>::encode(LayoutDocument const& rhs)
   {
     auto node = Node{};
-    node["version"] = rhs.version;
+    node["version"] = static_cast<int>(rhs.version);
     node["root"] = rhs.root;
 
     if (!rhs.templates.empty())
@@ -220,181 +223,34 @@ namespace YAML
 
 namespace ao::gtk::layout
 {
+  namespace
+  {
+    LayoutDocument loadBuiltInLayout()
+    {
+      try
+      {
+        auto const bytes = Gio::Resource::lookup_data_global("/org/aobus/layout/default_layout.yaml");
+        gsize size = 0; // NOLINT(misc-include-cleaner)
+        auto const* const data = static_cast<char const*>(bytes->get_data(size));
+        auto const yamlStr = std::string_view{data, size};
+        auto const node = YAML::Load(std::string{yamlStr});
+        return node.as<LayoutDocument>();
+      }
+      catch (Glib::Error const& e)
+      {
+        APP_LOG_CRITICAL("LayoutDocument: GResource error: {}", e.what());
+        throw;
+      }
+    }
+  } // namespace
+
   LayoutDocument createDefaultLayout()
   {
-    auto doc = LayoutDocument{.version = 1};
-
-    doc.root = LayoutNode{
-      .id = "app-root",
-      .type = "box",
-      .props = {{"orientation", LayoutValue{std::string{"vertical"}}}},
-      .children = {
-        LayoutNode{.type = "app.menuBar"},
-        LayoutNode{.id = "playback-row",
-                   .type = "template",
-                   .props = {{"templateId", LayoutValue{std::string{"playback.defaultBar"}}}},
-                   .layout = {{"cssClasses", LayoutValue{std::string{"ao-playback-strip"}}}}},
-        LayoutNode{.id = "main-paned",
-                   .type = "split",
-                   .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
-                             {"position", LayoutValue{static_cast<std::int64_t>(kDefaultSidebarWidth)}}},
-                   .layout = {{"vexpand", LayoutValue{true}}},
-                   .children = {LayoutNode{.id = "left-sidebar",
-                                           .type = "box",
-                                           .props = {{"orientation", LayoutValue{std::string{"vertical"}}}},
-                                           .children = {LayoutNode{.type = "library.listTree",
-                                                                   .layout = {{"vexpand", LayoutValue{true}}}},
-                                                        LayoutNode{.type = "inspector.coverArt",
-                                                                   .layout = {{"minHeight",
-                                                                               LayoutValue{static_cast<std::int64_t>(
-                                                                                 kMinCoverArtHeight)}}}}}},
-                                LayoutNode{.id = "workspace-with-inspector", .type = "app.workspaceWithInspector"}}},
-        LayoutNode{.type = "box",
-                   .props = {{"orientation", LayoutValue{std::string{"horizontal"}}}},
-                   .layout = {{"cssClasses", LayoutValue{std::string{"ao-status-region"}}}},
-                   .children = {LayoutNode{.type = "template",
-                                           .props = {{"templateId", LayoutValue{std::string{"status.defaultBar"}}}},
-                                           .layout = {{"hexpand", LayoutValue{true}}}}}}}};
-
-    doc.templates = getBuiltInTemplates();
-
-    return doc;
+    return loadBuiltInLayout();
   }
 
   std::map<std::string, LayoutNode, std::less<>> getBuiltInTemplates()
   {
-    auto templates = std::map<std::string, LayoutNode, std::less<>>{};
-
-    // playback.compactControls
-    {
-      auto node = LayoutNode{.type = "box"};
-      node.props["orientation"] = LayoutValue{std::string{"horizontal"}};
-
-      int const compactSpacing = 4;
-      node.props["spacing"] = LayoutValue{static_cast<std::int64_t>(compactSpacing)};
-      node.children.push_back(LayoutNode{.type = "playback.playPauseButton"});
-      node.children.push_back(LayoutNode{.type = "playback.stopButton"});
-      node.children.push_back(LayoutNode{.type = "playback.timeLabel"});
-      templates["playback.compactControls"] = std::move(node);
-    }
-
-    // playback.transportGroup
-    {
-      auto node = LayoutNode{.type = "box"};
-      node.props["orientation"] = LayoutValue{std::string{"horizontal"}};
-      node.props["spacing"] = LayoutValue{static_cast<std::int64_t>(0)};
-      node.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"linked"}};
-      node.layout["halign"] = LayoutValue{std::string{"start"}};
-
-      node.children.push_back(LayoutNode{.type = "playback.playPauseButton"});
-      node.children.push_back(LayoutNode{.type = "playback.stopButton"});
-      templates["playback.transportGroup"] = std::move(node);
-    }
-
-    // playback.defaultBar
-    {
-      auto node = LayoutNode{.type = "box"};
-      node.props["orientation"] = LayoutValue{std::string{"horizontal"}};
-      node.props["spacing"] = LayoutValue{static_cast<std::int64_t>(kSpacingMedium)};
-
-      auto leftGroup = LayoutNode{.type = "box"};
-      leftGroup.props["orientation"] = LayoutValue{std::string{"horizontal"}};
-      leftGroup.props["spacing"] = LayoutValue{static_cast<std::int64_t>(kSpacingMedium)};
-      leftGroup.layout["halign"] = LayoutValue{std::string{"start"}};
-      leftGroup.layout["valign"] = LayoutValue{std::string{"center"}};
-      leftGroup.layout["cssClasses"] = LayoutValue{std::string{"ao-grouping-region"}};
-
-      auto output = LayoutNode{.type = "playback.outputButton"};
-      output.layout["halign"] = LayoutValue{std::string{"start"}};
-      output.layout["valign"] = LayoutValue{std::string{"center"}};
-      leftGroup.children.push_back(std::move(output));
-
-      auto transport = LayoutNode{.type = "template"};
-      transport.props["templateId"] = LayoutValue{std::string{"playback.transportGroup"}};
-      leftGroup.children.push_back(std::move(transport));
-      node.children.push_back(std::move(leftGroup));
-
-      auto seek = LayoutNode{.type = "playback.seekSlider"};
-      seek.layout["hexpand"] = LayoutValue{true};
-      node.children.push_back(std::move(seek));
-
-      auto rightGroup = LayoutNode{.type = "box"};
-      rightGroup.props["orientation"] = LayoutValue{std::string{"horizontal"}};
-      rightGroup.props["spacing"] = LayoutValue{static_cast<std::int64_t>(kSpacingMedium)};
-      rightGroup.layout["halign"] = LayoutValue{std::string{"end"}};
-      rightGroup.layout["valign"] = LayoutValue{std::string{"center"}};
-      rightGroup.layout["cssClasses"] = LayoutValue{std::string{"ao-grouping-region"}};
-      rightGroup.children.push_back(LayoutNode{.type = "playback.timeLabel"});
-      rightGroup.children.push_back(LayoutNode{.type = "playback.volumeControl"});
-
-      node.children.push_back(std::move(rightGroup));
-      templates["playback.defaultBar"] = std::move(node);
-    }
-
-    // library.defaultSidebar
-    {
-      auto node = LayoutNode{.type = "box"};
-      node.props["orientation"] = LayoutValue{std::string{"vertical"}};
-      auto tree = LayoutNode{.type = "library.listTree"};
-      tree.layout["vexpand"] = LayoutValue{true};
-      node.children.push_back(std::move(tree));
-      auto cover = LayoutNode{.type = "inspector.coverArt"};
-      int const coverMinHeight = 50;
-      cover.layout["minHeight"] = LayoutValue{static_cast<std::int64_t>(coverMinHeight)};
-      node.children.push_back(std::move(cover));
-      templates["library.defaultSidebar"] = std::move(node);
-    }
-
-    // inspector.defaultPanel
-    {
-      templates["inspector.defaultPanel"] = LayoutNode{.type = "inspector.sidebar"};
-    }
-
-    // status.defaultBar
-    {
-      auto node = LayoutNode{.type = "box"};
-      node.props["orientation"] = LayoutValue{std::string{"horizontal"}};
-      node.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"ao-status-bar"}};
-      node.layout["hexpand"] = LayoutValue{true};
-
-      node.children.push_back(LayoutNode{.type = "status.playbackDetails"});
-
-      auto spacer1 = LayoutNode{.type = "spacer"};
-      spacer1.layout["hexpand"] = LayoutValue{true};
-      node.children.push_back(std::move(spacer1));
-
-      node.children.push_back(LayoutNode{.type = "status.nowPlaying"});
-
-      auto spacer2 = LayoutNode{.type = "spacer"};
-      spacer2.layout["hexpand"] = LayoutValue{true};
-      node.children.push_back(std::move(spacer2));
-
-      node.children.push_back(LayoutNode{.type = "status.importProgress"});
-      node.children.push_back(LayoutNode{.type = "status.notification"});
-
-      auto sep = LayoutNode{.type = "separator"};
-      sep.props["orientation"] = LayoutValue{std::string{"vertical"}};
-      sep.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"ao-status-separator"}};
-      node.children.push_back(std::move(sep));
-
-      node.children.push_back(LayoutNode{.type = "status.trackCount"});
-
-      templates["status.defaultBar"] = std::move(node);
-    }
-
-    // tracks.defaultWorkspace
-    {
-      auto node = LayoutNode{.type = "tracks.table"};
-      node.props["view"] = LayoutValue{std::string{"workspace.focused"}};
-      node.layout["vexpand"] = LayoutValue{true};
-      templates["tracks.defaultWorkspace"] = std::move(node);
-    }
-
-    // app.defaultLayout
-    {
-      templates["app.defaultLayout"] = LayoutNode{.type = "app.workspaceWithInspector"};
-    }
-
-    return templates;
+    return loadBuiltInLayout().templates;
   }
 } // namespace ao::gtk::layout

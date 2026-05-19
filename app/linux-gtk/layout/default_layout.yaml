@@ -1,0 +1,165 @@
+version: 1
+root:
+  id: app-root
+  type: box
+  props:
+    orientation: vertical
+  children:
+    - type: app.menuBar
+    - id: playback-row
+      type: template
+      props:
+        templateId: playback.defaultBar
+      layout:
+        cssClasses: ao-playback-strip
+    - id: main-paned
+      type: split
+      props:
+        orientation: horizontal
+        position: 330
+      layout:
+        vexpand: true
+      children:
+        - id: left-sidebar
+          type: box
+          props:
+            orientation: vertical
+          children:
+            - type: library.listTree
+              layout:
+                vexpand: true
+            - type: inspector.coverArt
+              layout:
+                minHeight: 50
+        - type: box
+          props:
+            orientation: vertical
+          children:
+            - type: box
+              props:
+                orientation: horizontal
+                spacing: 6
+              layout:
+                cssClasses: ao-track-controls-bar
+              children:
+                - type: track.quickFilter
+                  layout:
+                    hexpand: true
+                - type: track.presentationButton
+            - id: workspace-with-inspector
+              type: app.workspaceWithInspector
+              layout:
+                vexpand: true
+    - type: box
+      props:
+        orientation: horizontal
+      layout:
+        cssClasses: ao-status-region
+      children:
+        - type: template
+          props:
+            templateId: status.defaultBar
+          layout:
+            hexpand: true
+templates:
+  playback.compactControls:
+    type: box
+    props:
+      orientation: horizontal
+      spacing: 4
+    children:
+      - type: playback.playPauseButton
+      - type: playback.stopButton
+      - type: playback.timeLabel
+  playback.transportGroup:
+    type: box
+    props:
+      orientation: horizontal
+      spacing: 0
+    layout:
+      cssClasses: [linked]
+      halign: start
+    children:
+      - type: playback.playPauseButton
+      - type: playback.stopButton
+  playback.defaultBar:
+    type: box
+    props:
+      orientation: horizontal
+      spacing: 6
+    children:
+      - type: box
+        props:
+          orientation: horizontal
+          spacing: 8
+        layout:
+          halign: start
+          valign: center
+          cssClasses: ao-grouping-region
+        children:
+          - type: playback.outputButton
+            layout:
+              halign: start
+              valign: center
+          - type: template
+            props:
+              templateId: playback.transportGroup
+      - type: playback.seekSlider
+        layout:
+          hexpand: true
+      - type: box
+        props:
+          orientation: horizontal
+          spacing: 8
+        layout:
+          halign: end
+          valign: center
+          cssClasses: ao-grouping-region
+        children:
+          - type: playback.timeLabel
+          - type: playback.volumeControl
+  library.defaultSidebar:
+    type: box
+    props:
+      orientation: vertical
+    children:
+      - type: library.listTree
+        layout:
+          vexpand: true
+      - type: inspector.coverArt
+        layout:
+          minHeight: 50
+  inspector.defaultPanel:
+    type: inspector.sidebar
+  status.defaultBar:
+    type: box
+    props:
+      orientation: horizontal
+    layout:
+      cssClasses: ao-status-bar
+      hexpand: true
+    children:
+      - type: status.playbackDetails
+      - type: spacer
+        layout:
+          hexpand: true
+      - type: status.nowPlaying
+      - type: spacer
+        layout:
+          hexpand: true
+      - type: status.importProgress
+      - type: status.notification
+      - type: separator
+        props:
+          orientation: vertical
+        layout:
+          cssClasses: ao-status-separator
+      - type: status.trackCount
+  tracks.defaultWorkspace:
+    type: tracks.table
+    props:
+      view: workspace.focused
+    layout:
+      vexpand: true
+  app.defaultLayout:
+    type: app.workspaceWithInspector

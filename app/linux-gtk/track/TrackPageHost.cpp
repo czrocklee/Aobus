@@ -91,6 +91,25 @@ namespace ao::gtk
         }
 
         ctx->adapter->bindProjection(ev.projection);
+        ctx->page->applyPresentation(ev.projection->presentation());
+
+        if (_optPlayingTrackId)
+        {
+          ctx->page->setPlayingTrackId(_optPlayingTrackId);
+        }
+      });
+
+    _presentationChangedSub = _runtime.views().onPresentationChanged(
+      [this](rt::ViewService::PresentationChanged const& ev)
+      {
+        auto* ctx = find(ev.viewId);
+
+        if (ctx == nullptr || ctx->page == nullptr)
+        {
+          return;
+        }
+
+        ctx->page->applyPresentation(ev.presentation);
 
         if (_optPlayingTrackId)
         {

@@ -114,7 +114,12 @@ add_executable(ao_test_gtk
 )
 
 target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_test_gtk PRIVATE ao aobus-gtk-lib PkgGTKMM Catch2 FakeIt::FakeIt-catch spdlog::spdlog Catch2::Catch2WithMain)
+target_link_libraries(ao_test_gtk PRIVATE aobus-gtk-lib)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_link_libraries(ao_test_gtk PRIVATE -Wl,-u,aobus_get_resource)
+endif()
+
+target_link_libraries(ao_test_gtk PRIVATE ao PkgGTKMM Catch2 FakeIt::FakeIt-catch spdlog::spdlog Catch2::Catch2WithMain)
 add_test(NAME ao_test_gtk COMMAND ao_test_gtk)
 
 # ao_perf_baseline: standalone performance baseline (not run by default in build.sh)

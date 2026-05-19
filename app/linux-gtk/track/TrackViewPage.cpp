@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackViewPage.h"
 #include "app/StyleManager.h"
-#include "layout/LayoutConstants.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnFactoryBuilder.h"
 #include "track/TrackColumnViewHost.h"
-#include "track/TrackCustomViewDialog.h"
-#include "track/TrackFilterController.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
 #include "track/TrackPresentationStore.h"
@@ -18,54 +15,44 @@
 #include <runtime/AppRuntime.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/LibraryMutationService.h>
-#include <runtime/PlaybackService.h>
+#include <runtime/ProjectionTypes.h>
 #include <runtime/StateTypes.h>
 #include <runtime/TrackPresentationPreset.h>
 #include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
 
 #include <gdkmm/rectangle.h>
-#include <glib-object.h>
-#include <glib.h>
+#include <glib/gtypes.h>
 #include <glibmm/main.h>
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
 #include <glibmm/wrap.h>
-#include <gtk/gtk.h>
+#include <gobject/gobject.h>
+#include <gtk/gtkstyleprovider.h>
 #include <gtkmm/box.h>
-#include <gtkmm/button.h>
 #include <gtkmm/columnview.h>
-#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listheader.h>
-#include <gtkmm/menubutton.h>
 #include <gtkmm/multiselection.h>
 #include <gtkmm/object.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/selectionmodel.h>
-#include <gtkmm/separator.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/sorter.h>
 #include <gtkmm/sortlistmodel.h>
-#include <gtkmm/window.h>
 
-#include <algorithm>
 #include <format>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::gtk
 {
   namespace
   {
-    using RowCompareFn = std::move_only_function<int(TrackRowObject const&, TrackRowObject const&)>;
-
     std::string trackCountLabel(::guint count)
     {
       return std::format("{} {}", count, count == 1 ? "track" : "tracks");
@@ -133,22 +120,18 @@ namespace ao::gtk
     , _presentationStore{presentationStore}
     , _runtime{runtime}
     , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
+    , _selectionModel{Gtk::MultiSelection::create(_groupModel)}
     , _columnLayoutModel{columnLayoutModel}
+    , _viewHost{std::make_unique<TrackColumnViewHost>(_adapter, _columnLayoutModel, _selectionModel)}
   {
-    if (_viewId != rt::ViewId{})
-    {
-      auto const& presState = _runtime.views().trackListState(_viewId).presentation;
-      _activePresentation = rt::presentationSpecFromState(presState);
-    }
-
-    _selectionModel = Gtk::MultiSelection::create(_groupModel);
-
-    _filterController = std::make_unique<TrackFilterController>(_runtime.views(), _viewId, _filterEntry);
-    _filterController->setStatusMessageCallback(std::bind_front(&TrackViewPage::setStatusMessage, this));
-    _filterController->setCreateSmartListSignal(&_createSmartListRequested);
-
-    _viewHost = std::make_unique<TrackColumnViewHost>(_adapter, _columnLayoutModel, _selectionModel);
     _viewHost->setupSelectionActivation();
+
+    _modelChangedConnection = _adapter.signalModelChanged().connect(
+      [this]
+      {
+        APP_LOG_INFO("TrackViewPage: Underlying model changed, updating SortListModel...");
+        _groupModel->set_model(_adapter.getModel());
+      });
 
     _themeRefreshConnection = StyleManager::instance().signalRefreshed().connect(
       [this]
@@ -158,7 +141,6 @@ namespace ao::gtk
         _viewHost->columnView().queue_draw();
       });
 
-    setupPresentationControls();
     setupStatusBar();
     setupHeaderFactory();
 
@@ -167,7 +149,16 @@ namespace ao::gtk
       [this](TrackColumnDefinition const& def)
       { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
 
-    _viewHost->columnController().syncLayout();
+    if (_viewId != rt::ViewId{})
+    {
+      auto const& presState = _runtime.views().trackListState(_viewId).presentation;
+      _viewHost->columnController().setLayoutAndApply(
+        trackColumnLayoutForPresentation(rt::presentationSpecFromState(presState)));
+    }
+    else
+    {
+      _viewHost->columnController().syncLayout();
+    }
 
     // 2. Configure decorators and styles
     updateSectionHeaders();
@@ -184,43 +175,11 @@ namespace ao::gtk
     _scrolledWindow.set_hexpand(true);
     _contextPopover.set_parent(_viewHost->columnView());
 
-    append(_controlsBar);
     append(_statusLabel);
     append(_scrolledWindow);
   }
 
   TrackViewPage::~TrackViewPage() = default;
-
-  void TrackViewPage::setupPresentationControls()
-  {
-    _controlsBar.set_spacing(layout::kSpacingLarge);
-    _controlsBar.add_css_class("ao-track-controls-bar");
-
-    _filterEntry.set_placeholder_text("Quick filter or expression...");
-    _filterEntry.set_hexpand(true);
-    _filterEntry.set_icon_from_icon_name("system-search-symbolic", Gtk::Entry::IconPosition::PRIMARY);
-    _filterEntry.set_icon_sensitive(Gtk::Entry::IconPosition::PRIMARY, false);
-    _filterEntry.set_icon_from_icon_name("list-add-symbolic", Gtk::Entry::IconPosition::SECONDARY);
-    _filterEntry.set_icon_activatable(true, Gtk::Entry::IconPosition::SECONDARY);
-    _filterEntry.set_icon_tooltip_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
-    _filterEntry.set_menu_entry_icon_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
-
-    auto const* initialPreset = rt::builtinTrackPresentationPreset(_activePresentation.id);
-
-    _presentationButton.set_label(initialPreset != nullptr ? std::string{initialPreset->label}
-                                                           : std::string{_activePresentation.id});
-    _presentationButton.set_has_frame(true);
-
-    _presentationPopover.set_has_arrow(false);
-    _presentationPopover.set_child(_presentationMenuBox);
-
-    _presentationButton.set_popover(_presentationPopover);
-
-    populatePresentationOptions();
-
-    _controlsBar.append(_filterEntry);
-    _controlsBar.append(_presentationButton);
-  }
 
   void TrackViewPage::setupHeaderFactory()
   {
@@ -251,18 +210,18 @@ namespace ao::gtk
         auto const header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
         auto* const label = header ? dynamic_cast<Gtk::Label*>(header->get_child()) : nullptr;
 
-        if (!header || !label)
+        if (header == nullptr || label == nullptr)
         {
           return;
         }
 
         auto text = std::string{};
 
-        if (auto* proj = _adapter.projection())
+        if (auto* const proj = _adapter.projection())
         {
           auto const start = header->get_start();
 
-          if (auto optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
+          if (auto const optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
           {
             text = proj->groupAt(*optGroupIndex).label;
           }
@@ -277,19 +236,6 @@ namespace ao::gtk
 
         label->set_text(text);
       });
-  }
-
-  void TrackViewPage::updateSectionHeaders()
-  {
-    auto* const proj = _adapter.projection();
-    auto const groupBy = proj != nullptr ? proj->presentation().groupBy : rt::TrackGroupKey::None;
-
-    if (groupBy == rt::TrackGroupKey::None)
-    {
-      _groupModel->set_section_sorter({});
-      _viewHost->columnView().set_header_factory({});
-      return;
-    }
 
     _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_adapter));
     _viewHost->columnView().set_header_factory(_sectionHeaderFactory);
@@ -325,150 +271,8 @@ namespace ao::gtk
     _statusLabel.set_visible(false);
   }
 
-  void TrackViewPage::populatePresentationOptions()
-  {
-    auto* child = _presentationMenuBox.get_first_child();
-
-    while (child != nullptr)
-    {
-      auto* const next = child->get_next_sibling();
-      _presentationMenuBox.remove(*child);
-      child = next;
-    }
-
-    auto const builtins = _presentationStore.builtinPresets();
-
-    for (auto const& preset : builtins)
-    {
-      auto* const btn = Gtk::make_managed<Gtk::Button>(std::string{preset.label});
-      btn->set_halign(Gtk::Align::FILL);
-      btn->set_has_frame(false);
-      btn->get_style_context()->add_class("flat");
-
-      auto const id = preset.spec.id;
-      btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
-
-      _presentationMenuBox.append(*btn);
-    }
-
-    auto const& customs = _presentationStore.customPresentations();
-
-    if (!customs.empty())
-    {
-      auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
-      sep->add_css_class("ao-presentation-menu-separator");
-      _presentationMenuBox.append(*sep);
-
-      for (auto const& custom : customs)
-      {
-        auto* const btn = Gtk::make_managed<Gtk::Button>(custom.label);
-        btn->set_halign(Gtk::Align::FILL);
-        btn->set_has_frame(false);
-        btn->get_style_context()->add_class("flat");
-
-        auto const id = custom.id;
-        btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
-
-        _presentationMenuBox.append(*btn);
-      }
-    }
-
-    auto* const finalSep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
-    finalSep->add_css_class("ao-presentation-menu-separator");
-    _presentationMenuBox.append(*finalSep);
-
-    auto* const createBtn = Gtk::make_managed<Gtk::Button>("Create Custom View...");
-    createBtn->set_halign(Gtk::Align::FILL);
-    createBtn->set_has_frame(false);
-    createBtn->get_style_context()->add_class("flat");
-    createBtn->signal_clicked().connect([this] { onCreateCustomViewClicked(); });
-    _presentationMenuBox.append(*createBtn);
-  }
-
-  void TrackViewPage::onCreateCustomViewClicked()
-  {
-    _presentationPopover.popdown();
-
-    auto* parentWindow = dynamic_cast<Gtk::Window*>(get_root());
-
-    if (parentWindow == nullptr)
-    {
-      return;
-    }
-
-    auto const label = std::string{_presentationButton.get_label()} + " Copy";
-    auto dialog = TrackCustomViewDialog{*parentWindow, _activePresentation, label};
-
-    if (auto const optResult = dialog.runDialog())
-    {
-      if (optResult->deleted)
-      {
-        _presentationStore.removeCustomPresentation(optResult->state.id);
-
-        if (_activePresentation.id == optResult->state.id)
-        {
-          onPresentationSelected(rt::kDefaultTrackPresentationId);
-        }
-      }
-      else
-      {
-        _presentationStore.addCustomPresentation(optResult->state);
-        onPresentationSelected(optResult->state.id);
-      }
-
-      populatePresentationOptions();
-    }
-  }
-
-  void TrackViewPage::onPresentationSelected(std::string_view presentationId)
-  {
-    _presentationPopover.popdown();
-
-    if (_viewId == rt::ViewId{})
-    {
-      return;
-    }
-
-    auto const optSpec = _presentationStore.specForId(presentationId);
-
-    if (!optSpec)
-    {
-      return;
-    }
-
-    auto label = std::string{presentationId};
-
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(presentationId))
-    {
-      label = std::string{builtin->label};
-    }
-    else
-    {
-      auto const& customs = _presentationStore.customPresentations();
-      auto const it = std::ranges::find(customs, presentationId, &CustomTrackPresentationState::id);
-
-      if (it != customs.end())
-      {
-        label = it->label;
-      }
-    }
-
-    _presentationButton.set_label(label);
-
-    auto spec = rt::TrackPresentationSpec{*optSpec};
-    Glib::signal_idle().connect_once(
-      [this, spec = std::move(spec)]
-      {
-        _runtime.views().setPresentation(_viewId, spec);
-        _activePresentation = spec;
-
-        rebuildColumnView(trackColumnLayoutForPresentation(spec));
-      });
-  }
-
   void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentation)
   {
-    _activePresentation = presentation;
     rebuildColumnView(trackColumnLayoutForPresentation(presentation));
   }
 
@@ -489,8 +293,6 @@ namespace ao::gtk
     { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); };
 
     // 1. Detach UI from Model and Tree immediately.
-    // This ensures the old View is "floating" and not receiving signals
-    // before its C++ wrapper is destroyed by the host.
     _viewHost->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
     _scrolledWindow.unset_child();
     _contextPopover.unparent();
@@ -505,7 +307,6 @@ namespace ao::gtk
     _viewHost->columnController().updateTitlePositionVariable();
 
     // 4. Apply decorations (Section Headers)
-    // Must be called after rebuild() so _viewHost->columnView() targets the new generation.
     updateSectionHeaders();
 
     // 5. Restore playing state in the new controller before attaching model
@@ -532,6 +333,22 @@ namespace ao::gtk
       });
 
     _viewHost->setupSelectionActivation();
+  }
+
+  void TrackViewPage::updateSectionHeaders()
+  {
+    auto* const proj = _adapter.projection();
+    auto const groupBy = proj != nullptr ? proj->presentation().groupBy : rt::TrackGroupKey::None;
+
+    if (groupBy == rt::TrackGroupKey::None)
+    {
+      _groupModel->set_section_sorter({});
+      _viewHost->columnView().set_header_factory({});
+      return;
+    }
+
+    _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_adapter));
+    _viewHost->columnView().set_header_factory(_sectionHeaderFactory);
   }
 
   TrackViewPage::CreateSmartListRequestedSignal& TrackViewPage::signalCreateSmartListRequested() noexcept
@@ -601,6 +418,7 @@ namespace ao::gtk
       }
     }
   }
+
   void TrackViewPage::setupColumnViewStyles(Gtk::ColumnView& view)
   {
     view.set_show_row_separators(true);
