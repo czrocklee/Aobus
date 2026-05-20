@@ -10,6 +10,7 @@
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -67,6 +68,8 @@ namespace ao::gtk
 
   private:
     void setupActions();
+    void showTagsPopover(TrackViewPage& page, double posX, double posY);
+    void showPropertiesDialog();
 
     void addTagToCurrentSelection(std::string const& tag);
     void removeTagFromCurrentSelection(std::string const& tag);
@@ -76,6 +79,7 @@ namespace ao::gtk
     Callbacks _callbacks;
     rt::AppRuntime& _runtime;
     TrackRowCache* _dataProvider = nullptr;
+    Gtk::Window& _parent;
 
     // The explicit selection to apply the tags to
     std::optional<TrackSelectionContext> _optActiveSelection;
@@ -86,5 +90,6 @@ namespace ao::gtk
     Glib::RefPtr<Gio::SimpleAction> _trackTagToggleAction;
 
     std::unique_ptr<TagPopover> _tagPopover;
+    std::unique_ptr<Gtk::Popover> _contextPopover;
   };
 } // namespace ao::gtk

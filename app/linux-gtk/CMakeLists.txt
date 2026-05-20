@@ -74,6 +74,7 @@ add_library(aobus-gtk-lib STATIC
     tag/TagEditController.cpp
     tag/TagPopover.cpp
     tag/TagEditor.cpp
+    tag/TrackPropertiesDialog.cpp
 
     portal/ImportExportCoordinator.cpp
     portal/ImportProgressDialog.cpp

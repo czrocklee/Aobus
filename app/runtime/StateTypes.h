@@ -229,9 +229,15 @@ namespace ao::rt
     std::optional<std::string> optTitle{};
     std::optional<std::string> optArtist{};
     std::optional<std::string> optAlbum{};
+    std::optional<std::string> optAlbumArtist{};
     std::optional<std::string> optGenre{};
     std::optional<std::string> optComposer{};
     std::optional<std::string> optWork{};
+    std::optional<std::uint16_t> optYear{};
+    std::optional<std::uint16_t> optTrackNumber{};
+    std::optional<std::uint16_t> optTotalTracks{};
+    std::optional<std::uint16_t> optDiscNumber{};
+    std::optional<std::uint16_t> optTotalDiscs{};
   };
 
   struct UpdateTrackMetadataReply final

@@ -64,6 +64,12 @@ namespace ao::rt
         result.changedHot = true;
       }
 
+      if (patch.optAlbumArtist)
+      {
+        meta.albumArtist(*patch.optAlbumArtist);
+        result.changedHot = true;
+      }
+
       if (patch.optGenre)
       {
         meta.genre(*patch.optGenre);
@@ -79,7 +85,37 @@ namespace ao::rt
       if (patch.optWork)
       {
         meta.work(*patch.optWork);
+        result.changedCold = true;
+      }
+
+      if (patch.optYear)
+      {
+        meta.year(*patch.optYear);
         result.changedHot = true;
+      }
+
+      if (patch.optTrackNumber)
+      {
+        meta.trackNumber(*patch.optTrackNumber);
+        result.changedCold = true;
+      }
+
+      if (patch.optTotalTracks)
+      {
+        meta.totalTracks(*patch.optTotalTracks);
+        result.changedCold = true;
+      }
+
+      if (patch.optDiscNumber)
+      {
+        meta.discNumber(*patch.optDiscNumber);
+        result.changedCold = true;
+      }
+
+      if (patch.optTotalDiscs)
+      {
+        meta.totalDiscs(*patch.optTotalDiscs);
+        result.changedCold = true;
       }
 
       return result;

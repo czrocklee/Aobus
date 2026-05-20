@@ -9,6 +9,7 @@
 #include "runtime/NotificationService.h"
 #include "runtime/StateTypes.h"
 #include "tag/TagPopover.h"
+#include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 
@@ -16,6 +17,11 @@
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
 #include <glibmm/varianttype.h>
+#include <gtkmm/box.h>
+#include <gtkmm/button.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/object.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -30,6 +36,8 @@ namespace ao::gtk
 {
   namespace
   {
+    constexpr int kContextMenuButtonSpacing = 2;
+
     std::string tagChangeStatusMessage(std::size_t trackCount, std::size_t addedCount, std::size_t removedCount)
     {
       auto parts = std::vector<std::string>{};
@@ -60,8 +68,8 @@ namespace ao::gtk
     }
   }
 
-  TagEditController::TagEditController(Gtk::Window& /*parent*/, rt::AppRuntime& runtime, Callbacks callbacks)
-    : _callbacks{std::move(callbacks)}, _runtime{runtime}
+  TagEditController::TagEditController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks)
+    : _callbacks{std::move(callbacks)}, _runtime{runtime}, _parent{parent}
   {
     setupActions();
   }
@@ -113,13 +121,73 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
 
-    _tagPopover = std::make_unique<TagPopover>(_runtime.musicLibrary(), selection.selectedIds);
+    _contextPopover = std::make_unique<Gtk::Popover>();
+    _contextPopover->add_css_class("ao-context-menu");
+
+    auto* const menuBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContextMenuButtonSpacing);
+    menuBox->set_margin_start(2);
+    menuBox->set_margin_end(2);
+    menuBox->set_margin_top(2);
+    menuBox->set_margin_bottom(2);
+
+    auto* const tagsButton = Gtk::make_managed<Gtk::Button>("Edit Tags");
+    tagsButton->set_halign(Gtk::Align::FILL);
+    tagsButton->set_hexpand(true);
+    tagsButton->signal_clicked().connect(
+      [this, &page, posX, posY]
+      {
+        _contextPopover->popdown();
+        showTagsPopover(page, posX, posY);
+      });
+    menuBox->append(*tagsButton);
+
+    auto* const propertiesButton = Gtk::make_managed<Gtk::Button>("Properties");
+    propertiesButton->set_halign(Gtk::Align::FILL);
+    propertiesButton->set_hexpand(true);
+    propertiesButton->signal_clicked().connect(
+      [this]
+      {
+        _contextPopover->popdown();
+        showPropertiesDialog();
+      });
+    menuBox->append(*propertiesButton);
+
+    _contextPopover->set_child(*menuBox);
+    _contextPopover->set_parent(page);
+
+    auto const rect = Gdk::Rectangle{static_cast<int>(posX), static_cast<int>(posY), 1, 1};
+    _contextPopover->set_pointing_to(rect);
+    _contextPopover->popup();
+  }
+
+  void TagEditController::showTagsPopover(TrackViewPage& page, double posX, double posY)
+  {
+    if (!_optActiveSelection)
+    {
+      return;
+    }
+
+    _tagPopover = std::make_unique<TagPopover>(_runtime.musicLibrary(), _optActiveSelection->selectedIds);
 
     _tagPopover->signalTagsChanged().connect(
       [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
     page.showTagPopover(*_tagPopover, posX, posY);
+  }
+
+  void TagEditController::showPropertiesDialog()
+  {
+    if (!_optActiveSelection || _dataProvider == nullptr)
+    {
+      return;
+    }
+
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, _optActiveSelection->selectedIds);
+
+    dialog->signal_response().connect([dialog](int) { dialog->close(); });
+    dialog->present();
   }
 
   void TagEditController::showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)
