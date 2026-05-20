@@ -11,7 +11,7 @@
 #include "runtime/ProjectionTypes.h"
 #include "runtime/SmartListEvaluator.h"
 #include "runtime/SmartListSource.h"
-#include "runtime/StateTypes.h"
+#include "runtime/TrackField.h"
 #include "runtime/TrackPresentationPreset.h"
 #include "runtime/TrackSource.h"
 
@@ -691,7 +691,7 @@ namespace ao::rt::test
     CHECK(snap.effectiveSortBy[0].field == TrackSortField::Genre);
     CHECK(snap.effectiveSortBy[1].field == TrackSortField::Title);
 
-    auto expectedRedundant = std::vector<TrackPresentationField>{TrackPresentationField::Genre};
+    auto expectedRedundant = std::vector<TrackField>{TrackField::Genre};
     CHECK(snap.redundantFields == expectedRedundant);
   }
 

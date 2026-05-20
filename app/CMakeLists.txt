@@ -42,6 +42,8 @@ add_library(app_runtime STATIC
     runtime/SmartListSource.h
     runtime/TrackPresentationPreset.cpp
     runtime/TrackPresentationPreset.h
+    runtime/TrackField.cpp
+    runtime/TrackField.h
     runtime/TrackListProjection.cpp
     runtime/TrackListProjection.h
     runtime/TrackDetailProjection.cpp

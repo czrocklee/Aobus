@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackField.h"
 
-#include "runtime/StateTypes.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -65,11 +65,11 @@ TEST_CASE("songs preset has correct sort and visible fields", "[runtime][present
   CHECK(spec.sortBy[4].field == TrackSortField::Title);
 
   REQUIRE(spec.visibleFields.size() == 5);
-  CHECK(spec.visibleFields[0] == TrackPresentationField::Title);
-  CHECK(spec.visibleFields[1] == TrackPresentationField::Artist);
-  CHECK(spec.visibleFields[2] == TrackPresentationField::Album);
-  CHECK(spec.visibleFields[3] == TrackPresentationField::Duration);
-  CHECK(spec.visibleFields[4] == TrackPresentationField::Tags);
+  CHECK(spec.visibleFields[0] == TrackField::Title);
+  CHECK(spec.visibleFields[1] == TrackField::Artist);
+  CHECK(spec.visibleFields[2] == TrackField::Album);
+  CHECK(spec.visibleFields[3] == TrackField::Duration);
+  CHECK(spec.visibleFields[4] == TrackField::Tags);
 
   CHECK(spec.redundantFields.empty());
 }
@@ -91,15 +91,15 @@ TEST_CASE("albums preset has correct group, sort, and redundant fields", "[runti
   CHECK(spec.sortBy[4].field == TrackSortField::Title);
 
   REQUIRE(spec.visibleFields.size() == 5);
-  CHECK(spec.visibleFields[0] == TrackPresentationField::TrackNumber);
-  CHECK(spec.visibleFields[1] == TrackPresentationField::Title);
-  CHECK(spec.visibleFields[2] == TrackPresentationField::Duration);
-  CHECK(spec.visibleFields[3] == TrackPresentationField::Year);
-  CHECK(spec.visibleFields[4] == TrackPresentationField::Tags);
+  CHECK(spec.visibleFields[0] == TrackField::TrackNumber);
+  CHECK(spec.visibleFields[1] == TrackField::Title);
+  CHECK(spec.visibleFields[2] == TrackField::Duration);
+  CHECK(spec.visibleFields[3] == TrackField::Year);
+  CHECK(spec.visibleFields[4] == TrackField::Tags);
 
   REQUIRE(spec.redundantFields.size() == 2);
-  CHECK(spec.redundantFields[0] == TrackPresentationField::Album);
-  CHECK(spec.redundantFields[1] == TrackPresentationField::AlbumArtist);
+  CHECK(spec.redundantFields[0] == TrackField::Album);
+  CHECK(spec.redundantFields[1] == TrackField::AlbumArtist);
 }
 
 TEST_CASE("classical-composers preset has correct sort and visible fields", "[runtime][presentation]")
@@ -120,15 +120,15 @@ TEST_CASE("classical-composers preset has correct sort and visible fields", "[ru
   CHECK(spec.sortBy[5].field == TrackSortField::Title);
 
   REQUIRE(spec.visibleFields.size() == 6);
-  CHECK(spec.visibleFields[0] == TrackPresentationField::Work);
-  CHECK(spec.visibleFields[1] == TrackPresentationField::Title);
-  CHECK(spec.visibleFields[2] == TrackPresentationField::Artist);
-  CHECK(spec.visibleFields[3] == TrackPresentationField::Album);
-  CHECK(spec.visibleFields[4] == TrackPresentationField::Duration);
-  CHECK(spec.visibleFields[5] == TrackPresentationField::Year);
+  CHECK(spec.visibleFields[0] == TrackField::Work);
+  CHECK(spec.visibleFields[1] == TrackField::Title);
+  CHECK(spec.visibleFields[2] == TrackField::Artist);
+  CHECK(spec.visibleFields[3] == TrackField::Album);
+  CHECK(spec.visibleFields[4] == TrackField::Duration);
+  CHECK(spec.visibleFields[5] == TrackField::Year);
 
   REQUIRE(spec.redundantFields.size() == 1);
-  CHECK(spec.redundantFields[0] == TrackPresentationField::Composer);
+  CHECK(spec.redundantFields[0] == TrackField::Composer);
 }
 
 TEST_CASE("classical-works preset has correct group, sort, and redundant fields", "[runtime][presentation]")
@@ -148,14 +148,14 @@ TEST_CASE("classical-works preset has correct group, sort, and redundant fields"
   CHECK(spec.sortBy[4].field == TrackSortField::Title);
 
   REQUIRE(spec.visibleFields.size() == 5);
-  CHECK(spec.visibleFields[0] == TrackPresentationField::Composer);
-  CHECK(spec.visibleFields[1] == TrackPresentationField::Title);
-  CHECK(spec.visibleFields[2] == TrackPresentationField::Artist);
-  CHECK(spec.visibleFields[3] == TrackPresentationField::Album);
-  CHECK(spec.visibleFields[4] == TrackPresentationField::Duration);
+  CHECK(spec.visibleFields[0] == TrackField::Composer);
+  CHECK(spec.visibleFields[1] == TrackField::Title);
+  CHECK(spec.visibleFields[2] == TrackField::Artist);
+  CHECK(spec.visibleFields[3] == TrackField::Album);
+  CHECK(spec.visibleFields[4] == TrackField::Duration);
 
   REQUIRE(spec.redundantFields.size() == 1);
-  CHECK(spec.redundantFields[0] == TrackPresentationField::Work);
+  CHECK(spec.redundantFields[0] == TrackField::Work);
 }
 
 TEST_CASE("tagging preset has all curation columns visible", "[runtime][presentation]")
@@ -168,12 +168,12 @@ TEST_CASE("tagging preset has all curation columns visible", "[runtime][presenta
   REQUIRE(spec.groupBy == TrackGroupKey::None);
 
   REQUIRE(spec.visibleFields.size() == 6);
-  CHECK(spec.visibleFields[0] == TrackPresentationField::Title);
-  CHECK(spec.visibleFields[1] == TrackPresentationField::Artist);
-  CHECK(spec.visibleFields[2] == TrackPresentationField::Album);
-  CHECK(spec.visibleFields[3] == TrackPresentationField::Genre);
-  CHECK(spec.visibleFields[4] == TrackPresentationField::Year);
-  CHECK(spec.visibleFields[5] == TrackPresentationField::Tags);
+  CHECK(spec.visibleFields[0] == TrackField::Title);
+  CHECK(spec.visibleFields[1] == TrackField::Artist);
+  CHECK(spec.visibleFields[2] == TrackField::Album);
+  CHECK(spec.visibleFields[3] == TrackField::Genre);
+  CHECK(spec.visibleFields[4] == TrackField::Year);
+  CHECK(spec.visibleFields[5] == TrackField::Tags);
 
   CHECK(spec.redundantFields.empty());
 }
@@ -184,20 +184,20 @@ TEST_CASE("normalizeTrackPresentationSpec removes duplicate visible fields", "[r
     .id = "test",
     .visibleFields =
       {
-        TrackPresentationField::Title,
-        TrackPresentationField::Artist,
-        TrackPresentationField::Title,
-        TrackPresentationField::Album,
-        TrackPresentationField::Artist,
+        TrackField::Title,
+        TrackField::Artist,
+        TrackField::Title,
+        TrackField::Album,
+        TrackField::Artist,
       },
   };
 
   auto normalized = normalizeTrackPresentationSpec(spec);
 
   REQUIRE(normalized.visibleFields.size() == 3);
-  CHECK(normalized.visibleFields[0] == TrackPresentationField::Title);
-  CHECK(normalized.visibleFields[1] == TrackPresentationField::Artist);
-  CHECK(normalized.visibleFields[2] == TrackPresentationField::Album);
+  CHECK(normalized.visibleFields[0] == TrackField::Title);
+  CHECK(normalized.visibleFields[1] == TrackField::Artist);
+  CHECK(normalized.visibleFields[2] == TrackField::Album);
 }
 
 TEST_CASE("normalizeTrackPresentationSpec removes duplicate redundant fields", "[runtime][presentation]")
@@ -206,17 +206,17 @@ TEST_CASE("normalizeTrackPresentationSpec removes duplicate redundant fields", "
     .id = "test",
     .redundantFields =
       {
-        TrackPresentationField::Album,
-        TrackPresentationField::AlbumArtist,
-        TrackPresentationField::Album,
+        TrackField::Album,
+        TrackField::AlbumArtist,
+        TrackField::Album,
       },
   };
 
   auto normalized = normalizeTrackPresentationSpec(spec);
 
   REQUIRE(normalized.redundantFields.size() == 2);
-  CHECK(normalized.redundantFields[0] == TrackPresentationField::Album);
-  CHECK(normalized.redundantFields[1] == TrackPresentationField::AlbumArtist);
+  CHECK(normalized.redundantFields[0] == TrackField::Album);
+  CHECK(normalized.redundantFields[1] == TrackField::AlbumArtist);
 }
 
 TEST_CASE("normalizeTrackPresentationSpec defaults empty id to songs", "[runtime][presentation]")
@@ -228,36 +228,36 @@ TEST_CASE("normalizeTrackPresentationSpec defaults empty id to songs", "[runtime
   CHECK(normalized.id == "songs");
 }
 
-TEST_CASE("trackPresentationFieldId round-trips through trackPresentationFieldFromId", "[runtime][presentation]")
+TEST_CASE("trackFieldId round-trips through trackFieldFromId", "[runtime][presentation]")
 {
   auto const fields = {
-    TrackPresentationField::Title,
-    TrackPresentationField::Artist,
-    TrackPresentationField::Album,
-    TrackPresentationField::AlbumArtist,
-    TrackPresentationField::Genre,
-    TrackPresentationField::Composer,
-    TrackPresentationField::Work,
-    TrackPresentationField::Year,
-    TrackPresentationField::DiscNumber,
-    TrackPresentationField::TrackNumber,
-    TrackPresentationField::Duration,
-    TrackPresentationField::Tags,
+    TrackField::Title,
+    TrackField::Artist,
+    TrackField::Album,
+    TrackField::AlbumArtist,
+    TrackField::Genre,
+    TrackField::Composer,
+    TrackField::Work,
+    TrackField::Year,
+    TrackField::DiscNumber,
+    TrackField::TrackNumber,
+    TrackField::Duration,
+    TrackField::Tags,
   };
 
   for (auto const field : fields)
   {
-    auto const id = trackPresentationFieldId(field);
-    auto const optParsed = trackPresentationFieldFromId(id);
+    auto const id = trackFieldId(field);
+    auto const optParsed = trackFieldFromId(id);
 
     REQUIRE(optParsed.has_value());
     CHECK(*optParsed == field);
   }
 }
 
-TEST_CASE("trackPresentationFieldFromId returns nullopt for unknown id", "[runtime][presentation]")
+TEST_CASE("trackFieldFromId returns nullopt for unknown id", "[runtime][presentation]")
 {
-  CHECK(!trackPresentationFieldFromId("bpm").has_value());
-  CHECK(!trackPresentationFieldFromId("").has_value());
-  CHECK(!trackPresentationFieldFromId("unknown-field").has_value());
+  CHECK(!trackFieldFromId("bpm").has_value());
+  CHECK(!trackFieldFromId("").has_value());
+  CHECK(!trackFieldFromId("unknown-field").has_value());
 }

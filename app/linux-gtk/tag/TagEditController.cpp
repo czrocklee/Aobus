@@ -183,11 +183,8 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
+    Gtk::make_managed<TrackPropertiesDialog>(
       _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, _optActiveSelection->selectedIds);
-
-    dialog->signal_response().connect([dialog](int) { dialog->close(); });
-    dialog->present();
   }
 
   void TagEditController::showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)

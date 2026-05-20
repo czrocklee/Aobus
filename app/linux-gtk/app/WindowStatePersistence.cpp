@@ -6,104 +6,66 @@
 #include "UIState.h"
 #include "ao/utility/Log.h"
 #include "runtime/ConfigStore.h"
+#include "runtime/TrackField.h"
 #include "track/TrackPresentation.h"
 
 #include <gtkmm/window.h>
 
 #include <algorithm>
-#include <optional>
-#include <utility>
-#include <vector>
+#include <cstddef>
+#include <string>
 
 namespace ao::gtk
 {
   namespace
   {
-    TrackColumnLayout trackColumnLayoutFromState(TrackViewState const& state)
+    TrackColumnViewState viewStateFromPersisted(TrackViewState const& state)
     {
-      auto layout = defaultTrackColumnLayout();
-      auto ordered = std::vector<TrackColumnState>{};
-      ordered.reserve(layout.columns.size());
+      auto result = TrackColumnViewState{};
 
-      auto takeColumn = [&layout](TrackColumn column) -> std::optional<TrackColumnState>
+      for (auto const& [columnId, width] : state.columnWidths)
       {
-        auto const it = std::ranges::find(layout.columns, column, &TrackColumnState::column);
-
-        if (it == layout.columns.end())
+        if (auto const optField = rt::trackFieldFromId(columnId))
         {
-          return std::nullopt;
-        }
-
-        return *it;
-      };
-
-      for (auto const& id : state.columnOrder)
-      {
-        if (auto const optColumn = trackColumnFromId(id))
-        {
-          if (std::ranges::find(ordered, *optColumn, &TrackColumnState::column) != ordered.end())
-          {
-            continue;
-          }
-
-          if (auto optStateEntry = takeColumn(*optColumn))
-          {
-            ordered.push_back(*optStateEntry);
-          }
+          result.widths.at(static_cast<std::size_t>(*optField)) = width;
         }
       }
 
-      for (auto const& entry : layout.columns)
+      for (auto const& columnId : state.columnOrder)
       {
-        if (std::ranges::find(ordered, entry.column, &TrackColumnState::column) == ordered.end())
+        if (auto const optField = rt::trackFieldFromId(columnId);
+            optField && !std::ranges::contains(result.fieldOrder, *optField))
         {
-          ordered.push_back(entry);
+          result.fieldOrder.push_back(*optField);
         }
       }
 
-      layout.columns = std::move(ordered);
-
-      for (auto& entry : layout.columns)
-      {
-        auto const columnId = std::string{trackColumnId(entry.column)};
-
-        if (std::ranges::contains(state.hiddenColumns, columnId))
-        {
-          entry.visible = false;
-        }
-
-        if (auto const width = state.columnWidths.find(columnId); width != state.columnWidths.end())
-        {
-          entry.width = width->second;
-        }
-      }
-
-      return normalizeTrackColumnLayout(layout);
+      return result;
     }
 
-    TrackViewState trackViewStateFromLayout(TrackColumnLayout const& layout)
+    TrackViewState viewStateToPersisted(TrackColumnViewState const& state)
     {
-      auto const normalized = normalizeTrackColumnLayout(layout);
-      auto state = TrackViewState{};
+      auto result = TrackViewState{};
 
-      for (auto const& entry : normalized.columns)
+      for (auto const& def : rt::trackFieldDefinitions())
       {
-        auto const columnId = std::string{trackColumnId(entry.column)};
-        state.columnOrder.push_back(columnId);
+        auto const width = state.widths.at(static_cast<std::size_t>(def.field));
 
-        if (!entry.visible)
+        if (width != 0)
         {
-          state.hiddenColumns.push_back(columnId);
-        }
-
-        if (auto const def = std::ranges::find(trackColumnDefinitions(), entry.column, &TrackColumnDefinition::column);
-            def != trackColumnDefinitions().end() && entry.width != def->defaultWidth)
-        {
-          state.columnWidths.insert_or_assign(columnId, entry.width);
+          result.columnWidths.insert_or_assign(std::string{def.id}, width);
         }
       }
 
-      return state;
+      for (auto const field : state.fieldOrder)
+      {
+        if (auto const* def = rt::trackFieldDefinition(field); def != nullptr)
+        {
+          result.columnOrder.emplace_back(def->id);
+        }
+      }
+
+      return result;
     }
   } // namespace
 
@@ -157,11 +119,11 @@ namespace ao::gtk
       APP_LOG_DEBUG("Failed to load track_view config: {}", res.error().message);
     }
 
-    model.setLayout(trackColumnLayoutFromState(tvs));
+    model.setState(viewStateFromPersisted(tvs));
   }
 
   void WindowStatePersistence::saveTrackView(TrackColumnLayoutModel const& model) const
   {
-    _configStore.save("track_view", trackViewStateFromLayout(model.layout()));
+    _configStore.save("track_view", viewStateToPersisted(model.state()));
   }
 } // namespace ao::gtk

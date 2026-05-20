@@ -6,7 +6,7 @@
 #include "ao/utility/Log.h"
 #include "app/UIState.h"
 #include "runtime/ConfigStore.h"
-#include "runtime/StateTypes.h"
+#include "runtime/TrackField.h"
 #include "runtime/TrackPresentationPreset.h"
 
 #include <algorithm>
@@ -38,15 +38,13 @@ namespace ao::gtk
                     }) |
                   std::ranges::to<std::vector>();
 
-    spec.visibleFields =
-      state.visibleFields |
-      std::views::transform([](auto field) { return static_cast<rt::TrackPresentationField>(field); }) |
-      std::ranges::to<std::vector>();
+    spec.visibleFields = state.visibleFields |
+                         std::views::transform([](auto field) { return static_cast<rt::TrackField>(field); }) |
+                         std::ranges::to<std::vector>();
 
-    spec.redundantFields =
-      state.redundantFields |
-      std::views::transform([](auto field) { return static_cast<rt::TrackPresentationField>(field); }) |
-      std::ranges::to<std::vector>();
+    spec.redundantFields = state.redundantFields |
+                           std::views::transform([](auto field) { return static_cast<rt::TrackField>(field); }) |
+                           std::ranges::to<std::vector>();
 
     return spec;
   }

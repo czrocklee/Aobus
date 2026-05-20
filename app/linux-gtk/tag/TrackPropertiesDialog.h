@@ -4,19 +4,18 @@
 #pragma once
 
 #include "ao/Type.h"
+#include "runtime/TrackField.h"
+#include "track/TrackFieldUi.h"
 
 #include <gtkmm/box.h>
 #include <gtkmm/dialog.h>
-#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/label.h>
 #include <gtkmm/notebook.h>
 #include <gtkmm/scrolledwindow.h>
-#include <gtkmm/spinbutton.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
-#include <cstdint>
-#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::library
@@ -49,40 +48,26 @@ namespace ao::gtk
     TrackPropertiesDialog& operator=(TrackPropertiesDialog&&) = delete;
 
   private:
-    struct AggregatedFields final
+    struct FieldEditor final
     {
-      std::string title{};
-      std::string artist{};
-      std::string album{};
-      std::string albumArtist{};
-      std::string genre{};
-      std::string composer{};
-      std::string work{};
-      std::uint16_t year = 0;
-      std::uint16_t trackNumber = 0;
-      std::uint16_t totalTracks = 0;
-      std::uint16_t discNumber = 0;
-      std::uint16_t totalDiscs = 0;
-      bool titleMixed = false;
-      bool artistMixed = false;
-      bool albumMixed = false;
-      bool albumArtistMixed = false;
-      bool genreMixed = false;
-      bool composerMixed = false;
-      bool workMixed = false;
-      bool yearMixed = false;
-      bool trackNumberMixed = false;
-      bool totalTracksMixed = false;
-      bool discNumberMixed = false;
-      bool totalDiscsMixed = false;
+      rt::TrackField field;
+      Gtk::Widget* widget = nullptr;
+      bool mixed = false;
+      detail::TrackFieldRawValue originalRawValue{};
     };
 
     void setupUi();
     void setupMetadataTab();
     void setupPropertiesTab();
     void loadData();
+    void loadFirstTrack(library::TrackView const& view, library::DictionaryStore const& dictionary);
+    void loadSubsequentTrack(library::TrackView const& view, library::DictionaryStore const& dictionary);
     void onSave();
-    void applyMixedPlaceholder(Gtk::Entry& entry, bool mixed);
+
+    Gtk::Widget* createEditorWidget(rt::TrackField field);
+    Gtk::Widget* createReadonlyWidget(rt::TrackField field);
+    void setWidgetValue(rt::TrackField field, Gtk::Widget* widget, std::string_view value);
+    void setEditorMixed(rt::TrackField field, Gtk::Widget* widget);
 
     library::MusicLibrary& _library;
     rt::LibraryMutationService& _mutation;
@@ -98,29 +83,7 @@ namespace ao::gtk
     Gtk::ScrolledWindow _propertiesScroll;
     Gtk::Box _propertiesBox{Gtk::Orientation::VERTICAL};
 
-    Gtk::Entry _titleEntry;
-    Gtk::Entry _artistEntry;
-    Gtk::Entry _albumArtistEntry;
-    Gtk::Entry _albumEntry;
-    Gtk::Entry _genreEntry;
-    Gtk::Entry _composerEntry;
-    Gtk::Entry _workEntry;
-    Gtk::SpinButton _yearSpin;
-    Gtk::SpinButton _trackNumberSpin;
-    Gtk::SpinButton _totalTracksSpin;
-    Gtk::SpinButton _discNumberSpin;
-    Gtk::SpinButton _totalDiscsSpin;
-
-    Gtk::Label _filePathLabel;
-    Gtk::Label _codecLabel;
-    Gtk::Label _sampleRateLabel;
-    Gtk::Label _channelsLabel;
-    Gtk::Label _bitDepthLabel;
-    Gtk::Label _bitrateLabel;
-    Gtk::Label _durationLabel;
-    Gtk::Label _fileSizeLabel;
-    Gtk::Label _modifiedLabel;
-
-    AggregatedFields _fields{};
+    std::vector<FieldEditor> _editors;
+    std::vector<FieldEditor> _readonlyRows;
   };
 } // namespace ao::gtk

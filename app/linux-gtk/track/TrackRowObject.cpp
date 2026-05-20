@@ -4,7 +4,8 @@
 #include "track/TrackRowObject.h"
 
 #include "ao/Type.h"
-#include "track/TrackPresentation.h"
+#include "runtime/TrackField.h"
+#include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
 
 #include <glibmm/objectbase.h>
@@ -14,35 +15,10 @@
 
 #include <chrono>
 #include <cstdint>
-#include <format>
 #include <optional>
-#include <string>
 
 namespace ao::gtk
 {
-  namespace
-  {
-    std::string formatDuration(std::chrono::milliseconds duration)
-    {
-      if (duration.count() <= 0)
-      {
-        return {};
-      }
-
-      auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-      auto const hours = totalSeconds / 3600;
-      auto const minutes = (totalSeconds % 3600) / 60;
-      auto const seconds = totalSeconds % 60;
-
-      if (hours > 0)
-      {
-        return std::format("{}:{}:{:02}", hours, minutes, seconds);
-      }
-
-      return std::format("{}:{:02}", minutes, seconds);
-    }
-  }
-
   TrackRowObject::TrackRowObject()
     : Glib::ObjectBase{"TrackRowObject"}
     , _propertyPlaying{*this, "playing", false}
@@ -118,11 +94,15 @@ namespace ao::gtk
                                 std::uint16_t discNumber,
                                 std::uint16_t totalDiscs,
                                 std::uint16_t trackNumber,
+                                std::uint16_t totalTracks,
                                 std::optional<std::uint64_t> optResourceId,
                                 std::uint32_t sampleRate,
                                 std::uint8_t channels,
                                 std::uint8_t bitDepth,
-                                std::uint16_t codecId)
+                                std::uint16_t codecId,
+                                std::uint32_t bitrate,
+                                std::uint64_t fileSize,
+                                std::uint64_t modifiedTime)
   {
     _propertyTitle.set_value(title);
     _propertyArtist.set_value(_provider->resolveDictionaryString(artist));
@@ -139,61 +119,29 @@ namespace ao::gtk
     _discNumber = discNumber;
     _totalDiscs = totalDiscs;
     _trackNumber = trackNumber;
+    _totalTracks = totalTracks;
     _optResourceId = optResourceId;
 
     _sampleRate = sampleRate;
     _channels = channels;
     _bitDepth = bitDepth;
     _codecId = codecId;
-
-    // Pre-format numeric strings
-    _yearStr = _year == 0 ? Glib::ustring{} : Glib::ustring{std::format("{}", _year)};
-    _discNumberStr = _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::format("{}", _discNumber)};
-    _trackNumberStr = _trackNumber == 0 ? Glib::ustring{} : Glib::ustring{std::format("{}", _trackNumber)};
-    _durationStr = formatDuration(_duration);
-
-    if (_trackNumber != 0)
-    {
-      if (_totalDiscs > 1 && _discNumber != 0)
-      {
-        _displayNumberStr = std::format("{}-{}", _discNumber, _trackNumber);
-      }
-      else
-      {
-        _displayNumberStr = std::format("{}", _trackNumber);
-      }
-    }
-    else
-    {
-      _displayNumberStr.clear();
-    }
+    _bitrate = bitrate;
+    _fileSize = fileSize;
+    _modifiedTime = modifiedTime;
   }
 
-  Glib::ustring TrackRowObject::getColumnText(TrackColumn column) const
+  Glib::ustring TrackRowObject::getFieldText(rt::TrackField field) const
   {
-    switch (column)
+    auto const* uiDef = trackFieldUiDefinition(field);
+
+    if (uiDef == nullptr || uiDef->readRowText == nullptr)
     {
-      case TrackColumn::Artist: return getArtist();
-      case TrackColumn::Album: return getAlbum();
-      case TrackColumn::AlbumArtist: return _provider->resolveDictionaryString(_albumArtistId);
-      case TrackColumn::Genre: return _provider->resolveDictionaryString(_genreId);
-      case TrackColumn::Composer: return _provider->resolveDictionaryString(_composerId);
-      case TrackColumn::Work: return _provider->resolveDictionaryString(_workId);
-      case TrackColumn::Year: return _yearStr;
-      case TrackColumn::DiscNumber: return _discNumberStr;
-      case TrackColumn::TrackNumber: return _trackNumberStr;
-      case TrackColumn::Title: return _propertyTitle.get_value();
-      case TrackColumn::Duration: return _durationStr;
-      case TrackColumn::Tags: return _tags;
+      static Glib::ustring const kEmpty;
+      return kEmpty;
     }
 
-    static Glib::ustring const kEmpty;
-    return kEmpty;
-  }
-
-  Glib::ustring const& TrackRowObject::getDisplayNumber() const
-  {
-    return _displayNumberStr;
+    return Glib::ustring{uiDef->readRowText(*this, *_provider)};
   }
 
   void TrackRowObject::setTags(Glib::ustring const& tags)

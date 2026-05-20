@@ -3,7 +3,8 @@
 
 #include "track/TrackColumnFactoryBuilder.h"
 
-#include "track/TrackPresentation.h"
+#include "runtime/TrackField.h"
+#include "track/TrackFieldUi.h"
 #include "track/TrackRowObject.h"
 
 #include <gdk/gdkkeysyms.h>
@@ -30,6 +31,8 @@
 
 #include <format>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk
@@ -38,7 +41,8 @@ namespace ao::gtk
   {
     constexpr double kLongPressDelayFactor = 1.03;
 
-    std::shared_ptr<Gdk::ContentProvider> createDragContentProvider(Gtk::Label* label, TrackColumn column)
+    std::shared_ptr<Gdk::ContentProvider> createDragContentProvider(Gtk::Label* label,
+                                                                    std::string_view dragQueryPrefix)
     {
       auto const value = label->get_text().raw();
 
@@ -47,27 +51,12 @@ namespace ao::gtk
         return {};
       }
 
-      auto prefix = std::string{};
-
-      if (column == TrackColumn::Artist)
-      {
-        prefix = "$a=";
-      }
-      else if (column == TrackColumn::Album)
-      {
-        prefix = "$al=";
-      }
-      else if (column == TrackColumn::Genre)
-      {
-        prefix = "$g=";
-      }
-
-      if (prefix.empty())
+      if (dragQueryPrefix.empty())
       {
         return {};
       }
 
-      auto const expr = std::format("{}\"{}\"", prefix, value);
+      auto const expr = std::format("{}\"{}\"", dragQueryPrefix, value);
       auto const bytes = Glib::Bytes::create(expr.data(), expr.size());
 
       return Gdk::ContentProvider::create("text/plain", bytes);
@@ -90,9 +79,11 @@ namespace ao::gtk
       listItem->set_data(key, stored.release(), destroyConnectionData);
     }
 
-    void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem, TrackColumnDefinition const& definition)
+    void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem, rt::TrackField field)
     {
-      if (definition.tagsCell)
+      auto const* uiDef = trackFieldUiDefinition(field);
+
+      if (uiDef != nullptr && uiDef->columnTagsCell)
       {
         auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
 
@@ -112,7 +103,9 @@ namespace ao::gtk
         return;
       }
 
-      if (definition.editable)
+      auto const editable = uiDef != nullptr && uiDef->inlineEditable;
+
+      if (editable)
       {
         auto* const stack = Gtk::make_managed<Gtk::Stack>();
 
@@ -131,14 +124,17 @@ namespace ao::gtk
         label->set_hexpand(true);
         label->add_css_class("ao-inline-editor-label");
 
-        if (definition.draggable)
+        auto const dragPrefix =
+          uiDef != nullptr ? std::string{uiDef->dragQueryPrefix} : std::string{};
+
+        if (!dragPrefix.empty())
         {
           auto const source = Gtk::DragSource::create();
 
           source->signal_prepare().connect(
             sigc::slot<std::shared_ptr<Gdk::ContentProvider>(double, double)>(
-              [label, column = definition.column](double, double) -> std::shared_ptr<Gdk::ContentProvider>
-              { return createDragContentProvider(label, column); }),
+              [label, dragPrefix](double, double) -> std::shared_ptr<Gdk::ContentProvider>
+              { return createDragContentProvider(label, dragPrefix); }),
             false);
 
           label->add_controller(source);
@@ -176,22 +172,27 @@ namespace ao::gtk
 
       auto* const label = Gtk::make_managed<Gtk::Label>("");
 
-      label->set_halign(definition.numeric ? Gtk::Align::END : Gtk::Align::START);
-      label->set_xalign(definition.numeric ? 1.0F : 0.0F);
+      auto const numeric = uiDef != nullptr && uiDef->columnNumeric;
 
-      if (!definition.numeric)
+      label->set_halign(numeric ? Gtk::Align::END : Gtk::Align::START);
+      label->set_xalign(numeric ? 1.0F : 0.0F);
+
+      if (!numeric)
       {
         label->set_ellipsize(Pango::EllipsizeMode::END);
       }
 
-      if (definition.draggable)
+      auto const dragPrefix =
+        uiDef != nullptr ? std::string{uiDef->dragQueryPrefix} : std::string{};
+
+      if (!dragPrefix.empty())
       {
         auto const source = Gtk::DragSource::create();
 
         source->signal_prepare().connect(
           sigc::slot<std::shared_ptr<Gdk::ContentProvider>(double, double)>(
-            [label, column = definition.column](double, double) -> std::shared_ptr<Gdk::ContentProvider>
-            { return createDragContentProvider(label, column); }),
+            [label, dragPrefix](double, double) -> std::shared_ptr<Gdk::ContentProvider>
+            { return createDragContentProvider(label, dragPrefix); }),
           false);
 
         label->add_controller(source);
@@ -201,7 +202,7 @@ namespace ao::gtk
     }
 
     void onTextColumnBindEditable(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                                  TrackColumnDefinition const& definition,
+                                  rt::TrackField field,
                                   Glib::RefPtr<TrackRowObject> const& row,
                                   MetadataCommitFn const& commitFn)
     {
@@ -211,10 +212,10 @@ namespace ao::gtk
 
       if (label != nullptr && entry != nullptr)
       {
-        label->set_text(row->getColumnText(definition.column));
-        entry->set_text(row->getColumnText(definition.column));
+        label->set_text(row->getFieldText(field));
+        entry->set_text(row->getFieldText(field));
 
-        auto const commitChange = [stack, entry, row, column = definition.column, commitFn]
+        auto const commitChange = [stack, entry, row, field, commitFn]
         {
           if (stack->get_visible_child_name() != "edit")
           {
@@ -224,13 +225,13 @@ namespace ao::gtk
           auto const newValue = entry->get_text().raw();
           stack->set_visible_child("display");
 
-          commitFn(row, column, newValue);
+          commitFn(row, field, newValue);
         };
 
-        auto const cancelChange = [stack, row, definition, entry]
+        auto const cancelChange = [stack, row, field, entry]
         {
           stack->set_visible_child("display");
-          entry->set_text(row->getColumnText(definition.column));
+          entry->set_text(row->getFieldText(field));
         };
 
         auto const activateConn = entry->signal_activate().connect(commitChange);
@@ -257,7 +258,7 @@ namespace ao::gtk
 
         auto modelConnection = sigc::connection{};
 
-        if (definition.column == TrackColumn::Title)
+        if (field == rt::TrackField::Title)
         {
           modelConnection = row->property_title().signal_changed().connect(
             [label, entry, row]
@@ -266,7 +267,7 @@ namespace ao::gtk
               entry->set_text(row->getTitle());
             });
         }
-        else if (definition.column == TrackColumn::Artist)
+        else if (field == rt::TrackField::Artist)
         {
           modelConnection = row->property_artist().signal_changed().connect(
             [label, entry, row]
@@ -275,7 +276,7 @@ namespace ao::gtk
               entry->set_text(row->getArtist());
             });
         }
-        else if (definition.column == TrackColumn::Album)
+        else if (field == rt::TrackField::Album)
         {
           modelConnection = row->property_album().signal_changed().connect(
             [label, entry, row]
@@ -291,19 +292,58 @@ namespace ao::gtk
     }
 
     void onTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                                TrackColumnDefinition const& definition,
+                                rt::TrackField field,
                                 Glib::RefPtr<TrackRowObject> const& row)
     {
       auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child());
 
       if (label != nullptr)
       {
-        label->set_text(row->getColumnText(definition.column));
+        label->set_text(row->getFieldText(field));
+      }
+    }
+
+    void updatePlayingStyles(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                             Glib::RefPtr<TrackRowObject> const& row,
+                             rt::TrackField field)
+    {
+      if (auto* const child = listItem->get_child(); row->isPlaying())
+      {
+        if (auto* const cell = child->get_parent())
+        {
+          if (auto* const rowWidget = cell->get_parent())
+          {
+            rowWidget->add_css_class("ao-playing-row");
+          }
+
+          if (field == rt::TrackField::Title)
+          {
+            cell->add_css_class("ao-playing-title");
+          }
+          else
+          {
+            child->add_css_class("ao-playing-dim");
+          }
+        }
+      }
+      else
+      {
+        if (auto* const cell = child->get_parent())
+        {
+          if (auto* const rowWidget = cell->get_parent())
+          {
+            rowWidget->remove_css_class("ao-playing-row");
+          }
+
+          cell->remove_css_class("ao-playing-title");
+        }
+
+        child->remove_css_class("ao-playing-dim");
       }
     }
 
     void onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                          TrackColumnDefinition const& definition,
+                          rt::TrackField field,
                           MetadataCommitFn const& commitFn)
     {
       auto const item = listItem->get_item();
@@ -314,80 +354,48 @@ namespace ao::gtk
         return;
       }
 
-      if (definition.tagsCell)
+      auto const* uiDef = trackFieldUiDefinition(field);
+      auto const tagsCell = uiDef != nullptr && uiDef->columnTagsCell;
+      auto const editable = uiDef != nullptr && uiDef->inlineEditable;
+
+      if (tagsCell)
       {
         auto* const box = dynamic_cast<Gtk::Box*>(listItem->get_child());
         auto* const label = (box != nullptr) ? dynamic_cast<Gtk::Label*>(box->get_first_child()) : nullptr;
 
         if (label != nullptr)
         {
-          label->set_text(row->getColumnText(definition.column));
+          label->set_text(row->getFieldText(field));
         }
       }
-      else if (definition.editable)
+      else if (editable)
       {
-        onTextColumnBindEditable(listItem, definition, row, commitFn);
+        onTextColumnBindEditable(listItem, field, row, commitFn);
       }
       else
       {
-        onTextColumnBindStatic(listItem, definition, row);
+        onTextColumnBindStatic(listItem, field, row);
       }
 
-      auto const updateStyles = [listItem, row, definition]
-      {
-        if (auto* const child = listItem->get_child(); row->isPlaying())
-        {
-          if (auto* const cell = child->get_parent())
-          {
-            if (auto* const rowWidget = cell->get_parent())
-            {
-              rowWidget->add_css_class("ao-playing-row");
-            }
+      updatePlayingStyles(listItem, row, field);
 
-            if (definition.column == TrackColumn::Title)
-            {
-              cell->add_css_class("ao-playing-title");
-            }
-            else
-            {
-              child->add_css_class("ao-playing-dim");
-            }
-          }
-        }
-        else
-        {
-          if (auto* const cell = child->get_parent())
-          {
-            if (auto* const rowWidget = cell->get_parent())
-            {
-              rowWidget->remove_css_class("ao-playing-row");
-            }
-
-            cell->remove_css_class("ao-playing-title");
-          }
-
-          child->remove_css_class("ao-playing-dim");
-        }
-      };
-
-      updateStyles();
-
-      auto const connection = row->property_playing().signal_changed().connect(updateStyles);
+      auto const connection = row->property_playing().signal_changed().connect(
+        [listItem, row, field] { updatePlayingStyles(listItem, row, field); });
 
       setConnectionData(listItem, "playing-connection", connection);
     }
   } // namespace
 
-  Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(TrackColumnDefinition const& definition,
-                                                              MetadataCommitFn const& commitFn)
+  Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
+                                                               MetadataCommitFn const& commitFn)
   {
     auto const factory = Gtk::SignalListItemFactory::create();
 
-    factory->signal_setup().connect([definition](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                    { onTextColumnSetup(listItem, definition); });
+    factory->signal_setup().connect([field](Glib::RefPtr<Gtk::ListItem> const& listItem)
+                                    { onTextColumnSetup(listItem, field); });
 
-    factory->signal_bind().connect([definition, commitFn](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                   { onTextColumnBind(listItem, definition, commitFn); });
+    factory->signal_bind().connect([field, commitFn](Glib::RefPtr<Gtk::ListItem> const& listItem)
+                                   { onTextColumnBind(listItem, field, commitFn); });
 
     factory->signal_unbind().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)

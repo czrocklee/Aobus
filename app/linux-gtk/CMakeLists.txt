@@ -32,7 +32,6 @@ add_library(aobus-gtk-lib STATIC
     track/TrackViewPage.cpp
     track/TrackColumnController.cpp
     track/TrackColumnViewHost.cpp
-    track/ColumnVisibilityModel.cpp
     track/TrackQuickFilter.cpp
     track/TrackPresentationButton.cpp
     track/TrackSelectionController.cpp
@@ -44,6 +43,7 @@ add_library(aobus-gtk-lib STATIC
     track/TrackRowObject.cpp
     track/TrackRowCache.cpp
     track/TrackColumnFactoryBuilder.cpp
+    track/TrackFieldUi.cpp
 
     list/ListSidebarController.cpp
     list/ListSidebarPanel.cpp

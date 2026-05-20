@@ -3,188 +3,126 @@
 
 #include "app/linux-gtk/track/TrackPresentation.h"
 
-#include "app/linux-gtk/track/TrackColumnController.h"
-#include "runtime/StateTypes.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "app/linux-gtk/track/TrackFieldUi.h"
+#include "runtime/TrackField.h"
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/application.h>
-#include <gtkmm/columnview.h>
-#include <gtkmm/signallistitemfactory.h>
 
-#include <algorithm>
+#include <cstddef>
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackPresentation - column definitions", "[app][presentation]")
+  TEST_CASE("TrackPresentation - field UI definitions exist for all presentable fields", "[app][presentation]")
   {
-    auto const definitions = trackColumnDefinitions();
-    REQUIRE(definitions.size() == 12);
-  }
-
-  TEST_CASE("TrackPresentation - default column layout", "[app][presentation]")
-  {
-    auto const layout = defaultTrackColumnLayout();
-    REQUIRE(layout.columns.size() == trackColumnDefinitions().size());
-
-    auto const duration = std::ranges::find(layout.columns, TrackColumn::Duration, &TrackColumnState::column);
-    REQUIRE(duration != layout.columns.end());
-    CHECK(duration->visible == true);
-    CHECK(duration->width == 84);
-  }
-
-  TEST_CASE("TrackPresentation - normalize column layout fills missing and conceals them", "[app][presentation]")
-  {
-    auto layout = TrackColumnLayout{
-      .columns = {{.column = TrackColumn::Title, .visible = true, .width = 300}},
-    };
-    auto const normalized = normalizeTrackColumnLayout(layout);
-
-    REQUIRE(normalized.columns.size() == trackColumnDefinitions().size());
-
-    // Explicitly provided column should keep its state
-    auto const title = std::ranges::find(normalized.columns, TrackColumn::Title, &TrackColumnState::column);
-    REQUIRE(title != normalized.columns.end());
-    CHECK(title->visible == true);
-    CHECK(title->width == 300);
-
-    // Missing column (like Artist) should be added but set to HIDDEN
-    auto const artist = std::ranges::find(normalized.columns, TrackColumn::Artist, &TrackColumnState::column);
-    REQUIRE(artist != normalized.columns.end());
-    CHECK(artist->visible == false);
-  }
-
-  TEST_CASE("TrackPresentation - layout for spec respects visible fields", "[app][presentation]")
-  {
-    using namespace ao::rt;
-
-    auto spec = TrackPresentationSpec{
-      .id = "test-album",
-      .groupBy = TrackGroupKey::Album,
-      .visibleFields = {TrackPresentationField::TrackNumber, TrackPresentationField::Title},
-    };
-
-    auto const layout = trackColumnLayoutForPresentation(spec);
-
-    REQUIRE(layout.columns.size() == trackColumnDefinitions().size());
-
-    // Requested fields should be visible
-    auto const title = std::ranges::find(layout.columns, TrackColumn::Title, &TrackColumnState::column);
-    CHECK(title->visible == true);
-
-    auto const trackNum = std::ranges::find(layout.columns, TrackColumn::TrackNumber, &TrackColumnState::column);
-    CHECK(trackNum->visible == true);
-
-    // Unrequested fields (like Album or Artist) should be hidden
-    auto const album = std::ranges::find(layout.columns, TrackColumn::Album, &TrackColumnState::column);
-    CHECK(album->visible == false);
-
-    auto const artist = std::ranges::find(layout.columns, TrackColumn::Artist, &TrackColumnState::column);
-    CHECK(artist->visible == false);
-  }
-
-  TEST_CASE("TrackPresentation - expansion columns preserve a visible default expander", "[app][presentation]")
-  {
-    auto layout = TrackColumnLayout{
-      .columns = {{.column = TrackColumn::Title, .visible = true}, {.column = TrackColumn::Tags, .visible = true}},
-    };
-
-    auto const columns = expandingTrackColumnsForLayout(layout);
-
-    REQUIRE(columns.size() == 1);
-    CHECK(columns.front() == TrackColumn::Tags);
-  }
-
-  TEST_CASE("TrackPresentation - expansion columns fall back to title", "[app][presentation]")
-  {
-    using namespace ao::rt;
-
-    auto const* const preset = builtinTrackPresentationPreset("album-artists");
-    REQUIRE(preset != nullptr);
-
-    auto const layout = trackColumnLayoutForPresentation(preset->spec);
-    auto const columns = expandingTrackColumnsForLayout(layout);
-
-    REQUIRE(columns.size() == 1);
-    CHECK(columns.front() == TrackColumn::Title);
-  }
-
-  TEST_CASE("TrackColumnController - setLayoutAndApply updates visibility", "[app][presentation]")
-  {
-    auto const app = Gtk::Application::create("io.github.aobus.track_column_controller_test");
-    auto columnView = Gtk::ColumnView{};
-    auto layoutModel = TrackColumnLayoutModel{};
-    auto controller = TrackColumnController{columnView, layoutModel};
-
-    controller.setupColumns([](TrackColumnDefinition const&) { return Gtk::SignalListItemFactory::create(); });
-
-    auto layout = TrackColumnLayout{
-      .columns = {{.column = TrackColumn::Album, .visible = true},
-                  {.column = TrackColumn::Title, .visible = true},
-                  {.column = TrackColumn::Tags, .visible = false}},
-    };
-
-    controller.setLayoutAndApply(layout);
-
-    CHECK(layoutModel.layout() == normalizeTrackColumnLayout(layout));
-    CHECK(controller.visibilityModel()->isVisible(TrackColumn::Title) == true);
-    CHECK(controller.visibilityModel()->isVisible(TrackColumn::Tags) == false);
-  }
-
-  TEST_CASE("TrackPresentation - redundantFieldToColumn mapping", "[app][presentation]")
-  {
-    using namespace ao::rt;
-
-    CHECK(redundantFieldToColumn(TrackSortField::Artist) == TrackColumn::Artist);
-    CHECK(redundantFieldToColumn(TrackSortField::Album) == TrackColumn::Album);
-    CHECK(redundantFieldToColumn(TrackSortField::AlbumArtist) == TrackColumn::AlbumArtist);
-    CHECK(redundantFieldToColumn(TrackSortField::Genre) == TrackColumn::Genre);
-    CHECK(redundantFieldToColumn(TrackSortField::Composer) == TrackColumn::Composer);
-    CHECK(redundantFieldToColumn(TrackSortField::Work) == TrackColumn::Work);
-    CHECK(redundantFieldToColumn(TrackSortField::Year) == TrackColumn::Year);
-
-    // Non-display fields should return nullopt
-    CHECK_FALSE(redundantFieldToColumn(TrackSortField::Title).has_value());
-    CHECK_FALSE(redundantFieldToColumn(TrackSortField::Duration).has_value());
-    CHECK_FALSE(redundantFieldToColumn(TrackSortField::DiscNumber).has_value());
-    CHECK_FALSE(redundantFieldToColumn(TrackSortField::TrackNumber).has_value());
-  }
-
-  TEST_CASE("TrackPresentation - editable trait", "[app][presentation]")
-  {
-    for (auto const& def : trackColumnDefinitions())
+    for (auto const& rtDef : rt::trackFieldDefinitions())
     {
-      bool const expected =
-        def.column == TrackColumn::Title || def.column == TrackColumn::Artist || def.column == TrackColumn::Album;
-      CHECK(def.editable == expected);
+      if (rtDef.presentable)
+      {
+        INFO("Field " << rtDef.id << " must have a UI definition");
+        CHECK(trackFieldUiDefinition(rtDef.field) != nullptr);
+      }
     }
   }
 
-  TEST_CASE("TrackPresentation - trackColumnForPresentationField mapping", "[app][presentation]")
+  TEST_CASE("TrackPresentation - default width for fields", "[app][presentation]")
   {
-    using namespace ao::rt;
-
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Title) == TrackColumn::Title);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Artist) == TrackColumn::Artist);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Album) == TrackColumn::Album);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::AlbumArtist) == TrackColumn::AlbumArtist);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Genre) == TrackColumn::Genre);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Composer) == TrackColumn::Composer);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Work) == TrackColumn::Work);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Year) == TrackColumn::Year);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::DiscNumber) == TrackColumn::DiscNumber);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::TrackNumber) == TrackColumn::TrackNumber);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Duration) == TrackColumn::Duration);
-    CHECK(trackColumnForPresentationField(TrackPresentationField::Tags) == TrackColumn::Tags);
+    CHECK(defaultWidthForField(rt::TrackField::Artist) == 150);
+    CHECK(defaultWidthForField(rt::TrackField::Album) == 200);
+    CHECK(defaultWidthForField(rt::TrackField::TrackNumber) == 72);
+    CHECK(defaultWidthForField(rt::TrackField::Duration) == 84);
+    CHECK(defaultWidthForField(rt::TrackField::Year) == 80);
+    CHECK(defaultWidthForField(rt::TrackField::AlbumArtist) == 180);
   }
 
-  TEST_CASE("TrackPresentation - draggable trait", "[app][presentation]")
+  TEST_CASE("TrackPresentation - field is expanding", "[app][presentation]")
   {
-    for (auto const& def : trackColumnDefinitions())
+    CHECK(fieldIsExpanding(rt::TrackField::Tags));
+    CHECK_FALSE(fieldIsExpanding(rt::TrackField::Title));
+  }
+
+  TEST_CASE("TrackPresentation - field visible by default", "[app][presentation]")
+  {
+    CHECK(fieldIsVisibleByDefault(rt::TrackField::Title));
+    CHECK(fieldIsVisibleByDefault(rt::TrackField::Artist));
+    CHECK(fieldIsVisibleByDefault(rt::TrackField::Album));
+    CHECK(fieldIsVisibleByDefault(rt::TrackField::Duration));
+    CHECK(fieldIsVisibleByDefault(rt::TrackField::Tags));
+
+    CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::AlbumArtist));
+    CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::Genre));
+    CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::Year));
+  }
+
+  TEST_CASE("TrackPresentation - field column title", "[app][presentation]")
+  {
+    CHECK(fieldColumnTitle(rt::TrackField::Title) == "Title");
+    CHECK(fieldColumnTitle(rt::TrackField::Artist) == "Artist");
+    CHECK(fieldColumnTitle(rt::TrackField::Duration) == "Duration");
+  }
+
+  TEST_CASE("TrackPresentation - redundantFieldToColumn maps sort fields to TrackField", "[app][presentation]")
+  {
+    CHECK(redundantFieldToColumn(rt::TrackSortField::Artist) == rt::TrackField::Artist);
+    CHECK(redundantFieldToColumn(rt::TrackSortField::Album) == rt::TrackField::Album);
+    CHECK(redundantFieldToColumn(rt::TrackSortField::AlbumArtist) == rt::TrackField::AlbumArtist);
+    CHECK(redundantFieldToColumn(rt::TrackSortField::Genre) == rt::TrackField::Genre);
+    CHECK(redundantFieldToColumn(rt::TrackSortField::Composer) == rt::TrackField::Composer);
+    CHECK(redundantFieldToColumn(rt::TrackSortField::Work) == rt::TrackField::Work);
+    CHECK(redundantFieldToColumn(rt::TrackSortField::Year) == rt::TrackField::Year);
+
+    CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::Title).has_value());
+    CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::Duration).has_value());
+    CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::DiscNumber).has_value());
+    CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::TrackNumber).has_value());
+  }
+
+  TEST_CASE("TrackPresentation - TrackColumnLayoutModel reset produces empty state", "[app][presentation]")
+  {
+    auto model = TrackColumnLayoutModel{};
+
+    for (auto const& width : model.state().widths)
     {
-      bool const expected =
-        def.column == TrackColumn::Artist || def.column == TrackColumn::Album || def.column == TrackColumn::Genre;
-      CHECK(def.draggable == expected);
+      CHECK(width == 0);
     }
+
+    model.reset();
+
+    for (auto const& width : model.state().widths)
+    {
+      CHECK(width == 0);
+    }
+  }
+
+  TEST_CASE("TrackPresentation - TrackColumnLayoutModel setState and signal", "[app][presentation]")
+  {
+    auto model = TrackColumnLayoutModel{};
+    auto fired = false;
+
+    model.signalChanged().connect([&fired] { fired = true; });
+
+    auto state = TrackColumnViewState{};
+    state.widths[static_cast<std::size_t>(rt::TrackField::Title)] = 200;
+    model.setState(state);
+
+    CHECK(fired);
+    CHECK(model.state().widths[static_cast<std::size_t>(rt::TrackField::Title)] == 200);
+  }
+
+  TEST_CASE("TrackPresentation - TrackColumnViewState equality", "[app][presentation]")
+  {
+    auto a = TrackColumnViewState{};
+    auto b = TrackColumnViewState{};
+
+    CHECK(a == b);
+
+    a.widths[static_cast<std::size_t>(rt::TrackField::Title)] = 100;
+    CHECK(a != b);
+
+    b.widths[static_cast<std::size_t>(rt::TrackField::Title)] = 100;
+    CHECK(a == b);
+
+    a.fieldOrder = {rt::TrackField::Album, rt::TrackField::Title};
+    CHECK(a != b);
   }
 } // namespace ao::gtk::test

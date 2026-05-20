@@ -3,6 +3,7 @@
 
 #include "TrackListProjection.h"
 
+#include "TrackField.h"
 #include "TrackSource.h"
 #include "ao/Type.h"
 #include "ao/library/DictionaryStore.h"
@@ -427,8 +428,8 @@ namespace ao::rt
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
     std::string presentationId = std::string{kDefaultTrackPresentationId};
-    std::vector<TrackPresentationField> visibleFields;
-    std::vector<TrackPresentationField> redundantFields;
+    std::vector<TrackField> visibleFields;
+    std::vector<TrackField> redundantFields;
     Comparator comparator;
     library::TrackStore::Reader::LoadMode loadMode = library::TrackStore::Reader::LoadMode::Hot;
     std::vector<OrderEntry> orderIndex;

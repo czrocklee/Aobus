@@ -3,7 +3,7 @@
 
 #include "track/TrackColumnController.h"
 
-#include "track/ColumnVisibilityModel.h"
+#include "track/TrackFieldUi.h"
 #include "track/TrackPresentation.h"
 
 #include <giomm/listmodel.h>
@@ -23,6 +23,11 @@
 #include <memory>
 #include <ranges>
 #include <string>
+#include <optional>
+#include <span>
+#include <vector>
+
+#include "runtime/TrackField.h"
 
 namespace ao::gtk
 {
@@ -35,25 +40,38 @@ namespace ao::gtk
     : _columnView{columnView}, _columnLayoutModel{layoutModel}
   {
     _dynamicCssProvider = Gtk::CssProvider::create();
-    _visibilityModel = ColumnVisibilityModel::create();
 
     _layoutChangedConnection =
-      _columnLayoutModel.signalChanged().connect(sigc::mem_fun(*this, &TrackColumnController::updateColumnVisibility));
+      _columnLayoutModel.signalChanged().connect([this]
+                                                 { flushSharedColumnLayoutUpdate(); });
   }
 
   void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)
   {
-    _columns.reserve(trackColumnDefinitions().size());
+    auto const defs = rt::trackFieldDefinitions();
 
-    for (auto const& definition : trackColumnDefinitions())
+    _columns.reserve(defs.size());
+
+    for (auto const& rtDef : defs)
     {
-      auto const title = Glib::ustring{std::string{definition.title}};
-      auto const column = Gtk::ColumnViewColumn::create(title, factoryProvider(definition));
+      if (!rtDef.presentable)
+      {
+        continue;
+      }
 
-      column->set_id(Glib::ustring{std::string{definition.id}});
-      column->set_expand(definition.expands);
+      auto const title = Glib::ustring{std::string{rtDef.label}};
+      auto const column = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
+      auto const* uiDef = trackFieldUiDefinition(rtDef.field);
+
+      column->set_id(Glib::ustring{std::string{rtDef.id}});
+
       column->set_resizable(true);
-      column->set_fixed_width(definition.defaultWidth);
+
+      if (uiDef != nullptr)
+      {
+        column->set_expand(uiDef->columnExpands);
+        column->set_fixed_width(uiDef->defaultColumnWidth);
+      }
 
       _columnNotifyConnections.emplace_back(column->property_fixed_width().signal_changed().connect(
         [this]
@@ -71,26 +89,24 @@ namespace ao::gtk
 
       _columnView.append_column(column);
 
-      Glib::Binding::bind_property(_visibilityModel->property_visible(definition.column),
-                                   column->property_visible(),
-                                   Glib::Binding::Flags::SYNC_CREATE);
-
-      _columns.push_back({.id = definition.column, .column = column, .defaultWidth = definition.defaultWidth});
+      _columns.push_back(
+        {.field = rtDef.field,
+         .column = column,
+         .defaultWidth = uiDef != nullptr ? uiDef->defaultColumnWidth : -1});
     }
   }
 
-  void TrackColumnController::applyColumnLayout()
+  void TrackColumnController::applyColumnLayout(std::span<rt::TrackField const> visibleFields)
   {
-    auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
-
     _syncingColumnLayout = true;
-    _layoutChangedConnection.block(); // Block visibility updates during structural changes
+    _layoutChangedConnection.block();
 
     if (auto const columns = _columnView.get_columns(); columns)
     {
-      for (auto const& [idx, state] : std::views::enumerate(layout.columns))
+      // Reorder columns to match visibleFields order
+      for (auto const& [idx, field] : std::views::enumerate(visibleFields))
       {
-        auto* const binding = findColumnBinding(state.column);
+        auto* const binding = findColumnBinding(field);
 
         if (binding == nullptr)
         {
@@ -99,26 +115,27 @@ namespace ao::gtk
 
         ensureColumnPosition(columns, idx, binding->column);
 
-        auto const width = state.width == -1 ? binding->defaultWidth : state.width;
+        auto const width = _columnLayoutModel.state().widths.at(static_cast<std::size_t>(field));
+        auto const effectiveWidth = (width == 0 ? binding->defaultWidth : width);
 
-        if (binding->column->get_fixed_width() != width)
+        if (binding->column->get_fixed_width() != effectiveWidth)
         {
-          binding->column->set_fixed_width(width);
+          binding->column->set_fixed_width(effectiveWidth);
         }
       }
     }
 
-    _layoutChangedConnection.unblock(); // Unblock before manual update
+    _layoutChangedConnection.unblock();
 
-    updateColumnExpansion(layout);
-    updateColumnVisibility();
+    updateColumnExpansion(visibleFields);
+    updateColumnVisibility(visibleFields);
 
     _syncingColumnLayout = false;
   }
 
   void TrackColumnController::ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columns,
-                                                   std::size_t idx,
-                                                   Glib::RefPtr<Gtk::ColumnViewColumn> const& column)
+                                                    std::size_t idx,
+                                                    Glib::RefPtr<Gtk::ColumnViewColumn> const& column)
   {
     bool needsMove = true;
 
@@ -135,7 +152,6 @@ namespace ao::gtk
 
     if (needsMove)
     {
-      // Check if column is already in the view elsewhere
       for (::guint loopIdx = 0; loopIdx < columns->get_n_items(); ++loopIdx)
       {
         if (columns->get_object(loopIdx) == column)
@@ -149,26 +165,41 @@ namespace ao::gtk
     }
   }
 
-  void TrackColumnController::setLayoutAndApply(TrackColumnLayout const& layout)
+  void TrackColumnController::setLayoutAndApply(std::span<rt::TrackField const> visibleFields)
   {
-    _syncingColumnLayout = true;
-    _layoutChangedConnection.block();
-    _columnLayoutModel.setLayout(layout);
-    _layoutChangedConnection.unblock();
-    _syncingColumnLayout = false;
-
-    applyColumnLayout();
+    auto const orderedFields = visibleFieldsInStoredOrder(visibleFields);
+    applyColumnLayout(orderedFields);
   }
 
-  void TrackColumnController::updateColumnExpansion(TrackColumnLayout const& layout)
+  void TrackColumnController::updateColumnExpansion(std::span<rt::TrackField const> visibleFields)
   {
-    auto const expandingColumns = expandingTrackColumnsForLayout(layout);
+    auto expanding = rt::TrackField::Tags;
+
+    for (auto const field : visibleFields)
+    {
+      if (fieldIsExpanding(field))
+      {
+        expanding = field;
+        break;
+      }
+    }
+
+    if (!std::ranges::contains(visibleFields, expanding))
+    {
+      // Fallback: first visible field
+      if (auto const titleField = rt::TrackField::Title; std::ranges::contains(visibleFields, titleField))
+      {
+        expanding = titleField;
+      }
+      else if (!visibleFields.empty())
+      {
+        expanding = visibleFields.front();
+      }
+    }
 
     for (auto& binding : _columns)
     {
-      auto const shouldExpand = std::ranges::contains(expandingColumns, binding.id);
-
-      if (binding.column->get_expand() != shouldExpand)
+      if (auto const shouldExpand = binding.field == expanding; binding.column->get_expand() != shouldExpand)
       {
         binding.column->set_expand(shouldExpand);
       }
@@ -203,68 +234,112 @@ namespace ao::gtk
   void TrackColumnController::updateSharedColumnLayout()
   {
     _capturingColumnLayout = true;
-    _columnLayoutModel.setLayout(captureCurrentColumnLayout());
+
+    auto state = TrackColumnViewState{};
+
+    if (auto const columns = _columnView.get_columns(); columns)
+    {
+      for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
+      {
+        auto const obj = columns->get_object(idx);
+        auto const gtkColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(obj);
+
+        if (!gtkColumn)
+        {
+          continue;
+        }
+
+        auto const optField = rt::trackFieldFromId(std::string{gtkColumn->get_id()});
+
+        if (!optField)
+        {
+          continue;
+        }
+
+        state.widths.at(static_cast<std::size_t>(*optField)) = gtkColumn->get_fixed_width();
+      }
+    }
+
+    state.fieldOrder = captureCurrentFieldOrder();
+
+    _columnLayoutModel.setState(state);
     _capturingColumnLayout = false;
   }
 
-  TrackColumnLayout TrackColumnController::captureCurrentColumnLayout() const
+  std::vector<rt::TrackField> TrackColumnController::captureCurrentFieldOrder() const
   {
-    auto layout = TrackColumnLayout{};
-    auto currentLayout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
-
-    auto const currentStateFor = [&currentLayout](TrackColumn column)
-    {
-      auto const it = std::ranges::find(currentLayout.columns, column, &TrackColumnState::column);
-
-      return it != currentLayout.columns.end() ? *it : TrackColumnState{.column = column};
-    };
-
+    auto fields = std::vector<rt::TrackField>{};
     auto const columns = _columnView.get_columns();
 
     if (!columns)
     {
-      return currentLayout;
+      return fields;
     }
 
-    auto const nItems = columns->get_n_items();
+    fields.reserve(columns->get_n_items());
 
-    layout.columns.reserve(nItems);
-
-    for (std::uint32_t idx = 0; idx < nItems; ++idx)
+    for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
     {
-      auto const object = columns->get_object(idx);
-      auto const column = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
+      auto const obj = columns->get_object(idx);
+      auto const gtkColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(obj);
 
-      if (!column)
+      if (!gtkColumn)
       {
         continue;
       }
 
-      auto const optColumnId = trackColumnFromId(std::string{column->get_id()});
-
-      if (!optColumnId)
+      if (auto const optField = rt::trackFieldFromId(std::string{gtkColumn->get_id()}); optField)
       {
-        continue;
+        fields.push_back(*optField);
       }
-
-      auto state = currentStateFor(*optColumnId);
-
-      state.width = column->get_fixed_width();
-      layout.columns.push_back(state);
     }
 
-    return normalizeTrackColumnLayout(layout);
+    return fields;
   }
 
-  void TrackColumnController::updateColumnVisibility()
+  std::vector<rt::TrackField> TrackColumnController::visibleFieldsInStoredOrder(
+    std::span<rt::TrackField const> visibleFields) const
   {
-    _visibilityModel->recompute(normalizeTrackColumnLayout(_columnLayoutModel.layout()));
+    auto ordered = std::vector<rt::TrackField>{};
+    ordered.reserve(visibleFields.size());
+
+    auto const appendIfVisible = [&ordered, visibleFields](rt::TrackField field)
+    {
+      if (!std::ranges::contains(visibleFields, field) || std::ranges::contains(ordered, field))
+      {
+        return;
+      }
+
+      ordered.push_back(field);
+    };
+
+    for (auto const field : _columnLayoutModel.state().fieldOrder)
+    {
+      appendIfVisible(field);
+    }
+
+    for (auto const field : visibleFields)
+    {
+      appendIfVisible(field);
+    }
+
+    return ordered;
   }
 
-  void TrackColumnController::syncLayout()
+  void TrackColumnController::updateColumnVisibility(std::span<rt::TrackField const> visibleFields)
   {
-    updateColumnVisibility();
-    applyColumnLayout();
+    for (auto& binding : _columns)
+    {
+      auto const visible = std::ranges::contains(visibleFields, binding.field);
+      binding.column->set_visible(visible);
+    }
+  }
+
+  void TrackColumnController::syncLayout(std::span<rt::TrackField const> visibleFields)
+  {
+    auto const orderedFields = visibleFieldsInStoredOrder(visibleFields);
+    updateColumnVisibility(orderedFields);
+    applyColumnLayout(orderedFields);
     updateTitlePositionVariable();
   }
 
@@ -272,6 +347,7 @@ namespace ao::gtk
   {
     double titleX = 0;
     bool found = false;
+    auto const titleFieldId = std::string{rt::trackFieldId(rt::TrackField::Title)};
 
     auto const columns = _columnView.get_columns();
 
@@ -289,7 +365,7 @@ namespace ao::gtk
         continue;
       }
 
-      if (col->get_title() == "Title")
+      if (col->get_id() == titleFieldId)
       {
         titleX += col->get_fixed_width() / kTitlePositionDivisor;
         found = true;
@@ -302,21 +378,20 @@ namespace ao::gtk
     if (found)
     {
       auto const css = std::format("columnview {{ --ao-title-x: {:.1f}px; }}", titleX);
-
       _dynamicCssProvider->load_from_data(css);
     }
   }
 
-  TrackColumnController::ColumnBinding* TrackColumnController::findColumnBinding(TrackColumn column)
+  TrackColumnController::ColumnBinding* TrackColumnController::findColumnBinding(rt::TrackField field)
   {
-    auto const it = std::ranges::find(_columns, column, &ColumnBinding::id);
+    auto const it = std::ranges::find(_columns, field, &ColumnBinding::field);
 
     return it != _columns.end() ? &*it : nullptr;
   }
 
-  TrackColumnController::ColumnBinding const* TrackColumnController::findColumnBinding(TrackColumn column) const
+  TrackColumnController::ColumnBinding const* TrackColumnController::findColumnBinding(rt::TrackField field) const
   {
-    auto const it = std::ranges::find(_columns, column, &ColumnBinding::id);
+    auto const it = std::ranges::find(_columns, field, &ColumnBinding::field);
 
     return it != _columns.end() ? &*it : nullptr;
   }

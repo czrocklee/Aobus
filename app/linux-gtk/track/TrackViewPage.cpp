@@ -11,11 +11,13 @@
 #include "runtime/LibraryMutationService.h"
 #include "runtime/ProjectionTypes.h"
 #include "runtime/StateTypes.h"
+#include "runtime/TrackField.h"
 #include "runtime/TrackPresentationPreset.h"
 #include "runtime/ViewService.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnFactoryBuilder.h"
 #include "track/TrackColumnViewHost.h"
+#include "track/TrackFieldUi.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
 #include "track/TrackPresentationStore.h"
@@ -46,6 +48,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -146,18 +149,17 @@ namespace ao::gtk
 
     // 1. Configure columns and layout first (Off-tree)
     _viewHost->setupColumns(
-      [this](TrackColumnDefinition const& def)
-      { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
+      [this](rt::TrackField field)
+      { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
 
     if (_viewId != rt::kInvalidViewId)
     {
       auto const& presState = _runtime.views().trackListState(_viewId).presentation;
-      _viewHost->columnController().setLayoutAndApply(
-        trackColumnLayoutForPresentation(rt::presentationSpecFromState(presState)));
+      _viewHost->columnController().setLayoutAndApply(presState.visibleFields);
     }
     else
     {
-      _viewHost->columnController().syncLayout();
+      _viewHost->columnController().syncLayout(rt::defaultTrackPresentationSpec().visibleFields);
     }
 
     // 2. Configure decorators and styles
@@ -273,12 +275,12 @@ namespace ao::gtk
 
   void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentation)
   {
-    rebuildColumnView(trackColumnLayoutForPresentation(presentation));
+    rebuildColumnView(presentation.visibleFields);
   }
 
   void TrackViewPage::applyPresentation(rt::TrackListPresentationSnapshot const& snapshot)
   {
-    rebuildColumnView(trackColumnLayoutForPresentation(snapshot));
+    rebuildColumnView(snapshot.visibleFields);
   }
 
   void TrackViewPage::setPlayingTrackId(TrackId trackId)
@@ -287,10 +289,10 @@ namespace ao::gtk
     _viewHost->selectionController().setPlayingTrackId(trackId);
   }
 
-  void TrackViewPage::rebuildColumnView(TrackColumnLayout const& layout)
+  void TrackViewPage::rebuildColumnView(std::span<rt::TrackField const> visibleFields)
   {
-    auto const factoryProvider = [this](TrackColumnDefinition const& def)
-    { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); };
+    auto const factoryProvider = [this](rt::TrackField field)
+    { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this)); };
 
     // 1. Detach UI from Model and Tree immediately.
     _viewHost->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
@@ -303,7 +305,7 @@ namespace ao::gtk
     // 3. Configure structural properties before attaching model (Safe)
     setupColumnViewStyles(newView);
 
-    _viewHost->columnController().setLayoutAndApply(layout);
+    _viewHost->columnController().setLayoutAndApply(visibleFields);
     _viewHost->columnController().updateTitlePositionVariable();
 
     // 4. Apply decorations (Section Headers)
@@ -371,32 +373,35 @@ namespace ao::gtk
   }
 
   void TrackViewPage::commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row,
-                                           TrackColumn column,
+                                           rt::TrackField field,
                                            std::string const& newValue)
   {
-    auto const oldValue = row->getColumnText(column).raw();
+    auto const oldValue = row->getFieldText(field);
 
     if (newValue == oldValue)
     {
       return;
     }
 
-    auto patch = rt::MetadataPatch{};
+    auto const* uiDef = trackFieldUiDefinition(field);
 
-    if (column == TrackColumn::Title)
+    if (uiDef == nullptr || uiDef->writePatch == nullptr)
     {
-      patch.optTitle = newValue;
-      row->setTitle(newValue);
+      return;
     }
-    else if (column == TrackColumn::Artist)
+
+    auto patch = rt::MetadataPatch{};
+    auto const rawValue = detail::TrackFieldRawValue{newValue};
+    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = rawValue};
+    uiDef->writePatch(ctx);
+
+    // Optimistic update for fields with property-backed setters
+    switch (field)
     {
-      patch.optArtist = newValue;
-      row->setArtist(newValue);
-    }
-    else if (column == TrackColumn::Album)
-    {
-      patch.optAlbum = newValue;
-      row->setAlbum(newValue);
+    case rt::TrackField::Title: row->setTitle(newValue); break;
+    case rt::TrackField::Artist: row->setArtist(newValue); break;
+    case rt::TrackField::Album: row->setAlbum(newValue); break;
+    default: break;
     }
 
     auto const result = _runtime.mutation().updateMetadata({row->getTrackId()}, patch);
@@ -405,17 +410,12 @@ namespace ao::gtk
     {
       APP_LOG_ERROR("Metadata update failed: {}", result.error().message);
 
-      if (column == TrackColumn::Title)
+      switch (field)
       {
-        row->setTitle(oldValue);
-      }
-      else if (column == TrackColumn::Artist)
-      {
-        row->setArtist(oldValue);
-      }
-      else if (column == TrackColumn::Album)
-      {
-        row->setAlbum(oldValue);
+      case rt::TrackField::Title: row->setTitle(oldValue); break;
+      case rt::TrackField::Artist: row->setArtist(oldValue); break;
+      case rt::TrackField::Album: row->setAlbum(oldValue); break;
+      default: break;
       }
     }
   }

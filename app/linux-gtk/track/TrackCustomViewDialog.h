@@ -51,6 +51,10 @@ namespace ao::gtk
     Gtk::Button _saveButton{"Save"};
 
     std::vector<TrackPresentationSortTermState> _sortState;
-    std::vector<std::uint8_t> _visibleFieldsState;
+    std::vector<rt::TrackField> _visibleFieldsState;
+
+    std::vector<rt::TrackField> _availableVisibleFields;
+    std::vector<rt::TrackSortField> _availableSortFields;
+    std::vector<rt::TrackGroupKey> _availableGroupKeys;
   };
 } // namespace ao::gtk

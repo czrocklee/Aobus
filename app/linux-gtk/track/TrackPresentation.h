@@ -1,101 +1,52 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include "runtime/ProjectionTypes.h"
-#include "runtime/StateTypes.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackField.h"
 
 #include <sigc++/signal.h>
 
+#include <array>
 #include <cstdint>
 #include <optional>
-#include <span>
 #include <string_view>
 #include <vector>
 
 namespace ao::gtk
 {
-  enum class TrackColumn : std::uint8_t
+  static_assert(rt::kTrackFieldCount > 0, "rt::kTrackFieldCount must be positive");
+
+  struct TrackColumnViewState final
   {
-    Artist,
-    Album,
-    AlbumArtist,
-    Genre,
-    Composer,
-    Work,
-    Year,
-    DiscNumber,
-    TrackNumber,
-    Title,
-    Duration,
-    Tags,
+    std::array<std::int32_t, rt::kTrackFieldCount> widths{};
+    std::vector<rt::TrackField> fieldOrder{};
+
+    bool operator==(TrackColumnViewState const&) const = default;
   };
 
-  struct TrackColumnDefinition final
-  {
-    TrackColumn column;
-    std::string_view id;
-    std::string_view title;
-    std::int32_t defaultWidth = -1;
-    bool defaultVisible = true;
-    bool expands = false;
-    bool numeric = false;
-    bool tagsCell = false;
-    bool editable = false;
-    bool draggable = false;
-  };
+  std::int32_t defaultWidthForField(rt::TrackField field);
+  bool fieldIsExpanding(rt::TrackField field);
+  bool fieldIsVisibleByDefault(rt::TrackField field);
+  std::string_view fieldColumnTitle(rt::TrackField field);
 
-  struct TrackColumnState final
-  {
-    TrackColumn column = TrackColumn::Title;
-    bool visible = true;
-    std::int32_t width = -1;
-
-    bool operator==(TrackColumnState const&) const = default;
-  };
-
-  struct TrackColumnLayout final
-  {
-    std::vector<TrackColumnState> columns;
-
-    bool operator==(TrackColumnLayout const&) const = default;
-  };
-
-  std::optional<TrackColumn> redundantFieldToColumn(rt::TrackSortField field);
-  std::optional<TrackColumn> trackColumnForPresentationField(rt::TrackPresentationField field);
-  TrackColumnLayout trackColumnLayoutForPresentation(rt::TrackPresentationSpec const& presentation);
-  TrackColumnLayout trackColumnLayoutForPresentation(rt::TrackListPresentationSnapshot const& presentation);
-
-  std::span<TrackColumnDefinition const> trackColumnDefinitions();
-  TrackColumnDefinition const* trackColumnDefinition(TrackColumn column);
-  TrackColumnState defaultTrackColumnState(TrackColumn column);
-
-  std::optional<TrackColumn> trackColumnFromId(std::string_view id);
-
-  std::string_view trackColumnId(TrackColumn column);
-
-  TrackColumnLayout defaultTrackColumnLayout();
-
-  TrackColumnLayout normalizeTrackColumnLayout(TrackColumnLayout const& layout);
-  std::vector<TrackColumn> expandingTrackColumnsForLayout(TrackColumnLayout const& layout);
+  std::optional<rt::TrackField> redundantFieldToColumn(rt::TrackSortField field);
 
   class TrackColumnLayoutModel final
   {
   public:
     using ChangedSignal = sigc::signal<void()>;
 
-    explicit TrackColumnLayoutModel(TrackColumnLayout const& layout = defaultTrackColumnLayout());
+    explicit TrackColumnLayoutModel(TrackColumnViewState state = {});
 
-    TrackColumnLayout const& layout() const { return _layout; }
-    void setLayout(TrackColumnLayout const& layout);
+    TrackColumnViewState const& state() const { return _state; }
+    void setState(TrackColumnViewState const& state);
     void reset();
 
     ChangedSignal& signalChanged() { return _changed; }
 
   private:
-    TrackColumnLayout _layout;
+    TrackColumnViewState _state;
     ChangedSignal _changed;
   };
 } // namespace ao::gtk

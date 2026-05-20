@@ -44,6 +44,7 @@ add_executable(ao_test
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/SmartListEvaluatorTest.cpp
     unit/runtime/TrackPresentationPresetTest.cpp
+    unit/runtime/TrackFieldTest.cpp
     unit/runtime/TrackListProjectionTest.cpp
     unit/runtime/TrackListProjectionScaleTest.cpp
     unit/runtime/TrackDetailProjectionTest.cpp
@@ -105,6 +106,7 @@ target_compile_options(ao_integration_test PRIVATE -Wno-array-bounds)
 add_executable(ao_test_gtk
     unit/linux-gtk/track/TrackListAdapterTest.cpp
     unit/linux-gtk/track/TrackPresentationTest.cpp
+    unit/linux-gtk/track/TrackFieldUiTest.cpp
     unit/linux-gtk/track/TrackRowCacheTest.cpp
     unit/linux-gtk/layout/document/LayoutModelTest.cpp
     unit/linux-gtk/layout/components/ContainersTest.cpp

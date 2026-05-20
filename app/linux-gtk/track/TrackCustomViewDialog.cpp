@@ -4,7 +4,7 @@
 #include "track/TrackCustomViewDialog.h"
 
 #include "app/UIState.h"
-#include "runtime/StateTypes.h"
+#include "runtime/TrackField.h"
 #include "runtime/TrackPresentationPreset.h"
 
 #include <glibmm/main.h>
@@ -20,14 +20,18 @@
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <iterator>
 #include <optional>
 #include <random>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -36,10 +40,6 @@ namespace ao::gtk
     constexpr int kDefaultWidth = 500;
     constexpr int kDefaultHeight = 600;
     constexpr int kBoxSpacing = 6;
-    constexpr int kGroupByAlbumArtistIndex = 3;
-    constexpr int kGroupByComposerIndex = 5;
-    constexpr int kGroupByWorkIndex = 6;
-    constexpr int kGroupByYearIndex = 7;
 
     std::string generateId()
     {
@@ -66,38 +66,44 @@ namespace ao::gtk
       return "None";
     }
 
-    Glib::RefPtr<Gtk::StringList> createSortFieldsModel()
+    Glib::RefPtr<Gtk::StringList> createSortFieldsModel(std::vector<rt::TrackSortField>& mapping)
     {
       auto model = Gtk::StringList::create({});
-      model->append("Artist");
-      model->append("Album");
-      model->append("Album Artist");
-      model->append("Genre");
-      model->append("Composer");
-      model->append("Work");
-      model->append("Year");
-      model->append("Disc Number");
-      model->append("Track Number");
-      model->append("Title");
-      model->append("Duration");
+      auto const defs = rt::trackFieldDefinitions();
+      mapping.clear();
+
+      for (std::size_t idx = 0; idx < rt::kTrackSortFieldCount; ++idx)
+      {
+        auto const sortField = static_cast<rt::TrackSortField>(idx);
+
+        for (auto const& def : defs)
+        {
+          if (def.sortField == sortField)
+          {
+            model->append(std::string{def.label});
+            mapping.push_back(sortField);
+            break;
+          }
+        }
+      }
+
       return model;
     }
 
-    Glib::RefPtr<Gtk::StringList> createVisibleFieldsModel()
+    Glib::RefPtr<Gtk::StringList> createVisibleFieldsModel(std::vector<rt::TrackField>& mapping)
     {
       auto model = Gtk::StringList::create({});
-      model->append("Title");
-      model->append("Artist");
-      model->append("Album");
-      model->append("Album Artist");
-      model->append("Genre");
-      model->append("Composer");
-      model->append("Work");
-      model->append("Year");
-      model->append("Disc Number");
-      model->append("Track Number");
-      model->append("Duration");
-      model->append("Tags");
+      mapping.clear();
+
+      for (auto const& def : rt::trackFieldDefinitions())
+      {
+        if (def.presentable)
+        {
+          model->append(std::string{def.label});
+          mapping.push_back(def.field);
+        }
+      }
+
       return model;
     }
   }
@@ -141,16 +147,24 @@ namespace ao::gtk
     groupBox->append(*groupLabel);
 
     auto groupModel = Gtk::StringList::create({});
-    groupModel->append(std::string{groupKeyName(rt::TrackGroupKey::None)});
-    groupModel->append(std::string{groupKeyName(rt::TrackGroupKey::Artist)});
-    groupModel->append(std::string{groupKeyName(rt::TrackGroupKey::Album)});
-    groupModel->append(std::string{groupKeyName(rt::TrackGroupKey::AlbumArtist)});
-    groupModel->append(std::string{groupKeyName(rt::TrackGroupKey::Genre)});
-    groupModel->append(std::string{groupKeyName(rt::TrackGroupKey::Composer)});
-    groupModel->append(std::string{groupKeyName(rt::TrackGroupKey::Work)});
-    groupModel->append(std::string{groupKeyName(rt::TrackGroupKey::Year)});
+    _availableGroupKeys = {
+      rt::TrackGroupKey::None,
+      rt::TrackGroupKey::Artist,
+      rt::TrackGroupKey::Album,
+      rt::TrackGroupKey::AlbumArtist,
+      rt::TrackGroupKey::Genre,
+      rt::TrackGroupKey::Composer,
+      rt::TrackGroupKey::Work,
+      rt::TrackGroupKey::Year,
+    };
+
+    for (auto const key : _availableGroupKeys)
+    {
+      groupModel->append(std::string{groupKeyName(key)});
+    }
 
     _groupDropdown.set_model(groupModel);
+    _groupDropdown.set_hexpand(true);
     groupBox->append(_groupDropdown);
     mainBox->append(*groupBox);
 
@@ -191,7 +205,7 @@ namespace ao::gtk
     addVisibleBtn->signal_clicked().connect(
       [this]
       {
-        _visibleFieldsState.push_back(static_cast<std::uint8_t>(rt::TrackPresentationField::Title));
+        _visibleFieldsState.push_back(rt::TrackField::Title);
         rebuildVisibleFieldsList();
       });
     mainBox->append(*addVisibleBtn);
@@ -223,11 +237,23 @@ namespace ao::gtk
       auto* const row = Gtk::make_managed<Gtk::ListBoxRow>();
       auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
-      auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createSortFieldsModel());
+      auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createSortFieldsModel(_availableSortFields));
 
-      dropdown->set_selected(term.field);
+      // Find the index in our mapping
+      auto const it = std::ranges::find(_availableSortFields, static_cast<rt::TrackSortField>(term.field));
+      auto const index = (it != _availableSortFields.end())
+                           ? static_cast<::guint>(std::ranges::distance(_availableSortFields.begin(), it))
+                           : 0;
+
+      dropdown->set_selected(index);
       dropdown->property_selected().signal_changed().connect(
-        [this, i, dropdown] { _sortState[i].field = static_cast<std::uint8_t>(dropdown->get_selected()); });
+        [this, i, dropdown]
+        {
+          if (auto const selected = dropdown->get_selected(); selected < _availableSortFields.size())
+          {
+            _sortState[i].field = static_cast<std::uint8_t>(_availableSortFields[selected]);
+          }
+        });
       box->append(*dropdown);
 
       auto* ascBtn = Gtk::make_managed<Gtk::ToggleButton>("Ascending");
@@ -289,11 +315,22 @@ namespace ao::gtk
       auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
       auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
-      auto* dropdown = Gtk::make_managed<Gtk::DropDown>(createVisibleFieldsModel());
+      auto* dropdown = Gtk::make_managed<Gtk::DropDown>(createVisibleFieldsModel(_availableVisibleFields));
 
-      dropdown->set_selected(field);
+      auto const it = std::ranges::find(_availableVisibleFields, field);
+      auto const index = (it != _availableVisibleFields.end())
+                           ? static_cast<::guint>(std::ranges::distance(_availableVisibleFields.begin(), it))
+                           : 0;
+
+      dropdown->set_selected(index);
       dropdown->property_selected().signal_changed().connect(
-        [this, i, dropdown] { _visibleFieldsState[i] = static_cast<std::uint8_t>(dropdown->get_selected()); });
+        [this, i, dropdown]
+        {
+          if (auto const selected = dropdown->get_selected(); selected < _availableVisibleFields.size())
+          {
+            _visibleFieldsState[i] = _availableVisibleFields[selected];
+          }
+        });
       box->append(*dropdown);
 
       auto* spacer = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
@@ -340,21 +377,10 @@ namespace ao::gtk
   {
     _nameEntry.set_text(std::string{label});
 
-    int groupIndex = 0;
-
-    switch (spec.groupBy)
+    if (auto const it = std::ranges::find(_availableGroupKeys, spec.groupBy); it != _availableGroupKeys.end())
     {
-      case rt::TrackGroupKey::None: groupIndex = 0; break;
-      case rt::TrackGroupKey::Artist: groupIndex = 1; break;
-      case rt::TrackGroupKey::Album: groupIndex = 2; break;
-      case rt::TrackGroupKey::AlbumArtist: groupIndex = kGroupByAlbumArtistIndex; break;
-      case rt::TrackGroupKey::Genre: groupIndex = 4; break;
-      case rt::TrackGroupKey::Composer: groupIndex = kGroupByComposerIndex; break;
-      case rt::TrackGroupKey::Work: groupIndex = kGroupByWorkIndex; break;
-      case rt::TrackGroupKey::Year: groupIndex = kGroupByYearIndex; break;
+      _groupDropdown.set_selected(static_cast<::guint>(std::ranges::distance(_availableGroupKeys.begin(), it)));
     }
-
-    _groupDropdown.set_selected(groupIndex);
 
     _sortState.clear();
 
@@ -369,7 +395,7 @@ namespace ao::gtk
 
     for (auto const field : spec.visibleFields)
     {
-      _visibleFieldsState.push_back(static_cast<std::uint8_t>(field));
+      _visibleFieldsState.push_back(field);
     }
 
     rebuildVisibleFieldsList();
@@ -381,21 +407,23 @@ namespace ao::gtk
     state.id = generateId();
     state.label = _nameEntry.get_text();
 
-    switch (auto const groupIndex = _groupDropdown.get_selected(); groupIndex)
+    if (auto const groupIndex = _groupDropdown.get_selected(); groupIndex < _availableGroupKeys.size())
     {
-      case 0: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::None); break;
-      case 1: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Artist); break;
-      case 2: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Album); break;
-      case kGroupByAlbumArtistIndex: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::AlbumArtist); break;
-      case 4: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Genre); break;
-      case kGroupByComposerIndex: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Composer); break;
-      case kGroupByWorkIndex: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Work); break;
-      case kGroupByYearIndex: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Year); break;
-      default: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::None); break;
+      state.groupBy = static_cast<std::uint8_t>(_availableGroupKeys[groupIndex]);
+    }
+    else
+    {
+      state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::None);
     }
 
     state.sortBy = _sortState;
-    state.visibleFields = _visibleFieldsState;
+
+    state.visibleFields.reserve(_visibleFieldsState.size());
+
+    for (auto const field : _visibleFieldsState)
+    {
+      state.visibleFields.push_back(static_cast<std::uint8_t>(field));
+    }
 
     return state;
   }

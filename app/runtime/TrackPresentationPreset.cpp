@@ -3,10 +3,10 @@
 
 #include "TrackPresentationPreset.h"
 
-#include "runtime/StateTypes.h"
+#include "StateTypes.h"
+#include "TrackField.h"
 
 #include <algorithm>
-#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -16,8 +16,7 @@ namespace ao::rt
 {
   namespace
   {
-    using Field = TrackPresentationField;
-    using Sort = TrackSortField;
+    using F = TrackField;
 
     std::vector<TrackPresentationPreset> const& getBuiltinPresets()
     {
@@ -31,13 +30,13 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::None,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
-                      TrackSortTerm{.field = Sort::Album, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {Field::Title, Field::Artist, Field::Album, Field::Duration, Field::Tags},
+                  .visibleFields = {F::Title, F::Artist, F::Album, F::Duration, F::Tags},
                   .redundantFields = {},
                 },
               .label = "Songs",
@@ -50,14 +49,14 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::Album,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::AlbumArtist, .ascending = true},
-                      TrackSortTerm{.field = Sort::Album, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {Field::TrackNumber, Field::Title, Field::Duration, Field::Year, Field::Tags},
-                  .redundantFields = {Field::Album, Field::AlbumArtist},
+                  .visibleFields = {F::TrackNumber, F::Title, F::Duration, F::Year, F::Tags},
+                  .redundantFields = {F::Album, F::AlbumArtist},
                 },
               .label = "Albums",
               .description = "Grouped by album with track-oriented columns.",
@@ -69,14 +68,14 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::Artist,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
-                      TrackSortTerm{.field = Sort::Album, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {Field::Album, Field::TrackNumber, Field::Title, Field::Duration, Field::Tags},
-                  .redundantFields = {Field::Artist},
+                  .visibleFields = {F::Album, F::TrackNumber, F::Title, F::Duration, F::Tags},
+                  .redundantFields = {F::Artist},
                 },
               .label = "Artists",
               .description = "Grouped by artist with album-oriented columns.",
@@ -88,15 +87,14 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::AlbumArtist,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::AlbumArtist, .ascending = true},
-                      TrackSortTerm{.field = Sort::Album, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields =
-                    {Field::Album, Field::TrackNumber, Field::Title, Field::Artist, Field::Duration, Field::Year},
-                  .redundantFields = {Field::AlbumArtist},
+                  .visibleFields = {F::Album, F::TrackNumber, F::Title, F::Artist, F::Duration, F::Year},
+                  .redundantFields = {F::AlbumArtist},
                 },
               .label = "Album Artists",
               .description = "Grouped by album artist.",
@@ -108,16 +106,15 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::Composer,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::Composer, .ascending = true},
-                      TrackSortTerm{.field = Sort::Work, .ascending = true},
-                      TrackSortTerm{.field = Sort::Album, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Composer, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Work, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields =
-                    {Field::Work, Field::Title, Field::Artist, Field::Album, Field::Duration, Field::Year},
-                  .redundantFields = {Field::Composer},
+                  .visibleFields = {F::Work, F::Title, F::Artist, F::Album, F::Duration, F::Year},
+                  .redundantFields = {F::Composer},
                 },
               .label = "Classical: Composers",
               .description = "Grouped by composer with work-oriented columns.",
@@ -129,14 +126,14 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::Work,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::Composer, .ascending = true},
-                      TrackSortTerm{.field = Sort::Work, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Composer, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Work, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {Field::Composer, Field::Title, Field::Artist, Field::Album, Field::Duration},
-                  .redundantFields = {Field::Work},
+                  .visibleFields = {F::Composer, F::Title, F::Artist, F::Album, F::Duration},
+                  .redundantFields = {F::Work},
                 },
               .label = "Classical: Works",
               .description = "Grouped by work with composer-oriented columns.",
@@ -148,15 +145,15 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::Genre,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::Genre, .ascending = true},
-                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
-                      TrackSortTerm{.field = Sort::Album, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Genre, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {Field::Artist, Field::Album, Field::Title, Field::Duration, Field::Tags},
-                  .redundantFields = {Field::Genre},
+                  .visibleFields = {F::Artist, F::Album, F::Title, F::Duration, F::Tags},
+                  .redundantFields = {F::Genre},
                 },
               .label = "Genres",
               .description = "Grouped by genre.",
@@ -168,15 +165,15 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::Year,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::Year, .ascending = true},
-                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
-                      TrackSortTerm{.field = Sort::Album, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {Field::Artist, Field::Album, Field::Title, Field::Duration, Field::Tags},
-                  .redundantFields = {Field::Year},
+                  .visibleFields = {F::Artist, F::Album, F::Title, F::Duration, F::Tags},
+                  .redundantFields = {F::Year},
                 },
               .label = "Years",
               .description = "Grouped by year.",
@@ -188,13 +185,13 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::None,
                   .sortBy =
                     {
-                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
-                      TrackSortTerm{.field = Sort::Album, .ascending = true},
-                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
-                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {Field::Title, Field::Artist, Field::Album, Field::Genre, Field::Year, Field::Tags},
+                  .visibleFields = {F::Title, F::Artist, F::Album, F::Genre, F::Year, F::Tags},
                   .redundantFields = {},
                 },
               .label = "Tagging",
@@ -205,92 +202,6 @@ namespace ao::rt
       return presets;
     }
   } // namespace
-
-  std::string_view trackPresentationFieldId(TrackPresentationField field)
-  {
-    switch (field)
-    {
-      case TrackPresentationField::Title: return "title";
-      case TrackPresentationField::Artist: return "artist";
-      case TrackPresentationField::Album: return "album";
-      case TrackPresentationField::AlbumArtist: return "album-artist";
-      case TrackPresentationField::Genre: return "genre";
-      case TrackPresentationField::Composer: return "composer";
-      case TrackPresentationField::Work: return "work";
-      case TrackPresentationField::Year: return "year";
-      case TrackPresentationField::DiscNumber: return "disc-number";
-      case TrackPresentationField::TrackNumber: return "track-number";
-      case TrackPresentationField::Duration: return "duration";
-      case TrackPresentationField::Tags: return "tags";
-    }
-
-    return "title";
-  }
-
-  std::optional<TrackPresentationField> trackPresentationFieldFromId(std::string_view id)
-  {
-    if (id == "title")
-    {
-      return TrackPresentationField::Title;
-    }
-
-    if (id == "artist")
-    {
-      return TrackPresentationField::Artist;
-    }
-
-    if (id == "album")
-    {
-      return TrackPresentationField::Album;
-    }
-
-    if (id == "album-artist")
-    {
-      return TrackPresentationField::AlbumArtist;
-    }
-
-    if (id == "genre")
-    {
-      return TrackPresentationField::Genre;
-    }
-
-    if (id == "composer")
-    {
-      return TrackPresentationField::Composer;
-    }
-
-    if (id == "work")
-    {
-      return TrackPresentationField::Work;
-    }
-
-    if (id == "year")
-    {
-      return TrackPresentationField::Year;
-    }
-
-    if (id == "disc-number")
-    {
-      return TrackPresentationField::DiscNumber;
-    }
-
-    if (id == "track-number")
-    {
-      return TrackPresentationField::TrackNumber;
-    }
-
-    if (id == "duration")
-    {
-      return TrackPresentationField::Duration;
-    }
-
-    if (id == "tags")
-    {
-      return TrackPresentationField::Tags;
-    }
-
-    return std::nullopt;
-  }
 
   std::span<TrackPresentationPreset const> builtinTrackPresentationPresets()
   {
@@ -325,9 +236,9 @@ namespace ao::rt
       result.id = kDefaultTrackPresentationId;
     }
 
-    auto deduplicate = [](std::vector<TrackPresentationField>& fields)
+    auto deduplicate = [](std::vector<TrackField>& fields)
     {
-      auto seen = std::vector<TrackPresentationField>{};
+      auto seen = std::vector<TrackField>{};
       seen.reserve(fields.size());
 
       for (auto const field : fields)

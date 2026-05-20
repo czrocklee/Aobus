@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/runtime/TrackPresentationPreset.h"
-#include "runtime/StateTypes.h"
+#include "runtime/TrackField.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -70,7 +70,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].ascending == true);
     }
 
-    auto const expectedRedundant = std::vector{TrackPresentationField::Artist};
+    auto const expectedRedundant = std::vector{TrackField::Artist};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -92,8 +92,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    auto const expectedRedundant =
-      std::vector{TrackPresentationField::Artist, TrackPresentationField::Album, TrackPresentationField::AlbumArtist};
+    auto const expectedRedundant = std::vector{TrackField::Artist, TrackField::Album, TrackField::AlbumArtist};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -115,7 +114,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    auto const expectedRedundant = std::vector{TrackPresentationField::AlbumArtist};
+    auto const expectedRedundant = std::vector{TrackField::AlbumArtist};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -138,7 +137,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    auto const expectedRedundant = std::vector{TrackPresentationField::Genre};
+    auto const expectedRedundant = std::vector{TrackField::Genre};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -161,7 +160,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    auto const expectedRedundant = std::vector{TrackPresentationField::Composer};
+    auto const expectedRedundant = std::vector{TrackField::Composer};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -184,7 +183,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    auto const expectedRedundant = std::vector{TrackPresentationField::Work};
+    auto const expectedRedundant = std::vector{TrackField::Work};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -207,7 +206,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    auto const expectedRedundant = std::vector{TrackPresentationField::Year};
+    auto const expectedRedundant = std::vector{TrackField::Year};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 } // namespace ao::rt::test

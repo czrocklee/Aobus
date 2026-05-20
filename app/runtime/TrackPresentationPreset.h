@@ -4,8 +4,8 @@
 #pragma once
 
 #include "StateTypes.h"
+#include "TrackField.h"
 
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -18,8 +18,8 @@ namespace ao::rt
     std::string id{};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
-    std::vector<TrackPresentationField> visibleFields{};
-    std::vector<TrackPresentationField> redundantFields{};
+    std::vector<TrackField> visibleFields{};
+    std::vector<TrackField> redundantFields{};
 
     bool operator==(TrackPresentationSpec const&) const = default;
   };
@@ -30,9 +30,6 @@ namespace ao::rt
     std::string_view label{};
     std::string_view description{};
   };
-
-  std::string_view trackPresentationFieldId(TrackPresentationField field);
-  std::optional<TrackPresentationField> trackPresentationFieldFromId(std::string_view id);
 
   std::span<TrackPresentationPreset const> builtinTrackPresentationPresets();
   TrackPresentationPreset const* builtinTrackPresentationPreset(std::string_view id);

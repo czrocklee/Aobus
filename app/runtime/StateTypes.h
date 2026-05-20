@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CorePrimitives.h"
+#include "TrackField.h"
 #include "ao/Type.h"
 #include "ao/audio/Backend.h"
 #include "ao/audio/Types.h"
@@ -115,64 +116,13 @@ namespace ao::rt
     std::uint64_t revision = 0;
   };
 
-  enum class TrackGroupKey : std::uint8_t
-  {
-    None,
-    Artist,
-    Album,
-    AlbumArtist,
-    Genre,
-    Composer,
-    Work,
-    Year,
-  };
-
-  enum class TrackSortField : std::uint8_t
-  {
-    Artist,
-    Album,
-    AlbumArtist,
-    Genre,
-    Composer,
-    Work,
-    Year,
-    DiscNumber,
-    TrackNumber,
-    Title,
-    Duration,
-  };
-
-  struct TrackSortTerm final
-  {
-    TrackSortField field = TrackSortField::Title;
-    bool ascending = true;
-
-    bool operator==(TrackSortTerm const&) const = default;
-  };
-
-  enum class TrackPresentationField : std::uint8_t
-  {
-    Title,
-    Artist,
-    Album,
-    AlbumArtist,
-    Genre,
-    Composer,
-    Work,
-    Year,
-    DiscNumber,
-    TrackNumber,
-    Duration,
-    Tags,
-  };
-
   struct TrackListPresentationState final
   {
     std::string presentationId = std::string{kDefaultTrackPresentationId};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
-    std::vector<TrackPresentationField> visibleFields{};
-    std::vector<TrackPresentationField> redundantFields{};
+    std::vector<TrackField> visibleFields{};
+    std::vector<TrackField> redundantFields{};
 
     bool operator==(TrackListPresentationState const&) const = default;
   };

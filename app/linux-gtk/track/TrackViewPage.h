@@ -6,6 +6,7 @@
 #include "ao/Type.h"
 #include "runtime/CorePrimitives.h"
 #include "runtime/ProjectionTypes.h"
+#include "runtime/TrackField.h"
 #include "runtime/TrackPresentationPreset.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnViewHost.h"
@@ -29,6 +30,7 @@
 #include <sigc++/signal.h>
 
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -93,9 +95,9 @@ namespace ao::gtk
     void setupColumnViewStyles(Gtk::ColumnView& view);
     void updateSectionHeaders();
 
-    void rebuildColumnView(TrackColumnLayout const& layout);
+    void rebuildColumnView(std::span<rt::TrackField const> visibleFields);
 
-    void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row, TrackColumn column, std::string const& newValue);
+    void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row, rt::TrackField field, std::string const& newValue);
 
     // Child widgets
     Gtk::Label _statusLabel;

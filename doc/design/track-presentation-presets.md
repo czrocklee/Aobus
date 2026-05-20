@@ -59,13 +59,26 @@ Read these in order when implementing the feature:
    - long-term rebuild-and-swap architecture
    - staged implementation plan and acceptance criteria
 
+8. [Track Field Registry](track-field-registry.md)
+   - field-centric replacement for column/field dispatch
+   - real, technical, tag, and synthetic fields
+   - GTK field UI registry responsibilities
+   - Properties dialog integration
+
+Implementation plan:
+
+- [Track Field Registry One-Shot Implementation Plan](../plan/track-field-registry-one-shot-plan.md)
+  - final-state-only migration from `TrackPresentationField`/`TrackColumn` to `TrackField`
+  - runtime, GTK, Properties dialog, test, and documentation slices
+  - removal checklist for obsolete dispatch
+
 ## Final Target
 
 ```text
 User chooses a View preset
   -> runtime applies complete presentation spec
   -> projection groups/sorts by spec
-  -> GTK maps visible semantic fields to columns
+  -> GTK maps visible TrackField values to columns
   -> GTK keeps lazy track row loading and cell rendering
 ```
 

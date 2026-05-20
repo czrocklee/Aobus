@@ -45,8 +45,8 @@ namespace ao::gtk
     std::string basePresetId;
     std::uint8_t groupBy = 0; // ao::rt::TrackGroupKey
     std::vector<TrackPresentationSortTermState> sortBy;
-    std::vector<std::uint8_t> visibleFields;   // ao::rt::TrackPresentationField
-    std::vector<std::uint8_t> redundantFields; // ao::rt::TrackPresentationField
+    std::vector<std::uint8_t> visibleFields;   // ao::rt::TrackField
+    std::vector<std::uint8_t> redundantFields; // ao::rt::TrackField
   };
 
   struct TrackPresentationStoreState final

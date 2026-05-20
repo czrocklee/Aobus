@@ -4,7 +4,7 @@
 #pragma once
 
 #include "CorePrimitives.h"
-#include "StateTypes.h"
+#include "TrackField.h"
 #include "ao/Type.h"
 
 #include <cstddef>
@@ -23,8 +23,8 @@ namespace ao::rt
     std::string presentationId{};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> effectiveSortBy{};
-    std::vector<TrackPresentationField> visibleFields{};
-    std::vector<TrackPresentationField> redundantFields{};
+    std::vector<TrackField> visibleFields{};
+    std::vector<TrackField> redundantFields{};
     std::uint64_t revision = 0;
   };
 
