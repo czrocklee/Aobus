@@ -2,15 +2,16 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TrackCommand.h"
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-#include <ao/query/ExecutionPlan.h>
-#include <ao/query/Parser.h>
-#include <ao/query/PlanEvaluator.h>
-#include <runtime/CoreRuntime.h>
-#include <runtime/TrackCommandService.h>
+
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "ao/library/TrackView.h"
+#include "ao/query/ExecutionPlan.h"
+#include "ao/query/Parser.h"
+#include "ao/query/PlanEvaluator.h"
+#include "runtime/CoreRuntime.h"
+#include "runtime/TrackCommandService.h"
 
 #include <CLI/App.hpp>
 
@@ -176,7 +177,7 @@ namespace ao::cli
       [&runtime, path]
       {
         if (auto const trackId = runtime.trackCommands().createTrackFromFile(path->as<std::string>());
-            trackId != TrackId{})
+            trackId != kInvalidTrackId)
         {
           std::cout << "added track: " << trackId << '\n';
         }

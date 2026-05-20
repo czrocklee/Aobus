@@ -2,12 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackPresentationStore.h"
-#include "app/UIState.h"
-#include <runtime/ConfigStore.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackPresentationPreset.h>
 
-#include <ao/utility/Log.h>
+#include "ao/utility/Log.h"
+#include "app/UIState.h"
+#include "runtime/ConfigStore.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
 
 #include <algorithm>
 #include <memory>

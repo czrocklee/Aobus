@@ -3,9 +3,10 @@
 
 #pragma once
 
+#include "ao/lmdb/Environment.h"
+
 #include <lmdb.h>
 
-#include <ao/lmdb/Environment.h>
 #include <memory>
 #include <utility>
 

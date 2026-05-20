@@ -2,19 +2,20 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "list/ListSidebarController.h"
+
+#include "ao/Type.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/utility/Log.h"
 #include "list/ListSidebarPanel.h"
 #include "list/SmartListDialog.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/LibraryMutationService.h"
+#include "runtime/ViewService.h"
+#include "runtime/WorkspaceService.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/utility/Log.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -25,27 +26,12 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
-#include <cstdint>
-#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
 
 namespace ao::gtk
 {
-  namespace
-  {
-    ListId allTracksListId()
-    {
-      return ListId{std::numeric_limits<std::uint32_t>::max()};
-    }
-
-    ListId rootParentId()
-    {
-      return ListId{0};
-    }
-  }
-
   ListSidebarController::ListSidebarController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks)
     : _parent{parent}, _callbacks{std::move(callbacks)}, _runtime{runtime}
   {
@@ -61,9 +47,9 @@ namespace ao::gtk
     _focusSub = _runtime.workspace().onFocusedViewChanged(
       [this](rt::ViewId viewId)
       {
-        if (viewId != rt::ViewId{})
+        if (viewId != rt::kInvalidViewId)
         {
-          if (auto const state = _runtime.views().trackListState(viewId); state.listId != ListId{})
+          if (auto const state = _runtime.views().trackListState(viewId); state.listId != kInvalidListId)
           {
             select(state.listId);
           }
@@ -107,11 +93,11 @@ namespace ao::gtk
 
     _panel->rebuildTree(_runtime, txn);
 
-    if (_pendingSelectId != ListId{0})
+    if (_pendingSelectId != kInvalidListId)
     {
       _panel->selectList(_pendingSelectId);
       _runtime.workspace().navigateTo(_pendingSelectId);
-      _pendingSelectId = ListId{0};
+      _pendingSelectId = kInvalidListId;
     }
   }
 
@@ -123,8 +109,8 @@ namespace ao::gtk
   void ListSidebarController::onSelectionChanged(ListId listId)
   {
     _newListAction->set_enabled(true);
-    _deleteListAction->set_enabled(listId != allTracksListId());
-    _editListAction->set_enabled(listId != allTracksListId());
+    _deleteListAction->set_enabled(listId != rt::kAllTracksListId);
+    _editListAction->set_enabled(listId != rt::kAllTracksListId);
 
     if (_callbacks.onListSelected)
     {
@@ -137,7 +123,7 @@ namespace ao::gtk
     bool canDelete = false;
     bool canEdit = false;
 
-    if (listId != ListId{0} && listId != allTracksListId())
+    if (listId != kInvalidListId && listId != rt::kAllTracksListId)
     {
       canDelete = !_panel->listHasChildren(listId);
       canEdit = true;
@@ -163,9 +149,10 @@ namespace ao::gtk
 
   void ListSidebarController::openNewSmartListDialog()
   {
-    auto parentListId = rootParentId();
+    auto parentListId = kInvalidListId;
 
-    if (auto const selectedId = _panel->selectedListId(); selectedId != ListId{0} && selectedId != allTracksListId())
+    if (auto const selectedId = _panel->selectedListId();
+        selectedId != kInvalidListId && selectedId != rt::kAllTracksListId)
     {
       parentListId = selectedId;
     }
@@ -192,7 +179,7 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::OK)
         {
-          if (auto const draft = dialog->draft(); draft.listId != ListId{0})
+          if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
           {
             updateList(draft);
           }
@@ -232,7 +219,7 @@ namespace ao::gtk
         {
           if (responseId == Gtk::ResponseType::OK)
           {
-            if (auto const draft = dialog->draft(); draft.listId != ListId{0})
+            if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
             {
               updateList(draft);
             }
@@ -266,7 +253,7 @@ namespace ao::gtk
 
     auto const listId = _panel->selectedListId();
 
-    if (listId == ListId{0} || listId == allTracksListId())
+    if (listId == kInvalidListId || listId == rt::kAllTracksListId)
     {
       return;
     }
@@ -283,7 +270,7 @@ namespace ao::gtk
 
     auto const listId = _panel->selectedListId();
 
-    if (listId == ListId{0} || listId == allTracksListId())
+    if (listId == kInvalidListId || listId == rt::kAllTracksListId)
     {
       return;
     }
@@ -296,6 +283,6 @@ namespace ao::gtk
 
     _runtime.mutation().deleteList(listId);
 
-    _pendingSelectId = allTracksListId();
+    _pendingSelectId = rt::kAllTracksListId;
   }
 } // namespace ao::gtk

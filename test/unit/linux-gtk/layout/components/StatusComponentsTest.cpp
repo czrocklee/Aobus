@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <app/linux-gtk/library_io/ImportProgressIndicator.h>
-#include <app/linux-gtk/playback/NowPlayingStatusLabel.h>
-#include <app/linux-gtk/playback/PlaybackDetailsWidget.h>
-#include <app/linux-gtk/track/LibraryTrackCountLabel.h>
-#include <app/linux-gtk/track/StatusNotificationLabel.h>
-#include <app/runtime/AppRuntime.h>
-#include <app/runtime/ConfigStore.h>
-#include <app/runtime/ListSourceStore.h>
-#include <runtime/CorePrimitives.h>
-#include <test/unit/lmdb/TestUtils.h>
+#include "app/linux-gtk/playback/NowPlayingStatusLabel.h"
+#include "app/linux-gtk/playback/PlaybackDetailsWidget.h"
+#include "app/linux-gtk/portal/ImportProgressIndicator.h"
+#include "app/linux-gtk/track/LibraryTrackCountLabel.h"
+#include "app/linux-gtk/track/StatusNotificationLabel.h"
+#include "app/runtime/AppRuntime.h"
+#include "app/runtime/ConfigStore.h"
+#include "app/runtime/ListSourceStore.h"
+#include "runtime/CorePrimitives.h"
+#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -41,11 +41,10 @@ namespace ao::gtk::test
     auto const app = Gtk::Application::create("io.github.aobus.status_test");
 
     auto const tempDir = TempDir{};
-    auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     SECTION("PlaybackDetailsWidget instantiates")
     {
@@ -63,9 +62,9 @@ namespace ao::gtk::test
       CHECK(gtkLabel->get_text().empty());
     }
 
-    SECTION("ImportProgressIndicator instantiates and is hidden by default")
+    SECTION("portal::ImportProgressIndicator instantiates and is hidden by default")
     {
-      auto indicator = ImportProgressIndicator{runtime.mutation()};
+      auto indicator = portal::ImportProgressIndicator{runtime.mutation()};
       REQUIRE(indicator.widget().get_visible() == false);
     }
 

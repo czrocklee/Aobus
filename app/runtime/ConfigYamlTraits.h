@@ -66,7 +66,7 @@ namespace YAML
 
                                    if (auto const child = Node(field); child.IsDefined())
                                    {
-                                     node[std::string{kNames[index]}] = std::move(child); // NOLINT
+                                     node[std::string{kNames.at(index)}] = std::move(child);
                                    }
 
                                    ++index;
@@ -86,7 +86,7 @@ namespace YAML
                                  {
                                    constexpr auto kNames = boost::pfr::names_as_array<T>();
 
-                                   if (auto const child = n[std::string{kNames[index]}]) // NOLINT
+                                   if (auto const child = n[std::string{kNames.at(index)}])
                                    {
                                      field = child.as<std::remove_cvref_t<decltype(field)>>();
                                    }
@@ -98,18 +98,18 @@ namespace YAML
   };
 
   template<typename T>
-  concept HasValueMethod = requires(T const& obj) {
-    { obj.value() };
+  concept HasRawMethod = requires(T const& obj) {
+    { obj.raw() };
   } && !std::is_aggregate_v<T>;
 
-  template<HasValueMethod T>
+  template<HasRawMethod T>
   struct convert<T>
   {
-    static Node encode(T const& rhs) { return Node{rhs.value()}; }
+    static Node encode(T const& rhs) { return Node{rhs.raw()}; }
 
     static bool decode(Node const& node, T& rhs)
     {
-      using ValueType = std::remove_cvref_t<decltype(std::declval<T const&>().value())>;
+      using ValueType = std::remove_cvref_t<decltype(std::declval<T const&>().raw())>;
       rhs = T{node.as<ValueType>()};
       return true;
     }

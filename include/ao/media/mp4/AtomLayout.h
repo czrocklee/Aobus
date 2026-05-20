@@ -50,6 +50,7 @@ namespace ao::media::mp4
 
   struct TrknAtomLayout
   {
+    static constexpr std::size_t kByteCount = 32;
     using FixedSize = std::true_type;
 
     DataAtomLayout common;
@@ -61,12 +62,13 @@ namespace ao::media::mp4
     static constexpr char const* kType = "trkn";
   };
 
-  static_assert(sizeof(TrknAtomLayout) == 32); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(TrknAtomLayout) == TrknAtomLayout::kByteCount);
   static_assert(alignof(TrknAtomLayout) == 1);
   static_assert(std::is_trivial_v<TrknAtomLayout>);
 
   struct DiskAtomLayout
   {
+    static constexpr std::size_t kByteCount = 30;
     using FixedSize = std::true_type;
 
     DataAtomLayout common;
@@ -77,7 +79,7 @@ namespace ao::media::mp4
     static constexpr char const* kType = "disk";
   };
 
-  static_assert(sizeof(DiskAtomLayout) == 30); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(DiskAtomLayout) == DiskAtomLayout::kByteCount);
   static_assert(alignof(DiskAtomLayout) == 1);
   static_assert(std::is_trivial_v<DiskAtomLayout>);
 
@@ -92,6 +94,7 @@ namespace ao::media::mp4
   // bytes 24-27: duration (in timescale units)
   struct MdhdAtomLayout
   {
+    static constexpr std::size_t kByteCount = 28;
     using FixedSize = std::false_type;
 
     AtomLayout common;
@@ -104,7 +107,7 @@ namespace ao::media::mp4
     static constexpr char const* kType = "mdhd";
   };
 
-  static_assert(sizeof(MdhdAtomLayout) == 28); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(MdhdAtomLayout) == MdhdAtomLayout::kByteCount);
   static_assert(alignof(MdhdAtomLayout) == 1);
   static_assert(std::is_trivial_v<MdhdAtomLayout>);
 
@@ -113,6 +116,7 @@ namespace ao::media::mp4
   // Followed by entryCount sample entries
   struct StsdAtomLayout
   {
+    static constexpr std::size_t kByteCount = 16;
     using FixedSize = std::false_type;
 
     AtomLayout common;
@@ -120,7 +124,7 @@ namespace ao::media::mp4
     boost::endian::big_uint32_buf_t entryCount;
   };
 
-  static_assert(sizeof(StsdAtomLayout) == 16); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(StsdAtomLayout) == StsdAtomLayout::kByteCount);
   static_assert(alignof(StsdAtomLayout) == 1);
   static_assert(std::is_trivial_v<StsdAtomLayout>);
 
@@ -128,6 +132,7 @@ namespace ao::media::mp4
   // Followed by sampleCount entries of 4 bytes each (when sampleSize == 0)
   struct StszAtomLayout
   {
+    static constexpr std::size_t kByteCount = 20;
     using FixedSize = std::false_type;
 
     AtomLayout common;
@@ -141,7 +146,7 @@ namespace ao::media::mp4
     };
   };
 
-  static_assert(sizeof(StszAtomLayout) == 20); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(StszAtomLayout) == StszAtomLayout::kByteCount);
   static_assert(alignof(StszAtomLayout) == 1);
   static_assert(std::is_trivial_v<StszAtomLayout>);
 
@@ -150,6 +155,7 @@ namespace ao::media::mp4
   // Followed by entryCount entries of 12 bytes each
   struct StscAtomLayout
   {
+    static constexpr std::size_t kByteCount = 16;
     using FixedSize = std::false_type;
 
     AtomLayout common;
@@ -164,7 +170,7 @@ namespace ao::media::mp4
     };
   };
 
-  static_assert(sizeof(StscAtomLayout) == 16); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(StscAtomLayout) == StscAtomLayout::kByteCount);
   static_assert(alignof(StscAtomLayout) == 1);
   static_assert(std::is_trivial_v<StscAtomLayout>);
 
@@ -173,6 +179,7 @@ namespace ao::media::mp4
   // Followed by entryCount entries of 4 bytes each
   struct StcoAtomLayout
   {
+    static constexpr std::size_t kByteCount = 16;
     using FixedSize = std::false_type;
 
     AtomLayout common;
@@ -185,7 +192,7 @@ namespace ao::media::mp4
     };
   };
 
-  static_assert(sizeof(StcoAtomLayout) == 16); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(StcoAtomLayout) == StcoAtomLayout::kByteCount);
   static_assert(alignof(StcoAtomLayout) == 1);
   static_assert(std::is_trivial_v<StcoAtomLayout>);
 
@@ -194,6 +201,7 @@ namespace ao::media::mp4
   // Followed by entryCount entries of 8 bytes each
   struct Co64AtomLayout
   {
+    static constexpr std::size_t kByteCount = 16;
     using FixedSize = std::false_type;
 
     AtomLayout common;
@@ -206,7 +214,7 @@ namespace ao::media::mp4
     };
   };
 
-  static_assert(sizeof(Co64AtomLayout) == 16); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(Co64AtomLayout) == Co64AtomLayout::kByteCount);
   static_assert(alignof(Co64AtomLayout) == 1);
   static_assert(std::is_trivial_v<Co64AtomLayout>);
 
@@ -222,6 +230,7 @@ namespace ao::media::mp4
   // bytes 16-19: sample rate (4)
   struct AudioSampleEntryLayout
   {
+    static constexpr std::size_t kByteCount = 36;
     static constexpr std::size_t kReserved1Size = 6;
     using FixedSize = std::true_type;
 
@@ -238,7 +247,7 @@ namespace ao::media::mp4
     static constexpr char const* kType = "mp4a";
   };
 
-  static_assert(sizeof(AudioSampleEntryLayout) == 36); // NOLINT(readability-magic-numbers)
+  static_assert(sizeof(AudioSampleEntryLayout) == AudioSampleEntryLayout::kByteCount);
   static_assert(alignof(AudioSampleEntryLayout) == 1);
   static_assert(std::is_trivial_v<AudioSampleEntryLayout>);
 } // namespace ao::media::mp4

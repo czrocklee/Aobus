@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackColumnFactoryBuilder.h"
+
 #include "track/TrackPresentation.h"
 #include "track/TrackRowObject.h"
 
@@ -86,7 +87,7 @@ namespace ao::gtk
     void setConnectionData(Glib::RefPtr<Gtk::ListItem> const& listItem, char const* key, sigc::connection connection)
     {
       auto stored = std::make_unique<sigc::connection>(std::move(connection));
-      listItem->set_data(key, stored.release(), destroyConnectionData); // NOLINT(cppcoreguidelines-owning-memory)
+      listItem->set_data(key, stored.release(), destroyConnectionData);
     }
 
     void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem, TrackColumnDefinition const& definition)

@@ -2,7 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/MenuController.h"
-#include "library_io/ImportExportCoordinator.h"
+
+#include "portal/ImportExportCoordinator.h"
+
 #include <giomm/menu.h>
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
@@ -13,7 +15,7 @@
 
 namespace ao::gtk
 {
-  MenuController::MenuController(ImportExportCoordinator& importExport, std::function<void()> onEditLayout)
+  MenuController::MenuController(portal::ImportExportCoordinator& importExport, std::function<void()> onEditLayout)
     : _importExport{importExport}, _onEditLayout{std::move(onEditLayout)}
   {
   }

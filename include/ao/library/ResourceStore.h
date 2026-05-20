@@ -3,9 +3,10 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/Type.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Transaction.h"
+
 #include <cstddef>
 #include <span>
 #include <utility>
@@ -34,7 +35,7 @@ namespace ao::library
   {
   public:
     ResourceId create(std::span<std::byte const> data);
-    bool del(ResourceId id) { return _writer.del(id.value()); }
+    bool del(ResourceId id) { return _writer.del(id.raw()); }
     void clear() { _writer.clear(); }
 
   private:

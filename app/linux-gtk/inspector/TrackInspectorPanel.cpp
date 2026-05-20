@@ -2,16 +2,17 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "inspector/TrackInspectorPanel.h"
+
+#include "ao/Type.h"
+#include "ao/library/ResourceStore.h"
+#include "ao/utility/Log.h"
 #include "inspector/CoverArtCache.h"
+#include "runtime/LibraryMutationService.h"
 #include "runtime/ListSourceStore.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
 #include "runtime/TrackSource.h"
-#include <ao/Type.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/utility/Log.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/ViewService.h>
+#include "runtime/ViewService.h"
 
 #include <gdkmm/pixbuf.h>
 #include <giomm/memoryinputstream.h>
@@ -359,14 +360,14 @@ namespace ao::gtk
 
   void TrackInspectorPanel::updateCoverArt(rt::TrackDetailSnapshot const& snap)
   {
-    if (snap.singleCoverArtId == ResourceId{0})
+    if (snap.singleCoverArtId == kInvalidResourceId)
     {
       _coverImage.set_visible(false);
       _noCoverLabel.set_visible(true);
       return;
     }
 
-    auto const pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
+    auto const pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()));
 
     if (!pixbuf)
     {
@@ -374,7 +375,7 @@ namespace ao::gtk
 
       if (loadedPixbuf)
       {
-        _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.value()), loadedPixbuf);
+        _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()), loadedPixbuf);
       }
     }
 
@@ -390,7 +391,7 @@ namespace ao::gtk
   {
     auto const txn = _library.readTransaction();
     auto const reader = _library.resources().reader(txn);
-    auto const optData = reader.get(static_cast<std::uint32_t>(resourceId.value()));
+    auto const optData = reader.get(static_cast<std::uint32_t>(resourceId.raw()));
 
     if (!optData)
     {

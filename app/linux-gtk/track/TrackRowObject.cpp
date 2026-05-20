@@ -2,9 +2,10 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackRowObject.h"
+
+#include "ao/Type.h"
 #include "track/TrackPresentation.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
 
 #include <glibmm/objectbase.h>
 #include <glibmm/propertyproxy.h>
@@ -98,8 +99,7 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, TrackRowCache const& provider)
   {
-    auto obj =
-      Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{}); // NOLINT(cppcoreguidelines-owning-memory)
+    auto obj = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
     obj->_id = id;
     obj->_provider = &provider;
     return obj;

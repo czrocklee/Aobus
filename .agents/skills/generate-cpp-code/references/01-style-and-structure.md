@@ -96,10 +96,11 @@ Headers use `#pragma once`:
 #include <string_view>
 ```
 
-Implementation include order is paired header/project headers, third-party headers, then standard library:
+Implementation include order is paired header, project headers, third-party headers, then standard library (separated by blank lines):
 
 ```cpp
 #include <ao/audio/backend/PipeWireBackend.h>
+
 #include <ao/audio/backend/detail/PipeWireShared.h>
 #include <ao/utility/Log.h>
 

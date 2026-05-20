@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/detail/PipeWireShared.h>
+#include "ao/audio/backend/detail/PipeWireShared.h"
 
-#include <ao/audio/Format.h>
+#include "ao/audio/Format.h"
 
 extern "C"
 {
@@ -13,10 +13,11 @@ extern "C"
 #include <spa/pod/pod.h>
 }
 
-#include <cctype>
+#include <charconv>
 #include <cstdint>
-#include <cstdlib>
 #include <optional>
+#include <string_view>
+#include <system_error>
 
 namespace ao::audio::backend::detail
 {
@@ -38,20 +39,23 @@ namespace ao::audio::backend::detail
 
   std::optional<std::uint32_t> parseUintProperty(char const* value) noexcept
   {
-    if (value == nullptr || *value == '\0' || (std::isspace(static_cast<unsigned char>(*value)) != 0))
+    if (value == nullptr || *value == '\0')
     {
       return std::nullopt;
     }
 
-    char* end = nullptr; // NOLINT(misc-const-correctness)
-    auto const parsed = ::strtoul(value, &end, 10);
+    auto const text = std::string_view{value};
+    auto parsed = std::uint32_t{0};
+    auto const* const begin = text.data();
+    auto const* const end = begin + text.size();
+    auto const [ptr, ec] = std::from_chars(begin, end, parsed);
 
-    if (end == value || *end != '\0')
+    if (ec != std::errc{} || ptr != end)
     {
       return std::nullopt;
     }
 
-    return static_cast<std::uint32_t>(parsed);
+    return parsed;
   }
 
   std::optional<Format> parseRawStreamFormat(::spa_pod const* param) noexcept

@@ -4,10 +4,9 @@
 #pragma once
 
 #include "TrackSource.h"
-
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
 
 #include <cstddef>
 #include <map>

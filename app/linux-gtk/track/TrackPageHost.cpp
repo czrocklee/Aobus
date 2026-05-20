@@ -2,39 +2,38 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackPageHost.h"
-#include "library_io/PlaylistExporter.h" // NOLINT(misc-include-cleaner)
+
+#include "ao/Type.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/ListView.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/utility/Log.h"
 #include "list/ListSidebarController.h"
 #include "playback/PlaybackSequenceController.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ListSourceStore.h"
+#include "runtime/ManualListSource.h"
+#include "runtime/PlaybackService.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
+#include "runtime/ViewService.h"
+#include "runtime/WorkspaceService.h"
 #include "tag/TagEditController.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
-#include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/utility/Log.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/ListSourceStore.h>
-#include <runtime/ManualListSource.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 
 #include <algorithm>
-#include <cstdint>
 #include <format>
 #include <functional>
 #include <iterator>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -43,19 +42,6 @@
 
 namespace ao::gtk
 {
-  namespace
-  {
-    ListId allTracksListId()
-    {
-      return ListId{std::numeric_limits<std::uint32_t>::max()};
-    }
-
-    ListId rootParentId()
-    {
-      return ListId{0};
-    }
-  } // namespace
-
   TrackPageHost::TrackPageHost(Gtk::Stack& stack,
                                TrackColumnLayoutModel& layoutModel,
                                rt::AppRuntime& runtime,
@@ -73,8 +59,7 @@ namespace ao::gtk
   {
     _revealSub = _runtime.playback().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
 
-    _nowPlayingSub = _runtime.playback().onNowPlayingChanged(
-      [this](auto const& ev) { setPlayingTrack(ev.trackId != TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
+    _nowPlayingSub = _runtime.playback().onNowPlayingChanged([this](auto const& ev) { setPlayingTrack(ev.trackId); });
 
     _focusSub = _runtime.workspace().onFocusedViewChanged([this](auto) { syncLayout(); });
 
@@ -93,9 +78,9 @@ namespace ao::gtk
         ctx->adapter->bindProjection(ev.projection);
         ctx->page->applyPresentation(ev.projection->presentation());
 
-        if (_optPlayingTrackId)
+        if (_playingTrackId != kInvalidTrackId)
         {
-          ctx->page->setPlayingTrackId(_optPlayingTrackId);
+          ctx->page->setPlayingTrackId(_playingTrackId);
         }
       });
 
@@ -111,9 +96,9 @@ namespace ao::gtk
 
         ctx->page->applyPresentation(ev.presentation);
 
-        if (_optPlayingTrackId)
+        if (_playingTrackId != kInvalidTrackId)
         {
-          ctx->page->setPlayingTrackId(_optPlayingTrackId);
+          ctx->page->setPlayingTrackId(_playingTrackId);
         }
       });
   }
@@ -123,7 +108,7 @@ namespace ao::gtk
     auto viewId = rt::ViewId{ev.preferredViewId};
 
     // Fallback: If no view ID specified, try to find a view currently displaying the requested list
-    if (viewId == rt::ViewId{} && ev.preferredListId != ListId{})
+    if (viewId == rt::kInvalidViewId && ev.preferredListId != kInvalidListId)
     {
       for (auto const& [id, ctx] : _trackPages)
       {
@@ -135,11 +120,11 @@ namespace ao::gtk
       }
     }
 
-    if (viewId != rt::ViewId{})
+    if (viewId != rt::kInvalidViewId)
     {
       _runtime.workspace().setFocusedView(viewId);
 
-      if (ev.trackId != TrackId{})
+      if (ev.trackId != kInvalidTrackId)
       {
         if (auto* ctx = find(viewId))
         {
@@ -183,9 +168,9 @@ namespace ao::gtk
     }
 
     // Set active
-    if (state.activeViewId != rt::ViewId{})
+    if (state.activeViewId != rt::kInvalidViewId)
     {
-      _stack.set_visible_child(std::format("view-{}", state.activeViewId.value()));
+      _stack.set_visible_child(std::format("view-{}", state.activeViewId.raw()));
     }
   }
 
@@ -223,9 +208,9 @@ namespace ao::gtk
       ensureViewPage(viewId, *_activeDataProvider);
     }
 
-    if (layout.activeViewId != rt::ViewId{})
+    if (layout.activeViewId != rt::kInvalidViewId)
     {
-      _stack.set_visible_child(std::format("view-{}", layout.activeViewId.value()));
+      _stack.set_visible_child(std::format("view-{}", layout.activeViewId.raw()));
     }
   }
 
@@ -281,20 +266,20 @@ namespace ao::gtk
     return nullptr;
   }
 
-  void TrackPageHost::setPlayingTrack(std::optional<TrackId> optTrackId)
+  void TrackPageHost::setPlayingTrack(TrackId trackId)
   {
-    if (_optPlayingTrackId == optTrackId)
+    if (_playingTrackId == trackId)
     {
       return;
     }
 
-    _optPlayingTrackId = optTrackId;
+    _playingTrackId = trackId;
 
     for (auto& [id, ctx] : _trackPages)
     {
       if (ctx.page)
       {
-        ctx.page->setPlayingTrackId(optTrackId);
+        ctx.page->setPlayingTrackId(trackId);
       }
     }
   }
@@ -323,11 +308,11 @@ namespace ao::gtk
 
     auto trackPage =
       std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _presentationStore, _runtime, viewId);
-    auto const pageId = std::format("view-{}", viewId.value());
+    auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = std::string{"List"};
 
-    if (listId != allTracksListId() && listId != ListId{})
+    if (listId != rt::kAllTracksListId && listId != kInvalidListId)
     {
       auto const txn = _runtime.musicLibrary().readTransaction();
       auto lists = _runtime.musicLibrary().lists().reader(txn);
@@ -337,7 +322,7 @@ namespace ao::gtk
         listName = optView->name().empty() ? "<Unnamed List>" : std::string(optView->name());
       }
     }
-    else if (listId == allTracksListId())
+    else if (listId == rt::kAllTracksListId)
     {
       listName = "All Tracks";
     }
@@ -360,7 +345,7 @@ namespace ao::gtk
       {
         auto const ids = page->selectionController().getSelectedTrackIds();
 
-        if (viewId != rt::ViewId{})
+        if (viewId != rt::kInvalidViewId)
         {
           _runtime.views().setSelection(viewId, ids);
           _runtime.workspace().setFocusedView(viewId);
@@ -401,18 +386,18 @@ namespace ao::gtk
       {
         auto parentId = page->getListId();
 
-        if (parentId == allTracksListId())
+        if (parentId == rt::kAllTracksListId)
         {
-          parentId = rootParentId();
+          parentId = kInvalidListId;
         }
 
         _listSidebar.createSmartListFromExpression(parentId, expression);
       });
 
     // Set initial playing track state
-    if (_optPlayingTrackId)
+    if (_playingTrackId != kInvalidTrackId)
     {
-      page->setPlayingTrackId(_optPlayingTrackId);
+      page->setPlayingTrackId(_playingTrackId);
     }
   }
 
@@ -423,6 +408,6 @@ namespace ao::gtk
       return ctx->page->getListId();
     }
 
-    return allTracksListId();
+    return rt::kAllTracksListId;
   }
 } // namespace ao::gtk

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LayoutEditorDialog.h"
+
 #include "../LayoutConstants.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"

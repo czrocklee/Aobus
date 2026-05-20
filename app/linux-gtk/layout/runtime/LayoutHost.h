@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutRuntime.h"
 
 #include <gtkmm/box.h>
+
 #include <memory>
 
 namespace ao::gtk::layout

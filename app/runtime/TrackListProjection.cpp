@@ -4,20 +4,21 @@
 #include "TrackListProjection.h"
 
 #include "TrackSource.h"
-
-#include <ao/Type.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-#include <ao/utility/ScopedTimer.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackPresentationPreset.h>
+#include "ao/Type.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "ao/library/TrackView.h"
+#include "ao/utility/ScopedTimer.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <iterator>
@@ -31,9 +32,6 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-
-#include <cstddef>
-#include <cstdint>
 
 namespace ao::rt
 {
@@ -990,7 +988,7 @@ namespace ao::rt
   {
     if (index >= _impl->orderIndex.size())
     {
-      return TrackId{};
+      return kInvalidTrackId;
     }
 
     return _impl->orderIndex[index].trackId;

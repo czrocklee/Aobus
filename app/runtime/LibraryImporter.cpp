@@ -3,15 +3,16 @@
 
 #include "runtime/LibraryImporter.h"
 
-#include <ao/Exception.h>
-#include <ao/Type.h>
-#include <ao/library/ListBuilder.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/tag/TagFile.h>
+#include "ao/Exception.h"
+#include "ao/Type.h"
+#include "ao/library/ListBuilder.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackStore.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/tag/TagFile.h"
+
 #include <yaml-cpp/yaml.h>
 
 #include <chrono>
@@ -416,14 +417,14 @@ namespace ao::rt
 
     for (auto const& importedList : importedLists)
     {
-      auto const [mappingIt, inserted] = yamlListIdToNewListId.emplace(importedList.yamlId, ListId{});
+      auto const [mappingIt, inserted] = yamlListIdToNewListId.emplace(importedList.yamlId, kInvalidListId);
 
       if (!inserted)
       {
         ao::throwException<Exception>("Duplicate list id {} in YAML import", importedList.yamlId);
       }
 
-      auto [newListId, view] = listWriter.create(serializeList(importedList, ListId{0}));
+      auto [newListId, view] = listWriter.create(serializeList(importedList, kInvalidListId));
       std::ignore = view;
       mappingIt->second = newListId;
     }

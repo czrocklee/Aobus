@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/document/LayoutDocument.h>
-#include <app/linux-gtk/layout/document/LayoutNode.h>
-#include <app/linux-gtk/layout/document/LayoutYaml.h> // NOLINT(misc-include-cleaner)
-#include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
-#include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
-
-#include <app/linux-gtk/inspector/CoverArtCache.h>
-#include <app/linux-gtk/track/TrackRowCache.h>
-#include <app/runtime/AppRuntime.h>
-#include <app/runtime/ConfigStore.h>
-#include <runtime/CorePrimitives.h>
+#include "app/linux-gtk/inspector/CoverArtCache.h"
+#include "app/linux-gtk/layout/document/LayoutDocument.h"
+#include "app/linux-gtk/layout/document/LayoutNode.h"
+#include "app/linux-gtk/layout/document/LayoutYaml.h" // IWYU pragma: keep
+#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "app/linux-gtk/track/TrackRowCache.h"
+#include "app/runtime/AppRuntime.h"
+#include "app/runtime/ConfigStore.h"
+#include "runtime/CorePrimitives.h"
+#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/menu.h>
@@ -23,8 +23,6 @@
 #include <gtkmm/scale.h>
 #include <gtkmm/window.h>
 #include <yaml-cpp/yaml.h>
-
-#include <test/unit/lmdb/TestUtils.h>
 
 #include <array>
 #include <functional>
@@ -57,11 +55,10 @@ namespace ao::gtk::layout::test
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -263,11 +260,10 @@ namespace ao::gtk::layout::test
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -370,11 +366,10 @@ namespace ao::gtk::layout::test
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -470,11 +465,10 @@ namespace ao::gtk::layout::test
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -515,11 +509,10 @@ namespace ao::gtk::layout::test
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);

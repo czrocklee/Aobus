@@ -12,19 +12,22 @@
 
 namespace ao::gtk
 {
-  class ImportExportCoordinator;
+  namespace portal
+  {
+    class ImportExportCoordinator;
+  }
 
   class MenuController final
   {
   public:
-    MenuController(ImportExportCoordinator& importExport, std::function<void()> onEditLayout);
+    MenuController(portal::ImportExportCoordinator& importExport, std::function<void()> onEditLayout);
 
     void setup(Gtk::ApplicationWindow& window);
 
     Glib::RefPtr<Gio::MenuModel> menuModel() const { return _menuModel; }
 
   private:
-    ImportExportCoordinator& _importExport;
+    portal::ImportExportCoordinator& _importExport;
     std::function<void()> _onEditLayout;
     Glib::RefPtr<Gio::Menu> _menuModel;
   };

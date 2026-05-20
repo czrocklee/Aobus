@@ -4,10 +4,9 @@
 #pragma once
 
 #include "TrackSource.h"
-
-#include <ao/Type.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/Type.h"
+#include "ao/library/TrackStore.h"
+#include "ao/lmdb/Transaction.h"
 
 #include <cstddef>
 #include <flat_set>

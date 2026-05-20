@@ -3,15 +3,21 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <test/unit/lmdb/TestUtils.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackStore.h"
+#include "test/unit/lmdb/TestUtils.h"
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 
 namespace ao::rt::test
 {
@@ -82,4 +88,75 @@ namespace ao::rt::test
     lmdb::test::TempDir _tempDir;
     library::MusicLibrary _library;
   };
-}
+
+  /**
+   * @brief Lifecycle-safe test state tracker.
+   */
+  template<typename T>
+  class AsyncTestState final
+  {
+  public:
+    static auto create(T initial) { return AsyncTestState(std::make_shared<std::atomic<T>>(initial)); }
+
+    void set(T value) { *_data = value; }
+    T get() const { return _data->load(); }
+
+    bool waitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::milliseconds(500))
+    {
+      auto start = std::chrono::steady_clock::now();
+
+      while (std::chrono::steady_clock::now() - start < timeout)
+      {
+        if (get() == expected)
+        {
+          return true;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+
+      return get() == expected;
+    }
+
+    std::atomic<T>* operator->() { return _data.get(); }
+    std::atomic<T>& operator*() { return *_data; }
+
+  private:
+    explicit AsyncTestState(std::shared_ptr<std::atomic<T>> data)
+      : _data{std::move(data)}
+    {
+    }
+
+    std::shared_ptr<std::atomic<T>> _data;
+  };
+
+  /**
+   * @brief Deterministic barrier for testing.
+   * Blocks the current thread (intended for use in worker threads).
+   */
+  class AsyncBarrier final
+  {
+  public:
+    void wait()
+    {
+      auto lock = std::unique_lock{_mutex};
+
+      _cv.wait(lock, [this] { return _released; });
+    }
+
+    void release()
+    {
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _released = true;
+      }
+
+      _cv.notify_all();
+    }
+
+  private:
+    bool _released{false};
+    std::mutex _mutex;
+    std::condition_variable _cv;
+  };
+} // namespace ao::rt::test

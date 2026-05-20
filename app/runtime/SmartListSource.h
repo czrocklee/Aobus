@@ -4,11 +4,10 @@
 #pragma once
 
 #include "TrackSource.h"
-
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/query/ExecutionPlan.h>
-#include <ao/query/PlanEvaluator.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/query/ExecutionPlan.h"
+#include "ao/query/PlanEvaluator.h"
 
 #include <cstddef>
 #include <flat_set>

@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/PlaybackSequenceController.h"
+
+#include "ao/Type.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/PlaybackService.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
-#include <ao/Type.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/PlaybackService.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -52,7 +53,7 @@ namespace ao::gtk
     _sequence = std::make_unique<ActivePlaybackSequence>(ActivePlaybackSequence{
       .trackIds = std::move(trackIds),
       .currentIndex = startIndex,
-      .optSourceListId = page.getListId(),
+      .sourceListId = page.getListId(),
     });
 
     _playback.play(*optDesc, page.getListId());
@@ -81,14 +82,14 @@ namespace ao::gtk
     return _sequence->trackIds[_sequence->currentIndex];
   }
 
-  std::optional<ListId> PlaybackSequenceController::sourceListId() const
+  ListId PlaybackSequenceController::sourceListId() const
   {
     if (!_sequence)
     {
-      return std::nullopt;
+      return kInvalidListId;
     }
 
-    return _sequence->optSourceListId;
+    return _sequence->sourceListId;
   }
 
   void PlaybackSequenceController::clear()
@@ -114,7 +115,7 @@ namespace ao::gtk
       {
         _sequence->currentIndex = idx;
 
-        _playback.play(*optDesc, _sequence->optSourceListId.value_or(ListId{}));
+        _playback.play(*optDesc, _sequence->sourceListId);
         return;
       }
     }

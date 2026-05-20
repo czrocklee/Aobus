@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "list/ListSidebarPanel.h"
+
+#include "ao/Type.h"
+#include "ao/lmdb/Transaction.h"
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
-#include <ao/Type.h>
-#include <ao/lmdb/Transaction.h>
-#include <runtime/AppRuntime.h>
+#include "runtime/AppRuntime.h"
 
 #include <gdk/gdk.h>
 #include <gdkmm/graphene_point.h>
@@ -119,28 +120,28 @@ namespace ao::gtk
   {
     if (_listSelectionModel == nullptr)
     {
-      return ListId{0};
+      return kInvalidListId;
     }
 
     auto const selectedPosition = _listSelectionModel->get_selected();
 
     if (selectedPosition == kInvalidListPosition)
     {
-      return ListId{0};
+      return kInvalidListId;
     }
 
     auto const treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(_listSelectionModel->get_selected_item());
 
     if (treeListRow == nullptr)
     {
-      return ListId{0};
+      return kInvalidListId;
     }
 
     auto const node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
 
     if (node == nullptr)
     {
-      return ListId{0};
+      return kInvalidListId;
     }
 
     return node->getListId();

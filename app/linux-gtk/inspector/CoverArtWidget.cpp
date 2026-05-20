@@ -2,10 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "inspector/CoverArtWidget.h"
+
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/ResourceStore.h"
 #include "inspector/CoverArtCache.h"
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
-#include <runtime/ProjectionTypes.h>
+#include "runtime/ProjectionTypes.h"
 
 #include <gdkmm/pixbuf.h>
 #include <giomm/memoryinputstream.h>
@@ -40,13 +42,13 @@ namespace ao::gtk
   void CoverArtWidget::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)
   {
     if (snap.selectionKind == rt::SelectionKind::None || snap.trackIds.empty() ||
-        snap.singleCoverArtId == ResourceId{0})
+        snap.singleCoverArtId == kInvalidResourceId)
     {
       clearCover();
       return;
     }
 
-    auto const rid = static_cast<std::uint64_t>(snap.singleCoverArtId.value());
+    auto const rid = static_cast<std::uint64_t>(snap.singleCoverArtId.raw());
     auto cached = _cache.get(rid);
 
     if (!cached)

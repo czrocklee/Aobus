@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
 
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>

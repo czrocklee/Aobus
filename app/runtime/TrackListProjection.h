@@ -7,8 +7,8 @@
 #include "ProjectionTypes.h"
 #include "TrackPresentationPreset.h"
 #include "TrackSource.h"
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
 
 #include <cstddef>
 #include <cstdint>

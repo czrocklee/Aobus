@@ -2,10 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "Frame.h"
+
 #include "FrameLayout.h"
+#include "ao/utility/ByteView.h"
 
 #include <array>
-#include <boost/endian/conversion.hpp> // NOLINT(misc-include-cleaner)
 #include <cstdint>
 #include <cstring>
 #include <optional>
@@ -272,39 +273,30 @@ namespace ao::tag::mpeg
 
     auto const* ptr = static_cast<std::uint8_t const*>(_data) + offset;
 
-    static constexpr std::size_t kXingMagicSize = 4;
+    auto const* xing = utility::layout::view<XingLayout>(utility::bytes::view(ptr, sizeof(XingLayout)));
 
-    if (std::memcmp(ptr, "Xing", kXingMagicSize) != 0 && std::memcmp(ptr, "Info", kXingMagicSize) != 0)
+    if (std::memcmp(xing->magic.data(), "Xing", 4) != 0 && std::memcmp(xing->magic.data(), "Info", 4) != 0)
     {
       return {};
     }
 
     auto info = XingInfo{};
-    std::uint32_t flags = 0;
-    static constexpr std::size_t kXingFlagsSize = 4;
-    std::memcpy(&flags, ptr + kXingFlagsSize, kXingFlagsSize);
-    flags = boost::endian::endian_reverse(flags); // NOLINT(misc-include-cleaner)
+    auto const flags = xing->flags.value();
 
-    std::size_t fieldOffset = kXingDataFieldOffset;
-    constexpr std::uint32_t kXingFlagFrames = 0x01;
-    constexpr std::uint32_t kXingFlagBytes = 0x02;
+    std::size_t fieldOffset = sizeof(XingLayout);
 
-    if ((flags & kXingFlagFrames) != 0)
+    if ((flags & XingLayout::kFlagFrames) != 0)
     {
-      std::uint32_t frames = 0;
-      static constexpr std::size_t kXingFramesFieldSize = 4;
-      std::memcpy(&frames, ptr + fieldOffset, kXingFramesFieldSize);
-      info.frames = boost::endian::endian_reverse(frames); // NOLINT(misc-include-cleaner)
-      fieldOffset += kXingFramesFieldSize;
+      auto const* framesBuf = utility::layout::viewAt<boost::endian::big_uint32_buf_t>(ptr, fieldOffset);
+      info.frames = framesBuf->value();
+      fieldOffset += sizeof(boost::endian::big_uint32_buf_t);
     }
 
-    if ((flags & kXingFlagBytes) != 0) // Bytes field present
+    if ((flags & XingLayout::kFlagBytes) != 0)
     {
-      std::uint32_t bytes = 0;
-      static constexpr std::size_t kXingBytesFieldSize = 4;
-      std::memcpy(&bytes, ptr + fieldOffset, kXingBytesFieldSize);
-      info.bytes = boost::endian::endian_reverse(bytes); // NOLINT(misc-include-cleaner)
-      fieldOffset += kXingBytesFieldSize;
+      auto const* bytesBuf = utility::layout::viewAt<boost::endian::big_uint32_buf_t>(ptr, fieldOffset);
+      info.bytes = bytesBuf->value();
+      fieldOffset += sizeof(boost::endian::big_uint32_buf_t);
     }
 
     return info;

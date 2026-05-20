@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackPresentationPreset.h>
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
 
 #include <sigc++/signal.h>
 

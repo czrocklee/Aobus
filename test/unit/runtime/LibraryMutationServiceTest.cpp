@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <ao/Type.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/StateTypes.h>
+#include "runtime/LibraryMutationService.h"
 
 #include "TestUtils.h"
+#include "ao/Type.h"
+#include "runtime/StateTypes.h"
+#include "runtime/async/Runtime.h"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <functional>
 #include <vector>
@@ -30,7 +31,8 @@ namespace ao::rt::test
     auto const trackId = testLib.addTrack("Original Title");
 
     auto executor = NullExecutor{};
-    auto service = LibraryMutationService{executor, testLib.library()};
+    auto runtime = async::Runtime{executor};
+    auto service = LibraryMutationService{runtime, testLib.library()};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -48,7 +50,8 @@ namespace ao::rt::test
     auto const trackId = testLib.addTrack("Track");
 
     auto executor = NullExecutor{};
-    auto service = LibraryMutationService{executor, testLib.library()};
+    auto runtime = async::Runtime{executor};
+    auto service = LibraryMutationService{runtime, testLib.library()};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -66,7 +69,8 @@ namespace ao::rt::test
     auto const trackId = testLib.addTrack("Track");
 
     auto executor = NullExecutor{};
-    auto service = LibraryMutationService{executor, testLib.library()};
+    auto runtime = async::Runtime{executor};
+    auto service = LibraryMutationService{runtime, testLib.library()};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -82,7 +86,8 @@ namespace ao::rt::test
     auto testLib = TestMusicLibrary{};
 
     auto executor = NullExecutor{};
-    auto service = LibraryMutationService{executor, testLib.library()};
+    auto runtime = async::Runtime{executor};
+    auto service = LibraryMutationService{runtime, testLib.library()};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -97,7 +102,8 @@ namespace ao::rt::test
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};
-    auto service = LibraryMutationService{executor, testLib.library()};
+    auto runtime = async::Runtime{executor};
+    auto service = LibraryMutationService{runtime, testLib.library()};
 
     auto upserted = std::vector<ListId>{};
     auto sub = service.onListsMutated([&](auto const& ev) { upserted = ev.upserted; });
@@ -109,7 +115,7 @@ namespace ao::rt::test
 
     auto const listId = service.createList(draft);
 
-    REQUIRE(listId != ListId{0});
+    REQUIRE(listId != kInvalidListId);
     REQUIRE(upserted.size() == 1);
     CHECK(upserted[0] == listId);
   }

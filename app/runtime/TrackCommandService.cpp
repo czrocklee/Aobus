@@ -2,12 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackCommandService.h"
+
 #include "LibraryMutationService.h"
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/tag/TagFile.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackStore.h"
+#include "ao/tag/TagFile.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -98,7 +99,7 @@ namespace ao::rt
 
     if (!optTagFile)
     {
-      return TrackId{};
+      return kInvalidTrackId;
     }
 
     auto txn = _library.writeTransaction();

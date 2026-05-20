@@ -2,13 +2,14 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/PlaybackDetailsWidget.h"
+
+#include "ao/audio/Backend.h"
+#include "ao/audio/Format.h"
+#include "ao/audio/Types.h"
+#include "ao/audio/flow/Graph.h"
 #include "layout/LayoutConstants.h"
-#include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/Types.h>
-#include <ao/audio/flow/Graph.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/StateTypes.h>
+#include "runtime/PlaybackService.h"
+#include "runtime/StateTypes.h"
 
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>

@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/library/ListView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/Type.h"
+#include "ao/library/ListView.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Transaction.h"
 
 #include <cstddef>
 #include <optional>
@@ -59,11 +59,10 @@ namespace ao::library
   class ListStore::Reader::Iterator
   {
   public:
-    using value_type = std::pair<ListId, ListView>; // NOLINT
+    using value_type = std::pair<ListId, ListView>;
 
     Iterator() = default;
     Iterator(Iterator const&) = default;
-    // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
     ~Iterator() = default;
     Iterator& operator=(Iterator const&) = default;
     Iterator(Iterator&&) = default;

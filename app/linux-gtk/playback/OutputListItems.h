@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
+#include "ao/audio/Backend.h"
 
 #include <glibmm/object.h>
 #include <glibmm/objectbase.h>
@@ -22,8 +22,7 @@ namespace ao::gtk
   public:
     static Glib::RefPtr<BackendItem> create(audio::BackendId id, std::string name)
     {
-      return Glib::make_refptr_for_instance<BackendItem>(
-        new BackendItem{std::move(id), std::move(name)}); // NOLINT(cppcoreguidelines-owning-memory)
+      return Glib::make_refptr_for_instance<BackendItem>(new BackendItem{std::move(id), std::move(name)});
     }
 
     audio::BackendId const& id() const { return _id; }
@@ -52,10 +51,7 @@ namespace ao::gtk
                                            std::string customName = "")
     {
       return Glib::make_refptr_for_instance<DeviceItem>(
-        new DeviceItem(std::move(backend), // NOLINT(cppcoreguidelines-owning-memory)
-                       device,
-                       std::move(profile),
-                       std::move(customName)));
+        new DeviceItem(std::move(backend), device, std::move(profile), std::move(customName)));
     }
 
     audio::BackendId const& backendId() const { return _backendId; }

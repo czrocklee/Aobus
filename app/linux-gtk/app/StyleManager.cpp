@@ -2,7 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/StyleManager.h"
-#include <ao/utility/Log.h>
+
+#include "ao/utility/Log.h"
 
 #include <gdkmm/display.h>
 #include <gio/gsettingsschema.h>
@@ -358,7 +359,6 @@ namespace ao::gtk
     }
   }
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   void StyleManager::setupDBusMonitor()
   {
     try
@@ -390,7 +390,6 @@ namespace ao::gtk
 
   void StyleManager::setupSignalHandler()
   {
-    // NOLINTBEGIN(misc-include-cleaner)
     _sigusr1SourceId = ::g_unix_signal_add(
       SIGUSR1,
       [](void* data) -> ::gboolean
@@ -400,6 +399,5 @@ namespace ao::gtk
         return TRUE;
       },
       this);
-    // NOLINTEND(misc-include-cleaner)
   }
 } // namespace ao::gtk

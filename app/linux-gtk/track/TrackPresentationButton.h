@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <runtime/CorePrimitives.h>
+#include "runtime/CorePrimitives.h"
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -44,7 +44,7 @@ namespace ao::gtk
     void onCreateCustomViewClicked();
 
     rt::AppRuntime& _runtime;
-    rt::ViewId _activeViewId{};
+    rt::ViewId _activeViewId = rt::kInvalidViewId;
     TrackPresentationStore* _presentationStore = nullptr;
 
     Gtk::MenuButton _button;

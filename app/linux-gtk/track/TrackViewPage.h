@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include "ao/Type.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/TrackPresentationPreset.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackListAdapter.h"
@@ -10,10 +14,6 @@
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
-#include <ao/Type.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/TrackPresentationPreset.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
@@ -29,7 +29,6 @@
 #include <sigc++/signal.h>
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -55,7 +54,7 @@ namespace ao::gtk
                            TrackColumnLayoutModel& columnLayoutModel,
                            TrackPresentationStore& presentationStore,
                            rt::AppRuntime& runtime,
-                           rt::ViewId viewId = rt::ViewId{});
+                           rt::ViewId viewId = rt::kInvalidViewId);
     ~TrackViewPage() override;
 
     TrackViewPage(TrackViewPage const&) = delete;
@@ -83,7 +82,7 @@ namespace ao::gtk
     void setStatusMessage(std::string_view message);
     void clearStatusMessage();
 
-    void setPlayingTrackId(std::optional<TrackId> optPlayingTrackId);
+    void setPlayingTrackId(TrackId trackId);
 
     void applyPresentation(rt::TrackPresentationSpec const& presentation);
     void applyPresentation(rt::TrackListPresentationSnapshot const& snapshot);
@@ -113,7 +112,7 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
-    std::optional<TrackId> _optPlayingTrackId;
+    TrackId _playingTrackId{kInvalidTrackId};
 
     sigc::scoped_connection _themeRefreshConnection;
     sigc::scoped_connection _modelChangedConnection;

@@ -4,25 +4,23 @@
 #include "PlaybackService.h"
 
 #include "ViewService.h"
+#include "ao/Type.h"
+#include "ao/audio/Backend.h"
+#include "ao/audio/IBackendProvider.h"
+#include "ao/audio/Player.h"
+#include "ao/audio/Types.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/StateTypes.h"
 
-#include <ao/Type.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/IBackendProvider.h>
-#include <ao/audio/Player.h>
-#include <ao/audio/Types.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/StateTypes.h>
-
+#include <cstdint>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <cstdint>
 
 namespace ao::rt
 {
@@ -103,8 +101,8 @@ namespace ao::rt
     std::unique_ptr<audio::Player> player;
     ViewService& views;
     library::MusicLibrary& library;
-    TrackId currentTrackId{};
-    ListId currentSourceListId{};
+    TrackId currentTrackId = kInvalidTrackId;
+    ListId currentSourceListId = kInvalidListId;
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
     Signal<> preparingSignal;
@@ -319,7 +317,7 @@ namespace ao::rt
 
       if (sel.empty())
       {
-        return TrackId{};
+        return kInvalidTrackId;
       }
 
       auto const trackId = TrackId{sel.front()};
@@ -329,7 +327,7 @@ namespace ao::rt
 
       if (!optView)
       {
-        return TrackId{};
+        return kInvalidTrackId;
       }
 
       auto const uri = std::filesystem::path{optView->property().uri()};
@@ -349,7 +347,7 @@ namespace ao::rt
     }
     catch (std::exception const&)
     {
-      return TrackId{};
+      return kInvalidTrackId;
     }
   }
 

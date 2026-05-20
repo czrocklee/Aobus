@@ -5,10 +5,11 @@
 
 #include "CorePrimitives.h"
 #include "StateTypes.h"
+#include "ao/Error.h"
+#include "ao/Type.h"
 #include "async/Task.h"
 #include "runtime/LibraryExporter.h"
-#include <ao/Error.h>
-#include <ao/Type.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -46,15 +47,15 @@ namespace ao::rt
     struct ListDraft final
     {
       ListKind kind = ListKind::Smart;
-      ListId parentId = ListId{0};
-      ListId listId = ListId{0}; // 0 = create, non-zero = update
+      ListId parentId = kInvalidListId;
+      ListId listId = kInvalidListId; // 0 = create, non-zero = update
       std::string name{};
       std::string description{};
       std::string expression{};      // Only used for Smart lists
       std::vector<TrackId> trackIds; // Only used for Manual lists
     };
 
-    LibraryMutationService(IControlExecutor& executor, library::MusicLibrary& library);
+    LibraryMutationService(async::Runtime& asyncRuntime, library::MusicLibrary& library);
     ~LibraryMutationService();
 
     Result<UpdateTrackMetadataReply> updateMetadata(std::vector<TrackId> const& trackIds, MetadataPatch const& patch);
@@ -66,11 +67,10 @@ namespace ao::rt
     ImportFilesReply importFiles(std::vector<std::filesystem::path> const& paths);
 
     // C++20 Async variants
-    async::Task<void> importFilesAsync(async::Runtime& runtime, std::vector<std::filesystem::path> paths);
-    async::Task<void> importLibraryAsync(async::Runtime& runtime, std::filesystem::path path);
-    async::Task<void> exportLibraryAsync(async::Runtime& runtime, std::filesystem::path path, rt::ExportMode mode);
-    async::Task<std::vector<std::filesystem::path>> scanLibraryAsync(async::Runtime& runtime,
-                                                                     std::filesystem::path dir);
+    async::Task<void> importFilesAsync(std::vector<std::filesystem::path> paths);
+    async::Task<void> importLibraryAsync(std::filesystem::path path);
+    async::Task<void> exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode);
+    async::Task<std::vector<std::filesystem::path>> scanLibraryAsync(std::filesystem::path dir);
 
     ListId createList(ListDraft const& draft);
     void updateList(ListDraft const& draft);

@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Type.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackLayout.h>
-#include <ao/library/TrackView.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/utility/ByteView.h>
+#include "ao/library/TrackBuilder.h"
+
+#include "ao/Type.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/ResourceStore.h"
+#include "ao/library/TrackLayout.h"
+#include "ao/library/TrackView.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/utility/ByteView.h"
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -44,27 +45,27 @@ namespace ao::library
       auto meta = view.metadata();
       builder.metadata().title(meta.title()).year(meta.year());
 
-      if (auto artistId = meta.artistId(); artistId.value() > 0)
+      if (auto artistId = meta.artistId(); artistId.raw() > 0)
       {
         builder.metadata().artist(dict.get(artistId));
       }
 
-      if (auto albumId = meta.albumId(); albumId.value() > 0)
+      if (auto albumId = meta.albumId(); albumId.raw() > 0)
       {
         builder.metadata().album(dict.get(albumId));
       }
 
-      if (auto albumArtistId = meta.albumArtistId(); albumArtistId.value() > 0)
+      if (auto albumArtistId = meta.albumArtistId(); albumArtistId.raw() > 0)
       {
         builder.metadata().albumArtist(dict.get(albumArtistId));
       }
 
-      if (auto composerId = meta.composerId(); composerId.value() > 0)
+      if (auto composerId = meta.composerId(); composerId.raw() > 0)
       {
         builder.metadata().composer(dict.get(composerId));
       }
 
-      if (auto genreId = meta.genreId(); genreId.value() > 0)
+      if (auto genreId = meta.genreId(); genreId.raw() > 0)
       {
         builder.metadata().genre(dict.get(genreId));
       }
@@ -95,7 +96,7 @@ namespace ao::library
         .discNumber(meta.discNumber())
         .totalDiscs(meta.totalDiscs());
 
-      if (auto workId = meta.workId(); workId.value() > 0)
+      if (auto workId = meta.workId(); workId.raw() > 0)
       {
         builder.metadata().work(dict.get(workId));
       }
@@ -336,7 +337,7 @@ namespace ao::library
 
     for (auto const tagId : tagIds)
     {
-      bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask));
+      bloom |= (std::uint32_t{1} << (tagId.raw() & kBloomBitMask));
     }
 
     return bloom;
@@ -476,7 +477,7 @@ namespace ao::library
     if (!_builder->_metadataBuilder._embeddedCoverArt.empty())
     {
       auto writer = resources.writer(txn);
-      _coverArtId = writer.create(_builder->_metadataBuilder._embeddedCoverArt).value();
+      _coverArtId = writer.create(_builder->_metadataBuilder._embeddedCoverArt).raw();
     }
     else
     {

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/library/ListView.h>
+#include "ao/Type.h"
+#include "ao/library/ListView.h"
 
 #include <cstddef>
 #include <string_view>
@@ -78,7 +78,7 @@ namespace ao::library
     std::string_view _name;
     std::string_view _description;
     std::string_view _filter;
-    ListId _parentId = ListId{0};
+    ListId _parentId = kInvalidListId;
 
     // TracksBuilder needs access to modify ListBuilder's isSmart flag
     friend class TracksBuilder;

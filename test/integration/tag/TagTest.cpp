@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackLayout.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/tag/TagFile.h>
+#include "ao/library/ResourceStore.h"
+#include "ao/library/TrackLayout.h"
+#include "ao/lmdb/Environment.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/tag/TagFile.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <lmdb.h>
 
 #include <filesystem>
-#include <lmdb.h>
 
 namespace fs = std::filesystem;
 

@@ -3,13 +3,14 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/library/TrackLayout.h>
+#include "ao/Type.h"
+#include "ao/library/TrackLayout.h"
+#include "ao/utility/ByteView.h"
 
-#include <ao/utility/ByteView.h>
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <cstddef>
 #include <cstdint>
-#include <gsl-lite/gsl-lite.hpp>
 #include <iterator>
 #include <optional>
 #include <ranges>
@@ -243,11 +244,11 @@ namespace ao::library
   {
   public:
     // Standard iterator traits
-    using difference_type = std::ptrdiff_t;                             // NOLINT
-    using value_type = std::pair<DictionaryId const, std::string_view>; // NOLINT
-    using reference = value_type;                                       // NOLINT
-    using pointer = void;                                               // NOLINT
-    using iterator_category = std::forward_iterator_tag;                // NOLINT
+    using difference_type = std::ptrdiff_t;
+    using value_type = std::pair<DictionaryId const, std::string_view>;
+    using reference = value_type;
+    using pointer = void;
+    using iterator_category = std::forward_iterator_tag;
 
     Iterator() = default;
 

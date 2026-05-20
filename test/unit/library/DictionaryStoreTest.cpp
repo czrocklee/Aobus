@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "ao/library/DictionaryStore.h"
 
-#include <ao/library/DictionaryStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/Type.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Environment.h"
+#include "ao/lmdb/Transaction.h"
+#include "test/unit/lmdb/TestUtils.h"
+
+#include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
-#include <test/unit/lmdb/TestUtils.h>
 
 #include <string_view>
 
@@ -129,7 +131,7 @@ namespace ao::library::test
     auto const id = dict.put(wtxn, "first");
     wtxn.commit();
 
-    REQUIRE(id.value() == 1);
+    REQUIRE(id.raw() == 1);
     auto const result = dict.get(id);
     REQUIRE(result == "first");
   }
@@ -159,7 +161,7 @@ namespace ao::library::test
 
     // Reserve a non-existent string
     auto const id = dict.getOrIntern("new artist");
-    REQUIRE(id.value() == 1); // First getOrInternd ID is 0 (same as put)
+    REQUIRE(id.raw() == 1); // First getOrInternd ID is 0 (same as put)
 
     // contains should now return true (in-memory)
     REQUIRE(dict.contains("new artist"));
@@ -177,7 +179,7 @@ namespace ao::library::test
 
     // Reserve an existing string - should return the existing ID
     auto const id = dict.getOrIntern("existing");
-    REQUIRE(id.value() == 1); // First put uses ID 0
+    REQUIRE(id.raw() == 1); // First put uses ID 0
 
     REQUIRE(dict.contains("existing"));
   }
@@ -245,8 +247,8 @@ namespace ao::library::test
     auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
     wtxn.commit();
 
-    CHECK(dict.getOrDefault(DictionaryId{0}).empty());
-    CHECK(dict.getOrDefault(DictionaryId{0}, "fallback") == "fallback");
+    CHECK(dict.getOrDefault(kInvalidDictionaryId).empty());
+    CHECK(dict.getOrDefault(kInvalidDictionaryId, "fallback") == "fallback");
     CHECK(dict.getOrDefault(DictionaryId{999}).empty());
   }
 } // namespace ao::library::test

@@ -2,17 +2,29 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "Runtime.h"
-#include <ao/utility/Log.h>
-// NOLINTBEGIN(misc-include-cleaner)
+
+#include "ao/utility/Log.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/async/Task.h"
+
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_type.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
-// NOLINTEND(misc-include-cleaner)
-#include <thread>
+#include <boost/system/system_error.hpp>
 
-// NOLINTBEGIN(misc-include-cleaner)
+#include <exception>
+#include <functional>
+#include <future>
+#include <thread>
+#include <utility>
+
 namespace ao::rt::async
 {
   Runtime::Runtime(rt::IControlExecutor& uiExecutor)
@@ -26,7 +38,7 @@ namespace ao::rt::async
     join();
   }
 
-  rt::IControlExecutor& Runtime::uiExecutor() noexcept
+  rt::IControlExecutor& Runtime::controlExecutor() noexcept
   {
     return _uiExecutor;
   }
@@ -47,21 +59,14 @@ namespace ao::rt::async
     return _workerPool;
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
-  Task<void> resumeOnUi(Runtime& runtime)
+  Task<void> Runtime::resumeOnControl()
   {
     co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
-      [&runtime](auto handler)
-      {
-        runtime.uiExecutor().dispatch(
-          // NOLINTNEXTLINE(readability-identifier-length)
-          [cb = std::move(handler)] mutable { cb(); });
-      },
+      [this](auto handler) { controlExecutor().dispatch([cb = std::move(handler)] mutable { cb(); }); },
       boost::asio::use_awaitable);
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
-  Task<void> resumeOnWorker(Runtime& runtime)
+  Task<void> Runtime::resumeOnWorker()
   {
     auto state = co_await boost::asio::this_coro::cancellation_state;
 
@@ -70,7 +75,7 @@ namespace ao::rt::async
       throw boost::system::system_error(boost::asio::error::operation_aborted);
     }
 
-    co_await boost::asio::post(runtime.workerPool(), boost::asio::use_awaitable);
+    co_await boost::asio::post(workerPool(), boost::asio::use_awaitable);
 
     state = co_await boost::asio::this_coro::cancellation_state;
 
@@ -80,11 +85,10 @@ namespace ao::rt::async
     }
   }
 
-  void spawnLogged(Runtime& runtime, Task<void> task)
+  void Runtime::spawnLogged(Task<void> task)
   {
-    boost::asio::co_spawn(runtime.workerPool(),
+    boost::asio::co_spawn(workerPool(),
                           std::move(task),
-                          // NOLINTNEXTLINE(readability-identifier-length)
                           [](std::exception_ptr exPtr)
                           {
                             if (exPtr)
@@ -105,15 +109,19 @@ namespace ao::rt::async
                           });
   }
 
-  template<typename T>
-  std::future<T> spawn(Runtime& runtime, Task<T> task)
+  void Runtime::spawn(Task<void> task, CancellationSlot slot, std::function<void(std::exception_ptr)> callback)
   {
-    return boost::asio::co_spawn(runtime.workerPool(), std::move(task), boost::asio::use_future);
+    boost::asio::co_spawn(
+      workerPool(), std::move(task), boost::asio::bind_cancellation_slot(slot, std::move(callback)));
+  }
+
+  template<typename T>
+  std::future<T> Runtime::spawn(Task<T> task)
+  {
+    return boost::asio::co_spawn(workerPool(), std::move(task), boost::asio::use_future);
   }
 
   // Explicit instantiations for common types used in tests
-  template std::future<void> spawn(Runtime&, Task<void>);
-  template std::future<std::thread::id> spawn(Runtime&, Task<std::thread::id>);
-
-  // NOLINTEND(misc-include-cleaner)
+  template std::future<void> Runtime::spawn(Task<void>);
+  template std::future<std::thread::id> Runtime::spawn(Task<std::thread::id>);
 } // namespace ao::rt::async

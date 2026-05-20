@@ -2,12 +2,14 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "list/ListTreeModelBuilder.h"
+
+#include "ao/Type.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/MusicLibrary.h"
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
-#include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <runtime/AppRuntime.h>
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
 
 #include <giomm/listmodel.h>
 #include <giomm/liststore.h>
@@ -16,8 +18,6 @@
 #include <gtkmm/singleselection.h>
 #include <gtkmm/treelistmodel.h>
 
-#include <cstdint>
-#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -27,20 +27,10 @@ namespace ao::gtk
 {
   namespace
   {
-    ListId allTracksListId()
-    {
-      return ListId{std::numeric_limits<std::uint32_t>::max()};
-    }
-
-    ListId rootParentId()
-    {
-      return ListId{0};
-    }
-
     struct StoredListNode final
     {
-      ListId id = ListId{0};
-      ListId parentId = rootParentId();
+      ListId id = kInvalidListId;
+      ListId parentId = kInvalidListId;
       std::string name;
       bool isSmart = false;
       std::string localExpression;
@@ -69,7 +59,7 @@ namespace ao::gtk
 
     for (auto const& [id, node] : nodes)
     {
-      if (node.parentId != rootParentId() && node.parentId != id && nodes.contains(node.parentId))
+      if (node.parentId != kInvalidListId && node.parentId != id && nodes.contains(node.parentId))
       {
         children[node.parentId].push_back(id);
       }
@@ -82,9 +72,9 @@ namespace ao::gtk
       result.nodesById[id] = treeNode;
     }
 
-    auto allRow = ListRowObject::create(allTracksListId(), rootParentId(), 0, false, "All Tracks");
+    auto allRow = ListRowObject::create(rt::kAllTracksListId, kInvalidListId, 0, false, "All Tracks");
     auto allTracksNode = ListTreeItem::create(allRow);
-    result.nodesById[allTracksListId()] = allTracksNode;
+    result.nodesById[rt::kAllTracksListId] = allTracksNode;
 
     for (auto const& [id, node] : nodes)
     {

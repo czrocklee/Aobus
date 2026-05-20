@@ -4,8 +4,8 @@
 #pragma once
 
 #include "playback/PlaybackPositionInterpolator.h"
+#include "runtime/CorePrimitives.h"
 #include "runtime/PlaybackService.h"
-#include <runtime/CorePrimitives.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>

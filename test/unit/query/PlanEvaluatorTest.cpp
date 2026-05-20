@@ -1,23 +1,25 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "ao/query/PlanEvaluator.h"
 
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackLayout.h>
-#include <ao/library/TrackView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/query/ExecutionPlan.h>
-#include <ao/query/Parser.h>
-#include <ao/query/PlanEvaluator.h>
-#include <ao/utility/ByteView.h>
+#include "ao/Type.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/ResourceStore.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackLayout.h"
+#include "ao/library/TrackView.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Environment.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/query/ExecutionPlan.h"
+#include "ao/query/Parser.h"
+#include "ao/utility/ByteView.h"
+#include "test/unit/library/TestUtils.h"
+#include "test/unit/lmdb/TestUtils.h"
+
+#include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
-#include <test/unit/library/TestUtils.h>
-#include <test/unit/lmdb/TestUtils.h>
 
 #include <array>
 #include <cstddef>
@@ -224,10 +226,10 @@ namespace ao::query::test
 
     using TestTrack = TrackFixture;
 
-    std::vector<std::byte> makeHotOnlyTrack(DictionaryId artistId = DictionaryId{0},
-                                            DictionaryId albumId = DictionaryId{0},
-                                            DictionaryId genreId = DictionaryId{0},
-                                            DictionaryId albumArtistId = DictionaryId{0},
+    std::vector<std::byte> makeHotOnlyTrack(DictionaryId artistId = kInvalidDictionaryId,
+                                            DictionaryId albumId = kInvalidDictionaryId,
+                                            DictionaryId genreId = kInvalidDictionaryId,
+                                            DictionaryId albumArtistId = kInvalidDictionaryId,
                                             std::span<DictionaryId const> tagIds = {})
     {
       auto header = library::TrackHotHeader{};
@@ -239,7 +241,7 @@ namespace ao::query::test
 
       for (auto const tagId : tagIds)
       {
-        header.tagBloom |= std::uint32_t{1} << (tagId.value() & 31U);
+        header.tagBloom |= std::uint32_t{1} << (tagId.raw() & 31U);
       }
 
       auto data = serializeHeader(header);
@@ -460,7 +462,8 @@ namespace ao::query::test
     CHECK(evaluator.matches(plan, artistMatchTrack) == true);
 
     auto tagIds = std::array<DictionaryId, 1>{aimerId};
-    auto tagMatchHotData = makeHotOnlyTrack(DictionaryId{0}, DictionaryId{0}, DictionaryId{0}, DictionaryId{0}, tagIds);
+    auto tagMatchHotData =
+      makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, tagIds);
     auto tagMatchTrack = library::TrackView{tagMatchHotData, std::span<std::byte const>{}};
     CHECK(evaluator.matches(plan, tagMatchTrack) == true);
 
@@ -1152,7 +1155,7 @@ namespace ao::query::test
 
       // 1. Find or create a base tag
       auto const* tagA = "rock";
-      auto idA = dict.getOrIntern(tagA).value();
+      auto idA = dict.getOrIntern(tagA).raw();
       auto bitIndex = idA % 32;
 
       // 2. Find a colliding tag B
@@ -1162,7 +1165,7 @@ namespace ao::query::test
       {
         auto const candidate = std::format("collision_tag_{}", i);
 
-        if (auto const idB = dict.getOrIntern(candidate).value(); idB != idA && (idB % 32) == bitIndex)
+        if (auto const idB = dict.getOrIntern(candidate).raw(); idB != idA && (idB % 32) == bitIndex)
         {
           tagB = candidate;
           break;

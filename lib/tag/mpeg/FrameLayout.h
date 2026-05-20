@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <boost/endian/buffers.hpp>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -40,6 +42,9 @@ namespace ao::tag::mpeg
     SingleChannel = 0b11
   };
 
+  /**
+   * @brief Layout of the MPEG audio frame header (4 bytes).
+   */
   struct FrameLayout
   {
     static constexpr std::size_t kHeaderByteCount = 4;
@@ -109,4 +114,27 @@ namespace ao::tag::mpeg
   static_assert(sizeof(FrameLayout) == 4);
   static_assert(alignof(FrameLayout) == 1);
   static_assert(std::is_trivial_v<FrameLayout>);
+
+  /**
+   * @brief Layout of the Xing/Info VBR header.
+   */
+  struct XingLayout
+  {
+    static constexpr std::uint32_t kFlagFrames = 0x0001;
+    static constexpr std::uint32_t kFlagBytes = 0x0002;
+    static constexpr std::uint32_t kFlagToc = 0x0004;
+    static constexpr std::uint32_t kFlagQuality = 0x0008;
+
+    std::array<char, 4> magic;
+    boost::endian::big_uint32_buf_t flags;
+    // Followed by optional fields based on flags:
+    // big_uint32_buf_t frames;
+    // big_uint32_buf_t bytes;
+    // uint8_t toc[100];
+    // big_uint32_buf_t quality;
+  };
+
+  static_assert(sizeof(XingLayout) == 8);
+  static_assert(alignof(XingLayout) == 1);
+  static_assert(std::is_trivial_v<XingLayout>);
 }

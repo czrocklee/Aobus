@@ -2,10 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "WindowStatePersistence.h"
+
 #include "UIState.h"
+#include "ao/utility/Log.h"
+#include "runtime/ConfigStore.h"
 #include "track/TrackPresentation.h"
-#include <ao/utility/Log.h>
-#include <runtime/ConfigStore.h>
 
 #include <gtkmm/window.h>
 

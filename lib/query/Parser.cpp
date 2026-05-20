@@ -6,9 +6,10 @@
 #pragma GCC diagnostic ignored "-Wdangling-pointer"
 #endif
 
-#include <ao/Exception.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Parser.h>
+#include "ao/query/Parser.h"
+
+#include "ao/Exception.h"
+#include "ao/query/Expression.h"
 
 #include <lexy/action/parse.hpp>
 #include <lexy/callback/adapter.hpp>
@@ -56,7 +57,6 @@
 namespace
 {
   // LEXY grammar: rule/value/op/operand/operation names follow framework conventions.
-  // NOLINTBEGIN(readability-identifier-naming)
   namespace dsl = lexy::dsl;
   using namespace ao::query;
 
@@ -80,11 +80,7 @@ namespace
     static constexpr auto rule = dsl::symbol<kVarTypes> >>
                                  dsl::identifier(dsl::ascii::alpha_underscore, dsl::ascii::alpha_digit_underscore);
     static constexpr auto value = lexy::callback<VariableExpression>(
-      [](VariableType type, auto lexeme)
-      {
-        return VariableExpression{type, lexeme | std::ranges::to<std::string>()};
-      } // NOLINT(readability-named-parameter)
-    );
+      [](VariableType type, auto lexeme) { return VariableExpression{type, lexeme | std::ranges::to<std::string>()}; });
   };
 
   struct BooleanConstant : lexy::token_production
@@ -99,24 +95,23 @@ namespace
                                  (dsl::lit_c<'"'> >> dsl::capture(dsl::until(dsl::lit_c<'"'>))) | kBarewordIdentifier;
 
     static constexpr auto value = lexy::callback<std::string>(
-          [](auto lexeme) {  // NOLINT(readability-named-parameter)
-              auto str = lexeme | std::ranges::to<std::string>();
-              
-              if (!str.empty() && (str.back() == '\'' || str.back() == '"'))
-              {
-                  str.pop_back();
-              }
-              
-              return str;
-          }
-      );
+      [](auto lexeme)
+      {
+        auto str = lexeme | std::ranges::to<std::string>();
+
+        if (!str.empty() && (str.back() == '\'' || str.back() == '"'))
+        {
+          str.pop_back();
+        }
+
+        return str;
+      });
   };
 
   struct NegativeInteger : lexy::token_production
   {
     static constexpr auto rule = dsl::lit_c<'-'> >> dsl::integer<std::int64_t>;
-    static constexpr auto value =
-      lexy::callback<std::int64_t>([](std::int64_t val) { return -val; }); // NOLINT(readability-named-parameter)
+    static constexpr auto value = lexy::callback<std::int64_t>([](std::int64_t val) { return -val; });
   };
 
   struct PositiveInteger : lexy::token_production
@@ -135,7 +130,7 @@ namespace
   {
     static constexpr auto kUnitToken =
       dsl::token(dsl::minus_sign + dsl::digits<> + dsl::opt(dsl::lit_c<'.'> >> dsl::digits<>) +
-                 dsl::identifier(dsl::ascii::alpha).pattern()); // NOLINT(readability-static-accessed-through-instance)
+                 decltype(dsl::identifier(dsl::ascii::alpha))::pattern());
     static constexpr auto rule = dsl::peek(kUnitToken) >> dsl::capture(kUnitToken);
     static constexpr auto value = lexy::callback<UnitConstantExpression>(
       [](auto lexeme) { return UnitConstantExpression{lexeme | std::ranges::to<std::string>()}; });
@@ -247,7 +242,6 @@ namespace
     static constexpr auto rule = dsl::p<Expr> + dsl::eof;
     static constexpr auto value = lexy::forward<Expression>;
   };
-  // NOLINTEND(readability-identifier-naming)
 }
 
 namespace ao::query

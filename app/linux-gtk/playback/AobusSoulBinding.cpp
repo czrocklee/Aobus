@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/AobusSoulBinding.h"
+
+#include "ao/audio/Backend.h"
+#include "ao/audio/Types.h"
 #include "app/AobusSoul.h"
-#include <ao/audio/Backend.h>
-#include <ao/audio/Types.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/StateTypes.h>
+#include "runtime/PlaybackService.h"
+#include "runtime/StateTypes.h"
 
 #include <gdkmm/rgba.h>
 

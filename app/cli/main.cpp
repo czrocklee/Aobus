@@ -6,14 +6,15 @@
 #include "ListCommand.h"
 #include "TagCommand.h"
 #include "TrackCommand.h"
-#include <runtime/CoreRuntime.h>
-#include <runtime/ImmediateControlExecutor.h>
+#include "runtime/CoreRuntime.h"
+#include "runtime/ImmediateControlExecutor.h"
 
 #include <CLI/CLI.hpp>
 
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <utility>
 
 using namespace ao;
 
@@ -21,10 +22,10 @@ int main(int argc, char const* argv[])
 {
   try
   {
-    auto executor = std::make_shared<rt::ImmediateControlExecutor>();
-    auto runtime = rt::CoreRuntime{executor, "."};
+    auto executor = std::make_unique<rt::ImmediateControlExecutor>();
+    auto runtime = rt::CoreRuntime{std::move(executor), "."};
 
-    CLI::App app{"Aobus CLI - aobus"};
+    auto app = CLI::App{"Aobus CLI - aobus"};
     app.require_subcommand(1);
 
     cli::setupTrackCommand(app, runtime);

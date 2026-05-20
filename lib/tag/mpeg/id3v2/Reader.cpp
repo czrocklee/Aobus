@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "Reader.h"
+
 #include "Frame.h"
 #include "Layout.h"
-#include <ao/library/TrackBuilder.h>
-#include <ao/tag/TagFile.h>
-#include <ao/utility/ByteView.h>
+#include "ao/library/TrackBuilder.h"
+#include "ao/tag/TagFile.h"
+#include "ao/utility/ByteView.h"
 
 #include <charconv>
 #include <cstdint>
@@ -24,6 +25,9 @@ namespace ao::tag::mpeg::id3v2
       library::TrackBuilder::MetadataBuilder& (library::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
       library::TrackBuilder::MetadataBuilder& (library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+    constexpr std::uint8_t kId3v22MajorVersion = 2;
+    constexpr std::uint8_t kId3v23MajorVersion = 3;
+    constexpr std::uint8_t kId3v24MajorVersion = 4;
 
     template<typename T>
     std::optional<T> parseUnsigned(std::string_view text)
@@ -165,9 +169,9 @@ namespace ao::tag::mpeg::id3v2
   {
     switch (header.majorVersion)
     {
-      case 2: return library::TrackBuilder::createNew();
-      case 3: // NOLINT(readability-magic-numbers)
-      case 4:
+      case kId3v22MajorVersion: return library::TrackBuilder::createNew();
+      case kId3v23MajorVersion:
+      case kId3v24MajorVersion:
       {
         auto builder = library::TrackBuilder::createNew();
         auto frameIter = FrameViewIterator<V23FrameView>{buffer, size};

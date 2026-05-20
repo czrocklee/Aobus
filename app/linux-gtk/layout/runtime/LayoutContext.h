@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
+
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/window.h>
@@ -22,7 +23,10 @@ namespace ao::gtk
   class CoverArtCache;
   class PlaybackSequenceController;
   class TagEditController;
-  class ImportExportCoordinator;
+  namespace portal
+  {
+    class ImportExportCoordinator;
+  }
   class TrackPageHost;
   class TrackColumnLayoutModel;
   class ListSidebarController;
@@ -64,9 +68,9 @@ namespace ao::gtk::layout
     Glib::RefPtr<Gio::MenuModel> menuModel;
   };
 
-  struct LibraryIoContext final
+  struct PortalContext final
   {
-    ImportExportCoordinator* coordinator = nullptr;
+    portal::ImportExportCoordinator* coordinator = nullptr;
   };
 
   struct LayoutContext final
@@ -81,7 +85,7 @@ namespace ao::gtk::layout
     InspectorUiContext inspector{};
     TagUiContext tag{};
     ShellUiContext shell{};
-    LibraryIoContext libraryIo{};
+    PortalContext portal{};
 
     std::function<void(std::string const& nodeId, int posX, int posY)> onNodeMoved{};
     bool editMode = false;
@@ -95,7 +99,7 @@ namespace ao::gtk::layout
       playback.sequenceController = services.playbackSequenceController;
       inspector.coverArtCache = services.coverArtCache;
       tag.editController = services.tagEditController;
-      libraryIo.coordinator = services.importExportCoordinator;
+      portal.coordinator = services.importExportCoordinator;
     }
   };
 } // namespace ao::gtk::layout

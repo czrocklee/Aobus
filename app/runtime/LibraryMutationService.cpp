@@ -2,23 +2,27 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LibraryMutationService.h"
+
+#include "ao/Error.h"
+#include "ao/Type.h"
+#include "ao/library/ImportWorker.h"
+#include "ao/library/ListBuilder.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackStore.h"
+#include "ao/utility/ThreadUtils.h"
 #include "async/Runtime.h"
+#include "async/Task.h"
+#include "runtime/CorePrimitives.h"
 #include "runtime/LibraryExporter.h"
 #include "runtime/LibraryImporter.h"
-#include <ao/Error.h>
-#include <ao/Type.h>
-#include <ao/library/ImportWorker.h>
-#include <ao/library/ListBuilder.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/utility/ThreadUtils.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/StateTypes.h>
+#include "runtime/StateTypes.h"
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -26,9 +30,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include <cstddef>
-#include <cstdint>
 
 namespace ao::rt
 {
@@ -87,7 +88,7 @@ namespace ao::rt
 
   struct LibraryMutationService::Impl final
   {
-    IControlExecutor& executor;
+    async::Runtime& asyncRuntime;
     library::MusicLibrary& library;
     std::jthread importThread;
 
@@ -96,14 +97,14 @@ namespace ao::rt
     Signal<std::size_t> importCompletedSignal;
     Signal<LibraryMutationService::ImportProgressUpdated const&> importProgressSignal;
 
-    Impl(IControlExecutor& ex, library::MusicLibrary& lib)
-      : executor{ex}, library{lib}
+    Impl(async::Runtime& ar, library::MusicLibrary& lib)
+      : asyncRuntime{ar}, library{lib}
     {
     }
   };
 
-  LibraryMutationService::LibraryMutationService(IControlExecutor& executor, library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(executor, library)}
+  LibraryMutationService::LibraryMutationService(async::Runtime& asyncRuntime, library::MusicLibrary& library)
+    : _impl{std::make_unique<Impl>(asyncRuntime, library)}
   {
   }
 
@@ -232,7 +233,7 @@ namespace ao::rt
       paths,
       [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
       {
-        _impl->executor.dispatch(
+        _impl->asyncRuntime.controlExecutor().dispatch(
           [this, filePath, index, totalFiles]
           {
             auto const fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0;
@@ -245,7 +246,7 @@ namespace ao::rt
       },
       [this, container]
       {
-        _impl->executor.dispatch(
+        _impl->asyncRuntime.controlExecutor().dispatch(
           [this, container]
           {
             _impl->importCompletedSignal.emit(container->result.insertedIds.size());
@@ -268,11 +269,9 @@ namespace ao::rt
     return ImportFilesReply{};
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters,misc-include-cleaner)
-  async::Task<void> LibraryMutationService::importFilesAsync(async::Runtime& runtime,
-                                                             std::vector<std::filesystem::path> paths)
+  async::Task<void> LibraryMutationService::importFilesAsync(std::vector<std::filesystem::path> paths)
   {
-    co_await async::resumeOnWorker(runtime);
+    co_await _impl->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("FileImportAsync");
 
     auto resultIds = std::vector<TrackId>{};
@@ -283,7 +282,7 @@ namespace ao::rt
       paths,
       [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
       {
-        _impl->executor.dispatch(
+        _impl->asyncRuntime.controlExecutor().dispatch(
           [this, filePath, index, totalFiles]
           {
             auto const fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0;
@@ -299,7 +298,7 @@ namespace ao::rt
     worker.run();
     resultIds = worker.result().insertedIds;
 
-    co_await async::resumeOnUi(runtime);
+    co_await _impl->asyncRuntime.resumeOnControl();
 
     _impl->importCompletedSignal.emit(resultIds.size());
 
@@ -309,33 +308,27 @@ namespace ao::rt
     }
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
-  async::Task<void> LibraryMutationService::importLibraryAsync(async::Runtime& runtime, std::filesystem::path path)
+  async::Task<void> LibraryMutationService::importLibraryAsync(std::filesystem::path path)
   {
-    co_await async::resumeOnWorker(runtime);
+    co_await _impl->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryImport");
     auto importer = ao::rt::LibraryImporter{_impl->library};
     importer.importFromYaml(path);
-    co_await async::resumeOnUi(runtime);
+    co_await _impl->asyncRuntime.resumeOnControl();
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
-  async::Task<void> LibraryMutationService::exportLibraryAsync(async::Runtime& runtime,
-                                                               std::filesystem::path path,
-                                                               rt::ExportMode mode)
+  async::Task<void> LibraryMutationService::exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode)
   {
-    co_await async::resumeOnWorker(runtime);
+    co_await _impl->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryExport");
     auto exporter = ao::rt::LibraryExporter{_impl->library};
     exporter.exportToYaml(path, mode);
-    co_await async::resumeOnUi(runtime);
+    co_await _impl->asyncRuntime.resumeOnControl();
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
-  async::Task<std::vector<std::filesystem::path>> LibraryMutationService::scanLibraryAsync(async::Runtime& runtime,
-                                                                                           std::filesystem::path dir)
+  async::Task<std::vector<std::filesystem::path>> LibraryMutationService::scanLibraryAsync(std::filesystem::path dir)
   {
-    co_await async::resumeOnWorker(runtime);
+    co_await _impl->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryScan");
 
     auto files = std::vector<std::filesystem::path>{};
@@ -354,7 +347,7 @@ namespace ao::rt
       }
     }
 
-    co_await async::resumeOnUi(runtime);
+    co_await _impl->asyncRuntime.resumeOnControl();
     co_return files;
   }
 

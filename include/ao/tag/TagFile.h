@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <ao/library/TrackBuilder.h>
+#include "ao/library/TrackBuilder.h"
+
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 
@@ -28,7 +29,6 @@ namespace ao::tag::detail
 
 namespace ao::tag
 {
-  // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
   class TagFile
   {
   public:
@@ -87,7 +87,6 @@ namespace ao::tag
     boost::interprocess::file_mapping _fileMapping;
     boost::interprocess::mapped_region _mappedRegion;
   };
-  // NOLINTEND(cppcoreguidelines-special-member-functions)
 
   namespace detail
   {

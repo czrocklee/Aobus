@@ -3,12 +3,14 @@
 
 #pragma once
 
+#include "ao/Type.h"
 #include "list/ListTreeItem.h"
-#include <ao/Type.h>
+
 #include <giomm/liststore.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/singleselection.h>
 #include <gtkmm/treelistmodel.h>
+
 #include <map>
 
 namespace ao::lmdb

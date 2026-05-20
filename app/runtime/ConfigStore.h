@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <ao/Error.h>
-
-#include <runtime/ConfigYamlTraits.h> // IWYU pragma: export
+#include "ao/Error.h"
+#include "runtime/ConfigYamlTraits.h" // IWYU pragma: export
 
 #include <cstdint>
 #include <exception>

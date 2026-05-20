@@ -18,21 +18,21 @@ namespace ao::utility
   class StrongType
   {
   public:
-    StrongType() = default;
+    constexpr StrongType() = default;
 
-    explicit StrongType(T value)
+    constexpr explicit StrongType(T value)
       : _value{std::move(value)}
     {
     }
 
-    explicit StrongType(char const* value)
+    constexpr explicit StrongType(char const* value)
       requires std::constructible_from<T, char const*>
       : _value{value}
     {
     }
 
-    T const& value() const noexcept { return _value; }
-    T& value() noexcept { return _value; }
+    constexpr T const& raw() const noexcept { return _value; }
+    constexpr T& raw() noexcept { return _value; }
 
     bool empty() const noexcept
       requires requires(T const& typeVal) { typeVal.empty(); }
@@ -134,7 +134,7 @@ namespace std
   template<typename T, typename Tag>
   struct hash<ao::utility::StrongType<T, Tag>>
   {
-    size_t operator()(ao::utility::StrongType<T, Tag> const& id) const noexcept { return hash<T>{}(id.value()); }
+    size_t operator()(ao::utility::StrongType<T, Tag> const& id) const noexcept { return hash<T>{}(id.raw()); }
   };
 
   template<typename T, typename Tag>
@@ -142,7 +142,7 @@ namespace std
   {
     auto format(ao::utility::StrongType<T, Tag> const& id, format_context& ctx) const
     {
-      return formatter<T>::format(id.value(), ctx);
+      return formatter<T>::format(id.raw(), ctx);
     }
   };
 } // namespace std

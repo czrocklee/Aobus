@@ -1,4 +1,4 @@
-76 warnings generated.
+74 warnings generated.
 test/integration/lint/LintAllCheckFixture.cpp:66:9: warning: concrete class ''UnmarkedConcrete'' should be marked 'final' [aobus-modernize-concrete-final]
    66 |   class UnmarkedConcrete
       |         ^
@@ -129,11 +129,11 @@ test/integration/lint/LintAllCheckFixture.cpp:560:15: warning: use 'auto t = Typ
   560 |   std::thread t([] {}); // Warning: prefer std::jthread over std::thread (Rule 4.4.2)
       |               ^
 test/integration/lint/LintAllCheckFixture.cpp:560:15: warning: prefer std::jthread over std::thread (Rule 4.4.2); std::jthread provides automatic joining and stop_token support [aobus-threading-policy]
-test/integration/lint/LintAllCheckFixture.cpp:560:15: warning: prefer std::jthread over std::thread for ''t'' (Rule 4.4.2); std::jthread provides automatic joining and stop_token support [aobus-threading-policy]
+test/integration/lint/LintAllCheckFixture.cpp:560:15: note: prefer std::jthread over std::thread for 't' (Rule 4.4.2); std::jthread provides automatic joining and stop_token support
 test/integration/lint/LintAllCheckFixture.cpp:564:16: warning: use 'auto jt = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
   564 |   std::jthread jt([] {}); // OK
       |                ^
-test/integration/lint/LintAllCheckFixture.cpp:567:16: warning: ''volatileVar'' is volatile; use std::atomic<> for inter-thread communication instead (Rule 4.4.4) [aobus-threading-policy]
+test/integration/lint/LintAllCheckFixture.cpp:567:16: warning: 'volatileVar' is volatile; use std::atomic<> for inter-thread communication instead (Rule 4.4.4) [aobus-threading-policy]
   567 |   int volatile volatileVar =
       |                ^
 test/integration/lint/LintAllCheckFixture.cpp:571:14: warning: use 'auto m = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
@@ -142,11 +142,10 @@ test/integration/lint/LintAllCheckFixture.cpp:571:14: warning: use 'auto m = Typ
 test/integration/lint/LintAllCheckFixture.cpp:574:32: warning: use 'auto redundantLock = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
   574 |   std::unique_lock<std::mutex> redundantLock(
       |                                ^
-test/integration/lint/LintAllCheckFixture.cpp:574:32: warning: prefer std::scoped_lock over std::unique_lock for ''redundantLock'' unless you need deferred locking, early unlock, or condition_variable integration (Rule 4.4.3) [aobus-threading-policy]
+test/integration/lint/LintAllCheckFixture.cpp:574:32: warning: prefer std::scoped_lock over std::unique_lock for 'redundantLock' unless you need deferred locking, early unlock, or condition_variable integration (Rule 4.4.3) [aobus-threading-policy]
 test/integration/lint/LintAllCheckFixture.cpp:579:32: warning: use 'auto deferLock = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
   579 |   std::unique_lock<std::mutex> deferLock(m, std::defer_lock); // OK
       |                                ^
-test/integration/lint/LintAllCheckFixture.cpp:579:32: warning: prefer std::scoped_lock over std::unique_lock for ''deferLock'' unless you need deferred locking, early unlock, or condition_variable integration (Rule 4.4.3) [aobus-threading-policy]
 test/integration/lint/LintAllCheckFixture.cpp:582:32: warning: use 'auto manualLock = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
   582 |   std::unique_lock<std::mutex> manualLock(m);
       |                                ^

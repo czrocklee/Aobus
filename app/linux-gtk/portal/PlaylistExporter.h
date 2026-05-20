@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include "ao/Type.h"
+#include "runtime/TrackSource.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
-#include <runtime/TrackSource.h>
 
 #include <sigc++/connection.h>
 
@@ -13,7 +13,7 @@
 #include <filesystem>
 #include <memory>
 
-namespace ao::gtk
+namespace ao::gtk::portal
 {
   class PlaylistExporter final : public rt::TrackSourceObserver
   {
@@ -47,4 +47,4 @@ namespace ao::gtk
     std::filesystem::path const _path;
     std::unique_ptr<sigc::connection> _timeoutConnection;
   };
-} // namespace ao::gtk
+} // namespace ao::gtk::portal

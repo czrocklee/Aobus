@@ -2,11 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackQuickFilter.h"
+
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/ViewService.h"
+#include "runtime/WorkspaceService.h"
 #include "track/TrackListAdapter.h"
-#include <runtime/AppRuntime.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
 
 #include <gdkmm/enums.h>
 #include <glibmm/main.h>
@@ -77,7 +79,7 @@ namespace ao::gtk
     _viewId = viewId;
     _filterStatusSub.reset();
 
-    if (_viewId == rt::ViewId{})
+    if (_viewId == rt::kInvalidViewId)
     {
       set_sensitive(false);
       _filterExpression.clear();
@@ -127,7 +129,7 @@ namespace ao::gtk
   {
     auto const filterText = get_text();
 
-    if (_viewId == rt::ViewId{})
+    if (_viewId == rt::kInvalidViewId)
     {
       return;
     }

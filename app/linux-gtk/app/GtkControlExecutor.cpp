@@ -2,7 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/GtkControlExecutor.h"
-#include <ao/utility/Log.h>
+
+#include "ao/utility/Log.h"
 
 #include <glibmm/main.h>
 #include <sigc++/functors/mem_fun.h>

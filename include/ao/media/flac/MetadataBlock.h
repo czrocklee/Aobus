@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include <ao/Exception.h>
-#include <ao/media/flac/MetadataBlockLayout.h>
+#include "ao/Exception.h"
+#include "ao/media/flac/MetadataBlockLayout.h"
+#include "ao/utility/ByteView.h"
 
 #include <boost/endian/conversion.hpp>
 #include <boost/endian/detail/order.hpp>
@@ -115,7 +116,7 @@ namespace ao::media::flac
     using MetadataBlockView::MetadataBlockView;
 
     template<typename Visitor>
-    void visitComments(Visitor&& visitor) const // NOLINT(cppcoreguidelines-missing-std-forward)
+    void visitComments(Visitor visitor) const
     {
       char const* ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
       char const* end = ptr + size() - sizeof(MetadataBlockLayout);
@@ -153,9 +154,7 @@ namespace ao::media::flac
 
     StreamInfoLayout const& layout() const
     {
-      auto const* ptr = static_cast<std::uint8_t const*>(data()) + sizeof(MetadataBlockLayout);
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-      return *reinterpret_cast<StreamInfoLayout const*>(ptr);
+      return *utility::layout::viewAt<StreamInfoLayout>(data(), sizeof(MetadataBlockLayout));
     }
 
     std::uint32_t sampleRate() const

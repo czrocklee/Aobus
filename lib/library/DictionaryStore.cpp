@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Exception.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/utility/ByteView.h>
+#include "ao/library/DictionaryStore.h"
+
+#include "ao/Exception.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/utility/ByteView.h"
 
 #include <cstdint>
 #include <span>
@@ -40,7 +41,7 @@ namespace ao::library
       {
         auto writer = _database.writer(txn);
         auto data = utility::bytes::view(value);
-        writer.create(it->second.value(), data);
+        writer.create(it->second.raw(), data);
         _reservedStrings.erase(value);
       }
 
@@ -58,7 +59,7 @@ namespace ao::library
 
   std::string_view DictionaryStore::get(DictionaryId id) const
   {
-    auto idx = id.value();
+    auto idx = id.raw();
 
     // 0 is null/invalid
     if (idx == 0)
@@ -76,7 +77,7 @@ namespace ao::library
 
   std::string_view DictionaryStore::getOrDefault(DictionaryId id, std::string_view defaultValue) const
   {
-    auto idx = id.value();
+    auto idx = id.raw();
 
     if (idx == 0 || idx - 1 >= _idToStringStorage.size())
     {

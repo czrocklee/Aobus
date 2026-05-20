@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/library/ListStore.h"
+
+#include "ao/Type.h"
+#include "ao/library/ListView.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Transaction.h"
 
 #include <cstddef>
 #include <optional>
@@ -52,7 +53,7 @@ namespace ao::library
 
   std::optional<ListView> ListStore::Reader::get(ListId id) const
   {
-    return _reader.get(id.value()).transform([](auto const& buffer) { return ListView{buffer}; });
+    return _reader.get(id.raw()).transform([](auto const& buffer) { return ListView{buffer}; });
   }
 
   // Iterator implementation
@@ -92,12 +93,12 @@ namespace ao::library
 
   void ListStore::Writer::update(ListId id, std::span<std::byte const> data)
   {
-    _writer.update(id.value(), data);
+    _writer.update(id.raw(), data);
   }
 
   bool ListStore::Writer::del(ListId id)
   {
-    return _writer.del(id.value());
+    return _writer.del(id.raw());
   }
 
   void ListStore::Writer::clear()
@@ -107,6 +108,6 @@ namespace ao::library
 
   std::optional<ListView> ListStore::Writer::get(ListId id) const
   {
-    return _writer.get(id.value()).transform([](auto const& buffer) { return ListView{buffer}; });
+    return _writer.get(id.raw()).transform([](auto const& buffer) { return ListView{buffer}; });
   }
 } // namespace ao::library

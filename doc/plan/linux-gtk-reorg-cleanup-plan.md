@@ -166,13 +166,13 @@ app/linux-gtk/
     TagPopover.h/.cpp
     TagEditor.h/.cpp
 
-  library_io/
+  portal/
     ImportExportCoordinator.h/.cpp
     ImportProgressDialog.h/.cpp
     PlaylistExporter.h/.cpp        # moved from service/
 ```
 
-Later namespace cleanup can move classes from `ao::gtk` into feature namespaces such as `ao::gtk::track`, `ao::gtk::list`, `ao::gtk::playback`, `ao::gtk::inspector`, `ao::gtk::tag`, and `ao::gtk::library_io`.
+Later namespace cleanup can move classes from `ao::gtk` into feature namespaces such as `ao::gtk::track`, `ao::gtk::list`, `ao::gtk::playback`, `ao::gtk::inspector`, `ao::gtk::tag`, and `ao::gtk::portal`.
 
 ## Phase 0: Baseline Verification
 
@@ -407,9 +407,9 @@ Use `git mv` for all file moves so that `git log --follow` and `git blame` conti
 | `ui/TagEditController.*` | `tag/TagEditController.*` | |
 | `ui/TagPopover.*` | `tag/TagPopover.*` | |
 | `ui/TagEditor.*` | `tag/TagEditor.*` | |
-| `ui/ImportExportCoordinator.*` | `library_io/ImportExportCoordinator.*` | |
-| `ui/ImportProgressDialog.*` | `library_io/ImportProgressDialog.*` | |
-| `service/PlaylistExporter.*` | `library_io/PlaylistExporter.*` | Primary collaborator is `ImportExportCoordinator` |
+| `ui/ImportExportCoordinator.*` | `portal/ImportExportCoordinator.*` | |
+| `ui/ImportProgressDialog.*` | `portal/ImportProgressDialog.*` | |
+| `service/PlaylistExporter.*` | `portal/PlaylistExporter.*` | Primary collaborator is `ImportExportCoordinator` |
 
 `layout/LayoutConstants.h` stays in `layout/` because it is consumed by layout components.
 
@@ -425,7 +425,7 @@ Examples:
 #include "playback/AobusSoul.h"
 #include "inspector/CoverArtCache.h"
 #include "tag/TagEditController.h"
-#include "library_io/ImportExportCoordinator.h"
+#include "portal/ImportExportCoordinator.h"
 ```
 
 Keep `target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")` so root-relative includes work.

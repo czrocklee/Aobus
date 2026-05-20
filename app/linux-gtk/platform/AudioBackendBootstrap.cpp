@@ -2,15 +2,16 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "AudioBackendBootstrap.h"
-#include <runtime/AppRuntime.h>
+
+#include "runtime/AppRuntime.h"
 
 #include <memory>
 
 #ifdef ALSA_FOUND
-#include <ao/audio/backend/AlsaProvider.h>
+#include "ao/audio/backend/AlsaProvider.h"
 #endif
 #ifdef PIPEWIRE_FOUND
-#include <ao/audio/backend/PipeWireProvider.h>
+#include "ao/audio/backend/PipeWireProvider.h"
 #endif
 
 namespace ao::gtk

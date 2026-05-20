@@ -146,4 +146,3 @@ target_compile_options(ao_perf_baseline PRIVATE -Wno-array-bounds)
 # Compilation database support for custom linter integration fixture
 add_library(ao_lint_fixture OBJECT EXCLUDE_FROM_ALL integration/lint/LintAllCheckFixture.cpp)
 target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_include_directories(ao_lint_fixture SYSTEM PRIVATE integration/lint/mock_sys)

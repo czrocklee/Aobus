@@ -4,13 +4,13 @@
 // Standalone test for app::uigtk::TrackListAdapter without GTKMM dependency.
 // Tests adapter functionality with test doubles for GTK objects.
 
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
-#include <runtime/TrackSource.h>
-#include <test/unit/lmdb/TestUtils.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackStore.h"
+#include "ao/lmdb/Transaction.h"
+#include "runtime/TrackSource.h"
+#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -126,22 +126,22 @@ namespace ao::model::test
       row.id = id;
       row.title = std::string(metadata.title());
 
-      if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0})
+      if (auto const artistId = metadata.artistId(); artistId != kInvalidDictionaryId)
       {
         row.artist = resolveDictionaryString(artistId);
       }
 
-      if (auto const albumId = metadata.albumId(); albumId != DictionaryId{0})
+      if (auto const albumId = metadata.albumId(); albumId != kInvalidDictionaryId)
       {
         row.album = resolveDictionaryString(albumId);
       }
 
-      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != DictionaryId{0})
+      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != kInvalidDictionaryId)
       {
         row.albumArtist = resolveDictionaryString(albumArtistId);
       }
 
-      if (auto const genreId = metadata.genreId(); genreId != DictionaryId{0})
+      if (auto const genreId = metadata.genreId(); genreId != kInvalidDictionaryId)
       {
         row.genre = resolveDictionaryString(genreId);
       }

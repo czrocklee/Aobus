@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/PcmConverter.h>
+#include "ao/audio/PcmConverter.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 
 namespace ao::audio::test
@@ -25,7 +26,7 @@ namespace ao::audio::test
       CHECK(destination[1] == -0x56780000);
       CHECK(destination[2] == 0x00000000);
       CHECK(destination[3] == 0x7FFF0000);
-      CHECK(destination[4] == static_cast<std::int32_t>(-0x80000000)); // NOLINT(modernize-use-integer-sign-comparison)
+      CHECK(destination[4] == std::numeric_limits<std::int32_t>::min());
     }
 
     SECTION("24-bit to 32-bit padding")
@@ -135,7 +136,7 @@ namespace ao::audio::test
       auto destination = std::array<std::int32_t, 3>{};
       PcmConverter::unpackS24(source, destination, 0);
 
-      CHECK(destination[0] == static_cast<std::int32_t>(0xFF800000)); // NOLINT(modernize-use-integer-sign-comparison)
+      CHECK(destination[0] == -0x800000);
       CHECK(destination[1] == 0x7FFFFF);
       CHECK(destination[2] == -1);
     }

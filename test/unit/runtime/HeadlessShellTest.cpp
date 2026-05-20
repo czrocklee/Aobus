@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "runtime/AppRuntime.h"
+#include "runtime/ConfigStore.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/PlaybackService.h"
+#include "runtime/SessionPersistenceService.h"
+#include "runtime/StateTypes.h"
+#include "runtime/ViewService.h"
+#include "runtime/WorkspaceService.h"
+#include "test/unit/lmdb/TestUtils.h"
 
-#include <runtime/AppRuntime.h>
-#include <runtime/ConfigStore.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/SessionPersistenceService.h>
-#include <runtime/StateTypes.h>
-#include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
+#include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
 #include <functional>
 #include <memory>
-
-#include <test/unit/lmdb/TestUtils.h>
 
 namespace ao::rt::test
 {
@@ -34,17 +33,16 @@ namespace ao::rt::test
   TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][runtime][headless]")
   {
     auto tempDir = TempDir{};
-    auto executor = std::make_shared<MockExecutor>();
     auto configStore = std::make_shared<ConfigStore>(std::filesystem::path(tempDir.path()) / "config.yaml");
 
-    auto runtime = AppRuntime{
-      AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = AppRuntime{AppRuntimeDependencies{
+      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     SECTION("Initial layout is empty")
     {
       auto const layout = runtime.workspace().layoutState();
       CHECK(layout.openViews.empty());
-      CHECK(layout.activeViewId == ViewId{});
+      CHECK(layout.activeViewId == rt::kInvalidViewId);
     }
 
     SECTION("Navigate to list ID creates a view and marks it active")
@@ -56,7 +54,7 @@ namespace ao::rt::test
       REQUIRE(layout.openViews.size() == 1);
       CHECK(layout.activeViewId == layout.openViews.front());
 
-      auto const viewId = ViewId{layout.activeViewId};
+      auto const viewId = layout.activeViewId;
       auto const viewState = runtime.views().trackListState(viewId);
       CHECK(viewState.listId == listId);
     }
@@ -68,8 +66,8 @@ namespace ao::rt::test
 
       auto layout1 = runtime.workspace().layoutState();
       REQUIRE(layout1.openViews.size() == 2);
-      auto const viewToClose = ViewId{layout1.openViews.front()};
-      auto const remainingView = ViewId{layout1.openViews.back()};
+      auto const viewToClose = layout1.openViews.front();
+      auto const remainingView = layout1.openViews.back();
 
       runtime.workspace().closeView(viewToClose);
 
@@ -91,14 +89,14 @@ namespace ao::rt::test
       CHECK(loaded.openViews.size() == 2);
 
       // Create new runtime with same persistence
-      auto session2 = AppRuntime{
-        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+      auto session2 = AppRuntime{AppRuntimeDependencies{
+        .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       session2.persistence().restore();
 
       auto const layout = session2.workspace().layoutState();
       CHECK(layout.openViews.size() == 2);
-      CHECK(layout.activeViewId != ViewId{});
+      CHECK(layout.activeViewId != rt::kInvalidViewId);
     }
 
     SECTION("Session persistence preserves groupBy across instances")
@@ -120,8 +118,8 @@ namespace ao::rt::test
       CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
 
       // Restore in new runtime
-      auto session2 = AppRuntime{
-        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+      auto session2 = AppRuntime{AppRuntimeDependencies{
+        .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       session2.persistence().restore();
 
@@ -138,8 +136,8 @@ namespace ao::rt::test
       runtime.workspace().navigateTo(ListId{10});
       runtime.persistence().save();
 
-      auto session2 = AppRuntime{
-        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+      auto session2 = AppRuntime{AppRuntimeDependencies{
+        .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       session2.persistence().restore();
 

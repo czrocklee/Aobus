@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/LibraryTrackCountLabel.h"
-#include <ao/Type.h>
-#include <runtime/TrackSource.h>
+
+#include "ao/Type.h"
+#include "runtime/TrackSource.h"
 
 #include <cstddef>
 #include <format>

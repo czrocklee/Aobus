@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/library/TrackView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/Type.h"
+#include "ao/library/TrackView.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Transaction.h"
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -84,11 +84,10 @@ namespace ao::library
   class TrackStore::Reader::Iterator final
   {
   public:
-    using value_type = std::pair<TrackId, TrackView>; // NOLINT
+    using value_type = std::pair<TrackId, TrackView>;
 
     Iterator() = default;
     Iterator(Iterator const&) = default;
-    // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
     ~Iterator() = default;
     Iterator(Iterator&&) = default;
 
@@ -211,7 +210,7 @@ namespace ao::library
   {
     gsl_Expects((size % 4) == 0);
 
-    auto span = _hotWriter.update(id.value(), size);
+    auto span = _hotWriter.update(id.raw(), size);
     std::invoke(std::forward<F>(fill), span);
   }
 
@@ -220,7 +219,7 @@ namespace ao::library
   {
     gsl_Expects((size % 4) == 0);
 
-    auto span = _coldWriter.update(id.value(), size);
+    auto span = _coldWriter.update(id.raw(), size);
     std::invoke(std::forward<F>(fill), span);
   }
 } // namespace ao::library

@@ -1,12 +1,14 @@
 #include "LintAllCheckFixture.h"
+
+#include <string.h>
+#include <unistd.h>
+
 #include <cmath>
 #include <iostream>
 #include <mutex>
 #include <optional>
-#include <string.h>
 #include <string>
 #include <thread>
-#include <unistd.h>
 #include <utility>
 #include <vector>
 

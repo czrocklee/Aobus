@@ -2,7 +2,17 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackViewPage.h"
+
+#include "ao/Type.h"
+#include "ao/utility/Log.h"
 #include "app/StyleManager.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/LibraryMutationService.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
+#include "runtime/ViewService.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnFactoryBuilder.h"
 #include "track/TrackColumnViewHost.h"
@@ -10,15 +20,6 @@
 #include "track/TrackPresentation.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
-#include <ao/utility/Log.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackPresentationPreset.h>
-#include <runtime/ViewService.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -69,8 +70,7 @@ namespace ao::gtk
     public:
       static Glib::RefPtr<ProjectionGroupSectionSorter> create(TrackListAdapter& adapter)
       {
-        return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(
-          new ProjectionGroupSectionSorter(adapter)); // NOLINT(cppcoreguidelines-owning-memory)
+        return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(new ProjectionGroupSectionSorter(adapter));
       }
 
     protected:
@@ -149,7 +149,7 @@ namespace ao::gtk
       [this](TrackColumnDefinition const& def)
       { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
 
-    if (_viewId != rt::ViewId{})
+    if (_viewId != rt::kInvalidViewId)
     {
       auto const& presState = _runtime.views().trackListState(_viewId).presentation;
       _viewHost->columnController().setLayoutAndApply(
@@ -281,10 +281,10 @@ namespace ao::gtk
     rebuildColumnView(trackColumnLayoutForPresentation(snapshot));
   }
 
-  void TrackViewPage::setPlayingTrackId(std::optional<TrackId> optPlayingTrackId)
+  void TrackViewPage::setPlayingTrackId(TrackId trackId)
   {
-    _optPlayingTrackId = optPlayingTrackId;
-    _viewHost->selectionController().setPlayingTrackId(optPlayingTrackId);
+    _playingTrackId = trackId;
+    _viewHost->selectionController().setPlayingTrackId(trackId);
   }
 
   void TrackViewPage::rebuildColumnView(TrackColumnLayout const& layout)
@@ -310,9 +310,9 @@ namespace ao::gtk
     updateSectionHeaders();
 
     // 5. Restore playing state in the new controller before attaching model
-    if (_optPlayingTrackId)
+    if (_playingTrackId != kInvalidTrackId)
     {
-      _viewHost->selectionController().setPlayingTrackId(_optPlayingTrackId);
+      _viewHost->selectionController().setPlayingTrackId(_playingTrackId);
     }
 
     // 6. Attach the model
@@ -326,9 +326,10 @@ namespace ao::gtk
     Glib::signal_idle().connect_once(
       [this]
       {
-        if (auto const optPrimaryId = _viewHost->selectionController().getPrimarySelectedTrackId())
+        if (auto const primaryId = _viewHost->selectionController().getPrimarySelectedTrackId();
+            primaryId != kInvalidTrackId)
         {
-          _viewHost->selectionController().scrollToTrack(*optPrimaryId);
+          _viewHost->selectionController().scrollToTrack(primaryId);
         }
       });
 

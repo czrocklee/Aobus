@@ -2,12 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/document/LayoutDocument.h"
+
+#include "ao/Error.h"
+#include "ao/utility/Log.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/document/LayoutYaml.h"
-#include <ao/utility/Log.h>
+#include "runtime/ConfigStore.h"
 
 #include <giomm/resource.h>
-#include <glib.h> // NOLINT(misc-include-cleaner)
+#include <glib.h>
 #include <glibmm/error.h>
 #include <yaml-cpp/yaml.h>
 
@@ -230,7 +233,7 @@ namespace ao::gtk::layout
       try
       {
         auto const bytes = Gio::Resource::lookup_data_global("/org/aobus/layout/default_layout.yaml");
-        gsize size = 0; // NOLINT(misc-include-cleaner)
+        gsize size = 0;
         auto const* const data = static_cast<char const*>(bytes->get_data(size));
         auto const yamlStr = std::string_view{data, size};
         auto const node = YAML::Load(std::string{yamlStr});
@@ -252,5 +255,15 @@ namespace ao::gtk::layout
   std::map<std::string, LayoutNode, std::less<>> getBuiltInTemplates()
   {
     return loadBuiltInLayout().templates;
+  }
+
+  Result<> loadLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument& doc)
+  {
+    return store.load(group, doc);
+  }
+
+  void saveLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument const& doc)
+  {
+    store.save(group, doc);
   }
 } // namespace ao::gtk::layout

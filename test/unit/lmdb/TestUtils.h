@@ -3,13 +3,12 @@
 
 #pragma once
 
-#include <ao/utility/ByteView.h>
+#include "ao/utility/ByteView.h"
 
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
 #include <stdexcept>
-#include <stdlib.h> // NOLINT(modernize-deprecated-headers)
 #include <string>
 #include <string_view>
 #include <vector>

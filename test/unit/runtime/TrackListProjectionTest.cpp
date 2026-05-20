@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <runtime/CorePrimitives.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/SmartListEvaluator.h>
-#include <runtime/SmartListSource.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackListProjection.h>
-#include <runtime/TrackPresentationPreset.h>
-#include <runtime/TrackSource.h>
-
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
+#include "runtime/TrackListProjection.h"
 
 #include "TestUtils.h"
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/SmartListEvaluator.h"
+#include "runtime/SmartListSource.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackSource.h"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -134,7 +133,7 @@ namespace ao::rt::test
 
     SECTION("trackIdAt out of bounds returns invalid")
     {
-      CHECK(proj.trackIdAt(999) == TrackId{});
+      CHECK(proj.trackIdAt(999) == kInvalidTrackId);
     }
 
     SECTION("indexOf returns correct positions")
@@ -236,8 +235,8 @@ namespace ao::rt::test
 
     auto proj = env.createProjection(ViewId{1});
     CHECK(proj.size() == 0);
-    CHECK(proj.trackIdAt(0) == TrackId{});
-    CHECK(proj.trackIdAt(999) == TrackId{});
+    CHECK(proj.trackIdAt(0) == kInvalidTrackId);
+    CHECK(proj.trackIdAt(999) == kInvalidTrackId);
   }
 
   TEST_CASE("TrackListProjection - sort 20 tracks by year then title", "[app][runtime][projection]")
@@ -413,7 +412,7 @@ namespace ao::rt::test
 
     for (std::size_t i = 0; i < 10; ++i)
     {
-      CHECK(proj.trackIdAt(i) != TrackId{});
+      CHECK(proj.trackIdAt(i) != kInvalidTrackId);
     }
   }
 

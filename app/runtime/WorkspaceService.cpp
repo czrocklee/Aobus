@@ -6,11 +6,10 @@
 #include "LibraryMutationService.h"
 #include "PlaybackService.h"
 #include "ViewService.h"
-
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/StateTypes.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/StateTypes.h"
 
 #include <algorithm>
 #include <functional>
@@ -102,7 +101,7 @@ namespace ao::rt
 
   void WorkspaceService::navigateTo(std::variant<ListId, std::string, GlobalViewKind> const& target)
   {
-    auto targetViewId = ViewId{};
+    auto targetViewId = rt::kInvalidViewId;
 
     if (std::holds_alternative<ListId>(target))
     {
@@ -121,7 +120,7 @@ namespace ao::rt
         }
       }
 
-      if (targetViewId == ViewId{})
+      if (targetViewId == rt::kInvalidViewId)
       {
         auto const res = _impl->views.createView(TrackListViewConfig{.listId = listId}, true);
         targetViewId = res.viewId;
@@ -142,7 +141,7 @@ namespace ao::rt
       }
     }
 
-    if (targetViewId != ViewId{})
+    if (targetViewId != rt::kInvalidViewId)
     {
       if (std::ranges::find(_impl->layoutState.openViews, targetViewId) == _impl->layoutState.openViews.end())
       {
@@ -166,7 +165,7 @@ namespace ao::rt
     if (_impl->layoutState.activeViewId == viewId)
     {
       _impl->layoutState.activeViewId =
-        _impl->layoutState.openViews.empty() ? ViewId{} : _impl->layoutState.openViews.back();
+        _impl->layoutState.openViews.empty() ? rt::kInvalidViewId : _impl->layoutState.openViews.back();
     }
 
     _impl->layoutState.revision++;

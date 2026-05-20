@@ -11,6 +11,11 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::rt::async
+{
+  class Runtime;
+}
+
 namespace ao::rt
 {
   class IControlExecutor;
@@ -26,7 +31,7 @@ namespace ao::rt
   class CoreRuntime
   {
   public:
-    CoreRuntime(std::shared_ptr<IControlExecutor> executor, std::filesystem::path libraryRoot);
+    CoreRuntime(std::unique_ptr<IControlExecutor> executor, std::filesystem::path libraryRoot);
     virtual ~CoreRuntime();
 
     CoreRuntime(CoreRuntime const&) = delete;
@@ -40,7 +45,7 @@ namespace ao::rt
     ListSourceStore& sources() noexcept;
     NotificationService& notifications() noexcept;
 
-    IControlExecutor& executor() noexcept;
+    async::Runtime& async() noexcept;
 
   private:
     struct Impl;

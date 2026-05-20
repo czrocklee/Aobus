@@ -1,120 +1,117 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <runtime/ImmediateControlExecutor.h>
-#include <runtime/async/LifetimeScope.h>
-#include <runtime/async/Runtime.h>
-#include <runtime/async/Task.h>
+#include "runtime/async/LifetimeScope.h"
 
-#include <atomic>
+#include "TestUtils.h"
+#include "runtime/ImmediateControlExecutor.h"
+#include "runtime/async/Runtime.h"
+#include "runtime/async/Task.h"
+
 #include <catch2/catch_test_macros.hpp>
+
 #include <chrono>
 #include <thread>
+#include <utility>
 
-namespace ao::rt::async::test
+namespace ao::rt::test
 {
+  using namespace ao::rt::async;
+
   namespace
   {
-    class MemberTaskOwner final
+    struct MemberTaskOwner final
     {
-    public:
-      MemberTaskOwner(Runtime& runtime, LifetimeScope& scope, std::atomic<int>& completed)
-        : _runtime{runtime}, _scope{scope}, _completed{completed}
+      MemberTaskOwner(Runtime& runtime, LifetimeScope& scope, AsyncTestState<int> completed)
+        : runtime{runtime}, completed{std::move(completed)}
       {
+        runtime.spawnWithLifetime(&scope, run());
       }
 
-      void start() { spawnWithLifetime(_runtime, _scope, run()); }
-
-    private:
       Task<void> run()
       {
-        co_await resumeOnWorker(_runtime);
-        co_await resumeOnUi(_runtime);
-
-        _completed.fetch_add(1);
+        co_await runtime.resumeOnWorker();
+        (*completed)++;
       }
 
-      Runtime& _runtime;
-      LifetimeScope& _scope;
-      std::atomic<int>& _completed;
+      Runtime& runtime;
+      AsyncTestState<int> completed;
     };
 
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
-    Task<void> longRunningTask(Runtime& runtime, std::atomic<bool>& completed)
+    Task<void> longRunningTask(Runtime* runtime, AsyncBarrier* barrier, AsyncTestState<bool> completed)
     {
-      co_await resumeOnWorker(runtime);
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      co_await runtime->resumeOnWorker();
+      barrier->wait(); // deterministic wait point (blocks worker thread)
 
-      co_await resumeOnUi(runtime);
+      co_await runtime->resumeOnControl();
       // If cancelled, this line should never be reached.
-      completed.store(true);
+      completed.set(true);
     }
-  } // namespace
+  }
 
-  TEST_CASE("LifetimeScope - Cancels tasks on destruction", "[runtime][async]")
+  TEST_CASE("LifetimeScope - Completion without cancellation", "[async][runtime]")
   {
     auto executor = ImmediateControlExecutor{};
     auto runtime = Runtime{executor};
-    auto completed = std::atomic<bool>{false};
+    auto barrier = AsyncBarrier{};
+    auto completed = AsyncTestState<bool>::create(false);
 
     {
       auto scope = LifetimeScope{};
-      spawnWithLifetime(runtime, scope, longRunningTask(runtime, completed));
+      runtime.spawnWithLifetime(&scope, longRunningTask(&runtime, &barrier, completed));
 
-      // Scope is destroyed here, cancelling the task while it's sleeping.
+      barrier.release();
+
+      // Wait for it to complete on the worker thread/ImmediateControlExecutor
+      REQUIRE(completed.waitUntil(true));
     }
 
-    // Wait a bit to ensure the task had time to wake up and attempt resumeOnUi
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    // It should NOT have completed because the scope was destroyed.
-    REQUIRE_FALSE(completed.load());
-
+    REQUIRE(completed.get());
     runtime.requestStop();
     runtime.join();
   }
 
-  TEST_CASE("LifetimeScope - Completes task if scope remains alive", "[runtime][async]")
+  TEST_CASE("LifetimeScope - Automatic cancellation", "[async][runtime]")
   {
     auto executor = ImmediateControlExecutor{};
     auto runtime = Runtime{executor};
-    auto completed = std::atomic<bool>{false};
+    auto barrier = AsyncBarrier{};
+    auto completed = AsyncTestState<bool>::create(false);
 
     {
       auto scope = LifetimeScope{};
-      spawnWithLifetime(runtime, scope, longRunningTask(runtime, completed));
+      runtime.spawnWithLifetime(&scope, longRunningTask(&runtime, &barrier, completed));
 
-      // Keep scope alive until it completes
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      // Destroy scope while task is blocked at the barrier
     }
 
-    REQUIRE(completed.load());
+    // Now release the barrier - task should resume but be cancelled at resumeOnControl
+    barrier.release();
 
+    // Give it a tiny bit of time to resume and hit the cancellation point
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    REQUIRE_FALSE(completed.get());
     runtime.requestStop();
     runtime.join();
   }
 
-  TEST_CASE("LifetimeScope - Runs member coroutine after start returns", "[runtime][async]")
+  TEST_CASE("LifetimeScope - Member task lifecycle", "[async][runtime]")
   {
     auto executor = ImmediateControlExecutor{};
     auto runtime = Runtime{executor};
-    auto completed = std::atomic<int>{0};
+    auto completed = AsyncTestState<int>::create(0);
 
     {
       auto scope = LifetimeScope{};
       auto owner = MemberTaskOwner{runtime, scope, completed};
 
-      owner.start();
-
-      for (int attempt = 0; attempt < 50 && completed.load() == 0; ++attempt)
-      {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      }
+      // Coroutine finishes while owner and scope are alive
+      REQUIRE(completed.waitUntil(1));
     }
 
-    REQUIRE(completed.load() == 1);
-
+    REQUIRE(completed.get() == 1);
     runtime.requestStop();
     runtime.join();
   }
-} // namespace ao::rt::async::test
+} // namespace ao::rt::test

@@ -2,19 +2,21 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "list/SmartListDialog.h"
+
+#include "ao/Type.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/ListView.h"
+#include "ao/library/MusicLibrary.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ListSourceStore.h"
+#include "runtime/SmartListEvaluator.h"
+#include "runtime/SmartListSource.h"
+#include "runtime/TrackSource.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackViewPage.h"
-#include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <ao/library/MusicLibrary.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/ListSourceStore.h>
-#include <runtime/SmartListEvaluator.h>
-#include <runtime/SmartListSource.h>
-#include <runtime/TrackSource.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -38,7 +40,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -98,7 +99,7 @@ namespace ao::gtk
 
   void SmartListDialog::populate(ListId id, library::ListView const& view)
   {
-    _optEditListId = id;
+    _editListId = id;
     _nameEntry.set_text(std::string(view.name()));
     _descEntry.set_text(std::string(view.description()));
     _exprBox.entry().set_text(std::string(view.filter()));
@@ -109,7 +110,7 @@ namespace ao::gtk
 
   ListId SmartListDialog::editListId() const
   {
-    return _optEditListId.value_or(ListId{0});
+    return _editListId;
   }
 
   void SmartListDialog::setLocalExpression(std::string const& expression)
@@ -349,8 +350,7 @@ namespace ao::gtk
     auto inheritedExpr = std::string_view();
 
     // Check if parent is All Tracks
-    auto const isAllTracks =
-      (_parentListId == ListId{std::numeric_limits<std::uint32_t>::max()} || _parentListId == ListId{0});
+    auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
 
     if (!isAllTracks)
     {
@@ -395,8 +395,7 @@ namespace ao::gtk
     }
 
     auto const& expr = _exprBox.entry().get_text();
-    auto const isAllTracks =
-      (_parentListId == ListId{std::numeric_limits<std::uint32_t>::max()} || _parentListId == ListId{0});
+    auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
 
     if (expr.empty())
     {

@@ -1,26 +1,28 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Exception.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/query/ExecutionPlan.h>
-#include <ao/query/Expression.h>
-#include <ao/utility/VariantVisitor.h>
+#include "ao/query/ExecutionPlan.h"
+
+#include "ao/Exception.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/query/Expression.h"
+#include "ao/utility/VariantVisitor.h"
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <cstdint>
 #include <cstring>
-#include <gsl-lite/gsl-lite.hpp>
 #include <iterator>
 #include <limits>
-#include <memory> // NOLINT(misc-include-cleaner)
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
-#include <system_error> // NOLINT(misc-include-cleaner)
+#include <system_error>
 #include <variant>
 
 namespace ao::query
@@ -139,7 +141,7 @@ namespace ao::query
       }
 
       auto const tagId = dict->getOrIntern(tagName);
-      return std::uint32_t{1} << (tagId.value() & kBloomBitMask);
+      return std::uint32_t{1} << (tagId.raw() & kBloomBitMask);
     }
 
     std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dict);
@@ -545,7 +547,7 @@ namespace ao::query
           .op = OpCode::LoadConstant,
           .field = 0,
           .operand = static_cast<std::int32_t>(_nextReg++),
-          .constValue = static_cast<std::int64_t>(tagId.value()),
+          .constValue = static_cast<std::int64_t>(tagId.raw()),
           .strLen = 0,
           .strData = nullptr,
         });
@@ -587,7 +589,7 @@ namespace ao::query
       if (_dict != nullptr)
       {
         auto const dictId = _dict->getOrIntern(var.name);
-        constValue = static_cast<std::int64_t>(dictId.value());
+        constValue = static_cast<std::int64_t>(dictId.raw());
       }
       else
       {
@@ -692,7 +694,7 @@ namespace ao::query
 
     // Reserve in memory - if already exists, returns existing ID; if not, adds to memory only
     auto const id = _dict->getOrIntern(str);
-    return static_cast<std::int64_t>(id.value());
+    return static_cast<std::int64_t>(id.raw());
   }
 
   ExecutionPlan QueryCompiler::compile(Expression const& expr)

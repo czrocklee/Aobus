@@ -3,17 +3,17 @@
 
 #pragma once
 
-#include "library_io/PlaylistExporter.h"
+#include "ao/Type.h"
+#include "portal/PlaylistExporter.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/PlaybackService.h"
 #include "track/TrackViewPage.h"
-#include <ao/Type.h>
+
 #include <gtkmm/stack.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/PlaybackService.h>
 
 #include <map>
 #include <memory>
-#include <optional>
 
 namespace ao::lmdb
 {
@@ -28,7 +28,10 @@ namespace ao::gtk
   class TrackRowCache;
   class TrackListAdapter;
   class TrackViewPage;
-  class PlaylistExporter;
+  namespace portal
+  {
+    class PlaylistExporter;
+  }
   class TrackPresentationStore;
   class TrackColumnLayoutModel;
 
@@ -40,7 +43,7 @@ namespace ao::gtk
     rt::ViewId viewId{};
     std::unique_ptr<TrackListAdapter> adapter = {};
     std::unique_ptr<TrackViewPage> page = {};
-    std::unique_ptr<PlaylistExporter> exporter = {};
+    std::unique_ptr<portal::PlaylistExporter> exporter = {};
   };
 
   /**
@@ -81,10 +84,10 @@ namespace ao::gtk
     TrackPageContext* currentVisible();
     TrackPageContext const* currentVisible() const;
 
-    void setPlayingTrack(std::optional<TrackId> optTrackId);
+    void setPlayingTrack(TrackId trackId);
 
     /**
-     * @return The list ID of the currently visible page, or allTracksListId() if none.
+     * @return The list ID of the currently visible page, or rt::kAllTracksListId if none.
      */
     ListId activeListId() const;
 
@@ -109,7 +112,7 @@ namespace ao::gtk
     rt::Subscription _presentationChangedSub;
 
     std::map<rt::ViewId, TrackPageContext> _trackPages;
-    std::optional<TrackId> _optPlayingTrackId;
+    TrackId _playingTrackId{kInvalidTrackId};
     TrackRowCache* _activeDataProvider = nullptr;
   };
 } // namespace ao::gtk

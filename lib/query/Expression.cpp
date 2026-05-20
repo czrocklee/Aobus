@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/query/Expression.h>
+#include "ao/query/Expression.h"
 
 #include <memory>
 #include <utility>
@@ -43,8 +43,8 @@ namespace ao::query
         normalize(unary->operand);
       }
 
-      void operator()(VariableExpression&) {} // NOLINT(readability-named-parameter)
-      void operator()(ConstantExpression&) {} // NOLINT(readability-named-parameter)
+      void operator()(VariableExpression& /*variable*/) {}
+      void operator()(ConstantExpression& /*constant*/) {}
 
       void shiftAdd(BinaryExpression& binary)
       {

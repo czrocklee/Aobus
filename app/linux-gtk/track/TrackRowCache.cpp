@@ -2,13 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackRowCache.h"
+
+#include "ao/Type.h"
+#include "ao/audio/Types.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "ao/library/TrackView.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
-#include <ao/audio/Types.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
 
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
@@ -216,13 +217,13 @@ namespace ao::gtk
     desc.title = std::string{metadata.title()};
 
     // Artist
-    if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0})
+    if (auto const artistId = metadata.artistId(); artistId != kInvalidDictionaryId)
     {
       desc.artist = resolveDictionaryString(artistId).raw();
     }
 
     // Album
-    if (auto const albumId = metadata.albumId(); albumId != DictionaryId{0})
+    if (auto const albumId = metadata.albumId(); albumId != kInvalidDictionaryId)
     {
       desc.album = resolveDictionaryString(albumId).raw();
     }

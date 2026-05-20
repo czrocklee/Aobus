@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/VolumeControl.h"
-#include <runtime/PlaybackService.h>
-#include <runtime/StateTypes.h>
+
+#include "runtime/PlaybackService.h"
+#include "runtime/StateTypes.h"
 
 #include <gtkmm/enums.h>
 

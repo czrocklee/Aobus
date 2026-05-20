@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/AlsaExclusiveBackend.h>
+#include "ao/audio/backend/AlsaExclusiveBackend.h"
 
-#include <ao/Error.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/IRenderTarget.h>
-#include <ao/audio/Property.h>
-#include <ao/utility/Log.h>
-#include <ao/utility/ThreadUtils.h>
+#include "ao/Error.h"
+#include "ao/audio/Backend.h"
+#include "ao/audio/Format.h"
+#include "ao/audio/IRenderTarget.h"
+#include "ao/audio/Property.h"
+#include "ao/utility/Log.h"
+#include "ao/utility/ThreadUtils.h"
 
-#include <errno.h> // NOLINT(modernize-deprecated-headers)
 #include <poll.h>
+
+#include <cerrno>
 
 extern "C"
 {
@@ -246,7 +247,6 @@ namespace ao::audio::backend
       renderTarget->onUnderrun();
       ::snd_pcm_prepare(pcm.get());
     }
-    // NOLINTNEXTLINE(misc-include-cleaner)
     else if (err == -ESTRPIPE)
     {
       while (::snd_pcm_resume(pcm.get()) == -EAGAIN)
@@ -496,7 +496,7 @@ namespace ao::audio::backend
   }
 
   AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device, ProfileId const& /*profile*/)
-    : _impl{std::make_unique<Impl>(device.id.value())}
+    : _impl{std::make_unique<Impl>(device.id.raw())}
   {
     AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _impl->deviceName);
   }

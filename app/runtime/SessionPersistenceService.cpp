@@ -2,14 +2,15 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SessionPersistenceService.h"
+
 #include "ConfigStore.h"
 #include "CorePrimitives.h"
 #include "PlaybackService.h"
 #include "StateTypes.h"
 #include "ViewService.h"
 #include "WorkspaceService.h"
-#include <ao/library/MusicLibrary.h>
-#include <ao/utility/Log.h>
+#include "ao/library/MusicLibrary.h"
+#include "ao/utility/Log.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -115,9 +116,9 @@ namespace ao::rt
 
     // Capture playback output state for restoration
     auto const& pb = _impl->playback.state();
-    snapshot.lastBackend = pb.selectedOutput.backendId.value();
-    snapshot.lastOutputDeviceId = pb.selectedOutput.deviceId.value();
-    snapshot.lastProfile = pb.selectedOutput.profileId.value();
+    snapshot.lastBackend = pb.selectedOutput.backendId.raw();
+    snapshot.lastOutputDeviceId = pb.selectedOutput.deviceId.raw();
+    snapshot.lastProfile = pb.selectedOutput.profileId.raw();
 
     _impl->configStore.save("runtime", snapshot);
 

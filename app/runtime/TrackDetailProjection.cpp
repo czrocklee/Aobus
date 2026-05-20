@@ -6,17 +6,18 @@
 #include "LibraryMutationService.h"
 #include "ViewService.h"
 #include "WorkspaceService.h"
-
-#include <ao/Type.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
+#include "ao/Type.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "ao/library/TrackView.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <span>
@@ -25,9 +26,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-
-#include <cstddef>
-#include <cstdint>
 
 namespace ao::rt
 {
@@ -85,7 +83,7 @@ namespace ao::rt
     Subscription focusSub;
     Subscription selectionSub;
     Subscription tracksMutatedSub;
-    ViewId trackedViewId{};
+    ViewId trackedViewId = rt::kInvalidViewId;
 
     Impl(DetailTarget target,
          ViewService& views,
@@ -116,7 +114,7 @@ namespace ao::rt
             {
               _impl->trackedViewId = viewId;
 
-              if (viewId == ViewId{})
+              if (viewId == rt::kInvalidViewId)
               {
                 return;
               }
@@ -251,12 +249,12 @@ namespace ao::rt
       titles.emplace_back(optView->metadata().title());
 
       auto const artistId = optView->metadata().artistId();
-      artists.push_back(artistId != DictionaryId{0} ? std::string{_impl->library.dictionary().get(artistId)}
-                                                    : std::string{});
+      artists.push_back(artistId != kInvalidDictionaryId ? std::string{_impl->library.dictionary().get(artistId)}
+                                                         : std::string{});
 
       auto const albumId = optView->metadata().albumId();
-      albums.push_back(albumId != DictionaryId{0} ? std::string{_impl->library.dictionary().get(albumId)}
-                                                  : std::string{});
+      albums.push_back(albumId != kInvalidDictionaryId ? std::string{_impl->library.dictionary().get(albumId)}
+                                                       : std::string{});
 
       if (ids.size() == 1)
       {

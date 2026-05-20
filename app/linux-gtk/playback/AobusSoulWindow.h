@@ -5,7 +5,9 @@
 
 #include "app/AobusSoul.h"
 #include "playback/AobusSoulBinding.h"
+
 #include <gtkmm/window.h>
+
 #include <memory>
 
 namespace ao::rt

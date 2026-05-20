@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "library_io/ImportExportCoordinator.h"
+#include "portal/ImportExportCoordinator.h"
+
+#include "ao/utility/Log.h"
 #include "layout/LayoutConstants.h"
-#include "library_io/ImportProgressDialog.h"
+#include "portal/ImportProgressDialog.h"
+#include "runtime/AppRuntime.h"
 #include "runtime/LibraryExporter.h"
-#include <ao/utility/Log.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/NotificationService.h>
-#include <runtime/StateTypes.h>
-#include <runtime/async/LifetimeScope.h>
-#include <runtime/async/Task.h>
+#include "runtime/LibraryMutationService.h"
+#include "runtime/NotificationService.h"
+#include "runtime/StateTypes.h"
+#include "runtime/async/LifetimeScope.h"
+#include "runtime/async/Runtime.h"
+#include "runtime/async/Task.h"
 
 #include <giomm/asyncresult.h>
 #include <giomm/liststore.h>
@@ -34,7 +36,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::gtk
+namespace ao::gtk::portal
 {
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
@@ -96,14 +98,12 @@ namespace ao::gtk
         auto const path = std::filesystem::path{pathStr};
         APP_LOG_INFO("Importing from: {}", pathStr);
 
-        rt::async::spawnWithLifetime(
-          _runtime.async(),
-          _tasks,
+        _runtime.async().spawnWithLifetime(
+          &_tasks,
           [](
             ImportExportCoordinator* self, std::filesystem::path importPath, bool isNewLibrary) -> rt::async::Task<void>
           {
-            auto files =
-              co_await self->_runtime.mutation().scanLibraryAsync(self->_runtime.async(), std::move(importPath));
+            auto files = co_await self->_runtime.mutation().scanLibraryAsync(importPath);
 
             if (files.empty())
             {
@@ -133,26 +133,24 @@ namespace ao::gtk
 
     _importDialog->show();
 
-    rt::async::spawnWithLifetime(_runtime.async(),
-                                 _tasks,
-                                 [](ImportExportCoordinator* self,
-                                    std::vector<std::filesystem::path> paths,
-                                    bool importToNewLibrary,
-                                    ImportProgressDialog* dialog) -> rt::async::Task<void>
-                                 {
-                                   co_await self->_runtime.mutation().importFilesAsync(
-                                     self->_runtime.async(), std::move(paths));
+    _runtime.async().spawnWithLifetime(&_tasks,
+                                       [](ImportExportCoordinator* self,
+                                          std::vector<std::filesystem::path> paths,
+                                          bool importToNewLibrary,
+                                          ImportProgressDialog* dialog) -> rt::async::Task<void>
+                                       {
+                                         co_await self->_runtime.mutation().importFilesAsync(std::move(paths));
 
-                                   dialog->ready();
-                                   self->onImportFinished();
+                                         dialog->ready();
+                                         self->onImportFinished();
 
-                                   if (importToNewLibrary && self->_callbacks.onLibraryDataMutated)
-                                   {
-                                     self->_callbacks.onLibraryDataMutated();
-                                   }
+                                         if (importToNewLibrary && self->_callbacks.onLibraryDataMutated)
+                                         {
+                                           self->_callbacks.onLibraryDataMutated();
+                                         }
 
-                                   self->_importProgressSub.reset();
-                                 }(this, files, isNewLibrary, dialogPtr));
+                                         self->_importProgressSub.reset();
+                                       }(this, files, isNewLibrary, dialogPtr));
   }
 
   void ImportExportCoordinator::onImportFinished() const
@@ -175,12 +173,11 @@ namespace ao::gtk
       _callbacks.onOpenNewLibrary(path);
     }
 
-    rt::async::spawnWithLifetime(
-      _runtime.async(),
-      _tasks,
+    _runtime.async().spawnWithLifetime(
+      &_tasks,
       [](ImportExportCoordinator* self, std::filesystem::path importPath, bool isNewLibrary) -> rt::async::Task<void>
       {
-        auto files = co_await self->_runtime.mutation().scanLibraryAsync(self->_runtime.async(), std::move(importPath));
+        auto files = co_await self->_runtime.mutation().scanLibraryAsync(importPath);
 
         if (files.empty())
         {
@@ -280,9 +277,8 @@ namespace ao::gtk
 
   void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, rt::ExportMode mode)
   {
-    rt::async::spawnWithLifetime(
-      _runtime.async(),
-      _tasks,
+    _runtime.async().spawnWithLifetime(
+      &_tasks,
       [](ImportExportCoordinator* self,
          std::filesystem::path exportPath,
          rt::ExportMode exportMode) -> rt::async::Task<void>
@@ -292,8 +288,7 @@ namespace ao::gtk
 
         try
         {
-          co_await self->_runtime.mutation().exportLibraryAsync(
-            self->_runtime.async(), std::move(exportPath), exportMode);
+          co_await self->_runtime.mutation().exportLibraryAsync(std::move(exportPath), exportMode);
         }
         catch (std::exception const& e)
         {
@@ -340,9 +335,8 @@ namespace ao::gtk
       {
         auto const path = std::filesystem::path{file->get_path()};
 
-        rt::async::spawnWithLifetime(
-          _runtime.async(),
-          _tasks,
+        _runtime.async().spawnWithLifetime(
+          &_tasks,
           [](ImportExportCoordinator* self, std::filesystem::path importPath) -> rt::async::Task<void>
           {
             bool success = true;
@@ -350,7 +344,7 @@ namespace ao::gtk
 
             try
             {
-              co_await self->_runtime.mutation().importLibraryAsync(self->_runtime.async(), std::move(importPath));
+              co_await self->_runtime.mutation().importLibraryAsync(std::move(importPath));
             }
             catch (std::exception const& e)
             {
@@ -380,4 +374,4 @@ namespace ao::gtk
       APP_LOG_ERROR("Error selecting import file: {}", e.what());
     }
   }
-} // namespace ao::gtk
+} // namespace ao::gtk::portal

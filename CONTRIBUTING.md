@@ -24,7 +24,8 @@ Rules are numbered for easy reference in reviews and tooling.
     - 2.3.1. Use `#pragma once`
   - 2.4. Includes
     - 2.4.1. Group includes with blank lines in this order:
-      - paired header and project headers
+      - the paired header for this file
+      - project headers (`<ao/...>`, `<runtime/...>`, or `"..."`)
       - third-party headers
       - standard library headers
   - 2.5. Member Order

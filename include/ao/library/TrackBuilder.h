@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackView.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/Type.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/ResourceStore.h"
+#include "ao/library/TrackView.h"
+#include "ao/lmdb/Transaction.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -218,11 +218,11 @@ namespace ao::library
 
       TrackBuilder const* _builder;
       std::vector<DictionaryId> _tagIds;
-      DictionaryId _artistId = DictionaryId{0};
-      DictionaryId _albumId = DictionaryId{0};
-      DictionaryId _genreId = DictionaryId{0};
-      DictionaryId _albumArtistId = DictionaryId{0};
-      DictionaryId _composerId = DictionaryId{0};
+      DictionaryId _artistId = kInvalidDictionaryId;
+      DictionaryId _albumId = kInvalidDictionaryId;
+      DictionaryId _genreId = kInvalidDictionaryId;
+      DictionaryId _albumArtistId = kInvalidDictionaryId;
+      DictionaryId _composerId = kInvalidDictionaryId;
       std::uint32_t _bloomFilter = 0;
       std::size_t _size = 0;
 
@@ -250,7 +250,7 @@ namespace ao::library
       std::uint16_t _uriOffset = 0;
       std::uint16_t _uriLen = 0;
       std::uint32_t _coverArtId = 0;
-      DictionaryId _workId = DictionaryId{0};
+      DictionaryId _workId = kInvalidDictionaryId;
       std::size_t _size = 0;
 
       friend class TrackBuilder;

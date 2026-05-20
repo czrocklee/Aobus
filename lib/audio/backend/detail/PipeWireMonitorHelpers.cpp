@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
+#include "ao/audio/backend/detail/PipeWireMonitorHelpers.h"
 
-#include <ao/audio/Backend.h>
-#include <ao/audio/backend/detail/AudioBackendShared.h>
-#include <ao/utility/ByteView.h>
+#include "ao/audio/Backend.h"
+#include "ao/audio/backend/detail/AudioBackendShared.h"
+#include "ao/audio/backend/detail/PipeWireShared.h"
+#include "ao/utility/ByteView.h"
 
 extern "C"
 {
@@ -24,14 +24,13 @@ extern "C"
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
-
-#include <cstdint>
 
 namespace ao::audio::backend::detail
 {
@@ -265,8 +264,7 @@ namespace ao::audio::backend::detail
     bool copyFloatArray(::spa_pod const& pod, std::vector<float>& output)
     {
       auto values = std::array<float, 16>{};
-      auto const count = ::spa_pod_copy_array(
-        &pod, SPA_TYPE_Float, values.data(), values.size()); // NOLINT(readability-simplify-subscript-expr)
+      auto const count = ::spa_pod_copy_array_full(&pod, SPA_TYPE_Float, sizeof(float), values.data(), values.size());
 
       if (count == 0)
       {

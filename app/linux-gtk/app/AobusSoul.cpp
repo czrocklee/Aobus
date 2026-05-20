@@ -250,6 +250,12 @@ namespace ao::gtk
 
     static constexpr float kSectorCountF = 6.0F;
     static constexpr int kSectorCount = 6;
+    static constexpr int kRedSector = 0;
+    static constexpr int kYellowSector = 1;
+    static constexpr int kGreenSector = 2;
+    static constexpr int kCyanSector = 3;
+    static constexpr int kBlueSector = 4;
+    static constexpr int kMagentaSector = 5;
     int const sector = static_cast<int>(hue * kSectorCountF);
     float const fraction = (hue * kSectorCountF) - static_cast<float>(sector);
     float const pValue = maxValue * (1.0F - saturation);
@@ -262,32 +268,32 @@ namespace ao::gtk
 
     switch (sector % kSectorCount)
     {
-      case 0:
+      case kRedSector:
         resultRed = maxValue;
         resultGreen = tValue;
         resultBlue = pValue;
         break;
-      case 1:
+      case kYellowSector:
         resultRed = qValue;
         resultGreen = maxValue;
         resultBlue = pValue;
         break;
-      case 2:
+      case kGreenSector:
         resultRed = pValue;
         resultGreen = maxValue;
         resultBlue = tValue;
         break;
-      case 3: // NOLINT(readability-magic-numbers)
+      case kCyanSector:
         resultRed = pValue;
         resultGreen = qValue;
         resultBlue = maxValue;
         break;
-      case 4: // NOLINT(readability-magic-numbers)
+      case kBlueSector:
         resultRed = tValue;
         resultGreen = pValue;
         resultBlue = maxValue;
         break;
-      case 5: // NOLINT(readability-magic-numbers)
+      case kMagentaSector:
       default:
         resultRed = maxValue;
         resultGreen = pValue;

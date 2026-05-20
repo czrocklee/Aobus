@@ -4,11 +4,13 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
 #include "track/TrackPresentation.h"
+
 #include <gtkmm/stack.h>
+
 #include <memory>
-#include <runtime/AppRuntime.h>
-#include <runtime/CorePrimitives.h>
 
 namespace ao::rt
 {
@@ -31,7 +33,10 @@ namespace ao::gtk
   class TrackPresentationStore;
   class TrackPageHost;
   class PlaybackSequenceController;
-  class ImportExportCoordinator;
+  namespace portal
+  {
+    class ImportExportCoordinator;
+  }
 
   class MainWindowCoordinator final
   {
@@ -58,13 +63,13 @@ namespace ao::gtk
     CoverArtCache* coverArtCache() { return _coverArtCache.get(); }
     PlaybackSequenceController* playbackSequenceController() { return _playbackSequenceController.get(); }
     TagEditController* tagEditController() { return _tagEditController.get(); }
-    ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinator.get(); }
+    portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinator.get(); }
     TrackPageHost* trackPageHost() { return _trackPageHost.get(); }
     TrackColumnLayoutModel* columnLayoutModel() { return &_trackColumnLayoutModel; }
     ListSidebarController* listSidebarController() { return _listSidebarController.get(); }
     TrackPresentationStore* trackPresentationStore() { return _trackPresentationStore.get(); }
 
-    ImportExportCoordinator& importExport() { return *_importExportCoordinator; }
+    portal::ImportExportCoordinator& importExport() { return *_importExportCoordinator; }
 
   private:
     MainWindow& _window;
@@ -79,7 +84,7 @@ namespace ao::gtk
     std::unique_ptr<TrackPresentationStore> _trackPresentationStore;
     std::unique_ptr<TrackPageHost> _trackPageHost;
     std::unique_ptr<PlaybackSequenceController> _playbackSequenceController;
-    std::unique_ptr<ImportExportCoordinator> _importExportCoordinator;
+    std::unique_ptr<portal::ImportExportCoordinator> _importExportCoordinator;
 
     Gtk::Stack _stack;
     TrackColumnLayoutModel _trackColumnLayoutModel;

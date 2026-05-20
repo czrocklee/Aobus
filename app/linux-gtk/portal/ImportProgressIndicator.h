@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <runtime/CorePrimitives.h>
+#include "runtime/CorePrimitives.h"
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -16,7 +16,7 @@ namespace ao::rt
   class LibraryMutationService;
 }
 
-namespace ao::gtk
+namespace ao::gtk::portal
 {
   /**
    * ImportProgressIndicator shows a progress bar and label during active library imports.
@@ -47,4 +47,4 @@ namespace ao::gtk
 
     static constexpr int kProgressBarWidth = 200;
   };
-} // namespace ao::gtk
+} // namespace ao::gtk::portal

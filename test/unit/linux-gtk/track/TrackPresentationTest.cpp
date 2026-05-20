@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <app/linux-gtk/track/TrackColumnController.h>
-#include <app/linux-gtk/track/TrackPresentation.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackPresentationPreset.h>
+#include "app/linux-gtk/track/TrackPresentation.h"
+
+#include "app/linux-gtk/track/TrackColumnController.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>

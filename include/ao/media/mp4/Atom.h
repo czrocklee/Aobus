@@ -4,7 +4,7 @@
 #pragma once
 
 #include "AtomLayout.h"
-#include <ao/utility/ByteView.h>
+#include "ao/utility/ByteView.h"
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -88,7 +88,6 @@ namespace ao::media::mp4
 
   private:
     std::span<std::byte const> _data;
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers)
     Atom& _parent;
   };
 

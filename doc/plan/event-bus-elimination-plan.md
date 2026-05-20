@@ -119,11 +119,11 @@ class PlaybackService final {
 public:
   // -- Event types --
   struct TransportChanged { ao::audio::Transport transport{}; };
-  struct NowPlayingChanged { ao::TrackId trackId{}; ao::ListId sourceListId{}; };
+  struct NowPlayingChanged { ao::TrackId trackId{ao::kInvalidTrackId}; ao::ListId sourceListId{ao::kInvalidListId}; };
   struct OutputChanged { OutputSelection selection{}; };
   struct DevicesChanged {};
   struct QualityChanged { ao::audio::Quality quality{}; bool ready{}; };
-  struct RevealTrackRequested { ao::TrackId trackId{}; ao::ListId preferredListId{}; ViewId preferredViewId{}; };
+  struct RevealTrackRequested { ao::TrackId trackId{ao::kInvalidTrackId}; ao::ListId preferredListId{ao::kInvalidListId}; ViewId preferredViewId{rt::kInvalidViewId}; };
   struct Stopped {};
 
   // -- Subscribe methods --

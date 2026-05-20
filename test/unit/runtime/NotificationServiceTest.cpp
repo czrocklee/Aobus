@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "runtime/NotificationService.h"
 
-#include <runtime/NotificationService.h>
-#include <runtime/StateTypes.h>
+#include "runtime/CorePrimitives.h"
+#include "runtime/StateTypes.h"
+
+#include <catch2/catch_test_macros.hpp>
 
 namespace ao::rt::test
 {
@@ -12,7 +14,7 @@ namespace ao::rt::test
   {
     auto service = NotificationService{};
 
-    auto receivedId = NotificationId{};
+    auto receivedId = rt::kInvalidNotificationId;
     auto sub = service.onPosted([&](auto id) { receivedId = id; });
 
     auto id = service.post(NotificationSeverity::Info, "test message");
@@ -25,7 +27,7 @@ namespace ao::rt::test
 
     auto id = service.post(NotificationSeverity::Warning, "warning");
 
-    auto dismissedId = NotificationId{};
+    auto dismissedId = rt::kInvalidNotificationId;
     auto sub = service.onDismissed([&](auto id) { dismissedId = id; });
 
     service.dismiss(id);

@@ -2,9 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackSelectionController.h"
+
+#include "ao/Type.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
 
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>
@@ -75,9 +76,9 @@ namespace ao::gtk
           return;
         }
 
-        if (auto const optTrackId = trackIdAtPosition(position))
+        if (auto const trackId = trackIdAtPosition(position); trackId != kInvalidTrackId)
         {
-          _trackActivated.emit(*optTrackId);
+          _trackActivated.emit(trackId);
           return;
         }
 
@@ -171,9 +172,9 @@ namespace ao::gtk
       return;
     }
 
-    if (auto const optTrackId = getPrimarySelectedTrackId(); optTrackId)
+    if (auto const trackId = getPrimarySelectedTrackId(); trackId != kInvalidTrackId)
     {
-      _trackActivated.emit(*optTrackId);
+      _trackActivated.emit(trackId);
     }
   }
 
@@ -182,25 +183,25 @@ namespace ao::gtk
     _selectionChanged.emit();
   }
 
-  std::optional<TrackId> TrackSelectionController::trackIdAtPosition(std::uint32_t position) const noexcept
+  TrackId TrackSelectionController::trackIdAtPosition(std::uint32_t position) const noexcept
   {
     if (!_selectionModel)
     {
-      return std::nullopt;
+      return kInvalidTrackId;
     }
 
     auto const item = _selectionModel->get_object(position);
 
     if (!item)
     {
-      return std::nullopt;
+      return kInvalidTrackId;
     }
 
     auto const row = std::dynamic_pointer_cast<TrackRowObject>(item);
 
     if (!row)
     {
-      return std::nullopt;
+      return kInvalidTrackId;
     }
 
     return row->getTrackId();
@@ -228,8 +229,7 @@ namespace ao::gtk
     return std::views::iota(0U, model->get_n_items()) |
            std::views::filter([this](auto idx) { return _selectionModel->is_selected(idx); }) |
            std::views::transform([this](auto idx) { return trackIdAtPosition(idx); }) |
-           std::views::filter([](auto const& opt) { return static_cast<bool>(opt); }) |
-           std::views::transform([](auto const& opt) { return *opt; }) | std::ranges::to<std::vector>();
+           std::views::filter([](auto const& id) { return id != kInvalidTrackId; }) | std::ranges::to<std::vector>();
   }
 
   std::vector<Glib::RefPtr<TrackRowObject>> TrackSelectionController::getSelectedRows() const noexcept
@@ -268,13 +268,13 @@ namespace ao::gtk
       std::plus<>{});
   }
 
-  std::optional<TrackId> TrackSelectionController::getPrimarySelectedTrackId() const noexcept
+  TrackId TrackSelectionController::getPrimarySelectedTrackId() const noexcept
   {
     auto const bitset = _selectionModel->get_selection();
 
     if (!bitset || bitset->get_size() == 0)
     {
-      return std::nullopt;
+      return kInvalidTrackId;
     }
 
     return trackIdAtPosition(static_cast<std::uint32_t>(bitset->get_nth(0)));
@@ -308,7 +308,7 @@ namespace ao::gtk
     _columnView.scroll_to(pos, nullptr, Gtk::ListScrollFlags::NONE, {});
   }
 
-  void TrackSelectionController::setPlayingTrackId(std::optional<TrackId> optTrackId)
+  void TrackSelectionController::setPlayingTrackId(TrackId trackId)
   {
     auto const model = _selectionModel->get_model();
 
@@ -317,9 +317,9 @@ namespace ao::gtk
       return;
     }
 
-    if (_optPlayingTrackId)
+    if (_playingTrackId != kInvalidTrackId)
     {
-      if (auto const optIdx = _adapter.indexOf(*_optPlayingTrackId); optIdx && *optIdx < model->get_n_items())
+      if (auto const optIdx = _adapter.indexOf(_playingTrackId); optIdx && *optIdx < model->get_n_items())
       {
         auto const item = model->get_object(static_cast<::guint>(*optIdx));
 
@@ -330,11 +330,11 @@ namespace ao::gtk
       }
     }
 
-    _optPlayingTrackId = optTrackId;
+    _playingTrackId = trackId;
 
-    if (optTrackId)
+    if (trackId != kInvalidTrackId)
     {
-      if (auto const optIdx = _adapter.indexOf(*optTrackId); optIdx && *optIdx < model->get_n_items())
+      if (auto const optIdx = _adapter.indexOf(trackId); optIdx && *optIdx < model->get_n_items())
       {
         auto const item = model->get_object(static_cast<::guint>(*optIdx));
 

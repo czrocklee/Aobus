@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ao/Type.h"
 #include "track/TrackPresentation.h"
 
 #include <glibmm/object.h>
@@ -10,8 +11,6 @@
 #include <glibmm/propertyproxy.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
-
-#include <ao/Type.h>
 
 #include <chrono>
 #include <cstdint>

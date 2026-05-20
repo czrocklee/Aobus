@@ -142,14 +142,13 @@ namespace ao::async
   class Runtime;
   class LifetimeScope;
 
-  Task<void> resumeOnUi(Runtime& runtime);
-  Task<void> resumeOnWorker(Runtime& runtime);
-
-  template<typename F>
-  Task<std::invoke_result_t<F&>> runOnWorker(Runtime& runtime, F&& fn);
-
-  void spawnLogged(Runtime& runtime, Task<void> task);
-  void spawnWithLifetime(Runtime& runtime, LifetimeScope& scope, Task<void> task);
+  class Runtime final {
+  public:
+    Task<void> resumeOnControl();
+    Task<void> resumeOnWorker();
+    void spawnLogged(Task<void> task);
+    void spawnWithLifetime(LifetimeScope* scope, Task<void> task);
+  };
 }
 ```
 
@@ -164,14 +163,13 @@ ao::async::Task<void> ImportExportCoordinator::importLibraryAsync()
     co_return;
   }
 
-  auto result = co_await ao::async::runOnWorker(
-    _asyncRuntime,
+  auto result = co_await _asyncRuntime.runOnWorker(
     [this, files = std::move(files)]
     {
       return _session.mutation().importFiles(files);
     });
 
-  co_await ao::async::resumeOnUi(_asyncRuntime);
+  co_await _asyncRuntime.resumeOnControl();
   showImportResult(result);
 }
 ```
@@ -241,6 +239,11 @@ namespace ao::async
 
     void requestStop() noexcept;
     void join();
+    
+    Task<void> resumeOnControl();
+    Task<void> resumeOnWorker();
+    void spawnLogged(Task<void> task);
+    void spawnWithLifetime(LifetimeScope* scope, Task<void> task);
   };
 }
 ```
@@ -317,7 +320,7 @@ private:
 Starting work:
 
 ```cpp
-ao::async::spawnWithLifetime(_asyncRuntime, _tasks, importLibraryAsync());
+_asyncRuntime.spawnWithLifetime(&_tasks, importLibraryAsync());
 ```
 
 Expected semantics:
@@ -352,10 +355,10 @@ Required behavior:
 ### Allowed in UI controllers
 
 - `ao::async::Task<T>`;
-- `ao::async::Runtime&`;
-- `ao::async::LifetimeScope`;
-- `co_await ao::async::resumeOnUi(...)`;
-- `co_await ao::async::runOnWorker(...)`;
+- `ao::async::Runtime*`;
+- `ao::async::LifetimeScope*`;
+- `co_await runtime.resumeOnControl()`;
+- `co_await runtime.runOnWorker(...)`;
 - platform-specific awaiters for platform-specific UI operations, such as a GTK
   file dialog awaiter in the GTK shell.
 
@@ -402,9 +405,10 @@ Add the smallest production-ready async subsystem:
 
 - `ao::async::Runtime`;
 - `ao::async::Task<T>` facade or alias;
-- `resumeOnUi`;
-- `runOnWorker`;
-- `spawnLogged`;
+- `resumeOnControl`
+- `resumeOnWorker`
+- `spawnLogged`
+- `spawnWithLifetime`
 - focused tests for thread switching and exception logging.
 
 The initial `Task<T>` may be an alias to Boost.Asio's coroutine type if this

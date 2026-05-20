@@ -2,18 +2,17 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "AppRuntime.h"
+
 #include "ConfigStore.h"
+#include "CorePrimitives.h"
 #include "CoreRuntime.h"
+#include "ListSourceStore.h"
 #include "PlaybackService.h"
 #include "SessionPersistenceService.h"
 #include "ViewService.h"
 #include "WorkspaceService.h"
-
-#include "ListSourceStore.h"
-
+#include "ao/Type.h"
 #include "async/Runtime.h"
-
-#include <ao/Type.h>
 
 #include <memory>
 #include <utility>
@@ -22,16 +21,14 @@ namespace ao::rt
 {
   struct AppRuntime::Impl final
   {
-    async::Runtime asyncRuntime;
     ViewService viewService;
     PlaybackService playbackService;
     WorkspaceService workspaceService;
     SessionPersistenceService persistenceService;
 
     Impl(AppRuntime& runtime, std::shared_ptr<ConfigStore> configStore)
-      : asyncRuntime{runtime.executor()}
-      , viewService{runtime.executor(), runtime.musicLibrary(), runtime.sources()}
-      , playbackService{runtime.executor(), viewService, runtime.musicLibrary()}
+      : viewService{runtime.async().controlExecutor(), runtime.musicLibrary(), runtime.sources()}
+      , playbackService{runtime.async().controlExecutor(), viewService, runtime.musicLibrary()}
       , workspaceService{viewService, playbackService, runtime.mutation(), runtime.musicLibrary()}
       , persistenceService{workspaceService, viewService, playbackService, runtime.musicLibrary(), *configStore}
     {
@@ -42,15 +39,11 @@ namespace ao::rt
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    ~Impl()
-    {
-      asyncRuntime.requestStop();
-      asyncRuntime.join();
-    }
+    ~Impl() = default;
   };
 
   AppRuntime::AppRuntime(AppRuntimeDependencies dependencies)
-    : CoreRuntime(dependencies.executor, dependencies.libraryRoot)
+    : CoreRuntime(std::move(dependencies.executor), dependencies.libraryRoot)
     , _impl{std::make_unique<Impl>(*this, std::move(dependencies.configStore))}
   {
   }
@@ -79,7 +72,7 @@ namespace ao::rt
 
   async::Runtime& AppRuntime::async() noexcept
   {
-    return _impl->asyncRuntime;
+    return CoreRuntime::async();
   }
 
   void AppRuntime::reloadAllTracks()
@@ -91,9 +84,9 @@ namespace ao::rt
   {
     auto const focus = _impl->workspaceService.layoutState();
 
-    if (focus.activeViewId == ViewId{})
+    if (focus.activeViewId == rt::kInvalidViewId)
     {
-      return TrackId{};
+      return kInvalidTrackId;
     }
 
     return _impl->playbackService.playSelectionInView(focus.activeViewId);

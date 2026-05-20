@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <runtime/CorePrimitives.h>
+#include "runtime/CorePrimitives.h"
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>

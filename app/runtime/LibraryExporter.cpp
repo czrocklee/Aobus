@@ -2,15 +2,17 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "runtime/LibraryExporter.h"
-#include <ao/Exception.h>
-#include <ao/Type.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-#include <ao/lmdb/Transaction.h>
+
+#include "ao/Exception.h"
+#include "ao/Type.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/ListView.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "ao/library/TrackView.h"
+#include "ao/lmdb/Transaction.h"
+
 #include <yaml-cpp/yaml.h>
 
 #include <filesystem>
@@ -42,22 +44,22 @@ namespace ao::rt
       auto const metadata = view.metadata();
       out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
 
-      if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0})
+      if (auto const artistId = metadata.artistId(); artistId != kInvalidDictionaryId)
       {
         out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
       }
 
-      if (auto const albumId = metadata.albumId(); albumId != DictionaryId{0})
+      if (auto const albumId = metadata.albumId(); albumId != kInvalidDictionaryId)
       {
         out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
       }
 
-      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != DictionaryId{0})
+      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != kInvalidDictionaryId)
       {
         out << YAML::Key << "albumArtist" << YAML::Value << std::string(dict.get(albumArtistId));
       }
 
-      if (auto const genreId = metadata.genreId(); genreId != DictionaryId{0})
+      if (auto const genreId = metadata.genreId(); genreId != kInvalidDictionaryId)
       {
         out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
       }
@@ -212,7 +214,7 @@ namespace ao::rt
   {
     auto& dict = ml.dictionary();
     out << YAML::BeginMap;
-    out << YAML::Key << "id" << YAML::Value << id.value();
+    out << YAML::Key << "id" << YAML::Value << id.raw();
     auto const property = view.property();
     out << YAML::Key << "uri" << YAML::Value << std::string(property.uri());
 
@@ -239,8 +241,8 @@ namespace ao::rt
     for (auto const& [listId, listView] : listReader)
     {
       out << YAML::BeginMap;
-      out << YAML::Key << "id" << YAML::Value << listId.value();
-      out << YAML::Key << "parentId" << YAML::Value << listView.parentId().value();
+      out << YAML::Key << "id" << YAML::Value << listId.raw();
+      out << YAML::Key << "parentId" << YAML::Value << listView.parentId().raw();
       out << YAML::Key << "name" << YAML::Value << std::string(listView.name());
 
       if (!listView.description().empty())
@@ -260,7 +262,7 @@ namespace ao::rt
 
           for (auto const tid : tracks)
           {
-            out << tid.value();
+            out << tid.raw();
           }
 
           out << YAML::EndSeq;

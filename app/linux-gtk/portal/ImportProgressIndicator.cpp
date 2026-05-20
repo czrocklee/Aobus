@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "library_io/ImportProgressIndicator.h"
+#include "portal/ImportProgressIndicator.h"
+
 #include "layout/LayoutConstants.h"
-#include <runtime/LibraryMutationService.h>
+#include "runtime/LibraryMutationService.h"
 
 #include <gtkmm/enums.h>
 
-namespace ao::gtk
+namespace ao::gtk::portal
 {
   ImportProgressIndicator::ImportProgressIndicator(rt::LibraryMutationService& mutationService)
     : _mutationService{mutationService}
@@ -34,4 +35,4 @@ namespace ao::gtk
   }
 
   ImportProgressIndicator::~ImportProgressIndicator() = default;
-} // namespace ao::gtk
+} // namespace ao::gtk::portal

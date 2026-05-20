@@ -2,15 +2,16 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackListAdapter.h"
+
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/utility/ScopedTimer.h"
+#include "ao/utility/VariantVisitor.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/TrackSource.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/utility/ScopedTimer.h>
-#include <ao/utility/VariantVisitor.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/TrackSource.h>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/trim.hpp>

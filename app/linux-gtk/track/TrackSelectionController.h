@@ -3,23 +3,20 @@
 
 #pragma once
 
+#include "ao/Type.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackRowObject.h"
-
-#include <ao/Type.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/multiselection.h>
 #include <gtkmm/widget.h>
-
 #include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 namespace ao::gtk
@@ -41,12 +38,12 @@ namespace ao::gtk
     std::vector<TrackId> getSelectedTrackIds() const noexcept;
     std::vector<Glib::RefPtr<TrackRowObject>> getSelectedRows() const noexcept;
     std::chrono::milliseconds getSelectedTracksDuration() const noexcept;
-    std::optional<TrackId> getPrimarySelectedTrackId() const noexcept;
+    TrackId getPrimarySelectedTrackId() const noexcept;
     std::size_t selectedTrackCount() const noexcept;
 
     void selectTrack(TrackId trackId);
     void scrollToTrack(TrackId trackId);
-    void setPlayingTrackId(std::optional<TrackId> optTrackId);
+    void setPlayingTrackId(TrackId trackId);
     std::vector<TrackId> getVisibleTrackIds() const noexcept;
 
     // Exposed signals for TrackViewPage to wire to external handlers
@@ -58,13 +55,13 @@ namespace ao::gtk
   private:
     void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
     void onActivateCurrentSelection();
-    std::optional<TrackId> trackIdAtPosition(std::uint32_t position) const noexcept;
+    TrackId trackIdAtPosition(std::uint32_t position) const noexcept;
 
     Gtk::ColumnView& _columnView;
     TrackListAdapter& _adapter;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
 
-    std::optional<TrackId> _optPlayingTrackId;
+    TrackId _playingTrackId{kInvalidTrackId};
     bool _suppressNextTrackActivation = false;
 
     sigc::scoped_connection _selectionChangedConnection;

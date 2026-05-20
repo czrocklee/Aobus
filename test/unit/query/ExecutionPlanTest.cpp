@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "ao/query/ExecutionPlan.h"
 
-#include <ao/library/DictionaryStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/query/ExecutionPlan.h>
-#include <ao/query/Parser.h>
+#include "ao/library/DictionaryStore.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Environment.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/query/Parser.h"
+#include "test/unit/lmdb/TestUtils.h"
+
+#include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
-#include <test/unit/lmdb/TestUtils.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -598,7 +599,7 @@ namespace ao::query::test
 
         if (loadInstr.op == OpCode::LoadConstant)
         {
-          CHECK(std::cmp_equal(loadInstr.constValue, futureTagId.value()));
+          CHECK(std::cmp_equal(loadInstr.constValue, futureTagId.raw()));
           foundTagEq = true;
         }
       }
@@ -607,7 +608,7 @@ namespace ao::query::test
     CHECK(foundTagEq);
 
     // Verify Bloom Filter also contains the bit for this getOrInternd ID
-    std::uint32_t const expectedBit = std::uint32_t{1} << (futureTagId.value() & 31); // 31 is kBloomBitMask
+    std::uint32_t const expectedBit = std::uint32_t{1} << (futureTagId.raw() & 31); // 31 is kBloomBitMask
     CHECK((plan.tagBloomMask & expectedBit) == expectedBit);
   }
 
@@ -635,7 +636,7 @@ namespace ao::query::test
     {
       if (instr.op == OpCode::LoadField && instr.field == static_cast<std::uint8_t>(Field::Custom))
       {
-        CHECK(std::cmp_equal(instr.constValue, futureKeyId.value()));
+        CHECK(std::cmp_equal(instr.constValue, futureKeyId.raw()));
         foundLoadField = true;
       }
     }
@@ -892,8 +893,8 @@ namespace ao::query::test
     auto jazzId = dict.put(wtxn, "jazz");
     wtxn.commit();
 
-    std::uint32_t const rockBit = std::uint32_t{1} << (rockId.value() & 31);
-    std::uint32_t const jazzBit = std::uint32_t{1} << (jazzId.value() & 31);
+    std::uint32_t const rockBit = std::uint32_t{1} << (rockId.raw() & 31);
+    std::uint32_t const jazzBit = std::uint32_t{1} << (jazzId.raw() & 31);
 
     SECTION("Tag Bloom Mask For SingleTagWithDictionary")
     {
@@ -936,7 +937,7 @@ namespace ao::query::test
       auto plan = compiler.compile(expr);
       REQUIRE(plan.instructions.size() >= 2);
       CHECK(plan.instructions[1].op == OpCode::LoadConstant);
-      CHECK(std::cmp_equal(plan.instructions[1].constValue, bachId.value()));
+      CHECK(std::cmp_equal(plan.instructions[1].constValue, bachId.raw()));
       CHECK(plan.stringConstants.empty());
     }
 

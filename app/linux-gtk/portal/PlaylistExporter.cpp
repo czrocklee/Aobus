@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "library_io/PlaylistExporter.h"
-#include <ao/utility/Log.h>
+#include "portal/PlaylistExporter.h"
 
+#include "ao/Type.h"
+#include "ao/utility/Log.h"
+#include "runtime/TrackSource.h"
 #include "track/TrackRowCache.h"
-#include <runtime/TrackSource.h>
 
-#include <ao/Type.h>
 #include <glibmm/main.h>
 
 #include <cstddef>
@@ -17,7 +17,7 @@
 #include <memory>
 #include <utility>
 
-namespace ao::gtk
+namespace ao::gtk::portal
 {
   namespace
   {
@@ -109,7 +109,7 @@ namespace ao::gtk
       else
       {
         // Fallback: write track ID as comment
-        ofs << "# track://" << id.value() << " (URI not found)" << '\n';
+        ofs << "# track://" << id.raw() << " (URI not found)" << '\n';
       }
     }
   }
@@ -118,4 +118,4 @@ namespace ao::gtk
   {
     scheduleForWrite();
   }
-} // namespace ao::gtk
+} // namespace ao::gtk::portal

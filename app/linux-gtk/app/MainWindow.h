@@ -6,6 +6,7 @@
 #include "app/ShellLayoutController.h"
 
 #include <gtkmm/applicationwindow.h>
+
 #include <memory>
 
 namespace ao::rt
@@ -18,7 +19,10 @@ namespace ao::gtk
 {
   class MenuController;
   class MainWindowCoordinator;
-  class ImportExportCoordinator;
+  namespace portal
+  {
+    class ImportExportCoordinator;
+  }
 
   class MainWindow final : public Gtk::ApplicationWindow
   {
@@ -33,7 +37,7 @@ namespace ao::gtk
 
     void on_hide() override;
 
-    ImportExportCoordinator& importExportCoordinator();
+    portal::ImportExportCoordinator& importExportCoordinator();
 
     void initializeSession();
     void rebuildLayout();

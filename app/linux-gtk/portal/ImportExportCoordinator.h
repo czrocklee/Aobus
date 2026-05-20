@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "library_io/ImportProgressDialog.h"
+#include "portal/ImportProgressDialog.h"
+#include "runtime/CorePrimitives.h"
 #include "runtime/LibraryExporter.h"
-#include <runtime/CorePrimitives.h>
-#include <runtime/async/LifetimeScope.h>
+#include "runtime/async/LifetimeScope.h"
 
 #include <giomm/asyncresult.h>
 #include <glibmm/refptr.h>
@@ -26,7 +26,7 @@ namespace ao::rt
   class AppRuntime;
 }
 
-namespace ao::gtk
+namespace ao::gtk::portal
 {
   /**
    * ImportExportCallbacks defines the notifications from coordinator to host.
@@ -85,4 +85,4 @@ namespace ao::gtk
     rt::async::LifetimeScope _tasks;
     std::unique_ptr<ImportProgressDialog> _importDialog;
   };
-} // namespace ao::gtk
+} // namespace ao::gtk::portal

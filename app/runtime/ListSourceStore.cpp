@@ -7,9 +7,9 @@
 #include "ManualListSource.h"
 #include "SmartListSource.h"
 #include "TrackSource.h"
-
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
+#include "ao/Type.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/ListView.h"
 
 #include <algorithm>
 #include <memory>
@@ -19,6 +19,24 @@
 
 namespace ao::rt
 {
+  namespace
+  {
+    TrackSource* parentSourceOf(TrackSource& source)
+    {
+      if (auto* const manual = dynamic_cast<ManualListSource*>(&source))
+      {
+        return manual->source();
+      }
+
+      if (auto* const smart = dynamic_cast<SmartListSource*>(&source))
+      {
+        return &smart->source();
+      }
+
+      return nullptr;
+    }
+  } // namespace
+
   ListSourceStore::ListSourceStore(library::MusicLibrary& library, LibraryMutationService& mutation)
     : _library{library}, _allTracks{_library.tracks()}, _smartEvaluator{_library}
   {
@@ -57,7 +75,7 @@ namespace ao::rt
 
   void ListSourceStore::refreshList(ListId const listId)
   {
-    if (listId == ListId{})
+    if (listId == kInvalidListId)
     {
       return;
     }
@@ -91,7 +109,7 @@ namespace ao::rt
 
   void ListSourceStore::eraseList(ListId const listId)
   {
-    if (listId == ListId{})
+    if (listId == kInvalidListId)
     {
       return;
     }
@@ -121,16 +139,7 @@ namespace ao::rt
           continue;
         }
 
-        TrackSource* parentPtr = nullptr; // NOLINT(misc-const-correctness)
-
-        if (auto* const manual = dynamic_cast<ManualListSource*>(childSource.get()))
-        {
-          parentPtr = manual->source();
-        }
-        else if (auto* const smart = dynamic_cast<SmartListSource*>(childSource.get()))
-        {
-          parentPtr = &smart->source();
-        }
+        auto* const parentPtr = parentSourceOf(*childSource);
 
         for (auto const id : toErase)
         {
@@ -161,7 +170,7 @@ namespace ao::rt
 
   TrackSource& ListSourceStore::getOrBuildSource(ListId const listId)
   {
-    if (listId == ListId{})
+    if (listId == kInvalidListId)
     {
       return _allTracks;
     }

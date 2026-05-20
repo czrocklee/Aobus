@@ -2,17 +2,18 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponents.h"
+
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "library_io/ImportProgressIndicator.h"
 #include "playback/NowPlayingStatusLabel.h"
+#include "playback/PlaybackDetailsWidget.h"
+#include "portal/ImportProgressIndicator.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/ListSourceStore.h"
 #include "track/LibraryTrackCountLabel.h"
-#include <playback/PlaybackDetailsWidget.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/ListSourceStore.h>
-#include <track/StatusNotificationLabel.h>
+#include "track/StatusNotificationLabel.h"
 
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
@@ -64,7 +65,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _widget.widget(); }
 
     private:
-      ImportProgressIndicator _widget;
+      portal::ImportProgressIndicator _widget;
     };
 
     class StatusNotificationComponent final : public ILayoutComponent

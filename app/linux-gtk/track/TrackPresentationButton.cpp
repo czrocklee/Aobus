@@ -2,15 +2,16 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackPresentationButton.h"
+
 #include "app/UIState.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
+#include "runtime/ViewService.h"
+#include "runtime/WorkspaceService.h"
 #include "track/TrackCustomViewDialog.h"
 #include "track/TrackPresentationStore.h"
-#include <runtime/AppRuntime.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackPresentationPreset.h>
-#include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/button.h>
@@ -54,7 +55,7 @@ namespace ao::gtk
   {
     _activeViewId = viewId;
 
-    if (_activeViewId == rt::ViewId{})
+    if (_activeViewId == rt::kInvalidViewId)
     {
       _button.set_sensitive(false);
       _button.set_label("Presentation");
@@ -155,7 +156,7 @@ namespace ao::gtk
   {
     _popover.popdown();
 
-    if (_activeViewId == rt::ViewId{} || _presentationStore == nullptr)
+    if (_activeViewId == rt::kInvalidViewId || _presentationStore == nullptr)
     {
       return;
     }
@@ -190,7 +191,7 @@ namespace ao::gtk
     Glib::signal_idle().connect_once(
       [this, viewId = _activeViewId, spec = std::move(spec)]
       {
-        if (viewId != rt::ViewId{})
+        if (viewId != rt::kInvalidViewId)
         {
           _runtime.views().setPresentation(viewId, spec);
         }
@@ -201,7 +202,7 @@ namespace ao::gtk
   {
     _popover.popdown();
 
-    if (_activeViewId == rt::ViewId{} || _presentationStore == nullptr)
+    if (_activeViewId == rt::kInvalidViewId || _presentationStore == nullptr)
     {
       return;
     }

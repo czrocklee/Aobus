@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/ColumnVisibilityModel.h"
+
 #include "track/TrackPresentation.h"
 
 #include <glibmm/objectbase.h>
@@ -29,7 +30,6 @@ namespace ao::gtk
 
   Glib::RefPtr<ColumnVisibilityModel> ColumnVisibilityModel::create()
   {
-    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     return Glib::make_refptr_for_instance<ColumnVisibilityModel>(new ColumnVisibilityModel());
   }
 

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "list/ListTreeItem.h"
+
 #include "list/ListRowObject.h"
 
 #include <giomm/liststore.h>
@@ -17,8 +18,7 @@ namespace ao::gtk
 
   Glib::RefPtr<ListTreeItem> ListTreeItem::create(Glib::RefPtr<ListRowObject> const& row)
   {
-    auto obj =
-      Glib::make_refptr_for_instance<ListTreeItem>(new ListTreeItem()); // NOLINT(cppcoreguidelines-owning-memory)
+    auto obj = Glib::make_refptr_for_instance<ListTreeItem>(new ListTreeItem());
     obj->_row = row;
     return obj;
   }

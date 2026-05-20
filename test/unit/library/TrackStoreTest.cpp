@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "ao/library/TrackStore.h"
 
-#include <ao/library/TrackLayout.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/library/TrackLayout.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Environment.h"
+#include "ao/lmdb/Transaction.h"
+#include "test/unit/lmdb/TestUtils.h"
+
+#include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
-#include <test/unit/lmdb/TestUtils.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -205,7 +206,7 @@ namespace ao::library::test
     // Create with hot+cold
     auto wtxn2 = WriteTransaction{env};
     auto [id, hotView] = store.writer(wtxn2).createHotCold(hotData, coldData);
-    // REQUIRE(id.value() >= 0);
+    // REQUIRE(id.raw() >= 0);
     wtxn2.commit();
 
     // Verify hot and cold data
@@ -643,7 +644,7 @@ namespace ao::library::test
     // Verify all IDs match
     for (int i = 0; i < 5; ++i)
     {
-      REQUIRE(collectedIds[i].value() == ids[i].value());
+      REQUIRE(collectedIds[i].raw() == ids[i].raw());
     }
   }
 

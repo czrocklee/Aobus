@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include "ao/Type.h"
 #include "inspector/CoverArtCache.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
 #include "tag/TagEditor.h"
-#include <ao/Type.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/ProjectionTypes.h>
 
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>

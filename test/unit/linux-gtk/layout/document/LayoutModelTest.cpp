@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/document/LayoutDocument.h>
-#include <app/linux-gtk/layout/document/LayoutNode.h>
-#include <app/linux-gtk/layout/document/LayoutYaml.h> // NOLINT(misc-include-cleaner)
+#include "app/linux-gtk/layout/document/LayoutDocument.h"
+#include "app/linux-gtk/layout/document/LayoutNode.h"
+#include "app/linux-gtk/layout/document/LayoutYaml.h" // IWYU pragma: keep
 
 #include <catch2/catch_test_macros.hpp>
 #include <yaml-cpp/yaml.h>

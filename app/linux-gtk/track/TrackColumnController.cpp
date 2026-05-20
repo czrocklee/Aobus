@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackColumnController.h"
+
 #include "track/ColumnVisibilityModel.h"
 #include "track/TrackPresentation.h"
 

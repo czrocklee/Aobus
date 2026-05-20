@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "ao/library/TrackView.h"
 
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackLayout.h>
-#include <ao/library/TrackView.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/utility/ByteView.h>
+#include "ao/Type.h"
+#include "ao/library/ResourceStore.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackLayout.h"
+#include "ao/lmdb/Environment.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/utility/ByteView.h"
+#include "test/unit/library/TestUtils.h"
+#include "test/unit/lmdb/TestUtils.h"
+
+#include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
-#include <test/unit/library/TestUtils.h>
-#include <test/unit/lmdb/TestUtils.h>
 
 #include <array>
 #include <cstddef>
@@ -46,8 +48,8 @@ namespace ao::library::test
       h.artistId = DictionaryId{1};
       h.albumId = DictionaryId{2};
       h.genreId = DictionaryId{3};
-      h.albumArtistId = DictionaryId{0};
-      h.composerId = DictionaryId{0};
+      h.albumArtistId = kInvalidDictionaryId;
+      h.composerId = kInvalidDictionaryId;
       h.year = 2020;
       h.codecId = 0;
       h.bitDepth = 16;
@@ -65,8 +67,8 @@ namespace ao::library::test
       h.artistId = DictionaryId{1};
       h.albumId = DictionaryId{2};
       h.genreId = DictionaryId{3};
-      h.albumArtistId = DictionaryId{0};
-      h.composerId = DictionaryId{0};
+      h.albumArtistId = kInvalidDictionaryId;
+      h.composerId = kInvalidDictionaryId;
       h.year = 2020;
       h.codecId = 0;
       h.bitDepth = 16;
@@ -144,8 +146,8 @@ namespace ao::library::test
     CHECK(view.metadata().artistId() == DictionaryId{1});
     CHECK(view.metadata().albumId() == DictionaryId{2});
     CHECK(view.metadata().genreId() == DictionaryId{3});
-    CHECK(view.metadata().albumArtistId() == DictionaryId{0});
-    CHECK(view.metadata().composerId() == DictionaryId{0});
+    CHECK(view.metadata().albumArtistId() == kInvalidDictionaryId);
+    CHECK(view.metadata().composerId() == kInvalidDictionaryId);
   }
 
   TEST_CASE("TrackView - Hot Year")
@@ -298,8 +300,8 @@ namespace ao::library::test
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
-    h.albumArtistId = DictionaryId{0};
-    h.composerId = DictionaryId{0};
+    h.albumArtistId = kInvalidDictionaryId;
+    h.composerId = kInvalidDictionaryId;
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -329,8 +331,8 @@ namespace ao::library::test
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
-    h.albumArtistId = DictionaryId{0};
-    h.composerId = DictionaryId{0};
+    h.albumArtistId = kInvalidDictionaryId;
+    h.composerId = kInvalidDictionaryId;
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -364,8 +366,8 @@ namespace ao::library::test
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
-    h.albumArtistId = DictionaryId{0};
-    h.composerId = DictionaryId{0};
+    h.albumArtistId = kInvalidDictionaryId;
+    h.composerId = kInvalidDictionaryId;
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -392,8 +394,8 @@ namespace ao::library::test
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
-    h.albumArtistId = DictionaryId{0};
-    h.composerId = DictionaryId{0};
+    h.albumArtistId = kInvalidDictionaryId;
+    h.composerId = kInvalidDictionaryId;
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -615,7 +617,7 @@ namespace ao::library::test
     // Not found
     CHECK(view.custom().get(DictionaryId{199}).has_value() == false);
     // Before first (0 = null, should throw)
-    CHECK(view.custom().get(DictionaryId{0}).has_value() == false);
+    CHECK(view.custom().get(kInvalidDictionaryId).has_value() == false);
   }
 
   TEST_CASE("TrackView - Custom Empty Key And Value")

@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/library/TrackView.h>
-#include <ao/query/ExecutionPlan.h>
-#include <ao/query/PlanEvaluator.h>
+#include "ao/query/PlanEvaluator.h"
+
+#include "ao/Type.h"
+#include "ao/library/TrackView.h"
+#include "ao/query/ExecutionPlan.h"
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <functional>
-#include <gsl-lite/gsl-lite.hpp>
 #include <ranges>
 #include <string_view>
 #include <utility>
@@ -122,7 +125,7 @@ namespace ao::query
         return {};
       }
 
-      auto dictionaryId = DictionaryId{0};
+      auto dictionaryId = kInvalidDictionaryId;
 
       switch (field)
       {
@@ -135,7 +138,7 @@ namespace ao::query
         default: return {};
       }
 
-      if (dictionaryId == DictionaryId{0})
+      if (dictionaryId == kInvalidDictionaryId)
       {
         return {};
       }
@@ -188,12 +191,12 @@ namespace ao::query
         case Field::Rating: return static_cast<std::int64_t>(track.metadata().rating());
 
         // Metadata ID fields
-        case Field::ArtistId: return static_cast<std::int64_t>(track.metadata().artistId().value());
-        case Field::AlbumId: return static_cast<std::int64_t>(track.metadata().albumId().value());
-        case Field::GenreId: return static_cast<std::int64_t>(track.metadata().genreId().value());
-        case Field::AlbumArtistId: return static_cast<std::int64_t>(track.metadata().albumArtistId().value());
-        case Field::ComposerId: return static_cast<std::int64_t>(track.metadata().composerId().value());
-        case Field::WorkId: return static_cast<std::int64_t>(track.metadata().workId().value());
+        case Field::ArtistId: return static_cast<std::int64_t>(track.metadata().artistId().raw());
+        case Field::AlbumId: return static_cast<std::int64_t>(track.metadata().albumId().raw());
+        case Field::GenreId: return static_cast<std::int64_t>(track.metadata().genreId().raw());
+        case Field::AlbumArtistId: return static_cast<std::int64_t>(track.metadata().albumArtistId().raw());
+        case Field::ComposerId: return static_cast<std::int64_t>(track.metadata().composerId().raw());
+        case Field::WorkId: return static_cast<std::int64_t>(track.metadata().workId().raw());
         case Field::CoverArtId: return static_cast<std::int64_t>(track.metadata().coverArtId());
 
         // Metadata numeric fields
@@ -331,7 +334,6 @@ namespace ao::query
     return evaluateFull(plan, track);
   }
 
-  // NOLINTNEXTLINE(readability-function-size,readability-function-cognitive-complexity)
   bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const
   {
     if (plan.matchesAll)

@@ -2,10 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/AobusSoulWindow.h"
+
 #include "app/AobusSoul.h"
 #include "playback/AobusSoulBinding.h"
-#include <runtime/AppRuntime.h>
-#include <runtime/PlaybackService.h>
+#include "runtime/AppRuntime.h"
+#include "runtime/PlaybackService.h"
 
 #include <gdkmm/monitor.h>
 #include <gdkmm/rectangle.h>

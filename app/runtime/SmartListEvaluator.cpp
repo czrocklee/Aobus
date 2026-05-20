@@ -5,15 +5,15 @@
 
 #include "SmartListSource.h"
 #include "TrackSource.h"
-
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/query/ExecutionPlan.h>
-#include <ao/utility/ByteView.h>
-#include <ao/utility/ScopedTimer.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "ao/query/ExecutionPlan.h"
+#include "ao/utility/ByteView.h"
+#include "ao/utility/ScopedTimer.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <flat_set>
 #include <iterator>
 #include <memory>
@@ -21,8 +21,6 @@
 #include <span>
 #include <utility>
 #include <vector>
-
-#include <cstddef>
 
 namespace ao::rt
 {
@@ -692,4 +690,4 @@ namespace ao::rt
 
     return library::TrackStore::Reader::LoadMode::Hot;
   }
-}
+} // namespace ao::rt

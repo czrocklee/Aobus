@@ -5,10 +5,10 @@
 
 #include "CorePrimitives.h"
 #include "StateTypes.h"
-#include <ao/Type.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/IBackendProvider.h>
-#include <ao/audio/Types.h>
+#include "ao/Type.h"
+#include "ao/audio/Backend.h"
+#include "ao/audio/IBackendProvider.h"
+#include "ao/audio/Types.h"
 
 #include <cstdint>
 #include <functional>
@@ -29,8 +29,8 @@ namespace ao::rt
   public:
     struct NowPlayingChanged final
     {
-      TrackId trackId{};
-      ListId sourceListId{};
+      TrackId trackId = kInvalidTrackId;
+      ListId sourceListId = kInvalidListId;
     };
 
     struct QualityChanged final
@@ -41,9 +41,9 @@ namespace ao::rt
 
     struct RevealTrackRequested final
     {
-      TrackId trackId{};
-      ListId preferredListId{};
-      ViewId preferredViewId{};
+      TrackId trackId = kInvalidTrackId;
+      ListId preferredListId = kInvalidListId;
+      ViewId preferredViewId = rt::kInvalidViewId;
     };
 
     PlaybackService(IControlExecutor& executor, ViewService& views, library::MusicLibrary& library);

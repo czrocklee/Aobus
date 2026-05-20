@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/query/Expression.h>
-#include <ao/query/Parser.h>
-#include <ao/utility/VariantVisitor.h>
+#include "ao/query/Parser.h"
+
+#include "ao/query/Expression.h"
+#include "ao/utility/VariantVisitor.h"
+
 #include <catch2/catch_test_macros.hpp>
+
 #include <cstdint>
 #include <memory>
 #include <sstream>

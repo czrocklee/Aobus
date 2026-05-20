@@ -11,13 +11,15 @@
 
 namespace ao::lmdb
 {
+  constexpr mdb_mode_t kDefaultEnvironmentMode = 0644;
+
   class Environment final
   {
   public:
     struct Options
     {
       unsigned int flags = 0;
-      mdb_mode_t mode = 0644; // NOLINT(readability-magic-numbers)
+      mdb_mode_t mode = kDefaultEnvironmentMode;
       MDB_dbi maxDatabases = 0;
       unsigned int maxReaders = 0;
       std::size_t mapSize = 0;

@@ -2,9 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/NowPlayingFieldLabel.h"
-#include <ao/audio/Types.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/StateTypes.h>
+
+#include "ao/audio/Types.h"
+#include "runtime/PlaybackService.h"
+#include "runtime/StateTypes.h"
 
 #include <gtkmm/label.h>
 #include <pangomm/layout.h>
@@ -67,7 +68,7 @@ namespace ao::gtk
       }
       else
       {
-        _label.set_text(std::format("{}", state.trackId.value()));
+        _label.set_text(std::format("{}", state.trackId.raw()));
       }
     }
     else

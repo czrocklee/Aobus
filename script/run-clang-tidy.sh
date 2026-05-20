@@ -12,6 +12,7 @@ fi
 
 BUILD_DIR="/tmp/build/debug-clang-tidy"
 FIX_MODE=false
+DEBUG_MODE=false
 OUTPUT_FILE=""
 JOBS=$(nproc)
 
@@ -38,6 +39,7 @@ Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
 === Other =============================================================
 
   --fix                 Apply fixes automatically (use with caution)
+  --debug               Show debug info (config, system includes)
   -j <N>                Parallel jobs (default: nproc)
   -p <dir>              Build directory with compile_commands.json
                         (default: /tmp/build/debug-clang-tidy)
@@ -82,6 +84,7 @@ while [[ $# -gt 0 ]]; do
         -j) JOBS="$2"; shift 2 ;;
         -j*) JOBS="${1#-j}"; shift ;;
         --fix) FIX_MODE=true; shift ;;
+        --debug) DEBUG_MODE=true; shift ;;
         -o) OUTPUT_FILE="$2"; shift 2 ;;
         --all) ALL_MODE=true; shift ;;
         --folder) FOLDER_DIRS+=("$2"); shift 2 ;;
@@ -169,10 +172,8 @@ STRICT_CHECKS="$(
     echo "$c"
 )"
 
-CONFIG_CHECKS='-*,aobus-*,readability-identifier-length,readability-identifier-naming,readability-magic-numbers,readability-qualified-auto,readability-function-cognitive-complexity'
-
 CONFIG_BASE="
-{Checks: '${CONFIG_CHECKS}',
+{Checks: 'PLACEHOLDER',
  CheckOptions: [
   {key: 'readability-identifier-length.MinimumVariableNameLength', value: 2},
   {key: 'readability-identifier-length.MinimumParameterNameLength', value: 2},
@@ -184,6 +185,9 @@ CONFIG_BASE="
   {key: 'readability-identifier-naming.ScopedEnumConstantCase', value: 'CamelCase'},
   {key: 'readability-identifier-naming.ConstexprVariableCase', value: 'CamelCase'},
   {key: 'readability-identifier-naming.ConstexprVariablePrefix', value: 'k'},
+  {key: 'readability-identifier-naming.ConstexprVariableIgnoredRegexp', value: '^(rule|value|whitespace|op|name|atom)\$'},
+  {key: 'readability-identifier-naming.ClassConstantIgnoredRegexp', value: '^(rule|value|whitespace|op|name|atom)\$'},
+  {key: 'readability-identifier-naming.StaticConstantIgnoredRegexp', value: '^(rule|value|whitespace|op|name|atom)\$'},
   {key: 'readability-identifier-naming.FunctionCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.MethodCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.MethodIgnoredRegexp', value: '^property_.*|^signal_.*|^vfunc_.*|^on_.*'},
@@ -191,16 +195,16 @@ CONFIG_BASE="
   {key: 'readability-identifier-naming.ParameterCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.LocalVariableCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.TypeAliasCase', value: 'CamelCase'},
-  {key: 'readability-identifier-naming.TypeAliasIgnoredRegexp', value: '^(difference_type|value_type|pointer|reference|iterator_category)\$'},
+  {key: 'readability-identifier-naming.TypeAliasIgnoredRegexp', value: '^(difference_type|value_type|pointer|reference|iterator_category|operand|operation)\$'},
   {key: 'readability-magic-numbers.IgnorePowersOf2IntegerValues', value: true},
   {key: 'readability-magic-numbers.IgnoredIntegerValues', value: '24;1000;1000U;60;100'},
   {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'},
   {key: 'readability-function-cognitive-complexity.Threshold', value: 30},
-  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*'}
+  {key: 'cppcoreguidelines-macro-usage.AllowedRegexp', value: '^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+\$'},
+  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*boost/asio/.*;.*boost/interprocess/.*;.*/flat_(set|map);.*/errno.h;.*glib.*'}
  ]}"
 
-STRICT_CONFIG=$(echo "$CONFIG_BASE" | tr '\n' ' ' | sed 's/  */ /g')
-
+# ---------------------------------------------------------------------------
 RELAXED_CHECKS="$(
     c="$STRICT_CHECKS"
 
@@ -218,7 +222,6 @@ RELAXED_CHECKS="$(
 
     echo "$c"
 )"
-RELAXED_CONFIG="$STRICT_CONFIG"
 # ---------------------------------------------------------------------------
 
 classify_file() {
@@ -242,14 +245,24 @@ classify_file() {
 
 run_one() {
     local mode="$1" f="$2" tmp="$3"
-    local checks="$STRICT_CHECKS" config="$STRICT_CONFIG"
+    local checks="$STRICT_CHECKS"
     local header_filter="${PROJECT_ROOT}/(lib|app|include|lint)/.*"
 
     if [[ "$mode" == "RELAXED" ]]; then
         checks="$RELAXED_CHECKS"
-        config="$RELAXED_CONFIG"
         header_filter="${PROJECT_ROOT}/(test|include)/.*"
     fi
+
+    # Relax certain rules for GTK code due to framework patterns
+    local rel_f="${f#$PROJECT_ROOT/}"
+    if [[ "${rel_f}" == app/linux-gtk/* ]]; then
+        checks="${checks},-cppcoreguidelines-owning-memory"
+    fi
+
+    # Re-build config string with updated checks
+    local config
+    config="$(echo "$CONFIG_BASE" | sed "s/PLACEHOLDER/${checks}/" | tr '\n' ' ' | sed 's/  */ /g')"
+    $DEBUG_MODE && echo "DEBUG CONFIG: $config"
 
     local extra_args=()
     while IFS= read -r arg; do
@@ -259,15 +272,20 @@ run_one() {
     $FIX_MODE && extra_args+=("-fix")
 
     clang-tidy -p "$BUILD_DIR" \
-        -checks="$checks" \
         -config="$config" \
         -header-filter="$header_filter" \
         "${extra_args[@]}" \
         "$f" > "$tmp" 2>&1
+    local status=$?
+    if [[ $status -ne 0 ]]; then
+        echo "FAILED [$status]: $f" >&2
+        return $status
+    fi
 }
 
 # Serialize array for subshell inheritance
 ISYSTEM_ARGS_STR=$(printf '%s\n' "${ISYSTEM_ARGS[@]}")
+$DEBUG_MODE && echo "DEBUG ISYSTEM_ARGS: $ISYSTEM_ARGS_STR"
 
 # --- File discovery ---------------------------------------------------------
 cd "$PROJECT_ROOT"

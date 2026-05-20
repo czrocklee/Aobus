@@ -3,6 +3,8 @@
 
 #include "list/ListRowObject.h"
 
+#include "ao/Type.h"
+
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
@@ -11,7 +13,7 @@
 namespace ao::gtk
 {
   ListRowObject::ListRowObject()
-    : _listId{ListId{0}}, _parentId{ListId{0}}
+    : _listId{kInvalidListId}, _parentId{kInvalidListId}
   {
   }
 
@@ -22,8 +24,7 @@ namespace ao::gtk
                                                     Glib::ustring const& name,
                                                     Glib::ustring const& filter)
   {
-    auto obj =
-      Glib::make_refptr_for_instance<ListRowObject>(new ListRowObject{}); // NOLINT(cppcoreguidelines-owning-memory)
+    auto obj = Glib::make_refptr_for_instance<ListRowObject>(new ListRowObject{});
     obj->_listId = id;
     obj->_parentId = parentId;
     obj->_depth = depth;

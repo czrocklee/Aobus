@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include <array>
 #include <boost/endian/buffers.hpp>
+
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -33,7 +34,7 @@ namespace ao::tag::mpeg::id3v2
     return (static_cast<std::size_t>(size.data[0] & kSyncSafeMask) << kByteShift3) |
            (static_cast<std::size_t>(size.data[1] & kSyncSafeMask) << kByteShift2) |
            (static_cast<std::size_t>(size.data[2] & kSyncSafeMask) << kByteShift1) |
-           (static_cast<std::size_t>(size.data[3] & kSyncSafeMask)); // NOLINT(readability-magic-numbers)
+           (static_cast<std::size_t>(size.data.back() & kSyncSafeMask));
   }
 
   struct HeaderLayout

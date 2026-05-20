@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <string>
 
-namespace ao::gtk
+namespace ao::gtk::portal
 {
   class ImportProgressDialog final : public Gtk::Dialog
   {
@@ -37,4 +37,4 @@ namespace ao::gtk
     Gtk::Button _okButton;
     std::int32_t _maxItems;
   };
-} // namespace ao::gtk
+} // namespace ao::gtk::portal

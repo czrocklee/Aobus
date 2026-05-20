@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "File.h"
+
 #include "../detail/Decoder.h"
-#include <ao/Exception.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/media/flac/MetadataBlock.h>
-#include <ao/media/flac/MetadataBlockLayout.h>
+#include "ao/Exception.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/media/flac/MetadataBlock.h"
+#include "ao/media/flac/MetadataBlockLayout.h"
 
 #include <cstdint>
 #include <cstring>

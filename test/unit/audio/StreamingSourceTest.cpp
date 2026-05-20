@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ScriptedDecoderSession.h"
+#include "ao/audio/StreamingSource.h"
 
-#include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/StreamingSource.h>
+#include "ScriptedDecoderSession.h"
+#include "ao/Error.h"
+#include "ao/audio/DecoderTypes.h"
+#include "ao/audio/Format.h"
 
 #include <catch2/catch_test_macros.hpp>
 

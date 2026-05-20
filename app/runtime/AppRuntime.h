@@ -5,7 +5,8 @@
 
 #include "CorePrimitives.h"
 #include "CoreRuntime.h"
-#include <ao/Type.h>
+#include "ao/Type.h"
+
 #include <filesystem>
 #include <memory>
 
@@ -27,9 +28,9 @@ namespace ao::rt
   class SessionPersistenceService;
   class ViewService;
 
-  struct AppRuntimeDependencies final
+  struct AppRuntimeDependencies
   {
-    std::shared_ptr<IControlExecutor> executor{};
+    std::unique_ptr<IControlExecutor> executor{};
     std::filesystem::path libraryRoot{};
     std::shared_ptr<ConfigStore> configStore{};
   };

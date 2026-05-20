@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Backend.h>
-#include <ao/audio/backend/detail/AudioBackendShared.h>
-#include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
+#include "ao/audio/backend/detail/PipeWireMonitorHelpers.h"
+
+#include "ao/audio/Backend.h"
+#include "ao/audio/backend/detail/AudioBackendShared.h"
+#include "ao/utility/ByteView.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -27,6 +29,7 @@ extern "C"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <span>
 #include <vector>
 
 #ifdef __clang__
@@ -36,6 +39,23 @@ extern "C"
 
 namespace ao::audio::backend::detail::test
 {
+  namespace
+  {
+    ::spa_dict makeDict(std::span<::spa_dict_item const> items)
+    {
+      return ::spa_dict{.flags = 0, .n_items = static_cast<std::uint32_t>(items.size()), .items = items.data()};
+    }
+
+    ::spa_pod_builder makePodBuilder(std::span<std::byte> buffer)
+    {
+      return ::spa_pod_builder{.data = buffer.data(),
+                               .size = static_cast<std::uint32_t>(buffer.size()),
+                               ._padding = 0,
+                               .state = {.offset = 0, .flags = 0, .frame = nullptr},
+                               .callbacks = {.funcs = nullptr, .data = nullptr}};
+    }
+  } // namespace
+
   TEST_CASE("PipeWireMonitorHelpers - Property Parsing", "[audio][pipewire][monitor]")
   {
     SECTION("isSinkMediaClass")
@@ -49,8 +69,9 @@ namespace ao::audio::backend::detail::test
 
     SECTION("lookupProperty")
     {
-      struct spa_dict_item items[] = {SPA_DICT_ITEM_INIT("key1", "val1"), SPA_DICT_ITEM_INIT("key2", "val2")}; // NOLINT
-      struct spa_dict dict = SPA_DICT_INIT(items, 2);                                                          // NOLINT
+      auto const items = std::to_array<::spa_dict_item>(
+        {::spa_dict_item{.key = "key1", .value = "val1"}, ::spa_dict_item{.key = "key2", .value = "val2"}});
+      auto const dict = makeDict(items);
 
       CHECK(lookupProperty(&dict, "key1") == "val1");
       CHECK(lookupProperty(&dict, "key2") == "val2");
@@ -60,11 +81,12 @@ namespace ao::audio::backend::detail::test
 
     SECTION("parseNodeRecord")
     {
-      struct spa_dict_item items[] = {SPA_DICT_ITEM_INIT(PW_KEY_MEDIA_CLASS, "Audio/Sink"), // NOLINT
-                                      SPA_DICT_ITEM_INIT(PW_KEY_NODE_NAME, "test-node"),    // NOLINT
-                                      SPA_DICT_ITEM_INIT(PW_KEY_OBJECT_SERIAL, "1234"),     // NOLINT
-                                      SPA_DICT_ITEM_INIT("node.driver-id", "5678")};        // NOLINT
-      struct spa_dict dict = SPA_DICT_INIT(items, 4);                                       // NOLINT
+      auto const items =
+        std::to_array<::spa_dict_item>({::spa_dict_item{.key = PW_KEY_MEDIA_CLASS, .value = "Audio/Sink"},
+                                        ::spa_dict_item{.key = PW_KEY_NODE_NAME, .value = "test-node"},
+                                        ::spa_dict_item{.key = PW_KEY_OBJECT_SERIAL, .value = "1234"},
+                                        ::spa_dict_item{.key = "node.driver-id", .value = "5678"}});
+      auto const dict = makeDict(items);
 
       auto record = parseNodeRecord(1, &dict);
       CHECK(record.version == 1);
@@ -111,7 +133,7 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor]")
   {
     auto buffer = std::array<std::byte, 1024>{};
-    struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer.data(), buffer.size()); // NOLINT
+    auto b = makePodBuilder(buffer);
 
     SECTION("parseEnumFormat - Sample Rates and Channels")
     {
@@ -207,11 +229,8 @@ namespace ao::audio::backend::detail::test
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
-      ::spa_pod_builder_array(&b,
-                              sizeof(float),
-                              SPA_TYPE_Float,
-                              vols.size(),
-                              vols.data()); // NOLINT(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
       auto props = SinkProps{};

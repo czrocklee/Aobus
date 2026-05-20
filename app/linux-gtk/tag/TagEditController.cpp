@@ -2,14 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "tag/TagEditController.h"
+
+#include "ao/utility/Log.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/LibraryMutationService.h"
+#include "runtime/NotificationService.h"
+#include "runtime/StateTypes.h"
 #include "tag/TagPopover.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
-#include <ao/utility/Log.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/NotificationService.h>
-#include <runtime/StateTypes.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>

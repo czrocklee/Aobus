@@ -4,8 +4,8 @@
 #include "track/TrackCustomViewDialog.h"
 
 #include "app/UIState.h"
-#include <runtime/StateTypes.h>
-#include <runtime/TrackPresentationPreset.h>
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>

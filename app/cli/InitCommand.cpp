@@ -2,12 +2,13 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "InitCommand.h"
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/tag/TagFile.h>
-#include <ao/utility/Finder.h>
-#include <runtime/CoreRuntime.h>
+
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "ao/tag/TagFile.h"
+#include "ao/utility/Finder.h"
+#include "runtime/CoreRuntime.h"
 
 #include <CLI/App.hpp>
 

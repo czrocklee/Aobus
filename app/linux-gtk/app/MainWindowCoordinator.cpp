@@ -2,36 +2,34 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/MainWindowCoordinator.h"
+
+#include "ao/Type.h"
+#include "ao/lmdb/Transaction.h"
+#include "ao/utility/Log.h"
 #include "app/GtkUiServices.h"
 #include "app/MainWindow.h"
 #include "app/WindowStatePersistence.h"
 #include "inspector/CoverArtCache.h"
-#include "library_io/ImportExportCoordinator.h"
 #include "list/ListSidebarController.h"
+#include "platform/AudioBackendBootstrap.h"
 #include "playback/PlaybackSequenceController.h"
+#include "portal/ImportExportCoordinator.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/LibraryMutationService.h"
+#include "runtime/ListSourceStore.h"
+#include "runtime/NotificationService.h"
+#include "runtime/PlaybackService.h"
+#include "runtime/SessionPersistenceService.h"
+#include "runtime/StateTypes.h"
+#include "runtime/ViewService.h"
+#include "runtime/WorkspaceService.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
-#include "track/TrackPresentation.h" // NOLINT(misc-include-cleaner)
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/utility/Log.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/ListSourceStore.h>
-#include <runtime/NotificationService.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/SessionPersistenceService.h>
-#include <runtime/StateTypes.h>
-#include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
 
-#include "platform/AudioBackendBootstrap.h"
-
-#include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -39,14 +37,6 @@
 
 namespace ao::gtk
 {
-  namespace
-  {
-    ListId allTracksListId()
-    {
-      return ListId{std::numeric_limits<std::uint32_t>::max()};
-    }
-  }
-
   MainWindowCoordinator::MainWindowCoordinator(MainWindow& window,
                                                rt::AppRuntime& runtime,
                                                std::shared_ptr<rt::ConfigStore> configStore)
@@ -83,22 +73,22 @@ namespace ao::gtk
                                                      *_trackPresentationStore);
 
     // Initialize import/export coordinator
-    _importExportCoordinator = std::make_unique<ImportExportCoordinator>(
+    _importExportCoordinator = std::make_unique<portal::ImportExportCoordinator>(
       window,
       _runtime,
-      ImportExportCallbacks{.onOpenNewLibrary = [](std::filesystem::path const&) {},
-                            .onLibraryDataMutated =
-                              [this]
-                            {
-                              if (_trackRowCache)
-                              {
-                                _trackRowCache->clearCache();
-                                _runtime.reloadAllTracks();
-                                auto const txn = _runtime.musicLibrary().readTransaction();
-                                rebuildListPages(txn);
-                              }
-                            },
-                            .onTitleChanged = [this](std::string const& title) { _window.set_title(title); }});
+      portal::ImportExportCallbacks{.onOpenNewLibrary = [](std::filesystem::path const&) {},
+                                    .onLibraryDataMutated =
+                                      [this]
+                                    {
+                                      if (_trackRowCache)
+                                      {
+                                        _trackRowCache->clearCache();
+                                        _runtime.reloadAllTracks();
+                                        auto const txn = _runtime.musicLibrary().readTransaction();
+                                        rebuildListPages(txn);
+                                      }
+                                    },
+                                    .onTitleChanged = [this](std::string const& title) { _window.set_title(title); }});
   }
 
   MainWindowCoordinator::~MainWindowCoordinator()
@@ -167,7 +157,7 @@ namespace ao::gtk
 
     if (_runtime.workspace().layoutState().openViews.empty())
     {
-      _runtime.workspace().navigateTo(allTracksListId());
+      _runtime.workspace().navigateTo(rt::kAllTracksListId);
     }
 
     saveSession();

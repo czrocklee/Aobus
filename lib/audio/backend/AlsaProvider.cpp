@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IBackendProvider.h>
-#include <ao/audio/Subscription.h>
-#include <ao/audio/backend/AlsaExclusiveBackend.h>
-#include <ao/audio/backend/AlsaProvider.h>
-#include <ao/audio/flow/Graph.h>
-#include <ao/utility/Log.h>
-#include <ao/utility/Raii.h>
-#include <ao/utility/ThreadUtils.h>
+#include "ao/audio/backend/AlsaProvider.h"
+
+#include "ao/audio/Backend.h"
+#include "ao/audio/IBackend.h"
+#include "ao/audio/IBackendProvider.h"
+#include "ao/audio/Subscription.h"
+#include "ao/audio/backend/AlsaExclusiveBackend.h"
+#include "ao/audio/flow/Graph.h"
+#include "ao/utility/Log.h"
+#include "ao/utility/Raii.h"
+#include "ao/utility/ThreadUtils.h"
 
 #include <poll.h>
 
@@ -18,6 +19,8 @@ extern "C"
 {
 #include <libudev.h>
 }
+
+#include "ao/audio/backend/detail/AlsaProviderHelpers.h"
 
 #include <algorithm>
 #include <array>
@@ -29,8 +32,6 @@ extern "C"
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include <ao/audio/backend/detail/AlsaProviderHelpers.h>
 
 namespace ao::audio::backend
 {
@@ -94,14 +95,12 @@ namespace ao::audio::backend
 
       while (!stopToken.stop_requested())
       {
-        // NOLINTBEGIN(misc-include-cleaner)
         auto fds = std::array<struct pollfd, 1>{};
         fds[0].fd = fd;
         fds[0].events = POLLIN;
 
         if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), kUdevPollTimeoutMs) > 0 &&
             (fds[0].revents & POLLIN) != 0)
-        // NOLINTEND(misc-include-cleaner)
         {
           auto dev = utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
 

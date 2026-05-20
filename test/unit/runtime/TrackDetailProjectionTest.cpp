@@ -1,24 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "runtime/TrackDetailProjection.h"
 
 #include "TestUtils.h"
-#include <runtime/ConfigStore.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/ListSourceStore.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackDetailProjection.h>
-#include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
+#include "runtime/ConfigStore.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/LibraryMutationService.h"
+#include "runtime/ListSourceStore.h"
+#include "runtime/PlaybackService.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
+#include "runtime/ViewService.h"
+#include "runtime/WorkspaceService.h"
+#include "runtime/async/Runtime.h"
 
-#include <ao/Type.h>
+#include <catch2/catch_test_macros.hpp>
 
-#include <cstdint>
 #include <functional>
-#include <limits>
 #include <memory>
 
 namespace ao::rt::test
@@ -37,6 +36,7 @@ namespace ao::rt::test
     {
       TestMusicLibrary lib;
       MockControlExecutor executor;
+      async::Runtime runtime;
       LibraryMutationService mutation;
       ListSourceStore sources;
       ViewService views;
@@ -45,7 +45,8 @@ namespace ao::rt::test
       WorkspaceService workspace;
 
       Env()
-        : mutation{executor, lib.library()}
+        : runtime{executor}
+        , mutation{runtime, lib.library()}
         , sources{lib.library(), mutation}
         , views{executor, lib.library(), sources}
         , config{std::make_shared<ConfigStore>(lib.library().rootPath() / "config.json")}
@@ -54,11 +55,6 @@ namespace ao::rt::test
       {
       }
     };
-
-    ListId allTracksId()
-    {
-      return ListId{std::numeric_limits<std::uint32_t>::max()};
-    }
   }
 
   TEST_CASE("TrackDetailProjection refreshes on TracksMutated", "[projection]")
@@ -67,7 +63,7 @@ namespace ao::rt::test
 
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = allTracksId()});
+    auto const reply = env.views.createView(TrackListViewConfig{.listId = rt::kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
 
     auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
@@ -96,7 +92,7 @@ namespace ao::rt::test
     auto const id1 = env.lib.addTrack("Selected");
     auto const id2 = env.lib.addTrack("Other");
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = allTracksId()});
+    auto const reply = env.views.createView(TrackListViewConfig{.listId = rt::kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
 
     auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
@@ -117,7 +113,7 @@ namespace ao::rt::test
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A", .artist = "Same", .album = "AlbumX"});
     auto const id2 = env.lib.addTrack(TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = allTracksId()});
+    auto const reply = env.views.createView(TrackListViewConfig{.listId = rt::kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1, id2});
 
     auto const proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);

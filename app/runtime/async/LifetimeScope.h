@@ -4,7 +4,7 @@
 #pragma once
 
 #include "Task.h"
-#include <boost/asio/cancellation_signal.hpp>
+
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -16,7 +16,7 @@ namespace ao::rt::async
   struct LifetimeScopeState final
   {
     std::mutex mutex;
-    std::vector<std::shared_ptr<boost::asio::cancellation_signal>> signals;
+    std::vector<std::shared_ptr<CancellationSignal>> signals;
     bool isAlive{true};
   };
 
@@ -37,6 +37,4 @@ namespace ao::rt::async
   private:
     std::shared_ptr<LifetimeScopeState> _state;
   };
-
-  void spawnWithLifetime(Runtime& runtime, LifetimeScope& scope, Task<void> task);
 } // namespace ao::rt::async

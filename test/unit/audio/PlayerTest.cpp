@@ -1,11 +1,11 @@
-#include "TestUtility.h"
-#include "fakeit.hpp"
+#include "ao/audio/Player.h"
 
-#include <ao/audio/Backend.h>
-#include <ao/audio/Engine.h>
-#include <ao/audio/IBackendProvider.h>
-#include <ao/audio/NullBackend.h>
-#include <ao/audio/Player.h>
+#include "TestUtility.h"
+#include "ao/audio/Backend.h"
+#include "ao/audio/Engine.h"
+#include "ao/audio/IBackendProvider.h"
+#include "ao/audio/NullBackend.h"
+#include "fakeit.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>

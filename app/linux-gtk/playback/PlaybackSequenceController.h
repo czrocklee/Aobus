@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <runtime/CorePrimitives.h>
+#include "ao/Type.h"
+#include "runtime/CorePrimitives.h"
 
 #include <cstddef>
 #include <memory>
@@ -22,7 +22,7 @@ namespace ao::gtk
   {
     std::vector<TrackId> trackIds;
     std::size_t currentIndex = 0;
-    std::optional<ListId> optSourceListId;
+    ListId sourceListId{kInvalidListId};
   };
 
   class TrackRowCache;
@@ -50,7 +50,7 @@ namespace ao::gtk
     // Current playback state queries (used by status bar, navigation).
     bool isActive() const;
     std::optional<TrackId> nowPlayingTrackId() const;
-    std::optional<ListId> sourceListId() const;
+    ListId sourceListId() const;
 
   private:
     void clear();

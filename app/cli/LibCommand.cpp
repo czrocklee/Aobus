@@ -2,10 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LibCommand.h"
+
+#include "ao/library/MusicLibrary.h"
+#include "runtime/CoreRuntime.h"
 #include "runtime/LibraryExporter.h"
 #include "runtime/LibraryImporter.h"
-#include <ao/library/MusicLibrary.h>
-#include <runtime/CoreRuntime.h>
 
 #include <CLI/App.hpp>
 
@@ -22,34 +23,41 @@ namespace ao::cli
   namespace
   {
     constexpr std::size_t kUuidByteCount = 16;
+    constexpr std::size_t kHexCharsPerByte = 2;
+    constexpr std::size_t kUuidTimeLowByteCount = 4;
+    constexpr std::size_t kUuidTimeMidByteCount = 2;
+    constexpr std::size_t kUuidTimeHighByteCount = 2;
+    constexpr std::size_t kUuidClockSeqByteCount = 2;
+    constexpr std::size_t kUuidNodeByteCount = 6;
+    constexpr auto kUuidGroupByteCounts = std::to_array<std::size_t>({kUuidTimeLowByteCount,
+                                                                      kUuidTimeMidByteCount,
+                                                                      kUuidTimeHighByteCount,
+                                                                      kUuidClockSeqByteCount,
+                                                                      kUuidNodeByteCount});
+    constexpr auto kUuidHyphenCount = kUuidGroupByteCounts.size() - 1;
+    constexpr auto kUuidTextLength = (kUuidByteCount * kHexCharsPerByte) + kUuidHyphenCount;
 
     std::string formatUuid(std::array<std::byte, kUuidByteCount> const& id)
     {
-      // NOLINTBEGIN(readability-magic-numbers, cppcoreguidelines-pro-bounds-constant-array-index)
-      auto const cast = [&](std::size_t idx) { return static_cast<unsigned char>(id[idx]); };
+      auto result = std::string{};
+      result.reserve(kUuidTextLength);
+      auto byteIndex = std::size_t{0};
 
-      return std::format("{:02x}{:02x}{:02x}{:02x}-"
-                         "{:02x}{:02x}-"
-                         "{:02x}{:02x}-"
-                         "{:02x}{:02x}-"
-                         "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-                         cast(0),
-                         cast(1),
-                         cast(2),
-                         cast(3),
-                         cast(4),
-                         cast(5),
-                         cast(6),
-                         cast(7),
-                         cast(8),
-                         cast(9),
-                         cast(10),
-                         cast(11),
-                         cast(12),
-                         cast(13),
-                         cast(14),
-                         cast(15));
-      // NOLINTEND(readability-magic-numbers, cppcoreguidelines-pro-bounds-constant-array-index)
+      for (auto groupIndex = std::size_t{0}; groupIndex < kUuidGroupByteCounts.size(); ++groupIndex)
+      {
+        if (groupIndex > 0)
+        {
+          result.push_back('-');
+        }
+
+        for (auto groupByte = std::size_t{0}; groupByte < kUuidGroupByteCounts.at(groupIndex); ++groupByte)
+        {
+          result += std::format("{:02x}", static_cast<unsigned char>(id.at(byteIndex)));
+          ++byteIndex;
+        }
+      }
+
+      return result;
     }
 
     std::string formatTimestamp(std::uint64_t unixMs)

@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <runtime/CorePrimitives.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/ListSourceStore.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/ViewService.h>
+#include "runtime/ViewService.h"
 
 #include "TestUtils.h"
+#include "ao/Type.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/LibraryMutationService.h"
+#include "runtime/ListSourceStore.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
+#include "runtime/async/Runtime.h"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -34,11 +36,14 @@ namespace ao::rt::test
     {
       TestMusicLibrary library;
       MockControlExecutor executor;
+      async::Runtime runtime;
       LibraryMutationService mutation;
       std::unique_ptr<ListSourceStore> store;
 
       TestEnv()
-        : mutation{executor, library.library()}, store{std::make_unique<ListSourceStore>(library.library(), mutation)}
+        : runtime{executor}
+        , mutation{runtime, library.library()}
+        , store{std::make_unique<ListSourceStore>(library.library(), mutation)}
       {
       }
 
@@ -61,8 +66,8 @@ namespace ao::rt::test
 
     SECTION("creating a track list view returns ViewId")
     {
-      auto const result = service.createView({.listId = ListId{}}, true);
-      CHECK(result.viewId != ViewId{});
+      auto const result = service.createView({.listId = kInvalidListId}, true);
+      CHECK(result.viewId != rt::kInvalidViewId);
     }
 
     SECTION("creating multiple views returns distinct ViewIds")
@@ -121,7 +126,7 @@ namespace ao::rt::test
 
     SECTION("destroy publishes ViewDestroyed event")
     {
-      auto received = ViewId{};
+      auto received = rt::kInvalidViewId;
       auto const sub = service.onDestroyed([&](auto viewId) { received = viewId; });
 
       service.destroyView(viewId);

@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <ao/Type.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackListProjection.h>
-#include <runtime/TrackPresentationPreset.h>
-#include <runtime/TrackSource.h>
-
 #include "TestUtils.h"
+#include "ao/Type.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackListProjection.h"
+#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackSource.h"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <chrono>

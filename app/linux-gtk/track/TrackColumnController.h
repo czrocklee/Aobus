@@ -12,7 +12,6 @@
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/listitemfactory.h>
-
 #include <sigc++/scoped_connection.h>
 
 #include <cstddef>

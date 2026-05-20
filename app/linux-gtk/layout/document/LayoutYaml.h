@@ -28,7 +28,7 @@ namespace YAML
   {
     static Node encode(std::map<std::string, LayoutValue, std::less<>> const& rhs)
     {
-      auto node = Node{NodeType::Map}; // NOLINT(misc-include-cleaner)
+      auto node = Node{NodeType::Map};
 
       for (auto const& [key, value] : rhs)
       {

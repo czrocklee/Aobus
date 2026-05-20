@@ -75,10 +75,10 @@ add_library(aobus-gtk-lib STATIC
     tag/TagPopover.cpp
     tag/TagEditor.cpp
 
-    library_io/ImportExportCoordinator.cpp
-    library_io/ImportProgressDialog.cpp
-    library_io/ImportProgressIndicator.cpp
-    library_io/PlaylistExporter.cpp
+    portal/ImportExportCoordinator.cpp
+    portal/ImportProgressDialog.cpp
+    portal/ImportProgressIndicator.cpp
+    portal/PlaylistExporter.cpp
 
     layout/document/LayoutDocument.cpp
     layout/runtime/LayoutRuntime.cpp

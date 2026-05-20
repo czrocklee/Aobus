@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "ao/lmdb/Environment.h"
+
 #include "detail/ThrowError.h"
-#include <ao/lmdb/Environment.h>
 
 #include <lmdb.h>
 

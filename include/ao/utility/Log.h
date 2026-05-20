@@ -48,7 +48,6 @@ namespace ao::log
 } // namespace ao::log
 
 // Core log macros
-// NOLINTBEGIN(cppcoreguidelines-macro-usage)
 #define AO_LOG_CALL(logger, level, loc, ...)                                                                           \
   if (logger->should_log(level)) logger->log(ao::log::toSpdlog(loc), level, __VA_ARGS__)
 
@@ -77,4 +76,3 @@ namespace ao::log
   AO_LOG_CALL(ao::log::Log::getAudioLogger(), spdlog::level::err, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_CRITICAL(...)                                                                                        \
   AO_LOG_CALL(ao::log::Log::getAudioLogger(), spdlog::level::critical, std::source_location::current(), __VA_ARGS__)
-// NOLINTEND(cppcoreguidelines-macro-usage)

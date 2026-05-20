@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/ConfigStore.h"
+
+#include "ao/utility/StrongType.h"
+#include "test/unit/lmdb/TestUtils.h"
+
 #include <catch2/catch_test_macros.hpp>
-
-#include <runtime/ConfigStore.h>
-
-#include <ao/utility/StrongType.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -17,8 +18,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <test/unit/lmdb/TestUtils.h>
 
 namespace ao::rt::test
 {
@@ -299,7 +298,7 @@ namespace ao::rt::test
       auto loaded = WithTaggedId{};
       REQUIRE(reloaded.load("tagged", loaded));
 
-      CHECK(loaded.id.value() == 12345);
+      CHECK(loaded.id.raw() == 12345);
       CHECK(loaded.label == "tagged-test");
     }
 
@@ -314,7 +313,7 @@ namespace ao::rt::test
       auto loaded = WithTaggedId{.id = TestId{999}};
       REQUIRE(reloaded.load("tagged", loaded));
 
-      CHECK(loaded.id.value() == 0);
+      CHECK(loaded.id.raw() == 0);
     }
 
     SECTION("StrongId round-trip via aggregate")
@@ -328,7 +327,7 @@ namespace ao::rt::test
       auto loaded = WithStrongId{};
       REQUIRE(reloaded.load("strong", loaded));
 
-      CHECK(loaded.id.value() == "my-unique-id");
+      CHECK(loaded.id.raw() == "my-unique-id");
       CHECK(loaded.count == 5);
     }
 
@@ -343,7 +342,7 @@ namespace ao::rt::test
       auto loaded = WithStrongId{.id = TestStringId{"not-empty"}};
       REQUIRE(reloaded.load("strong", loaded));
 
-      CHECK(loaded.id.value().empty());
+      CHECK(loaded.id.raw().empty());
     }
   }
 

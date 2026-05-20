@@ -2,9 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/NowPlayingStatusLabel.h"
-#include <ao/audio/Types.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/StateTypes.h>
+
+#include "ao/audio/Types.h"
+#include "runtime/PlaybackService.h"
+#include "runtime/StateTypes.h"
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/gestureclick.h>

@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "ListCommand.h"
-#include <ao/Type.h>
-#include <ao/library/ListBuilder.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <runtime/CoreRuntime.h>
+
+#include "ao/Type.h"
+#include "ao/library/ListBuilder.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/MusicLibrary.h"
+#include "runtime/CoreRuntime.h"
 
 #include <CLI/App.hpp>
 

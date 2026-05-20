@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/Type.h>
+#include "ao/Type.h"
 
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>

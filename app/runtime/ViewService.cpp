@@ -10,23 +10,21 @@
 #include "TrackListProjection.h"
 #include "TrackSource.h"
 #include "WorkspaceService.h"
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/utility/ScopedTimer.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackPresentationPreset.h"
 
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/utility/ScopedTimer.h>
-#include <runtime/CorePrimitives.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackPresentationPreset.h>
-
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <ranges>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-#include <cstdint>
 
 namespace ao::rt
 {

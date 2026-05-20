@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <runtime/CorePrimitives.h>
-#include <runtime/ProjectionTypes.h>
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
 
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>

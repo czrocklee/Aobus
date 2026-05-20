@@ -3,8 +3,8 @@
 
 #include "NotificationService.h"
 
-#include <runtime/CorePrimitives.h>
-#include <runtime/StateTypes.h>
+#include "runtime/CorePrimitives.h"
+#include "runtime/StateTypes.h"
 
 #include <algorithm>
 #include <chrono>

@@ -3,10 +3,12 @@
 
 #pragma once
 
-#include <functional>
+#include "runtime/CorePrimitives.h"
+
 #include <glibmm/dispatcher.h>
+
+#include <functional>
 #include <mutex>
-#include <runtime/CorePrimitives.h>
 #include <thread>
 #include <vector>
 

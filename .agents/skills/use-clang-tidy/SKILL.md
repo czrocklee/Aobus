@@ -77,6 +77,25 @@ Scope behavior from the script:
 - For readability warnings, prefer small local improvements: named `constexpr` values, clearer expressions, early returns, or a small helper when it makes the code easier to read.
 - For RAII guards, explicitly delete copy/move or define the needed operations.
 
+### NOLINT Cleanup Playbook
+
+When reducing existing suppressions, prefer the smallest semantic-preserving edit and re-run clang-tidy on the touched files before continuing.
+
+- Skip `misc-include-cleaner` suppressions when the task explicitly excludes `-include`/include-cleaner work; do not mix include cleanup with behavioral lint cleanup.
+- Remove stale suppressions first: if the line no longer triggers after deleting `NOLINT`, just delete the suppression and run clang-tidy.
+- Replace bare `NOLINT` with code that avoids the warning when the fix is local. Good examples:
+  - Use `.at()`/`.back()` for fixed-size array access instead of suppressing constant-index or magic-number warnings.
+  - Use named `constexpr` values for protocol versions, byte counts, enum sequence numbers, and switch sectors.
+  - For binary-layout `static_assert(sizeof(T) == N)`, put `static constexpr std::size_t kByteCount = N;` on the layout type and assert against that name.
+  - For unused overload parameters, use comment names such as `Type& /*value*/` instead of `NOLINT(readability-named-parameter)`.
+  - Prefer `std::from_chars` over `strtoul` when strict full-string unsigned parsing is wanted; it avoids C `char**` output-parameter const-correctness suppressions and preserves no-leading-space behavior.
+  - For SPA/PipeWire test structs, prefer `std::to_array<::spa_dict_item>` plus a tiny local `makeDict(std::span<...>)`, or a local designated initializer helper for `spa_pod_builder`, instead of raw C arrays and macro initializers.
+  - At C API pointer boundaries in tests, use existing `utility::layout::asLegacyPtr<T>(ptr)` rather than suppressing array-to-pointer decay.
+- If a suppression is repeated because of the same framework shape, consider a small local helper only when it stays simple and removes several suppressions. Do not add a cross-cutting helper when protected constructors, ownership contracts, or friend access would create churn.
+- Iterator trait aliases (`value_type`, `difference_type`, `reference`, `pointer`, `iterator_category`) are often required by STL concepts. Prefer a lint-rule allowlist for these names over touching every iterator or keeping bare `NOLINT` long term.
+- GTKmm/glibmm ownership boundaries (`Glib::make_refptr_for_instance(new T)`, `set_data(..., destroy)`) are usually acceptable suppressions. Do not hide them behind helpers unless the local class design already supports it cleanly.
+- Binary/protocol magic numbers and layout sizes can be cleaned with named constants, but if doing so makes the code less readable than a documented format literal, propose disabling or narrowing that readability rule instead.
+
 ### Suppress
 
 Use `NOLINT` only when the warning is caused by an external API shape, a clear false positive, or a test-only pattern where the fix would be worse than the warning.

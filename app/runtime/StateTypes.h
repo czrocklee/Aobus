@@ -3,12 +3,11 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/Types.h>
-#include <ao/audio/flow/Graph.h>
-
 #include "CorePrimitives.h"
+#include "ao/Type.h"
+#include "ao/audio/Backend.h"
+#include "ao/audio/Types.h"
+#include "ao/audio/flow/Graph.h"
 
 #include <chrono>
 #include <cstddef>
@@ -68,7 +67,7 @@ namespace ao::rt
   {
     audio::Transport transport = audio::Transport::Idle;
     TrackId trackId{};
-    ListId sourceListId{};
+    ListId sourceListId = kInvalidListId;
     std::string trackTitle{};
     std::string trackArtist{};
     std::uint32_t positionMs = 0;
@@ -88,7 +87,7 @@ namespace ao::rt
 
   struct LayoutState final
   {
-    ViewId activeViewId{};
+    ViewId activeViewId = rt::kInvalidViewId;
     std::vector<ViewId> openViews{};
     std::vector<ViewId> navigationStack{};
     std::uint64_t revision = 0;

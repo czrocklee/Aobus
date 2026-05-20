@@ -2,10 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackListModel.h"
+
+#include "ao/Type.h"
+#include "runtime/ProjectionTypes.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
-#include <runtime/ProjectionTypes.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/private/listmodel_p.h>
@@ -32,8 +33,7 @@ namespace ao::gtk
 
   Glib::RefPtr<ProjectionTrackModel> ProjectionTrackModel::create()
   {
-    return Glib::make_refptr_for_instance<ProjectionTrackModel>(
-      new ProjectionTrackModel()); // NOLINT(cppcoreguidelines-owning-memory)
+    return Glib::make_refptr_for_instance<ProjectionTrackModel>(new ProjectionTrackModel());
   }
 
   void ProjectionTrackModel::setProjection(rt::ITrackListProjection* projection, TrackRowCache const& provider)

@@ -2,9 +2,10 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "list/QueryExpressionBox.h"
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
+
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -411,7 +412,6 @@ namespace ao::gtk
          iter != end;
          ++iter)
     {
-      // NOLINTNEXTLINE(readability-identifier-length)
       auto const& [_, view] = *iter;
 
       for (auto const tagId : view.tags())
@@ -422,7 +422,6 @@ namespace ao::gtk
         }
       }
 
-      // NOLINTNEXTLINE(readability-identifier-length)
       for (auto const& [dictId, _] : view.custom())
       {
         if (auto const key = dictionary.get(dictId); isQueryableIdentifier(key))

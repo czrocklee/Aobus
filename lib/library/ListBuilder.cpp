@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Type.h>
-#include <ao/library/ListBuilder.h>
-#include <ao/library/ListLayout.h>
-#include <ao/library/ListView.h>
-#include <ao/utility/ByteView.h>
+#include "ao/library/ListBuilder.h"
+
+#include "ao/Type.h"
+#include "ao/library/ListLayout.h"
+#include "ao/library/ListView.h"
+#include "ao/utility/ByteView.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -134,7 +135,7 @@ namespace ao::library
     header.descLen = static_cast<std::uint16_t>(descLen);
     header.filterOffset = static_cast<std::uint16_t>(filterOffset);
     header.filterLen = static_cast<std::uint16_t>(filterLen);
-    header.parentId = _parentId.value();
+    header.parentId = _parentId.raw();
 
     // Copy header
     result.insert_range(result.end(), utility::bytes::view(header));

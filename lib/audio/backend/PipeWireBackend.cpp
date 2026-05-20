@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/PipeWireBackend.h>
+#include "ao/audio/backend/PipeWireBackend.h"
 
-#include <ao/Error.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/IRenderTarget.h>
-#include <ao/audio/Property.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
-#include <ao/utility/Log.h>
-#include <ao/utility/Raii.h>
+#include "ao/Error.h"
+#include "ao/audio/Backend.h"
+#include "ao/audio/Format.h"
+#include "ao/audio/IRenderTarget.h"
+#include "ao/audio/Property.h"
+#include "ao/audio/backend/detail/PipeWireShared.h"
+#include "ao/utility/Log.h"
+#include "ao/utility/Raii.h"
 
 extern "C"
 {
@@ -23,7 +23,6 @@ extern "C"
 #include <spa/pod/builder.h>
 #include <spa/pod/iter.h>
 #include <spa/pod/pod.h>
-#include <spa/pod/vararg.h>
 #include <spa/utils/type.h>
 }
 
@@ -333,20 +332,14 @@ namespace ao::audio::backend
     }
 
     ::pw_thread_loop_lock(_impl->threadLoop.get());
-    auto* rawProps = ::pw_properties_new(PW_KEY_MEDIA_TYPE, // NOLINT(cppcoreguidelines-pro-type-vararg)
-                                         "Audio",
-                                         PW_KEY_MEDIA_CATEGORY,
-                                         "Playback",
-                                         PW_KEY_MEDIA_CATEGORY,
-                                         "Music",
-                                         PW_KEY_APP_NAME,
-                                         "Aobus",
-                                         PW_KEY_APP_ID,
-                                         "io.github.Aobus",
-                                         PW_KEY_NODE_NAME,
-                                         "Aobus Playback",
-                                         nullptr);
-    auto props = utility::makeUniquePtr<::pw_properties_free>(rawProps);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    auto props = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new(nullptr, nullptr));
+    ::pw_properties_set(props.get(), PW_KEY_MEDIA_TYPE, "Audio");
+    ::pw_properties_set(props.get(), PW_KEY_MEDIA_CATEGORY, "Playback");
+    ::pw_properties_set(props.get(), PW_KEY_MEDIA_ROLE, "Music");
+    ::pw_properties_set(props.get(), PW_KEY_APP_NAME, "Aobus");
+    ::pw_properties_set(props.get(), PW_KEY_APP_ID, "io.github.Aobus");
+    ::pw_properties_set(props.get(), PW_KEY_NODE_NAME, "Aobus Playback");
     ::pw_properties_set(props.get(), PW_KEY_NODE_RATE, std::format("1/{}", format.sampleRate).c_str());
 
     if (!_targetDeviceId.empty())
@@ -386,26 +379,27 @@ namespace ao::audio::backend
     ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
     auto frame = ::spa_pod_frame{};
     ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
-    ::spa_pod_builder_add(&builder, // NOLINT(cppcoreguidelines-pro-type-vararg)
-                          SPA_FORMAT_mediaType,
-                          SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                          SPA_FORMAT_mediaSubtype,
-                          SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                          SPA_FORMAT_AUDIO_format,
-                          SPA_POD_Id(spaFmt),
-                          SPA_FORMAT_AUDIO_rate,
-                          SPA_POD_Int(format.sampleRate),
-                          SPA_FORMAT_AUDIO_channels,
-                          SPA_POD_Int(format.channels),
-                          0);
+
+    ::spa_pod_builder_prop(&builder, SPA_FORMAT_mediaType, 0);
+    ::spa_pod_builder_id(&builder, SPA_MEDIA_TYPE_audio);
+
+    ::spa_pod_builder_prop(&builder, SPA_FORMAT_mediaSubtype, 0);
+    ::spa_pod_builder_id(&builder, SPA_MEDIA_SUBTYPE_raw);
+
+    ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_format, 0);
+    ::spa_pod_builder_id(&builder, spaFmt);
+
+    ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_rate, 0);
+    ::spa_pod_builder_int(&builder, static_cast<int32_t>(format.sampleRate));
+
+    ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_channels, 0);
+    ::spa_pod_builder_int(&builder, static_cast<int32_t>(format.channels));
 
     if (format.channels == 2)
     {
       auto position = std::array<std::uint32_t, 2>{SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
-      ::spa_pod_builder_add(&builder, // NOLINT(cppcoreguidelines-pro-type-vararg)
-                            SPA_FORMAT_AUDIO_position,
-                            SPA_POD_Array(sizeof(std::uint32_t), SPA_TYPE_Id, position.size(), position.data()),
-                            0);
+      ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_position, 0);
+      ::spa_pod_builder_array(&builder, sizeof(std::uint32_t), SPA_TYPE_Id, position.size(), position.data());
     }
 
     auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
@@ -536,22 +530,10 @@ namespace ao::audio::backend
         return {};
       }
 
-      auto vol = static_cast<float>(clamped);
-
-      auto buf = std::array<std::uint8_t, 128>{};
-      auto builder = ::spa_pod_builder{};
-      ::spa_pod_builder_init(&builder, buf.data(), buf.size());
-
-      auto frame = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-      ::spa_pod_builder_add(&builder, SPA_PROP_volume, SPA_POD_Float(clamped), 0);
-      auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
-
+      auto vol = clamped;
       ::pw_thread_loop_lock(_impl->threadLoop.get());
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
       ::pw_stream_set_control(_impl->stream.get(), SPA_PROP_volume, 1, &vol);
-      ::pw_stream_update_params(_impl->stream.get(), &param, 1);
       ::pw_thread_loop_unlock(_impl->threadLoop.get());
       return {};
     }
@@ -566,18 +548,10 @@ namespace ao::audio::backend
         return {};
       }
 
-      auto buf = std::array<std::uint8_t, 128>{};
-      auto builder = ::spa_pod_builder{};
-      ::spa_pod_builder_init(&builder, buf.data(), buf.size());
-
-      auto frame = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-      ::spa_pod_builder_add(&builder, SPA_PROP_mute, SPA_POD_Bool(muted), 0);
-      auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
-
+      auto mutedFloat = muted ? 1.0F : 0.0F;
       ::pw_thread_loop_lock(_impl->threadLoop.get());
-      ::pw_stream_update_params(_impl->stream.get(), &param, 1);
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+      ::pw_stream_set_control(_impl->stream.get(), SPA_PROP_mute, 1, &mutedFloat);
       ::pw_thread_loop_unlock(_impl->threadLoop.get());
       return {};
     }

@@ -4,13 +4,13 @@
 // Standalone test for row data loading without GTKMM dependency.
 // Tests ao::model::TrackRowCache functionality in isolation.
 
-#include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-#include <ao/lmdb/Transaction.h>
-#include <test/unit/lmdb/TestUtils.h>
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackStore.h"
+#include "ao/library/TrackView.h"
+#include "ao/lmdb/Transaction.h"
+#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 

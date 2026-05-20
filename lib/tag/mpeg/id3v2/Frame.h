@@ -4,7 +4,8 @@
 #pragma once
 
 #include "Layout.h"
-#include <ao/Exception.h>
+#include "ao/Exception.h"
+#include "ao/utility/ByteView.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -60,10 +61,9 @@ namespace ao::tag::mpeg::id3v2
         return {};
       }
 
-      auto const* u16Begin =
-        reinterpret_cast<std::uint8_t const*>(begin); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-      auto const* u16End =
-        reinterpret_cast<std::uint8_t const*>(end); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+      auto const u16Span = utility::layout::viewArray<std::uint8_t>(utility::bytes::view(begin, size));
+      auto const* u16Begin = u16Span.data();
+      auto const* u16End = u16Begin + u16Span.size();
 
       bool bigEndian = true;
       static constexpr std::uint8_t kBomByte1Le = 0xFF;

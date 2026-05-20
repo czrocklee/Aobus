@@ -1,212 +1,279 @@
-#include "check/ThreadingPolicyCheck.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
+#include "ThreadingPolicyCheck.h"
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
+#include <clang/AST/DeclCXX.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
+#include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/DiagnosticIDs.h>
 #include <clang/Basic/LLVM.h>
-#include <clang/Basic/SourceLocation.h>
 
+using namespace clang;
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::readability
 {
   namespace
   {
-    /// Returns true if the unique_lock variable is used in a way that requires
-    /// unique_lock (explicit lock/unlock/try_lock, or passed to condvar::wait).
-    bool needsUniqueLock(VarDecl const* lockVar, ASTContext& /*unused*/)
+    bool isLockTagType(QualType type)
     {
-      auto const* dc = lockVar->getParentFunctionOrMethod();
-      auto const* func = dyn_cast_or_null<FunctionDecl>(dc);
-
-      if ((func == nullptr) || !func->hasBody())
+      if (type.isNull())
       {
         return false;
       }
 
-      // Check constructor args for defer_lock / try_to_lock / adopt_lock
-      if (lockVar->hasInit())
+      type = type.getNonReferenceType().getUnqualifiedType().getCanonicalType();
+
+      if (auto const* record = type->getAsCXXRecordDecl())
       {
-        auto const* ctorExpr = dyn_cast<CXXConstructExpr>(lockVar->getInit()->IgnoreImplicit());
-
-        if (ctorExpr != nullptr)
+        if (auto const* ii = record->getIdentifier(); ii != nullptr)
         {
-          for (unsigned i = 0; i < ctorExpr->getNumArgs(); ++i)
-          {
-            auto const* arg = ctorExpr->getArg(i);
-            auto const* declRef = dyn_cast<DeclRefExpr>(arg->IgnoreImplicit());
+          StringRef const name = ii->getName();
+          return (name == "defer_lock_t" || name == "try_to_lock_t" || name == "adopt_lock_t") &&
+                 record->isInStdNamespace();
+        }
+      }
 
-            if (declRef != nullptr)
+      return false;
+    }
+
+    bool hasLockTagArgument(CXXConstructExpr const* ctorExpr)
+    {
+      for (unsigned i = 0; i < ctorExpr->getNumArgs(); ++i)
+      {
+        if (auto const* arg = ctorExpr->getArg(i)->IgnoreParenImpCasts(); isLockTagType(arg->getType()))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    bool hasLockTagInit(VarDecl const* lockVar)
+    {
+      auto const* init = lockVar->getInit();
+
+      if (init == nullptr)
+      {
+        return false;
+      }
+
+      init = init->IgnoreUnlessSpelledInSource();
+
+      if (auto const* ctorExpr = dyn_cast<CXXConstructExpr>(init))
+      {
+        return hasLockTagArgument(ctorExpr);
+      }
+
+      return false;
+    }
+
+    struct UseFinder final : RecursiveASTVisitor<UseFinder>
+    {
+      VarDecl const* target{};
+      bool found = false;
+
+      bool VisitCXXMemberCallExpr(CXXMemberCallExpr* call)
+      {
+        if (auto const* method = call->getMethodDecl())
+        {
+          if (auto const* ii = method->getIdentifier(); ii != nullptr)
+          {
+            if (StringRef const name = ii->getName();
+                name == "lock" || name == "unlock" || name == "try_lock" || name == "release")
             {
-              if (StringRef const name = declRef->getDecl()->getName();
-                  name == "defer_lock" || name == "try_to_lock" || name == "adopt_lock")
+              if (auto const* obj = call->getImplicitObjectArgument(); obj != nullptr)
               {
-                return true;
+                obj = obj->IgnoreParenImpCasts();
+
+                if (auto const* dre = dyn_cast<DeclRefExpr>(obj))
+                {
+                  if (dre->getDecl() == target || dre->getDecl()->getCanonicalDecl() == target->getCanonicalDecl())
+                  {
+                    found = true;
+                    return false;
+                  }
+                }
               }
             }
           }
         }
+
+        return checkCallArgs(call);
       }
 
-      // Walk the function body looking for uses that require unique_lock.
-      struct UseFinder : RecursiveASTVisitor<UseFinder>
+      bool VisitCallExpr(CallExpr* call) { return checkCallArgs(call); }
+
+    private:
+      bool isConditionVariableWait(CallExpr const* call)
       {
-        VarDecl const* target{};
-        bool found = false;
+        auto const* func = call->getDirectCallee();
 
-        bool VisitCXXMemberCallExpr(CXXMemberCallExpr* call)
+        if (func == nullptr)
         {
-          if (found)
-          {
-            return false;
-          }
-
-          auto const* method = call->getMethodDecl();
-
-          if (method == nullptr)
-          {
-            return true;
-          }
-
-          auto const* obj = call->getImplicitObjectArgument();
-
-          if (obj == nullptr)
-          {
-            return true;
-          }
-
-          auto const* declRef = dyn_cast<DeclRefExpr>(obj->IgnoreParenImpCasts());
-
-          if ((declRef == nullptr) || declRef->getDecl() != target)
-          {
-            return true;
-          }
-
-          if (StringRef const name = method->getName(); name == "lock" || name == "unlock" || name == "try_lock" ||
-                                                        name == "try_lock_for" || name == "try_lock_until" ||
-                                                        name == "release" || name == "mutex")
-          {
-            found = true;
-            return false;
-          }
-
-          return true;
+          return false;
         }
-      };
 
-      auto finder = UseFinder{};
-      finder.target = lockVar;
-      finder.TraverseStmt(func->getBody());
-      return finder.found;
+        auto const* method = dyn_cast<CXXMethodDecl>(func);
+
+        if (method == nullptr)
+        {
+          return false;
+        }
+
+        auto const* record = method->getParent();
+
+        if (record == nullptr)
+        {
+          return false;
+        }
+
+        if (auto const* ii = record->getIdentifier(); ii != nullptr)
+        {
+          StringRef const name = ii->getName();
+          return (name == "condition_variable" || name == "condition_variable_any") && record->isInStdNamespace();
+        }
+
+        return false;
+      }
+
+      bool isUniqueLockParam(CallExpr const* call, unsigned argIndex)
+      {
+        auto const* func = call->getDirectCallee();
+
+        if (func == nullptr || argIndex >= func->getNumParams())
+        {
+          return false;
+        }
+
+        auto const* param = func->getParamDecl(argIndex);
+        QualType const type = param->getType().getNonReferenceType().getUnqualifiedType().getCanonicalType();
+
+        if (auto const* record = type->getAsCXXRecordDecl())
+        {
+          if (auto const* ii = record->getIdentifier(); ii != nullptr)
+          {
+            return ii->getName() == "unique_lock" && record->isInStdNamespace();
+          }
+        }
+
+        return false;
+      }
+
+      bool checkCallArgs(CallExpr* call)
+      {
+        for (unsigned i = 0; i < call->getNumArgs(); ++i)
+        {
+          auto const* arg = call->getArg(i)->IgnoreParenImpCasts();
+          auto const* dre = dyn_cast<DeclRefExpr>(arg);
+
+          if (dre == nullptr)
+          {
+            continue;
+          }
+
+          if (dre->getDecl() == target || dre->getDecl()->getCanonicalDecl() == target->getCanonicalDecl())
+          {
+            if (isConditionVariableWait(call) || isUniqueLockParam(call, i))
+            {
+              found = true;
+              return false;
+            }
+          }
+        }
+
+        return true;
+      }
+    };
+
+    /// Returns true if the unique_lock variable is used in a way that requires
+    /// unique_lock (explicit lock/unlock/try_lock, or passed to condvar::wait).
+    bool needsUniqueLock(VarDecl const* lockVar, ASTContext& /*context*/)
+    {
+      auto const* dc = lockVar->getParentFunctionOrMethod();
+
+      if (dc == nullptr)
+      {
+        return false;
+      }
+
+      if (auto const* decl = dyn_cast<Decl>(dc))
+      {
+        if (auto const* body = decl->getBody())
+        {
+          if (hasLockTagInit(lockVar))
+          {
+            return true;
+          }
+
+          auto finder = UseFinder{};
+          finder.target = lockVar;
+          finder.TraverseStmt(const_cast<Stmt*>(body)); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+
+          return finder.found;
+        }
+      }
+
+      return false;
     }
   } // namespace
 
   void ThreadingPolicyCheck::registerMatchers(MatchFinder* finder)
   {
-    // Match std::thread variable declarations (not std::thread::id)
+    // Match std::thread usages (Rule 4.4.2)
     finder->addMatcher(
-      varDecl(hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(cxxRecordDecl(hasName("::std::thread")))))))
-        .bind("thread_var"),
+      varDecl(
+        hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(cxxRecordDecl(hasName("::std::thread")))))),
+        unless(hasAncestor(functionDecl(isDefinition(), isMain()))))
+        .bind("threadVar"),
       this);
 
-    // Match constructor calls to std::thread (catches local+temp construction)
-    finder->addMatcher(
-      cxxConstructExpr(hasDeclaration(cxxConstructorDecl(ofClass(cxxRecordDecl(hasName("::std::thread"))))),
-                       unless(isInTemplateInstantiation()))
-        .bind("thread_ctor"),
-      this);
-
-    // Match volatile-qualified variables (4.4.4)
-    finder->addMatcher(varDecl(hasType(qualType(isVolatileQualified()))).bind("volatile_var"), this);
-
-    // Match std::unique_lock variables
-    finder->addMatcher(varDecl(hasType(hasUnqualifiedDesugaredType(
-                                 recordType(hasDeclaration(cxxRecordDecl(hasName("::std::unique_lock")))))))
-                         .bind("unique_lock_var"),
+    // Match std::unique_lock that could be std::scoped_lock (Rule 4.4.3)
+    finder->addMatcher(varDecl(hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(anyOf(
+                                 classTemplateSpecializationDecl(hasName("::std::unique_lock")),
+                                 cxxRecordDecl(hasName("::std::unique_lock"))))))))
+                         .bind("uniqueLock"),
                        this);
+
+    // Match volatile variables (Rule 4.4.4)
+    finder->addMatcher(varDecl(hasType(isVolatileQualified())).bind("volatileVar"), this);
   }
 
-  void ThreadingPolicyCheck::check(MatchFinder::MatchResult const& result)
+  void ThreadingPolicyCheck::check(const MatchFinder::MatchResult& result)
   {
-    auto const& sm = *result.SourceManager;
-
-    // --- std::thread variable declarations ---
-    if (auto const* var = result.Nodes.getNodeAs<VarDecl>("thread_var"))
+    if (auto const* threadVar = result.Nodes.getNodeAs<VarDecl>("threadVar"))
     {
-      SourceLocation const loc = var->getLocation();
-
-      if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
-      {
-        return;
-      }
-
-      // Skip std::thread::id — it's not a thread object
-      if (QualType const type = var->getType().getCanonicalType(); type->isReferenceType() || type->isPointerType())
-      {
-        return;
-      }
-
-      diag(loc,
-           "prefer std::jthread over std::thread for '%0' (Rule 4.4.2); "
-           "std::jthread provides automatic joining and stop_token support")
-        << var;
+      diag(threadVar->getLocation(),
+           "prefer std::jthread over std::thread (Rule 4.4.2); std::jthread provides automatic joining and stop_token "
+           "support");
+      diag(threadVar->getLocation(),
+           "prefer std::jthread over std::thread for %0 (Rule 4.4.2); std::jthread provides automatic joining and "
+           "stop_token support",
+           DiagnosticIDs::Note)
+        << threadVar;
     }
 
-    // --- std::thread constructor calls ---
-    if (auto const* ctor = result.Nodes.getNodeAs<CXXConstructExpr>("thread_ctor"))
+    if (auto const* lockVar = result.Nodes.getNodeAs<VarDecl>("uniqueLock"))
     {
-      SourceLocation const loc = ctor->getBeginLoc();
-
-      if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
+      if (!needsUniqueLock(lockVar, *result.Context))
       {
-        return;
+        diag(lockVar->getLocation(),
+             "prefer std::scoped_lock over std::unique_lock for %0 unless you need deferred locking, early unlock, or "
+             "condition_variable integration (Rule 4.4.3)")
+          << lockVar;
       }
-
-      diag(loc,
-           "prefer std::jthread over std::thread (Rule 4.4.2); "
-           "std::jthread provides automatic joining and stop_token support");
     }
 
-    // --- volatile variables ---
-    if (auto const* var = result.Nodes.getNodeAs<VarDecl>("volatile_var"))
+    if (auto const* volatileVar = result.Nodes.getNodeAs<VarDecl>("volatileVar"))
     {
-      SourceLocation const loc = var->getLocation();
-
-      if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
-      {
-        return;
-      }
-
-      diag(loc,
-           "'%0' is volatile; use std::atomic<> for inter-thread communication "
-           "instead (Rule 4.4.4)")
-        << var;
-    }
-
-    // --- std::unique_lock variables ---
-    if (auto const* var = result.Nodes.getNodeAs<VarDecl>("unique_lock_var"))
-    {
-      SourceLocation const loc = var->getLocation();
-
-      if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
-      {
-        return;
-      }
-
-      if (needsUniqueLock(var, *result.Context))
-      {
-        return;
-      }
-
-      diag(loc,
-           "prefer std::scoped_lock over std::unique_lock for '%0' "
-           "unless you need deferred locking, early unlock, or "
-           "condition_variable integration (Rule 4.4.3)")
-        << var;
+      diag(volatileVar->getLocation(),
+           "%0 is volatile; use std::atomic<> for inter-thread communication instead (Rule 4.4.4)")
+        << volatileVar;
     }
   }
 } // namespace clang::tidy::readability

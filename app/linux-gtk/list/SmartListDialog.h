@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include "ao/Type.h"
 #include "list/QueryExpressionBox.h"
-#include <ao/Type.h>
-#include <runtime/LibraryMutationService.h>
+#include "runtime/LibraryMutationService.h"
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -18,7 +18,6 @@
 #include <sigc++/connection.h>
 
 #include <memory>
-#include <optional>
 #include <string>
 
 namespace ao::library
@@ -97,6 +96,6 @@ namespace ao::gtk
     bool _expressionValid = true;
 
     // Edit mode state
-    std::optional<ListId> _optEditListId;
+    ListId _editListId{kInvalidListId};
   };
 } // namespace ao::gtk

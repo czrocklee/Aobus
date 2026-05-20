@@ -1,6 +1,7 @@
-#include <ao/audio/Backend.h>
-#include <ao/audio/backend/PipeWireProvider.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
+#include "ao/audio/backend/PipeWireProvider.h"
+
+#include "ao/audio/Backend.h"
+#include "ao/audio/backend/detail/PipeWireShared.h"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>

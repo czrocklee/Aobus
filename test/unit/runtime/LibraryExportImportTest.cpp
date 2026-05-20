@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
-
+#include "ao/Type.h"
+#include "ao/library/DictionaryStore.h"
+#include "ao/library/ListBuilder.h"
+#include "ao/library/ListStore.h"
+#include "ao/library/ListView.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/ResourceStore.h"
+#include "ao/library/TrackBuilder.h"
+#include "ao/library/TrackStore.h"
+#include "ao/library/TrackView.h"
 #include "runtime/LibraryExporter.h"
 #include "runtime/LibraryImporter.h"
-#include <ao/Type.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ListBuilder.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-#include <test/unit/lmdb/TestUtils.h>
+#include "test/unit/lmdb/TestUtils.h"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -51,7 +51,7 @@ namespace ao::library::test
 
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property().uri("song.flac").durationMs(180000);
-      trackBuilder.metadata().title("Test Title").artist("Test Artist").coverArtId(resId.value());
+      trackBuilder.metadata().title("Test Title").artist("Test Artist").coverArtId(resId.raw());
       trackBuilder.tags().add("rock").add("favorite");
       trackBuilder.custom().add("mood", "happy");
 
@@ -60,7 +60,6 @@ namespace ao::library::test
       auto const [trackId, view] =
         trackWriter.createHotCold(preparedHot.size(),
                                   preparedCold.size(),
-                                  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                   [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                   {
                                     preparedHot.writeTo(hot);
@@ -95,7 +94,6 @@ namespace ao::library::test
       auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml2.resources());
       ml2.tracks().writer(txn).createHotCold(preparedHot.size(),
                                              preparedCold.size(),
-                                             // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                              [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                              {
                                                preparedHot.writeTo(hot);
@@ -186,7 +184,7 @@ namespace ao::library::test
     auto temp = TempDir{};
     auto ml = MusicLibrary{temp.path()};
 
-    auto trackId = TrackId{};
+    auto trackId = kInvalidTrackId;
     {
       auto txn = ml.writeTransaction();
       auto& dict = ml.dictionary();
@@ -196,7 +194,6 @@ namespace ao::library::test
       std::tie(trackId, std::ignore) =
         ml.tracks().writer(txn).createHotCold(preparedHot.size(),
                                               preparedCold.size(),
-                                              // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                               [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                               {
                                                 preparedHot.writeTo(hot);
@@ -234,8 +231,8 @@ library:
 
       auto optParent = std::optional<ListView>{};
       auto optChild = std::optional<ListView>{};
-      auto parentId = ListId{};
-      auto childId = ListId{};
+      auto parentId = kInvalidListId;
+      auto childId = kInvalidListId;
 
       for (auto const& [listId, view] : listReader)
       {
@@ -254,7 +251,7 @@ library:
 
       REQUIRE(optParent);
       REQUIRE(optChild);
-      REQUIRE(optParent->parentId() == ListId{0});
+      REQUIRE(optParent->parentId() == kInvalidListId);
       REQUIRE(optChild->parentId() == parentId);
       REQUIRE(childId != parentId);
       REQUIRE(optChild->tracks().size() == 1);

@@ -3,11 +3,10 @@
 
 #include "TrackSource.h"
 
-#include <ao/Type.h>
-
-#include <span>
+#include "ao/Type.h"
 
 #include <cstddef>
+#include <span>
 
 namespace ao::rt
 {

@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_test_macros.hpp>
+#include "ao/library/ListBuilder.h"
 
-#include <ao/library/ListBuilder.h>
-#include <ao/library/ListStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/Type.h"
+#include "ao/library/ListStore.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Environment.h"
+#include "ao/lmdb/Transaction.h"
+#include "test/unit/lmdb/TestUtils.h"
+
+#include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
-#include <test/unit/lmdb/TestUtils.h>
 
 namespace ao::library::test
 {
@@ -56,7 +58,7 @@ namespace ao::library::test
 
     CHECK(view.isSmart() == false);
     CHECK(view.tracks().empty());
-    CHECK(view.parentId() == ListId{0});
+    CHECK(view.parentId() == kInvalidListId);
   }
 
   TEST_CASE("ListBuilder - parentId round-trip through View")

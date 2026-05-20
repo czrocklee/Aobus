@@ -3,8 +3,8 @@
 
 #include "ConfigStore.h"
 
-#include <ao/Error.h>
-#include <ao/utility/Log.h>
+#include "ao/Error.h"
+#include "ao/utility/Log.h"
 
 #include <yaml-cpp/yaml.h>
 

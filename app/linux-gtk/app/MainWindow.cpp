@@ -2,13 +2,14 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/MainWindow.h"
+
+#include "ao/utility/Log.h"
 #include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
 #include "app/UIState.h"
-#include "library_io/ImportExportCoordinator.h"
-#include <ao/utility/Log.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/ConfigStore.h>
+#include "portal/ImportExportCoordinator.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/ConfigStore.h"
 
 #include <gtkmm/applicationwindow.h>
 
@@ -61,7 +62,7 @@ namespace ao::gtk
     Gtk::ApplicationWindow::on_hide();
   }
 
-  ImportExportCoordinator& MainWindow::importExportCoordinator()
+  portal::ImportExportCoordinator& MainWindow::importExportCoordinator()
   {
     return _mainWindowCoordinator->importExport();
   }

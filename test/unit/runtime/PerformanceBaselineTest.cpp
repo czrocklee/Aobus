@@ -3,16 +3,15 @@
 //
 // Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
 
-#include <ao/Type.h>
-#include <ao/utility/Log.h>
-#include <runtime/SmartListEvaluator.h>
-#include <runtime/SmartListSource.h>
-#include <runtime/StateTypes.h>
-#include <runtime/TrackListProjection.h>
-#include <runtime/TrackPresentationPreset.h>
-#include <runtime/TrackSource.h>
-
 #include "TestUtils.h"
+#include "ao/Type.h"
+#include "ao/utility/Log.h"
+#include "runtime/SmartListEvaluator.h"
+#include "runtime/SmartListSource.h"
+#include "runtime/StateTypes.h"
+#include "runtime/TrackListProjection.h"
+#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackSource.h"
 
 #include <catch2/catch_test_macros.hpp>
 

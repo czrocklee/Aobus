@@ -3,11 +3,13 @@
 
 #pragma once
 
-#include <ao/utility/StrongType.h>
+#include "ao/Type.h"
+#include "ao/utility/StrongType.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -16,6 +18,11 @@ namespace ao::rt
 {
   using ViewId = utility::StrongType<std::uint64_t, struct ViewIdTag>;
   using NotificationId = utility::StrongType<std::uint64_t, struct NotificationIdTag>;
+
+  inline constexpr auto kInvalidViewId = ViewId{0};
+  inline constexpr auto kInvalidNotificationId = NotificationId{0};
+
+  inline constexpr auto kAllTracksListId = ListId{std::numeric_limits<std::uint32_t>::max()};
 
   struct Range final
   {

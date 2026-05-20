@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SemanticComponents.h"
+
+#include "ao/Type.h"
 #include "inspector/CoverArtWidget.h"
 #include "inspector/TrackInspectorPanel.h"
 #include "layout/document/LayoutNode.h"
@@ -9,14 +11,14 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListSidebarController.h"
+#include "runtime/AppRuntime.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/ProjectionTypes.h"
+#include "runtime/ViewService.h"
+#include "runtime/WorkspaceService.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackViewPage.h"
-#include <ao/Type.h>
-#include <runtime/AppRuntime.h>
-#include <runtime/ProjectionTypes.h>
-#include <runtime/ViewService.h>
-#include <runtime/WorkspaceService.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -29,8 +31,6 @@
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/widget.h>
 
-#include <cstdint>
-#include <limits>
 #include <memory>
 #include <vector>
 
@@ -38,11 +38,6 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    ListId allTracksListId()
-    {
-      return ListId{std::numeric_limits<std::uint32_t>::max()};
-    }
-
     /**
      * @brief library.listTree
      */
@@ -184,7 +179,7 @@ namespace ao::gtk::layout
               if (relativeTo != nullptr)
               {
                 auto const listId =
-                  (ctx.track.pageHost != nullptr) ? ctx.track.pageHost->activeListId() : allTracksListId();
+                  (ctx.track.pageHost != nullptr) ? ctx.track.pageHost->activeListId() : rt::kAllTracksListId;
 
                 auto const selection = TrackSelectionContext{.listId = listId, .selectedIds = ids};
                 ctx.tag.editController->showTagEditor(selection, *relativeTo);

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/PipeWireMonitor.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
-#include <ao/utility/ByteView.h>
-#include <ao/utility/Log.h>
+#include "ao/audio/backend/PipeWireMonitor.h"
+
+#include "ao/audio/backend/detail/PipeWireShared.h"
+#include "ao/utility/ByteView.h"
+#include "ao/utility/Log.h"
 
 extern "C"
 {
@@ -16,6 +17,12 @@ extern "C"
 #include <spa/pod/pod.h>
 #include <spa/utils/dict.h>
 }
+
+#include "ao/audio/Backend.h"
+#include "ao/audio/Format.h"
+#include "ao/audio/Subscription.h"
+#include "ao/audio/backend/detail/PipeWireMonitorHelpers.h"
+#include "ao/audio/flow/Graph.h"
 
 #include <algorithm>
 #include <array>
@@ -34,12 +41,6 @@ extern "C"
 #include <unordered_set>
 #include <utility>
 #include <vector>
-
-#include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/Subscription.h>
-#include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
-#include <ao/audio/flow/Graph.h>
 
 namespace ao::audio::backend
 {
@@ -822,10 +823,12 @@ namespace ao::audio::backend
           auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props});
           ::pw_node_subscribe_params(
             binding->proxy.get(), utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
-          ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
-          ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_EnumFormat, 0, -1, nullptr);
-          ::pw_node_enum_params(
-            binding->proxy.get(), 3, SPA_PARAM_Props, 0, -1, nullptr); // NOLINT(readability-magic-numbers)
+          constexpr std::uint32_t kFormatSequence = 1;
+          constexpr std::uint32_t kEnumFormatSequence = 2;
+          constexpr std::uint32_t kPropsSequence = 3;
+          ::pw_node_enum_params(binding->proxy.get(), kFormatSequence, SPA_PARAM_Format, 0, -1, nullptr);
+          ::pw_node_enum_params(binding->proxy.get(), kEnumFormatSequence, SPA_PARAM_EnumFormat, 0, -1, nullptr);
+          ::pw_node_enum_params(binding->proxy.get(), kPropsSequence, SPA_PARAM_Props, 0, -1, nullptr);
 
           auto* bindingPtr = binding.get();
           ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &sinkNodeEvents, bindingPtr);
@@ -849,7 +852,6 @@ namespace ao::audio::backend
     {
       auto curr = ctx.reachableNodes[i];
 
-      // NOLINTNEXTLINE(readability-identifier-length)
       for (auto const& [_, link] : links)
       {
         if (!isActiveLink(static_cast<::pw_link_state>(link.state)) || link.outputNodeId != curr ||
@@ -867,7 +869,6 @@ namespace ao::audio::backend
 
     ctx.fullSet = ctx.reachableSet;
 
-    // NOLINTNEXTLINE(readability-identifier-length)
     for (auto const& [_, link] : links)
     {
       if (isActiveLink(static_cast<::pw_link_state>(link.state)) && ctx.reachableSet.contains(link.inputNodeId))
@@ -954,7 +955,6 @@ namespace ao::audio::backend
       }
     }
 
-    // NOLINTNEXTLINE(readability-identifier-length)
     for (auto const& [_, link] : links)
     {
       if (isActiveLink(static_cast<::pw_link_state>(link.state)) && ctx.fullSet.contains(link.outputNodeId) &&

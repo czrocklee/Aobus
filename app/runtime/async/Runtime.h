@@ -4,12 +4,18 @@
 #pragma once
 
 #include "Task.h"
+#include "runtime/CorePrimitives.h"
+
 #include <boost/asio/thread_pool.hpp>
+
+#include <exception>
+#include <functional>
 #include <future>
-#include <runtime/CorePrimitives.h>
 
 namespace ao::rt::async
 {
+  class LifetimeScope;
+
   class Runtime final
   {
   public:
@@ -21,28 +27,33 @@ namespace ao::rt::async
     Runtime(Runtime&&) = delete;
     Runtime& operator=(Runtime&&) = delete;
 
-    rt::IControlExecutor& uiExecutor() noexcept;
+    rt::IControlExecutor& controlExecutor() noexcept;
 
     void requestStop() noexcept;
     void join();
 
     boost::asio::thread_pool& workerPool() noexcept;
 
+    // Awaitable to resume execution on the UI control thread
+    Task<void> resumeOnControl();
+
+    // Awaitable to resume execution on the background worker pool
+    Task<void> resumeOnWorker();
+
+    // Spawn a root task with exception logging
+    void spawnLogged(Task<void> task);
+
+    // Spawn a task with a specific cancellation slot and completion callback
+    void spawn(Task<void> task, CancellationSlot slot, std::function<void(std::exception_ptr)> callback);
+
+    template<typename T>
+    std::future<T> spawn(Task<T> task);
+
+    void spawnWithLifetime(LifetimeScope* scope, Task<void> task);
+
   private:
     rt::IControlExecutor& _uiExecutor;
     boost::asio::thread_pool _workerPool;
     bool _stopRequested{false};
   };
-
-  // Awaitable to resume execution on the UI control thread
-  Task<void> resumeOnUi(Runtime& runtime);
-
-  // Awaitable to resume execution on the background worker pool
-  Task<void> resumeOnWorker(Runtime& runtime);
-
-  // Spawn a root task with exception logging
-  void spawnLogged(Runtime& runtime, Task<void> task);
-
-  template<typename T>
-  std::future<T> spawn(Runtime& runtime, Task<T> task);
 } // namespace ao::rt::async

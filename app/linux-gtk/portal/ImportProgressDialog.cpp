@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "library_io/ImportProgressDialog.h"
+#include "portal/ImportProgressDialog.h"
 
 #include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <string>
 
-namespace ao::gtk
+namespace ao::gtk::portal
 {
   ImportProgressDialog::ImportProgressDialog(std::int32_t maxItems, Gtk::Window& parent)
     : _maxItems{maxItems}
@@ -69,4 +69,4 @@ namespace ao::gtk
     _progressLabel.set_text("Import complete!");
     _okButton.set_sensitive(true);
   }
-} // namespace ao::gtk
+} // namespace ao::gtk::portal

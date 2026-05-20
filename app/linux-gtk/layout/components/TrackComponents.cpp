@@ -2,19 +2,19 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/components/TrackComponents.h"
+
+#include "ao/Type.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListSidebarController.h"
+#include "runtime/CorePrimitives.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackPresentationButton.h"
 #include "track/TrackQuickFilter.h"
-#include <ao/Type.h>
 
 #include <gtkmm/widget.h>
 
-#include <cstdint>
-#include <limits>
 #include <memory>
 #include <string>
 
@@ -22,16 +22,6 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    ListId allTracksListId()
-    {
-      return ListId{std::numeric_limits<std::uint32_t>::max()};
-    }
-
-    ListId rootParentId()
-    {
-      return ListId{0};
-    }
-
     /**
      * @brief track.quickFilter component wrapper
      */
@@ -48,9 +38,9 @@ namespace ao::gtk::layout
             {
               auto parentId = ctx.track.pageHost->activeListId();
 
-              if (parentId == allTracksListId())
+              if (parentId == rt::kAllTracksListId)
               {
-                parentId = rootParentId();
+                parentId = kInvalidListId;
               }
 
               ctx.list.sidebarController->createSmartListFromExpression(parentId, expression);

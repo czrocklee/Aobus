@@ -4,17 +4,15 @@
 #include "ManualListSource.h"
 
 #include "TrackSource.h"
-
-#include <ao/library/ListView.h>
+#include "ao/library/ListView.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <iterator>
 #include <optional>
 #include <span>
 #include <utility>
 #include <vector>
-
-#include <cstddef>
 
 namespace ao::rt
 {

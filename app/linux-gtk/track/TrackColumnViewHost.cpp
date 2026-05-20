@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackColumnViewHost.h"
+
+#include "ao/Type.h"
 #include "track/TrackColumnController.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
 #include "track/TrackSelectionController.h"
-#include <ao/Type.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Exception.h>
-#include <ao/Type.h>
-#include <ao/library/ListLayout.h>
-#include <ao/library/ListView.h>
-#include <ao/utility/ByteView.h>
+#include "ao/library/ListView.h"
+
+#include "ao/Exception.h"
+#include "ao/Type.h"
+#include "ao/library/ListLayout.h"
+#include "ao/utility/ByteView.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -62,7 +63,7 @@ namespace ao::library
 
   bool ListView::isRootParent() const noexcept
   {
-    return parentId() == ListId{0};
+    return parentId() == kInvalidListId;
   }
 
   ListView::TrackProxy ListView::tracks() const

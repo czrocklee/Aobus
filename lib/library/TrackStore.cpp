@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Type.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
+#include "ao/library/TrackStore.h"
+
+#include "ao/Type.h"
+#include "ao/library/TrackView.h"
+#include "ao/lmdb/Database.h"
+#include "ao/lmdb/Transaction.h"
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -45,7 +46,7 @@ namespace ao::library
 
     if (mode == LoadMode::Hot || mode == LoadMode::Both)
     {
-      auto optHotBuffer = _hotReader.get(id.value());
+      auto optHotBuffer = _hotReader.get(id.raw());
 
       if (!optHotBuffer)
       {
@@ -57,7 +58,7 @@ namespace ao::library
 
     if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
     {
-      auto optColdBuffer = _coldReader.get(id.value());
+      auto optColdBuffer = _coldReader.get(id.raw());
 
       if (!optColdBuffer)
       {
@@ -124,7 +125,7 @@ namespace ao::library
 
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
-    auto trackId = TrackId{};
+    auto trackId = kInvalidTrackId;
 
     auto hotData = std::span<std::byte const>{};
     auto coldData = std::span<std::byte const>{};
@@ -146,7 +147,7 @@ namespace ao::library
       }
       else
       {
-        gsl_Expects(coldId == trackId.value());
+        gsl_Expects(coldId == trackId.raw());
       }
 
       coldData = coldBuffer;
@@ -178,20 +179,20 @@ namespace ao::library
   {
     gsl_Expects((hotData.size() % 4) == 0);
 
-    _hotWriter.update(id.value(), hotData);
+    _hotWriter.update(id.raw(), hotData);
   }
 
   void TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
   {
     gsl_Expects((coldData.size() % 4) == 0);
 
-    _coldWriter.update(id.value(), coldData);
+    _coldWriter.update(id.raw(), coldData);
   }
 
   bool TrackStore::Writer::remove(TrackId id)
   {
-    bool const hotDeleted = _hotWriter.del(id.value());
-    bool const coldDeleted = _coldWriter.del(id.value());
+    bool const hotDeleted = _hotWriter.del(id.raw());
+    bool const coldDeleted = _coldWriter.del(id.raw());
     return hotDeleted && coldDeleted;
   }
 
@@ -205,21 +206,20 @@ namespace ao::library
   {
     if (mode == Reader::LoadMode::Hot)
     {
-      return _hotWriter.get(id.value()).transform([](auto const& buffer) { return TrackView{buffer, {}}; });
+      return _hotWriter.get(id.raw()).transform([](auto const& buffer) { return TrackView{buffer, {}}; });
     }
 
     if (mode == Reader::LoadMode::Cold)
     {
-      return _coldWriter.get(id.value()).transform([](auto const& buffer) { return TrackView{{}, buffer}; });
+      return _coldWriter.get(id.raw()).transform([](auto const& buffer) { return TrackView{{}, buffer}; });
     }
 
     // Both
-    return _hotWriter.get(id.value())
-      .and_then(
-        [this, id](auto const& hotBuffer)
-        {
-          return _coldWriter.get(id.value())
-            .transform([&hotBuffer](auto const& coldBuffer) { return TrackView{hotBuffer, coldBuffer}; });
-        });
+    return _hotWriter.get(id.raw()).and_then(
+      [this, id](auto const& hotBuffer)
+      {
+        return _coldWriter.get(id.raw()).transform([&hotBuffer](auto const& coldBuffer)
+                                                   { return TrackView{hotBuffer, coldBuffer}; });
+      });
   }
 } // namespace ao::library

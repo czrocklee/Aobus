@@ -3,10 +3,9 @@
 
 #pragma once
 
+#include "ao/Type.h"
 #include "tag/TagPopover.h"
 #include "track/TrackViewPage.h"
-
-#include <ao/Type.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>

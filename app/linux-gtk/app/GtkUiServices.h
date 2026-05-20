@@ -9,7 +9,10 @@ namespace ao::gtk
   class CoverArtCache;
   class PlaybackSequenceController;
   class TagEditController;
-  class ImportExportCoordinator;
+  namespace portal
+  {
+    class ImportExportCoordinator;
+  }
   class TrackPageHost;
   class TrackColumnLayoutModel;
   class ListSidebarController;
@@ -24,7 +27,7 @@ namespace ao::gtk
     CoverArtCache* coverArtCache = nullptr;
     PlaybackSequenceController* playbackSequenceController = nullptr;
     TagEditController* tagEditController = nullptr;
-    ImportExportCoordinator* importExportCoordinator = nullptr;
+    portal::ImportExportCoordinator* importExportCoordinator = nullptr;
     TrackPageHost* trackPageHost = nullptr;
     TrackColumnLayoutModel* columnLayoutModel = nullptr;
     ListSidebarController* listSidebarController = nullptr;
