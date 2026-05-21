@@ -31,8 +31,10 @@ namespace ao::rt
   struct AppRuntimeDependencies
   {
     std::unique_ptr<IControlExecutor> executor{};
-    std::filesystem::path libraryRoot{};
-    std::shared_ptr<ConfigStore> configStore{};
+    std::filesystem::path musicRoot{};
+    std::filesystem::path databasePath{};
+    std::shared_ptr<ConfigStore> globalConfigStore{};
+    std::shared_ptr<ConfigStore> workspaceConfigStore{};
   };
 
   class AppRuntime final : public CoreRuntime

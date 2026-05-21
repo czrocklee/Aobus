@@ -41,7 +41,10 @@ namespace ao::gtk
   class MainWindowCoordinator final
   {
   public:
-    MainWindowCoordinator(MainWindow& window, rt::AppRuntime& runtime, std::shared_ptr<rt::ConfigStore> configStore);
+    MainWindowCoordinator(MainWindow& window,
+                          rt::AppRuntime& runtime,
+                          std::shared_ptr<rt::ConfigStore> globalConfig,
+                          std::shared_ptr<rt::ConfigStore> workspaceConfig);
     ~MainWindowCoordinator();
 
     // Not copyable or movable
@@ -74,7 +77,8 @@ namespace ao::gtk
   private:
     MainWindow& _window;
     rt::AppRuntime& _runtime;
-    std::shared_ptr<rt::ConfigStore> _configStore;
+    std::shared_ptr<rt::ConfigStore> _globalConfig;
+    std::shared_ptr<rt::ConfigStore> _workspaceConfig;
     std::unique_ptr<WindowStatePersistence> _persistence;
 
     std::unique_ptr<TrackRowCache> _trackRowCache;

@@ -14,7 +14,10 @@ add_executable(ao_test
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
     unit/library/DictionaryStoreTest.cpp
-    unit/library/ResourceStoreTest.cpp
+    unit/library/ImportWorkerTest.cpp
+    unit/library/LibraryScannerTest.cpp
+    unit/library/ListStoreTest.cpp
+
     unit/library/TrackStoreTest.cpp
     unit/library/ListStoreTest.cpp
     unit/library/ListBuilderTest.cpp

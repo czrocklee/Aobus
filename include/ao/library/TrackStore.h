@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/TrackView.h"
 #include "ao/lmdb/Database.h"
 #include "ao/lmdb/Transaction.h"
@@ -61,6 +62,10 @@ namespace ao::library
       Both  // Both hot and cold
     };
 
+    explicit Reader(lmdb::Database::Reader hotReader,
+                    lmdb::Database::Reader coldReader,
+                    std::optional<FileManifestStore::Reader> optManifestReader = std::nullopt);
+
     Iterator begin(LoadMode mode = LoadMode::Both) const;
     Iterator end(LoadMode mode = LoadMode::Both) const;
 
@@ -70,11 +75,15 @@ namespace ao::library
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
-  private:
-    Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);
+    void setManifestReader(std::optional<FileManifestStore::Reader> optReader) noexcept { _manifestReader = optReader; }
 
+    lmdb::Database::Reader const& hotReader() const noexcept { return _hotReader; }
+    lmdb::Database::Reader const& coldReader() const noexcept { return _coldReader; }
+
+  private:
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
+    std::optional<FileManifestStore::Reader> _manifestReader;
     friend class TrackStore;
   };
 
@@ -98,13 +107,17 @@ namespace ao::library
     Iterator& operator++();
     value_type operator*() const;
 
+    void setManifestReader(std::optional<FileManifestStore::Reader> optReader) noexcept { _manifestReader = optReader; }
+
   private:
     Iterator(lmdb::Database::Reader::Iterator&& hotIter,
              lmdb::Database::Reader::Iterator&& coldIter,
-             Reader::LoadMode mode);
+             Reader::LoadMode mode,
+             std::optional<FileManifestStore::Reader> optManifestReader = std::nullopt);
 
     std::optional<lmdb::Database::Reader::Iterator> _optHotIter;
     std::optional<lmdb::Database::Reader::Iterator> _optColdIter;
+    std::optional<FileManifestStore::Reader> _manifestReader;
     Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };
@@ -159,6 +172,11 @@ namespace ao::library
     void updateCold(TrackId id, std::span<std::byte const> coldData);
 
     /**
+     * Update cold track data (direct span access).
+     */
+    std::span<std::byte> updateCold(TrackId id, std::size_t size);
+
+    /**
      * Zero-copy updateCold: reserves space and calls fill callback to populate span.
      * @param id Track ID to update
      * @param size Size of cold data (must be multiple of 4)
@@ -176,6 +194,9 @@ namespace ao::library
      * Clear all tracks.
      */
     void clear();
+
+    lmdb::Database::Writer& hotWriter() noexcept { return _hotWriter; }
+    lmdb::Database::Writer& coldWriter() noexcept { return _coldWriter; }
 
   private:
     explicit Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter);

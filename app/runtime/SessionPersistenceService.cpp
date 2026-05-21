@@ -5,11 +5,11 @@
 
 #include "ConfigStore.h"
 #include "CorePrimitives.h"
+#include "CoreRuntime.h"
 #include "PlaybackService.h"
 #include "StateTypes.h"
 #include "ViewService.h"
 #include "WorkspaceService.h"
-#include "ao/library/MusicLibrary.h"
 #include "ao/utility/Log.h"
 
 #include <cstddef>
@@ -27,13 +27,14 @@ namespace ao::rt
     WorkspaceService& workspace;
     ViewService& views;
     PlaybackService& playback;
-    library::MusicLibrary& library;
-    ConfigStore& configStore;
+    CoreRuntime& runtime;
+    ConfigStore& globalConfig;
+    ConfigStore& workspaceConfig;
 
     Signal<std::string const&> sessionRestoredSignal;
 
-    Impl(WorkspaceService& ws, ViewService& vs, PlaybackService& pb, library::MusicLibrary& lib, ConfigStore& cs)
-      : workspace{ws}, views{vs}, playback{pb}, library{lib}, configStore{cs}
+    Impl(WorkspaceService& ws, ViewService& vs, PlaybackService& pb, CoreRuntime& rt, ConfigStore& gc, ConfigStore& wc)
+      : workspace{ws}, views{vs}, playback{pb}, runtime{rt}, globalConfig{gc}, workspaceConfig{wc}
     {
     }
   };
@@ -41,9 +42,10 @@ namespace ao::rt
   SessionPersistenceService::SessionPersistenceService(WorkspaceService& workspace,
                                                        ViewService& views,
                                                        PlaybackService& playback,
-                                                       library::MusicLibrary& library,
-                                                       ConfigStore& configStore)
-    : _impl{std::make_unique<Impl>(workspace, views, playback, library, configStore)}
+                                                       CoreRuntime& runtime,
+                                                       ConfigStore& globalConfig,
+                                                       ConfigStore& workspaceConfig)
+    : _impl{std::make_unique<Impl>(workspace, views, playback, runtime, globalConfig, workspaceConfig)}
   {
   }
 
@@ -51,50 +53,59 @@ namespace ao::rt
 
   void SessionPersistenceService::restore()
   {
-    auto snapshot = SessionSnapshot{};
+    auto globalSnapshot = GlobalSessionSnapshot{};
+    auto workspaceSnapshot = WorkspaceSnapshot{};
 
-    if (auto const res = _impl->configStore.load("runtime", snapshot); !res)
+    if (auto const res = _impl->globalConfig.load("runtime", globalSnapshot); !res)
     {
       if (res.error().code != Error::Code::NotFound)
       {
-        APP_LOG_WARN("SessionPersistenceService: Failed to restore runtime - {}", res.error().message);
+        APP_LOG_WARN("SessionPersistenceService: Failed to restore global runtime - {}", res.error().message);
       }
-
-      return;
     }
 
-    for (auto const& viewConfig : snapshot.openViews)
+    if (auto const res = _impl->workspaceConfig.load("workspace", workspaceSnapshot); !res)
+    {
+      if (res.error().code != Error::Code::NotFound)
+      {
+        APP_LOG_WARN("SessionPersistenceService: Failed to restore workspace - {}", res.error().message);
+      }
+    }
+
+    for (auto const& viewConfig : workspaceSnapshot.openViews)
     {
       auto const res = _impl->views.createView(viewConfig, true);
       _impl->workspace.addView(res.viewId);
     }
 
     if (auto const layout = _impl->workspace.layoutState();
-        snapshot.optActiveViewIndex && *snapshot.optActiveViewIndex < layout.openViews.size())
+        workspaceSnapshot.optActiveViewIndex && *workspaceSnapshot.optActiveViewIndex < layout.openViews.size())
     {
-      _impl->workspace.setFocusedView(layout.openViews[*snapshot.optActiveViewIndex]);
+      _impl->workspace.setFocusedView(layout.openViews[*workspaceSnapshot.optActiveViewIndex]);
     }
     else if (!layout.openViews.empty())
     {
       _impl->workspace.setFocusedView(layout.openViews.front());
     }
 
-    if (!snapshot.lastBackend.empty())
+    if (!globalSnapshot.lastBackend.empty())
     {
-      _impl->playback.setOutput(audio::BackendId{snapshot.lastBackend},
-                                audio::DeviceId{snapshot.lastOutputDeviceId},
-                                audio::ProfileId{snapshot.lastProfile});
+      _impl->playback.setOutput(audio::BackendId{globalSnapshot.lastBackend},
+                                audio::DeviceId{globalSnapshot.lastOutputDeviceId},
+                                audio::ProfileId{globalSnapshot.lastProfile});
     }
 
-    _impl->sessionRestoredSignal.emit(snapshot.lastLibraryPath);
+    _impl->sessionRestoredSignal.emit(globalSnapshot.lastLibraryPath);
   }
 
   void SessionPersistenceService::save()
   {
     auto const layout = _impl->workspace.layoutState();
-    auto snapshot = SessionSnapshot{};
-    snapshot.optActiveViewIndex = std::nullopt;
-    snapshot.lastLibraryPath = _impl->library.rootPath().string();
+    auto globalSnapshot = GlobalSessionSnapshot{};
+    auto workspaceSnapshot = WorkspaceSnapshot{};
+
+    workspaceSnapshot.optActiveViewIndex = std::nullopt;
+    globalSnapshot.lastLibraryPath = _impl->runtime.musicRoot().string();
 
     for (std::size_t i = 0; i < layout.openViews.size(); ++i)
     {
@@ -102,11 +113,11 @@ namespace ao::rt
 
       if (viewId == layout.activeViewId)
       {
-        snapshot.optActiveViewIndex = static_cast<std::uint32_t>(i);
+        workspaceSnapshot.optActiveViewIndex = static_cast<std::uint32_t>(i);
       }
 
       auto const& state = _impl->views.trackListState(viewId);
-      snapshot.openViews.push_back(TrackListViewConfig{
+      workspaceSnapshot.openViews.push_back(TrackListViewConfig{
         .listId = state.listId,
         .filterExpression = state.filterExpression,
         .groupBy = state.groupBy,
@@ -116,15 +127,21 @@ namespace ao::rt
 
     // Capture playback output state for restoration
     auto const& pb = _impl->playback.state();
-    snapshot.lastBackend = pb.selectedOutput.backendId.raw();
-    snapshot.lastOutputDeviceId = pb.selectedOutput.deviceId.raw();
-    snapshot.lastProfile = pb.selectedOutput.profileId.raw();
+    globalSnapshot.lastBackend = pb.selectedOutput.backendId.raw();
+    globalSnapshot.lastOutputDeviceId = pb.selectedOutput.deviceId.raw();
+    globalSnapshot.lastProfile = pb.selectedOutput.profileId.raw();
 
-    _impl->configStore.save("runtime", snapshot);
+    _impl->globalConfig.save("runtime", globalSnapshot);
+    _impl->workspaceConfig.save("workspace", workspaceSnapshot);
 
-    if (auto const res = _impl->configStore.flush(); !res)
+    if (auto const res = _impl->globalConfig.flush(); !res)
     {
-      APP_LOG_ERROR("SessionPersistenceService: Failed to flush runtime - {}", res.error().message);
+      APP_LOG_ERROR("SessionPersistenceService: Failed to flush global runtime - {}", res.error().message);
+    }
+
+    if (auto const res = _impl->workspaceConfig.flush(); !res)
+    {
+      APP_LOG_ERROR("SessionPersistenceService: Failed to flush workspace - {}", res.error().message);
     }
   }
 

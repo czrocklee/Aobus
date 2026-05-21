@@ -47,18 +47,6 @@ namespace ao::library
     return coldGetString(hdr.uriOffset, hdr.uriLen);
   }
 
-  std::uint64_t TrackView::coldFileSize() const noexcept
-  {
-    auto const& hdr = coldHeader();
-    return utility::uint64Parts::combine(hdr.fileSizeLo, hdr.fileSizeHi);
-  }
-
-  std::uint64_t TrackView::coldMtime() const noexcept
-  {
-    auto const& hdr = coldHeader();
-    return utility::uint64Parts::combine(hdr.mtimeLo, hdr.mtimeHi);
-  }
-
   std::string_view TrackView::coldGetString(std::uint16_t offset, std::uint16_t len) const
   {
     gsl_Expects(offset + len <= _coldData.size());

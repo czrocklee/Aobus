@@ -510,4 +510,72 @@ namespace ao::lmdb::test
     // maxKey should still be 3 (the max wasn't deleted)
     REQUIRE(reader.maxKey() == 3);
   }
+
+  TEST_CASE("Database - Blob keys", "[lmdb][database][blob]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    auto wtxn = WriteTransaction{env};
+    auto db = Database{wtxn, "blobdb", Database::KeyKind::Blob};
+    auto writer = db.writer(wtxn);
+
+    auto const key1 = createStringData("key1");
+    auto const key2 = createStringData("another_key");
+    auto const val1 = createStringData("value1");
+    auto const val2 = createStringData("value2");
+
+    writer.create(key1, val1);
+    writer.create(key2, val2);
+    wtxn.commit();
+
+    auto const rtxn = ReadTransaction{env};
+    auto const reader = db.reader(rtxn);
+
+    SECTION("get works with blob keys")
+    {
+      auto const optRes1 = reader.get(key1);
+      REQUIRE(optRes1.has_value());
+      REQUIRE(utility::bytes::stringView(*optRes1) == "value1");
+
+      auto const optRes2 = reader.get(key2);
+      REQUIRE(optRes2.has_value());
+      REQUIRE(utility::bytes::stringView(*optRes2) == "value2");
+    }
+
+    SECTION("Iteration works with blob keys")
+    {
+      auto it = reader.begin();
+      REQUIRE(it != reader.end());
+      // LMDB sorts lexicographically
+      REQUIRE(utility::bytes::stringView(it->first) == "another_key");
+      REQUIRE(utility::bytes::stringView(it->second) == "value2");
+
+      ++it;
+      REQUIRE(it != reader.end());
+      REQUIRE(utility::bytes::stringView(it->first) == "key1");
+      REQUIRE(utility::bytes::stringView(it->second) == "value1");
+
+      ++it;
+      REQUIRE(it == reader.end());
+    }
+
+    SECTION("Writer::get works with blob keys")
+    {
+      auto wtxn2 = WriteTransaction{env};
+      auto writer2 = db.writer(wtxn2);
+      auto const optRes = writer2.get(key1);
+      REQUIRE(optRes.has_value());
+      REQUIRE(utility::bytes::stringView(*optRes) == "value1");
+    }
+
+    SECTION("Writer::del works with blob keys")
+    {
+      auto wtxn2 = WriteTransaction{env};
+      auto writer2 = db.writer(wtxn2);
+      REQUIRE(writer2.del(key1));
+      REQUIRE(!writer2.get(key1).has_value());
+      wtxn2.commit();
+    }
+  }
 } // namespace ao::lmdb::test

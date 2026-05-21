@@ -8,6 +8,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <cstddef>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -19,6 +20,23 @@
 
 namespace YAML
 {
+  template<>
+  struct convert<std::filesystem::path>
+  {
+    static Node encode(std::filesystem::path const& rhs) { return Node{rhs.string()}; }
+
+    static bool decode(Node const& node, std::filesystem::path& rhs)
+    {
+      if (!node.IsScalar())
+      {
+        return false;
+      }
+
+      rhs = node.as<std::string>();
+      return true;
+    }
+  };
+
   template<typename T>
   struct convert<std::optional<T>>
   {

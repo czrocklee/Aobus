@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/TrackLayout.h"
 #include "ao/utility/ByteView.h"
 
@@ -81,9 +82,12 @@ namespace ao::library
       std::uint16_t codecId() const noexcept { return _track.hotHeader().codecId; }
       std::uint8_t bitDepth() const noexcept { return _track.hotHeader().bitDepth; }
 
-      // Cold properties
-      std::uint64_t fileSize() const noexcept { return _track.coldFileSize(); }
-      std::uint64_t mtime() const noexcept { return _track.coldMtime(); }
+      // Physical properties (from manifest)
+      std::uint64_t fileSize() const noexcept { return _track.fileSize(); }
+      std::uint64_t mtime() const noexcept { return _track.mtime(); }
+      FileStatus status() const noexcept { return _track.status(); }
+
+      // Technical properties (from cold)
       std::uint32_t durationMs() const noexcept { return _track.coldHeader().durationMs; }
       std::uint32_t sampleRate() const noexcept { return _track.coldHeader().sampleRate; }
       std::uint32_t bitrate() const noexcept { return _track.coldHeader().bitrate; }
@@ -183,12 +187,18 @@ namespace ao::library
     /**
      * Construct a TrackView with raw bytes.
      *
-     * @param id Track ID (LMDB key)
      * @param hotData Hot track binary data (must be >= sizeof(TrackHotHeader)), can be empty span if not loaded
      * @param coldData Cold track binary data (optional), if null accessing cold accessors crashes
+     * @param fileSize File size in bytes (optional, from manifest)
+     * @param mtime Modification time (optional, from manifest)
+     * @param status Physical availability of the file
      */
-    TrackView(std::span<std::byte const> hotData, std::span<std::byte const> coldData)
-      : _hotData{hotData}, _coldData{coldData}
+    TrackView(std::span<std::byte const> hotData,
+              std::span<std::byte const> coldData,
+              std::uint64_t fileSize = 0,
+              std::uint64_t mtime = 0,
+              FileStatus status = FileStatus::Available)
+      : _hotData{hotData}, _coldData{coldData}, _fileSize{fileSize}, _mtime{mtime}, _status{status}
     {
     }
 
@@ -214,7 +224,14 @@ namespace ao::library
     TagProxy tags() const { return TagProxy{_hotData}; }
     CustomProxy custom() const { return CustomProxy{_coldData}; }
 
+    std::uint64_t fileSize() const noexcept { return _fileSize; }
+    std::uint64_t mtime() const noexcept { return _mtime; }
+    FileStatus status() const noexcept { return _status; }
+
     // Direct header access
+    std::span<std::byte const> hotData() const noexcept { return _hotData; }
+    std::span<std::byte const> coldData() const noexcept { return _coldData; }
+
     TrackHotHeader const& hotHeader() const
     {
       gsl_Expects(isHotValid());
@@ -232,12 +249,13 @@ namespace ao::library
     DictionaryId hotTagId(std::uint8_t index) const;
     std::string_view hotGetString(std::uint16_t offset, std::uint16_t len) const;
     std::string_view coldUri() const;
-    std::uint64_t coldFileSize() const noexcept;
-    std::uint64_t coldMtime() const noexcept;
     std::string_view coldGetString(std::uint16_t offset, std::uint16_t len) const;
 
     std::span<std::byte const> _hotData;
     std::span<std::byte const> _coldData;
+    std::uint64_t _fileSize = 0;
+    std::uint64_t _mtime = 0;
+    FileStatus _status = FileStatus::Available;
   };
 
   class TrackView::CustomProxy::Iterator final

@@ -4,6 +4,7 @@
 #include "ao/library/TrackStore.h"
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/TrackView.h"
 #include "ao/lmdb/Database.h"
 #include "ao/lmdb/Transaction.h"
@@ -34,8 +35,12 @@ namespace ao::library
   }
 
   // TrackStore::Reader implementation
-  TrackStore::Reader::Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader)
-    : _hotReader{std::move(hotReader)}, _coldReader{std::move(coldReader)}
+  TrackStore::Reader::Reader(lmdb::Database::Reader hotReader,
+                             lmdb::Database::Reader coldReader,
+                             std::optional<FileManifestStore::Reader> optManifestReader)
+    : _hotReader{std::move(hotReader)}
+    , _coldReader{std::move(coldReader)}
+    , _manifestReader{std::move(optManifestReader)}
   {
   }
 
@@ -68,25 +73,37 @@ namespace ao::library
       coldBuffer = *optColdBuffer;
     }
 
-    return TrackView{hotBuffer, coldBuffer};
+    auto view = TrackView{hotBuffer, coldBuffer};
+
+    if (_manifestReader && !coldBuffer.empty())
+    {
+      if (auto const optEntry = _manifestReader->get(view.property().uri()))
+      {
+        view = TrackView{hotBuffer, coldBuffer, optEntry->fileSize(), optEntry->mtime(), optEntry->status};
+      }
+    }
+
+    return view;
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin(LoadMode mode) const
   {
-    return Iterator{_hotReader.begin(), _coldReader.begin(), mode};
+    return Iterator{_hotReader.begin(), _coldReader.begin(), mode, _manifestReader};
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::end(LoadMode mode) const
   {
-    return Iterator{_hotReader.end(), _coldReader.end(), mode};
+    return Iterator{_hotReader.end(), _coldReader.end(), mode, _manifestReader};
   }
 
   // TrackStore::Reader::Iterator implementation
   TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& hotIter,
                                          lmdb::Database::Reader::Iterator&& coldIter,
-                                         Reader::LoadMode mode)
+                                         Reader::LoadMode mode,
+                                         std::optional<FileManifestStore::Reader> optManifestReader)
     : _optHotIter{mode != LoadMode::Cold ? std::make_optional(std::move(hotIter)) : std::nullopt}
     , _optColdIter{mode != LoadMode::Hot ? std::make_optional(std::move(coldIter)) : std::nullopt}
+    , _manifestReader{std::move(optManifestReader)}
     , _mode{mode}
   {
   }
@@ -98,14 +115,17 @@ namespace ao::library
       return false;
     }
 
-    switch (_mode)
+    if (_optHotIter && other._optHotIter && *(_optHotIter) != *(other._optHotIter))
     {
-      case LoadMode::Cold: return _optColdIter == other._optColdIter;
-      case LoadMode::Hot:
-      case LoadMode::Both: return _optHotIter == other._optHotIter;
+      return false;
     }
 
-    return false;
+    if (_optColdIter && other._optColdIter && *(_optColdIter) != *(other._optColdIter))
+    {
+      return false;
+    }
+
+    return true;
   }
 
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
@@ -125,41 +145,73 @@ namespace ao::library
 
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
-    auto trackId = kInvalidTrackId;
-
-    auto hotData = std::span<std::byte const>{};
-    auto coldData = std::span<std::byte const>{};
+    auto trackId = TrackId{};
+    auto hotBuffer = std::span<std::byte const>{};
+    auto coldBuffer = std::span<std::byte const>{};
 
     if (_optHotIter)
     {
-      auto&& [id, hotBuffer] = **_optHotIter;
-      trackId = TrackId{id};
-      hotData = hotBuffer;
+      auto const item = **_optHotIter;
+      trackId = TrackId{item.first};
+      hotBuffer = item.second;
     }
 
     if (_optColdIter)
     {
-      auto&& [coldId, coldBuffer] = **_optColdIter;
-
-      if (!_optHotIter)
-      {
-        trackId = TrackId{coldId};
-      }
-      else
-      {
-        gsl_Expects(coldId == trackId.raw());
-      }
-
-      coldData = coldBuffer;
+      auto const item = **_optColdIter;
+      trackId = TrackId{item.first};
+      coldBuffer = item.second;
     }
 
-    return {trackId, TrackView{hotData, coldData}};
+    auto view = TrackView{hotBuffer, coldBuffer};
+
+    if (_manifestReader && !coldBuffer.empty())
+    {
+      if (auto const optEntry = _manifestReader->get(view.property().uri()))
+      {
+        view = TrackView{hotBuffer, coldBuffer, optEntry->fileSize(), optEntry->mtime(), optEntry->status};
+      }
+    }
+
+    return {trackId, view};
   }
 
   // TrackStore::Writer implementation
   TrackStore::Writer::Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter)
     : _hotWriter{std::move(hotWriter)}, _coldWriter{std::move(coldWriter)}
   {
+  }
+
+  std::optional<TrackView> TrackStore::Writer::get(TrackId id, Reader::LoadMode mode) const
+  {
+    auto hotBuffer = std::span<std::byte const>{};
+    auto coldBuffer = std::span<std::byte const>{};
+
+    if (mode == Reader::LoadMode::Hot || mode == Reader::LoadMode::Both)
+    {
+      auto optHotBuffer = _hotWriter.get(id.raw());
+
+      if (!optHotBuffer)
+      {
+        return std::nullopt;
+      }
+
+      hotBuffer = *optHotBuffer;
+    }
+
+    if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
+    {
+      auto optColdBuffer = _coldWriter.get(id.raw());
+
+      if (!optColdBuffer)
+      {
+        return std::nullopt;
+      }
+
+      coldBuffer = *optColdBuffer;
+    }
+
+    return TrackView{hotBuffer, coldBuffer};
   }
 
   // Hot/Cold split methods
@@ -170,8 +222,7 @@ namespace ao::library
     gsl_Expects((coldData.size() % 4) == 0);
 
     auto id = _hotWriter.append(hotData);
-    auto coldId = _coldWriter.append(coldData);
-    gsl_Ensures(id == coldId);
+    _coldWriter.create(id, coldData);
     return {TrackId{id}, TrackView{hotData, coldData}};
   }
 
@@ -189,6 +240,12 @@ namespace ao::library
     _coldWriter.update(id.raw(), coldData);
   }
 
+  std::span<std::byte> TrackStore::Writer::updateCold(TrackId id, std::size_t size)
+  {
+    gsl_Expects((size % 4) == 0);
+    return _coldWriter.update(id.raw(), size);
+  }
+
   bool TrackStore::Writer::remove(TrackId id)
   {
     bool const hotDeleted = _hotWriter.del(id.raw());
@@ -200,26 +257,5 @@ namespace ao::library
   {
     _hotWriter.clear();
     _coldWriter.clear();
-  }
-
-  std::optional<TrackView> TrackStore::Writer::get(TrackId id, Reader::LoadMode mode) const
-  {
-    if (mode == Reader::LoadMode::Hot)
-    {
-      return _hotWriter.get(id.raw()).transform([](auto const& buffer) { return TrackView{buffer, {}}; });
-    }
-
-    if (mode == Reader::LoadMode::Cold)
-    {
-      return _coldWriter.get(id.raw()).transform([](auto const& buffer) { return TrackView{{}, buffer}; });
-    }
-
-    // Both
-    return _hotWriter.get(id.raw()).and_then(
-      [this, id](auto const& hotBuffer)
-      {
-        return _coldWriter.get(id.raw()).transform([&hotBuffer](auto const& coldBuffer)
-                                                   { return TrackView{hotBuffer, coldBuffer}; });
-      });
   }
 } // namespace ao::library

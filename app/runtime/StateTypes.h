@@ -210,12 +210,16 @@ namespace ao::rt
     ViewId viewId{};
   };
 
-  struct SessionSnapshot final
+  struct GlobalSessionSnapshot final
   {
     std::string lastLibraryPath;
     std::string lastBackend;
     std::string lastProfile;
     std::string lastOutputDeviceId;
+  };
+
+  struct WorkspaceSnapshot final
+  {
     std::vector<TrackListViewConfig> openViews;
     std::optional<std::size_t> optActiveViewIndex;
   };

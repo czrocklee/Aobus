@@ -23,7 +23,7 @@ namespace ao::gtk
   class WindowStatePersistence final
   {
   public:
-    explicit WindowStatePersistence(rt::ConfigStore& configStore);
+    explicit WindowStatePersistence(rt::ConfigStore& globalConfig);
 
     void loadWindow(Gtk::Window& window) const;
     void saveWindow(Gtk::Window const& window) const;
@@ -32,6 +32,6 @@ namespace ao::gtk
     void saveTrackView(TrackColumnLayoutModel const& model) const;
 
   private:
-    rt::ConfigStore& _configStore;
+    rt::ConfigStore& _globalConfig;
   };
 } // namespace ao::gtk

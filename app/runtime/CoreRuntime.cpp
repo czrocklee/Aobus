@@ -20,16 +20,20 @@ namespace ao::rt
   {
     std::unique_ptr<IControlExecutor> executor;
     async::Runtime asyncRuntime;
+    std::filesystem::path musicRoot;
+    std::filesystem::path databasePath;
     library::MusicLibrary musicLibrary;
     LibraryMutationService mutationService;
     TrackCommandService trackCommandService;
     ListSourceStore listSourceStore;
     NotificationService notificationService;
 
-    Impl(std::unique_ptr<IControlExecutor> exec, std::filesystem::path libraryRoot)
+    Impl(std::unique_ptr<IControlExecutor> exec, std::filesystem::path musicRoot, std::filesystem::path databasePath)
       : executor{std::move(exec)}
       , asyncRuntime{*executor}
-      , musicLibrary{std::move(libraryRoot)}
+      , musicRoot{std::move(musicRoot)}
+      , databasePath{std::move(databasePath)}
+      , musicLibrary{this->musicRoot, this->databasePath}
       , mutationService{asyncRuntime, musicLibrary}
       , trackCommandService{musicLibrary, mutationService}
       , listSourceStore{musicLibrary, mutationService}
@@ -38,8 +42,10 @@ namespace ao::rt
     }
   };
 
-  CoreRuntime::CoreRuntime(std::unique_ptr<IControlExecutor> executor, std::filesystem::path libraryRoot)
-    : _impl{std::make_unique<Impl>(std::move(executor), std::move(libraryRoot))}
+  CoreRuntime::CoreRuntime(std::unique_ptr<IControlExecutor> executor,
+                           std::filesystem::path musicRoot,
+                           std::filesystem::path databasePath)
+    : _impl{std::make_unique<Impl>(std::move(executor), std::move(musicRoot), std::move(databasePath))}
   {
   }
 
@@ -48,6 +54,16 @@ namespace ao::rt
   library::MusicLibrary& CoreRuntime::musicLibrary() noexcept
   {
     return _impl->musicLibrary;
+  }
+
+  std::filesystem::path const& CoreRuntime::musicRoot() const noexcept
+  {
+    return _impl->musicRoot;
+  }
+
+  std::filesystem::path const& CoreRuntime::databasePath() const noexcept
+  {
+    return _impl->databasePath;
   }
 
   LibraryMutationService& CoreRuntime::mutation() noexcept

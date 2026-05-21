@@ -4,17 +4,24 @@
 #pragma once
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
+#include "ao/lmdb/Transaction.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <thread>
 #include <vector>
 
 namespace ao::library
 {
+  struct ScanPlan;
+  class DictionaryStore;
+
   class ImportWorker final
   {
   public:
@@ -33,9 +40,11 @@ namespace ao::library
     };
 
     ImportWorker(MusicLibrary& ml,
-                 std::vector<std::filesystem::path> const& files,
+                 std::vector<std::filesystem::path> files,
                  ProgressCallback progressCallback,
                  FinishedCallback finishedCallback);
+
+    ImportWorker(MusicLibrary& ml, ScanPlan plan, ProgressCallback progressCallback, FinishedCallback finishedCallback);
 
     ~ImportWorker();
 
@@ -53,11 +62,19 @@ namespace ao::library
     // Join the worker thread (call from main thread after finished callback)
     void join();
 
-    std::size_t fileCount() const { return _files.size(); }
+    std::size_t fileCount() const;
 
   private:
+    void buildPlanFromFiles();
+    void processItem(std::size_t itemIndex,
+                     ao::lmdb::WriteTransaction& txn,
+                     TrackStore::Writer& trackWriter,
+                     FileManifestStore::Writer& manifestWriter,
+                     DictionaryStore& dict);
+
     MusicLibrary& _ml;
-    std::vector<std::filesystem::path> const& _files;
+    std::vector<std::filesystem::path> _files;
+    std::unique_ptr<ScanPlan> _plan;
     ProgressCallback _progressCallback;
     FinishedCallback _finishedCallback;
 

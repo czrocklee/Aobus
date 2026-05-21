@@ -104,7 +104,8 @@ namespace ao::gtk
                   view.property().codecId(),
                   view.property().bitrate(),
                   view.property().fileSize(),
-                  view.property().mtime());
+                  view.property().mtime(),
+                  view.property().status());
 
     return row;
   }

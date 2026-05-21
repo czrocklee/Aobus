@@ -6,6 +6,7 @@
 #include "ao/Error.h"
 #include "ao/Type.h"
 #include "ao/library/ImportWorker.h"
+#include "ao/library/LibraryScanner.h"
 #include "ao/library/ListBuilder.h"
 #include "ao/library/ListStore.h"
 #include "ao/library/MusicLibrary.h"
@@ -126,7 +127,7 @@ namespace ao::rt
   {
     async::Runtime& asyncRuntime;
     library::MusicLibrary& library;
-    std::jthread importThread;
+    std::jthread activeWorkerThread;
 
     Signal<std::vector<TrackId> const&> tracksMutatedSignal;
     Signal<LibraryMutationService::ListsMutated const&> listsMutatedSignal;
@@ -294,7 +295,7 @@ namespace ao::rt
           });
       });
 
-    _impl->importThread = std::jthread(
+    _impl->activeWorkerThread = std::jthread(
       [worker, container]
       {
         setCurrentThreadName("FileImport");
@@ -385,6 +386,68 @@ namespace ao::rt
 
     co_await _impl->asyncRuntime.resumeOnControl();
     co_return files;
+  }
+
+  async::Task<library::ScanPlan> LibraryMutationService::buildScanPlanAsync()
+  {
+    co_await _impl->asyncRuntime.resumeOnWorker();
+    setCurrentThreadName("LibraryScanner");
+
+    auto scanner = library::LibraryScanner{_impl->library};
+    auto plan = scanner.buildPlan(
+      [this](std::filesystem::path const& path)
+      {
+        _impl->asyncRuntime.controlExecutor().dispatch(
+          [this, path]
+          {
+            _impl->importProgressSignal.emit(LibraryMutationService::ImportProgressUpdated{
+              .fraction = 0.0, // Indeterminate during scan
+              .message = "Scanning: " + path.filename().string(),
+            });
+          });
+      });
+
+    co_await _impl->asyncRuntime.resumeOnControl();
+    co_return plan;
+  }
+
+  async::Task<void> LibraryMutationService::applyScanPlanAsync(library::ScanPlan plan)
+  {
+    co_await _impl->asyncRuntime.resumeOnWorker();
+    setCurrentThreadName("ApplyScanPlan");
+
+    auto resultIds = std::vector<TrackId>{};
+    auto const totalItems = plan.items.size();
+
+    auto worker = ao::library::ImportWorker(
+      _impl->library,
+      std::move(plan),
+      [this, totalItems](std::filesystem::path const& filePath, std::int32_t index)
+      {
+        _impl->asyncRuntime.controlExecutor().dispatch(
+          [this, filePath, index, totalItems]
+          {
+            auto const fraction = totalItems > 0 ? static_cast<double>(index) / static_cast<double>(totalItems) : 0.0;
+            auto const message = "Processing: " + filePath.filename().string();
+            _impl->importProgressSignal.emit(LibraryMutationService::ImportProgressUpdated{
+              .fraction = fraction,
+              .message = message,
+            });
+          });
+      },
+      [] {});
+
+    worker.run();
+    resultIds = worker.result().insertedIds;
+
+    co_await _impl->asyncRuntime.resumeOnControl();
+
+    _impl->importCompletedSignal.emit(resultIds.size());
+
+    if (!resultIds.empty())
+    {
+      _impl->tracksMutatedSignal.emit(resultIds);
+    }
   }
 
   ListId LibraryMutationService::createList(ListDraft const& draft)

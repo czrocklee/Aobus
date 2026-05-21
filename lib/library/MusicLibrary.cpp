@@ -5,6 +5,7 @@
 
 #include "ao/Exception.h"
 #include "ao/library/DictionaryStore.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/ListStore.h"
 #include "ao/library/Meta.h"
 #include "ao/library/MetaStore.h"
@@ -21,9 +22,11 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <random>
+#include <string>
 #include <utility>
 
 namespace ao::library
@@ -58,7 +61,6 @@ namespace ao::library
                         .libraryVersion = kLibraryVersion,
                         .flags = 0,
                         .createdAtUnixMs = timestamp,
-                        .migratedAtUnixMs = timestamp,
                         .libraryId = generateLibraryId()};
     }
 
@@ -75,18 +77,13 @@ namespace ao::library
         ao::throwException<Exception>(
           "Unsupported library version {} (maximum supported {})", header.libraryVersion, kLibraryVersion);
       }
-
-      if (header.libraryVersion < kLibraryVersion)
-      {
-        ao::throwException<Exception>(
-          "Library version {} requires migration to version {}", header.libraryVersion, kLibraryVersion);
-      }
     }
   }
 
   struct MusicLibrary::Impl final
   {
-    std::filesystem::path const root;
+    std::filesystem::path const musicRoot;
+    std::filesystem::path const databasePath;
     lmdb::Environment env;
     lmdb::WriteTransaction setupTxn;
     MetaStore metaStore;
@@ -95,10 +92,12 @@ namespace ao::library
     ListStore lists;
     ResourceStore resources;
     DictionaryStore dictionary;
+    FileManifestStore manifest;
 
-    explicit Impl(std::filesystem::path rootPath)
-      : root{std::move(rootPath)}
-      , env{root.string(),
+    explicit Impl(std::filesystem::path musicRoot, std::filesystem::path databasePath)
+      : musicRoot{std::move(musicRoot)}
+      , databasePath{std::move(databasePath)}
+      , env{this->databasePath.string(),
             lmdb::Environment::Options{.flags = MDB_NOTLS,
                                        .mode = kLmdbFileMode,
                                        .maxDatabases = kLmdbMaxDatabases,
@@ -109,13 +108,16 @@ namespace ao::library
       , lists{lmdb::Database{setupTxn, "lists"}}
       , resources{lmdb::Database{setupTxn, "resources"}}
       , dictionary{lmdb::Database{setupTxn, "dictionary"}, setupTxn}
+      , manifest{lmdb::Database{setupTxn, "file_manifest", lmdb::Database::KeyKind::Blob}}
     {
     }
   };
 
-  MusicLibrary::MusicLibrary(std::filesystem::path rootPath)
-    : _impl{std::make_unique<Impl>(std::move(rootPath))}
+  MusicLibrary::MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
   {
+    std::filesystem::create_directories(databasePath);
+    _impl = std::make_unique<Impl>(std::move(musicRoot), std::move(databasePath));
+
     if (auto const optHeader = _impl->metaStore.load(_impl->setupTxn))
     {
       validateMetaHeader(*optHeader);
@@ -183,6 +185,16 @@ namespace ao::library
     return _impl->dictionary;
   }
 
+  FileManifestStore& MusicLibrary::manifest()
+  {
+    return _impl->manifest;
+  }
+
+  FileManifestStore const& MusicLibrary::manifest() const
+  {
+    return _impl->manifest;
+  }
+
   MetaHeader const& MusicLibrary::metaHeader() const
   {
     return _impl->metaHeader;
@@ -190,6 +202,6 @@ namespace ao::library
 
   std::filesystem::path const& MusicLibrary::rootPath() const
   {
-    return _impl->root;
+    return _impl->musicRoot;
   }
 }

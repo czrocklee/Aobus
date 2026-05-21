@@ -5,7 +5,6 @@
 
 #include "runtime/StateTypes.h"
 #include "runtime/TrackField.h"
-
 #include <ao/library/MusicLibrary.h>
 
 #include <chrono>

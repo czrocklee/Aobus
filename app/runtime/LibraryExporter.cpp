@@ -6,6 +6,7 @@
 #include "ao/Exception.h"
 #include "ao/Type.h"
 #include "ao/library/DictionaryStore.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/ListStore.h"
 #include "ao/library/ListView.h"
 #include "ao/library/MusicLibrary.h"
@@ -59,9 +60,19 @@ namespace ao::rt
         out << YAML::Key << "albumArtist" << YAML::Value << std::string(dict.get(albumArtistId));
       }
 
+      if (auto const composerId = metadata.composerId(); composerId != kInvalidDictionaryId)
+      {
+        out << YAML::Key << "composer" << YAML::Value << std::string(dict.get(composerId));
+      }
+
       if (auto const genreId = metadata.genreId(); genreId != kInvalidDictionaryId)
       {
         out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
+      }
+
+      if (auto const workId = metadata.workId(); workId != kInvalidDictionaryId)
+      {
+        out << YAML::Key << "work" << YAML::Value << std::string(dict.get(workId));
       }
 
       if (metadata.year() != 0)
@@ -197,11 +208,19 @@ namespace ao::rt
   void LibraryExporter::Impl::exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode)
   {
     auto const trackReader = ml.tracks().reader(txn);
+    auto const manifestReader = ml.manifest().reader(txn);
     out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
 
     for (auto const& [trackId, view] : trackReader)
     {
-      exportTrack(out, trackId, view, mode);
+      auto viewWithManifest = view;
+
+      if (auto const optEntry = manifestReader.get(view.property().uri()))
+      {
+        viewWithManifest = library::TrackView{view.hotData(), view.coldData(), optEntry->fileSize(), optEntry->mtime()};
+      }
+
+      exportTrack(out, trackId, viewWithManifest, mode);
     }
 
     out << YAML::EndSeq;

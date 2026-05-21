@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "runtime/TrackField.h"
 
 #include <glibmm/object.h>
@@ -67,6 +68,7 @@ namespace ao::gtk
     std::uint32_t getBitrate() const { return _bitrate; }
     std::uint64_t getFileSize() const { return _fileSize; }
     std::uint64_t getModifiedTime() const { return _modifiedTime; }
+    library::FileStatus getStatus() const { return _status; }
 
     Glib::PropertyProxy<bool> property_playing();
 
@@ -94,7 +96,8 @@ namespace ao::gtk
                   std::uint16_t codecId,
                   std::uint32_t bitrate,
                   std::uint64_t fileSize,
-                  std::uint64_t modifiedTime);
+                  std::uint64_t modifiedTime,
+                  library::FileStatus status = library::FileStatus::Available);
 
   protected:
     explicit TrackRowObject();
@@ -127,6 +130,7 @@ namespace ao::gtk
     std::uint32_t _bitrate = 0;
     std::uint64_t _fileSize = 0;
     std::uint64_t _modifiedTime = 0;
+    library::FileStatus _status = library::FileStatus::Available;
 
     Glib::Property<bool> _propertyPlaying;
     Glib::Property<Glib::ustring> _propertyTitle;

@@ -224,7 +224,7 @@ namespace ao::gtk::test
     {
     public:
       TestMusicLibrary()
-        : _tempDir{}, _library{_tempDir.path()}
+        : _tempDir{}, _library{_tempDir.path(), _tempDir.path()}
       {
       }
 

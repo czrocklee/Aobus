@@ -21,6 +21,7 @@
 namespace ao::library
 {
   class MusicLibrary;
+  struct ScanPlan;
 }
 
 namespace ao::rt
@@ -71,6 +72,8 @@ namespace ao::rt
     async::Task<void> importLibraryAsync(std::filesystem::path path);
     async::Task<void> exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode);
     async::Task<std::vector<std::filesystem::path>> scanLibraryAsync(std::filesystem::path dir);
+    async::Task<library::ScanPlan> buildScanPlanAsync();
+    async::Task<void> applyScanPlanAsync(library::ScanPlan plan);
 
     ListId createList(ListDraft const& draft);
     void updateList(ListDraft const& draft);

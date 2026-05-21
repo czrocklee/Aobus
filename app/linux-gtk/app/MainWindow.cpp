@@ -19,10 +19,13 @@
 
 namespace ao::gtk
 {
-  MainWindow::MainWindow(rt::AppRuntime& runtime, std::shared_ptr<rt::ConfigStore> configStore)
+  MainWindow::MainWindow(rt::AppRuntime& runtime,
+                         std::shared_ptr<rt::ConfigStore> globalConfig,
+                         std::shared_ptr<rt::ConfigStore> workspaceConfig)
     : _runtime{runtime}
-    , _configStore{std::move(configStore)}
-    , _mainWindowCoordinator{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configStore)}
+    , _globalConfig{std::move(globalConfig)}
+    , _workspaceConfig{std::move(workspaceConfig)}
+    , _mainWindowCoordinator{std::make_unique<MainWindowCoordinator>(*this, _runtime, _globalConfig, _workspaceConfig)}
     , _shellLayout{_runtime, *this}
   {
     set_title("Aobus");
@@ -31,7 +34,7 @@ namespace ao::gtk
     _mainWindowCoordinator->loadSession();
 
     _menuController = std::make_unique<MenuController>(
-      _mainWindowCoordinator->importExport(), [this] { _shellLayout.openEditor(*_configStore); });
+      _mainWindowCoordinator->importExport(), [this] { _shellLayout.openEditor(*_globalConfig); });
     _menuController->setup(*this);
     _shellLayout.context().shell.menuModel = _menuController->menuModel();
 
@@ -43,7 +46,7 @@ namespace ao::gtk
     try
     {
       _mainWindowCoordinator->saveSession();
-      _shellLayout.saveLayout(*_configStore);
+      _shellLayout.saveLayout(*_globalConfig);
     }
     catch (std::exception const& e)
     {
@@ -58,7 +61,7 @@ namespace ao::gtk
   void MainWindow::on_hide()
   {
     _mainWindowCoordinator->saveSession();
-    _shellLayout.saveLayout(*_configStore);
+    _shellLayout.saveLayout(*_globalConfig);
     Gtk::ApplicationWindow::on_hide();
   }
 
@@ -73,11 +76,11 @@ namespace ao::gtk
 
     _shellLayout.context().bind(_mainWindowCoordinator->uiServices());
 
-    _shellLayout.loadLayout(*_configStore);
+    _shellLayout.loadLayout(*_globalConfig);
   }
 
   void MainWindow::rebuildLayout()
   {
-    _shellLayout.loadLayout(*_configStore);
+    _shellLayout.loadLayout(*_globalConfig);
   }
 } // namespace ao::gtk

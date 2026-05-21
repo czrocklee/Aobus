@@ -15,6 +15,7 @@ namespace ao::library
   class ListStore;
   class ResourceStore;
   class DictionaryStore;
+  class FileManifestStore;
 
   /**
    * @brief High-level facade for the music library database.
@@ -23,7 +24,7 @@ namespace ao::library
   class MusicLibrary final
   {
   public:
-    explicit MusicLibrary(std::filesystem::path rootPath);
+    explicit MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath);
     ~MusicLibrary();
 
     MusicLibrary(MusicLibrary const&) = delete;
@@ -45,6 +46,9 @@ namespace ao::library
 
     DictionaryStore& dictionary();
     DictionaryStore const& dictionary() const;
+
+    FileManifestStore& manifest();
+    FileManifestStore const& manifest() const;
 
     MetaHeader const& metaHeader() const;
 

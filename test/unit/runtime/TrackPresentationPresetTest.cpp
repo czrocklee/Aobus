@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "runtime/TrackPresentationPreset.h"
-#include "runtime/TrackField.h"
 
+#include "runtime/TrackField.h"
 
 #include <catch2/catch_test_macros.hpp>
 

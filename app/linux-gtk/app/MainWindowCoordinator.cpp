@@ -39,10 +39,14 @@ namespace ao::gtk
 {
   MainWindowCoordinator::MainWindowCoordinator(MainWindow& window,
                                                rt::AppRuntime& runtime,
-                                               std::shared_ptr<rt::ConfigStore> configStore)
-    : _window{window}, _runtime{runtime}, _configStore{std::move(configStore)}
+                                               std::shared_ptr<rt::ConfigStore> globalConfig,
+                                               std::shared_ptr<rt::ConfigStore> workspaceConfig)
+    : _window{window}
+    , _runtime{runtime}
+    , _globalConfig{std::move(globalConfig)}
+    , _workspaceConfig{std::move(workspaceConfig)}
   {
-    _persistence = std::make_unique<WindowStatePersistence>(*_configStore);
+    _persistence = std::make_unique<WindowStatePersistence>(*_globalConfig);
 
     // Initialize cover art cache
     int const coverArtCacheSize = 100;
@@ -61,7 +65,7 @@ namespace ao::gtk
         .getListMembership = [this](ListId listId) { return &_runtime.sources().sourceFor(listId); }});
 
     // Initialize track presentation store
-    _trackPresentationStore = std::make_unique<TrackPresentationStore>(_configStore);
+    _trackPresentationStore = std::make_unique<TrackPresentationStore>(_workspaceConfig);
 
     // Initialize track page manager
     _trackPageHost = std::make_unique<TrackPageHost>(_stack,

@@ -97,7 +97,9 @@ namespace ao::gtk
 
     void rebuildColumnView(std::span<rt::TrackField const> visibleFields);
 
-    void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row, rt::TrackField field, std::string const& newValue);
+    void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row,
+                              rt::TrackField field,
+                              std::string const& newValue);
 
     // Child widgets
     Gtk::Label _statusLabel;

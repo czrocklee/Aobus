@@ -31,6 +31,5 @@ namespace ao::gtk
    * @param field The track field to build a column factory for.
    * @param commitFn A callback to handle metadata changes if the column is editable.
    */
-  Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
-                                                               MetadataCommitFn const& commitFn);
+  Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field, MetadataCommitFn const& commitFn);
 } // namespace ao::gtk

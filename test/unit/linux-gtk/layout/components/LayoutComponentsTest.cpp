@@ -57,8 +57,12 @@ namespace ao::gtk::layout::test
     auto const tempDir = TempDir{};
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+                                 .musicRoot = tempDir.path(),
+                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .globalConfigStore = configStore,
+                                 .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -262,8 +266,12 @@ namespace ao::gtk::layout::test
     auto const tempDir = TempDir{};
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+                                 .musicRoot = tempDir.path(),
+                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .globalConfigStore = configStore,
+                                 .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -368,8 +376,12 @@ namespace ao::gtk::layout::test
     auto const tempDir = TempDir{};
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+                                 .musicRoot = tempDir.path(),
+                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .globalConfigStore = configStore,
+                                 .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -467,8 +479,12 @@ namespace ao::gtk::layout::test
     auto const tempDir = TempDir{};
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+                                 .musicRoot = tempDir.path(),
+                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .globalConfigStore = configStore,
+                                 .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -511,8 +527,12 @@ namespace ao::gtk::layout::test
     auto const tempDir = TempDir{};
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executor = std::make_unique<MockExecutor>(), .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+                                 .musicRoot = tempDir.path(),
+                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .globalConfigStore = configStore,
+                                 .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);

@@ -37,39 +37,59 @@ using namespace ao::gtk;
 
 namespace
 {
-  std::filesystem::path resolveLibraryPath()
+  struct LibraryPaths final
   {
-    {
-      auto const configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-      auto store = rt::ConfigStore{configPath};
-      auto snapshot = rt::SessionSnapshot{};
+    std::filesystem::path musicRoot;
+    std::filesystem::path databasePath;
+  };
 
-      if (auto result = store.load("runtime", snapshot); !result)
+  LibraryPaths resolveLibraryPaths()
+  {
+    auto const configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
+    auto store = rt::ConfigStore{configPath};
+    auto snapshot = rt::GlobalSessionSnapshot{};
+
+    if (auto result = store.load("runtime", snapshot); !result)
+    {
+      if (result.error().code != Error::Code::NotFound)
       {
         APP_LOG_WARN("Failed to load runtime config: {}", result.error().message);
       }
+    }
 
-      if (auto const& path = snapshot.lastLibraryPath; !path.empty())
+    if (!snapshot.lastLibraryPath.empty())
+    {
+      auto musicRoot = std::filesystem::path{snapshot.lastLibraryPath};
+
+      if (std::filesystem::exists(musicRoot))
       {
-        return std::filesystem::path{path};
+        return {.musicRoot = musicRoot, .databasePath = musicRoot / ".aobus" / "library"};
       }
     }
 
     auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
     std::filesystem::create_directories(emptyPath);
-    return emptyPath;
+    return {.musicRoot = emptyPath, .databasePath = emptyPath / ".aobus" / "library"};
   }
 
-  Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app, std::filesystem::path libraryPath)
+  Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app, LibraryPaths paths)
   {
     auto executor = std::make_unique<GtkControlExecutor>();
-    auto const configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-    auto configStore = std::make_shared<rt::ConfigStore>(configPath);
+    auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
+    auto globalConfigStore = std::make_shared<rt::ConfigStore>(globalConfigPath);
 
-    auto appRuntime = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
-      .executor = std::move(executor), .libraryRoot = std::move(libraryPath), .configStore = configStore});
+    auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
+    auto workspaceConfigStore = std::make_shared<rt::ConfigStore>(workspaceConfigPath);
 
-    auto window = Glib::make_refptr_for_instance<MainWindow>(new MainWindow(*appRuntime, configStore));
+    auto appRuntime =
+      std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{.executor = std::move(executor),
+                                                                  .musicRoot = paths.musicRoot,
+                                                                  .databasePath = paths.databasePath,
+                                                                  .globalConfigStore = globalConfigStore,
+                                                                  .workspaceConfigStore = workspaceConfigStore});
+
+    auto window =
+      Glib::make_refptr_for_instance<MainWindow>(new MainWindow(*appRuntime, globalConfigStore, workspaceConfigStore));
 
     // Store AppRuntime alongside window (lifetime tied to window via pointer)
     window->set_data("app-runtime",
@@ -148,6 +168,16 @@ namespace
 
     return options;
   }
+
+  void handleOpenNewLibrary(std::filesystem::path const& path,
+                            Glib::RefPtr<Gtk::Application> const& app,
+                            std::vector<Glib::RefPtr<MainWindow>>& windows)
+  {
+    if (std::filesystem::is_directory(path))
+    {
+      windows.push_back(createWindow(*app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}));
+    }
+  }
 }
 
 int main(int argc, char* argv[])
@@ -219,13 +249,13 @@ int main(int argc, char* argv[])
         // Idempotent — safe to call across multiple activate signals.
         StyleManager::instance().initialize();
 
-        auto libraryPath = resolveLibraryPath();
+        auto paths = resolveLibraryPaths();
 
-        auto window = createWindow(*app, libraryPath);
+        auto window = createWindow(*app, std::move(paths));
 
         // Wire up the "Open Library" → new window callback
-        window->importExportCoordinator().callbacks().onOpenNewLibrary = [&app](std::filesystem::path const& path)
-        { createWindow(*app, path); };
+        window->importExportCoordinator().callbacks().onOpenNewLibrary =
+          [&app, &windows](std::filesystem::path const& path) { handleOpenNewLibrary(path, app, windows); };
 
         windows.push_back(std::move(window));
       });

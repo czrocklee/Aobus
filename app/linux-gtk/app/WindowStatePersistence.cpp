@@ -69,8 +69,8 @@ namespace ao::gtk
     }
   } // namespace
 
-  WindowStatePersistence::WindowStatePersistence(rt::ConfigStore& configStore)
-    : _configStore{configStore}
+  WindowStatePersistence::WindowStatePersistence(rt::ConfigStore& globalConfig)
+    : _globalConfig{globalConfig}
   {
   }
 
@@ -78,7 +78,7 @@ namespace ao::gtk
   {
     auto ws = WindowState{};
 
-    if (auto const res = _configStore.load("window", ws); !res && res.error().code != Error::Code::NotFound)
+    if (auto const res = _globalConfig.load("window", ws); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("Failed to load window config: {}", res.error().message);
     }
@@ -107,14 +107,14 @@ namespace ao::gtk
 
     ws.maximized = window.is_maximized();
 
-    _configStore.save("window", ws);
+    _globalConfig.save("window", ws);
   }
 
   void WindowStatePersistence::loadTrackView(TrackColumnLayoutModel& model) const
   {
     auto tvs = TrackViewState{};
 
-    if (auto const res = _configStore.load("track_view", tvs); !res && res.error().code != Error::Code::NotFound)
+    if (auto const res = _globalConfig.load("track_view", tvs); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("Failed to load track_view config: {}", res.error().message);
     }
@@ -124,6 +124,6 @@ namespace ao::gtk
 
   void WindowStatePersistence::saveTrackView(TrackColumnLayoutModel const& model) const
   {
-    _configStore.save("track_view", viewStateToPersisted(model.state()));
+    _globalConfig.save("track_view", viewStateToPersisted(model.state()));
   }
 } // namespace ao::gtk

@@ -22,13 +22,13 @@ namespace ao::library::test
   {
     auto const temp = TempDir{};
 
-    auto const first = MusicLibrary{temp.path()};
+    auto const first = MusicLibrary{temp.path(), temp.path()};
     auto const firstHeader = MetaHeader{first.metaHeader()};
 
     REQUIRE(firstHeader.magic == kLibraryMetaMagic);
     REQUIRE(firstHeader.libraryVersion == kLibraryVersion);
 
-    auto const reopened = MusicLibrary{temp.path()};
+    auto const reopened = MusicLibrary{temp.path(), temp.path()};
     REQUIRE(reopened.metaHeader().libraryId == firstHeader.libraryId);
     REQUIRE(reopened.metaHeader().createdAtUnixMs == firstHeader.createdAtUnixMs);
   }
@@ -44,11 +44,10 @@ namespace ao::library::test
                              .libraryVersion = kLibraryVersion + 1,
                              .flags = 0,
                              .createdAtUnixMs = 1,
-                             .migratedAtUnixMs = 1,
                              .libraryId = {}};
     metaStore.create(txn, header);
     txn.commit();
 
-    REQUIRE_THROWS_AS(MusicLibrary{temp.path()}, Exception);
+    REQUIRE_THROWS_AS((MusicLibrary{temp.path(), temp.path()}), Exception);
   }
 } // namespace ao::library::test

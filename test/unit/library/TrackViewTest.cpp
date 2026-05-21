@@ -38,7 +38,6 @@ namespace ao::library::test
 #endif
 
     using namespace ao::lmdb::test;
-    using ao::utility::uint64Parts::split;
 
     // Helper to create a minimal valid hot TrackView for testing
     std::vector<std::byte> createMinimalHotData()
@@ -92,8 +91,6 @@ namespace ao::library::test
     {
       auto builder = TrackBuilder::createNew();
       builder.property().uri(uri);
-      builder.property().fileSize(utility::uint64Parts::combine(header.fileSizeLo, header.fileSizeHi));
-      builder.property().mtime(utility::uint64Parts::combine(header.mtimeLo, header.mtimeHi));
       builder.metadata().coverArtId(header.coverArtId);
       builder.metadata().trackNumber(header.trackNumber);
       builder.metadata().totalTracks(header.totalTracks);
@@ -117,9 +114,9 @@ namespace ao::library::test
       return builder.serializeCold(wtxn, dict, resources);
     }
 
-    TrackView makeColdView(std::vector<std::byte> const& data)
+    TrackView makeColdView(std::vector<std::byte> const& data, uint64_t fileSize = 0, uint64_t mtime = 0)
     {
-      return TrackView{std::span<std::byte const>{}, data};
+      return TrackView{std::span<std::byte const>{}, data, fileSize, mtime};
     }
   } // namespace
 
@@ -238,12 +235,8 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - Cold File Size and Mtime")
   {
-    auto header = TrackColdHeader{};
-    std::tie(header.fileSizeLo, header.fileSizeHi) = split(12345678);
-    std::tie(header.mtimeLo, header.mtimeHi) = split(987654321);
-
-    auto const data = createColdData(header, {}, "");
-    auto const view = makeColdView(data);
+    auto const data = createColdData({}, {}, "");
+    auto const view = makeColdView(data, 12345678, 987654321);
 
     CHECK(view.property().fileSize() == 12345678);
     CHECK(view.property().mtime() == 987654321);

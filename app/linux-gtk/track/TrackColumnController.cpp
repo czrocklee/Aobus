@@ -3,6 +3,7 @@
 
 #include "track/TrackColumnController.h"
 
+#include "runtime/TrackField.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackPresentation.h"
 
@@ -21,13 +22,11 @@
 #include <cstdint>
 #include <format>
 #include <memory>
-#include <ranges>
-#include <string>
 #include <optional>
+#include <ranges>
 #include <span>
+#include <string>
 #include <vector>
-
-#include "runtime/TrackField.h"
 
 namespace ao::gtk
 {
@@ -41,9 +40,7 @@ namespace ao::gtk
   {
     _dynamicCssProvider = Gtk::CssProvider::create();
 
-    _layoutChangedConnection =
-      _columnLayoutModel.signalChanged().connect([this]
-                                                 { flushSharedColumnLayoutUpdate(); });
+    _layoutChangedConnection = _columnLayoutModel.signalChanged().connect([this] { flushSharedColumnLayoutUpdate(); });
   }
 
   void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)
@@ -90,9 +87,7 @@ namespace ao::gtk
       _columnView.append_column(column);
 
       _columns.push_back(
-        {.field = rtDef.field,
-         .column = column,
-         .defaultWidth = uiDef != nullptr ? uiDef->defaultColumnWidth : -1});
+        {.field = rtDef.field, .column = column, .defaultWidth = uiDef != nullptr ? uiDef->defaultColumnWidth : -1});
     }
   }
 
@@ -134,8 +129,8 @@ namespace ao::gtk
   }
 
   void TrackColumnController::ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columns,
-                                                    std::size_t idx,
-                                                    Glib::RefPtr<Gtk::ColumnViewColumn> const& column)
+                                                   std::size_t idx,
+                                                   Glib::RefPtr<Gtk::ColumnViewColumn> const& column)
   {
     bool needsMove = true;
 

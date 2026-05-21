@@ -14,7 +14,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <span>
 #include <utility>
@@ -326,7 +325,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(5).totalTracks(10).discNumber(1).totalDiscs(2);
-    builder.property().uri("/path/to/file.flac").fileSize(2000).mtime(1234567890);
+    builder.property().uri("/path/to/file.flac").durationMs(180000);
 
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -336,10 +335,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
     auto const* header = reinterpret_cast<TrackColdHeader const*>(coldData.data());
-    CHECK(header->fileSizeLo == static_cast<std::uint32_t>(2000 & 0xFFFFFFFF));
-    CHECK(header->fileSizeHi == static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32));
-    CHECK(header->mtimeLo == static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF));
-    CHECK(header->mtimeHi == static_cast<std::uint32_t>(static_cast<std::uint64_t>(1234567890) >> 32));
+    CHECK(header->durationMs == 180000);
     CHECK(header->trackNumber == 5);
     CHECK(header->totalTracks == 10);
     CHECK(header->discNumber == 1);
@@ -350,7 +346,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test Title");
-    builder.property().uri("/path/to/file.flac").fileSize(1000);
+    builder.property().uri("/path/to/file.flac");
     builder.tags().add("tag10").add("tag20");
 
     auto const temp = TempDir{};
@@ -371,7 +367,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(3);
-    builder.property().uri("/path/to/file.flac").fileSize(2000).mtime(9876543210);
+    builder.property().uri("/path/to/file.flac").durationMs(240000);
     builder.custom().add("key1", "value1").add("key2", "value2");
 
     auto const temp = TempDir{};
@@ -383,8 +379,10 @@ namespace ao::library::test
 
     // Verify cold view can parse it
     auto view = TrackView{std::span<std::byte const>{}, coldData};
-    CHECK(view.property().fileSize() == 2000);
-    CHECK(view.property().mtime() == 9876543210);
+    CHECK(view.property().durationMs() == 240000);
     CHECK(view.metadata().trackNumber() == 3);
+
+    // fileSize should be 0 in TrackView because it's not in the cold header
+    CHECK(view.property().fileSize() == 0);
   }
 } // namespace ao::library::test

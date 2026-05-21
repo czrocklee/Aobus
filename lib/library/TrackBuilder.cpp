@@ -534,13 +534,7 @@ namespace ao::library
     auto const& prop = _builder->_propertyBuilder;
 
     {
-      auto [fileSizeLo, fileSizeHi] = utility::uint64Parts::split(prop._fileSize);
-      auto [mtimeLo, mtimeHi] = utility::uint64Parts::split(prop._mtime);
       new (out.data()) TrackColdHeader{
-        .fileSizeLo = fileSizeLo,
-        .fileSizeHi = fileSizeHi,
-        .mtimeLo = mtimeLo,
-        .mtimeHi = mtimeHi,
         .durationMs = prop._durationMs,
         .sampleRate = prop._sampleRate,
         .coverArtId = _coverArtId,

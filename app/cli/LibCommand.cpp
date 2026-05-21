@@ -74,7 +74,6 @@ namespace ao::cli
       os << "Library Version:  " << header.libraryVersion << "\n";
       os << "Flags:       0x" << std::hex << header.flags << std::dec << "\n";
       os << "Created:      " << formatTimestamp(header.createdAtUnixMs) << "\n";
-      os << "Migrated:     " << formatTimestamp(header.migratedAtUnixMs) << "\n";
     }
 
     void exportLib(library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)

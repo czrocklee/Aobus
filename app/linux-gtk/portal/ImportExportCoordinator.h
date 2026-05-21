@@ -56,6 +56,7 @@ namespace ao::gtk::portal
     ImportExportCallbacks& callbacks() { return _callbacks; }
 
     void openLibrary();
+    void scanLibrary(); // NEW: Full library scan
     void importFiles();
     void importLibrary(); // YAML import
     void exportLibrary(); // YAML export

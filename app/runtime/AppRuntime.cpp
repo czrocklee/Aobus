@@ -26,11 +26,11 @@ namespace ao::rt
     WorkspaceService workspaceService;
     SessionPersistenceService persistenceService;
 
-    Impl(AppRuntime& runtime, std::shared_ptr<ConfigStore> configStore)
+    Impl(AppRuntime& runtime, std::shared_ptr<ConfigStore> globalConfig, std::shared_ptr<ConfigStore> workspaceConfig)
       : viewService{runtime.async().controlExecutor(), runtime.musicLibrary(), runtime.sources()}
       , playbackService{runtime.async().controlExecutor(), viewService, runtime.musicLibrary()}
       , workspaceService{viewService, playbackService, runtime.mutation(), runtime.musicLibrary()}
-      , persistenceService{workspaceService, viewService, playbackService, runtime.musicLibrary(), *configStore}
+      , persistenceService{workspaceService, viewService, playbackService, runtime, *globalConfig, *workspaceConfig}
     {
     }
 
@@ -43,8 +43,12 @@ namespace ao::rt
   };
 
   AppRuntime::AppRuntime(AppRuntimeDependencies dependencies)
-    : CoreRuntime(std::move(dependencies.executor), dependencies.libraryRoot)
-    , _impl{std::make_unique<Impl>(*this, std::move(dependencies.configStore))}
+    : CoreRuntime(std::move(dependencies.executor),
+                  std::move(dependencies.musicRoot),
+                  std::move(dependencies.databasePath))
+    , _impl{std::make_unique<Impl>(*this,
+                                   std::move(dependencies.globalConfigStore),
+                                   std::move(dependencies.workspaceConfigStore))}
   {
   }
 

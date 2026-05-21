@@ -4,6 +4,7 @@
 #include "track/TrackRowObject.h"
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "runtime/TrackField.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
@@ -102,7 +103,8 @@ namespace ao::gtk
                                 std::uint16_t codecId,
                                 std::uint32_t bitrate,
                                 std::uint64_t fileSize,
-                                std::uint64_t modifiedTime)
+                                std::uint64_t modifiedTime,
+                                library::FileStatus status)
   {
     _propertyTitle.set_value(title);
     _propertyArtist.set_value(_provider->resolveDictionaryString(artist));
@@ -129,6 +131,7 @@ namespace ao::gtk
     _bitrate = bitrate;
     _fileSize = fileSize;
     _modifiedTime = modifiedTime;
+    _status = status;
   }
 
   Glib::ustring TrackRowObject::getFieldText(rt::TrackField field) const

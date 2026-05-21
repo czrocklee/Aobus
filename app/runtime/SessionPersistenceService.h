@@ -9,13 +9,9 @@
 #include <memory>
 #include <string>
 
-namespace ao::library
-{
-  class MusicLibrary;
-}
-
 namespace ao::rt
 {
+  class CoreRuntime;
   class ViewService;
   class PlaybackService;
   class WorkspaceService;
@@ -31,8 +27,9 @@ namespace ao::rt
     SessionPersistenceService(WorkspaceService& workspace,
                               ViewService& views,
                               PlaybackService& playback,
-                              library::MusicLibrary& library,
-                              ConfigStore& configStore);
+                              CoreRuntime& runtime,
+                              ConfigStore& globalConfig,
+                              ConfigStore& workspaceConfig);
     ~SessionPersistenceService();
 
     SessionPersistenceService(SessionPersistenceService const&) = delete;

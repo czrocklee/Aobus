@@ -421,6 +421,14 @@ columnview row {
 
 .ao-track-tags-cell {}
 
+columnview row.ao-missing-row {
+  opacity: 0.5;
+}
+
+columnview row.ao-missing-row label {
+  font-style: italic;
+}
+
 /* SeekControl */
 .ao-seekbar {
   padding: 0;

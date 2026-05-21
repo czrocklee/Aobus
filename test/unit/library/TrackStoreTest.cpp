@@ -192,10 +192,6 @@ namespace ao::library::test
 
     // Create cold header
     auto coldHeader = TrackColdHeader{};
-    coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
-    coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
-    coldHeader.mtimeLo = static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF);
-    coldHeader.mtimeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1234567890) >> 32);
     coldHeader.durationMs = 180000;
     coldHeader.trackNumber = 1;
     coldHeader.totalTracks = 10;
@@ -213,8 +209,6 @@ namespace ao::library::test
     auto rtxn = ReadTransaction{env};
     auto optTrack = store.reader(rtxn).get(id);
     REQUIRE(optTrack.has_value());
-    REQUIRE(optTrack->property().fileSize() == 1000);
-    REQUIRE(optTrack->property().mtime() == 1234567890);
     REQUIRE(optTrack->property().durationMs() == 180000);
     REQUIRE(optTrack->metadata().trackNumber() == 1);
     REQUIRE(optTrack->metadata().totalTracks() == 10);
@@ -235,10 +229,6 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
-    coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
-    coldHeader.mtimeLo = static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF);
-    coldHeader.mtimeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1234567890) >> 32);
     coldHeader.durationMs = 180000;
 
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
@@ -260,10 +250,6 @@ namespace ao::library::test
 
     // Update cold only
     auto coldHeader2 = TrackColdHeader{};
-    coldHeader2.fileSizeLo = static_cast<std::uint32_t>(2000 & 0xFFFFFFFF);
-    coldHeader2.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32);
-    coldHeader2.mtimeLo = static_cast<std::uint32_t>(9876543210 & 0xFFFFFFFF);
-    coldHeader2.mtimeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(9876543210) >> 32);
     coldHeader2.durationMs = 200000;
     coldHeader2.trackNumber = 2;
 
@@ -278,8 +264,6 @@ namespace ao::library::test
     auto rtxn = ReadTransaction{env};
     auto optTrack = store.reader(rtxn).get(id);
     REQUIRE(optTrack.has_value());
-    REQUIRE(optTrack->property().fileSize() == 2000);
-    REQUIRE(optTrack->property().mtime() == 9876543210);
     REQUIRE(optTrack->property().durationMs() == 200000);
     REQUIRE(optTrack->metadata().trackNumber() == 2);
   }
@@ -333,8 +317,6 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.fileSizeLo = static_cast<std::uint32_t>(3000 & 0xFFFFFFFF);
-    coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(3000) >> 32);
     coldHeader.durationMs = 240000;
     coldHeader.coverArtId = 42;
 
@@ -357,7 +339,6 @@ namespace ao::library::test
     REQUIRE(optCold.has_value());
     REQUIRE(!optCold->isHotValid());
     REQUIRE(optCold->isColdValid());
-    REQUIRE(optCold->property().fileSize() == 3000);
     REQUIRE(optCold->property().durationMs() == 240000);
     REQUIRE(optCold->metadata().coverArtId() == 42);
   }
@@ -418,8 +399,6 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
-    coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
     coldHeader.durationMs = 180000;
     coldHeader.trackNumber = 5;
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
@@ -455,8 +434,6 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.fileSizeLo = static_cast<std::uint32_t>(2000 & 0xFFFFFFFF);
-    coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32);
     coldHeader.durationMs = 240000;
     coldHeader.trackNumber = 3;
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
@@ -493,8 +470,6 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.fileSizeLo = static_cast<std::uint32_t>(3000 & 0xFFFFFFFF);
-    coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(3000) >> 32);
     coldHeader.durationMs = 300000;
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
@@ -512,7 +487,7 @@ namespace ao::library::test
     REQUIRE(trackId == id);
     REQUIRE(trackView.isHotValid());
     REQUIRE(trackView.isColdValid());
-    REQUIRE(trackView.property().fileSize() == 3000);
+    REQUIRE(trackView.property().durationMs() == 300000);
     REQUIRE(trackView.metadata().trackNumber() == 0); // default
   }
 
@@ -532,8 +507,6 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.fileSizeLo = static_cast<std::uint32_t>(5000 & 0xFFFFFFFF);
-    coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(5000) >> 32);
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
@@ -566,8 +539,6 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.fileSizeLo = static_cast<std::uint32_t>(6000 & 0xFFFFFFFF);
-    coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(6000) >> 32);
     coldHeader.durationMs = 360000;
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
@@ -582,7 +553,6 @@ namespace ao::library::test
     REQUIRE(optTrack.has_value());
     REQUIRE(!optTrack->isHotValid());
     REQUIRE(optTrack->isColdValid());
-    REQUIRE(optTrack->property().fileSize() == 6000);
     REQUIRE(optTrack->property().durationMs() == 360000);
   }
 
@@ -606,8 +576,6 @@ namespace ao::library::test
       std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
       auto coldHeader = TrackColdHeader{};
-      coldHeader.fileSizeLo = static_cast<std::uint32_t>((1000 + i) & 0xFFFFFFFF);
-      coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000 + i) >> 32);
       coldHeader.durationMs = static_cast<std::uint32_t>(180000 + (i * 10000));
       coldHeader.trackNumber = i + 1;
       auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));

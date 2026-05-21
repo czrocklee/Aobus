@@ -3,6 +3,7 @@
 
 #include "ao/Type.h"
 #include "ao/library/DictionaryStore.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/ListBuilder.h"
 #include "ao/library/ListStore.h"
 #include "ao/library/ListView.h"
@@ -34,7 +35,7 @@ namespace ao::library::test
   TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
   {
     auto const temp1 = TempDir{};
-    auto ml1 = MusicLibrary{temp1.path()};
+    auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
     auto const smartListName = std::string("Smart List ") + std::string(256, 'S');
     auto const smartFilter = std::string("@duration > 60 and ") + std::string(256, 'x');
     auto const manualListName = std::string("Manual List ") + std::string(256, 'M');
@@ -83,7 +84,7 @@ namespace ao::library::test
 
     // 3. Import into a new library
     auto const temp2 = TempDir{};
-    auto ml2 = MusicLibrary{temp2.path()};
+    auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
 
     // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
     {
@@ -179,10 +180,90 @@ namespace ao::library::test
     }
   }
 
+  TEST_CASE("Library Export/Import Phase 1 Fields", "[app][core][yaml]")
+  {
+    auto const temp1 = TempDir{};
+    auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
+
+    // 1. Setup initial library with new fields
+    {
+      auto txn = ml1.writeTransaction();
+      auto& dict = ml1.dictionary();
+
+      auto trackBuilder = TrackBuilder::createNew();
+      trackBuilder.property()
+        .uri("full-fields.flac")
+        .durationMs(240000)
+        .fileSize(1024ULL * 1024ULL * 50ULL)
+        .mtime(123456789);
+      trackBuilder.metadata().title("Test Title").artist("Test Artist").composer("Test Composer").work("Test Work");
+
+      auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
+      auto const [trackId, view] =
+        ml1.tracks().writer(txn).createHotCold(preparedHot.size(),
+                                               preparedCold.size(),
+                                               [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                               {
+                                                 preparedHot.writeTo(hot);
+                                                 preparedCold.writeTo(cold);
+                                               });
+
+      auto manifestWriter = ml1.manifest().writer(txn);
+      auto entry = ManifestEntry{.trackId = trackId};
+      entry.fileSize(1024ULL * 1024ULL * 50ULL);
+      entry.mtime(123456789);
+      manifestWriter.put("full-fields.flac", entry);
+
+      txn.commit();
+    }
+
+    // 2. Export to YAML (Full mode)
+    auto const yamlPath = std::filesystem::path(temp1.path()) / "phase1.yaml";
+    auto exporter = rt::LibraryExporter{ml1};
+    REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
+
+    // 3. Import into a new library (Restore mode)
+    auto const temp2 = TempDir{};
+    auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
+    auto importer = rt::LibraryImporter{ml2};
+
+    // Use Restore mode (default) - should not try to read physical file "full-fields.flac"
+    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
+
+    // 4. Verify in ml2
+    {
+      auto txn = ml2.readTransaction();
+      auto const manifestReader = ml2.manifest().reader(txn);
+      auto reader = ml2.tracks().reader(txn);
+      reader.setManifestReader(manifestReader);
+      auto& dict = ml2.dictionary();
+
+      auto tracks = std::vector<std::pair<TrackId, TrackView>>{};
+
+      for (auto const& item : reader)
+      {
+        tracks.push_back(item);
+      }
+
+      REQUIRE(tracks.size() == 1);
+      auto const& view = tracks[0].second;
+
+      REQUIRE(std::string(view.property().uri()) == "full-fields.flac");
+      REQUIRE(view.property().fileSize() == 1024ULL * 1024ULL * 50ULL);
+      REQUIRE(view.property().mtime() == 123456789);
+      REQUIRE(view.property().durationMs() == 240000);
+
+      REQUIRE(std::string(view.metadata().title()) == "Test Title");
+      REQUIRE(std::string(dict.get(view.metadata().artistId())) == "Test Artist");
+      REQUIRE(std::string(dict.get(view.metadata().composerId())) == "Test Composer");
+      REQUIRE(std::string(dict.get(view.metadata().workId())) == "Test Work");
+    }
+  }
+
   TEST_CASE("Library import remaps list parents regardless of YAML order", "[core][yaml]")
   {
     auto temp = TempDir{};
-    auto ml = MusicLibrary{temp.path()};
+    auto ml = MusicLibrary{temp.path(), temp.path()};
 
     auto trackId = kInvalidTrackId;
     {

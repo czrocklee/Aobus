@@ -5,6 +5,7 @@
 
 #include "ao/Exception.h"
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/ListBuilder.h"
 #include "ao/library/ListStore.h"
 #include "ao/library/MusicLibrary.h"
@@ -71,10 +72,11 @@ namespace ao::rt
     {
     }
 
-    void importFromYaml(std::filesystem::path const& path);
+    void importFromYaml(std::filesystem::path const& path, ImportMode mode);
     void importTracks(YAML::Node const& tracks,
                       lmdb::WriteTransaction& txn,
-                      std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
+                      std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
+                      ImportMode mode);
     void importLists(YAML::Node const& lists,
                      lmdb::WriteTransaction& txn,
                      std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId);
@@ -97,12 +99,12 @@ namespace ao::rt
 
   LibraryImporter::~LibraryImporter() = default;
 
-  void LibraryImporter::importFromYaml(std::filesystem::path const& path)
+  void LibraryImporter::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
-    _impl->importFromYaml(path);
+    _impl->importFromYaml(path, mode);
   }
 
-  void LibraryImporter::Impl::importFromYaml(std::filesystem::path const& path)
+  void LibraryImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
     auto root = YAML::Node{};
 
@@ -129,15 +131,19 @@ namespace ao::rt
 
     auto txn = ml.writeTransaction();
 
-    // Clear existing data for a fresh import
-    ml.tracks().writer(txn).clear();
-    ml.lists().writer(txn).clear();
+    if (mode == ImportMode::Restore)
+    {
+      // Clear existing data for a fresh import
+      ml.tracks().writer(txn).clear();
+      ml.lists().writer(txn).clear();
+      ml.manifest().writer(txn).clear();
+    }
 
     auto yamlTrackIdToInternalId = std::unordered_map<std::uint32_t, TrackId>{};
 
     if (library["tracks"])
     {
-      importTracks(library["tracks"], txn, yamlTrackIdToInternalId);
+      importTracks(library["tracks"], txn, yamlTrackIdToInternalId, mode);
     }
 
     if (library["lists"])
@@ -150,9 +156,11 @@ namespace ao::rt
 
   void LibraryImporter::Impl::importTracks(YAML::Node const& tracks,
                                            lmdb::WriteTransaction& txn,
-                                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
+                                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
+                                           ImportMode mode)
   {
     auto trackWriter = ml.tracks().writer(txn);
+    auto manifestWriter = ml.manifest().writer(txn);
     auto& dict = ml.dictionary();
 
     for (auto const& trackNode : tracks)
@@ -164,16 +172,19 @@ namespace ao::rt
       // 1. Try load from physical file (availability fallback)
       auto optFileBuilder = std::optional<library::TrackBuilder>{};
 
-      if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
+      if (mode != ImportMode::Restore)
       {
-        if (auto tagFile = tag::TagFile::open(fullPath); tagFile != nullptr)
+        if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
         {
-          optFileBuilder = tagFile->loadTrack();
-          optFileBuilder->property().uri(uriStr);
-          optFileBuilder->property().fileSize(std::filesystem::file_size(fullPath));
-          optFileBuilder->property().mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                             std::filesystem::last_write_time(fullPath).time_since_epoch())
-                                             .count());
+          if (auto tagFile = tag::TagFile::open(fullPath); tagFile != nullptr)
+          {
+            optFileBuilder = tagFile->loadTrack();
+            optFileBuilder->property().uri(uriStr);
+            optFileBuilder->property().fileSize(std::filesystem::file_size(fullPath));
+            optFileBuilder->property().mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                               std::filesystem::last_write_time(fullPath).time_since_epoch())
+                                               .count());
+          }
         }
       }
 
@@ -183,8 +194,6 @@ namespace ao::rt
       if (!optFileBuilder)
       {
         builder.property().uri(uriStr);
-        // If no file exists, we still try to import metadata from YAML,
-        // but technical properties will be empty unless provided in YAML.
       }
 
       // 3. Overlay YAML data (Priority: YAML > File)
@@ -203,6 +212,12 @@ namespace ao::rt
                                     preparedCold.writeTo(cold);
                                   });
       std::ignore = view;
+
+      // 5. Populate Manifest
+      auto manifestEntry = library::ManifestEntry{.trackId = newTrackId};
+      manifestEntry.fileSize(builder.property().fileSize());
+      manifestEntry.mtime(builder.property().mtime());
+      manifestWriter.put(uriStr, manifestEntry);
 
       if (yamlTrackId != 0)
       {
@@ -245,9 +260,19 @@ namespace ao::rt
       builder.metadata().albumArtist(keepAlive(trackNode["albumArtist"]));
     }
 
+    if (trackNode["composer"])
+    {
+      builder.metadata().composer(keepAlive(trackNode["composer"]));
+    }
+
     if (trackNode["genre"])
     {
       builder.metadata().genre(keepAlive(trackNode["genre"]));
+    }
+
+    if (trackNode["work"])
+    {
+      builder.metadata().work(keepAlive(trackNode["work"]));
     }
 
     if (trackNode["year"])
@@ -347,6 +372,16 @@ namespace ao::rt
     if (trackNode["codecId"])
     {
       builder.property().codecId(trackNode["codecId"].as<uint16_t>());
+    }
+
+    if (trackNode["fileSize"])
+    {
+      builder.property().fileSize(trackNode["fileSize"].as<uint64_t>());
+    }
+
+    if (trackNode["mtime"])
+    {
+      builder.property().mtime(trackNode["mtime"].as<uint64_t>());
     }
   }
 

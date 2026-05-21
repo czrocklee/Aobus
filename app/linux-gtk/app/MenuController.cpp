@@ -26,6 +26,7 @@ namespace ao::gtk
 
     auto fileMenu = Gio::Menu::create();
     fileMenu->append("Open Library", "win.open-library");
+    fileMenu->append("Scan Library", "win.scan-library");
     fileMenu->append("Import Files", "win.import-files");
     fileMenu->append("Quit", "app.quit");
     _menuModel->append_submenu("File", fileMenu);
@@ -41,6 +42,10 @@ namespace ao::gtk
     auto openAction = Gio::SimpleAction::create("open-library");
     openAction->signal_activate().connect([this](Glib::VariantBase const&) { _importExport.openLibrary(); });
     window.add_action(openAction);
+
+    auto scanAction = Gio::SimpleAction::create("scan-library");
+    scanAction->signal_activate().connect([this](Glib::VariantBase const&) { _importExport.scanLibrary(); });
+    window.add_action(scanAction);
 
     auto importAction = Gio::SimpleAction::create("import-files");
     importAction->signal_activate().connect([this](Glib::VariantBase const&) { _importExport.importFiles(); });

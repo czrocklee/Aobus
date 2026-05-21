@@ -31,7 +31,9 @@ namespace ao::rt
   class CoreRuntime
   {
   public:
-    CoreRuntime(std::unique_ptr<IControlExecutor> executor, std::filesystem::path libraryRoot);
+    CoreRuntime(std::unique_ptr<IControlExecutor> executor,
+                std::filesystem::path musicRoot,
+                std::filesystem::path databasePath);
     virtual ~CoreRuntime();
 
     CoreRuntime(CoreRuntime const&) = delete;
@@ -40,6 +42,10 @@ namespace ao::rt
     CoreRuntime& operator=(CoreRuntime&&) = delete;
 
     library::MusicLibrary& musicLibrary() noexcept;
+
+    std::filesystem::path const& musicRoot() const noexcept;
+    std::filesystem::path const& databasePath() const noexcept;
+
     LibraryMutationService& mutation() noexcept;
     TrackCommandService& trackCommands() noexcept;
     ListSourceStore& sources() noexcept;

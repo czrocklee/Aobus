@@ -69,30 +69,24 @@ namespace ao::library
    * TrackColdHeader - POD struct for cold track fixed fields.
    * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
    *
-   * NOTE: fileSize and mtime are split into two uint32_t fields to achieve
-   * 4-byte alignment (LMDB's alignment guarantee). The original uint64_t values
-   * are reconstructed in TrackView accessors.
-   *
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
-   *   - fileSize, mtime: file identity / refresh detection
    *   - durationMs, bitrate, sampleRate, channels: audio properties
    *   - coverArtId: display only
    *   - trackNumber, totalTracks, discNumber, totalDiscs: display only
+   *   - workId: classical metadata
    *   - uri: playback path, not filtered
    *
-   * Total size: 52 bytes with 4-byte alignment.
-   *
+   * Total size: 36 bytes with 4-byte alignment.
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← cold data begin
-   *   │        TrackColdHeader (52B)        │
-   *   │  fileSizeLo/Hi, mtimeLo/Hi          │
+   *   │        TrackColdHeader (36B)        │
    *   │  durationMs, sampleRate,            │
    *   │  coverArtId, bitrate, workId        │
    *   │  trackNumber, totalTracks,          │
    *   │  discNumber, totalDiscs             │
    *   │  customCount, uriOffset, uriLen     │
-   *   │  channels, padding[3]               │
+   *   │  channels, padding                  │
    *   ├─────────────────────────────────────┤  ← entries = customCount * 8 bytes
    *   │  [dictId(4), off(2), len(2)] × N   │
    *   ├─────────────────────────────────────┤  ← values start
@@ -105,12 +99,6 @@ namespace ao::library
    */
   struct TrackColdHeader final
   {
-    // 4-byte section (split from original int64)
-    std::uint32_t fileSizeLo{}; // Lower 32 bits of file size
-    std::uint32_t fileSizeHi{}; // Upper 32 bits of file size
-    std::uint32_t mtimeLo{};    // Lower 32 bits of modification time
-    std::uint32_t mtimeHi{};    // Upper 32 bits of modification time
-
     // 4-byte section
     std::uint32_t durationMs{}; // Track duration in milliseconds
     std::uint32_t sampleRate{}; // Sample rate in Hz
@@ -130,14 +118,14 @@ namespace ao::library
     // 1-byte section
     std::uint8_t channels{}; // Number of audio channels
 
-    // 1 byte padding to reach 52 bytes total
+    // 1 byte padding to reach 36 bytes total
     std::byte padding{};
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackColdHeaderSize = 52;
+  constexpr std::size_t kTrackColdHeaderSize = 36;
   constexpr std::size_t kTrackColdHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 52 bytes");
+  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 36 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 4-byte alignment");
 } // namespace ao::library

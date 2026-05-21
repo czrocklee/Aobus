@@ -18,7 +18,7 @@ namespace ao::rt
   {
     Minimum,  // Only data not in file tags: user tags, ratings, lists.
     Metadata, // Minimum + Metadata (title, artist, etc.) + Custom metadata.
-    Full      // Metadata + Audio properties + Resources (Base64 cover art).
+    Full      // Metadata + Audio properties (file size, mtime, codec, etc.).
   };
 
   /**

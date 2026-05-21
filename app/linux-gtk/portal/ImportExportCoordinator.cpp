@@ -3,6 +3,7 @@
 
 #include "portal/ImportExportCoordinator.h"
 
+#include "ao/library/LibraryScanner.h"
 #include "ao/utility/Log.h"
 #include "layout/LayoutConstants.h"
 #include "portal/ImportProgressDialog.h"
@@ -76,6 +77,34 @@ namespace ao::gtk::portal
                               APP_LOG_ERROR("Error selecting folder: {}", e.what());
                             }
                           });
+  }
+
+  void ImportExportCoordinator::scanLibrary()
+  {
+    APP_LOG_INFO("Starting full library scan...");
+
+    _runtime.async().spawnWithLifetime(
+      &_tasks,
+      [](ImportExportCoordinator* self) -> rt::async::Task<void>
+      {
+        auto plan = co_await self->_runtime.mutation().buildScanPlanAsync();
+
+        auto const newCount = plan.count(library::ScanClassification::New);
+        auto const changedCount = plan.count(library::ScanClassification::Changed);
+        auto const missingCount = plan.count(library::ScanClassification::Missing);
+
+        if (newCount == 0 && changedCount == 0 && missingCount == 0)
+        {
+          self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library is up to date");
+          co_return;
+        }
+
+        APP_LOG_INFO("Scan plan: {} new, {} changed, {} missing", newCount, changedCount, missingCount);
+
+        // For the first implementation, we apply NEW and CHANGED automatically.
+        // MISSING is logged but not yet handled in UI.
+        co_await self->_runtime.mutation().applyScanPlanAsync(std::move(plan));
+      }(this));
   }
 
   void ImportExportCoordinator::importFiles()

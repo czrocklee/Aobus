@@ -4,12 +4,14 @@ add_library(ao_library STATIC
     MusicLibrary.cpp
     ResourceStore.cpp
     DictionaryStore.cpp
+    FileManifestStore.cpp
     TrackStore.cpp
     TrackBuilder.cpp
     TrackView.cpp
     ListView.cpp
     ListStore.cpp
     ListBuilder.cpp
+    LibraryScanner.cpp
     ImportWorker.cpp
 )
 target_include_directories(ao_library PUBLIC ${AO_PUBLIC_INCLUDE_DIR})

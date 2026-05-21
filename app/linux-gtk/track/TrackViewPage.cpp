@@ -398,10 +398,10 @@ namespace ao::gtk
     // Optimistic update for fields with property-backed setters
     switch (field)
     {
-    case rt::TrackField::Title: row->setTitle(newValue); break;
-    case rt::TrackField::Artist: row->setArtist(newValue); break;
-    case rt::TrackField::Album: row->setAlbum(newValue); break;
-    default: break;
+      case rt::TrackField::Title: row->setTitle(newValue); break;
+      case rt::TrackField::Artist: row->setArtist(newValue); break;
+      case rt::TrackField::Album: row->setAlbum(newValue); break;
+      default: break;
     }
 
     auto const result = _runtime.mutation().updateMetadata({row->getTrackId()}, patch);
@@ -412,10 +412,10 @@ namespace ao::gtk
 
       switch (field)
       {
-      case rt::TrackField::Title: row->setTitle(oldValue); break;
-      case rt::TrackField::Artist: row->setArtist(oldValue); break;
-      case rt::TrackField::Album: row->setAlbum(oldValue); break;
-      default: break;
+        case rt::TrackField::Title: row->setTitle(oldValue); break;
+        case rt::TrackField::Artist: row->setArtist(oldValue); break;
+        case rt::TrackField::Album: row->setAlbum(oldValue); break;
+        default: break;
       }
     }
   }
