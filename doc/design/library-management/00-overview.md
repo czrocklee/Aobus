@@ -80,3 +80,7 @@ The main gaps are:
   refresh rules.
 - `05-implementation-plan.md`
   Breaks the work into reviewable implementation phases.
+- `06-smart-restoration-implementation-plan.md`
+  Defines the one-shot implementation plan for smart export/import, real
+  merge import, list-only synchronization, delta payloads, and cover art
+  resource restoration.

@@ -200,6 +200,15 @@ namespace ao::library
     return _impl->metaHeader;
   }
 
+  void MusicLibrary::updateMetaHeader(MetaHeader const& header)
+  {
+    validateMetaHeader(header);
+    auto txn = writeTransaction();
+    _impl->metaStore.update(txn, header);
+    txn.commit();
+    _impl->metaHeader = header;
+  }
+
   std::filesystem::path const& MusicLibrary::rootPath() const
   {
     return _impl->musicRoot;

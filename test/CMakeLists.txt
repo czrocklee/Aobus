@@ -1,5 +1,8 @@
 # ao_test: portable unit + integration tests
 add_executable(ao_test
+    # utility tests
+    unit/utility/Base64Test.cpp
+
     # query tests
     unit/query/ParserTest.cpp
     unit/query/ExecutionPlanTest.cpp

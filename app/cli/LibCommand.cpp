@@ -80,9 +80,9 @@ namespace ao::cli
     {
       auto mode = rt::ExportMode::Full;
 
-      if (modeStr == "minimum")
+      if (modeStr == "delta")
       {
-        mode = rt::ExportMode::Minimum;
+        mode = rt::ExportMode::Delta;
       }
       else if (modeStr == "metadata")
       {
@@ -92,9 +92,13 @@ namespace ao::cli
       {
         mode = rt::ExportMode::Full;
       }
+      else if (modeStr == "listOnly")
+      {
+        mode = rt::ExportMode::ListOnly;
+      }
       else
       {
-        os << "Error: Invalid export mode '" << modeStr << "'. Valid modes are: minimum, metadata, full.\n";
+        os << "Error: Invalid export mode '" << modeStr << "'. Valid modes are: delta, metadata, full, listOnly.\n";
         return;
       }
 
@@ -103,11 +107,27 @@ namespace ao::cli
       os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
     }
 
-    void importLib(library::MusicLibrary& ml, std::string const& path, std::ostream& os)
+    void importLib(library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
     {
+      auto mode = rt::ImportMode::Restore;
+
+      if (modeStr == "restore")
+      {
+        mode = rt::ImportMode::Restore;
+      }
+      else if (modeStr == "merge")
+      {
+        mode = rt::ImportMode::Merge;
+      }
+      else
+      {
+        os << "Error: Invalid import mode '" << modeStr << "'. Valid modes are: restore, merge.\n";
+        return;
+      }
+
       auto importer = rt::LibraryImporter{ml};
-      importer.importFromYaml(path);
-      os << "Library imported from '" << path << "'.\n";
+      importer.importFromYaml(path, mode);
+      os << "Library imported from '" << path << "' using mode '" << modeStr << "'.\n";
     }
   }
 
@@ -120,14 +140,16 @@ namespace ao::cli
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
     auto* exportPath = exportCmd->add_option("output,-o,--output", "Output YAML file path")->required();
-    auto* exportMode = exportCmd->add_option("-m,--mode", "Export mode (minimum, metadata, full)")->default_val("full");
+    auto* exportMode = exportCmd->add_option("-m,--mode", "Export mode (delta, metadata, full, listOnly)")->default_val("full");
     exportCmd->callback(
       [&runtime, exportPath, exportMode]
       { exportLib(runtime.musicLibrary(), exportPath->as<std::string>(), exportMode->as<std::string>(), std::cout); });
 
     auto* importCmd = lib->add_subcommand("import", "Import library from YAML");
     auto* importPath = importCmd->add_option("input,-i,--input", "Input YAML file path")->required();
-    importCmd->callback([&runtime, importPath]
-                        { importLib(runtime.musicLibrary(), importPath->as<std::string>(), std::cout); });
+    auto* importMode = importCmd->add_option("-m,--mode", "Import mode (restore, merge)")->default_val("restore");
+    importCmd->callback(
+      [&runtime, importPath, importMode]
+      { importLib(runtime.musicLibrary(), importPath->as<std::string>(), importMode->as<std::string>(), std::cout); });
   }
 }

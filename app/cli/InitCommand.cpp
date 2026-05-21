@@ -4,6 +4,7 @@
 #include "InitCommand.h"
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
 #include "ao/tag/TagFile.h"
@@ -27,6 +28,7 @@ namespace ao::cli
       auto const finder = utility::Finder{".", {".flac", ".m4a", ".mp3"}};
       auto txn = ml.writeTransaction();
       auto writer = ml.tracks().writer(txn);
+      auto manifestWriter = ml.manifest().writer(txn);
       auto& dict = ml.dictionary();
 
       for (std::filesystem::path const& path : finder.paths())
@@ -57,6 +59,13 @@ namespace ao::cli
               preparedHot.writeTo(hot);
               preparedCold.writeTo(cold);
             });
+
+          // Populate Manifest
+          auto manifestEntry = library::ManifestEntry{.trackId = id};
+          manifestEntry.fileSize(builder.property().fileSize());
+          manifestEntry.mtime(builder.property().mtime());
+          manifestWriter.put(pathStr, manifestEntry);
+
           os << "add track: " << id << " " << trackView.metadata().title() << '\n';
         }
         catch (std::exception const& e)

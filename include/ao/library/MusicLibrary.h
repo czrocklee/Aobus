@@ -51,6 +51,7 @@ namespace ao::library
     FileManifestStore const& manifest() const;
 
     MetaHeader const& metaHeader() const;
+    void updateMetaHeader(MetaHeader const& header);
 
     std::filesystem::path const& rootPath() const;
 

@@ -16,8 +16,8 @@ namespace ao::rt
    */
   enum class ImportMode : std::uint8_t
   {
-    Restore, // Recreate tracks exactly from YAML, do not read physical file tags.
-    Overlay  // Match tracks by URI and update metadata from YAML. (Future)
+    Restore, // Destructive within payload scope: clears existing data before rebuild.
+    Merge    // Additive/update import: preserves existing records outside payload scope.
   };
 
   /**

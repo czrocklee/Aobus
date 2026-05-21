@@ -242,14 +242,19 @@ namespace ao::gtk
         }
 
         auto* const stack = Gtk::make_managed<Gtk::Stack>();
+        stack->set_vhomogeneous(false);
+        stack->set_hhomogeneous(false);
+        stack->set_transition_type(Gtk::StackTransitionType::NONE);
         stack->add_css_class("ao-inline-editor-stack");
 
         auto* const label = Gtk::make_managed<Gtk::Label>("");
+        label->add_css_class("ao-inline-editor-label");
         label->set_halign(Gtk::Align::START);
         label->set_ellipsize(Pango::EllipsizeMode::END);
         stack->add(*label, "display");
 
         auto* const entry = Gtk::make_managed<Gtk::Entry>();
+        entry->add_css_class("ao-inline-editor-entry");
         stack->add(*entry, "edit");
 
         listItem->set_child(*stack);

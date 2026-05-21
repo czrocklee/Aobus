@@ -16,9 +16,10 @@ namespace ao::rt
    */
   enum class ExportMode : std::uint8_t
   {
-    Minimum,  // Only data not in file tags: user tags, ratings, lists.
-    Metadata, // Minimum + Metadata (title, artist, etc.) + Custom metadata.
-    Full      // Metadata + Audio properties (file size, mtime, codec, etc.).
+    Delta,    // Only data not matching physical baseline: user edits, tags, ratings.
+    Metadata, // Curated text metadata and cover art (no technical properties).
+    Full,     // Everything: Metadata, cover art, and technical properties.
+    ListOnly  // Synchronize playlists only, omitting track data entirely.
   };
 
   /**

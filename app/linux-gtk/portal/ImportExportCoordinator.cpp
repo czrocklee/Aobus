@@ -234,11 +234,12 @@ namespace ao::gtk::portal
     box->append(*label);
 
     auto* modeCombo = Gtk::make_managed<Gtk::DropDown>();
-    auto modeStrings = Gtk::StringList::create({"App-Only (Tags, Ratings, Lists)",
-                                                "Metadata + App Data (Title, Artist, Tags, etc.)",
-                                                "Full Backup (All Metadata + Audio Properties + Cover Art)"});
+    auto modeStrings = Gtk::StringList::create({"Delta (Sync user edits, Tags, Ratings, Lists)",
+                                                "Metadata (Curated text + Cover Art, no technical stats)",
+                                                "Full (Disaster Recovery: Everything)",
+                                                "List Only (Sync playlists without touching tracks)"});
     modeCombo->set_model(modeStrings);
-    modeCombo->set_selected(1);
+    modeCombo->set_selected(2); // Default to Full
     box->append(*modeCombo);
 
     contentArea->append(*box);
@@ -258,13 +259,19 @@ namespace ao::gtk::portal
       return;
     }
 
+    auto constexpr kDeltaIndex = 0;
+    auto constexpr kMetadataIndex = 1;
+    auto constexpr kFullIndex = 2;
+    auto constexpr kListOnlyIndex = 3;
+
     auto mode = rt::ExportMode::Metadata;
 
     switch (modeCombo->get_selected())
     {
-      case 0: mode = rt::ExportMode::Minimum; break;
-      case 1: mode = rt::ExportMode::Metadata; break;
-      case 2: mode = rt::ExportMode::Full; break;
+      case kDeltaIndex: mode = rt::ExportMode::Delta; break;
+      case kMetadataIndex: mode = rt::ExportMode::Metadata; break;
+      case kFullIndex: mode = rt::ExportMode::Full; break;
+      case kListOnlyIndex: mode = rt::ExportMode::ListOnly; break;
       default: break;
     }
 

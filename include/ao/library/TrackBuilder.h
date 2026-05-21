@@ -86,6 +86,7 @@ namespace ao::library
       std::uint16_t discNumber() const { return _discNumber; }
       std::uint16_t totalDiscs() const { return _totalDiscs; }
       std::uint32_t coverArtId() const { return _coverArtId; }
+      std::span<std::byte const> coverArtData() const { return _embeddedCoverArt; }
       std::uint8_t rating() const { return _rating; }
 
     private:
@@ -186,9 +187,16 @@ namespace ao::library
 
     // Sub-builder accessors - return references to stored members
     MetadataBuilder& metadata();
+    MetadataBuilder const& metadata() const;
+
     PropertyBuilder& property();
+    PropertyBuilder const& property() const;
+
     TagsBuilder& tags();
+    TagsBuilder const& tags() const;
+
     CustomBuilder& custom();
+    CustomBuilder const& custom() const;
 
     // Full serialization - resolves all strings to DictionaryIds
     std::pair<std::vector<std::byte>, std::vector<std::byte>> serialize(lmdb::WriteTransaction& txn,

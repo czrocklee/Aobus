@@ -1,5 +1,6 @@
 # ao_utility
 add_library(ao_utility STATIC
+    Base64.cpp
     MappedFile.cpp
     Log.cpp
 )

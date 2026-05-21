@@ -115,7 +115,17 @@ namespace ao::library
     return _metadataBuilder;
   }
 
+  TrackBuilder::MetadataBuilder const& TrackBuilder::metadata() const
+  {
+    return _metadataBuilder;
+  }
+
   TrackBuilder::PropertyBuilder& TrackBuilder::property()
+  {
+    return _propertyBuilder;
+  }
+
+  TrackBuilder::PropertyBuilder const& TrackBuilder::property() const
   {
     return _propertyBuilder;
   }
@@ -125,7 +135,17 @@ namespace ao::library
     return _tagsBuilder;
   }
 
+  TrackBuilder::TagsBuilder const& TrackBuilder::tags() const
+  {
+    return _tagsBuilder;
+  }
+
   TrackBuilder::CustomBuilder& TrackBuilder::custom()
+  {
+    return _customBuilder;
+  }
+
+  TrackBuilder::CustomBuilder const& TrackBuilder::custom() const
   {
     return _customBuilder;
   }
