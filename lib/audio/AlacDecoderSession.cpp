@@ -85,7 +85,7 @@ namespace ao::audio
 
     if (auto const mapResult = _impl->mappedFile.map(filePath); !mapResult)
     {
-      return std::unexpected(mapResult.error());
+      return std::unexpected{mapResult.error()};
     }
 
     _impl->demuxer = std::make_unique<Demuxer>(_impl->mappedFile.bytes());

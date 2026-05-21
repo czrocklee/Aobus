@@ -1,3 +1,4 @@
+#include "check/BracedInitializationCheck.h"
 #include "check/CApiGlobalQualificationCheck.h"
 #include "check/ConcreteFinalCheck.h"
 #include "check/ControlBlockSpacingCheck.h"
@@ -6,7 +7,6 @@
 #include "check/IdentifierNamingExtensionsCheck.h"
 #include "check/LambdaParamsCheck.h"
 #include "check/LocalInitializationStyleCheck.h"
-#include "check/MemberInitializerBracesCheck.h"
 #include "check/MemberOrderCheck.h"
 #include "check/OptionalNamingAndUsageCheck.h"
 #include "check/StdCLibraryQualificationCheck.h"
@@ -31,7 +31,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");
       checkFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");
       checkFactories.registerCheck<LocalInitializationStyleCheck>("aobus-modernize-local-initialization-style");
-      checkFactories.registerCheck<MemberInitializerBracesCheck>("aobus-modernize-member-initializer-braces");
+      checkFactories.registerCheck<BracedInitializationCheck>("aobus-modernize-braced-initialization");
       checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");
       checkFactories.registerCheck<OptionalNamingAndUsageCheck>("aobus-readability-optional-naming-and-usage");
       checkFactories.registerCheck<StdCLibraryQualificationCheck>("aobus-readability-std-c-library-qualification");
@@ -43,8 +43,8 @@ namespace clang::tidy::readability
 
   namespace
   {
-    ClangTidyModuleRegistry::Add<AobusLintModule> const aobusLintModuleRegistration("aobus-lint-module",
-                                                                                    "Adds Aobus custom checks.");
+    ClangTidyModuleRegistry::Add<AobusLintModule> const aobusLintModuleRegistration{"aobus-lint-module",
+                                                                                    "Adds Aobus custom checks."};
   } // namespace
 } // namespace clang::tidy::readability
 

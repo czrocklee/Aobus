@@ -165,8 +165,8 @@ namespace ao::audio::test
     SECTION("Volume and mute are propagated to engine and status")
     {
       player.setVolume(0.6F);
-      REQUIRE(player.status().volume == Catch::Approx(0.6F));
-      REQUIRE(player.status().engine.volume == Catch::Approx(0.6F));
+      REQUIRE(player.status().volume == Catch::Approx{0.6F});
+      REQUIRE(player.status().engine.volume == Catch::Approx{0.6F});
 
       player.setMuted(true);
       REQUIRE(player.status().muted == true);

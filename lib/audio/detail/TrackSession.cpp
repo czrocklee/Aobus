@@ -89,7 +89,7 @@ namespace ao::audio::detail
     }
 
     auto backendFormat = Format{};
-    auto errorMsg = std::string();
+    auto errorMsg = std::string{};
 
     if (!negotiateFormat(
           descriptor.filePath, info, decoder, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))

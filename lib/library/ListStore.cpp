@@ -76,7 +76,7 @@ namespace ao::library
   ListStore::Reader::Iterator::value_type ListStore::Reader::Iterator::operator*() const
   {
     auto&& [id, buffer] = *_iter;
-    return {ListId{id}, ListView(buffer)};
+    return {ListId{id}, ListView{buffer}};
   }
 
   // Writer implementation

@@ -131,7 +131,7 @@ namespace ao::audio::backend
     {
       if (paused.load(std::memory_order_relaxed))
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds(kPollRetryDelayMs));
+        std::this_thread::sleep_for(std::chrono::milliseconds{kPollRetryDelayMs});
         continue;
       }
 
@@ -178,7 +178,7 @@ namespace ao::audio::backend
           break;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
       }
     }
   }
@@ -226,7 +226,7 @@ namespace ao::audio::backend
       }
       else
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
       }
 
       return false;
@@ -251,7 +251,7 @@ namespace ao::audio::backend
     {
       while (::snd_pcm_resume(pcm.get()) == -EAGAIN)
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds(kPollRetryDelayMs));
+        std::this_thread::sleep_for(std::chrono::milliseconds{kPollRetryDelayMs});
       }
     }
     else if (err == -ENODEV || err == -EBADF)
@@ -527,7 +527,7 @@ namespace ao::audio::backend
       return makeError(Error::Code::DeviceNotFound, std::format("Failed to open ALSA device: {}", _impl->deviceName));
     }
 
-    auto safePcm = Impl::AlsaPcmPtr(pcm);
+    auto safePcm = Impl::AlsaPcmPtr{pcm};
     auto currentFormat = Format{format};
     auto alsaFormat = SND_PCM_FORMAT_S16_LE;
     ::snd_pcm_uframes_t periodSize = 0;
@@ -594,12 +594,11 @@ namespace ao::audio::backend
 
     if (!_impl->thread.joinable())
     {
-      _impl->thread = std::jthread(
-        [this](std::stop_token const& st)
-        {
-          setCurrentThreadName("AlsaPlayback");
-          _impl->playbackLoop(st);
-        });
+      _impl->thread = std::jthread{[this](std::stop_token const& st)
+                                   {
+                                     setCurrentThreadName("AlsaPlayback");
+                                     _impl->playbackLoop(st);
+                                   }};
     }
 
     ::snd_pcm_start(_impl->pcm.get());

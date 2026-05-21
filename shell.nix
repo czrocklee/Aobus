@@ -49,7 +49,10 @@ pkgs.mkShell {
       cli11
       catch2_3
       gsl-lite
-      yaml-cpp
+      rapidyaml
+      libogg
+      libxml2
+      sysprof
 
       (gtk4.overrideAttrs (old: {
         dontStrip = true;

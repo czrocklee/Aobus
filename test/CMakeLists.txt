@@ -64,7 +64,7 @@ add_executable(ao_test
 )
 
 target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
+target_link_libraries(ao_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(ao_test PRIVATE PIPEWIRE_FOUND)
@@ -89,7 +89,7 @@ add_executable(ao_integration_test
 )
 
 target_include_directories(ao_integration_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_integration_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
+target_link_libraries(ao_integration_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(ao_integration_test PRIVATE PIPEWIRE_FOUND)
@@ -136,7 +136,7 @@ add_executable(ao_perf_baseline
 )
 
 target_include_directories(ao_perf_baseline PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_perf_baseline PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
+target_link_libraries(ao_perf_baseline PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
     target_compile_definitions(ao_perf_baseline PRIVATE PIPEWIRE_FOUND)

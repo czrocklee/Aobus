@@ -81,7 +81,7 @@ namespace clang::tidy::readability
       if (foundLParen && rParenLoc.isValid())
       {
         auto diagBuilder = diag(lParenLoc, "omit empty parameter list '()' in lambda");
-        diagBuilder << FixItHint::CreateRemoval(SourceRange(lParenLoc, rParenLoc));
+        diagBuilder << FixItHint::CreateRemoval(SourceRange{lParenLoc, rParenLoc});
       }
     }
   }

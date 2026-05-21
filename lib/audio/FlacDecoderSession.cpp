@@ -119,7 +119,7 @@ namespace ao::audio
 
     if (auto const mapResult = _impl->mappedFile.map(filePath); !mapResult)
     {
-      return std::unexpected(mapResult.error());
+      return std::unexpected{mapResult.error()};
     }
 
     _impl->currentOffset = 0;
@@ -368,7 +368,7 @@ namespace ao::audio
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
       auto const dst = utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
 
-      auto channelSpans = std::vector<std::span<std::int32_t const>>(channels);
+      auto channelSpans = std::vector<std::span<std::int32_t const>>{channels};
 
       for (std::uint32_t ch = 0; ch < channels; ++ch)
       {

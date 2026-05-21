@@ -18,7 +18,7 @@ namespace ao::gtk
 
   Glib::RefPtr<ListTreeItem> ListTreeItem::create(Glib::RefPtr<ListRowObject> const& row)
   {
-    auto obj = Glib::make_refptr_for_instance<ListTreeItem>(new ListTreeItem());
+    auto obj = Glib::make_refptr_for_instance<ListTreeItem>(new ListTreeItem{});
     obj->_row = row;
     return obj;
   }

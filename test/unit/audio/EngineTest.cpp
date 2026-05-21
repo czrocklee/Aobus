@@ -66,9 +66,9 @@ namespace ao::audio::test
 
       engine.setVolume(0.75F);
       REQUIRE(lastSetPropertyId == PropertyId::Volume);
-      REQUIRE(std::get<float>(lastSetPropertyValue) == Catch::Approx(0.75F));
-      REQUIRE(engine.getVolume() == Catch::Approx(0.75F));
-      REQUIRE(engine.status().volume == Catch::Approx(0.75F));
+      REQUIRE(std::get<float>(lastSetPropertyValue) == Catch::Approx{0.75F});
+      REQUIRE(engine.getVolume() == Catch::Approx{0.75F});
+      REQUIRE(engine.status().volume == Catch::Approx{0.75F});
 
       engine.setMuted(true);
       REQUIRE(lastSetPropertyId == PropertyId::Muted);
@@ -121,7 +121,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
   {
-    auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
     if (!std::filesystem::exists(testFile))
     {
@@ -168,7 +168,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][engine][pipewire]")
   {
-    auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
     if (!std::filesystem::exists(testFile))
     {
@@ -217,7 +217,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[playback][engine][format]")
   {
-    auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
     if (!std::filesystem::exists(testFile))
     {
@@ -534,8 +534,8 @@ namespace ao::audio::test
     {
       backendPtr->firePropertyChanged(PropertyId::Volume);
 
-      REQUIRE(engine.status().volume == Catch::Approx(1.0F));
-      REQUIRE(engine.getVolume() == Catch::Approx(1.0F));
+      REQUIRE(engine.status().volume == Catch::Approx{1.0F});
+      REQUIRE(engine.getVolume() == Catch::Approx{1.0F});
       REQUIRE(engine.status().volumeAvailable == true);
     }
 
@@ -550,13 +550,13 @@ namespace ao::audio::test
     SECTION("setVolume round-trips through engine and backend")
     {
       engine.setVolume(0.42F);
-      REQUIRE(engine.getVolume() == Catch::Approx(0.42F));
-      REQUIRE(engine.status().volume == Catch::Approx(0.42F));
+      REQUIRE(engine.getVolume() == Catch::Approx{0.42F});
+      REQUIRE(engine.status().volume == Catch::Approx{0.42F});
 
       auto const backendVol = backendPtr->getProperty(PropertyId::Volume);
 
       REQUIRE(backendVol);
-      REQUIRE(std::get<float>(*backendVol) == Catch::Approx(0.42F));
+      REQUIRE(std::get<float>(*backendVol) == Catch::Approx{0.42F});
     }
 
     SECTION("setMuted round-trips through engine and backend")

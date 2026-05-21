@@ -5,8 +5,7 @@
 
 #include "ao/Error.h"
 #include "ao/utility/Log.h"
-
-#include <yaml-cpp/yaml.h>
+#include "runtime/yaml/Utils.h"
 
 #include <exception>
 #include <filesystem>
@@ -30,8 +29,12 @@ namespace ao::rt
 
     APP_LOG_INFO("Saving config to: {}", _filePath.string());
     std::filesystem::create_directories(_filePath.parent_path());
+
+    auto yaml = std::string{};
+    yaml = ryml::emitrs_yaml<std::string>(_root);
+
     auto file = std::ofstream{_filePath};
-    file << _root;
+    file << yaml;
 
     if (!file.good())
     {
@@ -57,12 +60,16 @@ namespace ao::rt
         return makeError(Error::Code::NotFound, std::format("Config file not found: {}", _filePath.string()));
       }
 
+      _root.to_map(0);
       return {};
     }
 
     try
     {
-      _root = YAML::LoadFile(_filePath.string());
+      auto const fileName = _filePath.string();
+      _inputBuffer = yaml::readFile(_filePath);
+      _root = ryml::Tree{yaml::callbacks(fileName.c_str())};
+      ryml::parse_in_place(yaml::toSubstr(_inputBuffer), &_root);
     }
     catch (std::exception const& e)
     {

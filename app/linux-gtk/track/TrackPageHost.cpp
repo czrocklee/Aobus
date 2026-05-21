@@ -319,7 +319,7 @@ namespace ao::gtk
 
       if (auto optView = lists.get(listId))
       {
-        listName = optView->name().empty() ? "<Unnamed List>" : std::string(optView->name());
+        listName = optView->name().empty() ? "<Unnamed List>" : std::string{optView->name()};
       }
     }
     else if (listId == rt::kAllTracksListId)

@@ -89,7 +89,7 @@ namespace ao::rt::test
     barrier.release();
 
     // Give it a tiny bit of time to resume and hit the cancellation point
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
     REQUIRE_FALSE(completed.get());
     runtime.requestStop();

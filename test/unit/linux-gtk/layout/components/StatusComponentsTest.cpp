@@ -46,7 +46,7 @@ namespace ao::gtk::test
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 

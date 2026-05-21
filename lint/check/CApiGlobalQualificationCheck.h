@@ -13,7 +13,7 @@ namespace clang::tidy::readability
   {
   public:
     CApiGlobalQualificationCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+      : ClangTidyCheck{name, context}
     {
     }
 

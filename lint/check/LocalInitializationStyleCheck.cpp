@@ -1,7 +1,9 @@
 #include "check/LocalInitializationStyleCheck.h"
+
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Lex/Lexer.h"
+
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
@@ -43,7 +45,7 @@ namespace clang::tidy::readability
       }
 
       StringRef const name = record->getName();
-      return llvm::StringSwitch<bool>(name)
+      return llvm::StringSwitch<bool>{name}
         .Cases("vector", "deque", "list", "forward_list", true)
         .Cases("set", "multiset", "unordered_set", "unordered_multiset", true)
         .Cases("map", "multimap", "unordered_map", "unordered_multimap", true)
@@ -100,10 +102,10 @@ namespace clang::tidy::readability
                          .bind("var"),
                        this);
 
-    // Primitive: brace-initialized (Rule 3.4.5: primitives use assignment-style)
+    // Primitive initialization (Rule 3.4.5: primitives use assignment-style)
     finder->addMatcher(
       varDecl(unless(parmVarDecl()),
-              hasInitializer(ignoringImplicit(initListExpr().bind("init"))),
+              hasInitializer(expr().bind("init")),
               hasType(qualType(anyOf(isInteger(), booleanType(), realFloatingPointType(), isAnyCharacter()))))
         .bind("var"),
       this);
@@ -222,7 +224,6 @@ namespace clang::tidy::readability
     auto const& sm = *result.SourceManager;
     auto const* var = result.Nodes.getNodeAs<VarDecl>("var");
     auto const* init = result.Nodes.getNodeAs<Expr>("init");
-    auto const* ctor = result.Nodes.getNodeAs<CXXConstructExpr>("ctor");
 
     if (!isEligibleLocalVar(var, sm, result.Context))
     {
@@ -259,13 +260,9 @@ namespace clang::tidy::readability
         diag(loc, "use 'auto %0 = Type{...}' instead of explicit type initialization") << var->getName();
       }
     }
-    else if (ctor != nullptr || init != nullptr)
+    else if (var->getInitStyle() != VarDecl::CInit)
     {
-      // Primitive type with brace initialization — use T x = val instead.
-      diag(loc,
-           "primitive type should use assignment-style initialization "
-           "'Type %0 = ...', not brace initialization")
-        << var->getName();
+      diag(loc, "primitive type should use assignment-style initialization 'Type %0 = ...'") << var->getName();
     }
   }
 } // namespace clang::tidy::readability

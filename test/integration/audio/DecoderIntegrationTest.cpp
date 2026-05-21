@@ -89,7 +89,7 @@ namespace ao::audio::test
 
     SECTION("FLAC: 16-bit to 32-bit padding alignment")
     {
-      auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
       if (!std::filesystem::exists(testFile))
       {
@@ -120,7 +120,7 @@ namespace ao::audio::test
 
     SECTION("ALAC: 24-bit to 32-bit padding alignment")
     {
-      auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "hires.m4a";
+      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.m4a";
 
       if (!std::filesystem::exists(testFile))
       {
@@ -155,7 +155,7 @@ namespace ao::audio::test
 
   TEST_CASE("FLAC Decoder Integrity", "[playback][integration][flac]")
   {
-    auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
     if (!std::filesystem::exists(testFile))
     {
@@ -188,7 +188,7 @@ namespace ao::audio::test
 
   TEST_CASE("ALAC Decoder Integrity", "[playback][integration][alac]")
   {
-    auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "hires.m4a";
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.m4a";
 
     if (!std::filesystem::exists(testFile))
     {
@@ -212,7 +212,7 @@ namespace ao::audio::test
     SECTION("Corrupt: Opening a non-FLAC file as FLAC")
     {
       // Use this source file itself as a fake FLAC
-      auto const testFile = std::filesystem::path(__FILE__);
+      auto const testFile = std::filesystem::path{__FILE__};
       auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
       auto const res = decoder.open(testFile);
 
@@ -221,7 +221,7 @@ namespace ao::audio::test
 
     SECTION("Seek near EOF")
     {
-      auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
       if (std::filesystem::exists(testFile))
       {

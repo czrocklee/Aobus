@@ -4,9 +4,9 @@
 #include "app/linux-gtk/layout/document/LayoutDocument.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // IWYU pragma: keep
+#include "runtime/yaml/Utils.h"
 
 #include <catch2/catch_test_macros.hpp>
-#include <yaml-cpp/yaml.h>
 
 #include <cstdint>
 #include <vector>
@@ -17,27 +17,34 @@
 
 namespace ao::gtk::layout::test
 {
+  namespace yaml = ao::rt::yaml;
+
   TEST_CASE("Layout model serialization", "[layout][model]")
   {
     SECTION("LayoutValue serialization")
     {
       auto const v1 = LayoutValue{std::string{"hello"}};
-      auto const n1 = YAML::Node(v1);
-      CHECK(n1.as<std::string>() == "hello");
+      auto tree1 = ryml::Tree{};
+      rt::yaml::write(tree1.rootref(), v1);
+      CHECK(yaml::scalarView(tree1.rootref()) == "hello");
 
       auto const v2 = LayoutValue{static_cast<std::int64_t>(42)};
-      auto const n2 = YAML::Node(v2);
-      CHECK(n2.as<std::int64_t>() == 42);
+      auto tree2 = ryml::Tree{};
+      rt::yaml::write(tree2.rootref(), v2);
+      CHECK(yaml::asInt<std::int64_t>(tree2.rootref()) == 42);
 
       auto const v3 = LayoutValue{true};
-      auto const n3 = YAML::Node(v3);
-      CHECK(n3.as<bool>() == true);
+      auto tree3 = ryml::Tree{};
+      rt::yaml::write(tree3.rootref(), v3);
+      CHECK(yaml::asBool(tree3.rootref()) == true);
 
       auto const v4 = LayoutValue{std::vector<std::string>{"a", "b"}};
-      auto const n4 = YAML::Node(v4);
-      CHECK(n4.IsSequence());
-      CHECK(n4.size() == 2);
-      CHECK(n4[0].as<std::string>() == "a");
+      auto tree4 = ryml::Tree{};
+      rt::yaml::write(tree4.rootref(), v4);
+      auto const n4 = tree4.rootref();
+      CHECK(n4.is_seq());
+      CHECK(n4.num_children() == 2);
+      CHECK(yaml::scalarView(n4[0]) == "a");
     }
 
     SECTION("LayoutNode round-trip")
@@ -51,8 +58,11 @@ namespace ao::gtk::layout::test
       child.type = "spacer";
       node.children.push_back(child);
 
-      auto const yaml = YAML::Node(node);
-      auto const decoded = yaml.as<LayoutNode>();
+      auto tree = ryml::Tree{};
+      rt::yaml::write(tree.rootref(), node);
+
+      auto decoded = LayoutNode{};
+      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
 
       CHECK(decoded.type == "box");
       CHECK(decoded.id == "main");
@@ -64,8 +74,11 @@ namespace ao::gtk::layout::test
     SECTION("LayoutDocument round-trip")
     {
       auto const doc = createDefaultLayout();
-      auto const yaml = YAML::Node(doc);
-      auto const decoded = yaml.as<LayoutDocument>();
+      auto tree = ryml::Tree{};
+      rt::yaml::write(tree.rootref(), doc);
+
+      auto decoded = LayoutDocument{};
+      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
 
       CHECK(decoded.version == 1);
       CHECK(decoded.root.type == "box");
@@ -109,8 +122,11 @@ namespace ao::gtk::layout::test
       c2.props["hscrollPolicy"] = LayoutValue{std::string{"never"}};
       doc.root.children.push_back(c2);
 
-      auto const yaml = YAML::Node(doc);
-      auto const decoded = yaml.as<LayoutDocument>();
+      auto tree = ryml::Tree{};
+      rt::yaml::write(tree.rootref(), doc);
+
+      auto decoded = LayoutDocument{};
+      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
 
       REQUIRE(decoded.root.children.size() == 2);
       CHECK(decoded.root.children[0].type == "spacer");
@@ -124,13 +140,16 @@ namespace ao::gtk::layout::test
 
     SECTION("YAML decode tolerates missing optional fields")
     {
-      auto const node = YAML::Load(R"(
+      auto const* yaml = R"(
       version: 1
       root:
         type: box
-    )");
+    )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
 
-      auto const decoded = node.as<LayoutDocument>();
+      auto decoded = LayoutDocument{};
+      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
       CHECK(decoded.version == 1);
       CHECK(decoded.root.type == "box");
       CHECK(decoded.root.id.empty());
@@ -140,14 +159,17 @@ namespace ao::gtk::layout::test
 
     SECTION("YAML decode tolerates fields set to empty string")
     {
-      auto const node = YAML::Load(R"(
+      auto const* yaml = R"(
       version: 1
       root:
         id: ""
         type: spacer
-    )");
+    )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
 
-      auto const decoded = node.as<LayoutDocument>();
+      auto decoded = LayoutDocument{};
+      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
       CHECK(decoded.root.type == "spacer");
       CHECK(decoded.root.id.empty());
     }
@@ -155,8 +177,12 @@ namespace ao::gtk::layout::test
     SECTION("LayoutValue serializes and decodes double")
     {
       auto const v = LayoutValue{3.14};
-      auto const n = YAML::Node(v);
-      CHECK(n.as<double>() == 3.14);
+      auto tree = ryml::Tree{};
+      rt::yaml::write(tree.rootref(), v);
+
+      auto decoded = LayoutValue{};
+      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+      CHECK(decoded.asDouble() == 3.14);
     }
   }
 

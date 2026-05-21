@@ -65,12 +65,11 @@ namespace ao::audio::backend
         AUDIO_LOG_WARN("ALSA device enumeration returned no devices - ALSA may not be available");
       }
 
-      monitorThread = std::jthread(
-        [this](std::stop_token const& st)
-        {
-          setCurrentThreadName("AlsaDeviceMonitor");
-          monitorLoop(st);
-        });
+      monitorThread = std::jthread{[this](std::stop_token const& st)
+                                   {
+                                     setCurrentThreadName("AlsaDeviceMonitor");
+                                     monitorLoop(st);
+                                   }};
     }
 
     void monitorLoop(std::stop_token const& stopToken)

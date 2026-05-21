@@ -295,13 +295,12 @@ namespace ao::rt
           });
       });
 
-    _impl->activeWorkerThread = std::jthread(
-      [worker, container]
-      {
-        setCurrentThreadName("FileImport");
-        worker->run();
-        container->result = worker->result();
-      });
+    _impl->activeWorkerThread = std::jthread{[worker, container]
+                                             {
+                                               setCurrentThreadName("FileImport");
+                                               worker->run();
+                                               container->result = worker->result();
+                                             }};
 
     return ImportFilesReply{};
   }
@@ -314,7 +313,7 @@ namespace ao::rt
     auto resultIds = std::vector<TrackId>{};
     auto const totalFiles = paths.size();
 
-    auto worker = ao::library::ImportWorker(
+    auto worker = ao::library::ImportWorker{
       _impl->library,
       paths,
       [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
@@ -330,7 +329,7 @@ namespace ao::rt
             });
           });
       },
-      [] {});
+      [] {}};
 
     worker.run();
     resultIds = worker.result().insertedIds;
@@ -370,7 +369,7 @@ namespace ao::rt
 
     auto files = std::vector<std::filesystem::path>{};
 
-    for (auto const& entry : std::filesystem::recursive_directory_iterator(dir))
+    for (auto const& entry : std::filesystem::recursive_directory_iterator{dir})
     {
       if (entry.is_regular_file())
       {
@@ -419,7 +418,7 @@ namespace ao::rt
     auto resultIds = std::vector<TrackId>{};
     auto const totalItems = plan.items.size();
 
-    auto worker = ao::library::ImportWorker(
+    auto worker = ao::library::ImportWorker{
       _impl->library,
       std::move(plan),
       [this, totalItems](std::filesystem::path const& filePath, std::int32_t index)
@@ -435,7 +434,7 @@ namespace ao::rt
             });
           });
       },
-      [] {});
+      [] {}};
 
     worker.run();
     resultIds = worker.result().insertedIds;

@@ -96,12 +96,12 @@ namespace ao::rt::test
   class AsyncTestState final
   {
   public:
-    static auto create(T initial) { return AsyncTestState(std::make_shared<std::atomic<T>>(initial)); }
+    static auto create(T initial) { return AsyncTestState{std::make_shared<std::atomic<T>>(initial)}; }
 
     void set(T value) { *_data = value; }
     T get() const { return _data->load(); }
 
-    bool waitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::milliseconds(500))
+    bool waitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::milliseconds{500})
     {
       auto start = std::chrono::steady_clock::now();
 
@@ -112,7 +112,7 @@ namespace ao::rt::test
           return true;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
       }
 
       return get() == expected;

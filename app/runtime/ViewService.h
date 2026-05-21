@@ -8,6 +8,7 @@
 #include "StateTypes.h"
 #include "TrackPresentationPreset.h"
 #include "ao/Type.h"
+#include "runtime/TrackField.h"
 
 #include <functional>
 #include <memory>

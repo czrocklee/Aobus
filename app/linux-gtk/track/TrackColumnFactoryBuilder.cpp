@@ -35,7 +35,7 @@ namespace ao::gtk
                            sigc::connection const& conn)
     {
       listItem->set_data(
-        Glib::Quark(key), new sigc::connection(conn), [](void* data) { delete static_cast<sigc::connection*>(data); });
+        Glib::Quark{key}, new sigc::connection{conn}, [](void* data) { delete static_cast<sigc::connection*>(data); });
     }
 
     void updatePlayingStyles(Glib::RefPtr<Gtk::ListItem> const& listItem,

@@ -72,7 +72,7 @@ namespace ao::rt::async
 
     if (state.cancelled() != boost::asio::cancellation_type::none)
     {
-      throw boost::system::system_error(boost::asio::error::operation_aborted);
+      throw boost::system::system_error{boost::asio::error::operation_aborted};
     }
 
     co_await boost::asio::post(workerPool(), boost::asio::use_awaitable);
@@ -81,7 +81,7 @@ namespace ao::rt::async
 
     if (state.cancelled() != boost::asio::cancellation_type::none)
     {
-      throw boost::system::system_error(boost::asio::error::operation_aborted);
+      throw boost::system::system_error{boost::asio::error::operation_aborted};
     }
   }
 

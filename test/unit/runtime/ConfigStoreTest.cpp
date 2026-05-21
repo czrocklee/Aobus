@@ -538,6 +538,28 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("ConfigStore - string lifetime (save-before-flush)", "[app][runtime][config]")
+  {
+    auto const tempDir = TempDir{};
+    auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
+
+    {
+      auto configStore = ConfigStore{configPath};
+      {
+        auto const original = ComplexAggregate{.name = "temporary string that will go out of scope"};
+        configStore.save("test", original);
+      } // original is destroyed here
+
+      // Flush should still work and use the copied string in the arena
+      REQUIRE(configStore.flush());
+    }
+
+    auto reloaded = ConfigStore{configPath};
+    auto loaded = ComplexAggregate{};
+    REQUIRE(reloaded.load("test", loaded));
+    CHECK(loaded.name == "temporary string that will go out of scope");
+  }
+
   TEST_CASE("ConfigStore - ReadOnly mode", "[app][runtime][config]")
   {
     auto const tempDir = TempDir{};

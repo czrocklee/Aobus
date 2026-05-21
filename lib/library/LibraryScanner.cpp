@@ -55,7 +55,7 @@ namespace ao::library
     // 1. Walk Filesystem
     try
     {
-      for (auto const& entry : std::filesystem::recursive_directory_iterator(root))
+      for (auto const& entry : std::filesystem::recursive_directory_iterator{root})
       {
         if (progress)
         {
@@ -125,7 +125,7 @@ namespace ao::library
     // 2. Identify MISSING (In manifest but not on disk)
     for (auto const& [uriView, entrySpan] : manifestReader.databaseReader())
     {
-      auto const uri = std::string(utility::bytes::stringView(uriView));
+      auto const uri = std::string{utility::bytes::stringView(uriView)};
 
       if (!seenUris.contains(uri))
       {

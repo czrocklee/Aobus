@@ -164,7 +164,7 @@ namespace ao::audio::backend::test
           break;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds{50});
       }
 
       REQUIRE(found);
@@ -227,7 +227,7 @@ namespace ao::audio::backend::test
             break;
           }
 
-          std::this_thread::sleep_for(std::chrono::milliseconds(50));
+          std::this_thread::sleep_for(std::chrono::milliseconds{50});
         }
 
         CHECK(found);

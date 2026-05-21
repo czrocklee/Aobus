@@ -47,7 +47,7 @@ namespace ao::gtk::portal
     _okButton.signal_clicked().connect([this] { response(Gtk::ResponseType::OK); });
 
     // Add action area for the button
-    auto actionArea = Gtk::Box(Gtk::Orientation::HORIZONTAL, kActionAreaSpacing);
+    auto actionArea = Gtk::Box{Gtk::Orientation::HORIZONTAL, kActionAreaSpacing};
     actionArea.set_halign(Gtk::Align::END);
     actionArea.add_css_class("ao-dialog-actions");
     actionArea.append(_okButton);

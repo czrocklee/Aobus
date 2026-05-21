@@ -11,6 +11,7 @@
 #include "app/runtime/AppRuntime.h"
 #include "app/runtime/ConfigStore.h"
 #include "runtime/CorePrimitives.h"
+#include "runtime/yaml/Utils.h"
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -22,7 +23,6 @@
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/window.h>
-#include <yaml-cpp/yaml.h>
 
 #include <array>
 #include <functional>
@@ -60,7 +60,7 @@ namespace ao::gtk::layout::test
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
@@ -269,7 +269,7 @@ namespace ao::gtk::layout::test
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
@@ -379,7 +379,7 @@ namespace ao::gtk::layout::test
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
@@ -482,7 +482,7 @@ namespace ao::gtk::layout::test
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
@@ -530,7 +530,7 @@ namespace ao::gtk::layout::test
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
@@ -542,7 +542,7 @@ namespace ao::gtk::layout::test
 
     SECTION("custom playback row YAML builds without errors")
     {
-      auto const node = YAML::Load(R"(
+      auto const* const yaml = R"(
       type: box
       props:
         orientation: horizontal
@@ -556,8 +556,11 @@ namespace ao::gtk::layout::test
             hexpand: true
         - type: playback.timeLabel
         - type: playback.volumeControl
-    )");
-      auto const layoutNode = node.as<LayoutNode>();
+    )";
+      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
+      auto layoutNode = LayoutNode{};
+      REQUIRE(rt::yaml::read(tree.rootref(), layoutNode));
 
       auto const comp = registry.create(ctx, layoutNode);
       REQUIRE(comp != nullptr);
@@ -571,7 +574,7 @@ namespace ao::gtk::layout::test
 
     SECTION("minimal listening layout YAML builds without errors")
     {
-      auto const node = YAML::Load(R"(
+      auto const* const yaml = R"(
       type: box
       props:
         orientation: vertical
@@ -588,8 +591,11 @@ namespace ao::gtk::layout::test
             - type: playback.playPauseButton
             - type: playback.stopButton
             - type: playback.volumeControl
-    )");
-      auto const layoutNode = node.as<LayoutNode>();
+    )";
+      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
+      auto layoutNode = LayoutNode{};
+      REQUIRE(rt::yaml::read(tree.rootref(), layoutNode));
 
       auto const comp = registry.create(ctx, layoutNode);
       REQUIRE(comp != nullptr);
@@ -615,8 +621,10 @@ namespace ao::gtk::layout::test
           - type: status.messageLabel
     )";
 
-      auto const parsed = YAML::Load(yaml);
-      auto const doc = parsed.as<LayoutDocument>();
+      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
+      auto doc = LayoutDocument{};
+      REQUIRE(rt::yaml::read(tree.rootref(), doc));
 
       CHECK(doc.version == 1);
       CHECK(doc.root.children.size() == 4);

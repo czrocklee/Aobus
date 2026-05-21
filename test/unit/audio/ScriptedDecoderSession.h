@@ -63,7 +63,7 @@ namespace ao::audio::test
 
       if (!entry.result)
       {
-        return std::unexpected(entry.result.error());
+        return std::unexpected{entry.result.error()};
       }
 
       return PcmBlock{.bytes = entry.data,

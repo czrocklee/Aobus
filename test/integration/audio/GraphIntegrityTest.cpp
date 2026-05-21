@@ -19,7 +19,7 @@ namespace ao::audio::test
 {
   TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
   {
-    auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
     if (!std::filesystem::exists(testFile))
     {
@@ -52,7 +52,7 @@ namespace ao::audio::test
         break;
       }
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      std::this_thread::sleep_for(std::chrono::milliseconds{20});
     }
 
     SECTION("RouteState has decoder source format")

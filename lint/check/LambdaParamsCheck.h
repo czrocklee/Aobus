@@ -16,7 +16,7 @@ namespace clang::tidy::readability
   {
   public:
     LambdaParamsCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+      : ClangTidyCheck{name, context}
     {
     }
 

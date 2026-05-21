@@ -169,12 +169,11 @@ namespace ao::audio
   {
     stopDecodeThread();
 
-    _decodeThread = std::jthread(
-      [this](std::stop_token const& token)
-      {
-        setCurrentThreadName("StreamingSource-Decode");
-        decodeLoop(token);
-      });
+    _decodeThread = std::jthread{[this](std::stop_token const& token)
+                                 {
+                                   setCurrentThreadName("StreamingSource-Decode");
+                                   decodeLoop(token);
+                                 }};
   }
 
   void StreamingSource::stopDecodeThread()
@@ -238,7 +237,7 @@ namespace ao::audio
           }
         }
 
-        return std::unexpected(result.error());
+        return std::unexpected{result.error()};
       }
 
       if (!*result)
@@ -277,7 +276,7 @@ namespace ao::audio
 
       if (!blockResult)
       {
-        return std::unexpected(blockResult.error());
+        return std::unexpected{blockResult.error()};
       }
 
       block = *blockResult;
@@ -289,7 +288,7 @@ namespace ao::audio
       return false;
     }
 
-    return writeBlock(std::span<std::byte const>(block.bytes.data(), block.bytes.size()), seekToken, threadStopToken);
+    return writeBlock(std::span<std::byte const>{block.bytes.data(), block.bytes.size()}, seekToken, threadStopToken);
   }
 
   bool StreamingSource::writeBlock(std::span<std::byte const> bytes,
@@ -304,13 +303,13 @@ namespace ao::audio
 
     while (remaining > 0 && !stopRequested())
     {
-      auto const written = _ringBuffer.write(std::span<std::byte const>(current, remaining));
+      auto const written = _ringBuffer.write(std::span<std::byte const>{current, remaining});
       remaining -= written;
       current += written;
 
       if (remaining > 0)
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
       }
     }
 

@@ -43,9 +43,9 @@ namespace ao::rt
   };
 
   AppRuntime::AppRuntime(AppRuntimeDependencies dependencies)
-    : CoreRuntime(std::move(dependencies.executor),
+    : CoreRuntime{std::move(dependencies.executor),
                   std::move(dependencies.musicRoot),
-                  std::move(dependencies.databasePath))
+                  std::move(dependencies.databasePath)}
     , _impl{std::make_unique<Impl>(*this,
                                    std::move(dependencies.globalConfigStore),
                                    std::move(dependencies.workspaceConfigStore))}

@@ -237,7 +237,7 @@ namespace ao::query::test
     CHECK(hasLt == true);
 
     expr = parse("$year <= 2000");
-    compiler = QueryCompiler();
+    compiler = QueryCompiler{};
     plan = compiler.compile(expr);
 
     bool hasLe = false;
@@ -747,9 +747,9 @@ namespace ao::query::test
       {
         auto expr = parse(f);
 
-        if (f[0] != '#' && std::string(f) != "true" && std::string(f) != "false")
+        if (f[0] != '#' && std::string{f} != "true" && std::string{f} != "false")
         {
-          expr = parse(std::string(f) + " = 0");
+          expr = parse(std::string{f} + " = 0");
         }
 
         auto plan = compiler.compile(expr);
@@ -773,7 +773,7 @@ namespace ao::query::test
 
       for (auto const* f : fields)
       {
-        auto expr = parse(std::string(f) + " >= 0");
+        auto expr = parse(std::string{f} + " >= 0");
         auto plan = compiler.compile(expr);
         CHECK(plan.accessProfile == AccessProfile::ColdOnly);
       }

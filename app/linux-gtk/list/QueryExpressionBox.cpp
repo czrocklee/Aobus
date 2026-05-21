@@ -160,7 +160,7 @@ namespace ao::gtk
   }
 
   QueryExpressionBox::QueryExpressionBox(library::MusicLibrary& musicLibrary)
-    : Gtk::Box(Gtk::Orientation::VERTICAL), _musicLibrary(musicLibrary)
+    : Gtk::Box{Gtk::Orientation::VERTICAL}, _musicLibrary{musicLibrary}
   {
     _entry.set_hexpand(true);
     append(_entry);
@@ -295,7 +295,7 @@ namespace ao::gtk
       {
         if (startsWithInsensitive(value, optQuery->prefix))
         {
-          suggestions.emplace_back(std::string(1, trigger) + std::string(value));
+          suggestions.emplace_back(std::string(1, trigger) + std::string{value});
         }
       }
     };

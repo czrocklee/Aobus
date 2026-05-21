@@ -48,8 +48,8 @@ namespace ao::utility::test
     SECTION("Large binary data round-trip")
     {
       auto data = std::vector<std::byte>(1024);
-      
-for (std::size_t i = 0; i < 1024; ++i)
+
+      for (std::size_t i = 0; i < 1024; ++i)
       {
         data[i] = static_cast<std::byte>(i & 0xFF);
       }
@@ -68,7 +68,7 @@ for (std::size_t i = 0; i < 1024; ++i)
 
     SECTION("Ignore whitespace in decode")
     {
-      const auto *const input = "SGVsbG8g\nQW9idXMh"; // Hello Aobus!
+      auto const* const input = "SGVsbG8g\nQW9idXMh"; // Hello Aobus!
       auto const decoded = base64Decode(input);
       auto const result = std::string_view{reinterpret_cast<char const*>(decoded.data()), decoded.size()};
       CHECK(result == "Hello Aobus!");

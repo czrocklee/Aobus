@@ -35,13 +35,13 @@ namespace ao::rt::test
   {
     auto tempDir = TempDir{};
     auto globalConfigStore =
-      std::make_shared<ConfigStore>(std::filesystem::path(tempDir.path()) / "global_config.yaml");
-    auto workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path(tempDir.path()) / "workspace.yaml");
+      std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "global_config.yaml");
+    auto workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
 
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .globalConfigStore = globalConfigStore,
                                  .workspaceConfigStore = workspaceConfigStore}};
 
@@ -99,7 +99,7 @@ namespace ao::rt::test
       auto session2 = rt::AppRuntime{
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .globalConfigStore = globalConfigStore,
                                    .workspaceConfigStore = workspaceConfigStore}};
 
@@ -132,7 +132,7 @@ namespace ao::rt::test
       auto session2 = rt::AppRuntime{
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .globalConfigStore = globalConfigStore,
                                    .workspaceConfigStore = workspaceConfigStore}};
 
@@ -154,7 +154,7 @@ namespace ao::rt::test
       auto session2 = rt::AppRuntime{
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .globalConfigStore = globalConfigStore,
                                    .workspaceConfigStore = workspaceConfigStore}};
 

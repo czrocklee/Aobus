@@ -17,7 +17,7 @@ namespace clang::tidy::readability
   {
     bool isCStandardLibraryFunction(StringRef name)
     {
-      return llvm::StringSwitch<bool>(name)
+      return llvm::StringSwitch<bool>{name}
         .Cases("memcpy", "memmove", "memcmp", "memset", true)
         .Cases("strlen", "strcmp", "strncmp", "strcpy", "strncpy", true)
         .Cases("strcat", "strncat", "strchr", "strrchr", "strstr", true)

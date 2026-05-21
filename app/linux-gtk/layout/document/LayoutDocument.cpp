@@ -8,16 +8,18 @@
 #include "layout/document/LayoutNode.h"
 #include "layout/document/LayoutYaml.h"
 #include "runtime/ConfigStore.h"
+#include "runtime/yaml/ConfigTraits.h" // NOLINT(misc-include-cleaner)
+#include "runtime/yaml/Utils.h"
 
 #include <giomm/resource.h>
 #include <glib.h>
 #include <glibmm/error.h>
-#include <yaml-cpp/yaml.h>
 
 #include <charconv>
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -26,53 +28,64 @@
 #include <variant>
 #include <vector>
 
-namespace YAML
+namespace ao::rt::yaml
 {
   using namespace ao::gtk::layout;
 
-  Node convert<LayoutValue>::encode(LayoutValue const& rhs)
+  void write(ryml::NodeRef node, LayoutValue const& value)
   {
-    return std::visit(
-      [](auto const& nodeValue) -> Node
+    std::visit(
+      [&node](auto const& nodeValue)
       {
         using T = std::decay_t<decltype(nodeValue)>;
 
         if constexpr (std::is_same_v<T, std::monostate>)
         {
-          return Node(NodeType::Null);
+          node << nullptr;
+        }
+        else if constexpr (std::is_same_v<T, std::vector<std::string>>)
+        {
+          node |= ryml::SEQ;
+
+          for (auto const& item : nodeValue)
+          {
+            yaml::setValue(node.append_child(), item);
+          }
+        }
+        else if constexpr (std::is_same_v<T, std::string>)
+        {
+          yaml::setValue(node, nodeValue);
         }
         else
         {
-          return Node(nodeValue);
+          node << nodeValue;
         }
       },
-      rhs.data);
+      value.data);
   }
 
-  bool convert<LayoutValue>::decode(Node const& node, LayoutValue& rhs)
+  bool read(ryml::ConstNodeRef node, LayoutValue& value)
   {
-    if (!node.IsDefined() || node.IsNull())
+    if (node.invalid() || (node.has_val() && node.val_is_null()))
     {
-      rhs.data = std::monostate{};
+      value.data = std::monostate{};
       return true;
     }
 
-    if (node.IsScalar())
+    if (node.has_val())
     {
-      auto const& scalar = node.Scalar();
+      auto const scalar = yaml::scalarView(node);
 
+      if (scalar == "true")
       {
-        if (scalar == "true")
-        {
-          rhs.data = true;
-          return true;
-        }
+        value.data = true;
+        return true;
+      }
 
-        if (scalar == "false")
-        {
-          rhs.data = false;
-          return true;
-        }
+      if (scalar == "false")
+      {
+        value.data = false;
+        return true;
       }
 
       auto const* const first = scalar.data();
@@ -84,11 +97,9 @@ namespace YAML
         if (auto const intResult = std::from_chars(first, last, intValue);
             intResult.ec == std::errc{} && intResult.ptr == last)
         {
-          rhs.data = intValue;
+          value.data = intValue;
           return true;
         }
-
-        APP_LOG_TRACE("LayoutDocument: Failed to parse scalar '{}' as integer, trying double", scalar);
       }
 
       {
@@ -97,132 +108,142 @@ namespace YAML
         if (auto const doubleResult = std::from_chars(first, last, doubleValue);
             doubleResult.ec == std::errc{} && doubleResult.ptr == last)
         {
-          rhs.data = doubleValue;
+          value.data = doubleValue;
           return true;
         }
 
-        APP_LOG_TRACE("LayoutDocument: Failed to parse scalar '{}' as numeric, keeping as string", scalar);
-
-        rhs.data = scalar;
+        value.data = std::string{scalar};
         return true;
       }
     }
 
-    if (node.IsSequence())
+    if (node.is_seq())
     {
       auto sequence = std::vector<std::string>{};
 
-      for (auto const& item : node)
+      for (auto const& item : node.children())
       {
-        if (item.IsScalar())
+        if (item.has_val())
         {
-          sequence.push_back(item.as<std::string>());
+          sequence.emplace_back(yaml::scalarView(item));
         }
       }
 
-      rhs.data = std::move(sequence);
+      value.data = std::move(sequence);
       return true;
     }
 
     return false;
   }
 
-  Node convert<LayoutNode>::encode(LayoutNode const& rhs)
+  void write(ryml::NodeRef node, LayoutNode const& value)
   {
-    auto node = Node{};
+    node |= ryml::MAP;
 
-    if (!rhs.id.empty())
+    if (!value.id.empty())
     {
-      node["id"] = rhs.id;
+      node.append_child() << ryml::key("id") << value.id;
     }
 
-    node["type"] = rhs.type;
+    node.append_child() << ryml::key("type") << value.type;
 
-    if (!rhs.props.empty())
+    if (!value.props.empty())
     {
-      node["props"] = rhs.props;
+      auto child = node.append_child();
+      child << ryml::key("props");
+      write(child, value.props);
     }
 
-    if (!rhs.layout.empty())
+    if (!value.layout.empty())
     {
-      node["layout"] = rhs.layout;
+      auto child = node.append_child();
+      child << ryml::key("layout");
+      write(child, value.layout);
     }
 
-    if (!rhs.children.empty())
+    if (!value.children.empty())
     {
-      node["children"] = rhs.children;
+      auto child = node.append_child();
+      child << ryml::key("children");
+      write(child, value.children);
     }
-
-    return node;
   }
 
-  bool convert<LayoutNode>::decode(Node const& node, LayoutNode& rhs)
+  bool read(ryml::ConstNodeRef node, LayoutNode& value)
   {
-    if (!node.IsMap())
+    if (!node.is_map())
     {
       return false;
     }
 
-    if (node["id"])
+    if (auto const idNode = yaml::findChild(node, "id"); idNode.readable())
     {
-      rhs.id = node["id"].as<std::string>();
+      value.id = std::string{yaml::scalarView(idNode)};
     }
 
-    if (node["type"])
+    if (auto const typeNode = yaml::findChild(node, "type"); typeNode.readable())
     {
-      rhs.type = node["type"].as<std::string>();
+      value.type = std::string{yaml::scalarView(typeNode)};
     }
 
-    if (node["props"])
+    if (auto const propsNode = yaml::findChild(node, "props"); propsNode.readable())
     {
-      rhs.props = node["props"].as<std::map<std::string, LayoutValue, std::less<>>>();
+      read(propsNode, value.props);
     }
 
-    if (node["layout"])
+    if (auto const layoutNode = yaml::findChild(node, "layout"); layoutNode.readable())
     {
-      rhs.layout = node["layout"].as<std::map<std::string, LayoutValue, std::less<>>>();
+      read(layoutNode, value.layout);
     }
 
-    if (node["children"])
+    if (auto const childrenNode = yaml::findChild(node, "children"); childrenNode.readable())
     {
-      rhs.children = node["children"].as<std::vector<LayoutNode>>();
+      read(childrenNode, value.children);
     }
 
     return true;
   }
 
-  Node convert<LayoutDocument>::encode(LayoutDocument const& rhs)
+  void write(ryml::NodeRef node, LayoutDocument const& value)
   {
-    auto node = Node{};
-    node["version"] = static_cast<int>(rhs.version);
-    node["root"] = rhs.root;
+    node |= ryml::MAP;
+    node.append_child() << ryml::key("version") << static_cast<int>(value.version);
+    write(node.append_child() << ryml::key("root"), value.root);
 
-    if (!rhs.templates.empty())
+    if (!value.templates.empty())
     {
-      node["templates"] = rhs.templates;
+      auto child = node.append_child();
+      child << ryml::key("templates");
+      write(child, value.templates);
     }
-
-    return node;
   }
 
-  bool convert<LayoutDocument>::decode(Node const& node, LayoutDocument& rhs)
+  bool read(ryml::ConstNodeRef node, LayoutDocument& value)
   {
-    if (!node.IsMap() || !node["version"] || !node["root"])
+    if (!node.is_map())
     {
       return false;
     }
 
-    rhs.version = node["version"].as<int>();
-    rhs.root = node["root"].as<LayoutNode>();
+    auto const versionNode = yaml::findChild(node, "version");
+    auto const rootNode = yaml::findChild(node, "root");
 
-    if (node["templates"])
+    if (!versionNode.readable() || !rootNode.readable())
     {
-      rhs.templates = node["templates"].as<std::map<std::string, LayoutNode, std::less<>>>();
+      return false;
+    }
+
+    read(versionNode, value.version);
+    read(rootNode, value.root);
+
+    if (auto const templatesNode = yaml::findChild(node, "templates"); templatesNode.readable())
+    {
+      read(templatesNode, value.templates);
     }
 
     return true;
   }
-} // namespace YAML
+} // namespace ao::rt::yaml
 
 namespace ao::gtk::layout
 {
@@ -235,9 +256,19 @@ namespace ao::gtk::layout
         auto const bytes = Gio::Resource::lookup_data_global("/org/aobus/layout/default_layout.yaml");
         gsize size = 0;
         auto const* const data = static_cast<char const*>(bytes->get_data(size));
-        auto const yamlStr = std::string_view{data, size};
-        auto const node = YAML::Load(std::string{yamlStr});
-        return node.as<LayoutDocument>();
+
+        auto tree = ryml::Tree{rt::yaml::callbacks("default_layout.yaml")};
+        ryml::parse_in_arena(rt::yaml::toCsubstr(std::string_view{data, size}), &tree);
+
+        auto doc = LayoutDocument{};
+
+        if (!rt::yaml::read(tree.rootref(), doc))
+        {
+          APP_LOG_CRITICAL("LayoutDocument: Failed to decode built-in layout");
+          throw std::runtime_error{"Failed to decode built-in layout"};
+        }
+
+        return doc;
       }
       catch (Glib::Error const& e)
       {

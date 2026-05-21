@@ -18,8 +18,7 @@
 #include "ao/tag/TagFile.h"
 #include "ao/utility/Base64.h"
 #include "runtime/TrackField.h"
-
-#include <yaml-cpp/yaml.h>
+#include "runtime/yaml/Utils.h"
 
 #include <algorithm>
 #include <array>
@@ -76,7 +75,7 @@ namespace ao::rt
       return result;
     }
 
-    std::string modeToString(ExportMode mode)
+    std::string_view modeToString(ExportMode mode)
     {
       switch (mode)
       {
@@ -98,10 +97,10 @@ namespace ao::rt
     struct MetadataDispatch final
     {
       rt::TrackField field;
-      MetadataStringGetter strGet;
-      MetadataStringBaseGetter strBaseGet;
-      MetadataNumberGetter numGet;
-      MetadataNumberBaseGetter numBaseGet;
+      MetadataStringGetter strGet = nullptr;
+      MetadataStringBaseGetter strBaseGet = nullptr;
+      MetadataNumberGetter numGet = nullptr;
+      MetadataNumberBaseGetter numBaseGet = nullptr;
     };
 
     constexpr auto kMetadataDispatch = std::to_array<MetadataDispatch>({
@@ -149,7 +148,14 @@ namespace ao::rt
        .numBaseGet = [](auto const& base) { return base.totalDiscs(); }},
     });
 
-    void emitTrackMetadata(YAML::Emitter& out,
+    void appendString(ryml::NodeRef& node, std::string_view key, std::string_view value)
+    {
+      auto child = node.append_child();
+      yaml::setKey(child, key);
+      yaml::setValue(child, value);
+    }
+
+    void emitTrackMetadata(ryml::NodeRef& node,
                            library::TrackView const& view,
                            library::DictionaryStore& dict,
                            std::optional<library::TrackBuilder> const& optBaseline)
@@ -167,7 +173,7 @@ namespace ao::rt
 
           if (shouldEmit)
           {
-            out << YAML::Key << std::string(key) << YAML::Value << std::string(current);
+            appendString(node, key, current);
           }
         }
         else if (map.numGet != nullptr)
@@ -177,22 +183,23 @@ namespace ao::rt
 
           if (shouldEmit)
           {
-            out << YAML::Key << std::string(key) << YAML::Value << current;
+            node.append_child() << ryml::key(key) << current;
           }
         }
       }
 
       if (auto const custom = view.custom(); !custom.empty())
       {
-        // Custom fields are always Aobus-specific deltas (not in standard tags)
-        out << YAML::Key << "custom" << YAML::Value << YAML::BeginMap;
+        auto customNode = node.append_child();
+        yaml::setKey(customNode, "custom");
+        customNode |= ryml::MAP;
 
         for (auto const& [dictId, value] : custom)
         {
-          out << YAML::Key << std::string(dict.get(dictId)) << YAML::Value << std::string(value);
+          auto child = customNode.append_child();
+          yaml::setKey(child, dict.get(dictId));
+          yaml::setValue(child, value);
         }
-
-        out << YAML::EndMap;
       }
     }
 
@@ -204,10 +211,10 @@ namespace ao::rt
     struct PropertyDispatch final
     {
       rt::TrackField field;
-      PropertyU64Getter u64Get;
-      PropertyU32Getter u32Get;
-      PropertyU16Getter u16Get;
-      PropertyU8Getter u8Get;
+      PropertyU64Getter u64Get = nullptr;
+      PropertyU32Getter u32Get = nullptr;
+      PropertyU16Getter u16Get = nullptr;
+      PropertyU8Getter u8Get = nullptr;
     };
 
     constexpr auto kPropertyDispatch = std::to_array<PropertyDispatch>({
@@ -219,33 +226,33 @@ namespace ao::rt
       {.field = rt::TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth(); }},
     });
 
-    void emitTrackProperties(YAML::Emitter& out, library::TrackView::PropertyProxy const& property)
+    void emitTrackProperties(ryml::NodeRef& node, library::TrackView::PropertyProxy const& property)
     {
       for (auto const& map : kPropertyDispatch)
       {
         if (auto const key = rt::trackFieldId(map.field); map.u64Get != nullptr)
         {
-          out << YAML::Key << std::string(key) << YAML::Value << map.u64Get(property);
+          node.append_child() << ryml::key(key) << map.u64Get(property);
         }
         else if (map.u32Get != nullptr)
         {
-          out << YAML::Key << std::string(key) << YAML::Value << map.u32Get(property);
+          node.append_child() << ryml::key(key) << map.u32Get(property);
         }
         else if (map.u16Get != nullptr)
         {
-          out << YAML::Key << std::string(key) << YAML::Value << map.u16Get(property);
+          node.append_child() << ryml::key(key) << map.u16Get(property);
         }
         else if (map.u8Get != nullptr)
         {
-          out << YAML::Key << std::string(key) << YAML::Value << static_cast<int>(map.u8Get(property));
+          node.append_child() << ryml::key(key) << map.u8Get(property);
         }
       }
 
-      out << YAML::Key << "fileSize" << YAML::Value << property.fileSize();
-      out << YAML::Key << "mtime" << YAML::Value << property.mtime();
+      node.append_child() << ryml::key("fileSize") << property.fileSize();
+      node.append_child() << ryml::key("mtime") << property.mtime();
     }
 
-    void emitTrackCover(YAML::Emitter& out,
+    void emitTrackCover(ryml::NodeRef& node,
                         lmdb::ReadTransaction const& txn,
                         library::TrackView::MetadataProxy const& metadata,
                         std::optional<library::TrackBuilder> const& optBaseline,
@@ -278,7 +285,9 @@ namespace ao::rt
 
           if (auto const it = exportedCovers.find(resId); it != exportedCovers.end())
           {
-            out << YAML::Key << "coverArtBase64" << YAML::Value << YAML::Alias(it->second);
+            auto child = node.append_child();
+            child << ryml::key("coverArtBase64");
+            child.set_val_ref(yaml::copyToArena(child, it->second));
           }
           else
           {
@@ -287,7 +296,9 @@ namespace ao::rt
               auto const b64 = utility::base64Encode(*optData);
               auto const anchorName = "cover_" + std::to_string(rid);
 
-              out << YAML::Key << "coverArtBase64" << YAML::Value << YAML::Anchor(anchorName) << b64;
+              auto child = node.append_child();
+              child << ryml::key("coverArtBase64") << node.tree()->to_arena(b64);
+              child.set_val_anchor(yaml::copyToArena(child, anchorName));
               exportedCovers[resId] = anchorName;
             }
           }
@@ -295,26 +306,26 @@ namespace ao::rt
       }
     }
 
-    void emitTrackCommon(YAML::Emitter& out,
+    void emitTrackCommon(ryml::NodeRef& node,
                          library::TrackView::MetadataProxy const& metadata,
                          library::TrackView::TagProxy const& tags,
                          library::DictionaryStore& dict)
     {
       if (metadata.rating() != 0)
       {
-        out << YAML::Key << "rating" << YAML::Value << static_cast<int>(metadata.rating());
+        node.append_child() << ryml::key("rating") << metadata.rating();
       }
 
       if (tags.count() != 0)
       {
-        out << YAML::Key << "tags" << YAML::Value << YAML::BeginSeq;
+        auto tagsNode = node.append_child();
+        yaml::setKey(tagsNode, "tags");
+        tagsNode |= ryml::SEQ;
 
         for (auto const tagId : tags)
         {
-          out << std::string(dict.get(tagId));
+          yaml::setValue(tagsNode.append_child(), dict.get(tagId));
         }
-
-        out << YAML::EndSeq;
       }
     }
   } // namespace
@@ -327,8 +338,8 @@ namespace ao::rt
     }
 
     void exportToYaml(std::filesystem::path const& path, ExportMode mode) const;
-    void exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode) const;
-    void exportTrack(YAML::Emitter& out,
+    void exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
+    void exportTrack(ryml::NodeRef& node,
                      lmdb::ReadTransaction const& txn,
                      TrackId id,
                      library::TrackView const& view,
@@ -336,7 +347,7 @@ namespace ao::rt
                      std::unordered_map<ResourceId, std::string>& exportedCovers,
                      library::ResourceStore& resources,
                      library::DictionaryStore& dict) const;
-    void exportLists(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode) const;
+    void exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
 
     library::MusicLibrary& ml;
   };
@@ -355,6 +366,26 @@ namespace ao::rt
 
   void LibraryExporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode) const
   {
+    auto tree = ryml::Tree{};
+    auto root = tree.rootref();
+    root |= ryml::MAP;
+
+    root.append_child() << ryml::key("version") << 1;
+    appendString(root, "libraryId", formatUuid(ml.metaHeader().libraryId));
+    appendString(root, "export_mode", modeToString(mode));
+
+    auto const txn = ml.readTransaction();
+    auto library = root.append_child();
+    yaml::setKey(library, "library");
+    library |= ryml::MAP;
+
+    if (mode != ExportMode::ListOnly)
+    {
+      exportTracks(library, txn, mode);
+    }
+
+    exportLists(library, txn, mode);
+
     auto ofs = std::ofstream{path};
 
     if (!ofs)
@@ -362,32 +393,16 @@ namespace ao::rt
       ao::throwException<Exception>("Failed to open '{}' for writing", path.string());
     }
 
-    auto out = YAML::Emitter{ofs};
-    out << YAML::BeginMap;
-    out << YAML::Key << "version" << YAML::Value << 1;
-    out << YAML::Key << "libraryId" << YAML::Value << formatUuid(ml.metaHeader().libraryId);
-    out << YAML::Key << "export_mode" << YAML::Value << modeToString(mode);
+    std::string const yaml = ryml::emitrs_yaml<std::string>(tree);
+    ofs << yaml;
 
-    auto const txn = ml.readTransaction();
-    out << YAML::Key << "library" << YAML::Value << YAML::BeginMap;
-
-    if (mode != ExportMode::ListOnly)
+    if (!ofs.good())
     {
-      exportTracks(out, txn, mode);
-    }
-
-    exportLists(out, txn, mode);
-
-    out << YAML::EndMap; // end library
-    out << YAML::EndMap; // end root
-
-    if (!out.good())
-    {
-      ao::throwException<Exception>("YAML emitter error while writing '{}': {}", path.string(), out.GetLastError());
+      ao::throwException<Exception>("File write error while writing '{}'", path.string());
     }
   }
 
-  void LibraryExporter::Impl::exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode) const
+  void LibraryExporter::Impl::exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const
   {
     auto const trackReader = ml.tracks().reader(txn);
     auto const manifestReader = ml.manifest().reader(txn);
@@ -395,7 +410,9 @@ namespace ao::rt
     auto& dict = ml.dictionary();
     auto exportedCovers = std::unordered_map<ResourceId, std::string>{};
 
-    out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
+    auto tracksNode = node.append_child();
+    yaml::setKey(tracksNode, "tracks");
+    tracksNode |= ryml::SEQ;
 
     for (auto const& [trackId, view] : trackReader)
     {
@@ -406,13 +423,11 @@ namespace ao::rt
         viewWithManifest = library::TrackView{view.hotData(), view.coldData(), optEntry->fileSize(), optEntry->mtime()};
       }
 
-      exportTrack(out, txn, trackId, viewWithManifest, mode, exportedCovers, resources, dict);
+      exportTrack(tracksNode, txn, trackId, viewWithManifest, mode, exportedCovers, resources, dict);
     }
-
-    out << YAML::EndSeq;
   }
 
-  void LibraryExporter::Impl::exportTrack(YAML::Emitter& out,
+  void LibraryExporter::Impl::exportTrack(ryml::NodeRef& node,
                                           lmdb::ReadTransaction const& txn,
                                           TrackId id,
                                           library::TrackView const& view,
@@ -421,18 +436,19 @@ namespace ao::rt
                                           library::ResourceStore& resources,
                                           library::DictionaryStore& dict) const
   {
-    out << YAML::BeginMap;
-    out << YAML::Key << "id" << YAML::Value << id.raw();
+    auto trackNode = node.append_child();
+    trackNode |= ryml::MAP;
+
+    trackNode.append_child() << ryml::key("id") << id.raw();
 
     auto const property = view.property();
-    out << YAML::Key << "uri" << YAML::Value << std::string(property.uri());
+    appendString(trackNode, "uri", property.uri());
 
     auto const metadata = view.metadata();
     auto optBaseline = std::optional<library::TrackBuilder>{};
 
     if (mode == ExportMode::Delta)
     {
-      // Delta mode: Diff against physical file
       if (auto const fullPath = ml.rootPath() / property.uri(); std::filesystem::exists(fullPath))
       {
         if (auto tagFile = tag::TagFile::open(fullPath))
@@ -444,47 +460,52 @@ namespace ao::rt
 
     if (mode != ExportMode::ListOnly)
     {
-      emitTrackMetadata(out, view, dict, optBaseline);
+      emitTrackMetadata(trackNode, view, dict, optBaseline);
     }
 
     if (mode == ExportMode::Full)
     {
-      emitTrackProperties(out, property);
+      emitTrackProperties(trackNode, property);
     }
 
-    emitTrackCover(out, txn, metadata, optBaseline, mode, exportedCovers, resources);
-    emitTrackCommon(out, metadata, view.tags(), dict);
-
-    out << YAML::EndMap;
+    emitTrackCover(trackNode, txn, metadata, optBaseline, mode, exportedCovers, resources);
+    emitTrackCommon(trackNode, metadata, view.tags(), dict);
   }
 
-  void LibraryExporter::Impl::exportLists(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode) const
+  void LibraryExporter::Impl::exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const
   {
-    out << YAML::Key << "lists" << YAML::Value << YAML::BeginSeq;
+    auto listsNode = node.append_child();
+    yaml::setKey(listsNode, "lists");
+    listsNode |= ryml::SEQ;
+
     auto const listReader = ml.lists().reader(txn);
     auto const trackReader = ml.tracks().reader(txn);
 
     for (auto const& [listId, listView] : listReader)
     {
-      out << YAML::BeginMap;
-      out << YAML::Key << "id" << YAML::Value << listId.raw();
-      out << YAML::Key << "parentId" << YAML::Value << listView.parentId().raw();
-      out << YAML::Key << "name" << YAML::Value << std::string(listView.name());
+      auto listNode = listsNode.append_child();
+      listNode |= ryml::MAP;
+
+      listNode.append_child() << ryml::key("id") << listId.raw();
+      listNode.append_child() << ryml::key("parentId") << listView.parentId().raw();
+      appendString(listNode, "name", listView.name());
 
       if (!listView.description().empty())
       {
-        out << YAML::Key << "description" << YAML::Value << std::string(listView.description());
+        appendString(listNode, "description", listView.description());
       }
 
       if (listView.isSmart())
       {
-        out << YAML::Key << "filter" << YAML::Value << std::string(listView.filter());
+        appendString(listNode, "filter", listView.filter());
       }
       else
       {
         if (auto const tracks = listView.tracks(); !tracks.empty())
         {
-          out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
+          auto tracksSeqNode = listNode.append_child();
+          yaml::setKey(tracksSeqNode, "tracks");
+          tracksSeqNode |= ryml::SEQ;
 
           for (auto const tid : tracks)
           {
@@ -492,24 +513,18 @@ namespace ao::rt
             {
               if (auto const optTrack = trackReader.get(tid); optTrack)
               {
-                out << YAML::BeginMap;
-                out << YAML::Key << "uri" << YAML::Value << std::string(optTrack->property().uri());
-                out << YAML::EndMap;
+                auto refNode = tracksSeqNode.append_child();
+                refNode |= ryml::MAP;
+                appendString(refNode, "uri", optTrack->property().uri());
               }
             }
             else
             {
-              out << tid.raw();
+              tracksSeqNode.append_child() << tid.raw();
             }
           }
-
-          out << YAML::EndSeq;
         }
       }
-
-      out << YAML::EndMap;
     }
-
-    out << YAML::EndSeq;
   }
 } // namespace ao::rt

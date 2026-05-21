@@ -44,7 +44,7 @@ namespace ao::gtk::layout
 
   void ComponentRegistry::registerComponent(ComponentDescriptor descriptor, ComponentFactory factory)
   {
-    auto const type = std::string(descriptor.type);
+    auto const type = std::string{descriptor.type};
     _factories[type] = factory;
 
     if (auto const it = _descriptorIndexMap.find(type); it != _descriptorIndexMap.end())

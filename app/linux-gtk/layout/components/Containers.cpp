@@ -342,7 +342,7 @@ namespace ao::gtk::layout
     {
     public:
       TabsComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _box(Gtk::Orientation::VERTICAL)
+        : _box{Gtk::Orientation::VERTICAL}
       {
         if (node.children.empty())
         {
@@ -599,10 +599,10 @@ namespace ao::gtk::layout
             Gtk::Orientation::VERTICAL, width, minHeight, naturalHeight, minBaseline, naturalBaseline);
           int const height = child.reqHeight > 0 ? child.reqHeight : naturalHeight;
 
-          auto const rect = Gdk::Graphene::Rect(static_cast<float>(child.posX),
+          auto const rect = Gdk::Graphene::Rect{static_cast<float>(child.posX),
                                                 static_cast<float>(child.posY),
                                                 static_cast<float>(width),
-                                                static_cast<float>(height));
+                                                static_cast<float>(height)};
           auto const cr = snapshot->append_cairo(rect);
 
           // Adwaita blue: #3584e4
@@ -731,7 +731,7 @@ namespace ao::gtk::layout
         _dragChild = nullptr;
         _resizeCorner = ResizeCorner::None;
 
-        for (auto& child : std::ranges::reverse_view(_children))
+        for (auto& child : std::ranges::reverse_view{_children})
         {
           int minWidth = 0;
           int naturalWidth = 0;
@@ -926,10 +926,10 @@ namespace ao::gtk::layout
     {
     public:
       AbsoluteCanvasComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _canvas(ctx.editMode,
+        : _canvas{ctx.editMode,
                   ctx.onNodeMoved,
                   node.getProp<bool>("snapToGrid", true),
-                  static_cast<int>(node.getProp<std::int64_t>("gridSize", 8)))
+                  static_cast<int>(node.getProp<std::int64_t>("gridSize", 8))}
       {
         for (auto const& childNode : node.children)
         {

@@ -140,7 +140,8 @@ namespace ao::cli
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
     auto* exportPath = exportCmd->add_option("output,-o,--output", "Output YAML file path")->required();
-    auto* exportMode = exportCmd->add_option("-m,--mode", "Export mode (delta, metadata, full, listOnly)")->default_val("full");
+    auto* exportMode =
+      exportCmd->add_option("-m,--mode", "Export mode (delta, metadata, full, listOnly)")->default_val("full");
     exportCmd->callback(
       [&runtime, exportPath, exportMode]
       { exportLib(runtime.musicLibrary(), exportPath->as<std::string>(), exportMode->as<std::string>(), std::cout); });

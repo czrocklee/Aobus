@@ -85,7 +85,7 @@ namespace ao::model::test
     try
     {
       auto const str = _dict->get(id);
-      result = std::string(str);
+      result = std::string{str};
     }
     catch (std::exception const&)
     {
@@ -124,7 +124,7 @@ namespace ao::model::test
 
       auto row = RowData{};
       row.id = id;
-      row.title = std::string(metadata.title());
+      row.title = std::string{metadata.title()};
 
       if (auto const artistId = metadata.artistId(); artistId != kInvalidDictionaryId)
       {

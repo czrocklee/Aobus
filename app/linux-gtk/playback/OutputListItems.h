@@ -51,7 +51,7 @@ namespace ao::gtk
                                            std::string customName = "")
     {
       return Glib::make_refptr_for_instance<DeviceItem>(
-        new DeviceItem(std::move(backend), device, std::move(profile), std::move(customName)));
+        new DeviceItem{std::move(backend), device, std::move(profile), std::move(customName)});
     }
 
     audio::BackendId const& backendId() const { return _backendId; }

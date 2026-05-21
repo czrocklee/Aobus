@@ -10,7 +10,11 @@ find_package(Catch2 3 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS headers)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
-find_package(yaml-cpp REQUIRED)
+find_package(ryml REQUIRED)
+find_package(c4core REQUIRED)
+
+add_library(PkgRapidYaml INTERFACE)
+target_link_libraries(PkgRapidYaml INTERFACE ryml::ryml c4core::c4core)
 
 # ── spdlog ABI guard ────────────────────────────────────────────────────────
 # Aobus compiles spdlog call sites with SPDLOG_USE_STD_FORMAT.  If CMake reuses

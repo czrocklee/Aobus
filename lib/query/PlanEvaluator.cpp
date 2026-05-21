@@ -61,7 +61,7 @@ namespace ao::query
       }
 
       auto const found =
-        std::ranges::find_last(std::ranges::subrange(instructions.begin(), it), OpCode::LoadField, &Instruction::op);
+        std::ranges::find_last(std::ranges::subrange{instructions.begin(), it}, OpCode::LoadField, &Instruction::op);
 
       if (found.empty())
       {
@@ -291,7 +291,7 @@ namespace ao::query
       auto rhs = registers[instr.operand];
       auto const* prevLoadField = findPrevLoadField(instructions, &instr);
 
-      auto fieldStr = std::string_view();
+      auto fieldStr = std::string_view{};
 
       if (isStringField(field))
       {

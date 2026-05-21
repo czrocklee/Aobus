@@ -14,15 +14,16 @@
 #include "ao/library/TrackView.h"
 #include "runtime/LibraryExporter.h"
 #include "runtime/LibraryImporter.h"
+#include "runtime/yaml/Utils.h"
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
-#include <yaml-cpp/yaml.h>
 
 #include <algorithm>
 #include <cstddef>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <optional>
@@ -36,15 +37,27 @@
 namespace ao::library::test
 {
   using namespace ao::lmdb::test;
+  namespace yaml = ao::rt::yaml;
+
+  namespace
+  {
+    ryml::Tree loadTree(std::filesystem::path const& path, std::vector<char>& buffer)
+    {
+      buffer = yaml::readFile(path);
+      auto tree = ryml::Tree{yaml::callbacks(path.string().c_str())};
+      ryml::parse_in_place(ryml::to_substr(buffer), &tree);
+      return tree;
+    }
+  }
 
   TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
   {
     auto const temp1 = TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
-    auto const smartListName = std::string("Smart List ") + std::string(256, 'S');
-    auto const smartFilter = std::string("@duration > 60 and ") + std::string(256, 'x');
-    auto const manualListName = std::string("Manual List ") + std::string(256, 'M');
-    auto const manualListDescription = std::string("Manual Description ") + std::string(256, 'D');
+    auto const smartListName = std::string{"Smart List "} + std::string(256, 'S');
+    auto const smartFilter = std::string{"@duration > 60 and "} + std::string(256, 'x');
+    auto const manualListName = std::string{"Manual List "} + std::string(256, 'M');
+    auto const manualListDescription = std::string{"Manual Description "} + std::string(256, 'D');
 
     // 1. Setup initial library
     {
@@ -83,7 +96,7 @@ namespace ao::library::test
     }
 
     // 2. Export to YAML
-    auto const yamlPath = std::filesystem::path(temp1.path()) / "backup.yaml";
+    auto const yamlPath = std::filesystem::path{temp1.path()} / "backup.yaml";
     auto exporter = rt::LibraryExporter{ml1};
     REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
 
@@ -150,7 +163,7 @@ namespace ao::library::test
 
       for (auto [k, v] : custom)
       {
-        if (std::string(dict.get(k)) == "mood" && std::string(v) == "happy")
+        if (std::string{dict.get(k)} == "mood" && std::string{v} == "happy")
         {
           foundMood = true;
         }
@@ -223,7 +236,7 @@ namespace ao::library::test
     }
 
     // 2. Export to YAML (Full mode)
-    auto const yamlPath = std::filesystem::path(temp1.path()) / "phase1.yaml";
+    auto const yamlPath = std::filesystem::path{temp1.path()} / "phase1.yaml";
     auto exporter = rt::LibraryExporter{ml1};
     REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
 
@@ -253,15 +266,15 @@ namespace ao::library::test
       REQUIRE(tracks.size() == 1);
       auto const& view = tracks[0].second;
 
-      REQUIRE(std::string(view.property().uri()) == "full-fields.flac");
+      REQUIRE(std::string{view.property().uri()} == "full-fields.flac");
       REQUIRE(view.property().fileSize() == 1024ULL * 1024ULL * 50ULL);
       REQUIRE(view.property().mtime() == 123456789);
       REQUIRE(view.property().durationMs() == 240000);
 
-      REQUIRE(std::string(view.metadata().title()) == "Test Title");
-      REQUIRE(std::string(dict.get(view.metadata().artistId())) == "Test Artist");
-      REQUIRE(std::string(dict.get(view.metadata().composerId())) == "Test Composer");
-      REQUIRE(std::string(dict.get(view.metadata().workId())) == "Test Work");
+      REQUIRE(std::string{view.metadata().title()} == "Test Title");
+      REQUIRE(std::string{dict.get(view.metadata().artistId())} == "Test Artist");
+      REQUIRE(std::string{dict.get(view.metadata().composerId())} == "Test Composer");
+      REQUIRE(std::string{dict.get(view.metadata().workId())} == "Test Work");
     }
   }
 
@@ -312,14 +325,14 @@ namespace ao::library::test
     }
 
     // 2. Export to YAML
-    auto const yamlPath = std::filesystem::path(temp1.path()) / "covers.yaml";
+    auto const yamlPath = std::filesystem::path{temp1.path()} / "covers.yaml";
     auto exporter = rt::LibraryExporter{ml1};
     exporter.exportToYaml(yamlPath, rt::ExportMode::Full);
 
     // 3. Verify YAML contains anchor and alias (textual check)
     {
       auto ifs = std::ifstream{yamlPath};
-      auto const content = std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+      auto const content = std::string((std::istreambuf_iterator<char>{ifs}), std::istreambuf_iterator<char>{});
       // Should contain at least one anchor &cover_ and one alias *cover_
       CHECK(content.find("&cover_") != std::string::npos);
       CHECK(content.find("*cover_") != std::string::npos);
@@ -364,7 +377,7 @@ namespace ao::library::test
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
 
     auto trackId = kInvalidTrackId;
-    const auto *const uri = "special-list-song.flac";
+    auto const* const uri = "special-list-song.flac";
 
     // 1. Setup initial library
     {
@@ -393,15 +406,17 @@ namespace ao::library::test
     }
 
     // 2. Export in ListOnly mode
-    auto const yamlPath = std::filesystem::path(temp1.path()) / "list-only.yaml";
+    auto const yamlPath = std::filesystem::path{temp1.path()} / "list-only.yaml";
     auto exporter = rt::LibraryExporter{ml1};
     exporter.exportToYaml(yamlPath, rt::ExportMode::ListOnly);
 
     // 3. Verify YAML content
     {
-      auto root = YAML::LoadFile(yamlPath.string());
-      CHECK_FALSE(root["library"]["tracks"]);
-      CHECK(root["library"]["lists"]);
+      auto buffer = std::vector<char>{};
+      auto tree = loadTree(yamlPath, buffer);
+      auto root = tree.rootref();
+      CHECK_FALSE(root["library"]["tracks"].readable());
+      CHECK(root["library"]["lists"].readable());
     }
 
     // 4. Import into a library that has the SAME track but DIFFERENT TrackId
@@ -463,8 +478,8 @@ namespace ao::library::test
     auto const temp = TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
 
-    const auto *const uri1 = "track1.flac";
-    const auto *const uri2 = "track2.flac";
+    auto const* const uri1 = "track1.flac";
+    auto const* const uri2 = "track2.flac";
 
     // 1. Setup initial library with track 1
     {
@@ -486,7 +501,7 @@ namespace ao::library::test
     }
 
     // 2. Prepare YAML with update for track 1 and addition of track 2
-    auto const yamlPath = std::filesystem::path(temp.path()) / "merge.yaml";
+    auto const yamlPath = std::filesystem::path{temp.path()} / "merge.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 1
@@ -527,7 +542,7 @@ library:
 
       // Track 2 should be added
       auto const& v2 = tracks.at(uri2);
-      CHECK(std::string(v2.metadata().title()) == "New Track");
+      CHECK(std::string{v2.metadata().title()} == "New Track");
     }
   }
 
@@ -554,7 +569,7 @@ library:
       txn.commit();
     }
 
-    auto const yamlPath = std::filesystem::path(temp.path()) / "child-first.yaml";
+    auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 1
@@ -616,7 +631,7 @@ library:
     auto const temp = TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
     auto importer = rt::LibraryImporter{ml};
-    auto const yamlPath = std::filesystem::path(temp.path()) / "bad.yaml";
+    auto const yamlPath = std::filesystem::path{temp.path()} / "bad.yaml";
 
     auto testError = [&](std::string_view yamlContent, std::string_view expectedErrorFragment)
     {
@@ -625,7 +640,7 @@ library:
         yaml << yamlContent;
       }
       REQUIRE_THROWS_WITH(
-        importer.importFromYaml(yamlPath), Catch::Matchers::ContainsSubstring(std::string(expectedErrorFragment)));
+        importer.importFromYaml(yamlPath), Catch::Matchers::ContainsSubstring(std::string{expectedErrorFragment}));
     };
 
     SECTION("Missing version")
@@ -811,18 +826,20 @@ library:
       txn.commit();
     }
 
-    auto const yamlPath = std::filesystem::path(temp.path()) / "delta.yaml";
+    auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";
     auto exporter = rt::LibraryExporter{ml};
     REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rt::ExportMode::Delta));
 
     {
-      auto root = YAML::LoadFile(yamlPath.string());
+      auto buffer = std::vector<char>{};
+      auto tree = loadTree(yamlPath, buffer);
+      auto root = tree.rootref();
       auto tracks = root["library"]["tracks"];
-      REQUIRE(tracks.IsSequence());
-      REQUIRE(tracks.size() == 2);
+      REQUIRE(tracks.is_seq());
+      REQUIRE(tracks.num_children() == 2);
 
-      CHECK(tracks[0]["title"].as<std::string>() == "Should Export Fully");
-      CHECK(tracks[1]["title"].as<std::string>() == "Will fallback to full export because TagFile fails");
+      CHECK(yaml::scalarView(tracks[0]["title"]) == "Should Export Fully");
+      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
     }
   }
 
@@ -831,7 +848,7 @@ library:
     auto const temp = TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
     auto importer = rt::LibraryImporter{ml};
-    auto const yamlPath = std::filesystem::path(temp.path()) / "list-edges.yaml";
+    auto const yamlPath = std::filesystem::path{temp.path()} / "list-edges.yaml";
 
     {
       auto yaml = std::ofstream{yamlPath};

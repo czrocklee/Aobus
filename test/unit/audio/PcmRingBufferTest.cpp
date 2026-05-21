@@ -34,12 +34,12 @@ namespace ao::audio::test
       REQUIRE(buffer.size() == 5);
 
       auto output = std::vector<std::byte>(5);
-      REQUIRE(buffer.read(std::span(output).subspan(0, 2)) == 2);
+      REQUIRE(buffer.read(std::span{output}.subspan(0, 2)) == 2);
       REQUIRE(output[0] == std::byte{1});
       REQUIRE(output[1] == std::byte{2});
       REQUIRE(buffer.size() == 3);
 
-      REQUIRE(buffer.read(std::span(output).subspan(2, 3)) == 3);
+      REQUIRE(buffer.read(std::span{output}.subspan(2, 3)) == 3);
       REQUIRE(output[2] == std::byte{3});
       REQUIRE(output[3] == std::byte{4});
       REQUIRE(output[4] == std::byte{5});
@@ -97,11 +97,11 @@ namespace ao::audio::test
       // Fill remaining if any
       auto b = std::byte{0xDD};
 
-      while (buffer.write(std::span<std::byte const>(&b, 1)) == 1)
+      while (buffer.write(std::span<std::byte const>{&b, 1}) == 1)
       {
       }
 
-      REQUIRE(buffer.write(std::span<std::byte const>(&b, 1)) == 0);
+      REQUIRE(buffer.write(std::span<std::byte const>{&b, 1}) == 0);
     }
   }
 
@@ -117,7 +117,7 @@ namespace ao::audio::test
                                    {
                                      std::byte b = static_cast<std::byte>(i % 256);
 
-                                     while (buffer.write(std::span(&b, 1)) == 0)
+                                     while (buffer.write(std::span{&b, 1}) == 0)
                                      {
                                        std::this_thread::yield();
                                      }
@@ -132,7 +132,7 @@ namespace ao::audio::test
 
                                    while (!done || buffer.size() > 0)
                                    {
-                                     if (auto b = std::byte{}; buffer.read(std::span(&b, 1)) == 1)
+                                     if (auto b = std::byte{}; buffer.read(std::span{&b, 1}) == 1)
                                      {
                                        REQUIRE(b == static_cast<std::byte>(count % 256));
                                        count++;

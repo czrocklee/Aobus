@@ -83,7 +83,7 @@ namespace ao::gtk
     auto const& metadata = view.metadata();
     auto const title = metadata.title();
 
-    row->populate(Glib::ustring(title.begin(), title.end()),
+    row->populate(Glib::ustring{title.begin(), title.end()},
                   metadata.artistId(),
                   metadata.albumId(),
                   metadata.albumArtistId(),
@@ -268,7 +268,7 @@ namespace ao::gtk
 
     // Resolve from dictionary and cache
     auto const str = _dict.getOrDefault(id, "");
-    auto result = Glib::ustring(str.begin(), str.end());
+    auto result = Glib::ustring{str.begin(), str.end()};
 
     auto const insertResult = _stringCache.emplace(id, std::move(result));
     return insertResult.first->second;

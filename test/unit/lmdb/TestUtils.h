@@ -30,7 +30,7 @@ namespace ao::lmdb::test
 
       if (result == nullptr)
       {
-        throw std::runtime_error("mkdtemp failed");
+        throw std::runtime_error{"mkdtemp failed"};
       }
 
       _path = result;

@@ -73,7 +73,7 @@ namespace ao::gtk
     public:
       static Glib::RefPtr<ProjectionGroupSectionSorter> create(TrackListAdapter& adapter)
       {
-        return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(new ProjectionGroupSectionSorter(adapter));
+        return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(new ProjectionGroupSectionSorter{adapter});
       }
 
     protected:

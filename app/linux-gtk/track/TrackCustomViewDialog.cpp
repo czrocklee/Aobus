@@ -27,7 +27,6 @@
 #include <iterator>
 #include <optional>
 #include <random>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -44,7 +43,7 @@ namespace ao::gtk
     std::string generateId()
     {
       static std::random_device rd;
-      static std::mt19937_64 gen(rd());
+      static std::mt19937_64 gen{rd()};
       static std::uniform_int_distribution<std::uint64_t> dis;
       return std::format("{:016x}", dis(gen));
     }

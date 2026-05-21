@@ -476,7 +476,7 @@ namespace ao::audio::backend
   // --- PipeWireMonitor Implementation ---
 
   PipeWireMonitor::PipeWireMonitor()
-    : _impl(std::make_unique<Impl>())
+    : _impl{std::make_unique<Impl>()}
   {
   }
 
@@ -612,7 +612,7 @@ namespace ao::audio::backend
     auto const id = nextSubscriptionId++;
     {
       auto const lock = std::scoped_lock{mutex};
-      graphSubscriptions.push_back({id, std::string(routeAnchor), std::move(callback)});
+      graphSubscriptions.push_back({id, std::string{routeAnchor}, std::move(callback)});
     }
 
     triggerRefresh();

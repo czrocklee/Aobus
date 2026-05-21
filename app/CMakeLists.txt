@@ -54,7 +54,8 @@ add_library(app_runtime STATIC
     runtime/ViewService.h
 )
 target_include_directories(app_runtime PUBLIC "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(app_runtime PRIVATE ao yaml-cpp::yaml-cpp Boost::headers)
+target_link_libraries(app_runtime PUBLIC PkgRapidYaml)
+target_link_libraries(app_runtime PRIVATE ao Boost::headers)
 
 # Frontends
 add_subdirectory(linux-gtk)

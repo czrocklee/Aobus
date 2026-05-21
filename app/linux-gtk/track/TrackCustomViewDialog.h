@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/UIState.h"
+#include "runtime/TrackField.h"
 #include "runtime/TrackPresentationPreset.h"
 
 #include <gtkmm/button.h>
@@ -13,7 +14,6 @@
 #include <gtkmm/listbox.h>
 #include <gtkmm/window.h>
 
-#include <cstdint>
 #include <optional>
 #include <string_view>
 #include <vector>

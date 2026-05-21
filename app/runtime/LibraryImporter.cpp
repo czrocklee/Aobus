@@ -16,14 +16,13 @@
 #include "ao/utility/Base64.h"
 #include "runtime/LibraryExporter.h"
 #include "runtime/TrackField.h"
-
-#include <yaml-cpp/yaml.h>
+#include "runtime/yaml/Utils.h"
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -42,19 +41,19 @@ namespace ao::rt
     struct ValidatedTrack final
     {
       std::uint32_t yamlId = 0;
-      std::string uri;
-      YAML::Node node;
+      std::string_view uri;
+      ryml::ConstNodeRef node;
     };
 
     struct ValidatedList final
     {
       std::uint32_t yamlId = 0;
       std::uint32_t yamlParentId = 0;
-      std::string name;
-      std::string description;
-      std::string filter;
+      std::string_view name;
+      std::string_view description;
+      std::string_view filter;
       std::vector<std::uint32_t> yamlTrackIds;
-      std::vector<std::string> trackUris;
+      std::vector<std::string_view> trackUris;
       bool isSmart = false;
     };
 
@@ -62,7 +61,7 @@ namespace ao::rt
     {
       std::uint32_t version = 0;
       ExportMode payloadMode = ExportMode::Full;
-      std::optional<std::string> libraryId;
+      std::optional<std::string_view> libraryId;
       std::vector<ValidatedTrack> tracks;
       std::vector<ValidatedList> lists;
     };
@@ -148,16 +147,16 @@ namespace ao::rt
 
     void importFromYaml(std::filesystem::path const& path, ImportMode mode);
 
-    ValidatedImport validate(YAML::Node const& root) const;
-    void validateTracks(YAML::Node const& tracks, ValidatedImport& validated) const;
-    void validateLists(YAML::Node const& lists, ValidatedImport& validated) const;
+    ValidatedImport validate(ryml::ConstNodeRef const& root) const;
+    void validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
+    void validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
 
     void importTracks(std::vector<ValidatedTrack> const& tracks,
                       lmdb::WriteTransaction& txn,
                       std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                       ImportMode strategy,
                       ExportMode payloadMode);
-    void loadTrackBaseline(std::string const& uriStr,
+    void loadTrackBaseline(std::string_view uriStr,
                            std::optional<TrackId> const& optExistingTrackId,
                            ExportMode payloadMode,
                            std::optional<library::TrackBuilder>& optBuilder,
@@ -169,15 +168,11 @@ namespace ao::rt
                      std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
                      ImportMode strategy);
 
-    void overlayMetadata(library::TrackBuilder& builder,
-                         YAML::Node const& trackNode,
-                         std::deque<std::string>& trackStrings) const;
-    void overlayCustomData(library::TrackBuilder& builder,
-                           YAML::Node const& trackNode,
-                           std::deque<std::string>& trackStrings) const;
-    void overlayTechnicalProperties(library::TrackBuilder& builder, YAML::Node const& trackNode) const;
+    void overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
+    void overlayCustomData(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
+    void overlayTechnicalProperties(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
 
-    void loadFileBaseline(std::string const& uriStr,
+    void loadFileBaseline(std::string_view uriStr,
                           ExportMode payloadMode,
                           std::optional<library::TrackBuilder>& optBuilder,
                           std::unique_ptr<tag::TagFile>& keepAliveTagFile) const;
@@ -199,18 +194,23 @@ namespace ao::rt
 
   void LibraryImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
-    auto root = YAML::Node{};
+    auto buffer = std::vector<char>{};
+    auto tree = ryml::Tree{};
 
     try
     {
-      root = YAML::LoadFile(path.string());
+      auto const fileName = path.string();
+      buffer = yaml::readFile(path);
+      tree = ryml::Tree{yaml::callbacks(fileName.c_str())};
+      ryml::parse_in_place(yaml::toSubstr(buffer), &tree);
+      tree.resolve();
     }
-    catch (YAML::Exception const& e)
+    catch (std::exception const& e)
     {
       ao::throwException<Exception>("Failed to read '{}': {}", path.string(), e.what());
     }
 
-    auto const validated = validate(root);
+    auto const validated = validate(tree.rootref());
 
     auto txn = ml.writeTransaction();
 
@@ -237,9 +237,6 @@ namespace ao::rt
       importLists(validated.lists, txn, yamlTrackIdToInternalId, mode);
     }
 
-    // Commit the main import transaction before updating the meta header.
-    // updateMetaHeader creates its own WriteTransaction, and LMDB does not
-    // support nested write transactions on the same thread.
     txn.commit();
 
     if (mode == ImportMode::Restore && validated.libraryId)
@@ -250,52 +247,54 @@ namespace ao::rt
     }
   }
 
-  ValidatedImport LibraryImporter::Impl::validate(YAML::Node const& root) const
+  ValidatedImport LibraryImporter::Impl::validate(ryml::ConstNodeRef const& root) const
   {
     auto validated = ValidatedImport{};
 
-    if (!root["version"])
+    auto const versionNode = yaml::findChild(root, "version");
+
+    if (!versionNode.readable())
     {
       ao::throwException<Exception>("Missing 'version' field in YAML");
     }
 
-    validated.version = root["version"].as<uint32_t>();
+    validated.version = yaml::asInt<uint32_t>(versionNode);
 
     if (validated.version != 1)
     {
       ao::throwException<Exception>("Unsupported YAML version {}", validated.version);
     }
 
-    if (root["export_mode"])
+    if (auto const exportModeNode = yaml::findChild(root, "export_mode"); exportModeNode.readable())
     {
-      validated.payloadMode = parseExportMode(root["export_mode"].as<std::string>());
+      validated.payloadMode = parseExportMode(yaml::scalarView(exportModeNode));
     }
     else
     {
       validated.payloadMode = ExportMode::Full;
     }
 
-    if (root["libraryId"])
+    if (auto const libraryIdNode = yaml::findChild(root, "libraryId"); libraryIdNode.readable())
     {
-      validated.libraryId = root["libraryId"].as<std::string>();
+      validated.libraryId = yaml::scalarView(libraryIdNode);
     }
 
-    auto const library = root["library"];
+    auto const library = yaml::findChild(root, "library");
 
-    if (!library)
+    if (!library.readable())
     {
       ao::throwException<Exception>("Missing 'library' section in YAML");
     }
 
     if (validated.payloadMode != ExportMode::ListOnly)
     {
-      if (auto const tracks = library["tracks"]; tracks)
+      if (auto const tracks = yaml::findChild(library, "tracks"); tracks.readable())
       {
         validateTracks(tracks, validated);
       }
     }
 
-    if (auto const lists = library["lists"]; lists)
+    if (auto const lists = yaml::findChild(library, "lists"); lists.readable())
     {
       validateLists(lists, validated);
     }
@@ -303,30 +302,30 @@ namespace ao::rt
     return validated;
   }
 
-  void LibraryImporter::Impl::validateTracks(YAML::Node const& tracks, ValidatedImport& validated) const
+  void LibraryImporter::Impl::validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
 
-    for (YAML::const_iterator it = tracks.begin(); it != tracks.end(); ++it)
+    for (auto const& trackNode : tracks.children())
     {
-      auto trackNode = YAML::Node{*it};
       auto track = ValidatedTrack{};
+      auto const uriNode = yaml::findChild(trackNode, "uri");
 
-      if (!trackNode["uri"])
+      if (!uriNode.readable())
       {
         ao::throwException<Exception>("Track record missing required 'uri' field");
       }
 
-      track.uri = trackNode["uri"].as<std::string>();
+      track.uri = yaml::scalarView(uriNode);
 
       if (track.uri.empty())
       {
         ao::throwException<Exception>("Track record has empty 'uri'");
       }
 
-      if (trackNode["id"])
+      if (auto const idNode = yaml::findChild(trackNode, "id"); idNode.readable())
       {
-        track.yamlId = trackNode["id"].as<uint32_t>();
+        track.yamlId = yaml::asInt<uint32_t>(idNode);
 
         if (track.yamlId != 0)
         {
@@ -344,21 +343,21 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::validateLists(YAML::Node const& lists, ValidatedImport& validated) const
+  void LibraryImporter::Impl::validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
 
-    for (YAML::const_iterator it = lists.begin(); it != lists.end(); ++it)
+    for (auto const& listNode : lists.children())
     {
-      auto const& listNode = *it;
       auto list = ValidatedList{};
+      auto const idNode = yaml::findChild(listNode, "id");
 
-      if (!listNode["id"])
+      if (!idNode.readable())
       {
         ao::throwException<Exception>("List record missing required 'id' field");
       }
 
-      list.yamlId = listNode["id"].as<uint32_t>();
+      list.yamlId = yaml::asInt<uint32_t>(idNode);
 
       if (list.yamlId == 0)
       {
@@ -372,41 +371,47 @@ namespace ao::rt
 
       seenYamlIds.insert(list.yamlId);
 
-      if (!listNode["name"])
+      auto const nameNode = yaml::findChild(listNode, "name");
+
+      if (!nameNode.readable())
       {
         ao::throwException<Exception>("List record missing required 'name' field");
       }
 
-      list.name = listNode["name"].as<std::string>();
-      list.yamlParentId = listNode["parentId"] ? listNode["parentId"].as<uint32_t>() : 0;
+      list.name = yaml::scalarView(nameNode);
 
-      if (listNode["description"])
+      if (auto const parentIdNode = yaml::findChild(listNode, "parentId"); parentIdNode.readable())
       {
-        list.description = listNode["description"].as<std::string>();
+        list.yamlParentId = yaml::asInt<uint32_t>(parentIdNode);
       }
 
-      if (listNode["filter"])
+      if (auto const descriptionNode = yaml::findChild(listNode, "description"); descriptionNode.readable())
+      {
+        list.description = yaml::scalarView(descriptionNode);
+      }
+
+      if (auto const filterNode = yaml::findChild(listNode, "filter"); filterNode.readable())
       {
         list.isSmart = true;
-        list.filter = listNode["filter"].as<std::string>();
+        list.filter = yaml::scalarView(filterNode);
       }
-      else if (listNode["tracks"])
+      else if (auto const tracksNode = yaml::findChild(listNode, "tracks"); tracksNode.readable())
       {
-        for (auto const& trackRef : listNode["tracks"])
+        for (auto const& trackRef : tracksNode.children())
         {
-          if (trackRef.IsScalar())
+          if (trackRef.is_val())
           {
-            list.yamlTrackIds.push_back(trackRef.as<uint32_t>());
+            list.yamlTrackIds.push_back(yaml::asInt<uint32_t>(trackRef));
           }
-          else if (trackRef.IsMap())
+          else if (trackRef.is_map())
           {
-            if (trackRef["id"])
+            if (auto const trackIdNode = yaml::findChild(trackRef, "id"); trackIdNode.readable())
             {
-              list.yamlTrackIds.push_back(trackRef["id"].as<uint32_t>());
+              list.yamlTrackIds.push_back(yaml::asInt<uint32_t>(trackIdNode));
             }
-            else if (trackRef["uri"])
+            else if (auto const uriNode = yaml::findChild(trackRef, "uri"); uriNode.readable())
             {
-              list.trackUris.push_back(trackRef["uri"].as<std::string>());
+              list.trackUris.push_back(yaml::scalarView(uriNode));
             }
           }
         }
@@ -431,10 +436,8 @@ namespace ao::rt
     for (auto const& validatedTrack : tracks)
     {
       auto const& trackNode = validatedTrack.node;
-      auto trackStrings = std::deque<std::string>{};
-      std::string const& uriStr = validatedTrack.uri;
+      std::string_view const& uriStr = validatedTrack.uri;
 
-      // URI-based matching for Merge mode
       auto optExistingTrackId = std::optional<TrackId>{};
 
       if (strategy == ImportMode::Merge)
@@ -445,13 +448,11 @@ namespace ao::rt
         }
       }
 
-      // 1. Try load baseline
       auto optBuilder = std::optional<library::TrackBuilder>{};
       auto keepAliveTagFile = std::unique_ptr<tag::TagFile>{};
 
       loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, keepAliveTagFile, trackWriter);
 
-      // 2. Initialize builder if still empty
       auto builder = optBuilder ? *optBuilder : library::TrackBuilder::createNew();
 
       if (!optBuilder)
@@ -459,16 +460,15 @@ namespace ao::rt
         builder.property().uri(uriStr);
       }
 
-      // 3. Overlay YAML data (Priority: YAML > File/DB)
-      overlayMetadata(builder, trackNode, trackStrings);
-      overlayCustomData(builder, trackNode, trackStrings);
+      overlayMetadata(builder, trackNode);
+      overlayCustomData(builder, trackNode);
       overlayTechnicalProperties(builder, trackNode);
 
-      auto coverArtBinary = std::vector<std::byte>{}; // NOLINT(aobus-readability-use-if-init-statement)
+      auto coverArtBinary = std::vector<std::byte>{};
 
-      if (trackNode["coverArtBase64"])
+      if (auto const coverArtNode = yaml::findChild(trackNode, "coverArtBase64"); coverArtNode.readable())
       {
-        auto const b64 = trackNode["coverArtBase64"].as<std::string>();
+        auto const b64 = yaml::scalarView(coverArtNode);
         coverArtBinary = utility::base64Decode(b64);
 
         if (!coverArtBinary.empty())
@@ -477,7 +477,6 @@ namespace ao::rt
         }
       }
 
-      // 4. Commit
       auto [preparedHot, preparedCold] = builder.prepare(txn, dict, resources);
       auto targetTrackId = TrackId{};
 
@@ -503,7 +502,6 @@ namespace ao::rt
         std::ignore = view;
       }
 
-      // 5. Populate Manifest
       auto manifestEntry = library::ManifestEntry{.trackId = targetTrackId};
       manifestEntry.fileSize(builder.property().fileSize());
       manifestEntry.mtime(builder.property().mtime());
@@ -516,7 +514,7 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::loadTrackBaseline(std::string const& uriStr,
+  void LibraryImporter::Impl::loadTrackBaseline(std::string_view uriStr,
                                                 std::optional<TrackId> const& optExistingTrackId,
                                                 ExportMode payloadMode,
                                                 std::optional<library::TrackBuilder>& optBuilder,
@@ -539,7 +537,7 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::loadFileBaseline(std::string const& uriStr,
+  void LibraryImporter::Impl::loadFileBaseline(std::string_view uriStr,
                                                ExportMode payloadMode,
                                                std::optional<library::TrackBuilder>& optBuilder,
                                                std::unique_ptr<tag::TagFile>& keepAliveTagFile) const
@@ -556,8 +554,6 @@ namespace ao::rt
 
           if (payloadMode == ExportMode::Metadata)
           {
-            // Clear parsed metadata fields so they don't leak into the restored track.
-            // For Metadata mode, technical props are the only baseline we want.
             optBuilder->metadata()
               .title("")
               .artist("")
@@ -578,7 +574,6 @@ namespace ao::rt
         }
         else
         {
-          // Merge physical file technical props into existing builder
           auto const& props = fileBuilder.property();
           optBuilder->property()
             .durationMs(props.durationMs())
@@ -590,7 +585,6 @@ namespace ao::rt
 
           if (payloadMode == ExportMode::Delta)
           {
-            // For Delta mode merge, we also refresh embedded cover art from file if it wasn't modified in DB
             if (optBuilder->metadata().coverArtId() == 0)
             {
               optBuilder->metadata().coverArtData(fileBuilder.metadata().coverArtData());
@@ -598,7 +592,6 @@ namespace ao::rt
           }
         }
 
-        // Always update file tracking info from physical file
         optBuilder->property().uri(uriStr);
         optBuilder->property().fileSize(std::filesystem::file_size(fullPath));
         optBuilder->property().mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -608,28 +601,16 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::overlayMetadata(library::TrackBuilder& builder,
-                                              YAML::Node const& trackNode,
-                                              std::deque<std::string>& trackStrings) const
+  void LibraryImporter::Impl::overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const
   {
-    auto const keepAlive = [&](YAML::Node const& node) -> std::string_view
-    {
-      if (!node)
-      {
-        return {};
-      }
-
-      return trackStrings.emplace_back(node.template as<std::string>());
-    };
-
     using StringSetter = void (*)(library::TrackBuilder::MetadataBuilder&, std::string_view);
     using NumberSetter = void (*)(library::TrackBuilder::MetadataBuilder&, std::uint16_t);
 
     struct Dispatch
     {
       rt::TrackField field;
-      StringSetter stringSetter;
-      NumberSetter numberSetter;
+      StringSetter stringSetter = nullptr;
+      NumberSetter numberSetter = nullptr;
     };
 
     constexpr auto kMetadataDispatch = std::to_array<Dispatch>({
@@ -651,62 +632,51 @@ namespace ao::rt
     {
       auto const key = rt::trackFieldId(map.field);
 
-      if (auto node = trackNode[key.data()])
+      if (auto node = yaml::findChild(trackNode, key); node.readable())
       {
         if (map.stringSetter != nullptr)
         {
-          map.stringSetter(builder.metadata(), keepAlive(node));
+          map.stringSetter(builder.metadata(), yaml::scalarView(node));
         }
         else if (map.numberSetter != nullptr)
         {
-          map.numberSetter(builder.metadata(), node.template as<std::uint16_t>());
+          map.numberSetter(builder.metadata(), yaml::asInt<std::uint16_t>(node));
         }
       }
     }
 
-    if (trackNode["rating"])
+    if (auto ratingNode = yaml::findChild(trackNode, "rating"); ratingNode.readable())
     {
-      builder.metadata().rating(trackNode["rating"].as<uint8_t>());
+      builder.metadata().rating(yaml::asInt<uint8_t>(ratingNode));
     }
   }
 
   void LibraryImporter::Impl::overlayCustomData(library::TrackBuilder& builder,
-                                                YAML::Node const& trackNode,
-                                                std::deque<std::string>& trackStrings) const
+                                                ryml::ConstNodeRef const& trackNode) const
   {
-    auto const keepAlive = [&](YAML::Node const& node) -> std::string_view
-    {
-      if (!node)
-      {
-        return {};
-      }
-
-      return trackStrings.emplace_back(node.template as<std::string>());
-    };
-
-    if (trackNode["tags"])
+    if (auto tagsNode = yaml::findChild(trackNode, "tags"); tagsNode.readable())
     {
       builder.tags().clear();
 
-      for (auto const& tag : trackNode["tags"])
+      for (auto const& tag : tagsNode.children())
       {
-        builder.tags().add(keepAlive(tag));
+        builder.tags().add(yaml::scalarView(tag));
       }
     }
 
-    if (trackNode["custom"])
+    if (auto customNode = yaml::findChild(trackNode, "custom"); customNode.readable())
     {
       builder.custom().clear();
 
-      for (auto it = trackNode["custom"].begin(); it != trackNode["custom"].end(); ++it)
+      for (auto const& it : customNode.children())
       {
-        builder.custom().add(keepAlive(it->first), keepAlive(it->second));
+        builder.custom().add(yaml::keyView(it), yaml::scalarView(it));
       }
     }
   }
 
   void LibraryImporter::Impl::overlayTechnicalProperties(library::TrackBuilder& builder,
-                                                         YAML::Node const& trackNode) const
+                                                         ryml::ConstNodeRef const& trackNode) const
   {
     using U32Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint32_t);
     using U16Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint16_t);
@@ -715,9 +685,9 @@ namespace ao::rt
     struct Dispatch
     {
       rt::TrackField field;
-      U32Setter u32Setter;
-      U16Setter u16Setter;
-      U8Setter u8Setter;
+      U32Setter u32Setter = nullptr;
+      U16Setter u16Setter = nullptr;
+      U8Setter u8Setter = nullptr;
     };
 
     constexpr auto kPropertyDispatch = std::to_array<Dispatch>({
@@ -733,31 +703,31 @@ namespace ao::rt
     {
       auto const key = rt::trackFieldId(map.field);
 
-      if (auto node = trackNode[key.data()])
+      if (auto node = yaml::findChild(trackNode, key); node.readable())
       {
         if (map.u32Setter != nullptr)
         {
-          map.u32Setter(builder.property(), node.template as<std::uint32_t>());
+          map.u32Setter(builder.property(), yaml::asInt<std::uint32_t>(node));
         }
         else if (map.u16Setter != nullptr)
         {
-          map.u16Setter(builder.property(), node.template as<std::uint16_t>());
+          map.u16Setter(builder.property(), yaml::asInt<std::uint16_t>(node));
         }
         else if (map.u8Setter != nullptr)
         {
-          map.u8Setter(builder.property(), node.template as<std::uint8_t>());
+          map.u8Setter(builder.property(), yaml::asInt<std::uint8_t>(node));
         }
       }
     }
 
-    if (trackNode["fileSize"])
+    if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
     {
-      builder.property().fileSize(trackNode["fileSize"].as<uint64_t>());
+      builder.property().fileSize(yaml::asInt<uint64_t>(fileSizeNode));
     }
 
-    if (trackNode["mtime"])
+    if (auto mtimeNode = yaml::findChild(trackNode, "mtime"); mtimeNode.readable())
     {
-      builder.property().mtime(trackNode["mtime"].as<uint64_t>());
+      builder.property().mtime(yaml::asInt<uint64_t>(mtimeNode));
     }
   }
 
@@ -770,11 +740,9 @@ namespace ao::rt
     auto listWriter = ml.lists().writer(txn);
     auto manifestReader = ml.manifest().reader(txn);
 
-    // Track ID mapping for this import session
-    auto yamlListIdToNewListId = std::unordered_map<std::uint32_t, ListId>();
+    auto yamlListIdToNewListId = std::unordered_map<std::uint32_t, ListId>{};
     yamlListIdToNewListId.reserve(lists.size());
 
-    // 1. Create lists (initial pass without parent mapping)
     for (auto const& importedList : lists)
     {
       auto builder = library::ListBuilder::createNew().name(importedList.name).description(importedList.description);
@@ -785,7 +753,6 @@ namespace ao::rt
       }
       else
       {
-        // Remap tracks using either YAML ID or URI
         for (auto const yamlTrackId : importedList.yamlTrackIds)
         {
           if (auto const it = yamlTrackIdToInternalId.find(yamlTrackId); it != yamlTrackIdToInternalId.end())
@@ -803,14 +770,11 @@ namespace ao::rt
         }
       }
 
-      // TODO: Implement "Real Merge" for lists (Phase 3/4)
-      // For now, we always create new list records in this pass.
       auto [newListId, view] = listWriter.create(builder.serialize());
       std::ignore = view;
       yamlListIdToNewListId[importedList.yamlId] = newListId;
     }
 
-    // 2. Resolve parent hierarchy and update
     for (auto const& importedList : lists)
     {
       if (importedList.yamlParentId == 0)
@@ -822,7 +786,6 @@ namespace ao::rt
 
       if (parentIt == yamlListIdToNewListId.end())
       {
-        // This should have been caught in validation
         continue;
       }
 

@@ -81,7 +81,7 @@ namespace ao::gtk::test
       try
       {
         auto const str = _dict->get(id);
-        result = std::string(str);
+        result = std::string{str};
       }
       catch (std::exception const&)
       {
@@ -158,7 +158,7 @@ namespace ao::gtk::test
       row.album = resolveDictionaryString(metadata.albumId());
       row.albumArtist = resolveDictionaryString(metadata.albumArtistId());
       row.genre = resolveDictionaryString(metadata.genreId());
-      row.title = std::string(metadata.title());
+      row.title = std::string{metadata.title()};
       row.year = metadata.year();
       row.discNumber = metadata.discNumber();
       row.trackNumber = metadata.trackNumber();

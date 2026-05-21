@@ -201,7 +201,7 @@ CONFIG_BASE="
   {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'},
   {key: 'readability-function-cognitive-complexity.Threshold', value: 30},
   {key: 'cppcoreguidelines-macro-usage.AllowedRegexp', value: '^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+\$'},
-  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*boost/asio/.*;.*boost/interprocess/.*;.*/flat_(set|map);.*/errno.h;.*glib.*'}
+  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4/.*;.*boost/asio/.*;.*boost/interprocess/.*;.*/flat_(set|map);.*/errno.h;.*glib.*'}
  ]}"
 
 # ---------------------------------------------------------------------------
@@ -232,7 +232,13 @@ classify_file() {
         return
     fi
     f=$(realpath -e "$f" 2>/dev/null || realpath "$f" 2>/dev/null || echo "$f")
-    if [[ "$f" == */test/integration/lint/* || "$f" == */test/main.cpp ]]; then
+    if [[ "$f" == */test/integration/lint/LintAllCheckFixture.cpp ]]; then
+        if $EXPLICIT_FILES_MODE; then
+            echo "STRICT $f"
+        else
+            echo "IGNORE $f"
+        fi
+    elif [[ "$f" == */test/integration/lint/* || "$f" == */test/main.cpp ]]; then
         echo "IGNORE $f"
     elif [[ "$f" == */lint/* ]]; then
         echo "STRICT $f"
@@ -289,6 +295,11 @@ $DEBUG_MODE && echo "DEBUG ISYSTEM_ARGS: $ISYSTEM_ARGS_STR"
 
 # --- File discovery ---------------------------------------------------------
 cd "$PROJECT_ROOT"
+
+EXPLICIT_FILES_MODE=false
+if [[ ${#FILES[@]} -gt 0 ]]; then
+    EXPLICIT_FILES_MODE=true
+fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
     if $ALL_MODE; then

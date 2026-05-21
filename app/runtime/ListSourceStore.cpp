@@ -162,7 +162,7 @@ namespace ao::rt
     }
 
     // Erase in reverse order of discovery (children first)
-    for (auto& it : std::ranges::reverse_view(toErase))
+    for (auto& it : std::ranges::reverse_view{toErase})
     {
       _sources.erase(it);
     }

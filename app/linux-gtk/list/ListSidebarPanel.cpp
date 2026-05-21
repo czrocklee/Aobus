@@ -186,7 +186,7 @@ namespace ao::gtk
         }
 
         auto optPoint =
-          rowBox->compute_point(_listView, Gdk::Graphene::Point(static_cast<float>(xPos), static_cast<float>(yPos)));
+          rowBox->compute_point(_listView, Gdk::Graphene::Point{static_cast<float>(xPos), static_cast<float>(yPos)});
 
         if (!optPoint)
         {

@@ -18,7 +18,7 @@ add_library(AobusLintPlugin MODULE
   check/ForbidTrailingReturnCheck.cpp
   check/IdentifierNamingExtensionsCheck.cpp
   check/LocalInitializationStyleCheck.cpp
-  check/MemberInitializerBracesCheck.cpp
+  check/BracedInitializationCheck.cpp
   check/OptionalNamingAndUsageCheck.cpp
   check/StdCLibraryQualificationCheck.cpp
   check/ThreadingPolicyCheck.cpp

@@ -178,7 +178,7 @@ namespace ao::gtk
 
     std::optional<ResolvedTrackFilter> resolveFilter(std::string_view rawFilter)
     {
-      auto const trimmed = boost::algorithm::trim_copy_if(std::string(rawFilter), boost::algorithm::is_space());
+      auto const trimmed = boost::algorithm::trim_copy_if(std::string{rawFilter}, boost::algorithm::is_space());
 
       if (trimmed.empty())
       {
@@ -221,8 +221,8 @@ namespace ao::gtk
     : _source{source}
     , _musicLibrary{musicLibrary}
     , _provider{provider}
-    , _listStore(Gio::ListStore<TrackRowObject>::create())
-    , _projectionModel(ProjectionTrackModel::create())
+    , _listStore{Gio::ListStore<TrackRowObject>::create()}
+    , _projectionModel{ProjectionTrackModel::create()}
     , _listModel{_listStore}
   {
     _source.attach(this);

@@ -20,7 +20,7 @@ namespace clang::tidy::readability
   {
   public:
     ControlBlockSpacingCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+      : ClangTidyCheck{name, context}
     {
     }
 

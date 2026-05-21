@@ -298,7 +298,7 @@ namespace ao::rt
     auto const txn = _ml.readTransaction();
     auto const reader = _ml.tracks().reader(txn);
 
-    auto nextMembers = std::vector<std::vector<TrackId>>(lists.size());
+    auto nextMembers = std::vector<std::vector<TrackId>>{lists.size()};
 
     for (auto const idx : std::views::iota(0UZ, source.size()))
     {
@@ -323,7 +323,7 @@ namespace ao::rt
     {
       std::ranges::sort(nextMembers[listIdx]);
       // NOLINTNEXTLINE(misc-include-cleaner)
-      lists[listIdx]->_members = std::flat_set<TrackId>(std::sorted_unique, std::move(nextMembers[listIdx]));
+      lists[listIdx]->_members = std::flat_set<TrackId>{std::sorted_unique, std::move(nextMembers[listIdx])};
     }
   }
 
@@ -473,7 +473,7 @@ namespace ao::rt
     auto const reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
 
-    auto matchedIds = std::vector<std::vector<TrackId>>(evaluatableLists.size());
+    auto matchedIds = std::vector<std::vector<TrackId>>{evaluatableLists.size()};
 
     for (auto const id : ids)
     {
@@ -544,7 +544,7 @@ namespace ao::rt
       std::vector<TrackId> updated;
     };
 
-    auto transitions = std::vector<Transitions>(evaluatableLists.size());
+    auto transitions = std::vector<Transitions>{evaluatableLists.size()};
 
     for (auto const id : ids)
     {
@@ -586,7 +586,7 @@ namespace ao::rt
         newMembers.reserve(list._members.size());
         std::ranges::set_difference(list._members, trans.removed, std::back_inserter(newMembers));
         // NOLINTNEXTLINE(misc-include-cleaner)
-        list._members = std::flat_set<TrackId>(std::sorted_unique, std::move(newMembers));
+        list._members = std::flat_set<TrackId>{std::sorted_unique, std::move(newMembers)};
 
         list.TrackSource::notifyRemoved(trans.removed);
       }
@@ -637,7 +637,7 @@ namespace ao::rt
         newMembers.reserve(list->_members.size());
         std::ranges::set_difference(list->_members, removed, std::back_inserter(newMembers));
         // NOLINTNEXTLINE(misc-include-cleaner)
-        list->_members = std::flat_set<TrackId>(std::sorted_unique, std::move(newMembers));
+        list->_members = std::flat_set<TrackId>{std::sorted_unique, std::move(newMembers)};
 
         list->notifyRemoved(removed);
       }

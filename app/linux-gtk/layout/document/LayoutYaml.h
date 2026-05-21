@@ -5,68 +5,16 @@
 
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
+#include "runtime/yaml/Utils.h" // NOLINT(misc-include-cleaner)
 
-#include <yaml-cpp/yaml.h>
-
-#include <functional>
-#include <map>
-#include <string>
-
-namespace YAML
+namespace ao::rt::yaml
 {
-  using namespace ao::gtk::layout;
+  void write(ryml::NodeRef node, ao::gtk::layout::LayoutValue const& value);
+  bool read(ryml::ConstNodeRef node, ao::gtk::layout::LayoutValue& value);
 
-  template<>
-  struct convert<LayoutValue>
-  {
-    static Node encode(LayoutValue const& rhs);
-    static bool decode(Node const& node, LayoutValue& rhs);
-  };
+  void write(ryml::NodeRef node, ao::gtk::layout::LayoutNode const& value);
+  bool read(ryml::ConstNodeRef node, ao::gtk::layout::LayoutNode& value);
 
-  template<>
-  struct convert<std::map<std::string, LayoutValue, std::less<>>>
-  {
-    static Node encode(std::map<std::string, LayoutValue, std::less<>> const& rhs)
-    {
-      auto node = Node{NodeType::Map};
-
-      for (auto const& [key, value] : rhs)
-      {
-        node[key] = value;
-      }
-
-      return node;
-    }
-
-    static bool decode(Node const& node, std::map<std::string, LayoutValue, std::less<>>& rhs)
-    {
-      if (!node.IsMap())
-      {
-        return false;
-      }
-
-      rhs.clear();
-
-      for (auto const& item : node)
-      {
-        rhs.emplace(item.first.as<std::string>(), item.second.as<LayoutValue>());
-      }
-
-      return true;
-    }
-  };
-
-  template<>
-  struct convert<LayoutNode>
-  {
-    static Node encode(LayoutNode const& rhs);
-    static bool decode(Node const& node, LayoutNode& rhs);
-  };
-
-  template<>
-  struct convert<LayoutDocument>
-  {
-    static Node encode(LayoutDocument const& rhs);
-    static bool decode(Node const& node, LayoutDocument& rhs);
-  };
-} // namespace YAML
+  void write(ryml::NodeRef node, ao::gtk::layout::LayoutDocument const& value);
+  bool read(ryml::ConstNodeRef node, ao::gtk::layout::LayoutDocument& value);
+} // namespace ao::rt::yaml

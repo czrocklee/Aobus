@@ -4,15 +4,16 @@
 #pragma once
 
 #include "ao/Error.h"
-#include "runtime/ConfigYamlTraits.h" // IWYU pragma: export
+#include "runtime/yaml/ConfigTraits.h" // IWYU pragma: export
+#include "runtime/yaml/Utils.h"
 
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <format>
 #include <stdexcept>
-#include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::rt
 {
@@ -49,7 +50,26 @@ namespace ao::rt
         return;
       }
 
-      _root[std::string{group}] = YAML::Node{obj};
+      if (!_root.is_map(0))
+      {
+        _root.clear();
+        _root.to_map(0);
+      }
+
+      auto const groupName = yaml::toCsubstr(group);
+      auto child = _root.rootref()[groupName];
+
+      if (!child.readable())
+      {
+        child = _root.rootref().append_child();
+        yaml::setKey(child, group);
+      }
+      else
+      {
+        child.clear_children();
+      }
+
+      yaml::write(child, obj);
     }
 
     template<typename T>
@@ -60,16 +80,22 @@ namespace ao::rt
         return result;
       }
 
-      if (auto const child = _root[std::string{group}])
+      if (_root.is_map(0))
       {
-        try
+        if (auto const child = _root.rootref()[yaml::toCsubstr(group)]; child.readable())
         {
-          obj = child.as<T>();
-        }
-        catch (std::exception const& e)
-        {
-          return makeError(
-            Error::Code::FormatRejected, std::format("Failed to decode config key '{}': {}", group, e.what()));
+          try
+          {
+            if (!yaml::read(child, obj))
+            {
+              return makeError(Error::Code::FormatRejected, std::format("Failed to decode config key '{}'", group));
+            }
+          }
+          catch (std::exception const& e)
+          {
+            return makeError(
+              Error::Code::FormatRejected, std::format("Failed to decode config key '{}': {}", group, e.what()));
+          }
         }
       }
 
@@ -81,7 +107,8 @@ namespace ao::rt
 
     std::filesystem::path _filePath;
     OpenMode _mode = OpenMode::ReadWrite;
-    YAML::Node _root;
+    ryml::Tree _root;
+    std::vector<char> _inputBuffer;
     bool _loaded = false;
   };
 }

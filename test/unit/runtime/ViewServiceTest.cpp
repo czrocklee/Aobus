@@ -10,6 +10,7 @@
 #include "runtime/ListSourceStore.h"
 #include "runtime/ProjectionTypes.h"
 #include "runtime/StateTypes.h"
+#include "runtime/TrackField.h"
 #include "runtime/async/Runtime.h"
 
 #include <catch2/catch_test_macros.hpp>

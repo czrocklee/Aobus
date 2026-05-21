@@ -100,9 +100,9 @@ namespace ao::gtk
   void SmartListDialog::populate(ListId id, library::ListView const& view)
   {
     _editListId = id;
-    _nameEntry.set_text(std::string(view.name()));
-    _descEntry.set_text(std::string(view.description()));
-    _exprBox.entry().set_text(std::string(view.filter()));
+    _nameEntry.set_text(std::string{view.name()});
+    _descEntry.set_text(std::string{view.description()});
+    _exprBox.entry().set_text(std::string{view.filter()});
     set_title("Edit List");
     _okButton.set_label("Save");
     updateDialogState();
@@ -139,20 +139,20 @@ namespace ao::gtk
     _leftPanel.set_spacing(kBoxSpacing);
 
     // Name field
-    auto nameLabel = Gtk::Label("Name:");
+    auto nameLabel = Gtk::Label{"Name:"};
     nameLabel.set_halign(Gtk::Align::START);
     _nameEntry.set_placeholder_text("List name");
     _leftPanel.append(nameLabel);
     _leftPanel.append(_nameEntry);
 
     // Description field
-    auto descLabel = Gtk::Label("Description:");
+    auto descLabel = Gtk::Label{"Description:"};
     descLabel.set_halign(Gtk::Align::START);
     _descEntry.set_placeholder_text("Optional description");
     _leftPanel.append(descLabel);
     _leftPanel.append(_descEntry);
 
-    auto inheritedLabel = Gtk::Label("Inherited Filter:");
+    auto inheritedLabel = Gtk::Label{"Inherited Filter:"};
     inheritedLabel.set_halign(Gtk::Align::START);
     _inheritedExprLabel.set_halign(Gtk::Align::START);
     _inheritedExprLabel.set_wrap(true);
@@ -161,7 +161,7 @@ namespace ao::gtk
     _leftPanel.append(_inheritedExprLabel);
 
     // Filter field
-    auto exprLabel = Gtk::Label("Local Filter:");
+    auto exprLabel = Gtk::Label{"Local Filter:"};
     exprLabel.set_halign(Gtk::Align::START);
     _exprBox.entry().set_placeholder_text("Filter expression (type $, @, #, or %)");
     _exprBox.entry().signal_changed().connect(
@@ -181,7 +181,7 @@ namespace ao::gtk
     _leftPanel.append(exprLabel);
     _leftPanel.append(_exprBox);
 
-    auto effectiveLabel = Gtk::Label("Effective Filter:");
+    auto effectiveLabel = Gtk::Label{"Effective Filter:"};
     effectiveLabel.set_halign(Gtk::Align::START);
     _effectiveExprLabel.set_halign(Gtk::Align::START);
     _effectiveExprLabel.set_wrap(true);
@@ -196,7 +196,7 @@ namespace ao::gtk
     _leftPanel.append(_errorLabel);
 
     // Buttons
-    auto buttonBox = Gtk::Box(Gtk::Orientation::HORIZONTAL, kButtonBoxSpacing);
+    auto buttonBox = Gtk::Box{Gtk::Orientation::HORIZONTAL, kButtonBoxSpacing};
     buttonBox.set_halign(Gtk::Align::END);
     buttonBox.add_css_class("ao-dialog-actions");
 
@@ -219,7 +219,7 @@ namespace ao::gtk
     _rightPanel.set_hexpand(true);
     _rightPanel.set_vexpand(true);
 
-    auto previewLabel = Gtk::Label("Preview:");
+    auto previewLabel = Gtk::Label{"Preview:"};
     previewLabel.set_halign(Gtk::Align::START);
     _rightPanel.append(previewLabel);
 
@@ -347,7 +347,7 @@ namespace ao::gtk
 
   void SmartListDialog::updateSourceLabels()
   {
-    auto inheritedExpr = std::string_view();
+    auto inheritedExpr = std::string_view{};
 
     // Check if parent is All Tracks
     auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
@@ -371,7 +371,7 @@ namespace ao::gtk
 
     _inheritedExprLabel.set_text(displayExpression(inheritedExpr));
 
-    auto const localExpr = std::string(_exprBox.entry().get_text());
+    auto const localExpr = std::string{_exprBox.entry().get_text()};
     auto const effectiveExpression = composeEffectiveExpression(inheritedExpr, localExpr);
     _effectiveExprLabel.set_text(displayExpression(effectiveExpression));
   }

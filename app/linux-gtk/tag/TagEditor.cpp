@@ -37,7 +37,7 @@ namespace ao::gtk
   }
 
   TagEditor::TagEditor()
-    : Gtk::Box(Gtk::Orientation::VERTICAL, kBoxSpacing)
+    : Gtk::Box{Gtk::Orientation::VERTICAL, kBoxSpacing}
   {
     setupUi();
   }
@@ -148,7 +148,7 @@ namespace ao::gtk
 
       for (auto const tagId : optView->tags())
       {
-        if (auto const tag = std::string(dictionary.get(tagId)); !tag.empty())
+        if (auto const tag = std::string{dictionary.get(tagId)}; !tag.empty())
         {
           tagsOnTrack.insert(tag);
         }
@@ -178,7 +178,7 @@ namespace ao::gtk
 
       for (auto const tagId : view.tags())
       {
-        if (auto const tag = std::string(dictionary.get(tagId)); !tag.empty())
+        if (auto const tag = std::string{dictionary.get(tagId)}; !tag.empty())
         {
           ++tagFrequency[tag];
         }

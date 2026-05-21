@@ -98,7 +98,7 @@ namespace ao::audio::backend::detail
     {
       if (char* cardName = nullptr; ::snd_card_get_name(card, &cardName) == 0)
       {
-        auto const safeCardName = std::unique_ptr<char, void (*)(void*)>(cardName, ::free);
+        auto const safeCardName = std::unique_ptr<char, void (*)(void*)>{cardName, ::free};
         auto const cardId = std::format("hw:{}", card);
 
         if (::snd_ctl_t* rawCtl = nullptr; ::snd_ctl_open(&rawCtl, cardId.c_str(), 0) >= 0)

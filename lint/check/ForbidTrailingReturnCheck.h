@@ -13,7 +13,7 @@ namespace clang::tidy::readability
   {
   public:
     ForbidTrailingReturnCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+      : ClangTidyCheck{name, context}
     {
     }
 

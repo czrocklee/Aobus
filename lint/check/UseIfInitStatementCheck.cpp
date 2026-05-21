@@ -27,7 +27,7 @@ namespace clang::tidy::readability
     {
     public:
       UsageVisitor(VarDecl const* varDecl)
-        : _varDecl(varDecl)
+        : _varDecl{varDecl}
       {
       }
 
@@ -219,7 +219,7 @@ namespace clang::tidy::readability
     }
 
     // Remove the declaration statement
-    diagBuilder << FixItHint::CreateRemoval(SourceRange(stmtBegin, removalEnd));
+    diagBuilder << FixItHint::CreateRemoval(SourceRange{stmtBegin, removalEnd});
 
     // Insert declaration into target
     auto const insertLoc = isIf ? cast<IfStmt>(target)->getLParenLoc().getLocWithOffset(1)

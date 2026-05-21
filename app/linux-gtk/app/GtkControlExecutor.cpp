@@ -61,7 +61,7 @@ namespace ao::gtk
 
   void GtkControlExecutor::onDispatched()
   {
-    auto tasksToRun = std::vector<std::move_only_function<void()>>();
+    auto tasksToRun = std::vector<std::move_only_function<void()>>{};
     {
       auto const lock = std::scoped_lock{_mutex};
       tasksToRun.swap(_tasks);

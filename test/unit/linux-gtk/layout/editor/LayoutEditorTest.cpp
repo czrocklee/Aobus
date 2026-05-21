@@ -9,6 +9,7 @@
 #include "app/runtime/AppRuntime.h"
 #include "app/runtime/ConfigStore.h"
 #include "runtime/CorePrimitives.h"
+#include "runtime/yaml/Utils.h" // IWYU pragma: keep
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -16,7 +17,6 @@
 #include <gtkmm/box.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
-#include <yaml-cpp/yaml.h>
 
 #include <algorithm>
 #include <array>
@@ -366,7 +366,7 @@ namespace ao::gtk::layout::editor::test
       auto runtime = rt::AppRuntime{
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .globalConfigStore = configStore,
                                    .workspaceConfigStore = configStore}};
 
@@ -400,7 +400,7 @@ namespace ao::gtk::layout::editor::test
       auto runtime = rt::AppRuntime{
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .globalConfigStore = configStore,
                                    .workspaceConfigStore = configStore}};
 
@@ -428,8 +428,11 @@ namespace ao::gtk::layout::editor::test
       doc.version = 2;
       doc.templates = getBuiltInTemplates();
 
-      auto const node = YAML::Node(doc);
-      auto const decoded = node.as<LayoutDocument>();
+      auto tree = ryml::Tree{};
+      rt::yaml::write(tree.rootref(), doc);
+
+      auto decoded = LayoutDocument{};
+      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
 
       REQUIRE(decoded.templates.contains("playback.compactControls"));
       CHECK(decoded.templates.at("playback.compactControls").type == "box");
@@ -449,7 +452,7 @@ namespace ao::gtk::layout::editor::test
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path(tempDir.path()) / ".aobus" / "library",
+                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 

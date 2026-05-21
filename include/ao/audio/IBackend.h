@@ -56,7 +56,7 @@ namespace ao::audio
 
       if (!result)
       {
-        return std::unexpected(result.error());
+        return std::unexpected{result.error()};
       }
 
       return std::get<T>(*result);

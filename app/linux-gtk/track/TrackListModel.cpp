@@ -27,13 +27,13 @@ namespace
 namespace ao::gtk
 {
   ProjectionTrackModel::ProjectionTrackModel()
-    : Glib::ObjectBase(typeid(ProjectionTrackModel)), Gio::ListModel(getListModelIfaceClass())
+    : Glib::ObjectBase{typeid(ProjectionTrackModel)}, Gio::ListModel{getListModelIfaceClass()}
   {
   }
 
   Glib::RefPtr<ProjectionTrackModel> ProjectionTrackModel::create()
   {
-    return Glib::make_refptr_for_instance<ProjectionTrackModel>(new ProjectionTrackModel());
+    return Glib::make_refptr_for_instance<ProjectionTrackModel>(new ProjectionTrackModel{});
   }
 
   void ProjectionTrackModel::setProjection(rt::ITrackListProjection* projection, TrackRowCache const& provider)

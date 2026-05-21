@@ -22,7 +22,7 @@ namespace ao::rt::test
     {
       co_await runtime->resumeOnWorker();
       // Now on worker thread
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      std::this_thread::sleep_for(std::chrono::milliseconds{10});
       (*counter)++;
 
       co_await runtime->resumeOnControl();
@@ -35,7 +35,7 @@ namespace ao::rt::test
     Task<void> failingTask(Runtime* runtime)
     {
       co_await runtime->resumeOnWorker();
-      throw std::runtime_error("Test failure");
+      throw std::runtime_error{"Test failure"};
     }
   }
 

@@ -17,7 +17,7 @@ namespace clang::tidy::readability
   {
   public:
     OptionalNamingAndUsageCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+      : ClangTidyCheck{name, context}
     {
     }
 

@@ -16,6 +16,7 @@
 #include "runtime/CorePrimitives.h"
 #include "runtime/ProjectionTypes.h"
 #include "runtime/StateTypes.h"
+#include "runtime/TrackField.h"
 #include "runtime/TrackPresentationPreset.h"
 
 #include <cstdint>

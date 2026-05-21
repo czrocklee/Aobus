@@ -7,13 +7,12 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 3.4.3: prefer brace initialization in member initializer
-  /// lists (e.g. T() : _mem{a} over T() : _mem(a)).
-  class MemberInitializerBracesCheck : public ClangTidyCheck
+  /// Enforces Rule 3.4.1 & 3.4.3: prefer brace initialization for all types.
+  class BracedInitializationCheck : public ClangTidyCheck
   {
   public:
-    MemberInitializerBracesCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+    BracedInitializationCheck(StringRef name, ClangTidyContext* context)
+      : ClangTidyCheck{name, context}
     {
     }
 

@@ -14,7 +14,7 @@ namespace clang::tidy::readability
   {
   public:
     UnusedSuppressionStyleCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+      : ClangTidyCheck{name, context}
     {
     }
 

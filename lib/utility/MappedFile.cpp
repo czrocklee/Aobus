@@ -23,8 +23,8 @@ namespace ao::utility
 
     try
     {
-      _fileMapping = boost::interprocess::file_mapping(filePath.c_str(), boost::interprocess::read_only);
-      _mappedRegion = boost::interprocess::mapped_region(_fileMapping, boost::interprocess::read_only);
+      _fileMapping = boost::interprocess::file_mapping{filePath.c_str(), boost::interprocess::read_only};
+      _mappedRegion = boost::interprocess::mapped_region{_fileMapping, boost::interprocess::read_only};
       _isMapped = true;
       return {};
     }

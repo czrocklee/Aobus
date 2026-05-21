@@ -50,9 +50,9 @@ namespace ao::gtk
       nodes.emplace(id,
                     StoredListNode{.id = id,
                                    .parentId = listView.parentId(),
-                                   .name = std::string(listView.name()),
+                                   .name = std::string{listView.name()},
                                    .isSmart = listView.isSmart(),
-                                   .localExpression = std::string(listView.filter())});
+                                   .localExpression = std::string{listView.filter()}});
     }
 
     auto children = std::map<ListId, std::vector<ListId>>{};

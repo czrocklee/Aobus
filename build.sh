@@ -6,7 +6,7 @@ set -e
 set -o pipefail
 
 if [[ -z "${IN_NIX_SHELL:-}" ]]; then
-    exec eval "$(printf '%q ' "$0" "$@")"
+    exec nix-shell --run "$(printf '%q ' "$0" "$@")"
 fi
 
 #Default to debug build

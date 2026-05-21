@@ -13,7 +13,7 @@ namespace clang::tidy::readability
   {
   public:
     LocalInitializationStyleCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+      : ClangTidyCheck{name, context}
     {
     }
 

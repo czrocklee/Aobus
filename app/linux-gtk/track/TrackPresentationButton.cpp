@@ -70,7 +70,7 @@ namespace ao::gtk
 
     if (auto const* builtin = rt::builtinTrackPresentationPreset(pres.presentationId))
     {
-      label = std::string(builtin->label);
+      label = std::string{builtin->label};
     }
     else if (_presentationStore != nullptr)
     {
@@ -107,12 +107,12 @@ namespace ao::gtk
 
     for (auto const& preset : builtins)
     {
-      auto* const btn = Gtk::make_managed<Gtk::Button>(std::string(preset.label));
+      auto* const btn = Gtk::make_managed<Gtk::Button>(std::string{preset.label});
       btn->set_halign(Gtk::Align::FILL);
       btn->set_has_frame(false);
       btn->get_style_context()->add_class("flat");
 
-      auto const id = std::string(preset.spec.id);
+      auto const id = std::string{preset.spec.id};
       btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
 
       _menuBox.append(*btn);
@@ -168,11 +168,11 @@ namespace ao::gtk
       return;
     }
 
-    auto label = std::string(presentationId);
+    auto label = std::string{presentationId};
 
     if (auto const* builtin = rt::builtinTrackPresentationPreset(presentationId))
     {
-      label = std::string(builtin->label);
+      label = std::string{builtin->label};
     }
     else
     {
@@ -217,7 +217,7 @@ namespace ao::gtk
     auto const state = _runtime.views().trackListState(_activeViewId);
     auto const spec = rt::presentationSpecFromState(state.presentation);
 
-    auto const label = std::string(_button.get_label()) + " Copy";
+    auto const label = std::string{_button.get_label()} + " Copy";
     auto dialog = TrackCustomViewDialog{*parentWindow, spec, label};
 
     if (auto const optResult = dialog.runDialog())

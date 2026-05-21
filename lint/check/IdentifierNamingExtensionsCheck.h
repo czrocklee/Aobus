@@ -15,7 +15,7 @@ namespace clang::tidy::readability
   {
   public:
     IdentifierNamingExtensionsCheck(StringRef name, ClangTidyContext* context)
-      : ClangTidyCheck(name, context)
+      : ClangTidyCheck{name, context}
     {
     }
 
