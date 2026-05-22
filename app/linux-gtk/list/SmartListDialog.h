@@ -18,7 +18,7 @@
 #include <sigc++/connection.h>
 
 #include <memory>
-#include <string>
+#include <string_view>
 
 namespace ao::library
 {
@@ -60,7 +60,7 @@ namespace ao::gtk
     // Returns a ListDraft populated from the dialog fields
     rt::LibraryMutationService::ListDraft draft() const;
 
-    void setLocalExpression(std::string const& expression);
+    void setLocalExpression(std::string_view expression);
 
   private:
     void setupUi();

@@ -4,24 +4,22 @@
 #include "ao/library/ScanPlanExecutor.h"
 
 #include "ao/Type.h"
-#include "ao/library/FileManifestBuilder.h"
+#include "ao/library/FileManifestLayout.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/LibraryScanner.h"
 #include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
 #include "ao/library/TrackView.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <span>
 #include <thread>
+#include <utility>
 
 namespace ao::library::test
 {

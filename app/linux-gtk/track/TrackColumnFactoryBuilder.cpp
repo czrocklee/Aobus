@@ -3,7 +3,7 @@
 
 #include "track/TrackColumnFactoryBuilder.h"
 
-#include "ao/library/FileManifestStore.h"
+#include "ao/library/FileManifestLayout.h"
 #include "runtime/TrackField.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowObject.h"
@@ -119,9 +119,6 @@ namespace ao::gtk
       {
         label->set_text(row->getFieldText(field));
       }
-
-      updateStatusStyles(listItem, row);
-      updatePlayingStyles(listItem, row, field);
     }
 
     void onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
@@ -139,88 +136,94 @@ namespace ao::gtk
       if (auto const* uiDef = trackFieldUiDefinition(field); uiDef == nullptr || !uiDef->inlineEditable)
       {
         onTextColumnBindStatic(listItem, field, row);
-        return;
       }
-
-      auto* const stack = dynamic_cast<Gtk::Stack*>(listItem->get_child());
-
-      if (stack != nullptr)
+      else
       {
-        auto* const label = dynamic_cast<Gtk::Label*>(stack->get_child_by_name("display"));
-        auto* const entry = dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit"));
+        auto* const stack = dynamic_cast<Gtk::Stack*>(listItem->get_child());
 
-        if (label != nullptr)
+        if (stack != nullptr)
         {
-          label->set_text(row->getFieldText(field));
-        }
+          auto* const label = dynamic_cast<Gtk::Label*>(stack->get_child_by_name("display"));
+          auto* const entry = dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit"));
 
-        if (entry != nullptr)
-        {
-          entry->set_text(row->getFieldText(field));
-        }
-
-        auto const commitChange = [entry, stack, row, field, commitFn]
-        {
-          auto const newValue = entry->get_text().raw();
-          commitFn(row, field, newValue);
-          stack->set_visible_child("display");
-        };
-
-        auto const cancelChange = [stack] { stack->set_visible_child("display"); };
-
-        auto const activateConn = entry->signal_activate().connect(commitChange);
-
-        auto const keyController = Gtk::EventControllerKey::create();
-        keyController->signal_key_pressed().connect(
-          [cancelChange](std::uint32_t keyval, std::uint32_t /*keycode*/, Gdk::ModifierType /*state*/)
+          if (label != nullptr)
           {
-            if (keyval == GDK_KEY_Escape)
+            label->set_text(row->getFieldText(field));
+          }
+
+          if (entry != nullptr)
+          {
+            entry->set_text(row->getFieldText(field));
+          }
+
+          auto const commitChange = [entry, stack, row, field, commitFn]
+          {
+            auto const newValue = entry->get_text().raw();
+            commitFn(row, field, newValue);
+            stack->set_visible_child("display");
+          };
+
+          auto const cancelChange = [stack] { stack->set_visible_child("display"); };
+
+          auto const activateConn = entry->signal_activate().connect(commitChange);
+
+          auto const keyController = Gtk::EventControllerKey::create();
+          keyController->signal_key_pressed().connect(
+            [cancelChange](std::uint32_t keyval, std::uint32_t /*keycode*/, Gdk::ModifierType /*state*/)
             {
-              cancelChange();
-              return true;
-            }
+              if (keyval == GDK_KEY_Escape)
+              {
+                cancelChange();
+                return true;
+              }
 
-            return false;
-          },
-          false);
-        entry->add_controller(keyController);
+              return false;
+            },
+            false);
+          entry->add_controller(keyController);
 
-        auto modelConnection = sigc::connection{};
+          auto modelConnection = sigc::connection{};
 
-        if (field == rt::TrackField::Title)
-        {
-          modelConnection = row->property_title().signal_changed().connect(
-            [label, entry, row]
-            {
-              label->set_text(row->getTitle());
-              entry->set_text(row->getTitle());
-            });
+          if (field == rt::TrackField::Title)
+          {
+            modelConnection = row->property_title().signal_changed().connect(
+              [label, entry, row]
+              {
+                label->set_text(row->getTitle());
+                entry->set_text(row->getTitle());
+              });
+          }
+          else if (field == rt::TrackField::Artist)
+          {
+            modelConnection = row->property_artist().signal_changed().connect(
+              [label, entry, row]
+              {
+                label->set_text(row->getArtist());
+                entry->set_text(row->getArtist());
+              });
+          }
+          else if (field == rt::TrackField::Album)
+          {
+            modelConnection = row->property_album().signal_changed().connect(
+              [label, entry, row]
+              {
+                label->set_text(row->getAlbum());
+                entry->set_text(row->getAlbum());
+              });
+          }
+
+          setConnectionData(listItem, "model-connection", modelConnection);
+          setConnectionData(listItem, "activate-connection", activateConn);
         }
-        else if (field == rt::TrackField::Artist)
-        {
-          modelConnection = row->property_artist().signal_changed().connect(
-            [label, entry, row]
-            {
-              label->set_text(row->getArtist());
-              entry->set_text(row->getArtist());
-            });
-        }
-        else if (field == rt::TrackField::Album)
-        {
-          modelConnection = row->property_album().signal_changed().connect(
-            [label, entry, row]
-            {
-              label->set_text(row->getAlbum());
-              entry->set_text(row->getAlbum());
-            });
-        }
-
-        setConnectionData(listItem, "model-connection", modelConnection);
-        setConnectionData(listItem, "activate-connection", activateConn);
-
-        updateStatusStyles(listItem, row);
-        updatePlayingStyles(listItem, row, field);
       }
+
+      updateStatusStyles(listItem, row);
+      updatePlayingStyles(listItem, row, field);
+
+      auto const playingConn = row->property_playing().signal_changed().connect(
+        [listItem, row, field] { updatePlayingStyles(listItem, row, field); });
+
+      setConnectionData(listItem, "playing-connection", playingConn);
     }
   }
 

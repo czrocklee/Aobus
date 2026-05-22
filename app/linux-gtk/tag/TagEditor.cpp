@@ -19,10 +19,10 @@
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <map>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -144,13 +144,13 @@ namespace ao::gtk
         continue;
       }
 
-      auto tagsOnTrack = std::set<std::string>{};
+      auto tagsOnTrack = std::vector<std::string>{};
 
       for (auto const tagId : optView->tags())
       {
-        if (auto const tag = std::string{dictionary.get(tagId)}; !tag.empty())
+        if (auto const tag = std::string{dictionary.get(tagId)}; !tag.empty() && !std::ranges::contains(tagsOnTrack, tag))
         {
-          tagsOnTrack.insert(tag);
+          tagsOnTrack.push_back(tag);
         }
       }
 
@@ -164,7 +164,7 @@ namespace ao::gtk
     {
       if (count == selectionCount)
       {
-        _currentTags.insert(tag);
+        _currentTags.push_back(tag);
       }
     }
 
@@ -217,7 +217,7 @@ namespace ao::gtk
 
     for (auto const& tag : _currentTags)
     {
-      if (!_pendingRemoves.contains(tag))
+      if (!std::ranges::contains(_pendingRemoves, tag))
       {
         addChip(tag);
       }
@@ -225,7 +225,7 @@ namespace ao::gtk
 
     for (auto const& tag : _pendingAdds)
     {
-      if (!_currentTags.contains(tag))
+      if (!std::ranges::contains(_currentTags, tag))
       {
         addChip(tag);
       }
@@ -252,7 +252,8 @@ namespace ao::gtk
 
     for (auto const& [tag, freq] : _availableTagsByFrequency)
     {
-      if (_currentTags.contains(tag) || _pendingRemoves.contains(tag) || _pendingAdds.contains(tag))
+      if (std::ranges::contains(_currentTags, tag) || std::ranges::contains(_pendingRemoves, tag)
+          || std::ranges::contains(_pendingAdds, tag))
       {
         continue;
       }
@@ -275,30 +276,35 @@ namespace ao::gtk
     {
       if (!button->get_active())
       {
-        _pendingRemoves.insert(tag);
-        _pendingAdds.erase(tag);
+        if (!std::ranges::contains(_pendingRemoves, tag))
+        {
+          _pendingRemoves.push_back(tag);
+        }
+
+        std::erase(_pendingAdds, tag);
       }
     }
     else
     {
       if (button->get_active())
       {
-        _pendingAdds.insert(tag);
-        _pendingRemoves.erase(tag);
+        if (!std::ranges::contains(_pendingAdds, tag))
+        {
+          _pendingAdds.push_back(tag);
+        }
+
+        std::erase(_pendingRemoves, tag);
       }
       else
       {
-        _pendingAdds.erase(tag);
+        std::erase(_pendingAdds, tag);
       }
     }
 
     rebuildCurrentTags();
     rebuildAvailableTags();
 
-    auto const toAdd = std::vector<std::string>{_pendingAdds.begin(), _pendingAdds.end()};
-    auto const toRemove = std::vector<std::string>{_pendingRemoves.begin(), _pendingRemoves.end()};
-
-    _tagsChanged.emit(toAdd, toRemove);
+    _tagsChanged.emit(_pendingAdds, _pendingRemoves);
   }
 
   void TagEditor::onEntryActivated()
@@ -310,14 +316,21 @@ namespace ao::gtk
       return;
     }
 
-    _pendingAdds.insert(text);
-    _pendingRemoves.erase(text);
+    auto const& tagStr = text.raw();
+
+    if (!std::ranges::contains(_pendingAdds, tagStr))
+    {
+      _pendingAdds.push_back(tagStr);
+    }
+
+    std::erase(_pendingRemoves, tagStr);
     _searchEntry.set_text("");
 
     rebuildCurrentTags();
     rebuildAvailableTags();
 
-    _tagsChanged.emit({text}, {});
+    auto const toAdd = std::array{std::string{tagStr}};
+    _tagsChanged.emit(toAdd, {});
   }
 
   std::string TagEditor::getTagNameFromChild(Gtk::FlowBoxChild* child)

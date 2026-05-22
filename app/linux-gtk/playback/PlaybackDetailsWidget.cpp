@@ -27,16 +27,16 @@ namespace ao::gtk
     std::string formatStream(audio::Format const& format)
     {
       constexpr auto kKhzMultiplier = 1000.0;
-      auto const channelsText = [&]
+      auto const channelsText = [&] -> std::string
       {
         if (format.channels == 1)
         {
-          return std::string{"Mono"};
+          return "Mono";
         }
 
         if (format.channels == 2)
         {
-          return std::string{"Stereo"};
+          return "Stereo";
         }
 
         return std::format("{} ch", format.channels);

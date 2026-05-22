@@ -3,13 +3,12 @@
 
 #pragma once
 
+#include "runtime/CorePrimitives.h"
 #include "runtime/LibraryMutationService.h"
 
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 #include <gtkmm/progressbar.h>
-
-#include <memory>
 
 namespace ao::gtk::portal
 {

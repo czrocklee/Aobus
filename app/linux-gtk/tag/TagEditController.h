@@ -17,6 +17,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -71,10 +72,10 @@ namespace ao::gtk
     void showTagsPopover(TrackViewPage& page, double posX, double posY);
     void showPropertiesDialog();
 
-    void addTagToCurrentSelection(std::string const& tag);
-    void removeTagFromCurrentSelection(std::string const& tag);
-    void applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
-                                          std::vector<std::string> const& tagsToRemove);
+    void addTagToCurrentSelection(std::string tag);
+    void removeTagFromCurrentSelection(std::string tag);
+    void applyTagChangeToCurrentSelection(std::span<std::string const> tagsToAdd,
+                                          std::span<std::string const> tagsToRemove);
 
     Callbacks _callbacks;
     rt::AppRuntime& _runtime;

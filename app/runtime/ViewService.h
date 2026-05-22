@@ -76,12 +76,12 @@ namespace ao::rt
 
     CreateTrackListViewReply createView(TrackListViewConfig const& initial, bool attached = true);
     void destroyView(ViewId viewId);
-    void setFilter(ViewId viewId, std::string const& filterExpression);
-    void setSort(ViewId viewId, std::vector<TrackSortTerm> const& sortBy);
+    void setFilter(ViewId viewId, std::string filterExpression);
+    void setSort(ViewId viewId, std::vector<TrackSortTerm> sortBy);
     void setGrouping(ViewId viewId, TrackGroupKey groupBy);
     void setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
     TrackPresentationSpec setPresentation(ViewId viewId, std::string_view presentationId);
-    void setSelection(ViewId viewId, std::vector<TrackId> const& selection);
+    void setSelection(ViewId viewId, std::vector<TrackId> selection);
     void openListInView(ViewId viewId, ListId listId);
 
     Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);

@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <string>
 #include <utility>
 
 namespace ao::rt
@@ -31,8 +32,7 @@ namespace ao::rt
     APP_LOG_INFO("Saving config to: {}", _filePath.string());
     std::filesystem::create_directories(_filePath.parent_path());
 
-    auto yaml = std::string{};
-    yaml = ryml::emitrs_yaml<std::string>(_root);
+    auto yaml = ryml::emitrs_yaml<std::string>(_root);
 
     auto file = std::ofstream{_filePath};
     file << yaml;

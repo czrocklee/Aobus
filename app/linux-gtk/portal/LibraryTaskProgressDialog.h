@@ -6,6 +6,7 @@
 #include <gtkmm/dialog.h>
 #include <gtkmm/label.h>
 #include <gtkmm/progressbar.h>
+#include <gtkmm/window.h>
 
 #include <cstdint>
 #include <string>

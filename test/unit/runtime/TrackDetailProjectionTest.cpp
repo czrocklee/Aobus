@@ -17,6 +17,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <functional>
 #include <memory>
 
@@ -76,7 +77,8 @@ namespace ao::rt::test
     // Mutate the track in the library using the service
     {
       auto const patch = MetadataPatch{.optTitle = "After"};
-      env.mutation.updateMetadata({id1}, patch);
+      auto const targetIds = std::array{id1};
+      env.mutation.updateMetadata(targetIds, patch);
     }
 
     // Mutation service already published the signal
@@ -100,7 +102,8 @@ namespace ao::rt::test
     auto const revBefore = proj->snapshot().revision;
 
     // Mutate a track not in the selection
-    env.mutation.updateMetadata({id2}, MetadataPatch{.optTitle = "Something Else"});
+    auto const otherIds = std::array{id2};
+    env.mutation.updateMetadata(otherIds, MetadataPatch{.optTitle = "Something Else"});
 
     // Revision should NOT change because the mutated track is not selected
     CHECK(proj->snapshot().revision == revBefore);

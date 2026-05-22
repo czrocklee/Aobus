@@ -103,7 +103,13 @@ namespace ao::cli
       }
 
       auto exporter = rt::LibraryYamlExporter{ml};
-      exporter.exportToYaml(path, mode);
+
+      if (auto const result = exporter.exportToYaml(path, mode); !result)
+      {
+        os << "Error: Export failed: " << result.error().message << '\n';
+        return;
+      }
+
       os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
     }
 
@@ -126,7 +132,13 @@ namespace ao::cli
       }
 
       auto importer = rt::LibraryYamlImporter{ml};
-      importer.importFromYaml(path, mode);
+
+      if (auto const result = importer.importFromYaml(path, mode); !result)
+      {
+        os << "Error: Import failed: " << result.error().message << '\n';
+        return;
+      }
+
       os << "Library imported from '" << path << "' using mode '" << modeStr << "'.\n";
     }
   }

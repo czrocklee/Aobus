@@ -99,7 +99,7 @@ namespace ao::gtk
 
     void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row,
                               rt::TrackField field,
-                              std::string const& newValue);
+                              std::string newValue);
 
     // Child widgets
     Gtk::Label _statusLabel;

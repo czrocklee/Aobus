@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::gtk::layout
@@ -81,7 +82,7 @@ namespace ao::gtk::layout
     /**
      * @brief Get a descriptor by component type.
      */
-    std::optional<ComponentDescriptor> getDescriptor(std::string const& type) const;
+    std::optional<ComponentDescriptor> getDescriptor(std::string_view type) const;
 
   private:
     std::map<std::string, ComponentFactory, std::less<>> _factories;

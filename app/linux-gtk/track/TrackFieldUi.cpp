@@ -390,7 +390,7 @@ namespace ao::gtk
           .propertyDialogEditable = true,
           .propertyDialogReadonly = false,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return std::string{row.getTitle().raw()}; },
+          { return row.getTitle().raw(); },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const&,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
@@ -406,7 +406,7 @@ namespace ao::gtk
           .inlineEditable = true,
           .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return std::string{row.getArtist().raw()}; },
+          { return row.getArtist().raw(); },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
@@ -422,7 +422,7 @@ namespace ao::gtk
           .inlineEditable = true,
           .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return std::string{row.getAlbum().raw()}; },
+          { return row.getAlbum().raw(); },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
@@ -443,7 +443,7 @@ namespace ao::gtk
               return {};
             }
 
-            return std::string{cache.resolveDictionaryString(id).raw()};
+            return cache.resolveDictionaryString(id).raw();
           },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
@@ -468,7 +468,7 @@ namespace ao::gtk
               return {};
             }
 
-            return std::string{cache.resolveDictionaryString(id).raw()};
+            return cache.resolveDictionaryString(id).raw();
           },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
@@ -490,7 +490,7 @@ namespace ao::gtk
               return {};
             }
 
-            return std::string{cache.resolveDictionaryString(id).raw()};
+            return cache.resolveDictionaryString(id).raw();
           },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
@@ -512,7 +512,7 @@ namespace ao::gtk
               return {};
             }
 
-            return std::string{cache.resolveDictionaryString(id).raw()};
+            return cache.resolveDictionaryString(id).raw();
           },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
@@ -613,7 +613,7 @@ namespace ao::gtk
           .columnExpands = true,
           .columnTagsCell = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return std::string{row.getTags().raw()}; },
+          { return row.getTags().raw(); },
           .readViewRawValue = readTagsViewRawValue,
           .formatValue = readStr,
         },

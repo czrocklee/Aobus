@@ -113,10 +113,10 @@ namespace ao::gtk
     return _editListId;
   }
 
-  void SmartListDialog::setLocalExpression(std::string const& expression)
+  void SmartListDialog::setLocalExpression(std::string_view expression)
   {
     _exprTimeoutConnection.disconnect();
-    _exprBox.entry().set_text(expression);
+    _exprBox.entry().set_text(std::string{expression});
     updatePreview();
   }
 

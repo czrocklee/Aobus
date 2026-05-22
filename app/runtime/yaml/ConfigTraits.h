@@ -106,7 +106,7 @@ namespace ao::rt::yaml
     }
 
     auto const view = yaml::scalarView(node);
-    value = std::string{view};
+    value = view;
     return true;
   }
 
@@ -296,7 +296,7 @@ namespace ao::rt::yaml
     {
       if (auto val = T{}; read(child, val))
       {
-        rhs.emplace(std::string{yaml::keyView(child)}, std::move(val));
+        rhs.emplace(yaml::keyView(child), std::move(val));
       }
     }
 

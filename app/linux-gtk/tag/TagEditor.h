@@ -18,7 +18,7 @@
 
 #include <cstddef>
 #include <map>
-#include <set>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -31,7 +31,7 @@ namespace ao::gtk
   class TagEditor final : public Gtk::Box
   {
   public:
-    using TagsChangedSignal = sigc::signal<void(std::vector<std::string> const&, std::vector<std::string> const&)>;
+    using TagsChangedSignal = sigc::signal<void(std::span<std::string const>, std::span<std::string const>)>;
 
     TagEditor();
     ~TagEditor() override;
@@ -68,11 +68,11 @@ namespace ao::gtk
     Gtk::Label _availableLabel;
     Gtk::FlowBox _availableTagsBox;
 
-    std::set<std::string> _currentTags;
+    std::vector<std::string> _currentTags;
     std::map<std::string, std::size_t> _tagMembershipCounts;
     std::vector<std::pair<std::string, std::size_t>> _availableTagsByFrequency;
-    std::set<std::string> _pendingAdds;
-    std::set<std::string> _pendingRemoves;
+    std::vector<std::string> _pendingAdds;
+    std::vector<std::string> _pendingRemoves;
 
     TagsChangedSignal _tagsChanged;
   };

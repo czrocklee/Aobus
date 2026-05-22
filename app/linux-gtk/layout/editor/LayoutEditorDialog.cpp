@@ -214,7 +214,7 @@ namespace ao::gtk::layout::editor
 
   namespace
   {
-    LayoutNode* findNodeById(LayoutNode* root, std::string const& id)
+    LayoutNode* findNodeById(LayoutNode* root, std::string_view id)
     {
       if (root->id == id)
       {
@@ -233,7 +233,7 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  void LayoutEditorDialog::updateNodePosition(std::string const& nodeId, int posX, int posY)
+  void LayoutEditorDialog::updateNodePosition(std::string_view nodeId, int posX, int posY)
   {
     if (auto* const node = findNodeById(&_document.root, nodeId); node != nullptr)
     {
@@ -313,7 +313,7 @@ namespace ao::gtk::layout::editor
     notifyPreview();
   }
 
-  void LayoutEditorDialog::addComponent(std::string const& type)
+  void LayoutEditorDialog::addComponent(std::string type)
   {
     auto row = _treeView.get_selection()->get_selected();
 
@@ -338,9 +338,9 @@ namespace ao::gtk::layout::editor
     }
 
     auto newNode = LayoutNode{};
-    newNode.type = type;
     newNode.id = type + "_new";
     std::ranges::replace(newNode.id, '.', '_');
+    newNode.type = std::move(type);
 
     parentNode->children.push_back(std::move(newNode));
 
@@ -348,7 +348,7 @@ namespace ao::gtk::layout::editor
     notifyPreview();
   }
 
-  void LayoutEditorDialog::wrapNode(std::string const& containerType)
+  void LayoutEditorDialog::wrapNode(std::string containerType)
   {
     auto row = _treeView.get_selection()->get_selected();
 
@@ -374,8 +374,8 @@ namespace ao::gtk::layout::editor
       if (it != parentNode->children.end())
       {
         auto containerNode = LayoutNode{};
-        containerNode.type = containerType;
         containerNode.id = containerType + "_wrap";
+        containerNode.type = std::move(containerType);
 
         // Move the target node into the new container
         containerNode.children.push_back(std::move(*it));
@@ -683,7 +683,7 @@ namespace ao::gtk::layout::editor
         *debounceConn = Glib::signal_timeout().connect(
           [this, node, prop, entry, isLayoutProp] -> bool
           {
-            applyPropertyChange(node, prop.name, LayoutValue{std::string{entry->get_text().raw()}}, isLayoutProp);
+            applyPropertyChange(node, prop.name, LayoutValue{entry->get_text().raw()}, isLayoutProp);
             return false;
           },
           kDebounceMs);

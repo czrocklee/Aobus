@@ -56,11 +56,11 @@ namespace ao::gtk
         continue;
       }
 
-      auto const title = Glib::ustring{std::string{rtDef.label}};
+      auto const title = Glib::ustring{rtDef.label.data(), rtDef.label.size()};
       auto const column = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
       auto const* uiDef = trackFieldUiDefinition(rtDef.field);
 
-      column->set_id(Glib::ustring{std::string{rtDef.id}});
+      column->set_id(Glib::ustring{rtDef.id.data(), rtDef.id.size()});
 
       column->set_resizable(true);
 
@@ -244,7 +244,7 @@ namespace ao::gtk
           continue;
         }
 
-        auto const optField = rt::trackFieldFromId(std::string{gtkColumn->get_id()});
+        auto const optField = rt::trackFieldFromId(gtkColumn->get_id().raw());
 
         if (!optField)
         {
@@ -342,7 +342,7 @@ namespace ao::gtk
   {
     double titleX = 0;
     bool found = false;
-    auto const titleFieldId = std::string{rt::trackFieldId(rt::TrackField::Title)};
+    auto const titleFieldId = rt::trackFieldId(rt::TrackField::Title);
 
     auto const columns = _columnView.get_columns();
 
@@ -360,7 +360,7 @@ namespace ao::gtk
         continue;
       }
 
-      if (col->get_id() == titleFieldId)
+      if (col->get_id().raw() == titleFieldId)
       {
         titleX += col->get_fixed_width() / kTitlePositionDivisor;
         found = true;

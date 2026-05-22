@@ -25,9 +25,11 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <array>
 #include <cstddef>
 #include <format>
 #include <memory>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -170,7 +172,7 @@ namespace ao::gtk
     _tagPopover = std::make_unique<TagPopover>(_runtime.musicLibrary(), _optActiveSelection->selectedIds);
 
     _tagPopover->signalTagsChanged().connect(
-      [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
+      [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
     page.showTagPopover(*_tagPopover, posX, posY);
@@ -199,25 +201,27 @@ namespace ao::gtk
     _tagPopover = std::make_unique<TagPopover>(_runtime.musicLibrary(), selection.selectedIds);
 
     _tagPopover->signalTagsChanged().connect(
-      [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
+      [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
     _tagPopover->set_parent(relativeTo);
     _tagPopover->popup();
   }
 
-  void TagEditController::addTagToCurrentSelection(std::string const& tag)
+  void TagEditController::addTagToCurrentSelection(std::string tag)
   {
-    applyTagChangeToCurrentSelection({tag}, {});
+    auto const toAdd = std::array{std::move(tag)};
+    applyTagChangeToCurrentSelection(toAdd, {});
   }
 
-  void TagEditController::removeTagFromCurrentSelection(std::string const& tag)
+  void TagEditController::removeTagFromCurrentSelection(std::string tag)
   {
-    applyTagChangeToCurrentSelection({}, {tag});
+    auto const toRemove = std::array{std::move(tag)};
+    applyTagChangeToCurrentSelection({}, toRemove);
   }
 
-  void TagEditController::applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
-                                                           std::vector<std::string> const& tagsToRemove)
+  void TagEditController::applyTagChangeToCurrentSelection(std::span<std::string const> tagsToAdd,
+                                                           std::span<std::string const> tagsToRemove)
   {
     if (!_optActiveSelection)
     {

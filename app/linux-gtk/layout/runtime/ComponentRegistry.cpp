@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -73,7 +74,7 @@ namespace ao::gtk::layout
     return _descriptors;
   }
 
-  std::optional<ComponentDescriptor> ComponentRegistry::getDescriptor(std::string const& type) const
+  std::optional<ComponentDescriptor> ComponentRegistry::getDescriptor(std::string_view type) const
   {
     if (auto const it = _descriptorIndexMap.find(type); it != _descriptorIndexMap.end())
     {

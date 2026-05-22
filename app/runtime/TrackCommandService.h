@@ -35,12 +35,12 @@ namespace ao::rt
     /**
      * Adds a tag to a track. Returns true if the tag was added.
      */
-    bool addTag(TrackId trackId, std::string const& tagName);
+    bool addTag(TrackId trackId, std::string tagName);
 
     /**
      * Removes a tag from a track. Returns true if the tag was removed.
      */
-    bool removeTag(TrackId trackId, std::string const& tagName);
+    bool removeTag(TrackId trackId, std::string tagName);
 
     /**
      * Deletes a track from the library.

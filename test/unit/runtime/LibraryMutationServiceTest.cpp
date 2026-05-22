@@ -10,6 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <functional>
 #include <vector>
 
@@ -37,7 +38,8 @@ namespace ao::rt::test
     auto mutated = std::vector<TrackId>{};
     auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
-    auto const result = service.updateMetadata({trackId}, MetadataPatch{.optTitle = "New Title"});
+    auto const targetIds = std::array{trackId};
+    auto const result = service.updateMetadata(targetIds, MetadataPatch{.optTitle = "New Title"});
 
     REQUIRE(result.has_value());
     REQUIRE(mutated.size() == 1);
@@ -56,7 +58,9 @@ namespace ao::rt::test
     auto mutated = std::vector<TrackId>{};
     auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
-    auto const result = service.editTags({trackId}, {"rock"}, {});
+    auto const trackIdsArr = std::array{trackId};
+    auto const toAdd = std::array{std::string{"rock"}};
+    auto const result = service.editTags(trackIdsArr, toAdd, {});
 
     REQUIRE(result.has_value());
     REQUIRE(mutated.size() == 1);
@@ -75,7 +79,8 @@ namespace ao::rt::test
     auto mutated = std::vector<TrackId>{};
     auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
-    auto const result = service.updateMetadata({trackId}, {});
+    auto const noPatchIds = std::array{trackId};
+    auto const result = service.updateMetadata(noPatchIds, {});
 
     REQUIRE(result.has_value());
     CHECK(mutated.size() == 1);
@@ -92,7 +97,8 @@ namespace ao::rt::test
     auto mutated = std::vector<TrackId>{};
     auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
-    auto const result = service.updateMetadata({TrackId{99999}}, MetadataPatch{.optTitle = "X"});
+    auto const missingIds = std::array{TrackId{99999}};
+    auto const result = service.updateMetadata(missingIds, MetadataPatch{.optTitle = "X"});
 
     REQUIRE(result.has_value());
     CHECK(mutated.empty());

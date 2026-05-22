@@ -45,7 +45,7 @@ namespace ao::gtk::layout::editor
 
     sigc::signal<void(LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
 
-    void updateNodePosition(std::string const& nodeId, int posX, int posY);
+    void updateNodePosition(std::string_view nodeId, int posX, int posY);
 
   private:
     // Tree Model columns
@@ -92,8 +92,8 @@ namespace ao::gtk::layout::editor
     void dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp);
 
     void onAddChild();
-    void addComponent(std::string const& type);
-    void wrapNode(std::string const& containerType);
+    void addComponent(std::string type);
+    void wrapNode(std::string containerType);
 
     void onRemoveNode();
     void onMoveUp();

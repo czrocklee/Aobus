@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/linux-gtk/layout/components/StatusComponents.h"
+#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 
 #include "app/linux-gtk/playback/NowPlayingStatusLabel.h"
 #include "app/linux-gtk/playback/PlaybackDetailsWidget.h"
@@ -90,7 +91,7 @@ namespace ao::gtk::layout::test
 
     SECTION("StatusComponents Registration")
     {
-      ComponentRegistry registry;
+      auto registry = ComponentRegistry{};
       registerStatusComponents(registry);
 
       auto const optDesc = registry.getDescriptor("status.libraryTaskProgress");

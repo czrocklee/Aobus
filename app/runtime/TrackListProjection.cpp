@@ -787,7 +787,7 @@ namespace ao::rt
       auto positions = std::vector<std::size_t>{};
       positions.reserve(ids.size());
 
-      for (auto id : ids)
+      for (auto const id : ids)
       {
         if (auto optPos = findPosition(id))
         {
@@ -802,7 +802,7 @@ namespace ao::rt
 
       std::ranges::sort(positions, std::greater<>{});
 
-      for (auto pos : positions)
+      for (auto const pos : positions)
       {
         auto id = orderIndex[pos].trackId;
         orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(pos));

@@ -50,8 +50,8 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <array>
 #include <string_view>
-#include <vector>
 
 namespace ao::gtk
 {
@@ -374,7 +374,7 @@ namespace ao::gtk
 
   void TrackViewPage::commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row,
                                            rt::TrackField field,
-                                           std::string const& newValue)
+                                           std::string newValue)
   {
     auto const oldValue = row->getFieldText(field);
 
@@ -404,7 +404,8 @@ namespace ao::gtk
       default: break;
     }
 
-    auto const result = _runtime.mutation().updateMetadata({row->getTrackId()}, patch);
+    auto const trackIds = std::array{row->getTrackId()};
+    auto const result = _runtime.mutation().updateMetadata(trackIds, patch);
 
     if (!result)
     {

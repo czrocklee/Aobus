@@ -178,12 +178,12 @@ namespace ao::rt::yaml
 
     if (auto const idNode = yaml::findChild(node, "id"); idNode.readable())
     {
-      value.id = std::string{yaml::scalarView(idNode)};
+      value.id = yaml::scalarView(idNode);
     }
 
     if (auto const typeNode = yaml::findChild(node, "type"); typeNode.readable())
     {
-      value.type = std::string{yaml::scalarView(typeNode)};
+      value.type = yaml::scalarView(typeNode);
     }
 
     if (auto const propsNode = yaml::findChild(node, "props"); propsNode.readable())

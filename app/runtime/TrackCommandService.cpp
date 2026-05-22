@@ -13,6 +13,7 @@
 #include "ao/tag/TagFile.h"
 
 #include <algorithm>
+#include <utility>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -27,7 +28,7 @@ namespace ao::rt
   {
   }
 
-  bool TrackCommandService::addTag(TrackId trackId, std::string const& tagName)
+  bool TrackCommandService::addTag(TrackId trackId, std::string tagName)
   {
     auto txn = _library.writeTransaction();
     auto writer = _library.tracks().writer(txn);
@@ -45,7 +46,7 @@ namespace ao::rt
       return false;
     }
 
-    builder.tags().add(tagName);
+    builder.tags().add(std::move(tagName));
 
     auto const hotData = builder.serializeHot(txn, _library.dictionary());
     writer.updateHot(trackId, hotData);
@@ -55,7 +56,7 @@ namespace ao::rt
     return true;
   }
 
-  bool TrackCommandService::removeTag(TrackId trackId, std::string const& tagName)
+  bool TrackCommandService::removeTag(TrackId trackId, std::string tagName)
   {
     auto txn = _library.writeTransaction();
     auto writer = _library.tracks().writer(txn);

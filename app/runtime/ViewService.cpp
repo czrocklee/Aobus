@@ -219,7 +219,7 @@ namespace ao::rt
     }
   }
 
-  void ViewService::setFilter(ViewId viewId, std::string const& filterExpression)
+  void ViewService::setFilter(ViewId viewId, std::string filterExpression)
   {
     auto const timer = utility::ScopedTimer{"ViewService::setFilter"};
     auto it = _impl->views.find(viewId);
@@ -229,23 +229,23 @@ namespace ao::rt
       return;
     }
 
-    it->second.state.filterExpression = filterExpression;
+    it->second.state.filterExpression = std::move(filterExpression);
     it->second.state.revision++;
     _impl->filterChangedSignal.post(
-      _impl->executor, ViewService::FilterChanged{.viewId = viewId, .filterExpression = filterExpression});
+      _impl->executor, ViewService::FilterChanged{.viewId = viewId, .filterExpression = it->second.state.filterExpression});
 
     if (it->second.adHocSource)
     {
-      it->second.adHocSource->setExpression(filterExpression);
+      it->second.adHocSource->setExpression(it->second.state.filterExpression);
       it->second.adHocSource->reload();
     }
-    else if (!filterExpression.empty())
+    else if (!it->second.state.filterExpression.empty())
     {
       // If we didn't have an adHocSource but now we need one
       auto* baseSource = &_impl->sources.sourceFor(it->second.state.listId);
       it->second.adHocSource =
         std::make_unique<SmartListSource>(*baseSource, _impl->library, _impl->sources.smartEvaluator());
-      it->second.adHocSource->setExpression(filterExpression);
+      it->second.adHocSource->setExpression(it->second.state.filterExpression);
       it->second.adHocSource->reload();
       it->second.activeSource = it->second.adHocSource.get();
 
@@ -271,7 +271,7 @@ namespace ao::rt
 
     auto status = FilterStatusChanged{
       .viewId = viewId,
-      .expression = std::string{filterExpression},
+      .expression = it->second.state.filterExpression,
       .revision = it->second.state.revision,
     };
 
@@ -283,7 +283,7 @@ namespace ao::rt
     _impl->filterStatusChangedSignal.emit(status);
   }
 
-  void ViewService::setSort(ViewId viewId, std::vector<TrackSortTerm> const& sortBy)
+  void ViewService::setSort(ViewId viewId, std::vector<TrackSortTerm> sortBy)
   {
     auto it = _impl->views.find(viewId);
 
@@ -301,7 +301,7 @@ namespace ao::rt
       if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(it->second.projection.get()))
       {
         auto spec = presentationSpecFromState(it->second.state.presentation);
-        spec.sortBy = sortBy;
+        spec.sortBy = std::move(sortBy);
         trackListProj->setPresentation(spec);
       }
     }
@@ -368,7 +368,7 @@ namespace ao::rt
     return spec;
   }
 
-  void ViewService::setSelection(ViewId viewId, std::vector<TrackId> const& selection)
+  void ViewService::setSelection(ViewId viewId, std::vector<TrackId> selection)
   {
     auto it = _impl->views.find(viewId);
 
@@ -377,10 +377,11 @@ namespace ao::rt
       return;
     }
 
-    it->second.state.selection = selection;
+    it->second.state.selection = std::move(selection);
     it->second.state.revision++;
 
-    _impl->selectionChangedSignal.emit(ViewService::SelectionChanged{.viewId = viewId, .selection = selection});
+    _impl->selectionChangedSignal.emit(
+      ViewService::SelectionChanged{.viewId = viewId, .selection = it->second.state.selection});
   }
 
   void ViewService::openListInView(ViewId viewId, ListId listId)

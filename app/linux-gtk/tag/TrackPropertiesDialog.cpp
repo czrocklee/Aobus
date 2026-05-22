@@ -379,7 +379,7 @@ namespace ao::gtk
 
       if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget))
       {
-        rawValue = detail::TrackFieldRawValue{std::in_place_type<std::string>, std::string{entry->get_text().raw()}};
+        rawValue = detail::TrackFieldRawValue{std::in_place_type<std::string>, entry->get_text().raw()};
       }
       else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget))
       {
