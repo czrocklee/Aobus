@@ -4,7 +4,6 @@
 #pragma once
 
 #include "ao/Type.h"
-#include "ao/library/FileManifestStore.h"
 #include "ao/library/TrackLayout.h"
 #include "ao/utility/ByteView.h"
 
@@ -81,11 +80,6 @@ namespace ao::library
       // Hot properties
       std::uint16_t codecId() const noexcept { return _track.hotHeader().codecId; }
       std::uint8_t bitDepth() const noexcept { return _track.hotHeader().bitDepth; }
-
-      // Physical properties (from manifest)
-      std::uint64_t fileSize() const noexcept { return _track.fileSize(); }
-      std::uint64_t mtime() const noexcept { return _track.mtime(); }
-      FileStatus status() const noexcept { return _track.status(); }
 
       // Technical properties (from cold)
       std::uint32_t durationMs() const noexcept { return _track.coldHeader().durationMs; }
@@ -193,12 +187,8 @@ namespace ao::library
      * @param mtime Modification time (optional, from manifest)
      * @param status Physical availability of the file
      */
-    TrackView(std::span<std::byte const> hotData,
-              std::span<std::byte const> coldData,
-              std::uint64_t fileSize = 0,
-              std::uint64_t mtime = 0,
-              FileStatus status = FileStatus::Available)
-      : _hotData{hotData}, _coldData{coldData}, _fileSize{fileSize}, _mtime{mtime}, _status{status}
+    TrackView(std::span<std::byte const> hotData, std::span<std::byte const> coldData)
+      : _hotData{hotData}, _coldData{coldData}
     {
     }
 
@@ -223,10 +213,6 @@ namespace ao::library
     PropertyProxy property() const { return PropertyProxy{*this}; }
     TagProxy tags() const { return TagProxy{_hotData}; }
     CustomProxy custom() const { return CustomProxy{_coldData}; }
-
-    std::uint64_t fileSize() const noexcept { return _fileSize; }
-    std::uint64_t mtime() const noexcept { return _mtime; }
-    FileStatus status() const noexcept { return _status; }
 
     // Direct header access
     std::span<std::byte const> hotData() const noexcept { return _hotData; }
@@ -253,9 +239,6 @@ namespace ao::library
 
     std::span<std::byte const> _hotData;
     std::span<std::byte const> _coldData;
-    std::uint64_t _fileSize = 0;
-    std::uint64_t _mtime = 0;
-    FileStatus _status = FileStatus::Available;
   };
 
   class TrackView::CustomProxy::Iterator final

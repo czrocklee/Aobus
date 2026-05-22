@@ -3,6 +3,7 @@
 
 #include "ao/library/LibraryScanner.h"
 
+#include "ao/library/FileManifestBuilder.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
 
@@ -61,24 +62,25 @@ namespace ao::library::test
 
       // Unchanged
       char const* const unchangedUri = "unchanged.mp3";
-      auto entry1 = ManifestEntry{.trackId = TrackId{1}};
-      entry1.fileSize(std::filesystem::file_size(musicRoot / unchangedUri));
-      entry1.mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                     std::filesystem::last_write_time(musicRoot / unchangedUri).time_since_epoch())
-                     .count());
-      manifestWriter.put(unchangedUri, entry1);
+      auto builder1 = FileManifestBuilder::createNew();
+      builder1.trackId(TrackId{1})
+        .fileSize(std::filesystem::file_size(musicRoot / unchangedUri))
+        .mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                 std::filesystem::last_write_time(musicRoot / unchangedUri).time_since_epoch())
+                 .count());
+      manifestWriter.put(unchangedUri, builder1.serialize());
 
       // Changed (different size)
       char const* const changedUri = "changed.wav";
-      auto entry2 = ManifestEntry{.trackId = TrackId{2}};
-      entry2.fileSize(99999);
-      entry2.mtime(0);
-      manifestWriter.put(changedUri, entry2);
+      auto builder2 = FileManifestBuilder::createNew();
+      builder2.trackId(TrackId{2}).fileSize(99999).mtime(0);
+      manifestWriter.put(changedUri, builder2.serialize());
 
       // Missing (in manifest but not on disk)
       char const* const missingUri = "missing.flac";
-      auto entry3 = ManifestEntry{.trackId = TrackId{3}};
-      manifestWriter.put(missingUri, entry3);
+      auto builder3 = FileManifestBuilder::createNew();
+      builder3.trackId(TrackId{3});
+      manifestWriter.put(missingUri, builder3.serialize());
 
       txn.commit();
     }

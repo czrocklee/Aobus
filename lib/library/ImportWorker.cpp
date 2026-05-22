@@ -1,6 +1,8 @@
 #include "ao/library/ImportWorker.h"
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestBuilder.h"
+#include "ao/library/FileManifestLayout.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/LibraryScanner.h"
 #include "ao/library/MusicLibrary.h"
@@ -61,18 +63,18 @@ namespace ao::library
 
       auto txn = _ml.readTransaction();
       auto const manifestReader = _ml.manifest().reader(txn);
-      auto const optEntry = manifestReader.get(uri);
+      auto const optView = manifestReader.get(uri);
 
       item.fileSize = std::filesystem::file_size(path);
       item.mtime = static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch())
           .count());
 
-      if (optEntry)
+      if (optView)
       {
-        item.trackId = optEntry->trackId;
+        item.trackId = optView->trackId();
 
-        if (optEntry->fileSize() == item.fileSize && optEntry->mtime() == item.mtime)
+        if (optView->fileSize() == item.fileSize && optView->mtime() == item.mtime)
         {
           item.classification = ScanClassification::Unchanged;
         }
@@ -145,11 +147,11 @@ namespace ao::library
       if (item.classification == ScanClassification::Missing)
       {
         // Update manifest status
-        if (auto const optEntry = _ml.manifest().reader(txn).get(item.uri))
+        if (auto const optView = _ml.manifest().reader(txn).get(item.uri))
         {
-          auto entry = *optEntry;
-          entry.status = FileStatus::Missing;
-          manifestWriter.put(item.uri, entry);
+          auto builder = FileManifestBuilder::fromView(*optView);
+          builder.status(FileStatus::Missing);
+          manifestWriter.put(item.uri, builder.serialize());
         }
 
         return;
@@ -166,7 +168,7 @@ namespace ao::library
       }
 
       auto builder = tagFile->loadTrack();
-      builder.property().uri(item.uri).fileSize(item.fileSize).mtime(item.mtime);
+      builder.property().uri(item.uri);
 
       if (item.classification == ScanClassification::Changed && item.trackId != kInvalidTrackId)
       {
@@ -190,10 +192,9 @@ namespace ao::library
             item.trackId, preparedCold.size(), [&](std::span<std::byte> cold) { preparedCold.writeTo(cold); });
 
           // Update manifest
-          auto entry = ManifestEntry{.trackId = item.trackId, .status = FileStatus::Available};
-          entry.fileSize(item.fileSize);
-          entry.mtime(item.mtime);
-          manifestWriter.put(item.uri, entry);
+          auto manifestBuilder = FileManifestBuilder::createNew();
+          manifestBuilder.trackId(item.trackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
+          manifestWriter.put(item.uri, manifestBuilder.serialize());
           return;
         }
       }
@@ -210,10 +211,9 @@ namespace ao::library
         });
       std::ignore = view;
 
-      auto entry = ManifestEntry{.trackId = newTrackId, .status = FileStatus::Available};
-      entry.fileSize(item.fileSize);
-      entry.mtime(item.mtime);
-      manifestWriter.put(item.uri, entry);
+      auto manifestBuilder = FileManifestBuilder::createNew();
+      manifestBuilder.trackId(newTrackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
+      manifestWriter.put(item.uri, manifestBuilder.serialize());
 
       _result.insertedIds.push_back(newTrackId);
     }

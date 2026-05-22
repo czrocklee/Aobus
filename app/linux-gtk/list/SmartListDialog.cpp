@@ -357,9 +357,9 @@ namespace ao::gtk
       auto readTxn = _runtime.musicLibrary().readTransaction();
       auto reader = _runtime.musicLibrary().lists().reader(readTxn);
 
-      if (auto optListView = reader.get(_parentListId); optListView)
+      if (auto optView = reader.get(_parentListId); optView)
       {
-        inheritedExpr = optListView->filter();
+        inheritedExpr = optView->filter();
       }
       else
       {

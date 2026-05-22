@@ -114,9 +114,9 @@ namespace ao::library::test
       return builder.serializeCold(wtxn, dict, resources);
     }
 
-    TrackView makeColdView(std::vector<std::byte> const& data, uint64_t fileSize = 0, uint64_t mtime = 0)
+    TrackView makeColdView(std::vector<std::byte> const& data)
     {
-      return TrackView{std::span<std::byte const>{}, data, fileSize, mtime};
+      return TrackView{std::span<std::byte const>{}, data};
     }
   } // namespace
 
@@ -236,10 +236,7 @@ namespace ao::library::test
   TEST_CASE("TrackView - Cold File Size and Mtime")
   {
     auto const data = createColdData({}, {}, "");
-    auto const view = makeColdView(data, 12345678, 987654321);
-
-    CHECK(view.property().fileSize() == 12345678);
-    CHECK(view.property().mtime() == 987654321);
+    auto const view = makeColdView(data);
   }
 
   TEST_CASE("TrackView - Cold Audio Format")

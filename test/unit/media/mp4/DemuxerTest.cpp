@@ -41,16 +41,16 @@ namespace ao::media::mp4::test
       // moov atom (8 bytes header + no children)
       auto const data = std::vector<std::byte>{
         std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x10}, // size 16
-        std::byte{'f'},  std::byte{'t'},  std::byte{'y'},  std::byte{'p'}, // type
+        std::byte{'f'},  std::byte{'t'},  std::byte{'y'},  std::byte{'p'},  // type
         std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, // dummy
         std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, // dummy
         std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x08}, // size 8
-        std::byte{'m'},  std::byte{'o'},  std::byte{'o'},  std::byte{'v'}  // type
+        std::byte{'m'},  std::byte{'o'},  std::byte{'o'},  std::byte{'v'}   // type
       };
 
       auto demuxer = Demuxer{data};
       auto const result = demuxer.parseTrack("alac");
-      
+
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
     }

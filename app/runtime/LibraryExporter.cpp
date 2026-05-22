@@ -226,7 +226,9 @@ namespace ao::rt
       {.field = rt::TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth(); }},
     });
 
-    void emitTrackProperties(ryml::NodeRef& node, library::TrackView::PropertyProxy const& property)
+    void emitTrackProperties(ryml::NodeRef& node,
+                             library::TrackView::PropertyProxy const& property,
+                             library::FileManifestStore::Reader const& manifestReader)
     {
       for (auto const& map : kPropertyDispatch)
       {
@@ -248,8 +250,17 @@ namespace ao::rt
         }
       }
 
-      node.append_child() << ryml::key("fileSize") << property.fileSize();
-      node.append_child() << ryml::key("mtime") << property.mtime();
+      auto fileSize = std::uint64_t{0};
+      auto mtime = std::uint64_t{0};
+
+      if (auto const optManifestView = manifestReader.get(property.uri()))
+      {
+        fileSize = optManifestView->fileSize();
+        mtime = optManifestView->mtime();
+      }
+
+      node.append_child() << ryml::key("fileSize") << fileSize;
+      node.append_child() << ryml::key("mtime") << mtime;
     }
 
     void emitTrackCover(ryml::NodeRef& node,
@@ -346,7 +357,8 @@ namespace ao::rt
                      ExportMode mode,
                      std::unordered_map<ResourceId, std::string>& exportedCovers,
                      library::ResourceStore& resources,
-                     library::DictionaryStore& dict) const;
+                     library::DictionaryStore& dict,
+                     library::FileManifestStore::Reader const& manifestReader) const;
     void exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
 
     library::MusicLibrary& ml;
@@ -418,14 +430,7 @@ namespace ao::rt
 
     for (auto const& [trackId, view] : trackReader)
     {
-      auto viewWithManifest = view;
-
-      if (auto const optEntry = manifestReader.get(view.property().uri()))
-      {
-        viewWithManifest = library::TrackView{view.hotData(), view.coldData(), optEntry->fileSize(), optEntry->mtime()};
-      }
-
-      exportTrack(tracksNode, txn, trackId, viewWithManifest, mode, exportedCovers, resources, dict);
+      exportTrack(tracksNode, txn, trackId, view, mode, exportedCovers, resources, dict, manifestReader);
     }
   }
 
@@ -436,7 +441,8 @@ namespace ao::rt
                                           ExportMode mode,
                                           std::unordered_map<ResourceId, std::string>& exportedCovers,
                                           library::ResourceStore& resources,
-                                          library::DictionaryStore& dict) const
+                                          library::DictionaryStore& dict,
+                                          library::FileManifestStore::Reader const& manifestReader) const
   {
     auto trackNode = node.append_child();
     trackNode |= ryml::MAP;
@@ -467,7 +473,7 @@ namespace ao::rt
 
     if (mode == ExportMode::Full)
     {
-      emitTrackProperties(trackNode, property);
+      emitTrackProperties(trackNode, property, manifestReader);
     }
 
     emitTrackCover(trackNode, txn, metadata, optBaseline, mode, exportedCovers, resources);
@@ -513,11 +519,11 @@ namespace ao::rt
           {
             if (mode == ExportMode::ListOnly)
             {
-              if (auto const optTrack = trackReader.get(tid); optTrack)
+              if (auto const optTrackView = trackReader.get(tid); optTrackView)
               {
                 auto refNode = tracksSeqNode.append_child();
                 refNode |= ryml::MAP;
-                appendString(refNode, "uri", optTrack->property().uri());
+                appendString(refNode, "uri", optTrackView->property().uri());
               }
             }
             else

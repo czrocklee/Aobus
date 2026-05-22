@@ -4,7 +4,6 @@
 #include "ao/library/TrackStore.h"
 
 #include "ao/Type.h"
-#include "ao/library/FileManifestStore.h"
 #include "ao/library/TrackView.h"
 #include "ao/lmdb/Database.h"
 #include "ao/lmdb/Transaction.h"
@@ -35,12 +34,8 @@ namespace ao::library
   }
 
   // TrackStore::Reader implementation
-  TrackStore::Reader::Reader(lmdb::Database::Reader hotReader,
-                             lmdb::Database::Reader coldReader,
-                             std::optional<FileManifestStore::Reader> optManifestReader)
-    : _hotReader{std::move(hotReader)}
-    , _coldReader{std::move(coldReader)}
-    , _optManifestReader{std::move(optManifestReader)}
+  TrackStore::Reader::Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader)
+    : _hotReader{std::move(hotReader)}, _coldReader{std::move(coldReader)}
   {
   }
 
@@ -75,35 +70,25 @@ namespace ao::library
 
     auto view = TrackView{hotBuffer, coldBuffer};
 
-    if (_optManifestReader && !coldBuffer.empty())
-    {
-      if (auto const optEntry = _optManifestReader->get(view.property().uri()))
-      {
-        view = TrackView{hotBuffer, coldBuffer, optEntry->fileSize(), optEntry->mtime(), optEntry->status};
-      }
-    }
-
     return view;
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin(LoadMode mode) const
   {
-    return Iterator{_hotReader.begin(), _coldReader.begin(), mode, _optManifestReader};
+    return Iterator{_hotReader.begin(), _coldReader.begin(), mode};
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::end(LoadMode mode) const
   {
-    return Iterator{_hotReader.end(), _coldReader.end(), mode, _optManifestReader};
+    return Iterator{_hotReader.end(), _coldReader.end(), mode};
   }
 
   // TrackStore::Reader::Iterator implementation
   TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& hotIter,
                                          lmdb::Database::Reader::Iterator&& coldIter,
-                                         Reader::LoadMode mode,
-                                         std::optional<FileManifestStore::Reader> optManifestReader)
+                                         Reader::LoadMode mode)
     : _optHotIter{mode != LoadMode::Cold ? std::make_optional(std::move(hotIter)) : std::nullopt}
     , _optColdIter{mode != LoadMode::Hot ? std::make_optional(std::move(coldIter)) : std::nullopt}
-    , _optManifestReader{std::move(optManifestReader)}
     , _mode{mode}
   {
   }
@@ -164,14 +149,6 @@ namespace ao::library
     }
 
     auto view = TrackView{hotBuffer, coldBuffer};
-
-    if (_optManifestReader && !coldBuffer.empty())
-    {
-      if (auto const optEntry = _optManifestReader->get(view.property().uri()))
-      {
-        view = TrackView{hotBuffer, coldBuffer, optEntry->fileSize(), optEntry->mtime(), optEntry->status};
-      }
-    }
 
     return {trackId, view};
   }

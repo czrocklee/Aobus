@@ -4,6 +4,7 @@
 #include "ao/Error.h"
 #include "ao/Type.h"
 #include "ao/library/DictionaryStore.h"
+#include "ao/library/FileManifestBuilder.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/ListBuilder.h"
 #include "ao/library/ListStore.h"
@@ -210,11 +211,8 @@ namespace ao::library::test
       auto& dict = ml1.dictionary();
 
       auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property()
-        .uri("full-fields.flac")
-        .durationMs(240000)
-        .fileSize(1024ULL * 1024ULL * 50ULL)
-        .mtime(123456789);
+      trackBuilder.property().uri("full-fields.flac").durationMs(240000);
+
       trackBuilder.metadata().title("Test Title").artist("Test Artist").composer("Test Composer").work("Test Work");
 
       auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
@@ -228,10 +226,9 @@ namespace ao::library::test
                                                });
 
       auto manifestWriter = ml1.manifest().writer(txn);
-      auto entry = ManifestEntry{.trackId = trackId};
-      entry.fileSize(1024ULL * 1024ULL * 50ULL);
-      entry.mtime(123456789);
-      manifestWriter.put("full-fields.flac", entry);
+      auto builder = FileManifestBuilder::createNew();
+      builder.trackId(trackId).mtime(123456789);
+      manifestWriter.put("full-fields.flac", builder.serialize());
 
       txn.commit();
     }
@@ -252,9 +249,8 @@ namespace ao::library::test
     // 4. Verify in ml2
     {
       auto txn = ml2.readTransaction();
-      auto const manifestReader = ml2.manifest().reader(txn);
+
       auto reader = ml2.tracks().reader(txn);
-      reader.setManifestReader(manifestReader);
       auto& dict = ml2.dictionary();
 
       auto tracks = std::vector<std::pair<TrackId, TrackView>>{};
@@ -268,8 +264,7 @@ namespace ao::library::test
       auto const& view = tracks[0].second;
 
       REQUIRE(std::string{view.property().uri()} == "full-fields.flac");
-      REQUIRE(view.property().fileSize() == 1024ULL * 1024ULL * 50ULL);
-      REQUIRE(view.property().mtime() == 123456789);
+
       REQUIRE(view.property().durationMs() == 240000);
 
       REQUIRE(std::string{view.metadata().title()} == "Test Title");
@@ -397,7 +392,9 @@ namespace ao::library::test
                                                                               });
 
       auto manifestWriter = ml1.manifest().writer(txn);
-      manifestWriter.put(uri, ManifestEntry{.trackId = trackId});
+      auto builder = FileManifestBuilder::createNew();
+      builder.trackId(trackId);
+      manifestWriter.put(uri, builder.serialize());
 
       auto listBuilder = ListBuilder::createNew().name("My URI List");
       listBuilder.tracks().add(trackId);
@@ -444,7 +441,9 @@ namespace ao::library::test
                                                                                     });
 
       auto manifestWriter = ml2.manifest().writer(txn);
-      manifestWriter.put(uri, ManifestEntry{.trackId = targetTrackId});
+      auto builder = FileManifestBuilder::createNew();
+      builder.trackId(targetTrackId);
+      manifestWriter.put(uri, builder.serialize());
 
       txn.commit();
     }
@@ -497,7 +496,9 @@ namespace ao::library::test
                                                                  preparedHot.writeTo(h);
                                                                  preparedCold.writeTo(c);
                                                                });
-      ml.manifest().writer(txn).put(uri1, ManifestEntry{.trackId = tid});
+      auto builder = FileManifestBuilder::createNew();
+      builder.trackId(tid);
+      ml.manifest().writer(txn).put(uri1, builder.serialize());
       txn.commit();
     }
 

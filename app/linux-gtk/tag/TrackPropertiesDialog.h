@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestStore.h"
 #include "runtime/TrackField.h"
 #include "track/TrackFieldUi.h"
 
@@ -60,8 +61,12 @@ namespace ao::gtk
     void setupMetadataTab();
     void setupPropertiesTab();
     void loadData();
-    void loadFirstTrack(library::TrackView const& view, library::DictionaryStore const& dictionary);
-    void loadSubsequentTrack(library::TrackView const& view, library::DictionaryStore const& dictionary);
+    void loadFirstTrack(library::TrackView const& view,
+                        library::DictionaryStore const& dictionary,
+                        library::FileManifestStore::Reader const* manifestReader = nullptr);
+    void loadSubsequentTrack(library::TrackView const& view,
+                             library::DictionaryStore const& dictionary,
+                             library::FileManifestStore::Reader const* manifestReader = nullptr);
     void onSave();
 
     Gtk::Widget* createEditorWidget(rt::TrackField field);

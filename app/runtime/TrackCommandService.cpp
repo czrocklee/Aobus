@@ -5,13 +5,17 @@
 
 #include "LibraryMutationService.h"
 #include "ao/Type.h"
+#include "ao/library/FileManifestBuilder.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
 #include "ao/tag/TagFile.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <span>
 #include <string>
@@ -105,10 +109,7 @@ namespace ao::rt
     auto txn = _library.writeTransaction();
     auto writer = _library.tracks().writer(txn);
     auto builder = optTagFile->loadTrack();
-    builder.property()
-      .uri(path.string())
-      .fileSize(std::filesystem::file_size(path))
-      .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
+    builder.property().uri(path.string());
 
     auto const [preparedHot, preparedCold] = builder.prepare(txn, _library.dictionary(), _library.resources());
     auto const [id, trackView] =
@@ -119,6 +120,16 @@ namespace ao::rt
                              preparedHot.writeTo(hot);
                              preparedCold.writeTo(cold);
                            });
+
+    auto manifestWriter = _library.manifest().writer(txn);
+    auto manifestBuilder = library::FileManifestBuilder::createNew();
+    manifestBuilder.trackId(id)
+      .fileSize(static_cast<std::uint64_t>(std::filesystem::file_size(path)))
+      .mtime(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch())
+          .count());
+    manifestWriter.put(path.string(), manifestBuilder.serialize());
+
     txn.commit();
 
     _mutation.notifyTracksMutated({id});

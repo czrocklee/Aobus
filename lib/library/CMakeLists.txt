@@ -5,6 +5,8 @@ add_library(ao_library STATIC
     ResourceStore.cpp
     DictionaryStore.cpp
     FileManifestStore.cpp
+    FileManifestView.cpp
+    FileManifestBuilder.cpp
     TrackStore.cpp
     TrackBuilder.cpp
     TrackView.cpp

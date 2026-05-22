@@ -4,10 +4,9 @@
 #pragma once
 
 #include "ao/Type.h"
-#include "ao/library/FileManifestStore.h"
 #include "ao/library/TrackView.h"
-#include "ao/lmdb/Database.h"
 #include "ao/lmdb/Transaction.h"
+#include <ao/lmdb/Database.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -62,9 +61,7 @@ namespace ao::library
       Both  // Both hot and cold
     };
 
-    explicit Reader(lmdb::Database::Reader hotReader,
-                    lmdb::Database::Reader coldReader,
-                    std::optional<FileManifestStore::Reader> optManifestReader = std::nullopt);
+    explicit Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);
 
     Iterator begin(LoadMode mode = LoadMode::Both) const;
     Iterator end(LoadMode mode = LoadMode::Both) const;
@@ -75,18 +72,12 @@ namespace ao::library
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
-    void setManifestReader(std::optional<FileManifestStore::Reader> optReader) noexcept
-    {
-      _optManifestReader = optReader;
-    }
-
     lmdb::Database::Reader const& hotReader() const noexcept { return _hotReader; }
     lmdb::Database::Reader const& coldReader() const noexcept { return _coldReader; }
 
   private:
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
-    std::optional<FileManifestStore::Reader> _optManifestReader;
     friend class TrackStore;
   };
 
@@ -110,20 +101,13 @@ namespace ao::library
     Iterator& operator++();
     value_type operator*() const;
 
-    void setManifestReader(std::optional<FileManifestStore::Reader> optReader) noexcept
-    {
-      _optManifestReader = optReader;
-    }
-
   private:
     Iterator(lmdb::Database::Reader::Iterator&& hotIter,
              lmdb::Database::Reader::Iterator&& coldIter,
-             Reader::LoadMode mode,
-             std::optional<FileManifestStore::Reader> optManifestReader = std::nullopt);
+             Reader::LoadMode mode);
 
     std::optional<lmdb::Database::Reader::Iterator> _optHotIter;
     std::optional<lmdb::Database::Reader::Iterator> _optColdIter;
-    std::optional<FileManifestStore::Reader> _optManifestReader;
     Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };

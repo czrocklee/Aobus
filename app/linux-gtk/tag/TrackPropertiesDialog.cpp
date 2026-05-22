@@ -247,6 +247,7 @@ namespace ao::gtk
     auto const txn = _library.readTransaction();
     auto const reader = _library.tracks().reader(txn);
     auto const& dictionary = _library.dictionary();
+    auto const manifestReader = _library.manifest().reader(txn);
 
     bool first = true;
 
@@ -256,18 +257,20 @@ namespace ao::gtk
       {
         if (first)
         {
-          loadFirstTrack(*optView, dictionary);
+          loadFirstTrack(*optView, dictionary, &manifestReader);
           first = false;
         }
         else
         {
-          loadSubsequentTrack(*optView, dictionary);
+          loadSubsequentTrack(*optView, dictionary, &manifestReader);
         }
       }
     }
   }
 
-  void TrackPropertiesDialog::loadFirstTrack(library::TrackView const& view, library::DictionaryStore const& dictionary)
+  void TrackPropertiesDialog::loadFirstTrack(library::TrackView const& view,
+                                             library::DictionaryStore const& dictionary,
+                                             library::FileManifestStore::Reader const* manifestReader)
   {
     for (auto& editor : _editors)
     {
@@ -278,7 +281,7 @@ namespace ao::gtk
         continue;
       }
 
-      auto const rawValue = def->readViewRawValue(view, dictionary);
+      auto const rawValue = def->readViewRawValue(view, dictionary, manifestReader);
       editor.originalRawValue = rawValue;
       setWidgetValue(editor.field, editor.widget, def->formatValue(rawValue));
     }
@@ -292,14 +295,15 @@ namespace ao::gtk
         continue;
       }
 
-      auto const rawValue = def->readViewRawValue(view, dictionary);
+      auto const rawValue = def->readViewRawValue(view, dictionary, manifestReader);
       row.originalRawValue = rawValue;
       setWidgetValue(row.field, row.widget, def->formatValue(rawValue));
     }
   }
 
   void TrackPropertiesDialog::loadSubsequentTrack(library::TrackView const& view,
-                                                  library::DictionaryStore const& dictionary)
+                                                  library::DictionaryStore const& dictionary,
+                                                  library::FileManifestStore::Reader const* manifestReader)
   {
     for (auto& editor : _editors)
     {
@@ -315,7 +319,7 @@ namespace ao::gtk
         continue;
       }
 
-      auto const rawValue = def->readViewRawValue(view, dictionary);
+      auto const rawValue = def->readViewRawValue(view, dictionary, manifestReader);
 
       if (rawValue != editor.originalRawValue)
       {
@@ -338,7 +342,7 @@ namespace ao::gtk
         continue;
       }
 
-      auto const rawValue = def->readViewRawValue(view, dictionary);
+      auto const rawValue = def->readViewRawValue(view, dictionary, manifestReader);
 
       if (rawValue != row.originalRawValue)
       {

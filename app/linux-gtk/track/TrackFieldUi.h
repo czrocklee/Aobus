@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ao/library/FileManifestStore.h"
 #include "runtime/StateTypes.h"
 #include "runtime/TrackField.h"
 #include <ao/library/MusicLibrary.h>
@@ -39,7 +40,9 @@ namespace ao::gtk
     };
 
     using TrackRowTextReader = std::string (*)(TrackRowObject const&, TrackRowCache const&);
-    using TrackViewRawReader = TrackFieldRawValue (*)(library::TrackView const&, library::DictionaryStore const&);
+    using TrackViewRawReader = TrackFieldRawValue (*)(library::TrackView const&,
+                                                      library::DictionaryStore const&,
+                                                      library::FileManifestStore::Reader const*);
     using TrackFieldFormatter = std::string (*)(TrackFieldRawValue const&);
     using TrackFieldPatchWriter = void (*)(TrackFieldEditContext const&);
 

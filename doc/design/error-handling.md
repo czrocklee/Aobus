@@ -166,14 +166,14 @@ When a higher-level operation requires the value, convert absence to `Result<T>`
 at that boundary:
 
 ```cpp
-auto optTrack = reader.get(id);
+auto optView = reader.get(id);
 
-if (!optTrack)
+if (!optView)
 {
   return ao::makeError(ao::Error::Code::NotFound, "Track not found");
 }
 
-return *optTrack;
+return *optView;
 ```
 
 Do not use optional to hide parse, IO, database, or format failures. If the

@@ -6,6 +6,8 @@
 #include "ao/Type.h"
 #include "ao/audio/Types.h"
 #include "ao/library/DictionaryStore.h"
+#include "ao/library/FileManifestLayout.h"
+#include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
 #include "ao/library/TrackView.h"
@@ -83,6 +85,23 @@ namespace ao::gtk
     auto const& metadata = view.metadata();
     auto const title = metadata.title();
 
+    auto fileSize = std::uint64_t{0};
+    auto mtime = std::uint64_t{0};
+    auto status = library::FileStatus::Available;
+
+    if (auto const uri = view.property().uri(); !uri.empty())
+    {
+      auto txn = _ml.readTransaction();
+      auto const reader = _ml.manifest().reader(txn);
+
+      if (auto const optManifestView = reader.get(uri))
+      {
+        fileSize = optManifestView->fileSize();
+        mtime = optManifestView->mtime();
+        status = optManifestView->status();
+      }
+    }
+
     row->populate(Glib::ustring{title.begin(), title.end()},
                   metadata.artistId(),
                   metadata.albumId(),
@@ -103,9 +122,9 @@ namespace ao::gtk
                   view.property().bitDepth(),
                   view.property().codecId(),
                   view.property().bitrate(),
-                  view.property().fileSize(),
-                  view.property().mtime(),
-                  view.property().status());
+                  fileSize,
+                  mtime,
+                  status);
 
     return row;
   }

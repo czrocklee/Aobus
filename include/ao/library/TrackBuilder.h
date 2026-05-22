@@ -115,8 +115,6 @@ namespace ao::library
     class PropertyBuilder
     {
     public:
-      PropertyBuilder& fileSize(std::uint64_t size);
-      PropertyBuilder& mtime(std::uint64_t mtime);
       PropertyBuilder& durationMs(std::uint32_t durationMs);
       PropertyBuilder& bitrate(std::uint32_t bitrate);
       PropertyBuilder& sampleRate(std::uint32_t sampleRate);
@@ -127,8 +125,6 @@ namespace ao::library
 
       // Accessors
       std::string_view uri() const { return _uri; }
-      std::uint64_t fileSize() const { return _fileSize; }
-      std::uint64_t mtime() const { return _mtime; }
       std::uint32_t durationMs() const { return _durationMs; }
       std::uint32_t bitrate() const { return _bitrate; }
       std::uint32_t sampleRate() const { return _sampleRate; }
@@ -140,8 +136,6 @@ namespace ao::library
       friend class TrackBuilder;
 
       // Property numerics
-      std::uint64_t _fileSize = 0;
-      std::uint64_t _mtime = 0;
       std::uint32_t _durationMs = 0;
       std::uint32_t _bitrate = 0;
       std::uint32_t _sampleRate = 0;

@@ -81,8 +81,6 @@ namespace ao::library
       auto prop = view.property();
       builder.property()
         .uri(prop.uri())
-        .fileSize(prop.fileSize())
-        .mtime(prop.mtime())
         .durationMs(prop.durationMs())
         .sampleRate(prop.sampleRate())
         .bitrate(prop.bitrate())
@@ -248,18 +246,6 @@ namespace ao::library
   //=============================================================================
   // PropertyBuilder
   //=============================================================================
-
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::fileSize(std::uint64_t size)
-  {
-    _fileSize = size;
-    return *this;
-  }
-
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::mtime(std::uint64_t mtime)
-  {
-    _mtime = mtime;
-    return *this;
-  }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::durationMs(std::uint32_t durationMs)
   {

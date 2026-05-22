@@ -4,6 +4,7 @@
 #include "InitCommand.h"
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestBuilder.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
@@ -13,6 +14,7 @@
 
 #include <CLI/App.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <exception>
 #include <filesystem>
@@ -45,10 +47,7 @@ namespace ao::cli
           auto builder = optTagFile->loadTrack();
           // NOTE: pathStr must outlive builder because PropertyBuilder stores string_view
           auto const pathStr = path.string();
-          builder.property()
-            .uri(pathStr)
-            .fileSize(std::filesystem::file_size(path))
-            .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
+          builder.property().uri(pathStr);
 
           auto const [preparedHot, preparedCold] = builder.prepare(txn, dict, ml.resources());
           auto const [id, trackView] = writer.createHotCold(
@@ -61,10 +60,13 @@ namespace ao::cli
             });
 
           // Populate Manifest
-          auto manifestEntry = library::ManifestEntry{.trackId = id};
-          manifestEntry.fileSize(builder.property().fileSize());
-          manifestEntry.mtime(builder.property().mtime());
-          manifestWriter.put(pathStr, manifestEntry);
+          auto manifestBuilder = library::FileManifestBuilder::createNew();
+          manifestBuilder.trackId(id)
+            .fileSize(std::filesystem::file_size(path))
+            .mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                     std::filesystem::last_write_time(path).time_since_epoch())
+                     .count());
+          manifestWriter.put(pathStr, manifestBuilder.serialize());
 
           os << "add track: " << id << " " << trackView.metadata().title() << '\n';
         }

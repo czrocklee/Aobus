@@ -48,8 +48,8 @@ namespace ao::library::test
     CHECK(builder.metadata().composer().empty());
     CHECK(builder.metadata().genre().empty());
     CHECK(builder.property().uri().empty());
-    CHECK(builder.property().fileSize() == 0);
     CHECK(builder.property().bitDepth() == 0);
+    CHECK(builder.property().durationMs() == 0);
     CHECK(builder.tags().names().empty());
     CHECK(builder.custom().pairs().empty());
   }
@@ -91,25 +91,21 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::createNew();
     builder.property()
-      .fileSize(10000000)
-      .mtime(1234567890)
-      .durationMs(180000)
+      .uri("file:///home/user/music/test.flac")
+      .durationMs(180500)
       .bitrate(320000)
       .sampleRate(44100)
       .codecId(7)
       .channels(2)
-      .bitDepth(16)
-      .uri("/path/to/track.flac");
+      .bitDepth(16);
 
-    CHECK(builder.property().fileSize() == 10000000);
-    CHECK(builder.property().mtime() == 1234567890);
-    CHECK(builder.property().durationMs() == 180000);
+    CHECK(builder.property().uri() == "file:///home/user/music/test.flac");
+    CHECK(builder.property().durationMs() == 180500);
     CHECK(builder.property().bitrate() == 320000);
     CHECK(builder.property().sampleRate() == 44100);
     CHECK(builder.property().codecId() == 7);
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
-    CHECK(builder.property().uri() == "/path/to/track.flac");
   }
 
   TEST_CASE("TrackBuilder - TagsBuilder add/remove/clear")
@@ -162,14 +158,13 @@ namespace ao::library::test
     auto builder = TrackBuilder::createNew();
 
     builder.metadata().title("Song").artist("Artist").album("Album");
-    builder.property().fileSize(1000).bitDepth(16);
+    builder.property().bitDepth(16);
     builder.tags().add("rock").add("jazz");
     builder.custom().add("key", "value");
 
     CHECK(builder.metadata().title() == "Song");
     CHECK(builder.metadata().artist() == "Artist");
     CHECK(builder.metadata().album() == "Album");
-    CHECK(builder.property().fileSize() == 1000);
     CHECK(builder.property().bitDepth() == 16);
     CHECK(builder.tags().names().size() == 2);
     CHECK(builder.custom().pairs().size() == 1);
@@ -242,7 +237,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
-    builder.property().uri("/test").fileSize(12345).mtime(9876543210);
+    builder.property().uri("/test");
 
     auto const [hotData1, coldData1] = serializeTestTrack(builder);
     auto const [hotData2, coldData2] = serializeTestTrack(builder);
@@ -381,8 +376,5 @@ namespace ao::library::test
     auto view = TrackView{std::span<std::byte const>{}, coldData};
     CHECK(view.property().durationMs() == 240000);
     CHECK(view.metadata().trackNumber() == 3);
-
-    // fileSize should be 0 in TrackView because it's not in the cold header
-    CHECK(view.property().fileSize() == 0);
   }
 } // namespace ao::library::test

@@ -5,6 +5,7 @@
 
 #include "ao/Error.h"
 #include "ao/Type.h"
+#include "ao/library/FileManifestBuilder.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/ListBuilder.h"
 #include "ao/library/ListStore.h"
@@ -463,9 +464,9 @@ namespace ao::rt
 
       if (strategy == ImportMode::Merge)
       {
-        if (auto const optEntry = manifestReader.get(uriStr))
+        if (auto const optManifestView = manifestReader.get(uriStr))
         {
-          optExistingTrackId = optEntry->trackId;
+          optExistingTrackId = optManifestView->trackId();
         }
       }
 
@@ -523,10 +524,32 @@ namespace ao::rt
         std::ignore = view;
       }
 
-      auto manifestEntry = library::ManifestEntry{.trackId = targetTrackId};
-      manifestEntry.fileSize(builder.property().fileSize());
-      manifestEntry.mtime(builder.property().mtime());
-      manifestWriter.put(uriStr, manifestEntry);
+      auto manifestBuilder = library::FileManifestBuilder::createNew();
+      manifestBuilder.trackId(targetTrackId);
+
+      if (auto const optManifestView = manifestReader.get(uriStr))
+      {
+        manifestBuilder.fileSize(optManifestView->fileSize());
+        manifestBuilder.mtime(optManifestView->mtime());
+      }
+      else if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
+      {
+        manifestBuilder.mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::filesystem::last_write_time(fullPath).time_since_epoch())
+                                .count());
+      }
+
+      if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
+      {
+        manifestBuilder.fileSize(yaml::asInt<uint64_t>(fileSizeNode));
+      }
+
+      if (auto mtimeNode = yaml::findChild(trackNode, "mtime"); mtimeNode.readable())
+      {
+        manifestBuilder.mtime(yaml::asInt<uint64_t>(mtimeNode));
+      }
+
+      manifestWriter.put(uriStr, manifestBuilder.serialize());
 
       if (validatedTrack.yamlId != 0)
       {
@@ -614,10 +637,6 @@ namespace ao::rt
         }
 
         optBuilder->property().uri(uriStr);
-        optBuilder->property().fileSize(std::filesystem::file_size(fullPath));
-        optBuilder->property().mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                       std::filesystem::last_write_time(fullPath).time_since_epoch())
-                                       .count());
       }
     }
   }
@@ -740,16 +759,6 @@ namespace ao::rt
         }
       }
     }
-
-    if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
-    {
-      builder.property().fileSize(yaml::asInt<uint64_t>(fileSizeNode));
-    }
-
-    if (auto mtimeNode = yaml::findChild(trackNode, "mtime"); mtimeNode.readable())
-    {
-      builder.property().mtime(yaml::asInt<uint64_t>(mtimeNode));
-    }
   }
 
   void LibraryImporter::Impl::importLists(std::vector<ValidatedList> const& lists,
@@ -784,9 +793,9 @@ namespace ao::rt
 
         for (auto const& uri : importedList.trackUris)
         {
-          if (auto const optEntry = manifestReader.get(uri))
+          if (auto const optManifestView = manifestReader.get(uri))
           {
-            builder.tracks().add(optEntry->trackId);
+            builder.tracks().add(optManifestView->trackId());
           }
         }
       }

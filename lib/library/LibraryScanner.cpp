@@ -5,14 +5,12 @@
 
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
-#include "ao/utility/ByteView.h"
 #include "ao/utility/Log.h"
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <string>
@@ -90,11 +88,11 @@ namespace ao::library
                                                     std::filesystem::last_write_time(path).time_since_epoch())
                                                     .count());
 
-          if (auto const optManifest = manifestReader.get(uri))
+          if (auto const optView = manifestReader.get(uri))
           {
-            item.trackId = optManifest->trackId;
+            item.trackId = optView->trackId();
 
-            if (optManifest->fileSize() == item.fileSize && optManifest->mtime() == item.mtime)
+            if (optView->fileSize() == item.fileSize && optView->mtime() == item.mtime)
             {
               item.classification = ScanClassification::Unchanged;
             }
@@ -123,26 +121,16 @@ namespace ao::library
     }
 
     // 2. Identify MISSING (In manifest but not on disk)
-    for (auto const& [uriView, entrySpan] : manifestReader.databaseReader())
+    for (auto const& [uriView, view] : manifestReader)
     {
-      auto const uri = std::string{utility::bytes::stringView(uriView)};
-
-      if (!seenUris.contains(uri))
+      if (auto const uri = std::string{uriView}; !seenUris.contains(uri))
       {
-        if (entrySpan.size() != sizeof(ManifestEntry))
-        {
-          continue;
-        }
-
-        auto entry = ManifestEntry{};
-        std::memcpy(&entry, entrySpan.data(), sizeof(ManifestEntry));
-
         auto item = ScanItem{.uri = uri,
                              .fullPath = {},
                              .classification = ScanClassification::Missing,
-                             .fileSize = entry.fileSize(),
-                             .mtime = entry.mtime(),
-                             .trackId = entry.trackId,
+                             .fileSize = view.fileSize(),
+                             .mtime = view.mtime(),
+                             .trackId = view.trackId(),
                              .errorMessage = {}};
         plan.items.push_back(std::move(item));
       }

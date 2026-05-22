@@ -207,11 +207,11 @@ namespace ao::library::test
 
     // Verify hot and cold data
     auto rtxn = ReadTransaction{env};
-    auto optTrack = store.reader(rtxn).get(id);
-    REQUIRE(optTrack.has_value());
-    REQUIRE(optTrack->property().durationMs() == 180000);
-    REQUIRE(optTrack->metadata().trackNumber() == 1);
-    REQUIRE(optTrack->metadata().totalTracks() == 10);
+    auto optView = store.reader(rtxn).get(id);
+    REQUIRE(optView.has_value());
+    REQUIRE(optView->property().durationMs() == 180000);
+    REQUIRE(optView->metadata().trackNumber() == 1);
+    REQUIRE(optView->metadata().totalTracks() == 10);
   }
 
   TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
@@ -262,10 +262,10 @@ namespace ao::library::test
 
     // Verify both persisted
     auto rtxn = ReadTransaction{env};
-    auto optTrack = store.reader(rtxn).get(id);
-    REQUIRE(optTrack.has_value());
-    REQUIRE(optTrack->property().durationMs() == 200000);
-    REQUIRE(optTrack->metadata().trackNumber() == 2);
+    auto optView = store.reader(rtxn).get(id);
+    REQUIRE(optView.has_value());
+    REQUIRE(optView->property().durationMs() == 200000);
+    REQUIRE(optView->metadata().trackNumber() == 2);
   }
 
   TEST_CASE("TrackStore - hot/cold remove", "[core][track]")
@@ -298,8 +298,8 @@ namespace ao::library::test
 
     // Verify both are gone
     auto rtxn = ReadTransaction{env};
-    auto optTrack = store.reader(rtxn).get(id);
-    REQUIRE(!optTrack.has_value());
+    auto optView = store.reader(rtxn).get(id);
+    REQUIRE(!optView.has_value());
   }
 
   TEST_CASE("TrackStore - Writer get with LoadMode", "[core][track]")
@@ -516,11 +516,11 @@ namespace ao::library::test
 
     // Get with Hot mode
     auto rtxn = ReadTransaction{env};
-    auto optTrack = store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(optTrack.has_value());
-    REQUIRE(optTrack->isHotValid());
-    REQUIRE(!optTrack->isColdValid());
-    REQUIRE(optTrack->metadata().artistId() == DictionaryId{42});
+    auto optView = store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Hot);
+    REQUIRE(optView.has_value());
+    REQUIRE(optView->isHotValid());
+    REQUIRE(!optView->isColdValid());
+    REQUIRE(optView->metadata().artistId() == DictionaryId{42});
   }
 
   TEST_CASE("TrackStore - LoadMode::Cold get by id", "[core][track]")
@@ -549,11 +549,11 @@ namespace ao::library::test
 
     // Get with Cold mode
     auto rtxn = ReadTransaction{env};
-    auto optTrack = store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Cold);
-    REQUIRE(optTrack.has_value());
-    REQUIRE(!optTrack->isHotValid());
-    REQUIRE(optTrack->isColdValid());
-    REQUIRE(optTrack->property().durationMs() == 360000);
+    auto optView = store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Cold);
+    REQUIRE(optView.has_value());
+    REQUIRE(!optView->isHotValid());
+    REQUIRE(optView->isColdValid());
+    REQUIRE(optView->property().durationMs() == 360000);
   }
 
   TEST_CASE("TrackStore - LoadMode::Cold multi-record iteration", "[core][track]")

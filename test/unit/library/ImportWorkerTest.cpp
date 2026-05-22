@@ -4,6 +4,7 @@
 #include "ao/library/ImportWorker.h"
 
 #include "ao/Type.h"
+#include "ao/library/FileManifestBuilder.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackBuilder.h"
@@ -77,12 +78,13 @@ namespace ao::library::test
                                               });
 
       auto manifestWriter = ml.manifest().writer(txn);
-      auto entry = ManifestEntry{.trackId = trackId};
-      entry.fileSize(std::filesystem::file_size(musicPath));
-      entry.mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    std::filesystem::last_write_time(musicPath).time_since_epoch())
-                    .count());
-      manifestWriter.put(uri, entry);
+      auto manifestBuilder = FileManifestBuilder::createNew();
+      manifestBuilder.trackId(trackId)
+        .fileSize(std::filesystem::file_size(musicPath))
+        .mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                 std::filesystem::last_write_time(musicPath).time_since_epoch())
+                 .count());
+      manifestWriter.put(uri, manifestBuilder.serialize());
       txn.commit();
     }
 

@@ -18,6 +18,8 @@ add_executable(ao_test
     # library tests
     unit/library/TrackLayoutTest.cpp
     unit/library/TrackViewTest.cpp
+    unit/library/FileManifestViewTest.cpp
+    unit/library/FileManifestBuilderTest.cpp
     unit/library/TrackBuilderTest.cpp
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
