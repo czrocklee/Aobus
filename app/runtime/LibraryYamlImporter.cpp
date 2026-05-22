@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "runtime/LibraryImporter.h"
+#include "runtime/LibraryYamlImporter.h"
 
 #include "ao/Error.h"
 #include "ao/Type.h"
@@ -15,7 +15,7 @@
 #include "ao/lmdb/Transaction.h"
 #include "ao/tag/TagFile.h"
 #include "ao/utility/Base64.h"
-#include "runtime/LibraryExporter.h"
+#include "runtime/LibraryYamlExporter.h"
 #include "runtime/TrackField.h"
 #include "runtime/yaml/Utils.h"
 
@@ -142,7 +142,7 @@ namespace ao::rt
     }
   }
 
-  struct LibraryImporter::Impl final
+  struct LibraryYamlImporter::Impl final
   {
     explicit Impl(library::MusicLibrary& ml)
       : ml{ml}
@@ -184,19 +184,19 @@ namespace ao::rt
     library::MusicLibrary& ml;
   };
 
-  LibraryImporter::LibraryImporter(library::MusicLibrary& ml)
+  LibraryYamlImporter::LibraryYamlImporter(library::MusicLibrary& ml)
     : _impl{std::make_unique<Impl>(ml)}
   {
   }
 
-  LibraryImporter::~LibraryImporter() = default;
+  LibraryYamlImporter::~LibraryYamlImporter() = default;
 
-  Result<> LibraryImporter::importFromYaml(std::filesystem::path const& path, ImportMode mode)
+  Result<> LibraryYamlImporter::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
     return _impl->importFromYaml(path, mode);
   }
 
-  Result<> LibraryImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
+  Result<> LibraryYamlImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
     auto buffer = std::vector<char>{};
     auto tree = ryml::Tree{};
@@ -259,7 +259,7 @@ namespace ao::rt
     return {};
   }
 
-  Result<ValidatedImport> LibraryImporter::Impl::validate(ryml::ConstNodeRef const& root) const
+  Result<ValidatedImport> LibraryYamlImporter::Impl::validate(ryml::ConstNodeRef const& root) const
   {
     auto validated = ValidatedImport{};
 
@@ -320,7 +320,7 @@ namespace ao::rt
     return validated;
   }
 
-  Result<> LibraryImporter::Impl::validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const
+  Result<> LibraryYamlImporter::Impl::validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
 
@@ -366,7 +366,7 @@ namespace ao::rt
     return {};
   }
 
-  Result<> LibraryImporter::Impl::validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const
+  Result<> LibraryYamlImporter::Impl::validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
 
@@ -448,11 +448,11 @@ namespace ao::rt
     return {};
   }
 
-  void LibraryImporter::Impl::importTracks(std::vector<ValidatedTrack> const& tracks,
-                                           lmdb::WriteTransaction& txn,
-                                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
-                                           ImportMode strategy,
-                                           ExportMode payloadMode)
+  void LibraryYamlImporter::Impl::importTracks(std::vector<ValidatedTrack> const& tracks,
+                                               lmdb::WriteTransaction& txn,
+                                               std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
+                                               ImportMode strategy,
+                                               ExportMode payloadMode)
   {
     auto trackWriter = ml.tracks().writer(txn);
     auto manifestWriter = ml.manifest().writer(txn);
@@ -564,12 +564,12 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::loadTrackBaseline(std::string_view uriStr,
-                                                std::optional<TrackId> const& optExistingTrackId,
-                                                ExportMode payloadMode,
-                                                std::optional<library::TrackBuilder>& optBuilder,
-                                                std::unique_ptr<tag::TagFile>& keepAliveTagFile,
-                                                library::TrackStore::Writer& trackWriter)
+  void LibraryYamlImporter::Impl::loadTrackBaseline(std::string_view uriStr,
+                                                    std::optional<TrackId> const& optExistingTrackId,
+                                                    ExportMode payloadMode,
+                                                    std::optional<library::TrackBuilder>& optBuilder,
+                                                    std::unique_ptr<tag::TagFile>& keepAliveTagFile,
+                                                    library::TrackStore::Writer& trackWriter)
   {
     if (optExistingTrackId)
     {
@@ -587,10 +587,10 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::loadFileBaseline(std::string_view uriStr,
-                                               ExportMode payloadMode,
-                                               std::optional<library::TrackBuilder>& optBuilder,
-                                               std::unique_ptr<tag::TagFile>& keepAliveTagFile) const
+  void LibraryYamlImporter::Impl::loadFileBaseline(std::string_view uriStr,
+                                                   ExportMode payloadMode,
+                                                   std::optional<library::TrackBuilder>& optBuilder,
+                                                   std::unique_ptr<tag::TagFile>& keepAliveTagFile) const
   {
     if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
     {
@@ -647,7 +647,8 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const
+  void LibraryYamlImporter::Impl::overlayMetadata(library::TrackBuilder& builder,
+                                                  ryml::ConstNodeRef const& trackNode) const
   {
     using StringSetter = void (*)(library::TrackBuilder::MetadataBuilder&, std::string_view);
     using NumberSetter = void (*)(library::TrackBuilder::MetadataBuilder&, std::uint16_t);
@@ -697,8 +698,8 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::overlayCustomData(library::TrackBuilder& builder,
-                                                ryml::ConstNodeRef const& trackNode) const
+  void LibraryYamlImporter::Impl::overlayCustomData(library::TrackBuilder& builder,
+                                                    ryml::ConstNodeRef const& trackNode) const
   {
     if (auto tagsNode = yaml::findChild(trackNode, "tags"); tagsNode.readable())
     {
@@ -721,8 +722,8 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::overlayTechnicalProperties(library::TrackBuilder& builder,
-                                                         ryml::ConstNodeRef const& trackNode) const
+  void LibraryYamlImporter::Impl::overlayTechnicalProperties(library::TrackBuilder& builder,
+                                                             ryml::ConstNodeRef const& trackNode) const
   {
     using U32Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint32_t);
     using U16Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint16_t);
@@ -767,10 +768,10 @@ namespace ao::rt
     }
   }
 
-  void LibraryImporter::Impl::importLists(std::vector<ValidatedList> const& lists,
-                                          lmdb::WriteTransaction& txn,
-                                          std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                                          ImportMode strategy)
+  void LibraryYamlImporter::Impl::importLists(std::vector<ValidatedList> const& lists,
+                                              lmdb::WriteTransaction& txn,
+                                              std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
+                                              ImportMode strategy)
   {
     std::ignore = strategy;
     auto listWriter = ml.lists().writer(txn);

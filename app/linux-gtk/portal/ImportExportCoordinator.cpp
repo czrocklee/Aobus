@@ -7,10 +7,10 @@
 #include "ao/library/LibraryScanner.h"
 #include "ao/utility/Log.h"
 #include "layout/LayoutConstants.h"
-#include "portal/ImportProgressDialog.h"
+#include "portal/LibraryTaskProgressDialog.h"
 #include "runtime/AppRuntime.h"
-#include "runtime/LibraryExporter.h"
 #include "runtime/LibraryMutationService.h"
+#include "runtime/LibraryYamlExporter.h"
 #include "runtime/NotificationService.h"
 #include "runtime/StateTypes.h"
 #include "runtime/async/LifetimeScope.h"
@@ -70,7 +70,9 @@ namespace ao::gtk::portal
                                 }
                                 else
                                 {
-                                  importFilesFromPath(path);
+                                  // Initial scan for new library
+                                  openMusicLibrary(path);
+                                  scanLibrary();
                                 }
                               }
                             }
@@ -83,12 +85,13 @@ namespace ao::gtk::portal
 
   void ImportExportCoordinator::scanLibrary()
   {
-    APP_LOG_INFO("Starting full library scan...");
+    APP_LOG_INFO("Starting library scan...");
 
     _runtime.async().spawnWithLifetime(
       &_tasks,
       [](ImportExportCoordinator* self) -> rt::async::Task<void>
       {
+        // 1. Build Plan
         auto plan = co_await self->_runtime.mutation().buildScanPlanAsync();
 
         auto const newCount = plan.count(library::ScanClassification::New);
@@ -103,90 +106,36 @@ namespace ao::gtk::portal
 
         APP_LOG_INFO("Scan plan: {} new, {} changed, {} missing", newCount, changedCount, missingCount);
 
-        // For the first implementation, we apply NEW and CHANGED automatically.
-        // MISSING is logged but not yet handled in UI.
-        co_await self->_runtime.mutation().applyScanPlanAsync(std::move(plan));
+        // 2. Execute Plan with progress dialog
+        self->_libraryTaskDialog =
+          std::make_unique<LibraryTaskProgressDialog>(static_cast<int>(plan.items.size()), self->_parent);
+        auto* const dialogPtr = self->_libraryTaskDialog.get();
+        self->_libraryTaskDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
+
+        self->_libraryTaskProgressSub = self->_runtime.mutation().onLibraryTaskProgress(
+          [dialogPtr](auto const& ev) { dialogPtr->updateProgress(ev.message, ev.fraction); });
+
+        self->_libraryTaskDialog->show();
+
+        try
+        {
+          co_await self->_runtime.mutation().applyScanPlanAsync(std::move(plan));
+          dialogPtr->ready();
+          self->onImportFinished();
+        }
+        catch (std::exception const& e)
+        {
+          APP_LOG_ERROR("Scan failed: {}", e.what());
+          self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+        }
+
+        self->_libraryTaskProgressSub.reset();
       }(this));
-  }
-
-  void ImportExportCoordinator::importFiles()
-  {
-    auto dialog = Gtk::FileDialog::create();
-    dialog->set_title("Import Music Files");
-
-    dialog->select_folder(
-      _parent, [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result) { onImportFolderSelected(result, dialog); });
-  }
-
-  void ImportExportCoordinator::onImportFolderSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                                                       Glib::RefPtr<Gtk::FileDialog> const& dialog)
-  {
-    try
-    {
-      if (auto const folder = dialog->select_folder_finish(result); folder)
-      {
-        auto const pathStr = folder->get_path();
-        auto const path = std::filesystem::path{pathStr};
-        APP_LOG_INFO("Importing from: {}", pathStr);
-
-        _runtime.async().spawnWithLifetime(
-          &_tasks,
-          [](
-            ImportExportCoordinator* self, std::filesystem::path importPath, bool isNewLibrary) -> rt::async::Task<void>
-          {
-            auto files = co_await self->_runtime.mutation().scanLibraryAsync(importPath);
-
-            if (files.empty())
-            {
-              self->_runtime.notifications().post(rt::NotificationSeverity::Info, "No music files found");
-              co_return;
-            }
-
-            self->executeImportTask(files, isNewLibrary);
-          }(this, path, false));
-      }
-    }
-    catch (Glib::Error const& e)
-    {
-      APP_LOG_ERROR("Error selecting folder: {}", e.what());
-    }
-  }
-
-  void ImportExportCoordinator::executeImportTask(std::vector<std::filesystem::path> const& files, bool isNewLibrary)
-  {
-    _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), _parent);
-    auto* const dialogPtr = _importDialog.get();
-    _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
-
-    _importProgressSub = _runtime.mutation().onImportProgress(
-      [dialogPtr, total = files.size()](auto const& ev)
-      { dialogPtr->onNewTrack(ev.message, static_cast<int>(ev.fraction * static_cast<double>(total))); });
-
-    _importDialog->show();
-
-    _runtime.async().spawnWithLifetime(&_tasks,
-                                       [](ImportExportCoordinator* self,
-                                          std::vector<std::filesystem::path> paths,
-                                          bool importToNewLibrary,
-                                          ImportProgressDialog* dialog) -> rt::async::Task<void>
-                                       {
-                                         co_await self->_runtime.mutation().importFilesAsync(std::move(paths));
-
-                                         dialog->ready();
-                                         self->onImportFinished();
-
-                                         if (importToNewLibrary && self->_callbacks.onLibraryDataMutated)
-                                         {
-                                           self->_callbacks.onLibraryDataMutated();
-                                         }
-
-                                         self->_importProgressSub.reset();
-                                       }(this, files, isNewLibrary, dialogPtr));
   }
 
   void ImportExportCoordinator::onImportFinished() const
   {
-    _runtime.notifications().post(rt::NotificationSeverity::Info, "Import complete");
+    _runtime.notifications().post(rt::NotificationSeverity::Info, "Library scan complete");
   }
 
   void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path) const
@@ -195,29 +144,6 @@ namespace ao::gtk::portal
     {
       _callbacks.onOpenNewLibrary(path);
     }
-  }
-
-  void ImportExportCoordinator::importFilesFromPath(std::filesystem::path const& path)
-  {
-    if (_callbacks.onOpenNewLibrary)
-    {
-      _callbacks.onOpenNewLibrary(path);
-    }
-
-    _runtime.async().spawnWithLifetime(
-      &_tasks,
-      [](ImportExportCoordinator* self, std::filesystem::path importPath, bool isNewLibrary) -> rt::async::Task<void>
-      {
-        auto files = co_await self->_runtime.mutation().scanLibraryAsync(importPath);
-
-        if (files.empty())
-        {
-          self->_runtime.notifications().post(rt::NotificationSeverity::Info, "No music files found");
-          co_return;
-        }
-
-        self->executeImportTask(files, isNewLibrary);
-      }(this, path, true));
   }
 
   void ImportExportCoordinator::exportLibrary()

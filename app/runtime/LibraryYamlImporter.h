@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -22,18 +22,18 @@ namespace ao::rt
   };
 
   /**
-   * Importer - Logical YAML importer for library::MusicLibrary.
+   * LibraryYamlImporter - Logical YAML importer for library::MusicLibrary.
    */
-  class LibraryImporter final
+  class LibraryYamlImporter final
   {
   public:
-    explicit LibraryImporter(library::MusicLibrary& ml);
-    ~LibraryImporter();
+    explicit LibraryYamlImporter(library::MusicLibrary& ml);
+    ~LibraryYamlImporter();
 
-    LibraryImporter(LibraryImporter const&) = delete;
-    LibraryImporter& operator=(LibraryImporter const&) = delete;
-    LibraryImporter(LibraryImporter&&) noexcept = default;
-    LibraryImporter& operator=(LibraryImporter&&) noexcept = default;
+    LibraryYamlImporter(LibraryYamlImporter const&) = delete;
+    LibraryYamlImporter& operator=(LibraryYamlImporter const&) = delete;
+    LibraryYamlImporter(LibraryYamlImporter&&) noexcept = default;
+    LibraryYamlImporter& operator=(LibraryYamlImporter&&) noexcept = default;
 
     /**
      * Import the library from a YAML file.

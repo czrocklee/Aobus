@@ -14,8 +14,8 @@
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
 #include "ao/library/TrackView.h"
-#include "runtime/LibraryExporter.h"
-#include "runtime/LibraryImporter.h"
+#include "runtime/LibraryYamlExporter.h"
+#include "runtime/LibraryYamlImporter.h"
 #include "runtime/yaml/Utils.h"
 #include "test/unit/lmdb/TestUtils.h"
 
@@ -99,7 +99,7 @@ namespace ao::library::test
 
     // 2. Export to YAML
     auto const yamlPath = std::filesystem::path{temp1.path()} / "backup.yaml";
-    auto exporter = rt::LibraryExporter{ml1};
+    auto exporter = rt::LibraryYamlExporter{ml1};
     REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
 
     // 3. Import into a new library
@@ -123,7 +123,7 @@ namespace ao::library::test
       txn.commit();
     }
 
-    auto importer = rt::LibraryImporter{ml2};
+    auto importer = rt::LibraryYamlImporter{ml2};
     REQUIRE(importer.importFromYaml(yamlPath));
 
     // 4. Verify
@@ -235,13 +235,13 @@ namespace ao::library::test
 
     // 2. Export to YAML (Full mode)
     auto const yamlPath = std::filesystem::path{temp1.path()} / "phase1.yaml";
-    auto exporter = rt::LibraryExporter{ml1};
+    auto exporter = rt::LibraryYamlExporter{ml1};
     REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
 
     // 3. Import into a new library (Restore mode)
     auto const temp2 = TempDir{};
     auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
-    auto importer = rt::LibraryImporter{ml2};
+    auto importer = rt::LibraryYamlImporter{ml2};
 
     // Use Restore mode (default) - should not try to read physical file "full-fields.flac"
     REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
@@ -322,7 +322,7 @@ namespace ao::library::test
 
     // 2. Export to YAML
     auto const yamlPath = std::filesystem::path{temp1.path()} / "covers.yaml";
-    auto exporter = rt::LibraryExporter{ml1};
+    auto exporter = rt::LibraryYamlExporter{ml1};
     exporter.exportToYaml(yamlPath, rt::ExportMode::Full);
 
     // 3. Verify YAML contains anchor and alias (textual check)
@@ -337,7 +337,7 @@ namespace ao::library::test
     // 4. Import into new library
     auto const temp2 = TempDir{};
     auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
-    auto importer = rt::LibraryImporter{ml2};
+    auto importer = rt::LibraryYamlImporter{ml2};
     REQUIRE(importer.importFromYaml(yamlPath));
 
     // 5. Verify deduplication and content
@@ -405,7 +405,7 @@ namespace ao::library::test
 
     // 2. Export in ListOnly mode
     auto const yamlPath = std::filesystem::path{temp1.path()} / "list-only.yaml";
-    auto exporter = rt::LibraryExporter{ml1};
+    auto exporter = rt::LibraryYamlExporter{ml1};
     exporter.exportToYaml(yamlPath, rt::ExportMode::ListOnly);
 
     // 3. Verify YAML content
@@ -448,7 +448,7 @@ namespace ao::library::test
       txn.commit();
     }
 
-    auto importer = rt::LibraryImporter{ml2};
+    auto importer = rt::LibraryYamlImporter{ml2};
     REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
 
     // 5. Verify list was restored and track remapped
@@ -520,7 +520,7 @@ library:
     }
 
     // 3. Perform Merge Import
-    auto importer = rt::LibraryImporter{ml};
+    auto importer = rt::LibraryYamlImporter{ml};
     REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Merge));
 
     // 4. Verify results
@@ -591,7 +591,7 @@ library:
 )";
     }
 
-    auto importer = rt::LibraryImporter{ml};
+    auto importer = rt::LibraryYamlImporter{ml};
     REQUIRE(importer.importFromYaml(yamlPath));
 
     {
@@ -632,7 +632,7 @@ library:
   {
     auto const temp = TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto importer = rt::LibraryImporter{ml};
+    auto importer = rt::LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "bad.yaml";
 
     auto testError = [&](std::string_view yamlContent, Error::Code expectedCode, std::string_view expectedErrorFragment)
@@ -849,7 +849,7 @@ library:
     }
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";
-    auto exporter = rt::LibraryExporter{ml};
+    auto exporter = rt::LibraryYamlExporter{ml};
     REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Delta));
 
     {
@@ -869,7 +869,7 @@ library:
   {
     auto const temp = TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto importer = rt::LibraryImporter{ml};
+    auto importer = rt::LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "list-edges.yaml";
 
     {
@@ -922,7 +922,7 @@ library:
   {
     auto const temp = TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto importer = rt::LibraryImporter{ml};
+    auto importer = rt::LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "canonization.yaml";
 
     auto const songPath = std::filesystem::path{temp.path()} / "song.flac";
@@ -995,7 +995,7 @@ library:
   {
     auto const temp = TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto importer = rt::LibraryImporter{ml};
+    auto importer = rt::LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "corrupt.yaml";
 
     SECTION("Tracks is scalar instead of sequence")

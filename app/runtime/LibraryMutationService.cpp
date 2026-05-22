@@ -1,33 +1,32 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "LibraryMutationService.h"
 
 #include "ao/Error.h"
 #include "ao/Exception.h"
 #include "ao/Type.h"
-#include "ao/library/ImportWorker.h"
 #include "ao/library/LibraryScanner.h"
 #include "ao/library/ListBuilder.h"
 #include "ao/library/ListStore.h"
 #include "ao/library/MusicLibrary.h"
+#include "ao/library/ScanPlanExecutor.h"
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
 #include "ao/utility/ThreadUtils.h"
 #include "async/Runtime.h"
 #include "async/Task.h"
 #include "runtime/CorePrimitives.h"
-#include "runtime/LibraryExporter.h"
-#include "runtime/LibraryImporter.h"
+#include "runtime/LibraryYamlExporter.h"
+#include "runtime/LibraryYamlImporter.h"
 #include "runtime/StateTypes.h"
 
-#include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <thread>
 #include <utility>
@@ -132,8 +131,8 @@ namespace ao::rt
 
     Signal<std::vector<TrackId> const&> tracksMutatedSignal;
     Signal<LibraryMutationService::ListsMutated const&> listsMutatedSignal;
-    Signal<std::size_t> importCompletedSignal;
-    Signal<LibraryMutationService::ImportProgressUpdated const&> importProgressSignal;
+    Signal<std::size_t> libraryTaskCompletedSignal;
+    Signal<LibraryMutationService::LibraryTaskProgressUpdated const&> libraryTaskProgressSignal;
 
     Impl(async::Runtime& ar, library::MusicLibrary& lib)
       : asyncRuntime{ar}, library{lib}
@@ -159,18 +158,18 @@ namespace ao::rt
     return _impl->listsMutatedSignal.connect(std::move(handler));
   }
 
-  Subscription LibraryMutationService::onImportCompleted(std::move_only_function<void(std::size_t)> handler)
+  Subscription LibraryMutationService::onLibraryTaskCompleted(std::move_only_function<void(std::size_t)> handler)
   {
-    return _impl->importCompletedSignal.connect(std::move(handler));
+    return _impl->libraryTaskCompletedSignal.connect(std::move(handler));
   }
 
-  Subscription LibraryMutationService::onImportProgress(
-    std::move_only_function<void(ImportProgressUpdated const&)> handler)
+  Subscription LibraryMutationService::onLibraryTaskProgress(
+    std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler)
   {
-    return _impl->importProgressSignal.connect(std::move(handler));
+    return _impl->libraryTaskProgressSignal.connect(std::move(handler));
   }
 
-  Result<UpdateTrackMetadataReply> LibraryMutationService::updateMetadata(std::vector<TrackId> const& trackIds,
+  Result<UpdateTrackMetadataReply> LibraryMutationService::updateMetadata(std::span<TrackId const> trackIds,
                                                                           MetadataPatch const& patch)
   {
     auto txn = _impl->library.writeTransaction();
@@ -214,9 +213,9 @@ namespace ao::rt
     return UpdateTrackMetadataReply{.mutatedIds = std::move(mutated)};
   }
 
-  Result<EditTrackTagsReply> LibraryMutationService::editTags(std::vector<TrackId> const& trackIds,
-                                                              std::vector<std::string> const& tagsToAdd,
-                                                              std::vector<std::string> const& tagsToRemove)
+  Result<EditTrackTagsReply> LibraryMutationService::editTags(std::span<TrackId const> trackIds,
+                                                              std::span<std::string const> tagsToAdd,
+                                                              std::span<std::string const> tagsToRemove)
   {
     auto txn = _impl->library.writeTransaction();
     auto writer = _impl->library.tracks().writer(txn);
@@ -257,99 +256,11 @@ namespace ao::rt
     return EditTrackTagsReply{.mutatedIds = std::move(mutated)};
   }
 
-  ImportFilesReply LibraryMutationService::importFiles(std::vector<std::filesystem::path> const& paths)
-  {
-    struct ResultContainer final
-    {
-      library::ImportWorker::ImportResult result;
-    };
-    auto const container = std::make_shared<ResultContainer>();
-
-    auto const totalFiles = paths.size();
-    auto const worker = std::make_shared<library::ImportWorker>(
-      _impl->library,
-      paths,
-      [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
-      {
-        _impl->asyncRuntime.controlExecutor().dispatch(
-          [this, filePath, index, totalFiles]
-          {
-            auto const fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0;
-            auto const message = "Importing: " + filePath.filename().string();
-            _impl->importProgressSignal.emit(LibraryMutationService::ImportProgressUpdated{
-              .fraction = fraction,
-              .message = message,
-            });
-          });
-      },
-      [this, container]
-      {
-        _impl->asyncRuntime.controlExecutor().dispatch(
-          [this, container]
-          {
-            _impl->importCompletedSignal.emit(container->result.insertedIds.size());
-
-            if (!container->result.insertedIds.empty())
-            {
-              _impl->tracksMutatedSignal.emit(container->result.insertedIds);
-            }
-          });
-      });
-
-    _impl->activeWorkerThread = std::jthread{[worker, container]
-                                             {
-                                               setCurrentThreadName("FileImport");
-                                               worker->run();
-                                               container->result = worker->result();
-                                             }};
-
-    return ImportFilesReply{};
-  }
-
-  async::Task<void> LibraryMutationService::importFilesAsync(std::vector<std::filesystem::path> paths)
-  {
-    co_await _impl->asyncRuntime.resumeOnWorker();
-    setCurrentThreadName("FileImportAsync");
-
-    auto resultIds = std::vector<TrackId>{};
-    auto const totalFiles = paths.size();
-
-    auto worker = ao::library::ImportWorker{
-      _impl->library,
-      paths,
-      [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
-      {
-        _impl->asyncRuntime.controlExecutor().dispatch(
-          [this, filePath, index, totalFiles]
-          {
-            auto const fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0;
-            auto const message = "Importing: " + filePath.filename().string();
-            _impl->importProgressSignal.emit(LibraryMutationService::ImportProgressUpdated{
-              .fraction = fraction,
-              .message = message,
-            });
-          });
-      },
-      [] {}};
-
-    worker.run();
-    resultIds = worker.result().insertedIds;
-
-    co_await _impl->asyncRuntime.resumeOnControl();
-
-    _impl->importCompletedSignal.emit(resultIds.size());
-
-    if (!resultIds.empty())
-    {
-      _impl->tracksMutatedSignal.emit(resultIds);
-    }
-  }
-
   async::Task<void> LibraryMutationService::importLibraryAsync(std::filesystem::path path)
   {
     co_await _impl->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryImport");
-    auto importer = ao::rt::LibraryImporter{_impl->library};
+    auto importer = ao::rt::LibraryYamlImporter{_impl->library};
 
     if (auto const result = importer.importFromYaml(path); !result)
     {
@@ -363,7 +274,7 @@ namespace ao::rt
   {
     co_await _impl->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryExport");
-    auto exporter = ao::rt::LibraryExporter{_impl->library};
+    auto exporter = ao::rt::LibraryYamlExporter{_impl->library};
 
     if (auto const result = exporter.exportToYaml(path, mode); !result)
     {
@@ -371,31 +282,6 @@ namespace ao::rt
     }
 
     co_await _impl->asyncRuntime.resumeOnControl();
-  }
-
-  async::Task<std::vector<std::filesystem::path>> LibraryMutationService::scanLibraryAsync(std::filesystem::path dir)
-  {
-    co_await _impl->asyncRuntime.resumeOnWorker();
-    setCurrentThreadName("LibraryScan");
-
-    auto files = std::vector<std::filesystem::path>{};
-
-    for (auto const& entry : std::filesystem::recursive_directory_iterator{dir})
-    {
-      if (entry.is_regular_file())
-      {
-        auto ext = entry.path().extension().string();
-        std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
-
-        if (ext == ".flac" || ext == ".m4a" || ext == ".mp3" || ext == ".wav")
-        {
-          files.push_back(entry.path());
-        }
-      }
-    }
-
-    co_await _impl->asyncRuntime.resumeOnControl();
-    co_return files;
   }
 
   async::Task<library::ScanPlan> LibraryMutationService::buildScanPlanAsync()
@@ -410,7 +296,7 @@ namespace ao::rt
         _impl->asyncRuntime.controlExecutor().dispatch(
           [this, path]
           {
-            _impl->importProgressSignal.emit(LibraryMutationService::ImportProgressUpdated{
+            _impl->libraryTaskProgressSignal.emit(LibraryMutationService::LibraryTaskProgressUpdated{
               .fraction = 0.0, // Indeterminate during scan
               .message = "Scanning: " + path.filename().string(),
             });
@@ -429,7 +315,7 @@ namespace ao::rt
     auto resultIds = std::vector<TrackId>{};
     auto const totalItems = plan.items.size();
 
-    auto worker = ao::library::ImportWorker{
+    auto executor = ao::library::ScanPlanExecutor{
       _impl->library,
       std::move(plan),
       [this, totalItems](std::filesystem::path const& filePath, std::int32_t index)
@@ -438,8 +324,8 @@ namespace ao::rt
           [this, filePath, index, totalItems]
           {
             auto const fraction = totalItems > 0 ? static_cast<double>(index) / static_cast<double>(totalItems) : 0.0;
-            auto const message = "Processing: " + filePath.filename().string();
-            _impl->importProgressSignal.emit(LibraryMutationService::ImportProgressUpdated{
+            auto const message = "Updating: " + filePath.filename().string();
+            _impl->libraryTaskProgressSignal.emit(LibraryMutationService::LibraryTaskProgressUpdated{
               .fraction = fraction,
               .message = message,
             });
@@ -447,12 +333,12 @@ namespace ao::rt
       },
       [] {}};
 
-    worker.run();
-    resultIds = worker.result().insertedIds;
+    executor.run();
+    resultIds = executor.result().processedIds;
 
     co_await _impl->asyncRuntime.resumeOnControl();
 
-    _impl->importCompletedSignal.emit(resultIds.size());
+    _impl->libraryTaskCompletedSignal.emit(resultIds.size());
 
     if (!resultIds.empty())
     {
@@ -530,14 +416,13 @@ namespace ao::rt
     _impl->listsMutatedSignal.emit(ev);
   }
 
-  void LibraryMutationService::notifyTracksMutated(std::vector<TrackId> const& trackIds)
+  void LibraryMutationService::notifyTracksMutated(std::vector<TrackId> trackIds)
   {
     _impl->tracksMutatedSignal.emit(trackIds);
   }
 
-  void LibraryMutationService::notifyListsMutated(std::vector<ListId> const& upserted,
-                                                  std::vector<ListId> const& deleted)
+  void LibraryMutationService::notifyListsMutated(std::vector<ListId> upserted, std::vector<ListId> deleted)
   {
-    _impl->listsMutatedSignal.emit({.upserted = upserted, .deleted = deleted});
+    _impl->listsMutatedSignal.emit({.upserted = std::move(upserted), .deleted = std::move(deleted)});
   }
 } // namespace ao::rt

@@ -94,8 +94,8 @@ namespace ao::gtk
     TrackColumnLayoutModel _trackColumnLayoutModel;
 
     rt::Subscription _tracksMutatedSubscription;
-    rt::Subscription _importProgressSubscription;
-    rt::Subscription _importCompletedSubscription;
+    rt::Subscription _libraryTaskProgressSubscription;
+    rt::Subscription _libraryTaskCompletedSubscription;
     rt::Subscription _listsMutatedSubscription;
   };
 } // namespace ao::gtk

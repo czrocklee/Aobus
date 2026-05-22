@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <stop_token>
 #include <thread>
 #include <vector>
 
@@ -22,7 +23,13 @@ namespace ao::library
   struct ScanPlan;
   class DictionaryStore;
 
-  class ImportWorker final
+  /**
+   * ScanPlanExecutor - Applies a ScanPlan to the MusicLibrary database.
+   *
+   * This class focus exclusively on reconciling the filesystem scan results
+   * with the database state.
+   */
+  class ScanPlanExecutor final
   {
   public:
     using ProgressCallback = std::move_only_function<void(std::filesystem::path const& path, std::int32_t itemIndex)>;
@@ -30,34 +37,34 @@ namespace ao::library
     using TrackIdList = std::vector<TrackId>;
 
     /**
-     * ImportResult - Result of an import operation.
+     * ScanApplyResult - Result of applying a scan plan.
      */
-    struct ImportResult
+    struct ScanApplyResult
     {
-      TrackIdList insertedIds;
+      TrackIdList processedIds; // TrackIds that were newly inserted or updated
       std::size_t failureCount = 0;
       std::size_t skippedCount = 0;
+      bool cancelled = false;
     };
 
-    ImportWorker(MusicLibrary& ml,
-                 std::vector<std::filesystem::path> files,
-                 ProgressCallback progressCallback,
-                 FinishedCallback finishedCallback);
+    ScanPlanExecutor(MusicLibrary& ml,
+                     ScanPlan plan,
+                     ProgressCallback progressCallback,
+                     FinishedCallback finishedCallback);
 
-    ImportWorker(MusicLibrary& ml, ScanPlan plan, ProgressCallback progressCallback, FinishedCallback finishedCallback);
+    ~ScanPlanExecutor();
 
-    ~ImportWorker();
+    ScanPlanExecutor(ScanPlanExecutor const&) = delete;
+    ScanPlanExecutor& operator=(ScanPlanExecutor const&) = delete;
+    ScanPlanExecutor(ScanPlanExecutor&&) = delete;
+    ScanPlanExecutor& operator=(ScanPlanExecutor&&) = delete;
 
-    ImportWorker(ImportWorker const&) = delete;
-    ImportWorker& operator=(ImportWorker const&) = delete;
-    ImportWorker(ImportWorker&&) = delete;
-    ImportWorker& operator=(ImportWorker&&) = delete;
-
-    // Run import in the current thread - must be called from background thread
-    void run();
+    // Run execution in the current thread - must be called from background thread.
+    // Respects cancellation via stop_token.
+    void run(std::stop_token stopToken = {});
 
     // Get the result after run() completes
-    ImportResult const& result() const { return _result; }
+    ScanApplyResult const& result() const { return _result; }
 
     // Join the worker thread (call from main thread after finished callback)
     void join();
@@ -65,7 +72,6 @@ namespace ao::library
     std::size_t fileCount() const;
 
   private:
-    void buildPlanFromFiles();
     void processItem(std::size_t itemIndex,
                      ao::lmdb::WriteTransaction& txn,
                      TrackStore::Writer& trackWriter,
@@ -73,12 +79,11 @@ namespace ao::library
                      DictionaryStore& dict);
 
     MusicLibrary& _ml;
-    std::vector<std::filesystem::path> _files;
     std::unique_ptr<ScanPlan> _plan;
     ProgressCallback _progressCallback;
     FinishedCallback _finishedCallback;
 
-    ImportResult _result;
+    ScanApplyResult _result;
     std::jthread _workerThread;
   };
 } // namespace ao::library

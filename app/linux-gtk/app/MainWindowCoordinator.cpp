@@ -98,8 +98,8 @@ namespace ao::gtk
   MainWindowCoordinator::~MainWindowCoordinator()
   {
     _tracksMutatedSubscription.reset();
-    _importProgressSubscription.reset();
-    _importCompletedSubscription.reset();
+    _libraryTaskProgressSubscription.reset();
+    _libraryTaskCompletedSubscription.reset();
     _listsMutatedSubscription.reset();
   }
 
@@ -114,7 +114,7 @@ namespace ao::gtk
     _playbackSequenceController = std::make_unique<PlaybackSequenceController>(_runtime.playback(), *_trackRowCache);
     _trackPageHost->setPlaybackSequenceController(*_playbackSequenceController);
 
-    _importCompletedSubscription = _runtime.mutation().onImportCompleted(
+    _libraryTaskCompletedSubscription = _runtime.mutation().onLibraryTaskCompleted(
       [this](auto)
       {
         if (_trackRowCache)

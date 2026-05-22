@@ -1,4 +1,4 @@
-#include "ao/library/ImportWorker.h"
+#include "ao/library/ScanPlanExecutor.h"
 
 #include "ao/Type.h"
 #include "ao/library/FileManifestBuilder.h"
@@ -11,28 +11,23 @@
 #include "ao/tag/TagFile.h"
 #include "ao/utility/Log.h"
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <stop_token>
 #include <thread>
 #include <utility>
 #include <vector>
 
 namespace ao::library
 {
-  ImportWorker::ImportWorker(MusicLibrary& ml,
-                             std::vector<std::filesystem::path> files,
-                             ProgressCallback progress,
-                             FinishedCallback finished)
-    : _ml{ml}, _files{std::move(files)}, _progressCallback{std::move(progress)}, _finishedCallback{std::move(finished)}
-  {
-  }
-
-  ImportWorker::ImportWorker(MusicLibrary& ml, ScanPlan plan, ProgressCallback progress, FinishedCallback finished)
+  ScanPlanExecutor::ScanPlanExecutor(MusicLibrary& ml,
+                                     ScanPlan plan,
+                                     ProgressCallback progress,
+                                     FinishedCallback finished)
     : _ml{ml}
     , _plan{std::make_unique<ScanPlan>(std::move(plan))}
     , _progressCallback{std::move(progress)}
@@ -40,63 +35,17 @@ namespace ao::library
   {
   }
 
-  ImportWorker::~ImportWorker()
+  ScanPlanExecutor::~ScanPlanExecutor()
   {
     join();
   }
 
-  void ImportWorker::buildPlanFromFiles()
-  {
-    _plan = std::make_unique<ScanPlan>();
-
-    for (auto const& path : _files)
-    {
-      auto const uri = std::filesystem::relative(path, _ml.rootPath()).generic_string();
-      auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
-
-      if (!std::filesystem::exists(path))
-      {
-        item.errorMessage = "File not found";
-        _plan->items.push_back(std::move(item));
-        continue;
-      }
-
-      auto txn = _ml.readTransaction();
-      auto const manifestReader = _ml.manifest().reader(txn);
-      auto const optView = manifestReader.get(uri);
-
-      item.fileSize = std::filesystem::file_size(path);
-      item.mtime = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch())
-          .count());
-
-      if (optView)
-      {
-        item.trackId = optView->trackId();
-
-        if (optView->fileSize() == item.fileSize && optView->mtime() == item.mtime)
-        {
-          item.classification = ScanClassification::Unchanged;
-        }
-        else
-        {
-          item.classification = ScanClassification::Changed;
-        }
-      }
-      else
-      {
-        item.classification = ScanClassification::New;
-      }
-
-      _plan->items.push_back(std::move(item));
-    }
-  }
-
-  void ImportWorker::run()
+  void ScanPlanExecutor::run(std::stop_token stopToken)
   {
     if (!_plan)
     {
-      buildPlanFromFiles();
+      APP_LOG_ERROR("ScanPlanExecutor: No plan provided");
+      return;
     }
 
     auto txn = _ml.writeTransaction();
@@ -106,6 +55,12 @@ namespace ao::library
 
     for (std::size_t i = 0; i < _plan->items.size(); ++i)
     {
+      if (stopToken.stop_requested())
+      {
+        _result.cancelled = true;
+        break;
+      }
+
       processItem(i, txn, trackWriter, manifestWriter, dict);
     }
 
@@ -117,11 +72,11 @@ namespace ao::library
     }
   }
 
-  void ImportWorker::processItem(std::size_t itemIndex,
-                                 ao::lmdb::WriteTransaction& txn,
-                                 TrackStore::Writer& trackWriter,
-                                 FileManifestStore::Writer& manifestWriter,
-                                 DictionaryStore& dict)
+  void ScanPlanExecutor::processItem(std::size_t itemIndex,
+                                     ao::lmdb::WriteTransaction& txn,
+                                     TrackStore::Writer& trackWriter,
+                                     FileManifestStore::Writer& manifestWriter,
+                                     DictionaryStore& dict)
   {
     auto const& item = _plan->items[itemIndex];
 
@@ -146,7 +101,7 @@ namespace ao::library
 
       if (item.classification == ScanClassification::Missing)
       {
-        // Update manifest status
+        // Update manifest status to Missing
         if (auto const optView = _ml.manifest().reader(txn).get(item.uri))
         {
           auto builder = FileManifestBuilder::fromView(*optView);
@@ -195,6 +150,8 @@ namespace ao::library
           auto manifestBuilder = FileManifestBuilder::createNew();
           manifestBuilder.trackId(item.trackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
           manifestWriter.put(item.uri, manifestBuilder.serialize());
+
+          _result.processedIds.push_back(item.trackId);
           return;
         }
       }
@@ -215,7 +172,7 @@ namespace ao::library
       manifestBuilder.trackId(newTrackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
       manifestWriter.put(item.uri, manifestBuilder.serialize());
 
-      _result.insertedIds.push_back(newTrackId);
+      _result.processedIds.push_back(newTrackId);
     }
     catch (std::exception const& e)
     {
@@ -224,7 +181,7 @@ namespace ao::library
     }
   }
 
-  void ImportWorker::join()
+  void ScanPlanExecutor::join()
   {
     if (_workerThread.joinable())
     {
@@ -232,13 +189,13 @@ namespace ao::library
     }
   }
 
-  std::size_t ImportWorker::fileCount() const
+  std::size_t ScanPlanExecutor::fileCount() const
   {
     if (_plan)
     {
       return _plan->items.size();
     }
 
-    return _files.size();
+    return 0;
   }
 } // namespace ao::library

@@ -200,11 +200,6 @@ namespace ao::rt
     std::vector<TrackId> mutatedIds;
   };
 
-  struct ImportFilesReply final
-  {
-    std::size_t importedTrackCount = 0;
-  };
-
   struct CreateTrackListViewReply final
   {
     ViewId viewId{};

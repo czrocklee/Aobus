@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "app/linux-gtk/layout/components/StatusComponents.h"
+
 #include "app/linux-gtk/playback/NowPlayingStatusLabel.h"
 #include "app/linux-gtk/playback/PlaybackDetailsWidget.h"
-#include "app/linux-gtk/portal/ImportProgressIndicator.h"
+#include "app/linux-gtk/portal/LibraryTaskProgressIndicator.h"
 #include "app/linux-gtk/track/LibraryTrackCountLabel.h"
 #include "app/linux-gtk/track/StatusNotificationLabel.h"
 #include "app/runtime/AppRuntime.h"
@@ -21,10 +23,12 @@
 #include <functional>
 #include <memory>
 
-namespace ao::gtk::test
+namespace ao::gtk::layout::test
 {
   namespace
   {
+    using namespace ao::lmdb::test;
+
     class MockExecutor final : public rt::IControlExecutor
     {
     public:
@@ -33,8 +37,6 @@ namespace ao::gtk::test
       void defer(std::move_only_function<void()> task) override { task(); }
     };
   } // namespace
-
-  using namespace ao::lmdb::test;
 
   TEST_CASE("Status bar components", "[gtk][shell]")
   {
@@ -54,28 +56,28 @@ namespace ao::gtk::test
     {
       auto widget = PlaybackDetailsWidget{runtime.playback()};
       auto& gtkWidget = widget.widget();
-      auto* box = dynamic_cast<Gtk::Box*>(&gtkWidget);
+      auto* const box = dynamic_cast<Gtk::Box*>(&gtkWidget);
       REQUIRE(box != nullptr);
     }
 
     SECTION("NowPlayingStatusLabel instantiates and is empty by default")
     {
       auto label = NowPlayingStatusLabel{runtime.playback()};
-      auto* gtkLabel = dynamic_cast<Gtk::Label*>(&label.widget());
+      auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&label.widget());
       REQUIRE(gtkLabel != nullptr);
       CHECK(gtkLabel->get_text().empty());
     }
 
-    SECTION("portal::ImportProgressIndicator instantiates and is hidden by default")
+    SECTION("portal::LibraryTaskProgressIndicator instantiates and is hidden by default")
     {
-      auto indicator = portal::ImportProgressIndicator{runtime.mutation()};
-      REQUIRE(indicator.widget().get_visible() == false);
+      auto indicator = portal::LibraryTaskProgressIndicator{runtime.mutation()};
+      REQUIRE(indicator.get_visible() == false);
     }
 
     SECTION("LibraryTrackCountLabel instantiates and shows 0 tracks")
     {
       auto label = LibraryTrackCountLabel{runtime.sources().allTracks()};
-      auto* gtkLabel = dynamic_cast<Gtk::Label*>(&label.widget());
+      auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&label.widget());
       REQUIRE(gtkLabel != nullptr);
       CHECK(gtkLabel->get_text() == "0 tracks");
     }
@@ -85,5 +87,15 @@ namespace ao::gtk::test
       auto label = StatusNotificationLabel{runtime.notifications(), runtime.views()};
       REQUIRE(dynamic_cast<Gtk::Stack*>(&label.widget()) != nullptr);
     }
+
+    SECTION("StatusComponents Registration")
+    {
+      ComponentRegistry registry;
+      registerStatusComponents(registry);
+
+      auto const optDesc = registry.getDescriptor("status.libraryTaskProgress");
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->displayName == "Library Task Progress");
+    }
   }
-} // namespace ao::gtk::test
+} // namespace ao::gtk::layout::test

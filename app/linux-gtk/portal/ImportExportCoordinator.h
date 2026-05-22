@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "portal/ImportProgressDialog.h"
+#include "portal/LibraryTaskProgressDialog.h"
 #include "runtime/CorePrimitives.h"
-#include "runtime/LibraryExporter.h"
+#include "runtime/LibraryYamlExporter.h"
 #include "runtime/async/LifetimeScope.h"
 
 #include <giomm/asyncresult.h>
@@ -56,17 +56,13 @@ namespace ao::gtk::portal
     ImportExportCallbacks& callbacks() { return _callbacks; }
 
     void openLibrary();
-    void scanLibrary(); // NEW: Full library scan
-    void importFiles();
+    void scanLibrary();
     void importLibrary(); // YAML import
     void exportLibrary(); // YAML export
 
     void openMusicLibrary(std::filesystem::path const& path) const;
-    void importFilesFromPath(std::filesystem::path const& path);
 
   private:
-    void onImportFolderSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
-    void executeImportTask(std::vector<std::filesystem::path> const& files, bool isNewLibrary);
     void onImportFinished() const;
 
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
@@ -81,9 +77,9 @@ namespace ao::gtk::portal
     rt::AppRuntime& _runtime;
     ImportExportCallbacks _callbacks;
 
-    rt::Subscription _importProgressSub;
-    rt::Subscription _importCompleteSub;
+    rt::Subscription _libraryTaskProgressSub;
+    rt::Subscription _libraryTaskCompletedSub;
     rt::async::LifetimeScope _tasks;
-    std::unique_ptr<ImportProgressDialog> _importDialog;
+    std::unique_ptr<LibraryTaskProgressDialog> _libraryTaskDialog;
   };
 } // namespace ao::gtk::portal

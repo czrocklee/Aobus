@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "runtime/LibraryExporter.h"
+#include "runtime/LibraryYamlExporter.h"
 
 #include "ao/Error.h"
 #include "ao/Type.h"
@@ -341,7 +341,7 @@ namespace ao::rt
     }
   } // namespace
 
-  struct LibraryExporter::Impl final
+  struct LibraryYamlExporter::Impl final
   {
     explicit Impl(library::MusicLibrary& ml)
       : ml{ml}
@@ -364,19 +364,19 @@ namespace ao::rt
     library::MusicLibrary& ml;
   };
 
-  LibraryExporter::LibraryExporter(library::MusicLibrary& ml)
+  LibraryYamlExporter::LibraryYamlExporter(library::MusicLibrary& ml)
     : _impl{std::make_unique<Impl>(ml)}
   {
   }
 
-  LibraryExporter::~LibraryExporter() = default;
+  LibraryYamlExporter::~LibraryYamlExporter() = default;
 
-  Result<> LibraryExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
+  Result<> LibraryYamlExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
   {
     return _impl->exportToYaml(path, mode);
   }
 
-  Result<> LibraryExporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode) const
+  Result<> LibraryYamlExporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode) const
   {
     auto tree = ryml::Tree{};
     auto root = tree.rootref();
@@ -416,7 +416,9 @@ namespace ao::rt
     return {};
   }
 
-  void LibraryExporter::Impl::exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const
+  void LibraryYamlExporter::Impl::exportTracks(ryml::NodeRef& node,
+                                               lmdb::ReadTransaction const& txn,
+                                               ExportMode mode) const
   {
     auto const trackReader = ml.tracks().reader(txn);
     auto const manifestReader = ml.manifest().reader(txn);
@@ -434,15 +436,15 @@ namespace ao::rt
     }
   }
 
-  void LibraryExporter::Impl::exportTrack(ryml::NodeRef& node,
-                                          lmdb::ReadTransaction const& txn,
-                                          TrackId id,
-                                          library::TrackView const& view,
-                                          ExportMode mode,
-                                          std::unordered_map<ResourceId, std::string>& exportedCovers,
-                                          library::ResourceStore& resources,
-                                          library::DictionaryStore& dict,
-                                          library::FileManifestStore::Reader const& manifestReader) const
+  void LibraryYamlExporter::Impl::exportTrack(ryml::NodeRef& node,
+                                              lmdb::ReadTransaction const& txn,
+                                              TrackId id,
+                                              library::TrackView const& view,
+                                              ExportMode mode,
+                                              std::unordered_map<ResourceId, std::string>& exportedCovers,
+                                              library::ResourceStore& resources,
+                                              library::DictionaryStore& dict,
+                                              library::FileManifestStore::Reader const& manifestReader) const
   {
     auto trackNode = node.append_child();
     trackNode |= ryml::MAP;
@@ -480,7 +482,9 @@ namespace ao::rt
     emitTrackCommon(trackNode, metadata, view.tags(), dict);
   }
 
-  void LibraryExporter::Impl::exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const
+  void LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,
+                                              lmdb::ReadTransaction const& txn,
+                                              ExportMode mode) const
   {
     auto listsNode = node.append_child();
     yaml::setKey(listsNode, "lists");

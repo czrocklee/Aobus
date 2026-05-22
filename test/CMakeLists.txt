@@ -24,7 +24,7 @@ add_executable(ao_test
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
     unit/library/DictionaryStoreTest.cpp
-    unit/library/ImportWorkerTest.cpp
+    unit/library/ScanPlanExecutorTest.cpp
     unit/library/LibraryScannerTest.cpp
     unit/library/ListStoreTest.cpp
 

@@ -5,8 +5,8 @@
 
 #include "ao/library/MusicLibrary.h"
 #include "runtime/CoreRuntime.h"
-#include "runtime/LibraryExporter.h"
-#include "runtime/LibraryImporter.h"
+#include "runtime/LibraryYamlExporter.h"
+#include "runtime/LibraryYamlImporter.h"
 
 #include <CLI/App.hpp>
 
@@ -102,7 +102,7 @@ namespace ao::cli
         return;
       }
 
-      auto exporter = rt::LibraryExporter{ml};
+      auto exporter = rt::LibraryYamlExporter{ml};
       exporter.exportToYaml(path, mode);
       os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
     }
@@ -125,7 +125,7 @@ namespace ao::cli
         return;
       }
 
-      auto importer = rt::LibraryImporter{ml};
+      auto importer = rt::LibraryYamlImporter{ml};
       importer.importFromYaml(path, mode);
       os << "Library imported from '" << path << "' using mode '" << modeStr << "'.\n";
     }

@@ -9,7 +9,7 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/NowPlayingStatusLabel.h"
 #include "playback/PlaybackDetailsWidget.h"
-#include "portal/ImportProgressIndicator.h"
+#include "portal/LibraryTaskProgressIndicator.h"
 #include "runtime/AppRuntime.h"
 #include "runtime/ListSourceStore.h"
 #include "track/LibraryTrackCountLabel.h"
@@ -54,18 +54,18 @@ namespace ao::gtk::layout
       NowPlayingStatusLabel _widget;
     };
 
-    class ImportProgressComponent final : public ILayoutComponent
+    class LibraryTaskProgressComponent final : public ILayoutComponent
     {
     public:
-      ImportProgressComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      LibraryTaskProgressComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _widget{ctx.runtime.mutation()}
       {
       }
 
-      Gtk::Widget& widget() override { return _widget.widget(); }
+      Gtk::Widget& widget() override { return _widget; }
 
     private:
-      portal::ImportProgressIndicator _widget;
+      portal::LibraryTaskProgressIndicator _widget;
     };
 
     class StatusNotificationComponent final : public ILayoutComponent
@@ -128,9 +128,9 @@ namespace ao::gtk::layout
                                { return std::make_unique<NowPlayingStatusComponent>(ctx, node); });
 
     registry.registerComponent(
-      {.type = "status.importProgress", .displayName = "Import Progress", .category = "Status"},
+      {.type = "status.libraryTaskProgress", .displayName = "Library Task Progress", .category = "Status"},
       [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<ImportProgressComponent>(ctx, node); });
+      { return std::make_unique<LibraryTaskProgressComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.notification", .displayName = "Status Notifications", .category = "Status"},

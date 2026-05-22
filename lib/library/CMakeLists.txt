@@ -14,7 +14,7 @@ add_library(ao_library STATIC
     ListStore.cpp
     ListBuilder.cpp
     LibraryScanner.cpp
-    ImportWorker.cpp
+    ScanPlanExecutor.cpp
 )
 target_include_directories(ao_library PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_library PUBLIC ao_lmdb)

@@ -77,8 +77,8 @@ add_library(aobus-gtk-lib STATIC
     tag/TrackPropertiesDialog.cpp
 
     portal/ImportExportCoordinator.cpp
-    portal/ImportProgressDialog.cpp
-    portal/ImportProgressIndicator.cpp
+    portal/LibraryTaskProgressDialog.cpp
+    portal/LibraryTaskProgressIndicator.cpp
     portal/PlaylistExporter.cpp
 
     layout/document/LayoutDocument.cpp
