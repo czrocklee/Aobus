@@ -5,6 +5,7 @@
 
 #include "SmartListEvaluator.h"
 #include "TrackSource.h"
+#include "ao/Error.h"
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/query/ExecutionPlan.h"
@@ -82,15 +83,13 @@ namespace ao::rt
       auto compiler = query::QueryCompiler{&_ml.dictionary()};
 
       _staged.plan = std::make_unique<query::ExecutionPlan>(compiler.compile(parsed));
-      _staged.hasError = false;
-      _staged.errorMessage.clear();
+      _staged.optError.reset();
     }
     catch (std::exception const& e)
     {
       APP_LOG_ERROR("Smart list expression error for '{}': {}", _staged.expression, e.what());
 
-      _staged.hasError = true;
-      _staged.errorMessage = e.what();
+      _staged.optError = Error{.code = Error::Code::FormatRejected, .message = e.what()};
       _staged.plan.reset();
     }
 

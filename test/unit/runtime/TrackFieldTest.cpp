@@ -138,7 +138,7 @@ TEST_CASE("TrackField editable fields match metadata text and numeric fields", "
   }
 }
 
-TEST_CASE("TrackField sortable fields have valid sortField", "[runtime][trackfield]")
+TEST_CASE("TrackField sortable fields have valid optSortField", "[runtime][trackfield]")
 {
   auto const defs = trackFieldDefinitions();
 
@@ -148,17 +148,17 @@ TEST_CASE("TrackField sortable fields have valid sortField", "[runtime][trackfie
 
     if (def.sortable)
     {
-      REQUIRE(def.sortField.has_value());
-      CHECK(static_cast<std::size_t>(*def.sortField) < 11);
+      REQUIRE(static_cast<bool>(def.optSortField));
+      CHECK(static_cast<std::size_t>(*def.optSortField) < 11);
     }
     else
     {
-      CHECK_FALSE(def.sortField.has_value());
+      CHECK_FALSE(static_cast<bool>(def.optSortField));
     }
   }
 }
 
-TEST_CASE("TrackField groupable fields have valid groupKey", "[runtime][trackfield]")
+TEST_CASE("TrackField groupable fields have valid optGroupKey", "[runtime][trackfield]")
 {
   auto const defs = trackFieldDefinitions();
 
@@ -168,12 +168,12 @@ TEST_CASE("TrackField groupable fields have valid groupKey", "[runtime][trackfie
 
     if (def.groupable)
     {
-      REQUIRE(def.groupKey.has_value());
-      CHECK(static_cast<std::size_t>(*def.groupKey) < 9);
+      REQUIRE(static_cast<bool>(def.optGroupKey));
+      CHECK(static_cast<std::size_t>(*def.optGroupKey) < 9);
     }
     else
     {
-      CHECK_FALSE(def.groupKey.has_value());
+      CHECK_FALSE(static_cast<bool>(def.optGroupKey));
     }
   }
 }
@@ -200,28 +200,28 @@ TEST_CASE("TrackField synthetic fields are DisplayTrackNumber, TechnicalSummary,
 
 TEST_CASE("TrackField known sort fields", "[runtime][trackfield]")
 {
-  CHECK(trackFieldDefinition(TrackField::Title)->sortField == TrackSortField::Title);
-  CHECK(trackFieldDefinition(TrackField::Artist)->sortField == TrackSortField::Artist);
-  CHECK(trackFieldDefinition(TrackField::Album)->sortField == TrackSortField::Album);
-  CHECK(trackFieldDefinition(TrackField::AlbumArtist)->sortField == TrackSortField::AlbumArtist);
-  CHECK(trackFieldDefinition(TrackField::Genre)->sortField == TrackSortField::Genre);
-  CHECK(trackFieldDefinition(TrackField::Composer)->sortField == TrackSortField::Composer);
-  CHECK(trackFieldDefinition(TrackField::Work)->sortField == TrackSortField::Work);
-  CHECK(trackFieldDefinition(TrackField::Year)->sortField == TrackSortField::Year);
-  CHECK(trackFieldDefinition(TrackField::DiscNumber)->sortField == TrackSortField::DiscNumber);
-  CHECK(trackFieldDefinition(TrackField::TrackNumber)->sortField == TrackSortField::TrackNumber);
-  CHECK(trackFieldDefinition(TrackField::Duration)->sortField == TrackSortField::Duration);
+  CHECK(trackFieldDefinition(TrackField::Title)->optSortField == TrackSortField::Title);
+  CHECK(trackFieldDefinition(TrackField::Artist)->optSortField == TrackSortField::Artist);
+  CHECK(trackFieldDefinition(TrackField::Album)->optSortField == TrackSortField::Album);
+  CHECK(trackFieldDefinition(TrackField::AlbumArtist)->optSortField == TrackSortField::AlbumArtist);
+  CHECK(trackFieldDefinition(TrackField::Genre)->optSortField == TrackSortField::Genre);
+  CHECK(trackFieldDefinition(TrackField::Composer)->optSortField == TrackSortField::Composer);
+  CHECK(trackFieldDefinition(TrackField::Work)->optSortField == TrackSortField::Work);
+  CHECK(trackFieldDefinition(TrackField::Year)->optSortField == TrackSortField::Year);
+  CHECK(trackFieldDefinition(TrackField::DiscNumber)->optSortField == TrackSortField::DiscNumber);
+  CHECK(trackFieldDefinition(TrackField::TrackNumber)->optSortField == TrackSortField::TrackNumber);
+  CHECK(trackFieldDefinition(TrackField::Duration)->optSortField == TrackSortField::Duration);
 }
 
 TEST_CASE("TrackField known group keys", "[runtime][trackfield]")
 {
-  CHECK(trackFieldDefinition(TrackField::Artist)->groupKey == TrackGroupKey::Artist);
-  CHECK(trackFieldDefinition(TrackField::Album)->groupKey == TrackGroupKey::Album);
-  CHECK(trackFieldDefinition(TrackField::AlbumArtist)->groupKey == TrackGroupKey::AlbumArtist);
-  CHECK(trackFieldDefinition(TrackField::Genre)->groupKey == TrackGroupKey::Genre);
-  CHECK(trackFieldDefinition(TrackField::Composer)->groupKey == TrackGroupKey::Composer);
-  CHECK(trackFieldDefinition(TrackField::Work)->groupKey == TrackGroupKey::Work);
-  CHECK(trackFieldDefinition(TrackField::Year)->groupKey == TrackGroupKey::Year);
+  CHECK(trackFieldDefinition(TrackField::Artist)->optGroupKey == TrackGroupKey::Artist);
+  CHECK(trackFieldDefinition(TrackField::Album)->optGroupKey == TrackGroupKey::Album);
+  CHECK(trackFieldDefinition(TrackField::AlbumArtist)->optGroupKey == TrackGroupKey::AlbumArtist);
+  CHECK(trackFieldDefinition(TrackField::Genre)->optGroupKey == TrackGroupKey::Genre);
+  CHECK(trackFieldDefinition(TrackField::Composer)->optGroupKey == TrackGroupKey::Composer);
+  CHECK(trackFieldDefinition(TrackField::Work)->optGroupKey == TrackGroupKey::Work);
+  CHECK(trackFieldDefinition(TrackField::Year)->optGroupKey == TrackGroupKey::Year);
 }
 
 TEST_CASE("TrackField known labels", "[runtime][trackfield]")

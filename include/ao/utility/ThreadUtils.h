@@ -20,7 +20,7 @@ namespace ao
     auto buf = std::array<char, 16>{};
     std::size_t const len = std::min(name.size(), buf.size() - 1);
     std::memcpy(buf.data(), name.data(), len);
-    ::pthread_setname_np(pthread_self(), buf.data());
+    ::pthread_setname_np(::pthread_self(), buf.data());
 #endif
   }
 }

@@ -77,7 +77,7 @@ namespace ao::gtk
 
         for (auto const& def : defs)
         {
-          if (def.sortField == sortField)
+          if (def.optSortField == sortField)
           {
             model->append(std::string{def.label});
             mapping.push_back(sortField);

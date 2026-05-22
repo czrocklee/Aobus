@@ -18,6 +18,7 @@ Do not report pure style or convention issues here. Delegate those to `check-cod
 5. Review in this order:
    - behavior regressions and crash risk
    - ownership, lifetime, and thread-safety
+   - error-contract regressions against `doc/design/error-handling.md`
    - boundary validation for CLI, filesystem, subprocess, or C-library interop
    - missing or incorrect tests at important behavioral edges
    - performance, API, and architecture risks with concrete impact
@@ -29,7 +30,7 @@ Do not report pure style or convention issues here. Delegate those to `check-cod
 When using the builtin tool, pass a concise instruction like this:
 
 ```text
-Review this Aobus change for behavior regressions, crash risk, ownership/lifetime/thread-safety issues, boundary validation, important missing tests, performance, API, and architecture risk. Do not report pure style/convention issues such as formatting, naming, member order, const/final/init style, optional naming, designated initializers, nodiscard/trailing-return/lambda-parameter style, unused-suppression style, C library qualification, or C API :: prefixes; those belong to check-code-conformance and the repository clang-tidy gate. If a tooling warning indicates a bug, performance issue, security risk, concurrency issue, or lifetime issue, review it here.
+Review this Aobus change for behavior regressions, crash risk, ownership/lifetime/thread-safety issues, error-contract regressions against doc/design/error-handling.md, boundary validation, important missing tests, performance, API, and architecture risk. Do not report pure style/convention issues such as formatting, naming, member order, const/final/init style, optional naming, designated initializers, nodiscard/trailing-return/lambda-parameter style, unused-suppression style, C library qualification, or C API :: prefixes; those belong to check-code-conformance and the repository clang-tidy gate. If a tooling warning indicates a bug, performance issue, security risk, concurrency issue, or lifetime issue, review it here.
 ```
 
 ## Aobus Hotspots
@@ -40,7 +41,7 @@ Review this Aobus change for behavior regressions, crash risk, ownership/lifetim
 - Default handling for config-like structs
 - **Cognitive Complexity**: Identify high-complexity functions (e.g. > 30) as refactoring candidates. Suggest abstraction patterns but defer to human judgment for architectural trade-offs.
 - Subtle test gaps around playback state, async teardown, and parser or CLI edges
-- Misuse of `ao::Result`, `ao::Exception`, or `std::optional` where the issue is error-model semantics rather than naming/style
+- Misuse of `ao::Result`, exceptions, or `std::optional` where the issue is error-model semantics rather than naming/style; use `doc/design/error-handling.md` as the contract
 
 ## Fast Paths
 

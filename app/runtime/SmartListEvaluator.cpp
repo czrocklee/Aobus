@@ -261,7 +261,7 @@ namespace ao::rt
 
     for (auto* const list : lists)
     {
-      if (list->_current.hasError || !list->_current.plan)
+      if (list->_current.optError || !list->_current.plan)
       {
         list->_members.clear();
       }
@@ -339,7 +339,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_current.hasError || !list->_current.plan || list->_dirty)
+      if (list->_current.optError || !list->_current.plan || list->_dirty)
       {
         continue;
       }
@@ -383,7 +383,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_current.hasError || !list->_current.plan || list->_dirty)
+      if (list->_current.optError || !list->_current.plan || list->_dirty)
       {
         continue;
       }
@@ -456,7 +456,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_current.hasError || !list->_current.plan || list->_dirty)
+      if (list->_current.optError || !list->_current.plan || list->_dirty)
       {
         continue;
       }
@@ -519,7 +519,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_current.hasError || !list->_current.plan || list->_dirty)
+      if (list->_current.optError || !list->_current.plan || list->_dirty)
       {
         continue;
       }

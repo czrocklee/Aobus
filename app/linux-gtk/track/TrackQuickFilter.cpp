@@ -84,8 +84,7 @@ namespace ao::gtk
       set_sensitive(false);
       _filterExpression.clear();
       _filterPending = false;
-      _filterHasError = false;
-      _filterErrorMessage.clear();
+      _optFilterError.reset();
 
       _textChangedConn.block();
       set_text("");
@@ -108,7 +107,7 @@ namespace ao::gtk
     auto const resolved = TrackListAdapter::resolveFilterExpression(state.filterExpression);
     _filterExpression = resolved.expression;
     _filterPending = false;
-    _filterHasError = false;
+    _optFilterError.reset();
 
     updateUi();
   }
@@ -158,18 +157,18 @@ namespace ao::gtk
     }
 
     _filterPending = status.pending;
-    _filterHasError = status.hasError;
-    _filterErrorMessage = status.errorMessage;
+    _optFilterError = status.optError;
 
     updateUi();
   }
 
   void TrackQuickFilter::updateUi()
   {
-    if (_filterHasError)
+    if (_optFilterError)
     {
       add_css_class("error");
-      set_tooltip_text(std::format("Expression error: {}", _filterErrorMessage));
+      // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+      set_tooltip_text(std::format("Expression error: {}", _optFilterError->message));
     }
     else
     {
@@ -177,7 +176,7 @@ namespace ao::gtk
       set_tooltip_text("");
     }
 
-    auto const canCreateSmartList = !_filterExpression.empty() && !_filterPending && !_filterHasError;
+    auto const canCreateSmartList = !_filterExpression.empty() && !_filterPending && !_optFilterError;
     set_icon_sensitive(Gtk::Entry::IconPosition::SECONDARY, canCreateSmartList);
   }
 } // namespace ao::gtk

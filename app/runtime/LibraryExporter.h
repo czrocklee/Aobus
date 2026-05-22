@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ao/Error.h"
 #include "ao/library/MusicLibrary.h"
 
 #include <cstdint>
@@ -40,9 +41,9 @@ namespace ao::rt
      * Export the library to a YAML file.
      * @param path Target file path.
      * @param mode Export verbosity mode.
-     * @throws std::exception on failure.
+     * @return Result of the operation.
      */
-    void exportToYaml(std::filesystem::path const& path, ExportMode mode);
+    Result<> exportToYaml(std::filesystem::path const& path, ExportMode mode);
 
   private:
     struct Impl;

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "TrackSource.h"
+#include "ao/Error.h"
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/query/ExecutionPlan.h"
@@ -50,8 +51,8 @@ namespace ao::rt
     using TrackSource::notifyUpdated;
     void notifyUpdated(TrackId id) override;
 
-    bool hasError() const { return _current.hasError; }
-    std::string const& errorMessage() const { return _current.errorMessage; }
+    bool hasError() const { return static_cast<bool>(_current.optError); }
+    std::optional<Error> const& error() const { return _current.optError; }
     std::string const& expression() const { return _current.expression; }
     TrackSource& source() const { return _source; }
 
@@ -62,8 +63,7 @@ namespace ao::rt
     {
       std::string expression;
       std::unique_ptr<query::ExecutionPlan> plan;
-      bool hasError = false;
-      std::string errorMessage;
+      std::optional<Error> optError;
     };
 
     void stageExpression(std::string expr);

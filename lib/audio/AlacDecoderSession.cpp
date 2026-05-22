@@ -90,9 +90,9 @@ namespace ao::audio
 
     _impl->demuxer = std::make_unique<Demuxer>(_impl->mappedFile.bytes());
 
-    if (auto const demuxError = _impl->demuxer->parseTrack("alac"); !demuxError.empty())
+    if (auto const demuxResult = _impl->demuxer->parseTrack("alac"); !demuxResult)
     {
-      return makeError(Error::Code::InitFailed, demuxError);
+      return makeError(Error::Code::InitFailed, demuxResult.error().message);
     }
 
     auto const cookie = _impl->demuxer->magicCookie();

@@ -53,6 +53,12 @@ app/cli        ->  app/application or include/ao + lib
 
 The core library must not depend on `app/runtime`, GTK, CLI, or frontend state.
 
+Error handling follows the same boundary direction. Recoverable failures should
+cross core/runtime/frontend boundaries as `ao::Result<T>`, legitimate absence as
+`std::optional<T>`, and exceptions only as boundary-internal mechanisms or
+invariant/fatal paths. See [Error Handling Model](error-handling.md) for the
+full contract.
+
 ## Public Core Library Boundary
 
 The public core library is the stable domain and infrastructure surface. It may
@@ -247,6 +253,9 @@ Use this checklist when adding or moving classes:
 - Can the class be tested without GTK? If not, do not move it into runtime.
 - Does a new dependency point downward? If not, introduce an adapter or command
   service instead.
+- Does a fallible boundary use the error mechanism assigned by
+  [Error Handling Model](error-handling.md), rather than relying on ad hoc
+  exception propagation or optional-as-error?
 - Is a `Manager` hiding a more precise `Host`, `Coordinator`, `Service`,
   `Store`, or `Adapter` role?
 

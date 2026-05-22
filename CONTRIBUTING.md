@@ -136,13 +136,14 @@ Rules are numbered for easy reference in reviews and tooling.
       - Use when the operation can legitimately fail and the caller is expected to handle it
       - Examples: `ao::Result<> open(path)`, `ao::Result<PcmBlock> readNextBlock()`
       - The error value travels with the return — no separate `lastError()` query needed
-    - 5.1.2. **`ao::Exception`** (via `AO_THROW` / `AO_THROW_FORMAT`) — Invariant violations
-      - Use for data corruption, programmer errors, impossible states, and unrecoverable system failures
-      - Examples: LMDB failures, expression parser errors, malformed tag data, import/export format violations
-      - Catch at boundary points only (e.g., UI event handlers, import workers, background threads)
+    - 5.1.2. **Exceptions** — Invariant violations, programmer errors, third-party callback mechanisms, and rare fatal startup defects
+      - Use `std::logic_error` or `ao::throwException<ao::Exception>()` according to the local pattern
+      - Do not use exceptions as the ordinary public contract for recoverable core/runtime/frontend failures
+      - Catch third-party exceptions at adapter boundaries when the failure should become `ao::Result<T>`
     - 5.1.3. **`std::optional<T>`** — Legitimate absence
       - Use when "not found" is a normal outcome, not an error
       - Examples: database lookups, optional UI state, finding a sink by name
+    - 5.1.4. See `doc/design/error-handling.md` for layer-specific rules and migration guidance
   - 5.2. Error Type
     - 5.2.1. Use `ao::Result<T>` (alias for `std::expected<T, ao::Error>`) as the return type; use `ao::Result<>` when `T` is `void`
       - `ao::Error` has a `Code` enum for programmatic dispatch and a `message` string for human context
@@ -154,4 +155,4 @@ Rules are numbered for easy reference in reviews and tooling.
     - 5.3.1. Do not use `bool` return + `lastError()` getter for error reporting in new code
     - 5.3.2. Do not return an empty `std::string` to indicate success
     - 5.3.3. Do not use `std::optional` to signal an error — use `std::expected` and let `std::nullopt` mean "absent, not broken"
-    - 5.3.4. Do not catch exceptions inside low-level code to convert them to error strings; let them propagate to boundary points
+    - 5.3.4. Do not catch exceptions in low-level implementation code only to stringify them; catch at meaningful adapter boundaries and preserve error code/context when converting to `ao::Result<T>`

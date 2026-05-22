@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ao/Error.h"
 #include "runtime/CorePrimitives.h"
 #include "runtime/ProjectionTypes.h"
 
@@ -10,6 +11,7 @@
 #include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
+#include <optional>
 #include <string>
 
 namespace ao::rt
@@ -49,8 +51,7 @@ namespace ao::gtk
 
     std::string _filterExpression;
     bool _filterPending = false;
-    bool _filterHasError = false;
-    std::string _filterErrorMessage;
+    std::optional<ao::Error> _optFilterError;
 
     sigc::scoped_connection _textChangedConn;
     sigc::scoped_connection _debounceTimer;

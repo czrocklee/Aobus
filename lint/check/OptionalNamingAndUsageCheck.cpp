@@ -1,9 +1,12 @@
 #include "check/OptionalNamingAndUsageCheck.h"
+
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Lex/Lexer.h"
+
 #include <clang/AST/Decl.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <llvm/Support/Casting.h>
 
 using namespace clang::ast_matchers;
 
@@ -15,8 +18,8 @@ namespace clang::tidy::readability
     auto isOptionalType = hasType(qualType(hasUnqualifiedDesugaredType(
       recordType(hasDeclaration(classTemplateSpecializationDecl(hasName("::std::optional")))))));
 
-    // Rule 1: Match all variables of type std::optional
-    finder->addMatcher(varDecl(isOptionalType).bind("optional_var"), this);
+    // Rule 1: Match all variables and fields of type std::optional
+    finder->addMatcher(declaratorDecl(isOptionalType).bind("optional_decl"), this);
 
     // Rule 2: Match calls to .has_value() on std::optional
     finder->addMatcher(
@@ -29,24 +32,18 @@ namespace clang::tidy::readability
     auto const& sm = *result.SourceManager;
 
     // Check Rule 1: Naming
-    if (auto const* var = result.Nodes.getNodeAs<VarDecl>("optional_var"))
+    if (auto const* decl = result.Nodes.getNodeAs<DeclaratorDecl>("optional_decl"))
     {
-      if (sm.isInSystemHeader(var->getLocation()) || var->getLocation().isMacroID())
+      if (sm.isInSystemHeader(decl->getLocation()) || decl->getLocation().isMacroID())
       {
         return;
       }
 
-      StringRef const name = var->getName();
-
-      if (name.empty() || name.starts_with("opt"))
+      if (StringRef const name = decl->getName(); !name.empty() && !name.contains_insensitive("opt"))
       {
-        return;
+        diag(decl->getLocation(), "std::optional %0 %1 should contain 'opt' in its name to indicate it is optional")
+          << (llvm::isa<FieldDecl>(decl) ? "member" : "variable") << decl;
       }
-
-      // Special case: ignore common iterator names or similar if needed,
-      // but for now we follow the strict "opt" prefix rule.
-      diag(var->getLocation(), "std::optional variable %0 must have 'opt' prefix (e.g., 'opt%1')")
-        << var << (name.substr(0, 1).upper() + name.substr(1).str());
     }
 
     // Check Rule 2: .has_value() usage

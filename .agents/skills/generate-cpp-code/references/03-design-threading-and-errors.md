@@ -2,7 +2,19 @@
 
 Covers `CONTRIBUTING.md` rules 3.3, 4.1-4.4, and 5.1-5.3.
 
-## `std::expected` via `ao::Result` (3.3, 5.2)
+## Error model source of truth (3.3, 5.1-5.3)
+
+Read `../../../../doc/design/error-handling.md` before adding or changing a fallible API.
+
+Mechanism meanings:
+
+- `ao::Result<T>`: recoverable failure the caller should handle.
+- `std::optional<T>`: legitimate absence with no failure detail needed.
+- Exception: programmer error, invariant violation, third-party callback mechanism, or rare fatal startup defect.
+
+Do not mix mechanisms for the same failure category on the same API.
+
+## `std::expected` via `ao::Result` (3.3, 5.1, 5.2)
 
 ```cpp
 ao::Result<> open(DeviceId const& id)
@@ -14,7 +26,7 @@ ao::Result<> open(DeviceId const& id)
 
   if (auto const result = connect(id); !result)
   {
-    return std::unexpected(result.error());
+    return ao::makeError(result.error().code, std::format("Failed to connect device: {}", result.error().message));
   }
 
   return {};
@@ -33,27 +45,13 @@ ao::Result<PcmBlock> readNextBlock()
 
 - Use `ao::Result<T>` for recoverable failures and `ao::Result<>` for void success/failure.
 - Return `{}` for successful `ao::Result<>`.
+- Treat `return {};` as the canonical successful `ao::Result<>` spelling; do not invent local success helpers.
 - Use `ao::makeError(code, message)` for concise error results, or `std::unexpected(ao::Error{...})` when explicit construction is clearer.
+- Preserve `Error::Code` when adding context unless the current layer intentionally maps the error category.
 - Do not use `bool` + `lastError()`, empty strings, `std::optional`, or `std::error_code` for new recoverable error reporting.
+- Do not add `[[nodiscard]]`; Aobus forbids ad hoc nodiscard annotations and relies on lint/review for ignored returns.
 
-## Three-layer error policy (5.1, 5.3)
-
-`ao::Result<T>`: recoverable and caller-handled:
-
-```cpp
-ao::Result<Device> findRequiredDevice(DeviceId const& id);
-```
-
-`ao::Exception` through `AO_THROW` / `AO_THROW_FORMAT`: invariant violations, data corruption, impossible states, unrecoverable failures:
-
-```cpp
-if (header.magic != kExpectedMagic)
-{
-  AO_THROW_FORMAT(ao::Exception, "Invalid track header magic: {}", header.magic);
-}
-```
-
-`std::optional<T>`: legitimate absence, with `opt` naming:
+## Optional means absence (3.2.1, 5.1.3, 5.3)
 
 ```cpp
 std::optional<Device> optDefaultDevice(std::span<Device const> devices)
@@ -69,21 +67,97 @@ std::optional<Device> optDefaultDevice(std::span<Device const> devices)
 }
 ```
 
-Catch exceptions at boundary points only:
+- Use the `opt` prefix for optional variables, members, and parameters.
+- Use `if (optValue)` / `if (!optValue)` checks; do not use `.has_value()`.
+- Convert absence to `ao::Result<T>` only at the boundary that requires a value.
 
 ```cpp
-void ImportWorker::run() noexcept
+ao::Result<Device> findRequiredDevice(DeviceId const& id)
+{
+  auto optDevice = findDevice(id);
+
+  if (!optDevice)
+  {
+    return ao::makeError(ao::Error::Code::DeviceNotFound, "Device not found");
+  }
+
+  return *optDevice;
+}
+```
+
+## Exception boundaries (5.1.2, 5.3.4)
+
+Use `ao::Exception` for invariant or contract violations:
+
+```cpp
+void ConfigStore::save(std::string_view group, State const& state)
+{
+  if (_mode == OpenMode::ReadOnly)
+  {
+    ao::throwException<ao::Exception>(ao::Error::Code::InternalError,
+                                      "save() called on ReadOnly ConfigStore");
+  }
+
+  // Save implementation...
+}
+```
+
+Catch third-party exceptions at adapter boundaries and convert to `ao::Result<T>` when the failure is recoverable:
+
+```cpp
+ao::Result<> loadConfig(ConfigStore& store, Config& config)
 {
   try
   {
-    importLibrary();
+    return store.load("config", config);
   }
-  catch (ao::Exception const& ex)
+  catch (std::exception const& ex)
   {
-    IMPORT_LOG_ERROR("Import failed: {}", ex.what());
+    return ao::makeError(ao::Error::Code::IoError, std::format("Failed to load config: {}", ex.what()));
   }
 }
 ```
+
+Root async tasks and application entry points may catch broad exceptions, but only as last-resort logging/crash protection. GUI and CLI handlers should consume service `ao::Result<T>` values instead of relying on top-level catch blocks.
+
+## Construction and async boundaries
+
+Constructors cannot return `ao::Result<T>`. Prefer a static factory for recoverable construction failures:
+
+```cpp
+class DeviceSession final
+{
+public:
+  static ao::Result<DeviceSession> create(DeviceId const& id);
+
+private:
+  explicit DeviceSession(DeviceHandle handle);
+};
+```
+
+Use `Result<> open()` or `Result<> initialize()` only when the type has a real two-phase lifecycle, such as decoder sessions or audio backends. Do not throw from constructors for ordinary IO/device/config failures.
+
+For async workflows, carry recoverable failures back to the control thread as values:
+
+```cpp
+rt::async::Task<void> ImportController::importAsync(std::filesystem::path path)
+{
+  co_await _async.resumeOnWorker();
+  auto result = _importer.import(path);
+
+  co_await _async.resumeOnControl();
+
+  if (!result)
+  {
+    _notifications.post(rt::NotificationSeverity::Error, result.error().message);
+    co_return;
+  }
+
+  _notifications.post(rt::NotificationSeverity::Info, "Import complete");
+}
+```
+
+Root coroutine exception handlers are for unexpected exceptions and expected cancellation, not for normal recoverable failure delivery in new APIs.
 
 ## Getters and accessors (4.1)
 

@@ -474,27 +474,42 @@ namespace ao::rt::test
       REQUIRE_FALSE(validList.hasError());
       REQUIRE(validList.size() == 1);
       REQUIRE(invalidList.hasError());
-      CHECK_FALSE(invalidList.errorMessage().empty());
+      REQUIRE(invalidList.error().has_value());
+      CHECK(invalidList.error()->code == Error::Code::FormatRejected);
+      CHECK_FALSE(invalidList.error()->message.empty());
       CHECK(invalidList.size() == 0);
 
-      auto validSpy = ObserverSpy{};
-      auto invalidSpy = ObserverSpy{};
-      validList.attach(&validSpy);
-      invalidList.attach(&invalidSpy);
+      SECTION("Standard flow: invalid expression remains empty")
+      {
+        auto validSpy = ObserverSpy{};
+        auto invalidSpy = ObserverSpy{};
+        validList.attach(&validSpy);
+        invalidList.attach(&invalidSpy);
 
-      auto second = testLibrary.addTrack(makeTrackSpec("second", 2023));
-      source.insert(second, 1);
+        auto second = testLibrary.addTrack(makeTrackSpec("second", 2023));
+        source.insert(second, 1);
 
-      REQUIRE(validSpy.events.size() == 1);
-      CHECK(validSpy.events[0].kind == ObserverSpy::EventKind::Inserted);
-      CHECK(validSpy.events[0].id == second);
-      CHECK(invalidSpy.events.empty());
-      REQUIRE(validList.size() == 2);
-      CHECK(validList.trackIdAt(1) == second);
-      CHECK(invalidList.size() == 0);
+        REQUIRE(validSpy.events.size() == 1);
+        CHECK(validSpy.events[0].kind == ObserverSpy::EventKind::Inserted);
+        CHECK(validSpy.events[0].id == second);
+        CHECK(invalidSpy.events.empty());
+        REQUIRE(validList.size() == 2);
+        CHECK(validList.trackIdAt(1) == second);
+        CHECK(invalidList.size() == 0);
 
-      validList.detach(&validSpy);
-      invalidList.detach(&invalidSpy);
+        validList.detach(&validSpy);
+        invalidList.detach(&invalidSpy);
+      }
+
+      SECTION("State recovery: Setting a valid expression clears error")
+      {
+        invalidList.setExpression("$year > 2000");
+        invalidList.reload();
+
+        CHECK_FALSE(invalidList.hasError());
+        CHECK_FALSE(invalidList.error().has_value());
+        CHECK(invalidList.size() == 1); // Only 'first' is in source at this point
+      }
     }
 
     SECTION("source destruction is handled gracefully")

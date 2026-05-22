@@ -30,7 +30,7 @@ namespace ao::lmdb
   protected:
     struct MdbTxnDeleter
     {
-      void operator()(MDB_txn* txn) const noexcept { mdb_txn_abort(txn); }
+      void operator()(MDB_txn* txn) const noexcept { ::mdb_txn_abort(txn); }
     };
 
     ReadTransaction(std::unique_ptr<MDB_txn, MdbTxnDeleter> handle)

@@ -7,6 +7,7 @@
 #include <format>
 #include <functional>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -92,7 +93,11 @@ namespace ao::gtk::layout
             {
               return std::stoll(val);
             }
-            catch (...)
+            catch (std::invalid_argument const&)
+            {
+              return defaultValue;
+            }
+            catch (std::out_of_range const&)
             {
               return defaultValue;
             }
@@ -159,7 +164,11 @@ namespace ao::gtk::layout
             {
               return std::stod(val);
             }
-            catch (...)
+            catch (std::invalid_argument const&)
+            {
+              return defaultValue;
+            }
+            catch (std::out_of_range const&)
             {
               return defaultValue;
             }

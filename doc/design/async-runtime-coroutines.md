@@ -128,6 +128,23 @@ Coroutines may await a one-time event later, but `await_signal` should not be pa
 of the first implementation phase because it has subtle ownership, cancellation,
 and reentrancy requirements.
 
+## Error Propagation Rule
+
+Recoverable async workflow failures should be carried as `ao::Result<T>` values,
+not as planned exceptions. A typical UI-owned workflow should:
+
+1. move to a worker execution context;
+2. run the fallible operation and keep its `ao::Result<T>`;
+3. move back to the control/UI context;
+4. show a notification, dialog, or status message if the result is an error.
+
+Root coroutine handlers still own unexpected exception logging, and cancellation
+continues to use the async runtime's cancellation mechanism. Exceptions should be
+the last-resort path for bugs, invariant violations, third-party callback
+mechanics, or legacy coroutine APIs that have not yet been migrated to value
+errors. See [Error Handling Model](error-handling.md) for the cross-layer
+contract and examples.
+
 ## Public Facade Shape
 
 The exact API can evolve during implementation, but application code should aim

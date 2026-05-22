@@ -3,7 +3,7 @@
 
 #include "runtime/LibraryImporter.h"
 
-#include "ao/Exception.h"
+#include "ao/Error.h"
 #include "ao/Type.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/ListBuilder.h"
@@ -23,7 +23,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <filesystem>
+#include <format>
 #include <memory>
 #include <optional>
 #include <span>
@@ -61,7 +63,7 @@ namespace ao::rt
     {
       std::uint32_t version = 0;
       ExportMode payloadMode = ExportMode::Full;
-      std::optional<std::string_view> libraryId;
+      std::optional<std::string_view> optLibraryId;
       std::vector<ValidatedTrack> tracks;
       std::vector<ValidatedList> lists;
     };
@@ -145,11 +147,11 @@ namespace ao::rt
     {
     }
 
-    void importFromYaml(std::filesystem::path const& path, ImportMode mode);
+    Result<> importFromYaml(std::filesystem::path const& path, ImportMode mode);
 
-    ValidatedImport validate(ryml::ConstNodeRef const& root) const;
-    void validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
-    void validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
+    Result<ValidatedImport> validate(ryml::ConstNodeRef const& root) const;
+    Result<> validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
+    Result<> validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
 
     void importTracks(std::vector<ValidatedTrack> const& tracks,
                       lmdb::WriteTransaction& txn,
@@ -187,12 +189,12 @@ namespace ao::rt
 
   LibraryImporter::~LibraryImporter() = default;
 
-  void LibraryImporter::importFromYaml(std::filesystem::path const& path, ImportMode mode)
+  Result<> LibraryImporter::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
-    _impl->importFromYaml(path, mode);
+    return _impl->importFromYaml(path, mode);
   }
 
-  void LibraryImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
+  Result<> LibraryImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
     auto buffer = std::vector<char>{};
     auto tree = ryml::Tree{};
@@ -207,11 +209,17 @@ namespace ao::rt
     }
     catch (std::exception const& e)
     {
-      ao::throwException<Exception>("Failed to read '{}': {}", path.string(), e.what());
+      return makeError(Error::Code::IoError, std::format("Failed to read '{}': {}", path.string(), e.what()));
     }
 
-    auto const validated = validate(tree.rootref());
+    auto const validationResult = validate(tree.rootref());
 
+    if (!validationResult)
+    {
+      return std::unexpected{validationResult.error()};
+    }
+
+    auto const& validated = *validationResult;
     auto txn = ml.writeTransaction();
 
     if (mode == ImportMode::Restore)
@@ -239,15 +247,17 @@ namespace ao::rt
 
     txn.commit();
 
-    if (mode == ImportMode::Restore && validated.libraryId)
+    if (mode == ImportMode::Restore && validated.optLibraryId)
     {
       auto header = ml.metaHeader();
-      header.libraryId = parseUuid(*validated.libraryId);
+      header.libraryId = parseUuid(*validated.optLibraryId);
       ml.updateMetaHeader(header);
     }
+
+    return {};
   }
 
-  ValidatedImport LibraryImporter::Impl::validate(ryml::ConstNodeRef const& root) const
+  Result<ValidatedImport> LibraryImporter::Impl::validate(ryml::ConstNodeRef const& root) const
   {
     auto validated = ValidatedImport{};
 
@@ -255,14 +265,14 @@ namespace ao::rt
 
     if (!versionNode.readable())
     {
-      ao::throwException<Exception>("Missing 'version' field in YAML");
+      return makeError(Error::Code::FormatRejected, "Missing 'version' field in YAML");
     }
 
     validated.version = yaml::asInt<uint32_t>(versionNode);
 
     if (validated.version != 1)
     {
-      ao::throwException<Exception>("Unsupported YAML version {}", validated.version);
+      return makeError(Error::Code::FormatRejected, std::format("Unsupported YAML version {}", validated.version));
     }
 
     if (auto const exportModeNode = yaml::findChild(root, "export_mode"); exportModeNode.readable())
@@ -276,33 +286,39 @@ namespace ao::rt
 
     if (auto const libraryIdNode = yaml::findChild(root, "libraryId"); libraryIdNode.readable())
     {
-      validated.libraryId = yaml::scalarView(libraryIdNode);
+      validated.optLibraryId = yaml::scalarView(libraryIdNode);
     }
 
     auto const library = yaml::findChild(root, "library");
 
     if (!library.readable())
     {
-      ao::throwException<Exception>("Missing 'library' section in YAML");
+      return makeError(Error::Code::FormatRejected, "Missing 'library' section in YAML");
     }
 
     if (validated.payloadMode != ExportMode::ListOnly)
     {
       if (auto const tracks = yaml::findChild(library, "tracks"); tracks.readable())
       {
-        validateTracks(tracks, validated);
+        if (auto const result = validateTracks(tracks, validated); !result)
+        {
+          return std::unexpected{result.error()};
+        }
       }
     }
 
     if (auto const lists = yaml::findChild(library, "lists"); lists.readable())
     {
-      validateLists(lists, validated);
+      if (auto const result = validateLists(lists, validated); !result)
+      {
+        return std::unexpected{result.error()};
+      }
     }
 
     return validated;
   }
 
-  void LibraryImporter::Impl::validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const
+  Result<> LibraryImporter::Impl::validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
 
@@ -313,14 +329,14 @@ namespace ao::rt
 
       if (!uriNode.readable())
       {
-        ao::throwException<Exception>("Track record missing required 'uri' field");
+        return makeError(Error::Code::FormatRejected, "Track record missing required 'uri' field");
       }
 
       track.uri = yaml::scalarView(uriNode);
 
       if (track.uri.empty())
       {
-        ao::throwException<Exception>("Track record has empty 'uri'");
+        return makeError(Error::Code::FormatRejected, "Track record has empty 'uri'");
       }
 
       if (auto const idNode = yaml::findChild(trackNode, "id"); idNode.readable())
@@ -331,7 +347,8 @@ namespace ao::rt
         {
           if (seenYamlIds.contains(track.yamlId))
           {
-            ao::throwException<Exception>("Duplicate track YAML id {} in payload", track.yamlId);
+            return makeError(
+              Error::Code::FormatRejected, std::format("Duplicate track YAML id {} in payload", track.yamlId));
           }
 
           seenYamlIds.insert(track.yamlId);
@@ -341,9 +358,11 @@ namespace ao::rt
       track.node = trackNode;
       validated.tracks.push_back(std::move(track));
     }
+
+    return {};
   }
 
-  void LibraryImporter::Impl::validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const
+  Result<> LibraryImporter::Impl::validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
 
@@ -354,19 +373,19 @@ namespace ao::rt
 
       if (!idNode.readable())
       {
-        ao::throwException<Exception>("List record missing required 'id' field");
+        return makeError(Error::Code::FormatRejected, "List record missing required 'id' field");
       }
 
       list.yamlId = yaml::asInt<uint32_t>(idNode);
 
       if (list.yamlId == 0)
       {
-        ao::throwException<Exception>("List id 0 is reserved for the root");
+        return makeError(Error::Code::FormatRejected, "List id 0 is reserved for the root");
       }
 
       if (seenYamlIds.contains(list.yamlId))
       {
-        ao::throwException<Exception>("Duplicate list YAML id {} in payload", list.yamlId);
+        return makeError(Error::Code::FormatRejected, std::format("Duplicate list YAML id {} in payload", list.yamlId));
       }
 
       seenYamlIds.insert(list.yamlId);
@@ -375,7 +394,7 @@ namespace ao::rt
 
       if (!nameNode.readable())
       {
-        ao::throwException<Exception>("List record missing required 'name' field");
+        return makeError(Error::Code::FormatRejected, "List record missing required 'name' field");
       }
 
       list.name = yaml::scalarView(nameNode);
@@ -419,6 +438,8 @@ namespace ao::rt
 
       validated.lists.push_back(std::move(list));
     }
+
+    return {};
   }
 
   void LibraryImporter::Impl::importTracks(std::vector<ValidatedTrack> const& tracks,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "ao/Error.h"
 #include "ao/Type.h"
 #include "ao/library/DictionaryStore.h"
 #include "ao/library/FileManifestStore.h"
@@ -98,7 +99,7 @@ namespace ao::library::test
     // 2. Export to YAML
     auto const yamlPath = std::filesystem::path{temp1.path()} / "backup.yaml";
     auto exporter = rt::LibraryExporter{ml1};
-    REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
+    REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
 
     // 3. Import into a new library
     auto const temp2 = TempDir{};
@@ -122,7 +123,7 @@ namespace ao::library::test
     }
 
     auto importer = rt::LibraryImporter{ml2};
-    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
+    REQUIRE(importer.importFromYaml(yamlPath));
 
     // 4. Verify
     {
@@ -238,7 +239,7 @@ namespace ao::library::test
     // 2. Export to YAML (Full mode)
     auto const yamlPath = std::filesystem::path{temp1.path()} / "phase1.yaml";
     auto exporter = rt::LibraryExporter{ml1};
-    REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
+    REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
 
     // 3. Import into a new library (Restore mode)
     auto const temp2 = TempDir{};
@@ -246,7 +247,7 @@ namespace ao::library::test
     auto importer = rt::LibraryImporter{ml2};
 
     // Use Restore mode (default) - should not try to read physical file "full-fields.flac"
-    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
+    REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
 
     // 4. Verify in ml2
     {
@@ -342,7 +343,7 @@ namespace ao::library::test
     auto const temp2 = TempDir{};
     auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
     auto importer = rt::LibraryImporter{ml2};
-    importer.importFromYaml(yamlPath);
+    REQUIRE(importer.importFromYaml(yamlPath));
 
     // 5. Verify deduplication and content
     {
@@ -449,7 +450,7 @@ namespace ao::library::test
     }
 
     auto importer = rt::LibraryImporter{ml2};
-    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
+    REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
 
     // 5. Verify list was restored and track remapped
     {
@@ -519,7 +520,7 @@ library:
 
     // 3. Perform Merge Import
     auto importer = rt::LibraryImporter{ml};
-    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath, rt::ImportMode::Merge));
+    REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Merge));
 
     // 4. Verify results
     {
@@ -590,7 +591,7 @@ library:
     }
 
     auto importer = rt::LibraryImporter{ml};
-    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
+    REQUIRE(importer.importFromYaml(yamlPath));
 
     {
       auto txn = ml.readTransaction();
@@ -633,15 +634,25 @@ library:
     auto importer = rt::LibraryImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "bad.yaml";
 
-    auto testError = [&](std::string_view yamlContent, std::string_view expectedErrorFragment)
+    auto testError = [&](std::string_view yamlContent, Error::Code expectedCode, std::string_view expectedErrorFragment)
     {
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << yamlContent;
       }
-      REQUIRE_THROWS_WITH(
-        importer.importFromYaml(yamlPath), Catch::Matchers::ContainsSubstring(std::string{expectedErrorFragment}));
+      auto const result = importer.importFromYaml(yamlPath);
+      REQUIRE(!result);
+      CHECK(result.error().code == expectedCode);
+      CHECK_THAT(result.error().message, Catch::Matchers::ContainsSubstring(std::string{expectedErrorFragment}));
     };
+
+    SECTION("IO Error: File not found")
+    {
+      auto const nonExistentPath = std::filesystem::path{temp.path()} / "ghost.yaml";
+      auto const result = importer.importFromYaml(nonExistentPath);
+      REQUIRE(!result);
+      CHECK(result.error().code == Error::Code::IoError);
+    }
 
     SECTION("Missing version")
     {
@@ -650,6 +661,7 @@ library:
   tracks: []
   lists: []
 )",
+                Error::Code::FormatRejected,
                 "Missing 'version'");
     }
 
@@ -660,6 +672,7 @@ version: 2
 library:
   tracks: []
 )",
+                Error::Code::FormatRejected,
                 "Unsupported YAML version");
     }
 
@@ -668,6 +681,7 @@ library:
       testError(R"(
 version: 1
 )",
+                Error::Code::FormatRejected,
                 "Missing 'library' section");
     }
 
@@ -681,6 +695,7 @@ library:
       title: "No URI"
   lists: []
 )",
+                Error::Code::FormatRejected,
                 "missing required 'uri'");
     }
 
@@ -694,6 +709,7 @@ library:
       uri: ""
   lists: []
 )",
+                Error::Code::FormatRejected,
                 "empty 'uri'");
     }
 
@@ -709,6 +725,7 @@ library:
       uri: "song2.flac"
   lists: []
 )",
+                Error::Code::FormatRejected,
                 "Duplicate track YAML id");
     }
 
@@ -721,6 +738,7 @@ library:
   lists:
     - name: "No ID"
 )",
+                Error::Code::FormatRejected,
                 "missing required 'id'");
     }
 
@@ -734,6 +752,7 @@ library:
     - id: 0
       name: "Root List"
 )",
+                Error::Code::FormatRejected,
                 "List id 0 is reserved");
     }
 
@@ -749,6 +768,7 @@ library:
     - id: 1
       name: "List 2"
 )",
+                Error::Code::FormatRejected,
                 "Duplicate list YAML id");
     }
 
@@ -761,6 +781,7 @@ library:
   lists:
     - id: 1
 )",
+                Error::Code::FormatRejected,
                 "missing required 'name'");
     }
 
@@ -777,7 +798,7 @@ library:
   lists: []
 )";
       }
-      REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
+      REQUIRE(importer.importFromYaml(yamlPath));
       auto txn = ml.readTransaction();
       auto const reader = ml.tracks().reader(txn);
       auto const it = reader.begin();
@@ -828,7 +849,7 @@ library:
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";
     auto exporter = rt::LibraryExporter{ml};
-    REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rt::ExportMode::Delta));
+    REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Delta));
 
     {
       auto buffer = std::vector<char>{};
@@ -871,7 +892,7 @@ library:
 )";
     }
 
-    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
+    REQUIRE(importer.importFromYaml(yamlPath));
 
     auto txn = ml.readTransaction();
     auto const listReader = ml.lists().reader(txn);

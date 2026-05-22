@@ -11,8 +11,9 @@ Follow these procedures to ensure architectural consistency and adherence to Aob
 
 1.  **Reference Examples**: You MUST read the most relevant snippet references listed below BEFORE writing or modifying any code. They are organized by `CONTRIBUTING.md` rule number and show focused examples rather than complete source files. Match the patterns you see — don't invent new ones.
 2.  **Context Discovery**: Read a sibling file in the target directory to match existing error handling, logging, and namespace patterns. Prefer the closest neighbor over the reference files when they differ.
-3.  **Implement**: Generate code following the exact conventions observed in the snippet references and nearby project code.
-4.  **Verify**: If modifying logic, identify relevant tests in `test/` and match the test style shown in the test snippets.
+3.  **Error Contract Check**: When adding or changing a fallible API, read `../../../doc/design/error-handling.md` and choose `ao::Result<T>`, `std::optional<T>`, or an exception according to that design before writing code.
+4.  **Implement**: Generate code following the exact conventions observed in the snippet references and nearby project code.
+5.  **Verify**: If modifying logic, identify relevant tests in `test/` and match the test style shown in the test snippets.
 
 ## Snippet References
 
@@ -29,5 +30,6 @@ When editing tests, always read `references/04-test-snippets.md` in addition to 
 ## References
 
 - **Full Standards**: [CONTRIBUTING.md](../../../CONTRIBUTING.md) (Read this if unsure about general C++ standards)
+- **Error Handling Design**: [doc/design/error-handling.md](../../../doc/design/error-handling.md) (Read this when adding or changing fallible APIs)
 - **Build & Test**: [README.md](../../../README.md)
 - **Type-to-Header Map**: [handling-clang-tidy-warnings/references/type-to-header-map.md](../handling-clang-tidy-warnings/references/type-to-header-map.md) — exact header for every type used in Aobus

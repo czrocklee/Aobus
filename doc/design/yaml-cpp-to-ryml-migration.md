@@ -14,7 +14,9 @@ This change aims to reduce memory allocations and improve parsing/emitting perfo
 - For **ConfigStore**, the parsed data is currently stored as a `YAML::Node _root`. We will maintain the buffer by storing a `std::vector<char> _buffer` alongside the `c4::yml::Tree _root` in the `ConfigStore` class.
 
 ### Error Handling
-`yaml-cpp` throws `YAML::Exception` on parse errors. By default, `rapidyaml` uses a callback that aborts the program. We will register a custom error handler callback using `c4::yml::set_callbacks()` that throws an `ao::Exception` or `std::runtime_error`. This maintains the existing error propagation behavior expected by `ConfigStore` and `LibraryImporter`.
+`yaml-cpp` throws `YAML::Exception` on parse errors. By default, `rapidyaml` uses a callback that aborts the program. We will register a custom error handler callback using `c4::yml::set_callbacks()` that throws an `ao::Exception` internally because the callback cannot return `ao::Result<T>`.
+
+This exception is a parser-adapter mechanism, not the public recoverable-error contract. `ConfigStore`, `LibraryImporter`, and layout loading code should catch parse exceptions at their YAML boundary and translate recoverable failures to `ao::Result<T>` or per-item import errors according to [Error Handling Model](error-handling.md).
 
 ## Implementation Steps
 

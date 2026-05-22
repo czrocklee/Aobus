@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ao/Error.h"
 #include "ao/library/MusicLibrary.h"
 
 #include <cstdint>
@@ -38,9 +39,9 @@ namespace ao::rt
      * Import the library from a YAML file.
      * @param path Source file path.
      * @param mode Import mode. Defaults to Restore.
-     * @throws std::exception on failure.
+     * @return Result of the operation.
      */
-    void importFromYaml(std::filesystem::path const& path, ImportMode mode = ImportMode::Restore);
+    Result<> importFromYaml(std::filesystem::path const& path, ImportMode mode = ImportMode::Restore);
 
   private:
     struct Impl;

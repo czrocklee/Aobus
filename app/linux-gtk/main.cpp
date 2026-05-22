@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "ao/AppVersion.h"
+#include "ao/Exception.h"
 #include "ao/utility/Log.h"
 #include "app/GtkControlExecutor.h"
 #include "app/MainWindow.h"
@@ -89,11 +90,11 @@ namespace
                                                                   .workspaceConfigStore = workspaceConfigStore});
 
     auto window =
-      Glib::make_refptr_for_instance<MainWindow>(new MainWindow(*appRuntime, globalConfigStore, workspaceConfigStore));
+      Glib::make_refptr_for_instance<MainWindow>(new MainWindow{*appRuntime, globalConfigStore, workspaceConfigStore});
 
     // Store AppRuntime alongside window (lifetime tied to window via pointer)
     window->set_data("app-runtime",
-                     new std::unique_ptr<rt::AppRuntime>(std::move(appRuntime)),
+                     new std::unique_ptr<rt::AppRuntime>{std::move(appRuntime)},
                      [](void* data) { delete static_cast<std::unique_ptr<rt::AppRuntime>*>(data); });
 
     window->initializeSession();
@@ -131,7 +132,7 @@ namespace
     cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
 
     cliApp.add_option("--log-level", options.logLevel, "Set the logging level")
-      ->transform(CLI::CheckedTransformer(logMapping, CLI::ignore_case));
+      ->transform(CLI::CheckedTransformer{logMapping, CLI::ignore_case});
 
     cliApp.add_flag_callback(
       "--version",
@@ -191,7 +192,7 @@ int main(int argc, char* argv[])
       return options.exitCode;
     }
 
-    auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "aobus" / "logs";
+    auto const logDir = std::filesystem::path{Glib::get_user_cache_dir()} / "aobus" / "logs";
     log::Log::init(options.logLevel, logDir);
     auto const logGuard = gsl_lite::finally([] { log::Log::shutdown(); });
 
@@ -289,8 +290,16 @@ int main(int argc, char* argv[])
     APP_LOG_INFO("Entering GTK main loop");
     return app->run(gtkArgc, gtkArgv.data());
   }
+  catch (ao::Exception const& e)
+  {
+    APP_LOG_CRITICAL("Internal error: {} (at {}:{})", e.what(), e.file(), e.line());
+    std::cerr << "Internal error: " << e.what() << "\n(at " << e.file() << ":" << e.line() << ")\n"
+              << "Please report this bug.\n";
+    return 1;
+  }
   catch (std::exception const& ex)
   {
+    APP_LOG_CRITICAL("Unhandled exception: {}", ex.what());
     std::cerr << "Unhandled exception: " << ex.what() << '\n';
     return 1;
   }

@@ -277,8 +277,7 @@ namespace ao::rt
 
     if (it->second.adHocSource != nullptr)
     {
-      status.hasError = it->second.adHocSource->hasError();
-      status.errorMessage = it->second.adHocSource->errorMessage();
+      status.optError = it->second.adHocSource->error();
     }
 
     _impl->filterStatusChangedSignal.emit(status);

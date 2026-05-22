@@ -75,7 +75,10 @@ namespace ao::library
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
-    void setManifestReader(std::optional<FileManifestStore::Reader> optReader) noexcept { _manifestReader = optReader; }
+    void setManifestReader(std::optional<FileManifestStore::Reader> optReader) noexcept
+    {
+      _optManifestReader = optReader;
+    }
 
     lmdb::Database::Reader const& hotReader() const noexcept { return _hotReader; }
     lmdb::Database::Reader const& coldReader() const noexcept { return _coldReader; }
@@ -83,7 +86,7 @@ namespace ao::library
   private:
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
-    std::optional<FileManifestStore::Reader> _manifestReader;
+    std::optional<FileManifestStore::Reader> _optManifestReader;
     friend class TrackStore;
   };
 
@@ -107,7 +110,10 @@ namespace ao::library
     Iterator& operator++();
     value_type operator*() const;
 
-    void setManifestReader(std::optional<FileManifestStore::Reader> optReader) noexcept { _manifestReader = optReader; }
+    void setManifestReader(std::optional<FileManifestStore::Reader> optReader) noexcept
+    {
+      _optManifestReader = optReader;
+    }
 
   private:
     Iterator(lmdb::Database::Reader::Iterator&& hotIter,
@@ -117,7 +123,7 @@ namespace ao::library
 
     std::optional<lmdb::Database::Reader::Iterator> _optHotIter;
     std::optional<lmdb::Database::Reader::Iterator> _optColdIter;
-    std::optional<FileManifestStore::Reader> _manifestReader;
+    std::optional<FileManifestStore::Reader> _optManifestReader;
     Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };

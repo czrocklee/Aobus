@@ -26,7 +26,7 @@ namespace ao::lmdb::test
     TempDir()
     {
       std::string tmpl = (std::filesystem::temp_directory_path() / "rs_lmdb_test_XXXXXX").string();
-      char const* const result = mkdtemp(tmpl.data());
+      char const* const result = ::mkdtemp(tmpl.data());
 
       if (result == nullptr)
       {

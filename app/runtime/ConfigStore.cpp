@@ -4,6 +4,7 @@
 #include "ConfigStore.h"
 
 #include "ao/Error.h"
+#include "ao/Exception.h"
 #include "ao/utility/Log.h"
 #include "runtime/yaml/Utils.h"
 
@@ -24,7 +25,7 @@ namespace ao::rt
   {
     if (_mode == OpenMode::ReadOnly)
     {
-      throw std::logic_error{"flush() called on ReadOnly ConfigStore"};
+      throwException<Exception>("flush() called on ReadOnly ConfigStore");
     }
 
     APP_LOG_INFO("Saving config to: {}", _filePath.string());

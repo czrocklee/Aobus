@@ -20,6 +20,7 @@ namespace ao
       DecodeFailed,
       SeekFailed,
       NotSupported,
+      InvalidState,
     };
 
     Code code = Code::Generic;

@@ -22,9 +22,18 @@ namespace ao::gtk
     _label.set_valign(Gtk::Align::CENTER);
     _label.add_css_class("ao-time-label");
 
-    auto const idleText = std::string{"00:00 / 00:00"};
-    _label.set_text(idleText);
-    _label.set_width_chars(static_cast<int>(idleText.size()));
+    // Use Pango to measure the exact pixel width of the template string.
+    // This ensures a tight fit without layout jitter when time changes.
+    // The "tnum" feature in app.css guarantees all digits have the same width.
+    auto const pangoLayout = _label.create_pango_layout("00:00 / 00:00");
+    int textWidth = 0;
+    int textHeight = 0;
+    pangoLayout->get_pixel_size(textWidth, textHeight);
+
+    // Lock the width to the measured size, with a small tolerance.
+    _label.set_size_request(textWidth + 2, -1);
+
+    _label.set_text("00:00 / 00:00");
 
     auto const resetCallback = [this] { reset(); };
 

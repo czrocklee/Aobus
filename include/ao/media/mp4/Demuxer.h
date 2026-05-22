@@ -3,10 +3,11 @@
 
 #pragma once
 
+#include "ao/Error.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -37,9 +38,9 @@ namespace ao::media::mp4
 
     /**
      * @brief Parses the MP4 atoms, looking for an audio track matching the given format (e.g. "alac").
-     * @return An empty string on success, or an error message on failure.
+     * @return Result of the operation.
      */
-    std::string parseTrack(std::string_view targetFormat);
+    Result<> parseTrack(std::string_view targetFormat);
 
     /**
      * @brief Returns the codec-specific magic cookie/extradata found during parsing.

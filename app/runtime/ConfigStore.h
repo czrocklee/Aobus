@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ao/Error.h"
+#include "ao/Exception.h"
 #include "runtime/yaml/ConfigTraits.h" // IWYU pragma: export
 #include "runtime/yaml/Utils.h"
 
@@ -11,7 +12,6 @@
 #include <exception>
 #include <filesystem>
 #include <format>
-#include <stdexcept>
 #include <string_view>
 #include <vector>
 
@@ -42,7 +42,7 @@ namespace ao::rt
     {
       if (_mode == OpenMode::ReadOnly)
       {
-        throw std::logic_error{"save() called on ReadOnly ConfigStore"};
+        throwException<Exception>("save() called on ReadOnly ConfigStore");
       }
 
       if (auto const result = ensureLoaded(); !result && result.error().code != Error::Code::NotFound)

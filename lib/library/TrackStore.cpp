@@ -40,7 +40,7 @@ namespace ao::library
                              std::optional<FileManifestStore::Reader> optManifestReader)
     : _hotReader{std::move(hotReader)}
     , _coldReader{std::move(coldReader)}
-    , _manifestReader{std::move(optManifestReader)}
+    , _optManifestReader{std::move(optManifestReader)}
   {
   }
 
@@ -75,9 +75,9 @@ namespace ao::library
 
     auto view = TrackView{hotBuffer, coldBuffer};
 
-    if (_manifestReader && !coldBuffer.empty())
+    if (_optManifestReader && !coldBuffer.empty())
     {
-      if (auto const optEntry = _manifestReader->get(view.property().uri()))
+      if (auto const optEntry = _optManifestReader->get(view.property().uri()))
       {
         view = TrackView{hotBuffer, coldBuffer, optEntry->fileSize(), optEntry->mtime(), optEntry->status};
       }
@@ -88,12 +88,12 @@ namespace ao::library
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin(LoadMode mode) const
   {
-    return Iterator{_hotReader.begin(), _coldReader.begin(), mode, _manifestReader};
+    return Iterator{_hotReader.begin(), _coldReader.begin(), mode, _optManifestReader};
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::end(LoadMode mode) const
   {
-    return Iterator{_hotReader.end(), _coldReader.end(), mode, _manifestReader};
+    return Iterator{_hotReader.end(), _coldReader.end(), mode, _optManifestReader};
   }
 
   // TrackStore::Reader::Iterator implementation
@@ -103,7 +103,7 @@ namespace ao::library
                                          std::optional<FileManifestStore::Reader> optManifestReader)
     : _optHotIter{mode != LoadMode::Cold ? std::make_optional(std::move(hotIter)) : std::nullopt}
     , _optColdIter{mode != LoadMode::Hot ? std::make_optional(std::move(coldIter)) : std::nullopt}
-    , _manifestReader{std::move(optManifestReader)}
+    , _optManifestReader{std::move(optManifestReader)}
     , _mode{mode}
   {
   }
@@ -165,9 +165,9 @@ namespace ao::library
 
     auto view = TrackView{hotBuffer, coldBuffer};
 
-    if (_manifestReader && !coldBuffer.empty())
+    if (_optManifestReader && !coldBuffer.empty())
     {
-      if (auto const optEntry = _manifestReader->get(view.property().uri()))
+      if (auto const optEntry = _optManifestReader->get(view.property().uri()))
       {
         view = TrackView{hotBuffer, coldBuffer, optEntry->fileSize(), optEntry->mtime(), optEntry->status};
       }

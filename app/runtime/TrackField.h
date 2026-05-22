@@ -115,8 +115,8 @@ namespace ao::rt
     bool groupable = false;
     bool synthetic = false;
 
-    std::optional<TrackSortField> sortField{};
-    std::optional<TrackGroupKey> groupKey{};
+    std::optional<TrackSortField> optSortField{};
+    std::optional<TrackGroupKey> optGroupKey{};
   };
 
   std::span<TrackFieldDefinition const> trackFieldDefinitions();

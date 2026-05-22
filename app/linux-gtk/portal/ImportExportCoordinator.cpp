@@ -3,6 +3,7 @@
 
 #include "portal/ImportExportCoordinator.h"
 
+#include "ao/Exception.h"
 #include "ao/library/LibraryScanner.h"
 #include "ao/utility/Log.h"
 #include "layout/LayoutConstants.h"
@@ -33,6 +34,7 @@
 
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -319,27 +321,21 @@ namespace ao::gtk::portal
          std::filesystem::path exportPath,
          rt::ExportMode exportMode) -> rt::async::Task<void>
       {
-        bool success = true;
-        auto errorText = std::string{};
-
         try
         {
           co_await self->_runtime.mutation().exportLibraryAsync(std::move(exportPath), exportMode);
+          self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully");
+        }
+        catch (ao::Exception const& e)
+        {
+          APP_LOG_CRITICAL("Export failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
+          self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Export failed: Internal error");
         }
         catch (std::exception const& e)
         {
-          success = false;
-          errorText = e.what();
-        }
-
-        if (success)
-        {
-          self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully");
-        }
-        else
-        {
-          APP_LOG_ERROR("Export failed: {}", errorText);
-          self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Export failed: " + errorText);
+          APP_LOG_ERROR("Export failed: {}", e.what());
+          self->_runtime.notifications().post(
+            rt::NotificationSeverity::Error, std::format("Export failed: {}", e.what()));
         }
       }(this, path, mode));
   }
@@ -375,21 +371,10 @@ namespace ao::gtk::portal
           &_tasks,
           [](ImportExportCoordinator* self, std::filesystem::path importPath) -> rt::async::Task<void>
           {
-            bool success = true;
-            auto errorText = std::string{};
-
             try
             {
               co_await self->_runtime.mutation().importLibraryAsync(std::move(importPath));
-            }
-            catch (std::exception const& e)
-            {
-              success = false;
-              errorText = e.what();
-            }
 
-            if (success)
-            {
               if (self->_callbacks.onLibraryDataMutated)
               {
                 self->_callbacks.onLibraryDataMutated();
@@ -397,10 +382,16 @@ namespace ao::gtk::portal
 
               self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
             }
-            else
+            catch (ao::Exception const& e)
             {
-              APP_LOG_ERROR("Import failed: {}", errorText);
-              self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: " + errorText);
+              APP_LOG_CRITICAL("Import failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
+              self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: Internal error");
+            }
+            catch (std::exception const& e)
+            {
+              APP_LOG_ERROR("Import failed: {}", e.what());
+              self->_runtime.notifications().post(
+                rt::NotificationSeverity::Error, std::format("Import failed: {}", e.what()));
             }
           }(this, path));
       }

@@ -6,6 +6,7 @@
 #include "ListCommand.h"
 #include "TagCommand.h"
 #include "TrackCommand.h"
+#include "ao/Exception.h"
 #include "runtime/CoreRuntime.h"
 #include "runtime/ImmediateControlExecutor.h"
 
@@ -36,6 +37,12 @@ int main(int argc, char const* argv[])
 
     CLI11_PARSE(app, argc, argv);
     return 0;
+  }
+  catch (ao::Exception const& e)
+  {
+    std::cerr << "Internal error: " << e.what() << "\n(at " << e.file() << ":" << e.line() << ")\n"
+              << "Please report this bug.\n";
+    return 1;
   }
   catch (std::exception const& e)
   {

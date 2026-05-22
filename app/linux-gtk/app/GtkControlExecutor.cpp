@@ -3,6 +3,7 @@
 
 #include "app/GtkControlExecutor.h"
 
+#include "ao/Exception.h"
 #include "ao/utility/Log.h"
 
 #include <glibmm/main.h>
@@ -74,6 +75,11 @@ namespace ao::gtk
         try
         {
           task();
+        }
+        catch (ao::Exception const& e)
+        {
+          APP_LOG_CRITICAL(
+            "GtkControlExecutor: Task threw an internal exception: {} (at {}:{})", e.what(), e.file(), e.line());
         }
         catch (std::exception const& e)
         {

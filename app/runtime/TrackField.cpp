@@ -27,7 +27,7 @@ namespace ao::rt
         .presentable = true,
         .editable = true,
         .sortable = true,
-        .sortField = TrackSortField::Title,
+        .optSortField = TrackSortField::Title,
       },
       {
         .field = F::Artist,
@@ -39,8 +39,8 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
-        .sortField = TrackSortField::Artist,
-        .groupKey = TrackGroupKey::Artist,
+        .optSortField = TrackSortField::Artist,
+        .optGroupKey = TrackGroupKey::Artist,
       },
       {
         .field = F::Album,
@@ -52,8 +52,8 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
-        .sortField = TrackSortField::Album,
-        .groupKey = TrackGroupKey::Album,
+        .optSortField = TrackSortField::Album,
+        .optGroupKey = TrackGroupKey::Album,
       },
       {
         .field = F::AlbumArtist,
@@ -65,8 +65,8 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
-        .sortField = TrackSortField::AlbumArtist,
-        .groupKey = TrackGroupKey::AlbumArtist,
+        .optSortField = TrackSortField::AlbumArtist,
+        .optGroupKey = TrackGroupKey::AlbumArtist,
       },
       {
         .field = F::Genre,
@@ -78,8 +78,8 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
-        .sortField = TrackSortField::Genre,
-        .groupKey = TrackGroupKey::Genre,
+        .optSortField = TrackSortField::Genre,
+        .optGroupKey = TrackGroupKey::Genre,
       },
       {
         .field = F::Composer,
@@ -91,8 +91,8 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
-        .sortField = TrackSortField::Composer,
-        .groupKey = TrackGroupKey::Composer,
+        .optSortField = TrackSortField::Composer,
+        .optGroupKey = TrackGroupKey::Composer,
       },
       {
         .field = F::Work,
@@ -104,8 +104,8 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
-        .sortField = TrackSortField::Work,
-        .groupKey = TrackGroupKey::Work,
+        .optSortField = TrackSortField::Work,
+        .optGroupKey = TrackGroupKey::Work,
       },
       // --- Metadata: number ---
       {
@@ -118,8 +118,8 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
-        .sortField = TrackSortField::Year,
-        .groupKey = TrackGroupKey::Year,
+        .optSortField = TrackSortField::Year,
+        .optGroupKey = TrackGroupKey::Year,
       },
       {
         .field = F::DiscNumber,
@@ -130,7 +130,7 @@ namespace ao::rt
         .presentable = true,
         .editable = true,
         .sortable = true,
-        .sortField = TrackSortField::DiscNumber,
+        .optSortField = TrackSortField::DiscNumber,
       },
       {
         .field = F::TotalDiscs,
@@ -150,7 +150,7 @@ namespace ao::rt
         .presentable = true,
         .editable = true,
         .sortable = true,
-        .sortField = TrackSortField::TrackNumber,
+        .optSortField = TrackSortField::TrackNumber,
       },
       {
         .field = F::TotalTracks,
@@ -170,7 +170,7 @@ namespace ao::rt
         .valueKind = Vk::Duration,
         .presentable = true,
         .sortable = true,
-        .sortField = TrackSortField::Duration,
+        .optSortField = TrackSortField::Duration,
       },
       // --- Tags ---
       {

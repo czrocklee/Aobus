@@ -428,7 +428,8 @@ namespace ao::gtk
       // Show error state
       _exprBox.entry().add_css_class("error");
       _errorLabel.set_visible(true);
-      _errorLabel.set_text("Filter error: " + _previewFilteredList->errorMessage());
+      // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+      _errorLabel.set_text("Filter error: " + _previewFilteredList->error()->message);
       _previewScrolledWindow.set_visible(false);
       _matchCountLabel.set_markup("<i>Invalid filter</i>");
       _expressionValid = false;

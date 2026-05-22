@@ -27,6 +27,10 @@ Use this index to choose focused examples before writing or editing Aobus C++ co
 | 5.3 | Error-handling anti-patterns | `03-design-threading-and-errors.md` |
 | Tests | Catch2, FakeIt, sections, generators, matchers, integration setup | `04-test-snippets.md` |
 
+For changes that add or modify a fallible API, also read
+`../../../../doc/design/error-handling.md`. It is the design-level source of
+truth for choosing between `ao::Result<T>`, `std::optional<T>`, and exceptions.
+
 ## Detailed coverage checklist
 
 Use this checklist when auditing generated code against `CONTRIBUTING.md`:
@@ -49,9 +53,9 @@ Use this checklist when auditing generated code against `CONTRIBUTING.md`:
 - 4.2.1-4.2.3: concrete classes/POD structs `final`, narrow type exposure, Pimpl for complex implementation details.
 - 4.3.1: const locals, member functions, pointed-to data, parameters, and mandatory services by reference.
 - 4.4.1-4.4.4: name background threads, `std::jthread`/`std::stop_token`, mutex + `std::scoped_lock`, atomics for simple shared flags/counters, no `volatile` synchronization.
-- 5.1.1-5.1.3: `ao::Result<T>` for recoverable operations, `AO_THROW`/`AO_THROW_FORMAT` for invariant violations, `std::optional<T>` for legitimate absence.
+- 5.1.1-5.1.4: `ao::Result<T>` for recoverable operations, exceptions for invariant violations/programmer errors/third-party callback boundaries/fatal startup defects, `std::optional<T>` for legitimate absence, and `doc/design/error-handling.md` for layer-specific guidance.
 - 5.2.1-5.2.2: `ao::Error` with `Code` and message; `ao::makeError`; `return {};` for `ao::Result<>` success; `std::unexpected(ao::Error{...})` for explicit errors.
-- 5.3.1-5.3.4: avoid bool+lastError, empty-string success, optional-as-error, and low-level exception-to-string conversion.
+- 5.3.1-5.3.4: avoid bool+lastError, empty-string success, optional-as-error, and low-level exception-to-string conversion without a meaningful adapter boundary.
 
 ## Reading guidance
 

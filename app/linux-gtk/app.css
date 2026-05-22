@@ -391,10 +391,6 @@ columnview row {
   transition: all 450ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-columnview cell {
-  padding: 2px 4px;
-}
-
 .ao-inline-editor-stack {
   min-height: 0;
   margin: 0;
@@ -455,5 +451,6 @@ columnview row.ao-missing-row label {
 .ao-seekbar slider {
   min-width: var(--ao-seek-slider-size);
   min-height: var(--ao-seek-slider-size);
+  margin: -4px;
   border-radius: 50%;
 }

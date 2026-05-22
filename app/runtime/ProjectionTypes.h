@@ -5,6 +5,7 @@
 
 #include "CorePrimitives.h"
 #include "TrackField.h"
+#include "ao/Error.h"
 #include "ao/Type.h"
 
 #include <cstddef>
@@ -103,8 +104,7 @@ namespace ao::rt
     ViewId viewId{};
     std::string expression{};
     bool pending = false;
-    bool hasError = false;
-    std::string errorMessage{};
+    std::optional<Error> optError = std::nullopt;
     std::uint64_t revision = 0;
   };
 

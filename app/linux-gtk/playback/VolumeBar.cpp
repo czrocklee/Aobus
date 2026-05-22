@@ -103,18 +103,21 @@ namespace ao::gtk
                                 int& /*minimumBaseline*/,
                                 int& /*naturalBaseline*/) const
   {
-    if (orientation == Gtk::Orientation::HORIZONTAL && forSize > 0)
+    static constexpr double kAspectRatio = std::numbers::phi + 1;
+    static constexpr int kMinHeight = 24;
+    static constexpr int kMinWidth = static_cast<int>(kMinHeight * kAspectRatio);
+
+    if (orientation == Gtk::Orientation::HORIZONTAL)
     {
-      static constexpr double kAspectRatio = std::numbers::phi + 1;
-      auto const width = static_cast<int>(static_cast<double>(forSize) * kAspectRatio);
-      minimum = width;
-      natural = width;
+      minimum = kMinWidth;
+      natural =
+        (forSize > 0) ? std::max(kMinWidth, static_cast<int>(static_cast<double>(forSize) * kAspectRatio)) : kMinWidth;
     }
     else
     {
-      // CSS min-height controls the vertical dimension.
-      minimum = 0;
-      natural = 0;
+      minimum = kMinHeight;
+      natural = (forSize > 0) ? std::max(kMinHeight, static_cast<int>(static_cast<double>(forSize) / kAspectRatio))
+                              : kMinHeight;
     }
   }
 

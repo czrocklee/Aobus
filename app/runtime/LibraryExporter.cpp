@@ -3,7 +3,7 @@
 
 #include "runtime/LibraryExporter.h"
 
-#include "ao/Exception.h"
+#include "ao/Error.h"
 #include "ao/Type.h"
 #include "ao/library/DictionaryStore.h"
 #include "ao/library/FileManifestStore.h"
@@ -337,7 +337,7 @@ namespace ao::rt
     {
     }
 
-    void exportToYaml(std::filesystem::path const& path, ExportMode mode) const;
+    Result<> exportToYaml(std::filesystem::path const& path, ExportMode mode) const;
     void exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
     void exportTrack(ryml::NodeRef& node,
                      lmdb::ReadTransaction const& txn,
@@ -359,12 +359,12 @@ namespace ao::rt
 
   LibraryExporter::~LibraryExporter() = default;
 
-  void LibraryExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
+  Result<> LibraryExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
   {
-    _impl->exportToYaml(path, mode);
+    return _impl->exportToYaml(path, mode);
   }
 
-  void LibraryExporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode) const
+  Result<> LibraryExporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode) const
   {
     auto tree = ryml::Tree{};
     auto root = tree.rootref();
@@ -390,7 +390,7 @@ namespace ao::rt
 
     if (!ofs)
     {
-      ao::throwException<Exception>("Failed to open '{}' for writing", path.string());
+      return makeError(Error::Code::IoError, std::format("Failed to open '{}' for writing", path.string()));
     }
 
     std::string const yaml = ryml::emitrs_yaml<std::string>(tree);
@@ -398,8 +398,10 @@ namespace ao::rt
 
     if (!ofs.good())
     {
-      ao::throwException<Exception>("File write error while writing '{}'", path.string());
+      return makeError(Error::Code::IoError, std::format("File write error while writing '{}'", path.string()));
     }
+
+    return {};
   }
 
   void LibraryExporter::Impl::exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const

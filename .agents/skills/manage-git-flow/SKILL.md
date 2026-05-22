@@ -23,7 +23,7 @@ while IFS= read -r -d '' entry; do
     IFS= read -r -d '' f || break
   fi
 
-  if [ -f "$f" ] && [[ "$f" =~ \.(cpp|h|hpp)$ ]]; then
+  if [ -f "$f" ] && { [[ "$f" == *.cpp ]] || [[ "$f" == *.h ]] || [[ "$f" == *.hpp ]]; }; then
     clang-format -i "$f"
     printf 'formatted %s\n' "$f"
   fi

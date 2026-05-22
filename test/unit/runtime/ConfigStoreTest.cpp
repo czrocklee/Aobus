@@ -3,6 +3,7 @@
 
 #include "runtime/ConfigStore.h"
 
+#include "ao/Exception.h"
 #include "ao/utility/StrongType.h"
 #include "test/unit/lmdb/TestUtils.h"
 
@@ -15,7 +16,6 @@
 #include <map>
 #include <numbers>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -570,12 +570,12 @@ namespace ao::rt::test
     {
       auto obj = ComplexAggregate{};
 
-      CHECK_THROWS_AS(configStore.save("key", obj), std::logic_error);
+      CHECK_THROWS_AS(configStore.save("key", obj), ao::Exception);
     }
 
     SECTION("flush() on ReadOnly throws")
     {
-      CHECK_THROWS_AS(configStore.flush(), std::logic_error);
+      CHECK_THROWS_AS(configStore.flush(), ao::Exception);
     }
 
     SECTION("load() on ReadOnly with missing file returns NotFound")

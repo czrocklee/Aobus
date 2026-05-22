@@ -3,6 +3,7 @@
 
 #include "ao/media/mp4/Demuxer.h"
 
+#include "ao/Error.h"
 #include "ao/media/mp4/Atom.h"
 #include "ao/media/mp4/AtomLayout.h"
 #include "ao/utility/ByteView.h"
@@ -155,7 +156,7 @@ namespace ao::media::mp4
     }
   }
 
-  std::string Demuxer::parseTrack(std::string_view targetFormat)
+  Result<> Demuxer::parseTrack(std::string_view targetFormat)
   {
     _magicCookie.clear();
     _samples.clear();
@@ -217,7 +218,7 @@ namespace ao::media::mp4
 
     if (stblNode == nullptr)
     {
-      return "Missing stbl atom";
+      return makeError(Error::Code::FormatRejected, "Missing stbl atom");
     }
 
     stblNode->visitChildren(
@@ -248,12 +249,12 @@ namespace ao::media::mp4
 
     if (_magicCookie.empty() || _samples.empty())
     {
-      return "Failed to extract track extradata or sample table";
+      return makeError(Error::Code::FormatRejected, "Failed to extract track extradata or sample table");
     }
 
     if (!buildSampleOffsets(_samples, chunkOffsets, sampleToChunk))
     {
-      return "Failed to resolve MP4 sample offsets";
+      return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample offsets");
     }
 
     return {};

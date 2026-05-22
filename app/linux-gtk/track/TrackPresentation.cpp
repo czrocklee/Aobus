@@ -51,7 +51,7 @@ namespace ao::gtk
   {
     for (auto const& def : rt::trackFieldDefinitions())
     {
-      if (def.sortField == sortField && def.groupable)
+      if (def.optSortField == sortField && def.groupable)
       {
         return def.field;
       }

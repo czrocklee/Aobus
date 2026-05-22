@@ -4,6 +4,7 @@
 #include "LibraryMutationService.h"
 
 #include "ao/Error.h"
+#include "ao/Exception.h"
 #include "ao/Type.h"
 #include "ao/library/ImportWorker.h"
 #include "ao/library/LibraryScanner.h"
@@ -349,7 +350,12 @@ namespace ao::rt
     co_await _impl->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryImport");
     auto importer = ao::rt::LibraryImporter{_impl->library};
-    importer.importFromYaml(path);
+
+    if (auto const result = importer.importFromYaml(path); !result)
+    {
+      throwException<Exception>("Library import failed: {}", result.error().message);
+    }
+
     co_await _impl->asyncRuntime.resumeOnControl();
   }
 
@@ -358,7 +364,12 @@ namespace ao::rt
     co_await _impl->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryExport");
     auto exporter = ao::rt::LibraryExporter{_impl->library};
-    exporter.exportToYaml(path, mode);
+
+    if (auto const result = exporter.exportToYaml(path, mode); !result)
+    {
+      throwException<Exception>("Library export failed: {}", result.error().message);
+    }
+
     co_await _impl->asyncRuntime.resumeOnControl();
   }
 

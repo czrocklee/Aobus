@@ -2,6 +2,8 @@
 add_executable(ao_test
     # utility tests
     unit/utility/Base64Test.cpp
+    unit/core/ExceptionTest.cpp
+    unit/core/ErrorTest.cpp
 
     # query tests
     unit/query/ParserTest.cpp
@@ -9,6 +11,9 @@ add_executable(ao_test
     unit/query/PlanEvaluatorTest.cpp
     unit/query/ExpressionTest.cpp
     unit/query/SerializerTest.cpp
+
+    # media tests
+    unit/media/mp4/DemuxerTest.cpp
 
     # library tests
     unit/library/TrackLayoutTest.cpp
