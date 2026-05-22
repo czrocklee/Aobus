@@ -51,7 +51,7 @@ namespace ao::library
 
     for (auto const& path : _files)
     {
-      auto const uri = std::filesystem::relative(path, _ml.rootPath()).string();
+      auto const uri = std::filesystem::relative(path, _ml.rootPath()).generic_string();
       auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
 
       if (!std::filesystem::exists(path))

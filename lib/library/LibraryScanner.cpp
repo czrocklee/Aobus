@@ -14,6 +14,7 @@
 #include <exception>
 #include <filesystem>
 #include <string>
+#include <system_error>
 #include <unordered_set>
 #include <utility>
 
@@ -25,6 +26,97 @@ namespace ao::library
     {
       static std::unordered_set<std::string> const supported = {".flac", ".mp3", ".m4a", ".wav", ".alac", ".ogg"};
       return supported.contains(ext);
+    }
+
+    void processEntry(std::filesystem::directory_entry const& entry,
+                      std::filesystem::path const& root,
+                      ao::library::FileManifestStore::Reader const& manifestReader,
+                      std::unordered_set<std::string>& seenUris,
+                      ScanPlan& plan)
+    {
+      auto entryEc = std::error_code{};
+      bool isFile = false;
+
+      try
+      {
+        isFile = entry.is_regular_file(entryEc);
+      }
+      catch (std::exception const& /*e*/)
+      {
+        isFile = false;
+        entryEc = std::make_error_code(std::errc::permission_denied);
+      }
+
+      if (entryEc)
+      {
+        auto const uri = std::filesystem::relative(entry.path(), root, entryEc).generic_string();
+        auto item = ScanItem{.uri = uri,
+                             .fullPath = entry.path(),
+                             .classification = ScanClassification::Error,
+                             .errorMessage = entryEc.message()};
+        plan.items.push_back(std::move(item));
+        return;
+      }
+
+      if (!isFile)
+      {
+        return;
+      }
+
+      auto const& path = entry.path();
+      auto ext = path.extension().string();
+      std::ranges::transform(
+        ext, ext.begin(), [](unsigned char ch) { return static_cast<unsigned char>(std::tolower(ch)); });
+
+      auto const uri = std::filesystem::relative(path, root, entryEc).generic_string();
+      seenUris.insert(uri);
+
+      auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
+
+      if (!isSupportedExtension(ext))
+      {
+        item.classification = ScanClassification::Unsupported;
+        plan.items.push_back(std::move(item));
+        return;
+      }
+
+      try
+      {
+        item.fileSize = std::filesystem::file_size(path, entryEc);
+        item.mtime = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                  std::filesystem::last_write_time(path, entryEc).time_since_epoch())
+                                                  .count());
+
+        if (entryEc)
+        {
+          item.classification = ScanClassification::Error;
+          item.errorMessage = entryEc.message();
+        }
+        else if (auto const optView = manifestReader.get(uri))
+        {
+          item.trackId = optView->trackId();
+
+          if (optView->fileSize() == item.fileSize && optView->mtime() == item.mtime)
+          {
+            item.classification = ScanClassification::Unchanged;
+          }
+          else
+          {
+            item.classification = ScanClassification::Changed;
+          }
+        }
+        else
+        {
+          item.classification = ScanClassification::New;
+        }
+      }
+      catch (std::exception const& e)
+      {
+        item.classification = ScanClassification::Error;
+        item.errorMessage = e.what();
+      }
+
+      plan.items.push_back(std::move(item));
     }
   }
 
@@ -51,73 +143,64 @@ namespace ao::library
     auto seenUris = std::unordered_set<std::string>{};
 
     // 1. Walk Filesystem
-    try
+    auto ec = std::error_code{};
+    auto it = std::filesystem::recursive_directory_iterator{root, ec};
+
+    if (ec)
     {
-      for (auto const& entry : std::filesystem::recursive_directory_iterator{root})
-      {
-        if (progress)
-        {
-          progress(entry.path());
-        }
-
-        if (!entry.is_regular_file())
-        {
-          continue;
-        }
-
-        auto const& path = entry.path();
-        auto ext = path.extension().string();
-        std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
-
-        auto const uri = std::filesystem::relative(path, root).string();
-        seenUris.insert(uri);
-
-        auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
-
-        if (!isSupportedExtension(ext))
-        {
-          item.classification = ScanClassification::Unsupported;
-          plan.items.push_back(std::move(item));
-          continue;
-        }
-
-        try
-        {
-          item.fileSize = std::filesystem::file_size(path);
-          item.mtime = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                    std::filesystem::last_write_time(path).time_since_epoch())
-                                                    .count());
-
-          if (auto const optView = manifestReader.get(uri))
-          {
-            item.trackId = optView->trackId();
-
-            if (optView->fileSize() == item.fileSize && optView->mtime() == item.mtime)
-            {
-              item.classification = ScanClassification::Unchanged;
-            }
-            else
-            {
-              item.classification = ScanClassification::Changed;
-            }
-          }
-          else
-          {
-            item.classification = ScanClassification::New;
-          }
-        }
-        catch (std::exception const& e)
-        {
-          item.classification = ScanClassification::Error;
-          item.errorMessage = e.what();
-        }
-
-        plan.items.push_back(std::move(item));
-      }
+      APP_LOG_ERROR("LibraryScanner: Fatal error starting FS walk: {}", ec.message());
+      return plan;
     }
-    catch (std::exception const& e)
+
+    while (it != std::filesystem::recursive_directory_iterator{})
+
     {
-      APP_LOG_ERROR("LibraryScanner: Fatal error during FS walk: {}", e.what());
+      auto entryEc = std::error_code{};
+      auto const& entry = *it;
+
+      if (progress)
+      {
+        progress(entry.path());
+      }
+
+      // Proactively check if this is a directory we can't enter
+      if (entry.is_directory(entryEc))
+      {
+        auto testEc = std::error_code{};
+        {
+          auto const testIt = std::filesystem::directory_iterator{entry.path(), testEc};
+          std::ignore = testIt;
+        }
+
+        if (testEc)
+        {
+          auto const uri = std::filesystem::relative(entry.path(), root, entryEc).generic_string();
+          auto item = ScanItem{.uri = uri,
+                               .fullPath = entry.path(),
+                               .classification = ScanClassification::Error,
+                               .errorMessage = testEc.message()};
+          plan.items.push_back(std::move(item));
+
+          it.disable_recursion_pending();
+          it.increment(ec);
+
+          if (ec)
+          {
+            ec.clear();
+          }
+
+          continue;
+        }
+      }
+
+      processEntry(entry, root, manifestReader, seenUris, plan);
+
+      it.increment(ec);
+
+      if (ec)
+      {
+        ec.clear();
+      }
     }
 
     // 2. Identify MISSING (In manifest but not on disk)

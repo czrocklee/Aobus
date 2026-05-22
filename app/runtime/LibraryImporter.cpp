@@ -19,6 +19,7 @@
 #include "runtime/TrackField.h"
 #include "runtime/yaml/Utils.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -44,7 +45,7 @@ namespace ao::rt
     struct ValidatedTrack final
     {
       std::uint32_t yamlId = 0;
-      std::string_view uri;
+      std::string uri;
       ryml::ConstNodeRef node;
     };
 
@@ -56,7 +57,7 @@ namespace ao::rt
       std::string_view description;
       std::string_view filter;
       std::vector<std::uint32_t> yamlTrackIds;
-      std::vector<std::string_view> trackUris;
+      std::vector<std::string> trackUris;
       bool isSmart = false;
     };
 
@@ -333,7 +334,9 @@ namespace ao::rt
         return makeError(Error::Code::FormatRejected, "Track record missing required 'uri' field");
       }
 
-      track.uri = yaml::scalarView(uriNode);
+      auto rawUriStr = std::string{yaml::scalarView(uriNode)};
+      std::ranges::replace(rawUriStr, '\\', '/');
+      track.uri = std::filesystem::path{rawUriStr}.lexically_normal().generic_string();
 
       if (track.uri.empty())
       {
@@ -431,7 +434,9 @@ namespace ao::rt
             }
             else if (auto const uriNode = yaml::findChild(trackRef, "uri"); uriNode.readable())
             {
-              list.trackUris.push_back(yaml::scalarView(uriNode));
+              auto rawUriStr = std::string{yaml::scalarView(uriNode)};
+              std::ranges::replace(rawUriStr, '\\', '/');
+              list.trackUris.push_back(std::filesystem::path{rawUriStr}.lexically_normal().generic_string());
             }
           }
         }
@@ -534,6 +539,7 @@ namespace ao::rt
       }
       else if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
       {
+        manifestBuilder.fileSize(std::filesystem::file_size(fullPath));
         manifestBuilder.mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                 std::filesystem::last_write_time(fullPath).time_since_epoch())
                                 .count());

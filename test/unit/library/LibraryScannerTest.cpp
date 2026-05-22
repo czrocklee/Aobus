@@ -109,4 +109,96 @@ namespace ao::library::test
 
     CHECK(foundMissing);
   }
+
+  TEST_CASE("LibraryScanner IO Error Handling", "[core][library][scan][error]")
+  {
+    auto const temp = TempDir{};
+    auto const root = temp.path;
+    auto const musicRoot = root / "music";
+    std::filesystem::create_directories(musicRoot / "ok_dir");
+    std::filesystem::create_directories(musicRoot / "restricted_dir");
+
+    createFile(musicRoot / "ok_dir" / "song1.flac");
+    createFile(musicRoot / "another.mp3");
+
+    // Make restricted_dir inaccessible
+    // Note: This might not work if running as root, but should work for normal users.
+    std::filesystem::permissions(musicRoot / "restricted_dir", std::filesystem::perms::none);
+
+    auto ml = MusicLibrary{musicRoot, root / "db"};
+    auto scanner = LibraryScanner{ml};
+    auto const plan = scanner.buildPlan();
+
+    // Reset permissions so TempDir can clean up
+    std::filesystem::permissions(musicRoot / "restricted_dir", std::filesystem::perms::owner_all);
+
+    // We expect:
+    // 1. ok_dir/song1.flac (New)
+    // 2. another.mp3 (New)
+    // 3. restricted_dir (Error)
+
+    bool foundOk = false;
+    bool foundAnother = false;
+    bool foundRestricted = false;
+
+    for (auto const& item : plan.items)
+    {
+      if (item.uri == "ok_dir/song1.flac")
+      {
+        CHECK(item.classification == ScanClassification::New);
+        foundOk = true;
+      }
+      else if (item.uri == "another.mp3")
+      {
+        CHECK(item.classification == ScanClassification::New);
+        foundAnother = true;
+      }
+      else if (item.uri == "restricted_dir")
+      {
+        CHECK(item.classification == ScanClassification::Error);
+        foundRestricted = true;
+      }
+    }
+
+    CHECK(foundOk);
+    CHECK(foundAnother);
+    CHECK(foundRestricted);
+  }
+
+  TEST_CASE("LibraryScanner Empty Root Boundary", "[core][library][scan]")
+  {
+    auto const temp = TempDir{};
+    auto const musicRoot = temp.path / "empty_music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto ml = MusicLibrary{musicRoot, temp.path / "db"};
+    auto scanner = LibraryScanner{ml};
+    auto const plan = scanner.buildPlan();
+
+    CHECK(plan.items.empty());
+  }
+
+  TEST_CASE("LibraryScanner URI Canonization Edge Cases", "[core][library][scan][uri]")
+  {
+    auto const temp = TempDir{};
+    auto const root = temp.path;
+    auto const musicRoot = root / "music";
+    std::filesystem::create_directories(musicRoot / "nested" / "dir");
+
+    createFile(musicRoot / "nested" / "dir" / "song.flac");
+
+    auto ml = MusicLibrary{musicRoot, root / "db"};
+    auto scanner = LibraryScanner{ml};
+    auto const plan = scanner.buildPlan();
+
+    REQUIRE(plan.items.size() == 1);
+
+    // Verify that the computed URI is standard, generic, and uses forward slashes
+    for (auto const& item : plan.items)
+    {
+      CHECK(item.uri == "nested/dir/song.flac");
+      CHECK(item.uri.find('\\') == std::string::npos);
+      CHECK(item.uri.find("./") == std::string::npos);
+    }
+  }
 } // namespace ao::library::test
