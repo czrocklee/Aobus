@@ -232,13 +232,24 @@ classify_file() {
         return
     fi
     f=$(realpath -e "$f" 2>/dev/null || realpath "$f" 2>/dev/null || echo "$f")
-    if [[ "$f" == */test/integration/lint/LintAllCheckFixture.cpp ]]; then
+
+    # Fixture files: check when explicitly requested, skip in batch scans
+    if [[ "$f" == */test/integration/lint/fixture/* ]]; then
         if $EXPLICIT_FILES_MODE; then
             echo "STRICT $f"
         else
             echo "IGNORE $f"
         fi
-    elif [[ "$f" == */test/integration/lint/* || "$f" == */test/main.cpp ]]; then
+        return
+    fi
+    # Everything else under test/integration/lint (scripts, old fixtures, etc.)
+    if [[ "$f" == */test/integration/lint/* ]]; then
+        echo "IGNORE $f"
+        return
+    fi
+
+    # General classification
+    if [[ "$f" == */test/main.cpp ]]; then
         echo "IGNORE $f"
     elif [[ "$f" == */lint/* ]]; then
         echo "STRICT $f"
@@ -249,13 +260,14 @@ classify_file() {
     fi
 }
 
+
 run_one() {
     local mode="$1" f="$2" tmp="$3"
-    local checks="$STRICT_CHECKS"
-    local header_filter="${PROJECT_ROOT}/(lib|app|include|lint)/.*"
+    local checks="${EXTRA_CHECKS:-$STRICT_CHECKS}"
+    local header_filter="${EXTRA_HEADER_FILTER:-${PROJECT_ROOT}/(lib|app|include|lint)/.*}"
 
     if [[ "$mode" == "RELAXED" ]]; then
-        checks="$RELAXED_CHECKS"
+        checks="${EXTRA_CHECKS:-$RELAXED_CHECKS}"
         header_filter="${PROJECT_ROOT}/(test|include)/.*"
     fi
 
@@ -277,7 +289,7 @@ run_one() {
     [[ -f "$PLUGIN" ]] && extra_args+=("-load=$PLUGIN")
     $FIX_MODE && extra_args+=("-fix")
 
-    clang-tidy -p "$BUILD_DIR" \
+    clang-tidy -p "$BUILD_DIR" ${EXTRA_TIDY_ARGS:-} \
         -config="$config" \
         -header-filter="$header_filter" \
         "${extra_args[@]}" \
@@ -288,6 +300,7 @@ run_one() {
         return $status
     fi
 }
+
 
 # Serialize array for subshell inheritance
 ISYSTEM_ARGS_STR=$(printf '%s\n' "${ISYSTEM_ARGS[@]}")

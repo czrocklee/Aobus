@@ -107,24 +107,8 @@ namespace clang::tidy::readability
       return;
     }
 
-    SourceLocation const loc = record->getLocation();
-
-    if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
-    {
-      return;
-    }
-
-    // Only check header files (.h / .hpp)
-    auto const fid = sm.getFileID(loc);
-    auto const file = sm.getFileEntryRefForID(fid);
-
-    if (!file)
-    {
-      return;
-    }
-
-    if (StringRef const filename = file->getName();
-        !filename.ends_with(".h") && !filename.ends_with(".hpp") && !filename.ends_with(".hxx"))
+    if (SourceLocation const loc = record->getLocation();
+        loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
     {
       return;
     }

@@ -1,7 +1,9 @@
 #include "check/StdCLibraryQualificationCheck.h"
+
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Lex/Lexer.h"
+
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
@@ -45,39 +47,39 @@ namespace clang::tidy::readability
 
   void StdCLibraryQualificationCheck::registerMatchers(MatchFinder* finder)
   {
-    // Match calls to known C standard library function names.
-    // The isExternC() filter narrows matches to C-linkage declarations.
-    // In check() we verify the declaration is from a system header.
-    finder->addMatcher(callExpr(callee(declRefExpr(to(functionDecl(isExternC(),
-                                                                   hasAnyName("memcpy",
-                                                                              "memmove",
-                                                                              "memcmp",
-                                                                              "memset",
-                                                                              "strlen",
-                                                                              "strcmp",
-                                                                              "strncmp",
-                                                                              "strcpy",
-                                                                              "strncpy",
-                                                                              "strcat",
-                                                                              "strncat",
-                                                                              "strchr",
-                                                                              "strrchr",
-                                                                              "strstr",
-                                                                              "abs",
-                                                                              "fabs",
-                                                                              "malloc",
-                                                                              "free",
-                                                                              "isalpha",
-                                                                              "isdigit",
-                                                                              "tolower",
-                                                                              "toupper",
-                                                                              "sin",
-                                                                              "cos",
-                                                                              "sqrt",
-                                                                              "pow"))
-                                                        .bind("func")))))
-                         .bind("call"),
-                       this);
+    // The callee of a function call is an ImplicitCastExpr (FunctionToPointerDecay)
+    // wrapping the actual DeclRefExpr to the FunctionDecl.
+    finder->addMatcher(
+      callExpr(callee(implicitCastExpr(hasSourceExpression(declRefExpr(to(functionDecl(isExternC(),
+                                                                                       hasAnyName("memcpy",
+                                                                                                  "memmove",
+                                                                                                  "memcmp",
+                                                                                                  "memset",
+                                                                                                  "strlen",
+                                                                                                  "strcmp",
+                                                                                                  "strncmp",
+                                                                                                  "strcpy",
+                                                                                                  "strncpy",
+                                                                                                  "strcat",
+                                                                                                  "strncat",
+                                                                                                  "strchr",
+                                                                                                  "strrchr",
+                                                                                                  "strstr",
+                                                                                                  "abs",
+                                                                                                  "fabs",
+                                                                                                  "malloc",
+                                                                                                  "free",
+                                                                                                  "isalpha",
+                                                                                                  "isdigit",
+                                                                                                  "tolower",
+                                                                                                  "toupper",
+                                                                                                  "sin",
+                                                                                                  "cos",
+                                                                                                  "sqrt",
+                                                                                                  "pow"))
+                                                                            .bind("func")))))))
+        .bind("call"),
+      this);
   }
 
   void StdCLibraryQualificationCheck::check(MatchFinder::MatchResult const& result)
@@ -98,9 +100,9 @@ namespace clang::tidy::readability
       return;
     }
 
-    // Verify the function is declared in a system header (not a project function
-    // that happens to share the same name).
-    if (!sm.isInSystemHeader(func->getLocation()))
+    // Skip functions defined in the main file (project-local extern "C" wrappers).
+    // Everything else — system headers, third-party libs, project headers — gets flagged.
+    if (sm.isInMainFile(func->getLocation()))
     {
       return;
     }

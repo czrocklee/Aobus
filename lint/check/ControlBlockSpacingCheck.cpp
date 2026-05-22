@@ -134,22 +134,6 @@ namespace clang::tidy::readability
         {
           idx++;
         }
-
-        if (idx < tokens.size())
-        {
-          unsigned const nextLine = sm.getSpellingLineNumber(tokens[idx].getLocation());
-
-          while (idx < tokens.size() && sm.getSpellingLineNumber(tokens[idx].getLocation()) == nextLine &&
-                 (tokens[idx].is(tok::comment) || sm.getSpellingLineNumber(tokens[idx].getLocation()) == nextLine))
-          {
-            if (sm.getSpellingLineNumber(tokens[idx].getLocation()) != nextLine)
-            {
-              break;
-            }
-
-            idx++;
-          }
-        }
       }
 
       return idx;
@@ -421,6 +405,8 @@ namespace clang::tidy::readability
       return;
     }
 
+    bool const isDoWhile = tokens[nextIdx].is(tok::raw_identifier) && tokens[nextIdx].getRawIdentifier() == "while";
+
     nextIdx = skipDoWhileCondition(nextIdx, tokens, sm);
 
     if (nextIdx >= tokens.size())
@@ -435,9 +421,13 @@ namespace clang::tidy::readability
       return;
     }
 
-    unsigned const rBraceEndOffset = sm.getFileOffset(rBraceLoc) + 1;
+    // For do-while, the "closing brace" conceptually ends at the while(); line,
+    // so measure the gap from the last token of the while() condition (the ';').
+    unsigned const gapStartOffset =
+      isDoWhile ? sm.getFileOffset(tokens[nextIdx - 1].getLocation()) + 1 : sm.getFileOffset(rBraceLoc) + 1;
+
     unsigned const nextCodeStart = sm.getFileOffset(tokens[codeIdx].getLocation());
-    StringRef const gap = buffer.substr(rBraceEndOffset, nextCodeStart - rBraceEndOffset);
+    StringRef const gap = buffer.substr(gapStartOffset, nextCodeStart - gapStartOffset);
 
     if (int const newlines = static_cast<int>(gap.count('\n')); newlines < 2)
     {

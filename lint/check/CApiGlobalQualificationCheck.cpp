@@ -1,7 +1,9 @@
 #include "check/CApiGlobalQualificationCheck.h"
+
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Lex/Lexer.h"
+
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
@@ -45,7 +47,12 @@ namespace clang::tidy::readability
 
   void CApiGlobalQualificationCheck::registerMatchers(MatchFinder* finder)
   {
-    finder->addMatcher(callExpr(callee(declRefExpr(to(functionDecl(isExternC()).bind("func"))))).bind("call"), this);
+    // The callee of a function call is an ImplicitCastExpr (FunctionToPointerDecay)
+    // wrapping the actual DeclRefExpr to the FunctionDecl.
+    finder->addMatcher(
+      callExpr(callee(implicitCastExpr(hasSourceExpression(declRefExpr(to(functionDecl(isExternC()).bind("func")))))))
+        .bind("call"),
+      this);
   }
 
   void CApiGlobalQualificationCheck::check(MatchFinder::MatchResult const& result)
@@ -66,30 +73,23 @@ namespace clang::tidy::readability
       return;
     }
 
-    // Only flag functions declared in system headers (not project C-linkage wrappers)
-    if (!sm.isInSystemHeader(func->getLocation()))
+    // Skip functions defined in the main file — these are project-local
+    // extern "C" wrappers, not external C API calls.
+    if (sm.isInMainFile(func->getLocation()))
     {
       return;
     }
 
-    // Skip C standard library functions — they are Check 2's domain (need std::)
+    // Skip C standard library functions — those need std::, handled by Check 2
     if (isCStandardLibraryFunction(func->getName()))
     {
       return;
     }
 
-    // Get the source text of the callee expression
     auto calleeRange = CharSourceRange::getTokenRange(call->getCallee()->getSourceRange());
     StringRef const calleeText = Lexer::getSourceText(calleeRange, sm, result.Context->getLangOpts());
 
-    if (calleeText.starts_with("::"))
-    {
-      return;
-    }
-
-    // If qualified with std:: (incorrect for non-stdlib C API), flag it anyway
-    // as it should use :: not std::
-    if (calleeText.starts_with("std::"))
+    if (calleeText.starts_with("::") || calleeText.starts_with("std::"))
     {
       return;
     }

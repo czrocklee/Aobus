@@ -152,5 +152,21 @@ target_compile_definitions(ao_perf_baseline PRIVATE TAG_TEST_DATA_DIR="${CMAKE_S
 target_compile_options(ao_perf_baseline PRIVATE -Wno-array-bounds)
 
 # Compilation database support for custom linter integration fixture
-add_library(ao_lint_fixture OBJECT EXCLUDE_FROM_ALL integration/lint/LintAllCheckFixture.cpp)
-target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+add_library(ao_lint_fixture OBJECT EXCLUDE_FROM_ALL 
+    integration/lint/fixture/BracedInitializationCheckFixture.cpp
+    integration/lint/fixture/CApiGlobalQualificationCheckFixture.cpp
+    integration/lint/fixture/ConcreteFinalCheckFixture.cpp
+    integration/lint/fixture/ControlBlockSpacingCheckFixture.cpp
+    integration/lint/fixture/ForbidNodiscardCheckFixture.cpp
+    integration/lint/fixture/ForbidTrailingReturnCheckFixture.cpp
+    integration/lint/fixture/IdentifierNamingExtensionsCheckFixture.cpp
+    integration/lint/fixture/LambdaParamsCheckFixture.cpp
+    integration/lint/fixture/LocalInitializationStyleCheckFixture.cpp
+    integration/lint/fixture/MemberOrderCheckFixture.cpp
+    integration/lint/fixture/OptionalNamingAndUsageCheckFixture.cpp
+    integration/lint/fixture/StdCLibraryQualificationCheckFixture.cpp
+    integration/lint/fixture/ThreadingPolicyCheckFixture.cpp
+    integration/lint/fixture/UnusedSuppressionStyleCheckFixture.cpp
+    integration/lint/fixture/UseIfInitStatementCheckFixture.cpp
+)
+target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/integration/lint/fixture")
