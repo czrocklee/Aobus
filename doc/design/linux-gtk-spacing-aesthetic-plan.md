@@ -163,7 +163,7 @@ Recommendation: normalize layout values to the proposed scale. `10` should gener
 | `DefaultStatusBarComponent` / `.ao-status-bar` | Has CSS margin plus C++ margin. | Remove component margin. Keep `min-height: 24px` and vertical padding. Parent layout should decide window-edge inset. |
 | Separator inside status bar | Uses `ao-margin-x-medium`. | Replace with `.ao-status-separator` and use logical margin or parent spacing. |
 | `StatusNotificationLabel`, `LibraryTrackCountLabel`, `SelectionInfoLabel` | Mostly text with dim style. | Keep margin-free. Status bar or local row spacing controls placement. |
-| `ImportProgressIndicator` | Container spacing `12`, progress bar fixed width. | Good as internal composition. No external margin. |
+| `libraryTaskProgress` | Container spacing `12`, progress bar fixed width. | Good as internal composition. No external margin. |
 
 ### Track View
 

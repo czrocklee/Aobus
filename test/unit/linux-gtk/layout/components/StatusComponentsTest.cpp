@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/linux-gtk/layout/components/StatusComponents.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 
+#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/playback/NowPlayingStatusLabel.h"
 #include "app/linux-gtk/playback/PlaybackDetailsWidget.h"
 #include "app/linux-gtk/portal/LibraryTaskProgressIndicator.h"

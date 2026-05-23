@@ -184,7 +184,7 @@ template "playback.defaultBar"          template "status.defaultBar"
     playback.playPauseButton                spacer hexpand
     playback.stopButton                     status.nowPlaying
     playback.seekSlider hexpand             spacer hexpand
-    playback.timeLabel                      status.importProgress
+    playback.timeLabel                      status.libraryTaskProgress
     playback.volumeControl                  status.notification
                                             separator vertical
                                             status.trackCount

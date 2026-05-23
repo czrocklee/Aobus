@@ -96,6 +96,24 @@ Runtime types should avoid GTK includes and GTK object ownership. They may expos
 small snapshots, IDs, deltas, subscriptions, and command results that a frontend
 can adapt to its own widgets.
 
+### Notification Center State
+
+`NotificationService` owns frontend-neutral notification-center state. Runtime
+notifications may carry a `NotificationContentState` with a template id, title,
+icon, actions, and optional progress data. The template id is a stable rendering
+hint such as `notification.message` or `notification.import-progress`; it is not
+a GTK widget instance. Frontends map that key and the associated data to their
+own concrete presentation.
+
+Progress notifications use `NotificationProgressState` so long-running runtime
+tasks can update the same notification entry instead of posting replacement
+messages. `NotificationProgressMode::Indeterminate` represents activity with no
+known fraction; `NotificationProgressMode::Fraction` represents a 0..1 progress
+indicator. Updates are published through `NotificationService::onUpdated`, and
+notification-center views can subscribe to `NotificationService::onChanged` for
+any feed-level mutation. The feed revision changes on every posted, updated,
+dismissed, or cleared notification batch.
+
 ### Runtime Sub-boundaries
 
 The current `app/runtime` contains both frontend-neutral services and GUI-like

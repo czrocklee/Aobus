@@ -44,13 +44,13 @@
 #include <gtkmm/sorter.h>
 #include <gtkmm/sortlistmodel.h>
 
+#include <array>
 #include <format>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
-#include <array>
 #include <string_view>
 
 namespace ao::gtk

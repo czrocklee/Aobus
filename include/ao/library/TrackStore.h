@@ -110,7 +110,7 @@ namespace ao::library
     Iterator& operator=(Iterator&&) = default;
 
     bool operator==(Iterator const& other) const;
-    bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
+    bool operator==(EndSentinel /*unused*/) const;
     Iterator& operator++();
     void operator++(int) { ++*this; }
     value_type operator*() const;

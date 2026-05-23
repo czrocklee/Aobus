@@ -101,6 +101,7 @@ namespace ao::gtk::portal
         if (newCount == 0 && changedCount == 0 && missingCount == 0)
         {
           self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library is up to date");
+          self->_runtime.mutation().notifyLibraryTaskCompleted(0);
           co_return;
         }
 

@@ -7,8 +7,8 @@
 #include "ao/lmdb/Database.h"
 
 #include <cstddef>
-#include <optional>
 #include <iterator>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>

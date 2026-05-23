@@ -232,7 +232,8 @@ namespace ao::rt
     it->second.state.filterExpression = std::move(filterExpression);
     it->second.state.revision++;
     _impl->filterChangedSignal.post(
-      _impl->executor, ViewService::FilterChanged{.viewId = viewId, .filterExpression = it->second.state.filterExpression});
+      _impl->executor,
+      ViewService::FilterChanged{.viewId = viewId, .filterExpression = it->second.state.filterExpression});
 
     if (it->second.adHocSource)
     {

@@ -147,7 +147,7 @@ templates:
       - type: spacer
         layout:
           hexpand: true
-      - type: status.importProgress
+      - type: status.libraryTaskProgress
       - type: status.notification
       - type: separator
         props:

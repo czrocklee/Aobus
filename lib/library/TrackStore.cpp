@@ -113,6 +113,13 @@ namespace ao::library
     return true;
   }
 
+  bool TrackStore::Reader::Iterator::operator==(EndSentinel /*unused*/) const
+  {
+    auto isAtEnd = [](std::optional<lmdb::Database::Reader::Iterator> const& opt) -> bool
+    { return !opt || *opt == lmdb::Database::Reader::Iterator{}; };
+    return isAtEnd(_optHotIter) && isAtEnd(_optColdIter);
+  }
+
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
   {
     if (_optHotIter)

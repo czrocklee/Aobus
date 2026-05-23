@@ -31,12 +31,18 @@ namespace ao::rt
                         std::string message,
                         bool sticky = false,
                         std::optional<std::chrono::milliseconds> optTimeout = std::nullopt);
+    NotificationId post(NotificationRequest request);
 
+    void updateContent(NotificationId id, NotificationContentState content);
+    void updateProgress(NotificationId id, NotificationProgressState progress);
+    void clearProgress(NotificationId id);
     void dismiss(NotificationId id);
     void dismissAll();
 
     Subscription onPosted(std::move_only_function<void(NotificationId)> handler);
+    Subscription onUpdated(std::move_only_function<void(NotificationId)> handler);
     Subscription onDismissed(std::move_only_function<void(NotificationId)> handler);
+    Subscription onChanged(std::move_only_function<void()> handler);
 
   private:
     struct Impl;

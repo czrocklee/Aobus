@@ -77,6 +77,7 @@ namespace ao::rt
 
     void notifyTracksMutated(std::vector<TrackId> trackIds);
     void notifyListsMutated(std::vector<ListId> upserted, std::vector<ListId> deleted);
+    void notifyLibraryTaskCompleted(std::size_t count);
 
     struct ListsMutated final
     {
