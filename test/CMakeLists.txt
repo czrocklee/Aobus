@@ -126,6 +126,8 @@ add_executable(ao_test_gtk
     unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
     unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
     unit/linux-gtk/layout/components/StatusComponentsTest.cpp
+    unit/app/linux-gtk/playback/PlaybackPositionInterpolatorTest.cpp
+    unit/app/linux-gtk/playback/PlaybackUiComponentsTest.cpp
 )
 
 target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")

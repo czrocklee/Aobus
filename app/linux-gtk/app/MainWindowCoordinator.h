@@ -27,7 +27,7 @@ namespace ao::gtk
   class MainWindow;
   class WindowStatePersistence;
   class TrackRowCache;
-  class CoverArtCache;
+  class ImageCache;
   class TagEditController;
   class ListSidebarController;
   class TrackPresentationStore;
@@ -63,7 +63,7 @@ namespace ao::gtk
     void rebuildListPages(lmdb::ReadTransaction const& txn);
 
     TrackRowCache* trackRowCache() { return _trackRowCache.get(); }
-    CoverArtCache* coverArtCache() { return _coverArtCache.get(); }
+    ImageCache* imageCache() { return _imageCache.get(); }
     PlaybackSequenceController* playbackSequenceController() { return _playbackSequenceController.get(); }
     TagEditController* tagEditController() { return _tagEditController.get(); }
     portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinator.get(); }
@@ -82,7 +82,7 @@ namespace ao::gtk
     std::unique_ptr<WindowStatePersistence> _persistence;
 
     std::unique_ptr<TrackRowCache> _trackRowCache;
-    std::unique_ptr<CoverArtCache> _coverArtCache;
+    std::unique_ptr<ImageCache> _imageCache;
     std::unique_ptr<TagEditController> _tagEditController;
     std::unique_ptr<ListSidebarController> _listSidebarController;
     std::unique_ptr<TrackPresentationStore> _trackPresentationStore;

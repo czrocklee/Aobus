@@ -28,6 +28,8 @@ namespace ao::gtk
   class TrackRowCache;
   class TrackListAdapter;
   class TrackViewPage;
+  class ImageCache;
+
   namespace portal
   {
     class PlaylistExporter;
@@ -58,7 +60,8 @@ namespace ao::gtk
                   PlaybackSequenceController* sequenceController,
                   TagEditController& tagEditController,
                   ListSidebarController& listSidebar,
-                  TrackPresentationStore& presentationStore);
+                  TrackPresentationStore& presentationStore,
+                  ImageCache* imageCache);
     ~TrackPageHost();
 
     // Not copyable or movable
@@ -104,6 +107,7 @@ namespace ao::gtk
     TagEditController& _tagEditController;
     ListSidebarController& _listSidebar;
     TrackPresentationStore& _presentationStore;
+    ImageCache* _imageCache = nullptr;
     rt::Subscription _revealSub;
     rt::Subscription _nowPlayingSub;
     rt::Subscription _focusSub;

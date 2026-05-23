@@ -7,7 +7,7 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
 #include "app/AobusSoul.h"
-#include "inspector/CoverArtWidget.h"
+#include "image/ImageWidget.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
@@ -85,20 +85,20 @@ namespace ao::gtk::layout
     };
 
     /**
-     * @brief playback.coverArt
+     * @brief playback.image
      */
-    class PlaybackCoverArtComponent final : public ILayoutComponent
+    class PlaybackImageComponent final : public ILayoutComponent
     {
     public:
-      PlaybackCoverArtComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      PlaybackImageComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.inspector.coverArtCache == nullptr)
+        if (ctx.inspector.imageCache == nullptr)
         {
-          _error = Gtk::make_managed<Gtk::Label>("Error: coverArtCache missing");
+          _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
           return;
         }
 
-        _widget = std::make_unique<CoverArtWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.coverArtCache);
+        _widget = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
 
         _sub = ctx.runtime.playback().onNowPlayingChanged(
           [this, &ctx](auto const& ev)
@@ -106,13 +106,13 @@ namespace ao::gtk::layout
             if (ev.trackId != _currentTrackId)
             {
               _currentTrackId = ev.trackId;
-              updateCoverArt(ctx.runtime.musicLibrary());
+              updateImage(ctx.runtime.musicLibrary());
             }
           });
 
         // Initial update
         _currentTrackId = ctx.runtime.playback().state().trackId;
-        updateCoverArt(ctx.runtime.musicLibrary());
+        updateImage(ctx.runtime.musicLibrary());
       }
 
       Gtk::Widget& widget() override
@@ -121,11 +121,11 @@ namespace ao::gtk::layout
       }
 
     private:
-      void updateCoverArt(library::MusicLibrary& library)
+      void updateImage(library::MusicLibrary& library)
       {
         if (_currentTrackId == ao::kInvalidTrackId)
         {
-          _widget->clearCover();
+          _widget->clearImage();
           return;
         }
 
@@ -135,15 +135,15 @@ namespace ao::gtk::layout
 
         if (optView)
         {
-          _widget->loadCoverArt(ResourceId{optView->metadata().coverArtId()});
+          _widget->loadImage(ResourceId{optView->metadata().coverArtId()});
         }
         else
         {
-          _widget->clearCover();
+          _widget->clearImage();
         }
       }
 
-      std::unique_ptr<CoverArtWidget> _widget;
+      std::unique_ptr<ImageWidget> _widget;
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = ao::kInvalidTrackId;
       rt::Subscription _sub;
@@ -291,15 +291,15 @@ namespace ao::gtk::layout
       return std::make_unique<QualityIndicatorComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createPlaybackCoverArt(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createPlaybackImage(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<PlaybackCoverArtComponent>(ctx, node);
+      return std::make_unique<PlaybackImageComponent>(ctx, node);
     }
   } // namespace
 
   void registerPlaybackComponents(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.coverArt",
+    registry.registerComponent({.type = "playback.image",
                                 .displayName = "Playback Cover Art",
                                 .category = "Playback",
                                 .container = false,
@@ -307,7 +307,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
-                               createPlaybackCoverArt);
+                               createPlaybackImage);
 
     registry.registerComponent(
       {.type = "playback.playPauseButton",

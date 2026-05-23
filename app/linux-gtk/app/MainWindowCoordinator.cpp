@@ -9,7 +9,7 @@
 #include "app/GtkUiServices.h"
 #include "app/MainWindow.h"
 #include "app/WindowStatePersistence.h"
-#include "inspector/CoverArtCache.h"
+#include "image/ImageCache.h"
 #include "list/ListSidebarController.h"
 #include "platform/AudioBackendBootstrap.h"
 #include "playback/PlaybackSequenceController.h"
@@ -49,8 +49,8 @@ namespace ao::gtk
     _persistence = std::make_unique<WindowStatePersistence>(*_globalConfig);
 
     // Initialize cover art cache
-    int const coverArtCacheSize = 100;
-    _coverArtCache = std::make_unique<CoverArtCache>(coverArtCacheSize);
+    int const imageCacheSize = 100;
+    _imageCache = std::make_unique<ImageCache>(imageCacheSize);
 
     // Initialize TagEditController
     _tagEditController =
@@ -74,7 +74,8 @@ namespace ao::gtk
                                                      _playbackSequenceController.get(),
                                                      *_tagEditController,
                                                      *_listSidebarController,
-                                                     *_trackPresentationStore);
+                                                     *_trackPresentationStore,
+                                                     _imageCache.get());
 
     // Initialize import/export coordinator
     _importExportCoordinator = std::make_unique<portal::ImportExportCoordinator>(
@@ -184,7 +185,7 @@ namespace ao::gtk
   GtkUiServices MainWindowCoordinator::uiServices()
   {
     return GtkUiServices{.trackRowCache = _trackRowCache.get(),
-                         .coverArtCache = _coverArtCache.get(),
+                         .imageCache = _imageCache.get(),
                          .playbackSequenceController = _playbackSequenceController.get(),
                          .tagEditController = _tagEditController.get(),
                          .importExportCoordinator = _importExportCoordinator.get(),

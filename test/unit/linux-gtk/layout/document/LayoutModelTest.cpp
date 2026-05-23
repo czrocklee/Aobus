@@ -3,7 +3,7 @@
 
 #include "app/linux-gtk/layout/document/LayoutDocument.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
-#include "app/linux-gtk/layout/document/LayoutYaml.h" // IWYU pragma: keep
+#include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "runtime/yaml/Utils.h"
 
 #include <catch2/catch_test_macros.hpp>

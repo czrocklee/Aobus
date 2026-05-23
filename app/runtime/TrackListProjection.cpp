@@ -57,6 +57,7 @@ namespace ao::rt
     {
       Range rows{};
       std::string_view label{};
+      ResourceId imageId{kInvalidResourceId};
     };
 
     struct OrderEntry final
@@ -65,6 +66,7 @@ namespace ao::rt
       SortKeys keys{};
       std::string_view groupKey{};
       std::string_view groupLabel{};
+      ResourceId imageId{kInvalidResourceId};
     };
 
     using Comparator = std::move_only_function<bool(OrderEntry const&, OrderEntry const&)>;
@@ -126,7 +128,7 @@ namespace ao::rt
 
     bool groupByNeedsCold(TrackGroupKey groupBy)
     {
-      return groupBy == TrackGroupKey::Work;
+      return groupBy == TrackGroupKey::Work || groupBy == TrackGroupKey::Album;
     }
 
     library::TrackStore::Reader::LoadMode computeLoadMode(std::vector<TrackSortTerm> const& sortBy,
@@ -354,6 +356,7 @@ namespace ao::rt
         case TrackGroupKey::Album:
           entry.groupKey =
             intern(stringPool, std::string{entry.keys.albumArtistKey} + "\x1F" + std::string{entry.keys.albumKey});
+          entry.imageId = ResourceId{view.metadata().coverArtId()};
           {
             auto album = std::string{dict.getOrDefault(view.metadata().albumId())};
             auto const albumArtist = std::string{dict.getOrDefault(view.metadata().albumArtistId())};
@@ -491,6 +494,7 @@ namespace ao::rt
       sections.push_back(GroupSection{
         .rows = {.start = 0, .count = 1},
         .label = orderIndex[0].groupLabel,
+        .imageId = orderIndex[0].imageId,
       });
 
       for (std::size_t idx = 1; idx < orderIndex.size(); ++idx)
@@ -500,6 +504,7 @@ namespace ao::rt
           sections.push_back(GroupSection{
             .rows = {.start = idx, .count = 1},
             .label = orderIndex[idx].groupLabel,
+            .imageId = orderIndex[idx].imageId,
           });
         }
         else
@@ -1033,6 +1038,7 @@ namespace ao::rt
     return TrackGroupSectionSnapshot{
       .rows = section.rows,
       .label = std::string{section.label},
+      .imageId = section.imageId,
     };
   }
 

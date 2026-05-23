@@ -63,7 +63,10 @@ namespace ao::gtk
     _listContextMenu.set_parent(_listView);
   }
 
-  ListSidebarPanel::~ListSidebarPanel() = default;
+  ListSidebarPanel::~ListSidebarPanel()
+  {
+    _listContextMenu.unparent();
+  }
 
   void ListSidebarPanel::rebuildTree(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn)
   {

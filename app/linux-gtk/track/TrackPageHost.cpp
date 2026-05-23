@@ -48,7 +48,8 @@ namespace ao::gtk
                                PlaybackSequenceController* sequenceController,
                                TagEditController& tagEditController,
                                ListSidebarController& listSidebar,
-                               TrackPresentationStore& presentationStore)
+                               TrackPresentationStore& presentationStore,
+                               ImageCache* imageCache)
     : _stack{stack}
     , _layoutModel{layoutModel}
     , _runtime{runtime}
@@ -56,6 +57,7 @@ namespace ao::gtk
     , _tagEditController{tagEditController}
     , _listSidebar{listSidebar}
     , _presentationStore{presentationStore}
+    , _imageCache{imageCache}
   {
     _revealSub = _runtime.playback().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
 
@@ -306,8 +308,8 @@ namespace ao::gtk
       std::make_unique<TrackListAdapter>(_runtime.sources().allTracks(), _runtime.musicLibrary(), dataProvider);
     adapter->bindProjection(proj);
 
-    auto trackPage =
-      std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _presentationStore, _runtime, viewId);
+    auto trackPage = std::make_unique<TrackViewPage>(
+      listId, *adapter, _layoutModel, _presentationStore, _runtime, *_imageCache, viewId);
     auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = std::string{"List"};

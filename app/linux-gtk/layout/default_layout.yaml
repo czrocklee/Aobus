@@ -28,7 +28,7 @@ root:
             - type: library.listTree
               layout:
                 vexpand: true
-            - type: playback.coverArt
+            - type: playback.image
               layout:
                 minHeight: 50
         - type: box
@@ -126,7 +126,7 @@ templates:
       - type: library.listTree
         layout:
           vexpand: true
-      - type: playback.coverArt
+      - type: playback.image
         layout:
           minHeight: 50
   inspector.defaultPanel:

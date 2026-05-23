@@ -6,7 +6,7 @@
 #include "ao/Type.h"
 #include "ao/library/ResourceStore.h"
 #include "ao/utility/Log.h"
-#include "inspector/CoverArtCache.h"
+#include "image/ImageCache.h"
 #include "runtime/LibraryMutationService.h"
 #include "runtime/ListSourceStore.h"
 #include "runtime/ProjectionTypes.h"
@@ -98,12 +98,12 @@ namespace ao::gtk
   TrackInspectorPanel::TrackInspectorPanel(library::MusicLibrary& library,
                                            rt::LibraryMutationService& mutation,
                                            rt::ListSourceStore& sources,
-                                           CoverArtCache& coverArtCache)
+                                           ImageCache& imageCache)
     : Gtk::Box{Gtk::Orientation::VERTICAL, 0}
     , _library{library}
     , _mutation{mutation}
     , _sources{sources}
-    , _coverArtCache{coverArtCache}
+    , _imageCache{imageCache}
   {
     setupUi();
   }
@@ -350,7 +350,7 @@ namespace ao::gtk
     _artistLabel.set_text(snap.artist.mixed ? "<Multiple Values>" : snap.artist.optValue.value_or(""));
     _albumLabel.set_text(snap.album.mixed ? "<Multiple Values>" : snap.album.optValue.value_or(""));
 
-    updateCoverArt(snap);
+    updateImage(snap);
     updateAudioMetadata(snap);
 
     // Tags
@@ -358,7 +358,7 @@ namespace ao::gtk
     _tagEditor.set_visible(true);
   }
 
-  void TrackInspectorPanel::updateCoverArt(rt::TrackDetailSnapshot const& snap)
+  void TrackInspectorPanel::updateImage(rt::TrackDetailSnapshot const& snap)
   {
     if (snap.singleCoverArtId == kInvalidResourceId)
     {
@@ -367,15 +367,15 @@ namespace ao::gtk
       return;
     }
 
-    auto const pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()));
+    auto const pixbuf = _imageCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()));
 
     if (!pixbuf)
     {
-      auto const loadedPixbuf = loadCoverArtFromLibrary(snap.singleCoverArtId);
+      auto const loadedPixbuf = loadImageFromLibrary(snap.singleCoverArtId);
 
       if (loadedPixbuf)
       {
-        _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()), loadedPixbuf);
+        _imageCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()), loadedPixbuf);
       }
     }
 
@@ -387,7 +387,7 @@ namespace ao::gtk
     }
   }
 
-  Glib::RefPtr<Gdk::Pixbuf> TrackInspectorPanel::loadCoverArtFromLibrary(ResourceId resourceId)
+  Glib::RefPtr<Gdk::Pixbuf> TrackInspectorPanel::loadImageFromLibrary(ResourceId resourceId)
   {
     auto const txn = _library.readTransaction();
     auto const reader = _library.resources().reader(txn);

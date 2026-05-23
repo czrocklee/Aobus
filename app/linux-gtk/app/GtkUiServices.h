@@ -6,7 +6,7 @@
 namespace ao::gtk
 {
   class TrackRowCache;
-  class CoverArtCache;
+  class ImageCache;
   class PlaybackSequenceController;
   class TagEditController;
   namespace portal
@@ -24,7 +24,7 @@ namespace ao::gtk
   struct GtkUiServices final
   {
     TrackRowCache* trackRowCache = nullptr;
-    CoverArtCache* coverArtCache = nullptr;
+    ImageCache* imageCache = nullptr;
     PlaybackSequenceController* playbackSequenceController = nullptr;
     TagEditController* tagEditController = nullptr;
     portal::ImportExportCoordinator* importExportCoordinator = nullptr;

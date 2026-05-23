@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "inspector/CoverArtWidget.h"
+#include "image/ImageWidget.h"
 
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/ResourceStore.h"
-#include "inspector/CoverArtCache.h"
+#include "image/ImageCache.h"
 #include "runtime/ProjectionTypes.h"
 
 #include <gdkmm/pixbuf.h>
@@ -24,37 +24,37 @@
 
 namespace ao::gtk
 {
-  CoverArtWidget::CoverArtWidget(library::MusicLibrary& library, CoverArtCache& cache)
+  ImageWidget::ImageWidget(library::MusicLibrary& library, ImageCache& cache)
     : _library{library}, _cache{cache}
   {
     set_keep_aspect_ratio(true);
     set_alternative_text("No cover art");
   }
 
-  CoverArtWidget::~CoverArtWidget() = default;
+  ImageWidget::~ImageWidget() = default;
 
-  void CoverArtWidget::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
+  void ImageWidget::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
   {
     _detailProjection = std::move(projection);
-    _detailSub = _detailProjection->subscribe(std::bind_front(&CoverArtWidget::onDetailSnapshot, this));
+    _detailSub = _detailProjection->subscribe(std::bind_front(&ImageWidget::onDetailSnapshot, this));
   }
 
-  void CoverArtWidget::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)
+  void ImageWidget::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)
   {
     if (snap.selectionKind == rt::SelectionKind::None || snap.trackIds.empty())
     {
-      clearCover();
+      clearImage();
       return;
     }
 
-    loadCoverArt(snap.singleCoverArtId);
+    loadImage(snap.singleCoverArtId);
   }
 
-  void CoverArtWidget::loadCoverArt(ResourceId const coverArtId)
+  void ImageWidget::loadImage(ResourceId const coverArtId)
   {
     if (coverArtId == kInvalidResourceId)
     {
-      clearCover();
+      clearImage();
       return;
     }
 
@@ -69,7 +69,7 @@ namespace ao::gtk
 
       if (!optData)
       {
-        clearCover();
+        clearImage();
         return;
       }
 
@@ -82,19 +82,19 @@ namespace ao::gtk
       }
       catch (Glib::Error const&)
       {
-        clearCover();
+        clearImage();
         return;
       }
     }
 
-    setCoverPixbuf(cached);
+    setImagePixbuf(cached);
   }
 
-  void CoverArtWidget::setCoverFromBytes(std::span<std::byte const> bytes)
+  void ImageWidget::setImageFromBytes(std::span<std::byte const> bytes)
   {
     if (bytes.empty())
     {
-      clearCover();
+      clearImage();
       return;
     }
 
@@ -106,16 +106,16 @@ namespace ao::gtk
     }
     catch (Glib::Error const&)
     {
-      clearCover();
+      clearImage();
     }
   }
 
-  void CoverArtWidget::setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
+  void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
   {
-    pixbuf ? set_pixbuf(pixbuf) : clearCover();
+    pixbuf ? set_pixbuf(pixbuf) : clearImage();
   }
 
-  void CoverArtWidget::clearCover()
+  void ImageWidget::clearImage()
   {
     set_pixbuf({});
   }

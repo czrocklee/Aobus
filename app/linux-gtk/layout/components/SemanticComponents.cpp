@@ -4,7 +4,7 @@
 #include "SemanticComponents.h"
 
 #include "ao/Type.h"
-#include "inspector/CoverArtWidget.h"
+#include "image/ImageWidget.h"
 #include "inspector/TrackInspectorPanel.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -124,20 +124,20 @@ namespace ao::gtk::layout
     };
 
     /**
-     * @brief inspector.coverArt
+     * @brief inspector.image
      */
-    class CoverArtComponent final : public ILayoutComponent
+    class ImageComponent final : public ILayoutComponent
     {
     public:
-      CoverArtComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      ImageComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.inspector.coverArtCache == nullptr)
+        if (ctx.inspector.imageCache == nullptr)
         {
-          _error = Gtk::make_managed<Gtk::Label>("Error: coverArtCache missing");
+          _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
           return;
         }
 
-        _widget = std::make_unique<CoverArtWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.coverArtCache);
+        _widget = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
         _widget->bindToDetailProjection(ctx.runtime.views().detailProjection(
           rt::FocusedViewTarget{}, ctx.runtime.workspace(), ctx.runtime.mutation()));
       }
@@ -148,7 +148,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      std::unique_ptr<CoverArtWidget> _widget;
+      std::unique_ptr<ImageWidget> _widget;
       Gtk::Label* _error = nullptr;
     };
 
@@ -160,14 +160,14 @@ namespace ao::gtk::layout
     public:
       InspectorSidebarComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.inspector.coverArtCache == nullptr)
+        if (ctx.inspector.imageCache == nullptr)
         {
-          _error = Gtk::make_managed<Gtk::Label>("Error: coverArtCache missing");
+          _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
           return;
         }
 
         _widget = std::make_unique<TrackInspectorPanel>(
-          ctx.runtime.musicLibrary(), ctx.runtime.mutation(), ctx.runtime.sources(), *ctx.inspector.coverArtCache);
+          ctx.runtime.musicLibrary(), ctx.runtime.mutation(), ctx.runtime.sources(), *ctx.inspector.imageCache);
         _widget->bindToDetailProjection(ctx.runtime.views().detailProjection(
           rt::FocusedViewTarget{}, ctx.runtime.workspace(), ctx.runtime.mutation()));
 
@@ -318,7 +318,7 @@ namespace ao::gtk::layout
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<OpenLibraryButton>(ctx, node); });
 
-    registry.registerComponent({.type = "inspector.coverArt",
+    registry.registerComponent({.type = "inspector.image",
                                 .displayName = "Cover Art",
                                 .category = "Inspector",
                                 .container = false,
@@ -327,7 +327,7 @@ namespace ao::gtk::layout
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<CoverArtComponent>(ctx, node); });
+                               { return std::make_unique<ImageComponent>(ctx, node); });
 
     registry.registerComponent({.type = "inspector.sidebar",
                                 .displayName = "Inspector Sidebar",

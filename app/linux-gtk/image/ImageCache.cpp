@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "inspector/CoverArtCache.h"
+#include "image/ImageCache.h"
 
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
@@ -11,14 +11,14 @@
 
 namespace ao::gtk
 {
-  CoverArtCache::CoverArtCache(std::size_t maxSize)
+  ImageCache::ImageCache(std::size_t maxSize)
     : _maxSize{maxSize}
   {
   }
 
-  CoverArtCache::~CoverArtCache() = default;
+  ImageCache::~ImageCache() = default;
 
-  Glib::RefPtr<Gdk::Pixbuf> CoverArtCache::get(std::uint64_t resourceId)
+  Glib::RefPtr<Gdk::Pixbuf> ImageCache::get(std::uint64_t resourceId)
   {
     auto const it = _cacheMap.find(resourceId);
 
@@ -32,7 +32,7 @@ namespace ao::gtk
     return it->second->pixbuf;
   }
 
-  void CoverArtCache::put(std::uint64_t resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
+  void ImageCache::put(std::uint64_t resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
   {
     if (!pixbuf)
     {
@@ -60,7 +60,7 @@ namespace ao::gtk
     }
   }
 
-  void CoverArtCache::clear()
+  void ImageCache::clear()
   {
     _cacheMap.clear();
     _entries.clear();

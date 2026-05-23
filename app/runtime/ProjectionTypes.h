@@ -33,6 +33,7 @@ namespace ao::rt
   {
     Range rows{};
     std::string label{};
+    ResourceId imageId{kInvalidResourceId};
   };
 
   struct ProjectionReset final

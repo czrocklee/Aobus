@@ -240,6 +240,12 @@ namespace ao::gtk
           label->set_halign(Gtk::Align::START);
           label->set_ellipsize(Pango::EllipsizeMode::END);
           label->set_xalign(0);
+
+          if (field == rt::TrackField::Duration || field == rt::TrackField::Year)
+          {
+            label->add_css_class("dim-label");
+          }
+
           listItem->set_child(*label);
           return;
         }

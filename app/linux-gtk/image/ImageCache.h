@@ -14,22 +14,22 @@
 namespace ao::gtk
 {
   /**
-   * @brief CoverArtCache provides an LRU cache for track cover art Pixbufs.
+   * @brief ImageCache provides an LRU cache for track cover art Pixbufs.
    * Keyed by ResourceId (the ID of the image blob in the database).
    */
-  class CoverArtCache final
+  class ImageCache final
   {
   public:
     static constexpr std::size_t kDefaultMaxSize = 50;
 
-    explicit CoverArtCache(std::size_t maxSize = kDefaultMaxSize);
-    ~CoverArtCache();
+    explicit ImageCache(std::size_t maxSize = kDefaultMaxSize);
+    ~ImageCache();
 
     // Not copyable or movable
-    CoverArtCache(CoverArtCache const&) = delete;
-    CoverArtCache& operator=(CoverArtCache const&) = delete;
-    CoverArtCache(CoverArtCache&&) = delete;
-    CoverArtCache& operator=(CoverArtCache&&) = delete;
+    ImageCache(ImageCache const&) = delete;
+    ImageCache& operator=(ImageCache const&) = delete;
+    ImageCache(ImageCache&&) = delete;
+    ImageCache& operator=(ImageCache&&) = delete;
 
     /**
      * @brief Try to get a Pixbuf from the cache.

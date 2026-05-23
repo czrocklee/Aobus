@@ -41,6 +41,22 @@ namespace ao::gtk
     _dynamicCssProvider = Gtk::CssProvider::create();
 
     _layoutChangedConnection = _columnLayoutModel.signalChanged().connect([this] { queueSharedColumnLayoutUpdate(); });
+
+    _columnView.signal_map().connect(sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
+
+    if (auto const adj = _columnView.get_hadjustment())
+    {
+      adj->property_page_size().signal_changed().connect(
+        sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
+      adj->property_upper().signal_changed().connect(
+        sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
+    }
+
+    if (auto const columns = _columnView.get_columns())
+    {
+      _columnNotifyConnections.emplace_back(
+        columns->signal_items_changed().connect([this](::guint, ::guint, ::guint) { updateTitlePositionVariable(); }));
+    }
   }
 
   void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)
@@ -340,16 +356,31 @@ namespace ao::gtk
 
   void TrackColumnController::updateTitlePositionVariable()
   {
-    double titleX = 0;
-    bool found = false;
-    auto const titleFieldId = rt::trackFieldId(rt::TrackField::Title);
-
     auto const columns = _columnView.get_columns();
 
     if (!columns)
     {
       return;
     }
+
+    int totalFixedWidth = 0;
+
+    for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
+    {
+      auto const col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(idx));
+
+      if (col && col->get_visible())
+      {
+        totalFixedWidth += std::max(0, col->get_fixed_width());
+      }
+    }
+
+    int const viewWidth = _columnView.get_width();
+    int const extraSpace = std::max(0, viewWidth - totalFixedWidth);
+
+    double titleX = 0;
+    bool found = false;
+    auto const titleFieldId = rt::trackFieldId(rt::TrackField::Title);
 
     for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
     {
@@ -360,20 +391,30 @@ namespace ao::gtk
         continue;
       }
 
+      int const actualWidth = std::max(0, col->get_fixed_width()) + (col->get_expand() ? extraSpace : 0);
+
       if (col->get_id().raw() == titleFieldId)
       {
-        titleX += col->get_fixed_width() / kTitlePositionDivisor;
         found = true;
         break;
       }
 
-      titleX += col->get_fixed_width();
+      titleX += actualWidth;
     }
 
     if (found)
     {
-      auto const css = std::format("columnview {{ --ao-title-x: {:.1f}px; }}", titleX);
-      _dynamicCssProvider->load_from_data(css);
+      if (viewWidth > 0)
+      {
+        double const percentage = (titleX / viewWidth) * 100.0;
+        auto const css = std::format("columnview {{ --ao-title-x: {:.1f}%; }}", percentage);
+        _dynamicCssProvider->load_from_data(css);
+      }
+      else
+      {
+        auto const css = std::format("columnview {{ --ao-title-x: {:.1f}px; }}", titleX);
+        _dynamicCssProvider->load_from_data(css);
+      }
     }
   }
 

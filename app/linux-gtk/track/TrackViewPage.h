@@ -42,6 +42,8 @@ namespace ao::rt
 
 namespace ao::gtk
 {
+  class ImageCache;
+
   class TrackViewPage final : public Gtk::Box
   {
   public:
@@ -56,6 +58,7 @@ namespace ao::gtk
                            TrackColumnLayoutModel& columnLayoutModel,
                            TrackPresentationStore& presentationStore,
                            rt::AppRuntime& runtime,
+                           ImageCache& imageCache,
                            rt::ViewId viewId = rt::kInvalidViewId);
     ~TrackViewPage() override;
 
@@ -110,6 +113,7 @@ namespace ao::gtk
     TrackListAdapter& _adapter;
     TrackPresentationStore& _presentationStore;
     rt::AppRuntime& _runtime;
+    ImageCache& _imageCache;
     Glib::RefPtr<Gtk::SortListModel> _groupModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;

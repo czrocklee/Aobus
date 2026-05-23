@@ -6,6 +6,9 @@
 #include "ao/Type.h"
 #include "ao/utility/Log.h"
 #include "app/StyleManager.h"
+#include "image/ImageCache.h"
+#include "image/ImageWidget.h"
+#include "layout/LayoutConstants.h"
 #include "runtime/AppRuntime.h"
 #include "runtime/CorePrimitives.h"
 #include "runtime/LibraryMutationService.h"
@@ -62,6 +65,8 @@ namespace ao::gtk
       return std::format("{} {}", count, count == 1 ? "track" : "tracks");
     }
 
+    constexpr int kSectionCoverSize = 32;
+
     TrackRowObject* trackRowFromSorterItem(gpointer item)
     {
       auto* const object = static_cast<GObject*>(item);
@@ -115,6 +120,7 @@ namespace ao::gtk
                                TrackColumnLayoutModel& columnLayoutModel,
                                TrackPresentationStore& presentationStore,
                                rt::AppRuntime& runtime,
+                               ImageCache& imageCache,
                                rt::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
@@ -122,6 +128,7 @@ namespace ao::gtk
     , _adapter{adapter}
     , _presentationStore{presentationStore}
     , _runtime{runtime}
+    , _imageCache{imageCache}
     , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
     , _selectionModel{Gtk::MultiSelection::create(_groupModel)}
     , _columnLayoutModel{columnLayoutModel}
@@ -188,7 +195,7 @@ namespace ao::gtk
     _sectionHeaderFactory = Gtk::SignalListItemFactory::create();
 
     _sectionHeaderFactory->signal_setup_obj().connect(
-      [](Glib::RefPtr<Glib::Object> const& object)
+      [this](Glib::RefPtr<Glib::Object> const& object)
       {
         auto const header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
 
@@ -197,27 +204,47 @@ namespace ao::gtk
           return;
         }
 
-        auto* const label = Gtk::make_managed<Gtk::Label>("");
+        auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+        box->set_spacing(layout::kSpacingXLarge);
+        box->add_css_class("ao-track-section-box");
 
+        auto* const cover = Gtk::make_managed<ImageWidget>(_runtime.musicLibrary(), _imageCache);
+        cover->set_size_request(kSectionCoverSize, kSectionCoverSize);
+        cover->add_css_class("ao-track-section-cover");
+        cover->set_valign(Gtk::Align::CENTER);
+        box->append(*cover);
+
+        auto* const label = Gtk::make_managed<Gtk::Label>("");
         label->set_halign(Gtk::Align::START);
         label->add_css_class("ao-track-section-header");
         label->set_xalign(0.0F);
+        label->set_valign(Gtk::Align::CENTER);
+        box->append(*label);
 
-        header->set_child(*label);
+        header->set_child(*box);
       });
 
     _sectionHeaderFactory->signal_bind_obj().connect(
       [this](Glib::RefPtr<Glib::Object> const& object)
       {
         auto const header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
-        auto* const label = header ? dynamic_cast<Gtk::Label*>(header->get_child()) : nullptr;
+        auto* const box = header ? dynamic_cast<Gtk::Box*>(header->get_child()) : nullptr;
 
-        if (header == nullptr || label == nullptr)
+        if (header == nullptr || box == nullptr)
+        {
+          return;
+        }
+
+        auto* const cover = dynamic_cast<ImageWidget*>(box->get_first_child());
+        auto* const label = dynamic_cast<Gtk::Label*>(box->get_last_child());
+
+        if (cover == nullptr || label == nullptr)
         {
           return;
         }
 
         auto text = std::string{};
+        auto coverArtId = kInvalidResourceId;
 
         if (auto* const proj = _adapter.projection())
         {
@@ -225,7 +252,9 @@ namespace ao::gtk
 
           if (auto const optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
           {
-            text = proj->groupAt(*optGroupIndex).label;
+            auto const snap = proj->groupAt(*optGroupIndex);
+            text = snap.label;
+            coverArtId = snap.imageId;
           }
         }
 
@@ -237,6 +266,16 @@ namespace ao::gtk
         text += "(" + trackCountLabel(header->get_n_items()) + ")";
 
         label->set_text(text);
+
+        if (coverArtId != kInvalidResourceId)
+        {
+          cover->loadImage(coverArtId);
+          cover->set_visible(true);
+        }
+        else
+        {
+          cover->set_visible(false);
+        }
       });
 
     _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_adapter));
@@ -347,11 +386,13 @@ namespace ao::gtk
     {
       _groupModel->set_section_sorter({});
       _viewHost->columnView().set_header_factory({});
+      _viewHost->columnView().set_show_row_separators(true);
       return;
     }
 
     _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_adapter));
     _viewHost->columnView().set_header_factory(_sectionHeaderFactory);
+    _viewHost->columnView().set_show_row_separators(false);
   }
 
   TrackViewPage::CreateSmartListRequestedSignal& TrackViewPage::signalCreateSmartListRequested() noexcept
@@ -423,7 +464,6 @@ namespace ao::gtk
 
   void TrackViewPage::setupColumnViewStyles(Gtk::ColumnView& view)
   {
-    view.set_show_row_separators(true);
     view.set_reorderable(true);
     view.get_style_context()->add_provider(_viewHost->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }

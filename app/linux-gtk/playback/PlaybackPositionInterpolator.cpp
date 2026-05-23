@@ -34,9 +34,10 @@ namespace ao::gtk
       return _lastPositionMs;
     }
 
-    if (_firstFrameTime == 0)
+    if (_firstFrameTime == 0 || frameTime < _firstFrameTime)
     {
       _firstFrameTime = frameTime;
+      return _lastPositionMs;
     }
 
     // GDK frame time is in microseconds. Convert delta to milliseconds.

@@ -76,7 +76,18 @@ namespace ao::gtk
     setupActions();
   }
 
-  TagEditController::~TagEditController() = default;
+  TagEditController::~TagEditController()
+  {
+    if (_contextPopover)
+    {
+      _contextPopover->unparent();
+    }
+
+    if (_tagPopover)
+    {
+      _tagPopover->unparent();
+    }
+  }
 
   void TagEditController::setDataProvider(TrackRowCache* provider)
   {

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "app/linux-gtk/inspector/CoverArtCache.h"
+#include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/document/LayoutDocument.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
-#include "app/linux-gtk/layout/document/LayoutYaml.h" // IWYU pragma: keep
+#include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
@@ -323,19 +323,19 @@ namespace ao::gtk::layout::test
       CHECK(label->get_label().find("trackPageHost missing") != std::string::npos);
     }
 
-    SECTION("inspector.coverArt shows error when coverArtCache missing")
+    SECTION("inspector.image shows error when imageCache missing")
     {
-      auto const node = LayoutNode{.type = "inspector.coverArt"};
+      auto const node = LayoutNode{.type = "inspector.image"};
       auto const comp = registry.create(ctx, node);
 
       REQUIRE(comp != nullptr);
 
       auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("coverArtCache missing") != std::string::npos);
+      CHECK(label->get_label().find("imageCache missing") != std::string::npos);
     }
 
-    SECTION("inspector.sidebar shows error when coverArtCache missing")
+    SECTION("inspector.sidebar shows error when imageCache missing")
     {
       auto const node = LayoutNode{.type = "inspector.sidebar"};
       auto const comp = registry.create(ctx, node);
@@ -344,7 +344,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("coverArtCache missing") != std::string::npos);
+      CHECK(label->get_label().find("imageCache missing") != std::string::npos);
     }
 
     SECTION("app.workspaceWithInspector shows error when trackPageGraph missing")
@@ -389,14 +389,14 @@ namespace ao::gtk::layout::test
     auto window = Gtk::Window{};
 
     int const cacheSize = 10;
-    auto coverArtCache = std::make_unique<CoverArtCache>(cacheSize);
+    auto imageCache = std::make_unique<ImageCache>(cacheSize);
     auto menuModel = Gio::Menu::create();
     menuModel->append_submenu("Test Menu", Gio::Menu::create());
 
     auto ctx = LayoutContext{.registry = registry,
                              .runtime = runtime,
                              .parentWindow = window,
-                             .inspector = {.coverArtCache = coverArtCache.get()},
+                             .inspector = {.imageCache = imageCache.get()},
                              .shell = {.menuModel = menuModel}};
 
     [[maybe_unused]] auto layoutRuntime = LayoutRuntime{registry};
@@ -445,9 +445,9 @@ namespace ao::gtk::layout::test
       CHECK(dynamic_cast<Gtk::PopoverMenuBar*>(&comp->widget()) != nullptr);
     }
 
-    SECTION("inspector.coverArt creates CoverArtWidget when cache available")
+    SECTION("inspector.image creates ImageWidget when cache available")
     {
-      auto const node = LayoutNode{.type = "inspector.coverArt"};
+      auto const node = LayoutNode{.type = "inspector.image"};
       auto const comp = registry.create(ctx, node);
 
       REQUIRE(comp != nullptr);
@@ -498,7 +498,7 @@ namespace ao::gtk::layout::test
                                                           "library.listTree",
                                                           "tracks.table",
                                                           "library.openLibraryButton",
-                                                          "inspector.coverArt",
+                                                          "inspector.image",
                                                           "inspector.sidebar",
                                                           "app.menuBar",
                                                           "app.workspaceWithInspector",

@@ -20,7 +20,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class TrackRowCache;
-  class CoverArtCache;
+  class ImageCache;
   class PlaybackSequenceController;
   class TagEditController;
   namespace portal
@@ -55,7 +55,7 @@ namespace ao::gtk::layout
 
   struct InspectorUiContext final
   {
-    CoverArtCache* coverArtCache = nullptr;
+    ImageCache* imageCache = nullptr;
   };
 
   struct TagUiContext final
@@ -97,7 +97,7 @@ namespace ao::gtk::layout
       track.trackRowCache = services.trackRowCache;
       list.sidebarController = services.listSidebarController;
       playback.sequenceController = services.playbackSequenceController;
-      inspector.coverArtCache = services.coverArtCache;
+      inspector.imageCache = services.imageCache;
       tag.editController = services.tagEditController;
       portal.coordinator = services.importExportCoordinator;
     }

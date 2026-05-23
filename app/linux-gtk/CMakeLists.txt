@@ -68,8 +68,8 @@ add_library(aobus-gtk-lib STATIC
     playback/VolumeBar.cpp
 
     inspector/TrackInspectorPanel.cpp
-    inspector/CoverArtCache.cpp
-    inspector/CoverArtWidget.cpp
+    image/ImageCache.cpp
+    image/ImageWidget.cpp
 
     tag/TagEditController.cpp
     tag/TagPopover.cpp

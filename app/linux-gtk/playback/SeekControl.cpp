@@ -3,6 +3,7 @@
 
 #include "playback/SeekControl.h"
 
+#include "ao/audio/Types.h"
 #include "runtime/PlaybackService.h"
 
 #include <gdkmm/event.h>
@@ -116,7 +117,11 @@ namespace ao::gtk
         if (ev.mode == rt::PlaybackService::SeekMode::Final)
         {
           auto const& state = _playbackService.state();
-          _interpolator.updateState(ev.positionMs, state.durationMs, _interpolator.isPlaying());
+          bool const isPlaying =
+            (state.transport == audio::Transport::Playing || state.transport == audio::Transport::Buffering ||
+             state.transport == audio::Transport::Seeking);
+
+          _interpolator.updateState(ev.positionMs, state.durationMs, isPlaying);
 
           if (!_isDragging && !_updating)
           {

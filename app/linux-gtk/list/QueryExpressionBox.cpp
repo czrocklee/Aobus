@@ -171,6 +171,7 @@ namespace ao::gtk
   QueryExpressionBox::~QueryExpressionBox()
   {
     _completionPopover.popdown();
+    _completionPopover.unparent();
   }
 
   void QueryExpressionBox::setupCompletion()

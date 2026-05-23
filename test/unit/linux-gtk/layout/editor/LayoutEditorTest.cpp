@@ -2,14 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/linux-gtk/layout/document/LayoutDocument.h"
-#include "app/linux-gtk/layout/document/LayoutYaml.h" // IWYU pragma: keep
+#include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/runtime/AppRuntime.h"
 #include "app/runtime/ConfigStore.h"
 #include "runtime/CorePrimitives.h"
-#include "runtime/yaml/Utils.h" // IWYU pragma: keep
+#include "runtime/yaml/Utils.h" // NOLINT(misc-include-cleaner)
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -209,7 +209,7 @@ namespace ao::gtk::layout::editor::test
                                                           "library.listTree",
                                                           "tracks.table",
                                                           "library.openLibraryButton",
-                                                          "inspector.coverArt",
+                                                          "inspector.image",
                                                           "inspector.sidebar",
                                                           "app.menuBar",
                                                           "app.workspaceWithInspector"});

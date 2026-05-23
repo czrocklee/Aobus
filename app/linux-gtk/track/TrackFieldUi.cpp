@@ -43,10 +43,13 @@ namespace ao::gtk
     constexpr std::int32_t kWidthYear = 80;
     constexpr std::int32_t kWidthDisc = 70;
     constexpr std::int32_t kWidthTrack = 72;
+    constexpr std::int32_t kWidthTitle = 280;
     constexpr std::int32_t kWidthDuration = 84;
     constexpr std::int32_t kWidthTechnical = 80;
+    constexpr std::int32_t kWidthTechnicalSummary = 180;
     constexpr std::int32_t kWidthPath = 300;
     constexpr std::int32_t kWidthTime = 130;
+    constexpr std::int32_t kWidthTags = 160;
 
     std::string formatDuration(Duration duration)
     {
@@ -381,6 +384,7 @@ namespace ao::gtk
         // ---- Metadata: text ----
         {
           .field = F::Title,
+          .defaultColumnWidth = kWidthTitle,
           .dragQueryPrefix = {},
           .columnVisibleByDefault = true,
           .columnExpands = false,
@@ -609,6 +613,7 @@ namespace ao::gtk
         // ---- Tags ----
         {
           .field = F::Tags,
+          .defaultColumnWidth = kWidthTags,
           .columnVisibleByDefault = true,
           .columnExpands = true,
           .columnTagsCell = true,

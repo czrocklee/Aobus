@@ -22,24 +22,24 @@ namespace ao::library
 
 namespace ao::gtk
 {
-  class CoverArtCache;
+  class ImageCache;
 
-  class CoverArtWidget final : public Gtk::Picture
+  class ImageWidget final : public Gtk::Picture
   {
   public:
-    CoverArtWidget(library::MusicLibrary& library, CoverArtCache& cache);
-    ~CoverArtWidget() override;
+    ImageWidget(library::MusicLibrary& library, ImageCache& cache);
+    ~ImageWidget() override;
 
-    CoverArtWidget(CoverArtWidget const&) = delete;
-    CoverArtWidget& operator=(CoverArtWidget const&) = delete;
-    CoverArtWidget(CoverArtWidget&&) = delete;
-    CoverArtWidget& operator=(CoverArtWidget&&) = delete;
+    ImageWidget(ImageWidget const&) = delete;
+    ImageWidget& operator=(ImageWidget const&) = delete;
+    ImageWidget(ImageWidget&&) = delete;
+    ImageWidget& operator=(ImageWidget&&) = delete;
 
-    void setCoverFromBytes(std::span<std::byte const> bytes);
-    void setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
-    void clearCover();
+    void setImageFromBytes(std::span<std::byte const> bytes);
+    void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
+    void clearImage();
 
-    void loadCoverArt(ResourceId coverArtId);
+    void loadImage(ResourceId coverArtId);
 
     /// Bind to a runtime detail projection for reactive cover art updates.
     void bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection);
@@ -48,7 +48,7 @@ namespace ao::gtk
     void onDetailSnapshot(rt::TrackDetailSnapshot const& snap);
 
     library::MusicLibrary& _library;
-    CoverArtCache& _cache;
+    ImageCache& _cache;
     std::shared_ptr<rt::ITrackDetailProjection> _detailProjection;
     rt::Subscription _detailSub;
   };

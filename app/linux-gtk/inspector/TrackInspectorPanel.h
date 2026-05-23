@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ao/Type.h"
-#include "inspector/CoverArtCache.h"
+#include "image/ImageCache.h"
 #include "runtime/CorePrimitives.h"
 #include "runtime/ProjectionTypes.h"
 #include "tag/TagEditor.h"
@@ -48,7 +48,7 @@ namespace ao::gtk
     explicit TrackInspectorPanel(library::MusicLibrary& library,
                                  rt::LibraryMutationService& mutation,
                                  rt::ListSourceStore& sources,
-                                 CoverArtCache& coverArtCache);
+                                 ImageCache& imageCache);
     ~TrackInspectorPanel() override;
 
     TrackInspectorPanel(TrackInspectorPanel const&) = delete;
@@ -75,14 +75,14 @@ namespace ao::gtk
     void onAlbumEdited();
 
     void onTrackDetailSnapshot(rt::TrackDetailSnapshot const& snap);
-    void updateCoverArt(rt::TrackDetailSnapshot const& snap);
-    Glib::RefPtr<Gdk::Pixbuf> loadCoverArtFromLibrary(ResourceId resourceId);
+    void updateImage(rt::TrackDetailSnapshot const& snap);
+    Glib::RefPtr<Gdk::Pixbuf> loadImageFromLibrary(ResourceId resourceId);
     void updateAudioMetadata(rt::TrackDetailSnapshot const& snap);
 
     library::MusicLibrary& _library;
     rt::LibraryMutationService& _mutation;
     rt::ListSourceStore& _sources;
-    CoverArtCache& _coverArtCache;
+    ImageCache& _imageCache;
 
     std::vector<TrackId> _currentTrackIds;
     std::shared_ptr<rt::ITrackDetailProjection> _detailProjection;

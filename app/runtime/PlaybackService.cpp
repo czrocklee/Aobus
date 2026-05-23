@@ -105,6 +105,7 @@ namespace ao::rt
     ListId currentSourceListId = kInvalidListId;
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
+    std::uint32_t currentTrackDurationMs = 0;
     Signal<> preparingSignal;
     Signal<> startedSignal;
     Signal<> pausedSignal;
@@ -156,6 +157,12 @@ namespace ao::rt
       snapshot.sourceListId = currentSourceListId;
       snapshot.trackTitle = currentTrackTitle;
       snapshot.trackArtist = currentTrackArtist;
+
+      if (snapshot.durationMs == 0)
+      {
+        snapshot.durationMs = currentTrackDurationMs;
+      }
+
       return snapshot;
     }
 
@@ -305,6 +312,7 @@ namespace ao::rt
     _impl->currentSourceListId = sourceListId;
     _impl->currentTrackTitle = descriptor.title;
     _impl->currentTrackArtist = descriptor.artist;
+    _impl->currentTrackDurationMs = descriptor.durationMs;
     _impl->state = _impl->buildState(*_impl->player);
     _impl->startedSignal.emit();
 
@@ -378,6 +386,7 @@ namespace ao::rt
     _impl->currentSourceListId = {};
     _impl->currentTrackTitle.clear();
     _impl->currentTrackArtist.clear();
+    _impl->currentTrackDurationMs = 0;
     _impl->state = _impl->buildState(*_impl->player);
     _impl->stoppedSignal.emit();
     _impl->idleSignal.emit();
