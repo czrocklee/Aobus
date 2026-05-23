@@ -11,6 +11,7 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
 #include "ao/library/TrackView.h"
+#include "ao/utility/Log.h"
 #include "track/TrackRowObject.h"
 
 #include <glibmm/refptr.h>
@@ -35,10 +36,15 @@ namespace ao::gtk
 
       for (auto const tagId : tags)
       {
-        auto const tag = dictionary.get(tagId);
+        auto const tag = dictionary.getOrDefault(tagId, "");
 
         if (tag.empty())
         {
+          if (tagId.raw() != 0)
+          {
+            APP_LOG_ERROR("TrackRowCache: invalid tag ID {} not found in dictionary", tagId.raw());
+          }
+
           continue;
         }
 

@@ -224,6 +224,67 @@ namespace ao::library::test
     REQUIRE(dict.contains("artist3"));
   }
 
+  TEST_CASE("Dictionary - put different string after getOrIntern does not collide", "[core][dictionary]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    auto wtxn = WriteTransaction{env};
+    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+    wtxn.commit();
+
+    // Simulate scan populating some entries first
+    auto wtxn2 = WriteTransaction{env};
+    dict.put(wtxn2, "artist_one");
+    dict.put(wtxn2, "album_one");
+    wtxn2.commit();
+
+    // getOrIntern reserves "fav" (like query compiler does for "#fav" smart list)
+    auto const reservedId = dict.getOrIntern("fav");
+    REQUIRE(reservedId.raw() == 3); // after 2 puts, next is 3
+
+    // put a DIFFERENT string "#fav" — must NOT collide with reserved "fav"
+    auto wtxn3 = WriteTransaction{env};
+    auto const putId = dict.put(wtxn3, "#fav");
+    wtxn3.commit();
+
+    REQUIRE(putId.raw() != reservedId.raw());
+    REQUIRE(putId.raw() == 4); // must skip over reserved ID 3
+
+    // Both strings should be independently resolvable
+    REQUIRE(dict.get(reservedId) == "fav");
+    REQUIRE(dict.get(putId) == "#fav");
+    REQUIRE(dict.getId("fav").raw() == 3);
+    REQUIRE(dict.getId("#fav").raw() == 4);
+  }
+
+  TEST_CASE("Dictionary - put same string as getOrIntern returns reserved ID and persists", "[core][dictionary]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    auto wtxn = WriteTransaction{env};
+    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+    wtxn.commit();
+
+    // Reserve a string
+    auto const reservedId = dict.getOrIntern("fav");
+    REQUIRE(reservedId.raw() == 1);
+
+    // Put the SAME string — should reuse the reserved ID and persist it
+    auto wtxn2 = WriteTransaction{env};
+    auto const putId = dict.put(wtxn2, "fav");
+    wtxn2.commit();
+
+    REQUIRE(putId.raw() == reservedId.raw());
+    REQUIRE(dict.get(putId) == "fav");
+
+    // After restart simulation: reload dictionary from DB
+    auto rtxn = ReadTransaction{env};
+    auto dict2 = DictionaryStore{Database{rtxn, "dict"}, rtxn};
+    REQUIRE(dict2.get(putId) == "fav");
+  }
+
   TEST_CASE("Dictionary - getOrDefault returns value for valid ID", "[core][dictionary]")
   {
     auto const temp = TempDir{};

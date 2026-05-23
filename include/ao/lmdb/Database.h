@@ -165,6 +165,7 @@ namespace ao::lmdb
     std::span<std::byte> create(std::uint32_t id, std::size_t size);
     std::span<std::byte> create(std::span<std::byte const> key, std::size_t size);
 
+    std::uint32_t maxKey() const noexcept { return _lastId; }
     std::uint32_t append(std::span<std::byte const> data);
     std::pair<std::uint32_t, std::span<std::byte>> append(std::size_t size);
 

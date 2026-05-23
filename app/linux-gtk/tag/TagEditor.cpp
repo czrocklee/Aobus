@@ -9,6 +9,7 @@
 #include "ao/library/TrackStore.h"
 #include "layout/LayoutConstants.h"
 
+#include <glibmm/regex.h>
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/flowbox.h>
@@ -62,6 +63,22 @@ namespace ao::gtk
     _searchEntry.add_css_class("ao-tags-entry");
     _searchEntry.signal_activate().connect(sigc::mem_fun(*this, &TagEditor::onEntryActivated));
     _searchEntry.signal_changed().connect([this] { _availableTagsBox.invalidate_filter(); });
+
+    // Tag names must match query parser identifier rules: [a-zA-Z_][a-zA-Z0-9_]*
+    static auto const kTagNamePattern = Glib::Regex::create("^[a-zA-Z_][a-zA-Z0-9_]*$");
+
+    _searchEntry.signal_insert_text().connect(
+      [this](Glib::ustring const& text, int const* position)
+      {
+        auto candidate = _searchEntry.get_text();
+        candidate.insert(*position, text);
+
+        if (!candidate.empty() && !kTagNamePattern->match(candidate))
+        {
+          ::g_signal_stop_emission_by_name(_searchEntry.gobj(), "insert-text");
+        }
+      },
+      false);
 
     append(_searchEntry);
 
@@ -148,7 +165,8 @@ namespace ao::gtk
 
       for (auto const tagId : optView->tags())
       {
-        if (auto const tag = std::string{dictionary.get(tagId)}; !tag.empty() && !std::ranges::contains(tagsOnTrack, tag))
+        if (auto const tag = std::string{dictionary.get(tagId)};
+            !tag.empty() && !std::ranges::contains(tagsOnTrack, tag))
         {
           tagsOnTrack.push_back(tag);
         }
@@ -252,8 +270,8 @@ namespace ao::gtk
 
     for (auto const& [tag, freq] : _availableTagsByFrequency)
     {
-      if (std::ranges::contains(_currentTags, tag) || std::ranges::contains(_pendingRemoves, tag)
-          || std::ranges::contains(_pendingAdds, tag))
+      if (std::ranges::contains(_currentTags, tag) || std::ranges::contains(_pendingRemoves, tag) ||
+          std::ranges::contains(_pendingAdds, tag))
       {
         continue;
       }

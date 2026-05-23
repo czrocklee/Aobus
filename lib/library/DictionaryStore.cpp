@@ -8,6 +8,7 @@
 #include "ao/lmdb/Transaction.h"
 #include "ao/utility/ByteView.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <span>
 #include <string_view>
@@ -48,10 +49,11 @@ namespace ao::library
       return it->second;
     }
 
-    // Not found in memory - append to database
+    // Not found in memory - write with ID that avoids getOrIntern collisions
     auto writer = _database.writer(txn);
     auto data = utility::bytes::view(value);
-    auto id = writer.append(data);
+    auto const id = std::max(writer.maxKey(), static_cast<std::uint32_t>(_idToStringStorage.size())) + 1;
+    writer.create(id, data);
     auto const& str = _idToStringStorage.emplace_back(utility::bytes::stringView(data));
     _stringToId.emplace(str, DictionaryId{id});
     return DictionaryId{id};
