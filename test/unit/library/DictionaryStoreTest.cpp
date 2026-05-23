@@ -7,12 +7,16 @@
 #include "ao/lmdb/Database.h"
 #include "ao/lmdb/Environment.h"
 #include "ao/lmdb/Transaction.h"
+#include "ao/utility/ByteView.h"
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <string>
 #include <string_view>
+
+using namespace std::string_view_literals;
 
 namespace ao::library::test
 {
@@ -311,5 +315,116 @@ namespace ao::library::test
     CHECK(dict.getOrDefault(kInvalidDictionaryId).empty());
     CHECK(dict.getOrDefault(kInvalidDictionaryId, "fallback") == "fallback");
     CHECK(dict.getOrDefault(DictionaryId{999}).empty());
+  }
+
+  TEST_CASE("Dictionary - handles gaps in database IDs correctly", "[core][dictionary]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    // Manually create a gap in the database
+    {
+      auto wtxn = WriteTransaction{env};
+      auto db = Database{wtxn, "dict"};
+      auto writer = db.writer(wtxn);
+
+      writer.create(1, utility::bytes::view("first"sv));
+      // SKIP ID 2
+      writer.create(3, utility::bytes::view("third"sv));
+      // SKIP ID 4
+      writer.create(5, utility::bytes::view("fifth"sv));
+
+      wtxn.commit();
+    }
+
+    // Load DictionaryStore which should correctly handle the gaps via resize()
+    auto rtxn = ReadTransaction{env};
+    auto dict = DictionaryStore{Database{rtxn, "dict"}, rtxn};
+
+    REQUIRE(dict.size() == 3);
+
+    // Valid entries
+    CHECK(dict.get(DictionaryId{1}) == "first");
+    CHECK(dict.get(DictionaryId{3}) == "third");
+    CHECK(dict.get(DictionaryId{5}) == "fifth");
+
+    // Gapped entries should return empty strings but NOT throw out-of-bounds
+    CHECK(dict.get(DictionaryId{2}).empty());
+    CHECK(dict.get(DictionaryId{4}).empty());
+
+    // Transparent index should also resolve correctly
+    CHECK(dict.getId("first").raw() == 1);
+    CHECK(dict.getId("fifth").raw() == 5);
+  }
+
+  TEST_CASE("Dictionary - recycles gap IDs across restarts", "[core][dictionary]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    // Manually create a gap in the database
+    {
+      auto wtxn = WriteTransaction{env};
+      auto db = Database{wtxn, "dict"};
+      auto writer = db.writer(wtxn);
+
+      writer.create(1, utility::bytes::view("first"sv));
+      // SKIP ID 2
+      writer.create(3, utility::bytes::view("third"sv));
+
+      wtxn.commit();
+    }
+
+    // Load DictionaryStore which should discover ID 2 as a gap
+    auto wtxn2 = WriteTransaction{env};
+    auto dict = DictionaryStore{Database{wtxn2, "dict"}, wtxn2};
+
+    // Inserting a new string should RECYCLE ID 2 instead of appending to 4
+    auto const newId1 = dict.put(wtxn2, "recycled_id_2");
+    REQUIRE(newId1.raw() == 2);
+
+    // Inserting another new string should go to 4 since gaps are exhausted
+    auto const newId2 = dict.getOrIntern("appended_id_4");
+    REQUIRE(newId2.raw() == 4);
+
+    // Inserting another should go to 5
+    auto const newId3 = dict.put(wtxn2, "appended_id_5");
+    REQUIRE(newId3.raw() == 5);
+
+    wtxn2.commit();
+  }
+
+  TEST_CASE("Dictionary - prevents dangling pointers upon heavy reallocation", "[core][dictionary]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    auto wtxn = WriteTransaction{env};
+    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+    wtxn.commit();
+
+    // Store the first string, capturing its ID
+    auto wtxn2 = WriteTransaction{env};
+    auto const firstId = dict.put(wtxn2, "very_first_string");
+    wtxn2.commit();
+
+    // Insert 10,000 unique short strings to force vector reallocation multiple times
+    auto wtxn3 = WriteTransaction{env};
+
+    for (int i = 0; i < 10000; ++i)
+    {
+      dict.put(wtxn3, "string_" + std::to_string(i));
+    }
+
+    wtxn3.commit();
+
+    // After massive reallocation, the old string_view in the transparent index should NOT dangle,
+    // because we use DictionaryId in the hash set and vector element direct lookup.
+    // So looking up "very_first_string" should succeed and return the correct ID.
+    REQUIRE_NOTHROW(dict.getId("very_first_string"));
+    REQUIRE(dict.getId("very_first_string") == firstId);
+
+    // And get() should resolve correctly
+    REQUIRE(dict.get(firstId) == "very_first_string");
   }
 } // namespace ao::library::test

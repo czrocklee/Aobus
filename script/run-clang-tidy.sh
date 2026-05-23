@@ -201,7 +201,7 @@ CONFIG_BASE="
   {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'},
   {key: 'readability-function-cognitive-complexity.Threshold', value: 30},
   {key: 'cppcoreguidelines-macro-usage.AllowedRegexp', value: '^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+\$'},
-  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4/.*;.*boost/asio/.*;.*boost/interprocess/.*;.*/flat_(set|map);.*/errno.h;.*glib.*'}
+  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4/.*;.*boost/asio/.*;.*boost/interprocess/.*;.*boost/unordered/.*;.*/flat_(set|map);.*/errno.h;.*glib.*'}
  ]}"
 
 # ---------------------------------------------------------------------------

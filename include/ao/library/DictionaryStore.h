@@ -7,11 +7,12 @@
 #include "ao/lmdb/Database.h"
 #include "ao/lmdb/Transaction.h"
 
+#include <boost/unordered/unordered_flat_set.hpp>
+
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace ao::library
@@ -32,6 +33,12 @@ namespace ao::library
      * @param db Database name
      */
     DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& txn);
+
+    DictionaryStore(DictionaryStore&&) = delete;
+    DictionaryStore& operator=(DictionaryStore&&) = delete;
+    DictionaryStore(DictionaryStore const&) = delete;
+    DictionaryStore& operator=(DictionaryStore const&) = delete;
+    ~DictionaryStore() = default;
 
     /**
      * Store a string and auto-generate a unique ID.
@@ -76,16 +83,8 @@ namespace ao::library
      * Get the total number of dictionary entries.
      * @return The number of entries
      */
-    std::size_t size() const noexcept { return _idToStringStorage.size(); }
+    std::size_t size() const noexcept { return _idToStringStorage.size() - _freeIds.size(); }
 
-    /**
-     * Reserve a string in memory without persisting to database.
-     * If the string already exists, returns its existing ID.
-     * If not, adds to in-memory storage only (not persisted).
-     * When put() is later called with the same string, the reserved ID will be reused.
-     * @param str The string to reserve
-     * @return The reserved ID
-     */
     /**
      * Get the ID for a string, or intern it if it doesn't exist.
      * Unlike put(), this does not immediately persist to the database.
@@ -94,15 +93,57 @@ namespace ao::library
     DictionaryId getOrIntern(std::string_view str);
 
   private:
-    lmdb::Database _database;
+    struct DictHash final
+    {
+      using is_transparent = void; // NOLINT(readability-identifier-naming)
+      std::vector<std::string> const* storage;
 
-    // In-memory index: string_view → id (views into _idToStringStorage)
-    std::unordered_map<std::string_view, DictionaryId> _stringToId;
+      std::size_t operator()(DictionaryId id) const { return std::hash<std::string_view>{}((*storage)[id.raw() - 1]); }
+
+      std::size_t operator()(std::string_view str) const { return std::hash<std::string_view>{}(str); }
+    };
+
+    struct DictEqual final
+    {
+      using is_transparent = void; // NOLINT(readability-identifier-naming)
+      std::vector<std::string> const* storage;
+
+      bool operator()(DictionaryId lhs, DictionaryId rhs) const { return lhs == rhs; }
+
+      bool operator()(DictionaryId id, std::string_view str) const { return (*storage)[id.raw() - 1] == str; }
+
+      bool operator()(std::string_view str, DictionaryId id) const { return (*storage)[id.raw() - 1] == str; }
+    };
+
+    struct PlainDictHash final
+    {
+      std::size_t operator()(DictionaryId id) const { return std::hash<std::uint32_t>{}(id.raw()); }
+    };
+
+    DictionaryId popFreeId()
+    {
+      if (_freeIds.empty())
+      {
+        return kInvalidDictionaryId;
+      }
+
+      auto id = _freeIds.back();
+      _freeIds.pop_back();
+      return id;
+    }
+
+    lmdb::Database _database;
 
     // In-memory index: id → string (owner of all strings)
     std::vector<std::string> _idToStringStorage;
 
+    // In-memory index: string_view → id (transparent lookup)
+    boost::unordered_flat_set<DictionaryId, DictHash, DictEqual> _stringToId;
+
     // Track strings that were reserved but not yet persisted to DB
-    std::unordered_set<std::string_view> _reservedStrings;
+    boost::unordered_flat_set<DictionaryId, PlainDictHash> _reservedStrings;
+
+    // Track previously freed/skipped IDs to recycle them and prevent gap accumulation
+    std::vector<DictionaryId> _freeIds;
   };
 } // namespace ao::library

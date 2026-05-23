@@ -4,6 +4,7 @@
 #include "ao/library/DictionaryStore.h"
 
 #include "ao/Exception.h"
+#include "ao/Type.h"
 #include "ao/lmdb/Database.h"
 #include "ao/lmdb/Transaction.h"
 #include "ao/utility/ByteView.h"
@@ -20,15 +21,31 @@ namespace ao::library
   constexpr std::uint32_t kExtraCapacity = 4096;
 
   DictionaryStore::DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& txn)
-    : _database{std::move(db)}
+    : _database{std::move(db)}, _stringToId{1024, DictHash{&_idToStringStorage}, DictEqual{&_idToStringStorage}}
   {
     auto const reader = _database.reader(txn);
+
     _idToStringStorage.reserve(reader.maxKey() + kExtraCapacity);
+
+    std::uint32_t expectedId = 1;
 
     for (auto const& [id, buf] : reader)
     {
-      auto const& str = _idToStringStorage.emplace_back(utility::bytes::stringView(buf));
-      _stringToId.emplace(str, DictionaryId{id});
+      while (expectedId < id)
+      {
+        _freeIds.emplace_back(expectedId);
+        expectedId++;
+      }
+
+      if (id > _idToStringStorage.size())
+      {
+        _idToStringStorage.resize(id);
+      }
+
+      _idToStringStorage[id - 1] = std::string{utility::bytes::stringView(buf)};
+      _stringToId.insert(DictionaryId{id});
+
+      expectedId = id + 1;
     }
   }
 
@@ -37,26 +54,36 @@ namespace ao::library
     // Check in-memory index first (includes entries from reserve)
     if (auto it = _stringToId.find(value); it != _stringToId.end())
     {
-      // If this string was reserved, we need to persist it now
-      if (_reservedStrings.contains(value))
+      if (auto resIt = _reservedStrings.find(*it); resIt != _reservedStrings.end())
       {
         auto writer = _database.writer(txn);
         auto data = utility::bytes::view(value);
-        writer.create(it->second.raw(), data);
-        _reservedStrings.erase(value);
+        writer.create(it->raw(), data);
+        _reservedStrings.erase(resIt);
       }
 
-      return it->second;
+      return *it;
     }
 
     // Not found in memory - write with ID that avoids getOrIntern collisions
     auto writer = _database.writer(txn);
     auto data = utility::bytes::view(value);
-    auto const id = std::max(writer.maxKey(), static_cast<std::uint32_t>(_idToStringStorage.size())) + 1;
-    writer.create(id, data);
-    auto const& str = _idToStringStorage.emplace_back(utility::bytes::stringView(data));
-    _stringToId.emplace(str, DictionaryId{id});
-    return DictionaryId{id};
+    auto id = popFreeId();
+
+    if (id == kInvalidDictionaryId)
+    {
+      id = DictionaryId{std::max(writer.maxKey(), static_cast<std::uint32_t>(_idToStringStorage.size())) + 1};
+
+      if (id.raw() > _idToStringStorage.size())
+      {
+        _idToStringStorage.resize(id.raw());
+      }
+    }
+
+    writer.create(id.raw(), data);
+    _idToStringStorage[id.raw() - 1] = std::string{utility::bytes::stringView(data)};
+    _stringToId.insert(id);
+    return id;
   }
 
   std::string_view DictionaryStore::get(DictionaryId id) const
@@ -93,7 +120,7 @@ namespace ao::library
   {
     if (auto it = _stringToId.find(str); it != _stringToId.end())
     {
-      return it->second;
+      return *it;
     }
 
     ao::throwException<Exception>("String not found in dictionary");
@@ -109,14 +136,24 @@ namespace ao::library
     // Check if already exists
     if (auto it = _stringToId.find(str); it != _stringToId.end())
     {
-      return it->second;
+      return *it;
     }
 
     // Add to in-memory storage - ID is 1-indexed (0 = null)
-    _idToStringStorage.emplace_back(str);
-    auto const id = DictionaryId{static_cast<std::uint32_t>(_idToStringStorage.size())};
-    _stringToId.emplace(_idToStringStorage.back(), id);
-    _reservedStrings.emplace(_idToStringStorage.back());
+    auto id = popFreeId();
+
+    if (id != kInvalidDictionaryId)
+    {
+      _idToStringStorage[id.raw() - 1] = str;
+    }
+    else
+    {
+      _idToStringStorage.emplace_back(str);
+      id = DictionaryId{static_cast<std::uint32_t>(_idToStringStorage.size())};
+    }
+
+    _reservedStrings.insert(id);
+    _stringToId.insert(id);
     return id;
   }
 } // namespace ao::library
