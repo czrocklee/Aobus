@@ -407,13 +407,8 @@ namespace ao::gtk
     auto const reader = _musicLibrary.tracks().reader(txn);
     auto const& dictionary = _musicLibrary.dictionary();
 
-    for (auto iter = reader.begin(library::TrackStore::Reader::LoadMode::Both),
-              end = reader.end(library::TrackStore::Reader::LoadMode::Both);
-         iter != end;
-         ++iter)
+    for (auto const& [_, view] : reader.both())
     {
-      auto const& [_, view] = *iter;
-
       for (auto const tagId : view.tags())
       {
         if (auto const tag = dictionary.get(tagId); isQueryableIdentifier(tag))

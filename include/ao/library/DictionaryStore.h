@@ -7,6 +7,7 @@
 #include "ao/lmdb/Database.h"
 #include "ao/lmdb/Transaction.h"
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -70,6 +71,12 @@ namespace ao::library
      * @return true if the string exists
      */
     bool contains(std::string_view str) const;
+
+    /**
+     * Get the total number of dictionary entries.
+     * @return The number of entries
+     */
+    std::size_t size() const noexcept { return _idToStringStorage.size(); }
 
     /**
      * Reserve a string in memory without persisting to database.

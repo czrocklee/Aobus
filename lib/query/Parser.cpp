@@ -164,10 +164,10 @@ namespace
 
                                         auto result = Expression{std::move(list.back())};
 
-                                        for (auto it = list.rbegin() + 1; it != list.rend(); ++it)
+                                        for (auto& item : list | std::views::reverse | std::views::drop(1))
                                         {
                                           auto bin = std::make_unique<BinaryExpression>();
-                                          bin->operand = std::move(*it);
+                                          bin->operand = std::move(item);
                                           bin->optOperation = BinaryExpression::Operation{
                                             .op = Operator::Add, .operand = std::move(result)};
                                           result = Expression{std::move(bin)};

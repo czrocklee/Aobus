@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <iterator>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -47,12 +48,17 @@ namespace ao::library
 
     lmdb::Database::Reader const& databaseReader() const noexcept { return _reader; }
 
+    struct EndSentinel
+    {};
     /**
      * Iterator for all manifest entries.
      */
     class Iterator final
     {
     public:
+      using value_type = std::pair<std::string_view, FileManifestView>;
+      using difference_type = std::ptrdiff_t;
+      using iterator_category = std::input_iterator_tag;
       Iterator() = default;
       explicit Iterator(lmdb::Database::Reader::Iterator it)
         : _it{std::move(it)}
@@ -60,6 +66,7 @@ namespace ao::library
       }
 
       bool operator==(Iterator const& other) const { return _it == other._it; }
+      bool operator==(EndSentinel /*unused*/) const { return _it == lmdb::Database::Reader::Iterator{}; }
       bool operator!=(Iterator const& other) const { return _it != other._it; }
 
       Iterator& operator++()
@@ -67,6 +74,7 @@ namespace ao::library
         ++_it;
         return *this;
       }
+      void operator++(int) { ++*this; }
 
       std::pair<std::string_view, FileManifestView> operator*() const;
 
@@ -75,7 +83,7 @@ namespace ao::library
     };
 
     Iterator begin() const;
-    Iterator end() const;
+    EndSentinel end() const { return {}; }
 
   private:
     lmdb::Database::Reader _reader;

@@ -1,5 +1,6 @@
 add_executable(aobus
     main.cpp
+    DumpUtils.h
     InitCommand.cpp
     LibCommand.cpp
     ListCommand.cpp

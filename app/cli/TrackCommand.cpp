@@ -3,8 +3,10 @@
 
 #include "TrackCommand.h"
 
+#include "DumpUtils.h"
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackLayout.h"
 #include "ao/library/TrackStore.h"
 #include "ao/library/TrackView.h"
 #include "ao/query/ExecutionPlan.h"
@@ -66,7 +68,7 @@ namespace ao::cli
       return matches;
     }
 
-    void formatJson(std::vector<std::pair<TrackId, library::TrackView>> const& matches,
+    void formatYaml(std::vector<std::pair<TrackId, library::TrackView>> const& matches,
                     std::size_t offset,
                     std::size_t limit,
                     library::MusicLibrary& ml,
@@ -74,39 +76,29 @@ namespace ao::cli
     {
       if (offset >= matches.size())
       {
-        os << "[]\n";
+        os << "tracks: []\n";
         return;
       }
 
       std::size_t const end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
-      os << "[\n";
+      os << "tracks:\n";
 
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << " {\"id\": " << id << R"(, "title": ")" << view.metadata().title() << "\"";
+        os << "  - id: " << id << "\n"
+           << "    title: \"" << view.metadata().title() << "\"\n";
 
         if (view.metadata().artistId() > 0)
         {
-          os << R"(, "artist": ")" << ml.dictionary().get(view.metadata().artistId()) << "\"";
+          os << "    artist: \"" << ml.dictionary().get(view.metadata().artistId()) << "\"\n";
         }
 
         if (view.metadata().albumId() > 0)
         {
-          os << R"(, "album": ")" << ml.dictionary().get(view.metadata().albumId()) << "\"";
+          os << "    album: \"" << ml.dictionary().get(view.metadata().albumId()) << "\"\n";
         }
-
-        os << "}";
-
-        if (i < end - 1)
-        {
-          os << ",";
-        }
-
-        os << "\n";
       }
-
-      os << "]\n";
     }
 
     void formatPlain(std::vector<std::pair<TrackId, library::TrackView>> const& matches,
@@ -135,18 +127,144 @@ namespace ao::cli
 
     void show(library::MusicLibrary& ml,
               std::string const& filter,
-              bool json,
+              bool yaml,
               std::size_t limit,
               std::size_t offset,
               std::ostream& os)
     {
-      if (auto const matches = collectTracks(ml, filter); json)
+      if (auto const matches = collectTracks(ml, filter); yaml)
       {
-        formatJson(matches, offset, limit, ml, os);
+        formatYaml(matches, offset, limit, ml, os);
       }
       else
       {
         formatPlain(matches, offset, limit, os);
+      }
+    }
+
+    void processTrackDump(TrackId id,
+                          library::TrackView const& view,
+                          library::DictionaryStore const& dict,
+                          bool raw,
+                          bool yaml,
+                          std::ostream& os)
+    {
+      if (yaml)
+      {
+        os << "  - id: " << id << "\n";
+
+        if (view.isHotValid())
+        {
+          os << "    title: \"" << view.metadata().title() << "\"\n"
+             << "    artist: \"" << resolveDict(dict, view.metadata().artistId()) << "\"\n"
+             << "    album: \"" << resolveDict(dict, view.metadata().albumId()) << "\"\n";
+        }
+
+        if (view.isColdValid())
+        {
+          os << "    duration: " << view.property().durationMs() << "\n"
+             << "    sampleRate: " << view.property().sampleRate() << "\n"
+             << "    uri: \"" << view.property().uri() << "\"\n";
+        }
+      }
+      else if (raw)
+      {
+        os << "Track ID: " << id << "\n";
+
+        if (view.isHotValid())
+        {
+          os << "Hot Header:\n";
+          hexDump(view.hotData().subspan(0, sizeof(library::TrackHotHeader)), os);
+          os << "Hot Payload:\n";
+
+          if (view.hotData().size() > sizeof(library::TrackHotHeader))
+          {
+            hexDump(view.hotData().subspan(sizeof(library::TrackHotHeader)), os);
+          }
+        }
+
+        if (view.isColdValid())
+        {
+          os << "Cold Header:\n";
+          hexDump(view.coldData().subspan(0, sizeof(library::TrackColdHeader)), os);
+          os << "Cold Payload:\n";
+
+          if (view.coldData().size() > sizeof(library::TrackColdHeader))
+          {
+            hexDump(view.coldData().subspan(sizeof(library::TrackColdHeader)), os);
+          }
+        }
+      }
+      else
+      {
+        os << "Track ID: " << id << "\n";
+
+        if (view.isHotValid())
+        {
+          os << "  Title: " << view.metadata().title() << "\n"
+             << "  Artist: " << resolveDict(dict, view.metadata().artistId()) << " (ID: " << view.metadata().artistId()
+             << ")\n"
+             << "  Album: " << resolveDict(dict, view.metadata().albumId()) << " (ID: " << view.metadata().albumId()
+             << ")\n"
+             << "  Tag Bloom: 0x" << std::hex << std::setw(8) << std::setfill('0') << view.tags().bloom() << std::dec
+             << std::setfill(' ') << "\n"
+             << "  Tags: ";
+
+          for (auto const tagId : view.tags())
+          {
+            os << resolveDict(dict, tagId) << " (ID: " << tagId << ") ";
+          }
+
+          os << "\n";
+        }
+
+        if (view.isColdValid())
+        {
+          os << "  Duration: " << view.property().durationMs() << "ms\n"
+             << "  Sample Rate: " << view.property().sampleRate() << "Hz\n"
+             << "  URI: " << view.property().uri() << "\n";
+
+          for (auto const& [customId, val] : view.custom())
+          {
+            os << "  Custom [" << resolveDict(dict, customId) << "]: " << val << "\n";
+          }
+        }
+      }
+    }
+
+    void dumpTracks(library::MusicLibrary& ml, std::uint32_t targetId, bool raw, bool yaml, std::ostream& os)
+    {
+      auto const txn = ml.readTransaction();
+      auto const reader = ml.tracks().reader(txn);
+      auto const& dict = ml.dictionary();
+
+      if (yaml)
+      {
+        os << "tracks:\n";
+      }
+
+      if (targetId > 0)
+      {
+        auto const id = TrackId{targetId};
+
+        if (auto const viewOpt = reader.get(id, library::TrackStore::Reader::LoadMode::Both))
+        {
+          processTrackDump(id, *viewOpt, dict, raw, yaml, os);
+        }
+        else
+        {
+          if (!yaml)
+          {
+            os << "Track " << targetId << " not found.\n";
+          }
+        }
+      }
+      else
+      {
+        for (auto const& [id, view] : reader)
+        {
+          processTrackDump(id, view, dict, raw, yaml, os);
+        }
       }
     }
   }
@@ -156,16 +274,16 @@ namespace ao::cli
     auto* track = app.add_subcommand("track", "Track management commands");
     auto* showCmd = track->add_subcommand("show", "Show tracks matching a filter");
     auto* filter = showCmd->add_option("filter,-f,--filter", "track filter expression");
-    auto* json = showCmd->add_flag("-j,--json", "output as JSON");
+    auto* yaml = showCmd->add_flag("-y,--yaml", "output as YAML");
     auto* limit = showCmd->add_option("-l,--limit", "limit number of results (0 = all)")->default_val(0);
     auto* offset = showCmd->add_option("-o,--offset", "offset results")->default_val(0);
 
     showCmd->callback(
-      [&runtime, filter, json, limit, offset]
+      [&runtime, filter, yaml, limit, offset]
       {
         show(runtime.musicLibrary(),
              filter->as<std::string>(),
-             json->count() > 0,
+             yaml->count() > 0,
              limit->as<std::size_t>(),
              offset->as<std::size_t>(),
              std::cout);
@@ -200,6 +318,21 @@ namespace ao::cli
         {
           std::cout << "track not found: " << trackId << '\n';
         }
+      });
+
+    auto* dumpCmd = track->add_subcommand("dump", "Dump tracks from database");
+    auto* dumpId = dumpCmd->add_option("--id", "track id to dump");
+    auto* dumpRaw = dumpCmd->add_flag("--raw", "hex dump raw bytes");
+    auto* dumpYaml = dumpCmd->add_flag("--yaml", "output as YAML");
+
+    dumpCmd->callback(
+      [&runtime, dumpId, dumpRaw, dumpYaml]
+      {
+        dumpTracks(runtime.musicLibrary(),
+                   dumpId->count() > 0 ? dumpId->as<std::uint32_t>() : 0,
+                   dumpRaw->count() > 0,
+                   dumpYaml->count() > 0,
+                   std::cout);
       });
   }
 }

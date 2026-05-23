@@ -9,6 +9,7 @@
 #include "ao/lmdb/Transaction.h"
 
 #include <cstddef>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <utility>
@@ -39,10 +40,12 @@ namespace ao::library
   class ListStore::Reader final
   {
   public:
+    struct EndSentinel
+    {};
     class Iterator;
 
     Iterator begin() const;
-    Iterator end() const;
+    EndSentinel end() const { return {}; }
 
     std::optional<ListView> get(ListId id) const;
 
@@ -60,6 +63,8 @@ namespace ao::library
   {
   public:
     using value_type = std::pair<ListId, ListView>;
+    using difference_type = std::ptrdiff_t;
+    using iterator_category = std::input_iterator_tag;
 
     Iterator() = default;
     Iterator(Iterator const&) = default;
@@ -69,7 +74,9 @@ namespace ao::library
     Iterator& operator=(Iterator&&) = default;
 
     bool operator==(Iterator const& other) const;
+    bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
     Iterator& operator++();
+    void operator++(int) { ++*this; }
     value_type operator*() const;
 
   private:

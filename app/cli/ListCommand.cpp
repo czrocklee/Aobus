@@ -3,6 +3,7 @@
 
 #include "ListCommand.h"
 
+#include "DumpUtils.h"
 #include "ao/Type.h"
 #include "ao/library/ListBuilder.h"
 #include "ao/library/ListStore.h"
@@ -81,6 +82,74 @@ namespace ao::cli
 
       os << "add list: " << id << " " << name << "\n";
     }
+
+    void dumpLists(library::MusicLibrary& ml, bool raw, bool yaml, std::ostream& os)
+    {
+      auto const txn = ml.readTransaction();
+      auto const reader = ml.lists().reader(txn);
+
+      if (yaml)
+      {
+        os << "lists:\n";
+      }
+
+      for (auto const& [id, view] : reader)
+      {
+        if (yaml)
+        {
+          os << "  - id: " << id << "\n"
+             << "    name: \"" << view.name() << "\"\n"
+             << "    description: \"" << view.description() << "\"\n"
+             << "    type: \"" << (view.isSmart() ? "smart" : "manual") << "\"\n"
+             << "    parentId: " << view.parentId() << "\n";
+
+          if (view.isSmart())
+          {
+            os << "    filter: \"" << view.filter() << "\"\n";
+          }
+          else
+          {
+            os << "    tracks: [";
+            bool first = true;
+
+            for (auto const trackId : view.tracks())
+            {
+              if (!first)
+              {
+                os << ", ";
+              }
+
+              os << trackId;
+              first = false;
+            }
+
+            os << "]\n";
+          }
+        }
+        else if (raw)
+        {
+          os << "List ID: " << id << "\n";
+          hexDump(view.rawData(), os);
+        }
+        else
+        {
+          os << "List ID: " << id << "\n"
+             << "  Name: " << view.name() << "\n"
+             << "  Description: " << view.description() << "\n"
+             << "  Type: " << (view.isSmart() ? "smart" : "manual") << "\n"
+             << "  Parent ID: " << view.parentId() << "\n";
+
+          if (view.isSmart())
+          {
+            os << "  Filter: " << view.filter() << "\n";
+          }
+          else
+          {
+            os << "  Tracks: " << view.tracks().size() << "\n";
+          }
+        }
+      }
+    }
   }
 
   void setupListCommand(CLI::App& app, rt::CoreRuntime& runtime)
@@ -124,5 +193,12 @@ namespace ao::cli
           std::cout << "list not found: " << listId << "\n";
         }
       });
+
+    auto* dumpCmd = list->add_subcommand("dump", "Dump lists from database");
+    auto* dumpRaw = dumpCmd->add_flag("--raw", "hex dump raw bytes");
+    auto* dumpYaml = dumpCmd->add_flag("--yaml", "output as YAML");
+
+    dumpCmd->callback([&ml, dumpRaw, dumpYaml]
+                      { dumpLists(ml, dumpRaw->count() > 0, dumpYaml->count() > 0, std::cout); });
   }
 }

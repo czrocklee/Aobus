@@ -91,11 +91,6 @@ namespace ao::library
     return Iterator{_reader.begin()};
   }
 
-  FileManifestStore::Reader::Iterator FileManifestStore::Reader::end() const
-  {
-    return Iterator{_reader.end()};
-  }
-
   void FileManifestStore::Writer::put(std::string_view uri, std::span<std::byte const> payload)
   {
     validateUri(uri);

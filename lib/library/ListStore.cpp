@@ -43,12 +43,7 @@ namespace ao::library
       return Iterator{std::move(iter)};
     }
 
-    return end();
-  }
-
-  ListStore::Reader::Iterator ListStore::Reader::end() const
-  {
-    return Iterator{_reader.end()};
+    return Iterator{};
   }
 
   std::optional<ListView> ListStore::Reader::get(ListId id) const

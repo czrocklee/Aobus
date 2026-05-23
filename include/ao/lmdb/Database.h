@@ -65,11 +65,13 @@ namespace ao::lmdb
       operator std::uint32_t() const noexcept;
     };
 
+    struct EndSentinel
+    {};
     using Value = std::pair<KeyView, std::span<std::byte const>>;
     class Iterator;
 
     Iterator begin() const;
-    Iterator end() const;
+    EndSentinel end() const { return {}; }
 
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
     std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
@@ -111,7 +113,7 @@ namespace ao::lmdb
   class Database::Reader::Iterator final
   {
   public:
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::input_iterator_tag;
     using value_type = Reader::Value;
     using difference_type = std::ptrdiff_t;
     using pointer = value_type const*;
@@ -130,7 +132,9 @@ namespace ao::lmdb
     pointer operator->() const;
 
     Iterator& operator++();
+    void operator++(int) { ++*this; }
     bool operator==(Iterator const& other) const;
+    bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
 
   private:
     Iterator(::MDB_txn* txn, ::MDB_dbi dbi, bool end);

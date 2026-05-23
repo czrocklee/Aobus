@@ -5,7 +5,7 @@
 set -e
 
 TEST_DIR="/tmp/aobus_shell_test"
-AOBUS="/tmp/build/debug/app/aobus/aobus"
+AOBUS="/tmp/build/debug/app/cli/aobus"
 
 cleanup() { rm -rf "$TEST_DIR"; mkdir -p "$TEST_DIR"; }
 
@@ -37,17 +37,17 @@ echo "Test 3: Init with audio files..."
 "$AOBUS" track show | grep -q "Pop Song"
 echo "  PASS"
 
-# Test 4: JSON output
-echo "Test 4: JSON output..."
-"$AOBUS" track show --json | grep -q "Rock Song"
-"$AOBUS" track show --json | grep -q "artist"
+# Test 4: YAML output
+echo "Test 4: YAML output..."
+"$AOBUS" track show --yaml | grep -q "Rock Song"
+"$AOBUS" track show --yaml | grep -q "artist:"
 echo "  PASS"
 
 # Test 5: Limit/offset
 echo "Test 5: Limit/offset..."
-count=$("$AOBUS" track show --json | grep -c "id")
+count=$("$AOBUS" track show --yaml | grep -c "id:")
 [ "$count" -eq 2 ]
-count=$("$AOBUS" track show --limit 1 --json | grep -c "id")
+count=$("$AOBUS" track show --limit 1 --yaml | grep -c "id:")
 [ "$count" -eq 1 ]
 echo "  PASS"
 
@@ -72,13 +72,25 @@ echo "  PASS"
 # Test 9: Track delete
 echo "Test 9: Track delete..."
 "$AOBUS" track delete 1 | grep -q "deleted track"
-! "$AOBUS" track show --json | grep -q "Rock Song"
+! "$AOBUS" track show --yaml | grep -q "Rock Song"
 echo "  PASS"
 
 # Test 10: Non-existent tag query
 echo "Test 10: Non-existent tag query..."
 # This should not throw an error
 "$AOBUS" track show --filter "#NonExistentTag" > /dev/null
+echo "  PASS"
+
+# Test 11: Dump commands
+echo "Test 11: Dump commands..."
+"$AOBUS" track dump --yaml | grep -q "tracks:"
+"$AOBUS" track dump --id 2 | grep -q "Title:"
+"$AOBUS" track dump --raw | grep -q "Track ID:"
+"$AOBUS" list dump --yaml | grep -q "lists:"
+"$AOBUS" lib dump --meta --yaml | grep -q "meta:"
+"$AOBUS" lib dump --dict | grep -q "Dictionary"
+"$AOBUS" lib dump --manifest --yaml | grep -q "manifest:"
+"$AOBUS" lib dump --resources | grep -q "Resources"
 echo "  PASS"
 
 rm -rf "$TEST_DIR"

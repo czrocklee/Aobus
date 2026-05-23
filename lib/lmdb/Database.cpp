@@ -95,11 +95,6 @@ namespace ao::lmdb
     return Iterator{_txn, _dbi, false};
   }
 
-  Database::Reader::Iterator Database::Reader::end() const
-  {
-    return Iterator{_txn, _dbi, true};
-  }
-
   std::optional<std::span<std::byte const>> Database::Reader::get(std::uint32_t id) const
   {
     return get(utility::bytes::view(id));

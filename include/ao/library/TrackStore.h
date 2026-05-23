@@ -13,7 +13,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <utility>
 
@@ -61,6 +63,9 @@ namespace ao::library
       Both  // Both hot and cold
     };
 
+    struct EndSentinel
+    {};
+
     explicit Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);
 
     Iterator begin(LoadMode mode = LoadMode::Both) const;
@@ -71,6 +76,10 @@ namespace ao::library
      * @return TrackView or std::nullopt if not found
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
+
+    auto hot() const;
+    auto cold() const;
+    auto both() const;
 
     lmdb::Database::Reader const& hotReader() const noexcept { return _hotReader; }
     lmdb::Database::Reader const& coldReader() const noexcept { return _coldReader; }
@@ -88,6 +97,8 @@ namespace ao::library
   {
   public:
     using value_type = std::pair<TrackId, TrackView>;
+    using difference_type = std::ptrdiff_t;
+    using iterator_category = std::input_iterator_tag;
 
     Iterator() = default;
     Iterator(Iterator const&) = default;
@@ -98,7 +109,9 @@ namespace ao::library
     Iterator& operator=(Iterator&&) = default;
 
     bool operator==(Iterator const& other) const;
+    bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
     Iterator& operator++();
+    void operator++(int) { ++*this; }
     value_type operator*() const;
 
   private:
@@ -111,6 +124,21 @@ namespace ao::library
     Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };
+
+  inline auto TrackStore::Reader::hot() const
+  {
+    return std::ranges::subrange{begin(LoadMode::Hot), EndSentinel{}};
+  }
+
+  inline auto TrackStore::Reader::cold() const
+  {
+    return std::ranges::subrange{begin(LoadMode::Cold), EndSentinel{}};
+  }
+
+  inline auto TrackStore::Reader::both() const
+  {
+    return std::ranges::subrange{begin(LoadMode::Both), EndSentinel{}};
+  }
 
   /**
    * TrackStore::Writer - Write access to tracks.

@@ -53,7 +53,7 @@ If the user asks whether a change is ready, safe, or worth merging, load `review
 2. Format changed `.cpp`, `.h`, and `.hpp` files with the targeted command above and report its output.
 3. Run scoped validation for the relevant changed code and report pass/fail before staging or committing.
 4. Stage only the intended changes.
-5. Use an imperative commit message such as `perf: optimize TrackRow memory usage`. Do not append "Co-Authored-By" or any AI signatures.
+5. Use an imperative commit message such as `perf: optimize TrackRow memory usage`. Focus on specific technical content and user-facing changes; do not reference project plans, design docs, or internal task IDs (e.g., avoid "implement phase 2 of plan X"). Do not append "Co-Authored-By" or any AI signatures.
 6. Run `git status` after the commit and do not conclude until the working tree is clean or only unrelated user changes remain.
 
 ## 4. Scope And Safety

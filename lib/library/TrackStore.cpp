@@ -80,7 +80,7 @@ namespace ao::library
 
   TrackStore::Reader::Iterator TrackStore::Reader::end(LoadMode mode) const
   {
-    return Iterator{_hotReader.end(), _coldReader.end(), mode};
+    return Iterator{lmdb::Database::Reader::Iterator{}, lmdb::Database::Reader::Iterator{}, mode};
   }
 
   // TrackStore::Reader::Iterator implementation

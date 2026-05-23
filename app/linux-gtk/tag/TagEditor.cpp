@@ -187,13 +187,8 @@ namespace ao::gtk
     }
 
     // Full scan for available tags
-    for (auto it = reader.begin(library::TrackStore::Reader::LoadMode::Hot),
-              end = reader.end(library::TrackStore::Reader::LoadMode::Hot);
-         it != end;
-         ++it)
+    for (auto const& [_, view] : reader.hot())
     {
-      auto const& [_, view] = *it;
-
       for (auto const tagId : view.tags())
       {
         if (auto const tag = std::string{dictionary.get(tagId)}; !tag.empty())
