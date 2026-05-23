@@ -115,7 +115,7 @@ namespace ao::rt
     Multiple,
   };
 
-  template<class T>
+  template<typename T>
   struct AggregateValue final
   {
     std::optional<T> optValue{};

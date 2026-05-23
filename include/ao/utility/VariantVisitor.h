@@ -1,5 +1,6 @@
 #pragma once
 
+#include <type_traits>
 #include <utility>
 
 namespace ao::utility
@@ -17,6 +18,7 @@ namespace ao::utility
   }
 
   template<typename... Ts>
+    requires(std::is_class_v<std::remove_cvref_t<Ts>> && ...)
   auto makeVisitor(Ts&&... ts)
   {
     return detail::Overload{std::forward<Ts>(ts)...};

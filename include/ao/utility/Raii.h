@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <memory>
 
 namespace ao::utility
@@ -15,6 +16,7 @@ namespace ao::utility
    *   auto pcm = makeUniquePtr<::snd_pcm_close>(ptr);
    */
   template<auto Fn, typename T>
+    requires std::invocable<decltype(Fn), T*>
   auto makeUniquePtr(T* ptr)
   {
     struct Deleter final

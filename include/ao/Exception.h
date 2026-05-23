@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstdint>
 #include <exception>
 #include <format>
@@ -58,7 +59,7 @@ namespace ao
    * Selected when one or more formatting arguments are provided.
    */
   template<typename ExceptionType, typename... Args>
-    requires(sizeof...(Args) > 0)
+    requires(sizeof...(Args) > 0 && std::derived_from<ExceptionType, std::exception>)
   [[noreturn]] void throwException(FormatWithLocation<std::type_identity_t<Args>...> fmt, Args&&... args)
   {
     throw ExceptionType{std::format(fmt.fmt, std::forward<Args>(args)...),
@@ -71,6 +72,7 @@ namespace ao
    * Selected when no additional formatting arguments are provided.
    */
   template<typename ExceptionType>
+    requires std::derived_from<ExceptionType, std::exception>
   [[noreturn]] void throwException(std::string_view what, std::source_location loc = std::source_location::current())
   {
     throw ExceptionType{std::string{what}, loc.file_name(), static_cast<std::int32_t>(loc.line())};

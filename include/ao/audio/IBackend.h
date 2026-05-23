@@ -9,6 +9,7 @@
 #include "ao/audio/IRenderTarget.h"
 #include "ao/audio/Property.h"
 
+#include <concepts>
 #include <expected>
 
 namespace ao::audio
@@ -44,12 +45,14 @@ namespace ao::audio
     virtual PropertyInfo queryProperty(PropertyId id) const noexcept = 0;
 
     template<typename T, PropertyId Id>
+      requires std::constructible_from<PropertyValue, T>
     Result<> set(TypedProperty<T, Id> /*tag*/, T value)
     {
       return setProperty(Id, PropertyValue{value});
     }
 
     template<typename T, PropertyId Id>
+      requires std::constructible_from<PropertyValue, T>
     Result<T> get(TypedProperty<T, Id> /*tag*/) const
     {
       auto const result = getProperty(Id);

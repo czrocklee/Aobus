@@ -10,6 +10,7 @@
 
 #include <gsl-lite/gsl-lite.hpp>
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -167,7 +168,8 @@ namespace ao::library
      * @param fill Callback: fill(TrackId id, span<byte> hot, span<byte> cold) -> void
      * @return Pair of (track ID, TrackView)
      */
-    template<class F>
+    template<typename F>
+      requires std::invocable<F, TrackId, std::span<std::byte>, std::span<std::byte>>
     std::pair<TrackId, TrackView> createHotCold(std::size_t hotSize, std::size_t coldSize, F&& fill);
 
     /**
@@ -181,7 +183,8 @@ namespace ao::library
      * @param size Size of hot data (must be multiple of 4)
      * @param fill Callback: fill(span<byte> hot) -> void
      */
-    template<class F>
+    template<typename F>
+      requires std::invocable<F, std::span<std::byte>>
     void updateHot(TrackId id, std::size_t size, F&& fill);
 
     /**
@@ -200,7 +203,8 @@ namespace ao::library
      * @param size Size of cold data (must be multiple of 4)
      * @param fill Callback: fill(span<byte> cold) -> void
      */
-    template<class F>
+    template<typename F>
+      requires std::invocable<F, std::span<std::byte>>
     void updateCold(TrackId id, std::size_t size, F&& fill);
 
     /**
@@ -226,7 +230,8 @@ namespace ao::library
 
   // Template implementations
 
-  template<class F>
+  template<typename F>
+    requires std::invocable<F, TrackId, std::span<std::byte>, std::span<std::byte>>
   std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(std::size_t hotSize, std::size_t coldSize, F&& fill)
   {
     gsl_Expects((hotSize % 4) == 0);
@@ -244,7 +249,8 @@ namespace ao::library
     return {TrackId{id}, TrackView{hotSpan, coldSpan}};
   }
 
-  template<class F>
+  template<typename F>
+    requires std::invocable<F, std::span<std::byte>>
   void TrackStore::Writer::updateHot(TrackId id, std::size_t size, F&& fill)
   {
     gsl_Expects((size % 4) == 0);
@@ -253,7 +259,8 @@ namespace ao::library
     std::invoke(std::forward<F>(fill), span);
   }
 
-  template<class F>
+  template<typename F>
+    requires std::invocable<F, std::span<std::byte>>
   void TrackStore::Writer::updateCold(TrackId id, std::size_t size, F&& fill)
   {
     gsl_Expects((size % 4) == 0);

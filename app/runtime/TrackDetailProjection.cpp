@@ -46,7 +46,7 @@ namespace ao::rt
       return SelectionKind::Multiple;
     }
 
-    template<class T>
+    template<typename T>
     AggregateValue<T> aggregate(std::vector<T> const& values)
     {
       if (values.empty())
