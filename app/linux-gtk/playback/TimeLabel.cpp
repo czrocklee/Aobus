@@ -40,6 +40,7 @@ namespace ao::gtk
     _startedSub = _playbackService.onStarted(
       [this]
       {
+        _isPreviewing = false;
         auto const& state = _playbackService.state();
         _interpolator.updateState(state.positionMs, state.durationMs, true);
         updateLabel(state.positionMs, state.durationMs);
@@ -56,10 +57,28 @@ namespace ao::gtk
     _stoppedSub = _playbackService.onStopped(resetCallback);
     _preparingSub = _playbackService.onPreparing(resetCallback);
 
+    _seekUpdateSub = _playbackService.onSeekUpdate(
+      [this](rt::PlaybackService::SeekUpdate const& ev)
+      {
+        bool const isPreview = ev.mode == rt::PlaybackService::SeekMode::Preview;
+        _isPreviewing = isPreview;
+
+        if (!isPreview)
+        {
+          auto const& state = _playbackService.state();
+          _interpolator.updateState(ev.positionMs, state.durationMs, _interpolator.isPlaying());
+          updateLabel(ev.positionMs, state.durationMs);
+        }
+        else
+        {
+          updateLabel(ev.positionMs, _interpolator.lastDurationMs());
+        }
+      });
+
     _label.add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
-        if (_interpolator.isPlaying())
+        if (_interpolator.isPlaying() && !_isPreviewing)
         {
           auto const displayPos = _interpolator.interpolate(clock->get_frame_time());
           updateLabel(displayPos, _interpolator.lastDurationMs());
@@ -75,6 +94,7 @@ namespace ao::gtk
   {
     _label.set_text("00:00 / 00:00");
     _interpolator.reset();
+    _isPreviewing = false;
   }
 
   void TimeLabel::updateLabel(std::uint32_t posMs, std::uint32_t durMs)

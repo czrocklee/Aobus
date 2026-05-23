@@ -449,6 +449,23 @@ namespace ao::gtk::layout
         }
       }
 
+      ~AbsoluteCanvasWidget() override = default;
+
+      AbsoluteCanvasWidget(AbsoluteCanvasWidget const&) = delete;
+      AbsoluteCanvasWidget& operator=(AbsoluteCanvasWidget const&) = delete;
+      AbsoluteCanvasWidget(AbsoluteCanvasWidget&&) = delete;
+      AbsoluteCanvasWidget& operator=(AbsoluteCanvasWidget&&) = delete;
+
+      void unparentAll()
+      {
+        for (auto& child : _children)
+        {
+          child.widget->unparent();
+        }
+
+        _children.clear();
+      }
+
       void addChild(std::string const& id, Gtk::Widget& child, int posX, int posY, int width, int height, int zIndex)
       {
         child.set_parent(*this);
@@ -948,6 +965,13 @@ namespace ao::gtk::layout
 
         _canvas.sortChildren();
       }
+
+      ~AbsoluteCanvasComponent() override { _canvas.unparentAll(); }
+
+      AbsoluteCanvasComponent(AbsoluteCanvasComponent const&) = delete;
+      AbsoluteCanvasComponent& operator=(AbsoluteCanvasComponent const&) = delete;
+      AbsoluteCanvasComponent(AbsoluteCanvasComponent&&) = delete;
+      AbsoluteCanvasComponent& operator=(AbsoluteCanvasComponent&&) = delete;
 
       Gtk::Widget& widget() override { return _canvas; }
 

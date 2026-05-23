@@ -4,8 +4,8 @@
 #include "playback/SeekControl.h"
 
 #include "runtime/PlaybackService.h"
-#include "runtime/StateTypes.h"
 
+#include <gdkmm/event.h>
 #include <gdkmm/frameclock.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
@@ -53,7 +53,26 @@ namespace ao::gtk
         _playbackService.seek(static_cast<std::uint32_t>(_scale.get_value()));
       });
 
+    gesture->signal_cancel().connect(
+      [this](Gdk::EventSequence*)
+      {
+        if (_isDragging)
+        {
+          _isDragging = false;
+          _playbackService.seek(static_cast<std::uint32_t>(_scale.get_value()));
+        }
+      });
+
     _scale.add_controller(gesture);
+
+    _scale.signal_value_changed().connect(
+      [this]
+      {
+        if (_isDragging && !_updating)
+        {
+          _playbackService.seek(static_cast<std::uint32_t>(_scale.get_value()), rt::PlaybackService::SeekMode::Preview);
+        }
+      });
 
     auto const resetCallback = [this] { reset(); };
 
@@ -90,6 +109,23 @@ namespace ao::gtk
     _idleSub = _playbackService.onIdle(resetCallback);
     _stoppedSub = _playbackService.onStopped(resetCallback);
     _preparingSub = _playbackService.onPreparing(resetCallback);
+
+    _seekUpdateSub = _playbackService.onSeekUpdate(
+      [this](rt::PlaybackService::SeekUpdate const& ev)
+      {
+        if (ev.mode == rt::PlaybackService::SeekMode::Final)
+        {
+          auto const& state = _playbackService.state();
+          _interpolator.updateState(ev.positionMs, state.durationMs, _interpolator.isPlaying());
+
+          if (!_isDragging && !_updating)
+          {
+            _updating = true;
+            _scale.set_value(static_cast<double>(ev.positionMs));
+            _updating = false;
+          }
+        }
+      });
 
     _scale.add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool

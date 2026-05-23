@@ -41,14 +41,24 @@ namespace ao::gtk
 
   void CoverArtWidget::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)
   {
-    if (snap.selectionKind == rt::SelectionKind::None || snap.trackIds.empty() ||
-        snap.singleCoverArtId == kInvalidResourceId)
+    if (snap.selectionKind == rt::SelectionKind::None || snap.trackIds.empty())
     {
       clearCover();
       return;
     }
 
-    auto const rid = static_cast<std::uint64_t>(snap.singleCoverArtId.raw());
+    loadCoverArt(snap.singleCoverArtId);
+  }
+
+  void CoverArtWidget::loadCoverArt(ResourceId const coverArtId)
+  {
+    if (coverArtId == kInvalidResourceId)
+    {
+      clearCover();
+      return;
+    }
+
+    auto const rid = static_cast<std::uint64_t>(coverArtId.raw());
     auto cached = _cache.get(rid);
 
     if (!cached)

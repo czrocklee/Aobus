@@ -37,5 +37,8 @@ namespace ao::gtk
     rt::Subscription _idleSub;
     rt::Subscription _stoppedSub;
     rt::Subscription _preparingSub;
+    rt::Subscription _seekUpdateSub;
+
+    bool _isPreviewing = false;
   };
 } // namespace ao::gtk

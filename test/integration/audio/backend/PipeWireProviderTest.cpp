@@ -2,6 +2,7 @@
 
 #include "ao/audio/Backend.h"
 #include "ao/audio/backend/detail/PipeWireShared.h"
+#include "ao/utility/Raii.h"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -62,42 +63,44 @@ namespace ao::audio::backend::test
           return;
         }
 
-        ::pw_thread_loop_lock(threadLoop.get());
-        core.reset(::pw_context_connect(context.get(), nullptr, 0));
-
-        if (core)
         {
-          ::pw_properties* const props = ::pw_properties_new("factory.name",
-                                                             "support.null-audio-sink",
-                                                             "node.name",
-                                                             "rs-test-dummy-sink",
-                                                             "media.class",
-                                                             "Audio/Sink",
-                                                             "object.linger",
-                                                             "false",
-                                                             nullptr);
+          auto guard = PwThreadLoopGuard{threadLoop.get()};
+          core.reset(::pw_context_connect(context.get(), nullptr, 0));
 
-          // Create node via adapter factory
-          void* const p =
-            ::pw_core_create_object(core.get(), "adapter", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, &props->dict, 0);
-          proxy.reset(static_cast<::pw_proxy*>(p));
-          ::pw_properties_free(props);
+          if (core)
+          {
+            auto props = ao::utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
+                                                                                              "support.null-audio-sink",
+                                                                                              "node.name",
+                                                                                              "rs-test-dummy-sink",
+                                                                                              "media.class",
+                                                                                              "Audio/Sink",
+                                                                                              "object.linger",
+                                                                                              "false",
+                                                                                              nullptr));
 
-          // Sync to ensure it's processed
-          ::pw_core_sync(core.get(), PW_ID_CORE, 0);
+            // Create node via adapter factory
+            void* const p =
+              ::pw_core_create_object(core.get(), "adapter", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, &props->dict, 0);
+            proxy.reset(static_cast<::pw_proxy*>(p));
+
+            // Sync to ensure it's processed
+            ::pw_core_sync(core.get(), PW_ID_CORE, 0);
+          }
         }
-
-        ::pw_thread_loop_unlock(threadLoop.get());
       }
 
       ~DummySinkGuard()
       {
         if (threadLoop)
         {
-          ::pw_thread_loop_lock(threadLoop.get());
-          proxy.reset(); // Destroy proxy while lock is held
-          ::pw_thread_loop_unlock(threadLoop.get());
           ::pw_thread_loop_stop(threadLoop.get());
+          {
+            auto guard = PwThreadLoopGuard{threadLoop.get()};
+            proxy.reset(); // Destroy proxy while lock is held
+            core.reset();
+            context.reset();
+          }
         }
       }
 
@@ -112,20 +115,15 @@ namespace ao::audio::backend::test
 
     // Quick check if we can connect to a daemon
     {
-      auto* loop = ::pw_main_loop_new(nullptr);
-      auto* context = ::pw_context_new(::pw_main_loop_get_loop(loop), nullptr, 0);
-      auto* core = ::pw_context_connect(context, nullptr, 0);
+      auto loop = ao::utility::makeUniquePtr<::pw_main_loop_destroy>(::pw_main_loop_new(nullptr));
+      auto context = PwContextPtr{::pw_context_new(::pw_main_loop_get_loop(loop.get()), nullptr, 0)};
+      auto core = PwCorePtr{::pw_context_connect(context.get(), nullptr, 0)};
 
-      if (core == nullptr)
+      if (!core)
       {
-        ::pw_main_loop_destroy(loop);
         WARN("Skipping PipeWire integration test: Daemon not running");
         return;
       }
-
-      ::pw_core_disconnect(core);
-      ::pw_context_destroy(context);
-      ::pw_main_loop_destroy(loop);
     }
 
     auto const sinkGuard = DummySinkGuard{};
@@ -184,28 +182,27 @@ namespace ao::audio::backend::test
       REQUIRE(context);
       REQUIRE(::pw_thread_loop_start(threadLoop.get()) >= 0);
 
-      ::pw_thread_loop_lock(threadLoop.get());
-      core.reset(::pw_context_connect(context.get(), nullptr, 0));
-
-      if (core)
       {
-        ::pw_properties* const props = ::pw_properties_new("factory.name",
-                                                           "support.null-audio-sink",
-                                                           "node.name",
-                                                           "ao-test-duplex-sink",
-                                                           "media.class",
-                                                           "Audio/Duplex",
-                                                           "object.linger",
-                                                           "false",
-                                                           nullptr);
-        void* const p =
-          ::pw_core_create_object(core.get(), "adapter", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, &props->dict, 0);
-        proxy.reset(static_cast<::pw_proxy*>(p));
-        ::pw_properties_free(props);
-        ::pw_core_sync(core.get(), PW_ID_CORE, 0);
-      }
+        auto guard = PwThreadLoopGuard{threadLoop.get()};
+        core.reset(::pw_context_connect(context.get(), nullptr, 0));
 
-      ::pw_thread_loop_unlock(threadLoop.get());
+        if (core)
+        {
+          auto props = ao::utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
+                                                                                            "support.null-audio-sink",
+                                                                                            "node.name",
+                                                                                            "ao-test-duplex-sink",
+                                                                                            "media.class",
+                                                                                            "Audio/Duplex",
+                                                                                            "object.linger",
+                                                                                            "false",
+                                                                                            nullptr));
+          void* const p =
+            ::pw_core_create_object(core.get(), "adapter", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, &props->dict, 0);
+          proxy.reset(static_cast<::pw_proxy*>(p));
+          ::pw_core_sync(core.get(), PW_ID_CORE, 0);
+        }
+      }
 
       if (proxy)
       {
@@ -235,10 +232,13 @@ namespace ao::audio::backend::test
 
       if (threadLoop)
       {
-        ::pw_thread_loop_lock(threadLoop.get());
-        proxy.reset();
-        ::pw_thread_loop_unlock(threadLoop.get());
         ::pw_thread_loop_stop(threadLoop.get());
+        {
+          auto guard = PwThreadLoopGuard{threadLoop.get()};
+          proxy.reset();
+          core.reset();
+          context.reset();
+        }
       }
     }
   }

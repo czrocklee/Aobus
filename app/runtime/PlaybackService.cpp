@@ -115,6 +115,7 @@ namespace ao::rt
     Signal<> devicesChangedSignal;
     Signal<PlaybackService::QualityChanged const&> qualityChangedSignal;
     Signal<PlaybackService::RevealTrackRequested const&> revealTrackRequestedSignal;
+    Signal<PlaybackService::SeekUpdate const&> seekUpdateSignal;
 
     void ensureReady() const
     {
@@ -281,6 +282,11 @@ namespace ao::rt
     return _impl->revealTrackRequestedSignal.connect(std::move(handler));
   }
 
+  Subscription PlaybackService::onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler)
+  {
+    return _impl->seekUpdateSignal.connect(std::move(handler));
+  }
+
   PlaybackState const& PlaybackService::state() const
   {
     return _impl->state;
@@ -377,10 +383,15 @@ namespace ao::rt
     _impl->idleSignal.emit();
   }
 
-  void PlaybackService::seek(std::uint32_t const positionMs)
+  void PlaybackService::seek(std::uint32_t const positionMs, SeekMode const mode)
   {
-    _impl->player->seek(positionMs);
-    _impl->state = _impl->buildState(*_impl->player);
+    if (mode == SeekMode::Final)
+    {
+      _impl->player->seek(positionMs);
+      _impl->state = _impl->buildState(*_impl->player);
+    }
+
+    _impl->seekUpdateSignal.emit(SeekUpdate{.positionMs = positionMs, .mode = mode});
   }
 
   void PlaybackService::setOutput(audio::BackendId const& backendId,

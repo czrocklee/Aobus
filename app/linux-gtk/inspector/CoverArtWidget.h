@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ao/Type.h"
 #include "runtime/CorePrimitives.h"
 #include "runtime/ProjectionTypes.h"
 
@@ -37,6 +38,8 @@ namespace ao::gtk
     void setCoverFromBytes(std::span<std::byte const> bytes);
     void setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
     void clearCover();
+
+    void loadCoverArt(ResourceId coverArtId);
 
     /// Bind to a runtime detail projection for reactive cover art updates.
     void bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection);

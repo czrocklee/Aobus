@@ -70,10 +70,10 @@ namespace ao::audio
     mutable std::vector<IBackendProvider::Status> cachedBackends;
     mutable std::vector<Device> allDevices;
 
+    mutable std::mutex graphMutex;
     Engine::RouteStatus cachedRouteStatus;
     flow::Graph cachedSystemGraph;
     flow::Graph mergedGraph;
-
     QualityResult qualityResult;
     std::optional<TrackPlaybackDescriptor> optCurrentTrack;
 
@@ -163,8 +163,11 @@ namespace ao::audio
       return;
     }
 
-    cachedSystemGraph = graph;
-    updateMergedGraph();
+    {
+      auto const lock = std::scoped_lock{graphMutex};
+      cachedSystemGraph = graph;
+      updateMergedGraph();
+    }
 
     if (onQualityChanged)
     {
@@ -310,10 +313,13 @@ namespace ao::audio
     }
 
     _impl->playbackGeneration++;
-    _impl->cachedRouteStatus = {};
-    _impl->cachedSystemGraph = {};
-    _impl->mergedGraph = {};
-    _impl->qualityResult = {};
+    {
+      auto const lock = std::scoped_lock{_impl->graphMutex};
+      _impl->cachedRouteStatus = {};
+      _impl->cachedSystemGraph = {};
+      _impl->mergedGraph = {};
+      _impl->qualityResult = {};
+    }
     _impl->graphSubscription.reset();
     _impl->optCurrentTrack = descriptor;
     _impl->engine->play(descriptor);
@@ -380,10 +386,13 @@ namespace ao::audio
   void Player::stop()
   {
     _impl->playbackGeneration++;
-    _impl->cachedRouteStatus = {};
-    _impl->cachedSystemGraph = {};
-    _impl->mergedGraph = {};
-    _impl->qualityResult = {};
+    {
+      auto const lock = std::scoped_lock{_impl->graphMutex};
+      _impl->cachedRouteStatus = {};
+      _impl->cachedSystemGraph = {};
+      _impl->mergedGraph = {};
+      _impl->qualityResult = {};
+    }
     _impl->graphSubscription.reset();
     _impl->optCurrentTrack.reset();
     _impl->engine->stop();
@@ -426,15 +435,17 @@ namespace ao::audio
       status.availableBackends = _impl->cachedBackends;
     }
 
-    status.flow = _impl->mergedGraph;
+    {
+      auto const lock = std::scoped_lock{_impl->graphMutex};
+      status.flow = _impl->mergedGraph;
+      status.quality = _impl->qualityResult.quality;
+      status.qualityTooltip = _impl->qualityResult.tooltip;
+    }
     status.isReady = isReady();
 
     status.volume = status.engine.volume;
     status.muted = status.engine.muted;
     status.volumeAvailable = status.engine.volumeAvailable;
-
-    status.quality = _impl->qualityResult.quality;
-    status.qualityTooltip = _impl->qualityResult.tooltip;
     return status;
   }
 
@@ -455,25 +466,36 @@ namespace ao::audio
       return;
     }
 
+    auto lock = std::unique_lock{_impl->graphMutex};
     _impl->cachedRouteStatus = status;
+    lock.unlock();
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
-    if (_impl->cachedRouteStatus.optAnchor && _impl->activeManager != nullptr)
+    auto const hasRoute = status.optAnchor && _impl->activeManager != nullptr;
+
+    if (hasRoute)
     {
       if (!_impl->graphSubscription)
       {
         _impl->graphSubscription = _impl->activeManager->subscribeGraph(
-          _impl->cachedRouteStatus.optAnchor->id,
+          status.optAnchor->id,
           [this, generation](flow::Graph const& graph) { _impl->handleSystemGraphChanged(this, graph, generation); });
       }
     }
     else
     {
       _impl->graphSubscription.reset();
+    }
+
+    lock.lock();
+
+    if (!hasRoute)
+    {
       _impl->cachedSystemGraph = {};
     }
 
     _impl->updateMergedGraph();
+    lock.unlock();
 
     if (_impl->onQualityChanged)
     {

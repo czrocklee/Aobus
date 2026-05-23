@@ -103,6 +103,36 @@ namespace ao::audio::backend::detail
     ::spa_hook _hook;
   };
 
+  class PwThreadLoopGuard final
+  {
+  public:
+    explicit PwThreadLoopGuard(::pw_thread_loop* loop) noexcept
+      : _loop{loop}
+    {
+      if (_loop != nullptr)
+      {
+        ::pw_thread_loop_lock(_loop);
+      }
+    }
+
+    ~PwThreadLoopGuard() noexcept
+    {
+      if (_loop != nullptr)
+      {
+        ::pw_thread_loop_unlock(_loop);
+      }
+    }
+
+    PwThreadLoopGuard(PwThreadLoopGuard const&) = delete;
+    PwThreadLoopGuard& operator=(PwThreadLoopGuard const&) = delete;
+
+    PwThreadLoopGuard(PwThreadLoopGuard&&) = delete;
+    PwThreadLoopGuard& operator=(PwThreadLoopGuard&&) = delete;
+
+  private:
+    ::pw_thread_loop* _loop;
+  };
+
   // --- Shared Helper Functions ---
 
   void ensurePipeWireInit();

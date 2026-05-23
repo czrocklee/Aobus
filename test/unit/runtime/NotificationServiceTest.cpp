@@ -92,7 +92,7 @@ namespace ao::rt::test
     CHECK(entry.content.actions.front().id == "cancel");
     REQUIRE(entry.content.optProgress);
     CHECK(entry.content.optProgress->mode == NotificationProgressMode::Fraction);
-    CHECK(entry.content.optProgress->fraction == Catch::Approx(0.25));
+    CHECK(entry.content.optProgress->fraction == Catch::Approx{0.25});
     CHECK(entry.content.optProgress->label == "25%");
   }
 
@@ -118,7 +118,7 @@ namespace ao::rt::test
     auto const& entry = feed.entries.front();
     CHECK(updatedId == id);
     REQUIRE(entry.content.optProgress);
-    CHECK(entry.content.optProgress->fraction == Catch::Approx(0.5));
+    CHECK(entry.content.optProgress->fraction == Catch::Approx{0.5});
     CHECK(entry.content.optProgress->label == "Halfway");
   }
 

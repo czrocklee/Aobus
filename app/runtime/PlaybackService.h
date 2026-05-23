@@ -39,6 +39,18 @@ namespace ao::rt
       bool ready = false;
     };
 
+    enum class SeekMode : std::uint8_t
+    {
+      Final,
+      Preview
+    };
+
+    struct SeekUpdate final
+    {
+      std::uint32_t positionMs = 0;
+      SeekMode mode = SeekMode::Final;
+    };
+
     struct RevealTrackRequested final
     {
       TrackId trackId = kInvalidTrackId;
@@ -66,13 +78,14 @@ namespace ao::rt
     Subscription onDevicesChanged(std::move_only_function<void()> handler);
     Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
     Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
+    Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
 
     void play(audio::TrackPlaybackDescriptor const& descriptor, ListId sourceListId);
     TrackId playSelectionInView(ViewId viewId);
     void pause();
     void resume();
     void stop();
-    void seek(std::uint32_t positionMs);
+    void seek(std::uint32_t positionMs, SeekMode mode = SeekMode::Final);
     void setOutput(audio::BackendId const& backendId,
                    audio::DeviceId const& deviceId,
                    audio::ProfileId const& profileId);

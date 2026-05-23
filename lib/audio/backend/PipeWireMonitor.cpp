@@ -134,9 +134,10 @@ namespace ao::audio::backend
         return;
       }
 
-      ::pw_thread_loop_lock(threadLoop.get());
-      core.reset(::pw_context_connect(context.get(), nullptr, 0));
-      ::pw_thread_loop_unlock(threadLoop.get());
+      {
+        auto guard = PwThreadLoopGuard{threadLoop.get()};
+        core.reset(::pw_context_connect(context.get(), nullptr, 0));
+      }
     }
 
     ~Impl()
@@ -153,18 +154,22 @@ namespace ao::audio::backend
         ::pw_thread_loop_stop(threadLoop.get());
       }
 
-      refreshEvent.reset();
-      linkBindings.clear();
-      streamNodeBindings.clear();
-      sinkNodeBindings.clear();
-      registryListener.reset();
-      registry.reset();
-      coreListener.reset();
-      nodeFormatMap.clear();
-      sinkCapabilitiesMap.clear();
-      sinkPropsMap.clear();
-      core.reset();
-      context.reset();
+      {
+        auto guard = PwThreadLoopGuard{threadLoop.get()};
+        refreshEvent.reset();
+        linkBindings.clear();
+        streamNodeBindings.clear();
+        sinkNodeBindings.clear();
+        registryListener.reset();
+        registry.reset();
+        coreListener.reset();
+        nodeFormatMap.clear();
+        sinkCapabilitiesMap.clear();
+        sinkPropsMap.clear();
+        core.reset();
+        context.reset();
+      }
+
       threadLoop.reset();
     }
 
@@ -255,8 +260,8 @@ namespace ao::audio::backend
                                  ::spa_dict const* props)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
-      auto const isNode = (::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
-      auto const isLink = (::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
+      auto const isNode = (std::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
+      auto const isLink = (std::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
 
       if (!isNode && !isLink)
       {
@@ -501,28 +506,30 @@ namespace ao::audio::backend
 
     _impl->refreshEvent.reset(event);
 
-    ::pw_thread_loop_lock(_impl->threadLoop.get());
-
-    if (_impl->core)
     {
-      auto* const registry = ::pw_core_get_registry(_impl->core.get(), PW_VERSION_REGISTRY, 0);
-      _impl->registry.reset(static_cast<::pw_registry*>(registry));
+      auto guard = PwThreadLoopGuard{_impl->threadLoop.get()};
 
-      if (_impl->registry)
+      if (_impl->core)
       {
-        ::pw_registry_add_listener(
-          _impl->registry.get(), _impl->registryListener.get(), &Impl::registryEvents, _impl.get());
-        ::pw_core_add_listener(_impl->core.get(), _impl->coreListener.get(), &Impl::coreEvents, _impl.get());
-        _impl->coreSyncSeq = ::pw_core_sync(_impl->core.get(), PW_ID_CORE, 0);
+        auto* const registry = ::pw_core_get_registry(_impl->core.get(), PW_VERSION_REGISTRY, 0);
+        _impl->registry.reset(static_cast<::pw_registry*>(registry));
+
+        if (_impl->registry)
+        {
+          ::pw_registry_add_listener(
+            _impl->registry.get(), _impl->registryListener.get(), &Impl::registryEvents, _impl.get());
+          ::pw_core_add_listener(_impl->core.get(), _impl->coreListener.get(), &Impl::coreEvents, _impl.get());
+          _impl->coreSyncSeq = ::pw_core_sync(_impl->core.get(), PW_ID_CORE, 0);
+        }
       }
     }
 
-    ::pw_thread_loop_unlock(_impl->threadLoop.get());
     _impl->triggerRefresh();
   }
 
   void PipeWireMonitor::stop()
   {
+    auto guard = PwThreadLoopGuard{_impl->threadLoop.get()};
     auto const lock = std::scoped_lock{_impl->mutex};
     _impl->refreshEvent.reset();
     _impl->linkBindings.clear();
@@ -677,7 +684,7 @@ namespace ao::audio::backend
 
   void PipeWireMonitor::Impl::refresh()
   {
-    ::pw_thread_loop_lock(threadLoop.get());
+    auto guard = PwThreadLoopGuard{threadLoop.get()};
 
     // Phase 1: sync bindings under mutex
     {
@@ -743,8 +750,6 @@ namespace ao::audio::backend
         cb(deviceSnapshot);
       }
     }
-
-    ::pw_thread_loop_unlock(threadLoop.get());
   }
 
   void PipeWireMonitor::Impl::syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds)

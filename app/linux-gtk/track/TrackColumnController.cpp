@@ -40,7 +40,7 @@ namespace ao::gtk
   {
     _dynamicCssProvider = Gtk::CssProvider::create();
 
-    _layoutChangedConnection = _columnLayoutModel.signalChanged().connect([this] { flushSharedColumnLayoutUpdate(); });
+    _layoutChangedConnection = _columnLayoutModel.signalChanged().connect([this] { queueSharedColumnLayoutUpdate(); });
   }
 
   void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)

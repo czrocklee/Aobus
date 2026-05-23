@@ -391,7 +391,7 @@ namespace ao::gtk::layout::test
     int const cacheSize = 10;
     auto coverArtCache = std::make_unique<CoverArtCache>(cacheSize);
     auto menuModel = Gio::Menu::create();
-    menuModel->append("Test Item", "win.test");
+    menuModel->append_submenu("Test Menu", Gio::Menu::create());
 
     auto ctx = LayoutContext{.registry = registry,
                              .runtime = runtime,

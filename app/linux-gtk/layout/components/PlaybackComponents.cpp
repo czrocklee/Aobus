@@ -3,7 +3,11 @@
 
 #include "PlaybackComponents.h"
 
+#include "ao/Type.h"
+#include "ao/library/MusicLibrary.h"
+#include "ao/library/TrackStore.h"
 #include "app/AobusSoul.h"
+#include "inspector/CoverArtWidget.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
@@ -17,6 +21,8 @@
 #include "playback/VolumeControl.h"
 #include "runtime/AppRuntime.h"
 
+#include <gtkmm/label.h>
+#include <gtkmm/object.h>
 #include <gtkmm/widget.h>
 
 #include <functional>
@@ -76,6 +82,71 @@ namespace ao::gtk::layout
 
     private:
       NowPlayingFieldLabel _label;
+    };
+
+    /**
+     * @brief playback.coverArt
+     */
+    class PlaybackCoverArtComponent final : public ILayoutComponent
+    {
+    public:
+      PlaybackCoverArtComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      {
+        if (ctx.inspector.coverArtCache == nullptr)
+        {
+          _error = Gtk::make_managed<Gtk::Label>("Error: coverArtCache missing");
+          return;
+        }
+
+        _widget = std::make_unique<CoverArtWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.coverArtCache);
+
+        _sub = ctx.runtime.playback().onNowPlayingChanged(
+          [this, &ctx](auto const& ev)
+          {
+            if (ev.trackId != _currentTrackId)
+            {
+              _currentTrackId = ev.trackId;
+              updateCoverArt(ctx.runtime.musicLibrary());
+            }
+          });
+
+        // Initial update
+        _currentTrackId = ctx.runtime.playback().state().trackId;
+        updateCoverArt(ctx.runtime.musicLibrary());
+      }
+
+      Gtk::Widget& widget() override
+      {
+        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widget);
+      }
+
+    private:
+      void updateCoverArt(library::MusicLibrary& library)
+      {
+        if (_currentTrackId == ao::kInvalidTrackId)
+        {
+          _widget->clearCover();
+          return;
+        }
+
+        auto const txn = library.readTransaction();
+        auto const reader = library.tracks().reader(txn);
+        auto const optView = reader.get(_currentTrackId, library::TrackStore::Reader::LoadMode::Both);
+
+        if (optView)
+        {
+          _widget->loadCoverArt(ResourceId{optView->metadata().coverArtId()});
+        }
+        else
+        {
+          _widget->clearCover();
+        }
+      }
+
+      std::unique_ptr<CoverArtWidget> _widget;
+      Gtk::Label* _error = nullptr;
+      TrackId _currentTrackId = ao::kInvalidTrackId;
+      rt::Subscription _sub;
     };
 
     /**
@@ -219,10 +290,25 @@ namespace ao::gtk::layout
     {
       return std::make_unique<QualityIndicatorComponent>(ctx, node);
     }
+
+    std::unique_ptr<ILayoutComponent> createPlaybackCoverArt(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<PlaybackCoverArtComponent>(ctx, node);
+    }
   } // namespace
 
   void registerPlaybackComponents(ComponentRegistry& registry)
   {
+    registry.registerComponent({.type = "playback.coverArt",
+                                .displayName = "Playback Cover Art",
+                                .category = "Playback",
+                                .container = false,
+                                .props = {},
+                                .layoutProps = {},
+                                .minChildren = 0,
+                                .optMaxChildren = 0},
+                               createPlaybackCoverArt);
+
     registry.registerComponent(
       {.type = "playback.playPauseButton",
        .displayName = "Play/Pause Button",
