@@ -130,6 +130,12 @@ namespace ao::gtk
             _updating = false;
           }
         }
+        else if (ev.mode == rt::PlaybackService::SeekMode::Preview)
+        {
+          // Ensure that the next frame after dragging ends or previewing starts
+          // will pick up the correct base position.
+          _interpolator.updateState(ev.positionMs, _durationMs, _interpolator.isPlaying());
+        }
       });
 
     _scale.add_tick_callback(

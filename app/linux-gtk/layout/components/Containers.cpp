@@ -15,6 +15,7 @@
 #include <glib.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
+#include <gtkmm/centerbox.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gesturedrag.h>
@@ -175,6 +176,63 @@ namespace ao::gtk::layout
     private:
       Gtk::Box _box;
       std::vector<std::unique_ptr<ILayoutComponent>> _children;
+    };
+
+    /**
+     * @brief A center box container component (Gtk::CenterBox).
+     */
+    class CenterBoxComponent final : public ILayoutComponent
+    {
+    public:
+      CenterBoxComponent(LayoutContext& ctx, LayoutNode const& node)
+      {
+        auto orientation = Gtk::Orientation::HORIZONTAL;
+
+        if (node.getProp<std::string>("orientation", "") == "vertical")
+        {
+          orientation = Gtk::Orientation::VERTICAL;
+        }
+
+        _centerBox.set_orientation(orientation);
+        applyCommonProps(_centerBox, node);
+
+        for (auto const& childNode : node.children)
+        {
+          auto child = ctx.registry.create(ctx, childNode);
+          applyCommonProps(child->widget(), childNode);
+
+          auto const slot = childNode.getLayout<std::string>("slot", "");
+
+          if (slot == "start")
+          {
+            _centerBox.set_start_widget(child->widget());
+            _startChild = std::move(child);
+          }
+          else if (slot == "center")
+          {
+            _centerBox.set_center_widget(child->widget());
+            _centerChild = std::move(child);
+          }
+          else if (slot == "end")
+          {
+            _centerBox.set_end_widget(child->widget());
+            _endChild = std::move(child);
+          }
+          else
+          {
+            _overflowChildren.push_back(std::move(child));
+          }
+        }
+      }
+
+      Gtk::Widget& widget() override { return _centerBox; }
+
+    private:
+      Gtk::CenterBox _centerBox;
+      std::unique_ptr<ILayoutComponent> _startChild;
+      std::unique_ptr<ILayoutComponent> _centerChild;
+      std::unique_ptr<ILayoutComponent> _endChild;
+      std::vector<std::unique_ptr<ILayoutComponent>> _overflowChildren;
     };
 
     /**
@@ -393,6 +451,11 @@ namespace ao::gtk::layout
     std::unique_ptr<ILayoutComponent> createBox(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<BoxComponent>(ctx, node);
+    }
+
+    std::unique_ptr<ILayoutComponent> createCenterBox(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<CenterBoxComponent>(ctx, node);
     }
 
     std::unique_ptr<ILayoutComponent> createSplit(LayoutContext& ctx, LayoutNode const& node)
@@ -1031,6 +1094,24 @@ namespace ao::gtk::layout
                                 .minChildren = 0,
                                 .optMaxChildren = std::nullopt},
                                createBox);
+
+    registry.registerComponent({.type = "centerBox",
+                                .displayName = "Center Box",
+                                .category = "Containers",
+                                .container = true,
+                                .props = {{.name = "orientation",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Orientation",
+                                           .defaultValue = LayoutValue{"horizontal"},
+                                           .enumValues = {"horizontal", "vertical"}}},
+                                .layoutProps = {{.name = "slot",
+                                                .kind = PropertyKind::Enum,
+                                                .label = "Slot",
+                                                .defaultValue = LayoutValue{""},
+                                                .enumValues = {"", "start", "center", "end"}}},
+                                .minChildren = 0,
+                                .optMaxChildren = 3},
+                               createCenterBox);
 
     registry.registerComponent(
       {.type = "split",

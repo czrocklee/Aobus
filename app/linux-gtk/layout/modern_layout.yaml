@@ -4,6 +4,8 @@ root:
   type: box
   props:
     orientation: vertical
+  layout:
+    cssClasses: ao-layout-preset-modern
   children:
     - type: app.menuBar
 
@@ -20,6 +22,8 @@ root:
           type: box
           props:
             orientation: vertical
+          layout:
+            cssClasses: ao-modern-sidebar
           children:
             - type: library.listTree
               layout:
@@ -27,13 +31,15 @@ root:
         - type: box
           props:
             orientation: vertical
+          layout:
+            cssClasses: ao-modern-content-shell
           children:
             - type: box
               props:
                 orientation: horizontal
                 spacing: 6
               layout:
-                cssClasses: ao-track-controls-bar
+                cssClasses: ao-modern-track-controls-bar
               children:
                 - type: track.quickFilter
                   layout:
@@ -51,24 +57,20 @@ root:
 
 templates:
   playback.modernBar:
-    type: box
-    props:
-      orientation: horizontal
-      spacing: 16
+    type: centerBox
     layout:
       cssClasses: ao-modern-bottom-bar
       hexpand: true
     children:
 
-      # --- Left: image + now-playing text (fixed width/flex to not push center) ---
+      # --- Start Slot: image + now-playing text ---
       - type: box
         props:
           orientation: horizontal
           spacing: 12
         layout:
-          halign: start
+          slot: start
           valign: center
-          hexpand: true
         children:
           - type: playback.image
             props:
@@ -87,13 +89,13 @@ templates:
                 layout:
                   cssClasses: ao-nowplaying-artist
 
-      # --- Center: Controls + seekbar ---
+      # --- Center Slot: Controls + seekbar ---
       - type: box
         props:
           orientation: vertical
           spacing: 8
         layout:
-          hexpand: true
+          slot: center
           valign: center
           cssClasses: ao-modern-center-group
         children:
@@ -106,13 +108,17 @@ templates:
               hexpand: true
             children:
               - type: playback.timeLabel
+                props:
+                  mode: elapsed
                 layout:
                   cssClasses: ao-modern-time-label
               - type: playback.seekSlider
                 layout:
                   cssClasses: ao-seekbar-modern
                   hexpand: true
-              - type: status.playbackDetails # Duration/total time could go here, reusing status for now
+              - type: playback.timeLabel
+                props:
+                  mode: duration
                 layout:
                   cssClasses: ao-modern-time-label
           # Transport controls
@@ -134,21 +140,14 @@ templates:
                 layout:
                   cssClasses: ao-play-button-prominent
 
-      # --- Right: volume + output + status ---
+      # --- End Slot: volume + output ---
       - type: box
         props:
           orientation: horizontal
           spacing: 12
         layout:
-          halign: end
+          slot: end
           valign: center
-          hexpand: true
         children:
           - type: playback.volumeControl
           - type: playback.outputButton
-          - type: separator
-            props:
-              orientation: vertical
-            layout:
-              cssClasses: ao-status-separator
-          - type: status.statusSlot

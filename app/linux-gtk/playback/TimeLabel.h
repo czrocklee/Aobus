@@ -14,13 +14,20 @@
 
 namespace ao::gtk
 {
+  enum class TimeLabelMode : std::uint8_t
+  {
+    Default,
+    Elapsed,
+    Duration
+  };
+
   /**
    * @brief A composite widget providing a formatted time display (current / total).
    */
   class TimeLabel final
   {
   public:
-    explicit TimeLabel(rt::PlaybackService& playbackService);
+    explicit TimeLabel(rt::PlaybackService& playbackService, TimeLabelMode mode = TimeLabelMode::Default);
 
     Gtk::Widget& widget() { return _label; }
 
@@ -29,6 +36,7 @@ namespace ao::gtk
     void updateLabel(std::uint32_t posMs, std::uint32_t durMs);
 
     rt::PlaybackService& _playbackService;
+    TimeLabelMode _mode;
     Gtk::Label _label;
     PlaybackPositionInterpolator _interpolator;
 

@@ -587,3 +587,61 @@ columnview row.ao-missing-row label {
   font-size: 0.8rem;
   opacity: 0.55;
 }
+
+/* ===== Modern Shell & Table Scoping ===== */
+
+.ao-layout-preset-modern .ao-modern-sidebar {
+  background: alpha(@theme_bg_color, 0.4);
+}
+
+/* Modern Content Shell (the card surface) */
+.ao-layout-preset-modern .ao-modern-content-shell {
+  background: alpha(@theme_base_color, 0.5);
+  border-radius: var(--ao-radius-md);
+  margin: var(--ao-spacing-md);
+  border: 1px solid alpha(currentColor, 0.05);
+}
+
+/* Modern Track Controls Bar (search row) */
+.ao-layout-preset-modern .ao-modern-track-controls-bar {
+  padding: var(--ao-spacing-lg);
+  border-bottom: 1px solid alpha(currentColor, 0.03);
+}
+
+/* Search pill styling */
+.ao-layout-preset-modern .ao-modern-track-controls-bar entry {
+  border-radius: var(--ao-radius-full);
+  background: alpha(currentColor, 0.04);
+  border: 1px solid alpha(currentColor, 0.08);
+  box-shadow: none;
+}
+
+.ao-layout-preset-modern .ao-modern-track-controls-bar entry:focus {
+  background: alpha(currentColor, 0.06);
+  border-color: alpha(@accent_color, 0.4);
+}
+
+/* Modern Table row polish */
+.ao-layout-preset-modern columnview {
+  background: transparent;
+}
+
+.ao-layout-preset-modern columnview row {
+  min-height: 44px; /* Slightly taller than classic */
+  border-radius: 4px;
+  margin: 0 4px;
+}
+
+.ao-layout-preset-modern columnview row:hover {
+  background-color: alpha(currentColor, 0.03);
+}
+
+.ao-layout-preset-modern columnview > listview > row:selected {
+  background-color: alpha(@theme_selected_bg_color, 0.12);
+  color: inherit; /* Don't force white text if bg is soft */
+}
+
+.ao-layout-preset-modern columnview > listview > row:selected label {
+  color: @theme_selected_bg_color;
+  font-weight: 500;
+}

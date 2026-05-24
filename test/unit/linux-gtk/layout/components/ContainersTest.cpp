@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
+#include <gtkmm/centerbox.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/paned.h>
@@ -310,6 +311,37 @@ namespace ao::gtk::layout::test
       CHECK(paned->get_position() == expectedPos);
       CHECK(paned->get_resize_start_child() == false);
       CHECK(paned->get_shrink_end_child() == true);
+    }
+
+    SECTION("centerBox with 3 children builds Gtk::CenterBox")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "centerBox";
+      doc.root.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+
+      auto c1 = LayoutNode{};
+      c1.type = "spacer";
+      c1.layout["slot"] = LayoutValue{std::string{"start"}};
+      doc.root.children.push_back(c1);
+
+      auto c2 = LayoutNode{};
+      c2.type = "spacer";
+      c2.layout["slot"] = LayoutValue{std::string{"center"}};
+      doc.root.children.push_back(c2);
+
+      auto c3 = LayoutNode{};
+      c3.type = "spacer";
+      c3.layout["slot"] = LayoutValue{std::string{"end"}};
+      doc.root.children.push_back(c3);
+
+      auto const comp = layoutRuntime.build(ctx, doc);
+      auto* const cb = dynamic_cast<Gtk::CenterBox*>(&comp->widget());
+
+      REQUIRE(cb != nullptr);
+      CHECK(cb->get_orientation() == Gtk::Orientation::HORIZONTAL);
+      CHECK(cb->get_start_widget() != nullptr);
+      CHECK(cb->get_center_widget() != nullptr);
+      CHECK(cb->get_end_widget() != nullptr);
     }
 
     SECTION("scroll with 1 child builds Gtk::ScrolledWindow")

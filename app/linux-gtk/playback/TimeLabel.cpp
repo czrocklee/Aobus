@@ -16,8 +16,8 @@
 
 namespace ao::gtk
 {
-  TimeLabel::TimeLabel(rt::PlaybackService& playbackService)
-    : _playbackService{playbackService}
+  TimeLabel::TimeLabel(rt::PlaybackService& playbackService, TimeLabelMode mode)
+    : _playbackService{playbackService}, _mode{mode}
   {
     _label.set_halign(Gtk::Align::CENTER);
     _label.set_valign(Gtk::Align::CENTER);
@@ -26,7 +26,18 @@ namespace ao::gtk
     // Use Pango to measure the exact pixel width of the template string.
     // This ensures a tight fit without layout jitter when time changes.
     // The "tnum" feature in app.css guarantees all digits have the same width.
-    auto const pangoLayout = _label.create_pango_layout("00:00 / 00:00");
+    auto const templateText = std::string{[this]
+    {
+      switch (_mode)
+      {
+        case TimeLabelMode::Elapsed:
+        case TimeLabelMode::Duration: return "00:00";
+        case TimeLabelMode::Default:
+        default: return "00:00 / 00:00";
+      }
+    }()};
+
+    auto const pangoLayout = _label.create_pango_layout(templateText);
     std::int32_t textWidth = 0;
     std::int32_t textHeight = 0;
     pangoLayout->get_pixel_size(textWidth, textHeight);
@@ -34,7 +45,7 @@ namespace ao::gtk
     // Lock the width to the measured size, with a small tolerance.
     _label.set_size_request(textWidth + 2, -1);
 
-    _label.set_text("00:00 / 00:00");
+    _label.set_text(templateText);
 
     auto const resetCallback = [this] { reset(); };
 
@@ -97,7 +108,14 @@ namespace ao::gtk
 
   void TimeLabel::reset()
   {
-    _label.set_text("00:00 / 00:00");
+    switch (_mode)
+    {
+      case TimeLabelMode::Elapsed:
+      case TimeLabelMode::Duration: _label.set_text("00:00"); break;
+      case TimeLabelMode::Default:
+      default: _label.set_text("00:00 / 00:00"); break;
+    }
+
     _interpolator.reset();
     _isPreviewing = false;
   }
@@ -108,8 +126,17 @@ namespace ao::gtk
     auto const posSec = posMs / msInSec;
     auto const durSec = durMs / msInSec;
 
-    int const secInMin = 60;
-    _label.set_text(std::format(
-      "{:d}:{:02d} / {:d}:{:02d}", posSec / secInMin, posSec % secInMin, durSec / secInMin, durSec % secInMin));
+    switch (int const secInMin = 60; _mode)
+    {
+      case TimeLabelMode::Elapsed: _label.set_text(std::format("{:d}:{:02d}", posSec / secInMin, posSec % secInMin)); break;
+
+      case TimeLabelMode::Duration: _label.set_text(std::format("{:d}:{:02d}", durSec / secInMin, durSec % secInMin)); break;
+
+      case TimeLabelMode::Default:
+      default:
+        _label.set_text(std::format(
+          "{:d}:{:02d} / {:d}:{:02d}", posSec / secInMin, posSec % secInMin, durSec / secInMin, durSec % secInMin));
+        break;
+    }
   }
 } // namespace ao::gtk

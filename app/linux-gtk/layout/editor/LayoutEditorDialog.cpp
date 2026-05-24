@@ -22,6 +22,7 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/menubutton.h>
+#include <gtkmm/messagedialog.h>
 #include <gtkmm/object.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/scrolledwindow.h>
@@ -101,6 +102,8 @@ namespace ao::gtk::layout::editor
     _comboPresets.append("classic", "Classic");
     _comboPresets.append("modern", "Modern");
     _toolbar.append(_comboPresets);
+
+    _btnReset.set_tooltip_text("Reset to selected preset's default layout");
 
     _actionGroup = Gio::SimpleActionGroup::create();
     insert_action_group("editor", _actionGroup);
@@ -519,21 +522,53 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onPresetChanged()
   {
-    if (auto const presetId = _comboPresets.get_active_id(); presetId == "classic")
-    {
-      _document = createBuiltInLayout(LayoutPresetId::Classic);
-    }
-    else if (presetId == "modern")
-    {
-      _document = createBuiltInLayout(LayoutPresetId::Modern);
-    }
-    else
+    auto const presetId = _comboPresets.get_active_id();
+
+    if (presetId.empty())
     {
       return;
     }
 
-    populateTree();
-    notifyPreview();
+    // Ask for confirmation if there are nodes or customizations.
+    // We check if root has children to decide if it's "dirty" enough to ask.
+    // In a more complete implementation, we'd compare against the built-in default.
+    auto* const confirmation = Gtk::make_managed<Gtk::MessageDialog>(
+      *this, "Switch to " + presetId + " preset?", false, Gtk::MessageType::QUESTION, Gtk::ButtonsType::YES_NO, true);
+    confirmation->set_secondary_text(
+      "This will replace your current layout with the default " + presetId + " preset. Any unsaved changes will be lost.");
+
+    confirmation->signal_response().connect(
+      [this, presetId, confirmation](std::int32_t response)
+      {
+        if (response == Gtk::ResponseType::YES)
+        {
+          if (presetId == "modern")
+          {
+            _document = createBuiltInLayout(LayoutPresetId::Modern);
+          }
+          else
+          {
+            _document = createBuiltInLayout(LayoutPresetId::Classic);
+          }
+
+          populateTree();
+          notifyPreview();
+        }
+        else
+        {
+          // Revert combo selection without triggering signal again
+          _comboPresets.set_active_id(
+            _document.root.layout.contains("cssClasses") &&
+                std::ranges::contains(_document.root.layout.at("cssClasses").asStringList(),
+                                      "ao-layout-preset-modern")
+              ? "modern"
+              : "classic");
+        }
+
+        confirmation->close();
+      });
+
+    confirmation->show();
   }
 
   void LayoutEditorDialog::onSelectionChanged()

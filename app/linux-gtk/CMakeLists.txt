@@ -81,6 +81,7 @@ add_library(aobus-gtk-lib STATIC
     portal/PlaylistExporter.cpp
 
     layout/document/LayoutDocument.cpp
+    layout/document/LayoutNode.cpp
     layout/runtime/LayoutRuntime.cpp
     layout/runtime/ComponentRegistry.cpp
     layout/runtime/LayoutHost.cpp

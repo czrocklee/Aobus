@@ -217,8 +217,19 @@ namespace ao::gtk::layout
     class TimeLabelComponent final : public ILayoutComponent
     {
     public:
-      TimeLabelComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _label{ctx.runtime.playback()}
+      TimeLabelComponent(LayoutContext& ctx, LayoutNode const& node)
+        : _label{ctx.runtime.playback(), [mode = node.getProp<std::string>("mode", "default")]
+                                         {
+                                           if (mode == "elapsed")
+                                           {
+                                             return TimeLabelMode::Elapsed;
+                                           }
+                                           if (mode == "duration")
+                                           {
+                                             return TimeLabelMode::Duration;
+                                           }
+                                           return TimeLabelMode::Default;
+                                         }()}
       {
       }
 
@@ -419,7 +430,11 @@ namespace ao::gtk::layout
                                 .displayName = "Time Label",
                                 .category = "Playback",
                                 .container = false,
-                                .props = {},
+                                .props = {{.name = "mode",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Mode",
+                                           .defaultValue = LayoutValue{"default"},
+                                           .enumValues = {"default", "elapsed", "duration"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},

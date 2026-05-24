@@ -113,5 +113,33 @@ namespace ao::gtk::test
       CHECK(scale->get_value() == 0.0);
       CHECK(label->get_text() == "00:00 / 00:00");
     }
+
+    SECTION("TimeLabel modes (Elapsed and Duration)")
+    {
+      auto elapsedLabel = TimeLabel{playback, TimeLabelMode::Elapsed};
+      auto durationLabel = TimeLabel{playback, TimeLabelMode::Duration};
+
+      auto* const elWidget = dynamic_cast<Gtk::Label*>(&elapsedLabel.widget());
+      auto* const durWidget = dynamic_cast<Gtk::Label*>(&durationLabel.widget());
+
+      REQUIRE(elWidget != nullptr);
+      REQUIRE(durWidget != nullptr);
+
+      // 1. Initial State
+      CHECK(elWidget->get_text() == "00:00");
+      CHECK(durWidget->get_text() == "00:00");
+
+      // 2. Simulate playback start (5 min track)
+      auto const desc = audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .durationMs = 300000};
+      playback.play(desc, ListId{1});
+
+      CHECK(elWidget->get_text() == "0:00");
+      CHECK(durWidget->get_text() == "5:00");
+
+      // 3. Simulate Seek to 2:30
+      playback.seek(150000, rt::PlaybackService::SeekMode::Final);
+      CHECK(elWidget->get_text() == "2:30");
+      CHECK(durWidget->get_text() == "5:00");
+    }
   }
 } // namespace ao::gtk::test
