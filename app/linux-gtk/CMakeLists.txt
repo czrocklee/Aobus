@@ -22,7 +22,8 @@ add_library(aobus-gtk-lib STATIC
     app/ShellLayoutController.cpp
     app/StyleManager.cpp
     app/MainWindowCoordinator.cpp
-    app/WindowStatePersistence.cpp
+    app/AppConfig.cpp
+    app/GtkLayoutConfig.cpp
     platform/AudioBackendBootstrap.cpp
 
     track/LibraryTrackCountLabel.cpp
@@ -37,7 +38,6 @@ add_library(aobus-gtk-lib STATIC
     track/TrackSelectionController.cpp
     track/TrackListAdapter.cpp
     track/TrackListModel.cpp
-    track/TrackPresentation.cpp
     track/TrackPresentationStore.cpp
     track/TrackCustomViewDialog.cpp
     track/TrackRowObject.cpp

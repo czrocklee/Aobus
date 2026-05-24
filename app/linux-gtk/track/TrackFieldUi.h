@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -68,4 +69,11 @@ namespace ao::gtk
 
   std::span<detail::TrackFieldUiDefinition const> trackFieldUiDefinitions();
   detail::TrackFieldUiDefinition const* trackFieldUiDefinition(rt::TrackField field);
+
+  std::int32_t defaultWidthForField(rt::TrackField field);
+  bool fieldIsExpanding(rt::TrackField field);
+  bool fieldIsVisibleByDefault(rt::TrackField field);
+  std::string_view fieldColumnTitle(rt::TrackField field);
+
+  std::optional<rt::TrackField> redundantFieldToColumn(rt::TrackSortField field);
 } // namespace ao::gtk

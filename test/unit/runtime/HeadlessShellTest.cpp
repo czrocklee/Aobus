@@ -5,10 +5,10 @@
 #include "runtime/ConfigStore.h"
 #include "runtime/CorePrimitives.h"
 #include "runtime/PlaybackService.h"
-#include "runtime/SessionPersistenceService.h"
 #include "runtime/StateTypes.h"
 #include "runtime/TrackField.h"
 #include "runtime/ViewService.h"
+#include "runtime/WorkspaceConfig.h"
 #include "runtime/WorkspaceService.h"
 #include "test/unit/lmdb/TestUtils.h"
 
@@ -34,15 +34,12 @@ namespace ao::rt::test
   TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][runtime][headless]")
   {
     auto tempDir = TempDir{};
-    auto globalConfigStore =
-      std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "global_config.yaml");
     auto workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
 
     auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .globalConfigStore = globalConfigStore,
                                  .workspaceConfigStore = workspaceConfigStore}};
 
     SECTION("Initial layout is empty")
@@ -91,7 +88,7 @@ namespace ao::rt::test
       runtime.workspace().navigateTo(ListId{20});
       runtime.persistence().save();
 
-      auto loaded = rt::WorkspaceSnapshot{};
+      auto loaded = rt::SessionState{};
       workspaceConfigStore->load("workspace", loaded);
       CHECK(loaded.openViews.size() == 2);
 
@@ -100,7 +97,6 @@ namespace ao::rt::test
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .globalConfigStore = globalConfigStore,
                                    .workspaceConfigStore = workspaceConfigStore}};
 
       session2.persistence().restore();
@@ -123,7 +119,7 @@ namespace ao::rt::test
 
       runtime.persistence().save();
 
-      auto loaded = rt::WorkspaceSnapshot{};
+      auto loaded = rt::SessionState{};
       workspaceConfigStore->load("workspace", loaded);
       REQUIRE(loaded.openViews.size() == 1);
       CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
@@ -133,7 +129,6 @@ namespace ao::rt::test
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .globalConfigStore = globalConfigStore,
                                    .workspaceConfigStore = workspaceConfigStore}};
 
       session2.persistence().restore();
@@ -155,7 +150,6 @@ namespace ao::rt::test
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .globalConfigStore = globalConfigStore,
                                    .workspaceConfigStore = workspaceConfigStore}};
 
       session2.persistence().restore();

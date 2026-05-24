@@ -3,9 +3,8 @@
 
 #include "track/TrackCustomViewDialog.h"
 
-#include "app/UIState.h"
 #include "runtime/TrackField.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -183,7 +182,7 @@ namespace ao::gtk
     addSortBtn->signal_clicked().connect(
       [this]
       {
-        _sortState.push_back({static_cast<std::uint8_t>(rt::TrackSortField::Title), true});
+        _sortState.push_back({rt::TrackSortField::Title, true});
         rebuildSortList();
       });
     mainBox->append(*addSortBtn);
@@ -239,7 +238,7 @@ namespace ao::gtk
       auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createSortFieldsModel(_availableSortFields));
 
       // Find the index in our mapping
-      auto const it = std::ranges::find(_availableSortFields, static_cast<rt::TrackSortField>(term.field));
+      auto const it = std::ranges::find(_availableSortFields, term.field);
       auto const index = (it != _availableSortFields.end())
                            ? static_cast<::guint>(std::ranges::distance(_availableSortFields.begin(), it))
                            : 0;
@@ -250,7 +249,7 @@ namespace ao::gtk
         {
           if (auto const selected = dropdown->get_selected(); selected < _availableSortFields.size())
           {
-            _sortState[i].field = static_cast<std::uint8_t>(_availableSortFields[selected]);
+            _sortState[i].field = _availableSortFields[selected];
           }
         });
       box->append(*dropdown);
@@ -385,7 +384,7 @@ namespace ao::gtk
 
     for (auto const& term : spec.sortBy)
     {
-      _sortState.push_back({static_cast<std::uint8_t>(term.field), term.ascending});
+      _sortState.push_back(term);
     }
 
     rebuildSortList();
@@ -400,29 +399,23 @@ namespace ao::gtk
     rebuildVisibleFieldsList();
   }
 
-  CustomTrackPresentationState TrackCustomViewDialog::collectState() const
+  rt::CustomTrackPresentationPreset TrackCustomViewDialog::collectState() const
   {
-    auto state = CustomTrackPresentationState{};
-    state.id = generateId();
+    auto state = rt::CustomTrackPresentationPreset{};
+    state.spec.id = generateId();
     state.label = _nameEntry.get_text();
 
     if (auto const groupIndex = _groupDropdown.get_selected(); groupIndex < _availableGroupKeys.size())
     {
-      state.groupBy = static_cast<std::uint8_t>(_availableGroupKeys[groupIndex]);
+      state.spec.groupBy = _availableGroupKeys[groupIndex];
     }
     else
     {
-      state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::None);
+      state.spec.groupBy = rt::TrackGroupKey::None;
     }
 
-    state.sortBy = _sortState;
-
-    state.visibleFields.reserve(_visibleFieldsState.size());
-
-    for (auto const field : _visibleFieldsState)
-    {
-      state.visibleFields.push_back(static_cast<std::uint8_t>(field));
-    }
+    state.spec.sortBy = _sortState;
+    state.spec.visibleFields = _visibleFieldsState;
 
     return state;
   }

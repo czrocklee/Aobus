@@ -12,7 +12,7 @@
 #include "runtime/SmartListEvaluator.h"
 #include "runtime/SmartListSource.h"
 #include "runtime/TrackField.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 #include "runtime/TrackSource.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -687,9 +687,9 @@ namespace ao::rt::test
 
     auto snap = proj.presentation();
     CHECK(snap.groupBy == TrackGroupKey::Genre);
-    REQUIRE(snap.effectiveSortBy.size() == 2);
-    CHECK(snap.effectiveSortBy[0].field == TrackSortField::Genre);
-    CHECK(snap.effectiveSortBy[1].field == TrackSortField::Title);
+    REQUIRE(snap.sortBy.size() == 2);
+    CHECK(snap.sortBy[0].field == TrackSortField::Genre);
+    CHECK(snap.sortBy[1].field == TrackSortField::Title);
 
     auto expectedRedundant = std::vector<TrackField>{TrackField::Genre};
     CHECK(snap.redundantFields == expectedRedundant);

@@ -3,7 +3,7 @@
 
 #include "app/linux-gtk/layout/components/Containers.h"
 
-#include "app/linux-gtk/layout/document/LayoutDocument.h"
+#include "layout/document/LayoutDocument.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
@@ -54,7 +54,6 @@ namespace ao::gtk::layout::test
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -193,7 +192,6 @@ namespace ao::gtk::layout::test
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -281,7 +279,6 @@ namespace ao::gtk::layout::test
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -448,7 +445,6 @@ namespace ao::gtk::layout::test
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -588,7 +584,6 @@ namespace ao::gtk::layout::test
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -643,7 +638,6 @@ namespace ao::gtk::layout::test
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir2.path(),
                                    .databasePath = std::filesystem::path{tempDir2.path()} / ".aobus" / "library",
-                                   .globalConfigStore = configStore2,
                                    .workspaceConfigStore = configStore2}};
       auto ctx2 = LayoutContext{.registry = registry2, .runtime = runtime, .parentWindow = window2};
 

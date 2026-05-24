@@ -12,11 +12,11 @@
 namespace ao::rt
 {
   class AppRuntime;
-  class ConfigStore;
 }
 
 namespace ao::gtk
 {
+  class AppConfig;
   class MenuController;
   class MainWindowCoordinator;
   namespace portal
@@ -27,9 +27,7 @@ namespace ao::gtk
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    explicit MainWindow(rt::AppRuntime& runtime,
-                        std::shared_ptr<rt::ConfigStore> globalConfig,
-                        std::shared_ptr<rt::ConfigStore> workspaceConfig);
+    explicit MainWindow(rt::AppRuntime& runtime, std::shared_ptr<AppConfig> config);
     ~MainWindow() override;
 
     MainWindow(MainWindow const&) = delete;
@@ -46,8 +44,7 @@ namespace ao::gtk
 
   private:
     rt::AppRuntime& _runtime;
-    std::shared_ptr<rt::ConfigStore> _globalConfig;
-    std::shared_ptr<rt::ConfigStore> _workspaceConfig;
+    std::shared_ptr<AppConfig> _config;
 
     std::unique_ptr<MainWindowCoordinator> _mainWindowCoordinator;
     ShellLayoutController _shellLayout;

@@ -56,7 +56,7 @@ add_executable(ao_test
     unit/runtime/AsyncRuntimeTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/SmartListEvaluatorTest.cpp
-    unit/runtime/TrackPresentationPresetTest.cpp
+    unit/runtime/TrackPresentationTest.cpp
     unit/runtime/TrackFieldTest.cpp
     unit/runtime/TrackListProjectionTest.cpp
     unit/runtime/TrackListProjectionScaleTest.cpp

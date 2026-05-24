@@ -10,7 +10,7 @@
 #include "runtime/SmartListSource.h"
 #include "runtime/TrackField.h"
 #include "runtime/TrackListProjection.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 #include "runtime/TrackSource.h"
 
 #include <catch2/catch_test_macros.hpp>

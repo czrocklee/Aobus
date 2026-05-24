@@ -4,7 +4,7 @@
 #pragma once
 
 #include "CorePrimitives.h"
-#include "TrackField.h"
+#include "TrackPresentation.h"
 #include "ao/Error.h"
 #include "ao/Type.h"
 
@@ -19,16 +19,6 @@
 
 namespace ao::rt
 {
-  struct TrackListPresentationSnapshot final
-  {
-    std::string presentationId{};
-    TrackGroupKey groupBy = TrackGroupKey::None;
-    std::vector<TrackSortTerm> effectiveSortBy{};
-    std::vector<TrackField> visibleFields{};
-    std::vector<TrackField> redundantFields{};
-    std::uint64_t revision = 0;
-  };
-
   struct TrackGroupSectionSnapshot final
   {
     Range rows{};
@@ -78,7 +68,7 @@ namespace ao::rt
     virtual ViewId viewId() const noexcept = 0;
     virtual std::uint64_t revision() const noexcept = 0;
 
-    virtual TrackListPresentationSnapshot presentation() const = 0;
+    virtual TrackPresentationSpec presentation() const = 0;
     virtual std::size_t groupCount() const noexcept = 0;
     virtual TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const = 0;
     virtual std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const = 0;

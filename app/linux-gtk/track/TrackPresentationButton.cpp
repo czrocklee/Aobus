@@ -3,11 +3,10 @@
 
 #include "track/TrackPresentationButton.h"
 
-#include "app/UIState.h"
 #include "runtime/AppRuntime.h"
 #include "runtime/CorePrimitives.h"
 #include "runtime/StateTypes.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 #include "runtime/ViewService.h"
 #include "runtime/WorkspaceService.h"
 #include "track/TrackCustomViewDialog.h"
@@ -24,7 +23,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk
 {
@@ -66,16 +64,16 @@ namespace ao::gtk
     auto const state = _runtime.views().trackListState(_activeViewId);
     auto const& pres = state.presentation;
 
-    auto label = pres.presentationId;
+    auto label = pres.id;
 
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(pres.presentationId))
+    if (auto const* builtin = rt::builtinTrackPresentationPreset(pres.id))
     {
       label = std::string{builtin->label};
     }
     else if (_presentationStore != nullptr)
     {
       auto const& customs = _presentationStore->customPresentations();
-      auto const it = std::ranges::find(customs, pres.presentationId, &CustomTrackPresentationState::id);
+      auto const it = std::ranges::find(customs, pres.id, [](auto const& preset) { return preset.spec.id; });
 
       if (it != customs.end())
       {
@@ -133,7 +131,7 @@ namespace ao::gtk
         btn->set_has_frame(false);
         btn->get_style_context()->add_class("flat");
 
-        auto const id = custom.id;
+        auto const id = custom.spec.id;
         btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
 
         _menuBox.append(*btn);
@@ -177,7 +175,7 @@ namespace ao::gtk
     else
     {
       auto const& customs = _presentationStore->customPresentations();
-      auto const it = std::ranges::find(customs, presentationId, &CustomTrackPresentationState::id);
+      auto const it = std::ranges::find(customs, presentationId, [](auto const& preset) { return preset.spec.id; });
 
       if (it != customs.end())
       {
@@ -215,7 +213,7 @@ namespace ao::gtk
     }
 
     auto const state = _runtime.views().trackListState(_activeViewId);
-    auto const spec = rt::presentationSpecFromState(state.presentation);
+    auto const& spec = state.presentation;
 
     auto const label = std::string{_button.get_label()} + " Copy";
     auto dialog = TrackCustomViewDialog{*parentWindow, spec, label};
@@ -224,9 +222,9 @@ namespace ao::gtk
     {
       if (optResult->deleted)
       {
-        _presentationStore->removeCustomPresentation(optResult->state.id);
+        _presentationStore->removeCustomPresentation(optResult->state.spec.id);
 
-        if (spec.id == optResult->state.id)
+        if (spec.id == optResult->state.spec.id)
         {
           onPresentationSelected(rt::kDefaultTrackPresentationId);
         }
@@ -234,7 +232,7 @@ namespace ao::gtk
       else
       {
         _presentationStore->addCustomPresentation(optResult->state);
-        onPresentationSelected(optResult->state.id);
+        onPresentationSelected(optResult->state.spec.id);
       }
 
       populatePresentationOptions();

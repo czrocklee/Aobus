@@ -11,13 +11,10 @@
 
 #include <gtkmm/window.h>
 
-namespace ao::rt
-{
-  class ConfigStore;
-}
-
 namespace ao::gtk
 {
+  class AppConfig;
+
   class ShellLayoutController final
   {
   public:
@@ -29,9 +26,9 @@ namespace ao::gtk
     layout::LayoutDocument const& activeLayout() const { return _activeLayout; }
 
     void attachToWindow();
-    void loadLayout(rt::ConfigStore& configStore);
-    void saveLayout(rt::ConfigStore& configStore) const;
-    void openEditor(rt::ConfigStore& configStore);
+    void loadLayout(AppConfig& config);
+    void saveLayout(AppConfig& config) const;
+    void openEditor(AppConfig& config);
 
   private:
     static void setupCss();

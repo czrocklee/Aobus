@@ -3,10 +3,11 @@
 
 #pragma once
 
+#include "ao/Type.h"
+#include "runtime/TrackField.h"
+
 #include <cstdint>
-#include <functional>
 #include <map>
-#include <string>
 #include <vector>
 
 namespace ao::gtk
@@ -20,37 +21,18 @@ namespace ao::gtk
     std::int32_t width = kDefaultWindowWidth;
     std::int32_t height = kDefaultWindowHeight;
     bool maximized = false;
-    std::int32_t panedPosition = kDefaultPanedPosition;
   };
 
-  struct TrackViewState final
+  struct ColumnState final
   {
-    std::string activePresentationId = "songs";
+    rt::TrackField field = rt::TrackField::Title;
+    std::int32_t width = -1;
 
-    std::vector<std::string> columnOrder;
-    std::vector<std::string> hiddenColumns;
-    std::map<std::string, std::int32_t, std::less<>> columnWidths;
+    bool operator==(ColumnState const&) const = default;
   };
 
-  struct TrackPresentationSortTermState final
+  struct ColumnLayoutState final
   {
-    std::uint8_t field = 0; // ao::rt::TrackSortField
-    bool ascending = true;
-  };
-
-  struct CustomTrackPresentationState final
-  {
-    std::string id;
-    std::string label;
-    std::string basePresetId;
-    std::uint8_t groupBy = 0; // ao::rt::TrackGroupKey
-    std::vector<TrackPresentationSortTermState> sortBy;
-    std::vector<std::uint8_t> visibleFields;   // ao::rt::TrackField
-    std::vector<std::uint8_t> redundantFields; // ao::rt::TrackField
-  };
-
-  struct TrackPresentationStoreState final
-  {
-    std::vector<CustomTrackPresentationState> customPresentations;
+    std::map<ao::ListId, std::vector<ColumnState>> listLayouts;
   };
 } // namespace ao::gtk

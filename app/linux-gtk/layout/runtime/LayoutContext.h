@@ -28,7 +28,7 @@ namespace ao::gtk
     class ImportExportCoordinator;
   }
   class TrackPageHost;
-  class TrackColumnLayoutModel;
+  class TrackPresentationStore;
   class ListSidebarController;
 } // namespace ao::gtk
 
@@ -39,7 +39,7 @@ namespace ao::gtk::layout
   struct TrackUiContext final
   {
     TrackPageHost* pageHost = nullptr;
-    TrackColumnLayoutModel* columnLayoutModel = nullptr;
+    TrackPresentationStore* presentationStore = nullptr;
     TrackRowCache* trackRowCache = nullptr;
   };
 
@@ -93,7 +93,7 @@ namespace ao::gtk::layout
     void bind(GtkUiServices const& services)
     {
       track.pageHost = services.trackPageHost;
-      track.columnLayoutModel = services.columnLayoutModel;
+      track.presentationStore = services.trackPresentationStore;
       track.trackRowCache = services.trackRowCache;
       list.sidebarController = services.listSidebarController;
       playback.sequenceController = services.playbackSequenceController;

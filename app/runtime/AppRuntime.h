@@ -25,7 +25,7 @@ namespace ao::rt
   class ConfigStore;
   class PlaybackService;
   class WorkspaceService;
-  class SessionPersistenceService;
+  class WorkspaceConfig;
   class ViewService;
 
   struct AppRuntimeDependencies
@@ -33,7 +33,6 @@ namespace ao::rt
     std::unique_ptr<IControlExecutor> executor{};
     std::filesystem::path musicRoot{};
     std::filesystem::path databasePath{};
-    std::shared_ptr<ConfigStore> globalConfigStore{};
     std::shared_ptr<ConfigStore> workspaceConfigStore{};
   };
 
@@ -50,7 +49,7 @@ namespace ao::rt
 
     PlaybackService& playback() noexcept;
     WorkspaceService& workspace() noexcept;
-    SessionPersistenceService& persistence() noexcept;
+    WorkspaceConfig& persistence() noexcept;
     ViewService& views() noexcept;
     async::Runtime& async() noexcept;
 

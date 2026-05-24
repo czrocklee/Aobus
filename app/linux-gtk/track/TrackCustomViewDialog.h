@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include "app/UIState.h"
 #include "runtime/TrackField.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 
 #include <gtkmm/button.h>
 #include <gtkmm/dialog.h>
@@ -25,7 +24,7 @@ namespace ao::gtk
   public:
     struct Result final
     {
-      CustomTrackPresentationState state;
+      rt::CustomTrackPresentationPreset state;
       bool deleted = false;
     };
 
@@ -38,7 +37,7 @@ namespace ao::gtk
   private:
     void setupUi();
     void populateFromSpec(rt::TrackPresentationSpec const& spec, std::string_view label);
-    CustomTrackPresentationState collectState() const;
+    rt::CustomTrackPresentationPreset collectState() const;
 
     void rebuildSortList();
     void rebuildVisibleFieldsList();
@@ -50,7 +49,7 @@ namespace ao::gtk
 
     Gtk::Button _saveButton{"Save"};
 
-    std::vector<TrackPresentationSortTermState> _sortState;
+    std::vector<rt::TrackSortTerm> _sortState;
     std::vector<rt::TrackField> _visibleFieldsState;
 
     std::vector<rt::TrackField> _availableVisibleFields;

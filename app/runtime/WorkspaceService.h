@@ -5,12 +5,16 @@
 
 #include "CorePrimitives.h"
 #include "StateTypes.h"
+#include "TrackPresentation.h"
 #include "ao/Type.h"
 
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 #include <variant>
+#include <vector>
 
 namespace ao::library
 {
@@ -46,6 +50,13 @@ namespace ao::rt
     void closeView(ViewId viewId);
 
     Subscription onFocusedViewChanged(std::move_only_function<void(ViewId)> handler);
+
+    std::span<CustomTrackPresentationPreset const> customPresets() const;
+    void addCustomPreset(CustomTrackPresentationPreset const& preset);
+    void removeCustomPreset(std::string_view presetId);
+    void setCustomPresets(std::vector<CustomTrackPresentationPreset> presets);
+
+    Subscription onCustomPresetsChanged(std::move_only_function<void()> handler);
 
   private:
     struct Impl;

@@ -17,7 +17,7 @@
 #include "runtime/ProjectionTypes.h"
 #include "runtime/StateTypes.h"
 #include "runtime/TrackField.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 
 #include <cstdint>
 #include <functional>
@@ -39,16 +39,6 @@ namespace ao::rt
       std::shared_ptr<ITrackListProjection> projection;
     };
 
-    TrackPresentationSpec resolvePresentation(TrackListPresentationState const& state)
-    {
-      if (auto const* preset = builtinTrackPresentationPreset(state.presentationId))
-      {
-        return preset->spec;
-      }
-
-      return defaultTrackPresentationSpec();
-    }
-
     void applyPresentation(ViewEntry& entry)
     {
       // Derive sort and redundant fields from the built-in preset whose group-by
@@ -66,7 +56,7 @@ namespace ao::rt
         }
       }
 
-      entry.state.presentation = presentationStateFromSpec(preset->spec);
+      entry.state.presentation = preset->spec;
       entry.state.sortBy = entry.state.presentation.sortBy;
 
       if (entry.projection)
@@ -80,7 +70,7 @@ namespace ao::rt
 
     void applyPresentation(ViewEntry& entry, TrackPresentationSpec const& spec)
     {
-      entry.state.presentation = presentationStateFromSpec(spec);
+      entry.state.presentation = spec;
       entry.state.groupBy = spec.groupBy;
       entry.state.sortBy = spec.sortBy;
 
@@ -183,7 +173,6 @@ namespace ao::rt
       .filterExpression = initial.filterExpression,
       .groupBy = initial.groupBy,
       .sortBy = initial.sortBy,
-      .selection = initial.selection,
     };
 
     auto* baseSource = &_impl->sources.sourceFor(initial.listId);
@@ -301,7 +290,7 @@ namespace ao::rt
     {
       if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(it->second.projection.get()))
       {
-        auto spec = presentationSpecFromState(it->second.state.presentation);
+        auto spec = it->second.state.presentation;
         spec.sortBy = std::move(sortBy);
         trackListProj->setPresentation(spec);
       }
@@ -340,7 +329,7 @@ namespace ao::rt
 
     auto spec = normalizeTrackPresentationSpec(presentation);
 
-    if (it->second.state.presentation.presentationId == spec.id && it->second.state.groupBy == spec.groupBy &&
+    if (it->second.state.presentation.id == spec.id && it->second.state.groupBy == spec.groupBy &&
         it->second.state.sortBy == spec.sortBy)
     {
       return;
@@ -354,16 +343,13 @@ namespace ao::rt
 
   TrackPresentationSpec ViewService::setPresentation(ViewId viewId, std::string_view presentationId)
   {
-    auto it = _impl->views.find(viewId);
-
-    if (it == _impl->views.end())
+    if (auto const it = _impl->views.find(viewId); it == _impl->views.end())
     {
       return {};
     }
 
-    auto state = TrackListPresentationState{it->second.state.presentation};
-    state.presentationId = presentationId;
-    auto spec = resolvePresentation(state);
+    auto const* const preset = builtinTrackPresentationPreset(presentationId);
+    auto const spec = (preset != nullptr) ? preset->spec : defaultTrackPresentationSpec();
 
     setPresentation(viewId, spec);
     return spec;

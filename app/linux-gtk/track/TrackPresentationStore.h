@@ -3,50 +3,73 @@
 
 #pragma once
 
+#include "ao/Type.h"
 #include "app/UIState.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/CorePrimitives.h"
+#include "runtime/TrackField.h"
+#include "runtime/TrackPresentation.h"
 
 #include <sigc++/signal.h>
 
-#include <memory>
+#include <cstdint>
+#include <map>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace ao::rt
 {
-  class ConfigStore;
+  class WorkspaceService;
 }
 
 namespace ao::gtk
 {
+  enum class TrackPresentationChangeType : std::uint8_t
+  {
+    FullRebuild,
+    LayoutOnly,
+  };
+
   class TrackPresentationStore final
   {
   public:
-    using ChangedSignal = sigc::signal<void()>;
+    using ChangedSignal = sigc::signal<void(ao::ListId, TrackPresentationChangeType)>;
 
-    explicit TrackPresentationStore(std::shared_ptr<rt::ConfigStore> configStore);
+    explicit TrackPresentationStore(rt::WorkspaceService& workspace);
 
     std::span<rt::TrackPresentationPreset const> builtinPresets() const noexcept;
-    std::vector<CustomTrackPresentationState> const& customPresentations() const noexcept;
+    std::span<rt::CustomTrackPresentationPreset const> customPresentations() const noexcept;
 
     std::optional<rt::TrackPresentationSpec> specForId(std::string_view id) const;
 
-    void setCustomPresentations(std::vector<CustomTrackPresentationState> presentations);
-    void addCustomPresentation(CustomTrackPresentationState const& state);
+    void addCustomPresentation(rt::CustomTrackPresentationPreset const& state);
     void removeCustomPresentation(std::string_view id);
+
+    // Active Layout Management
+    void setActivePresentationId(std::string_view id);
+    std::string_view activePresentationId() const noexcept { return _activePresentationId; }
+
+    void setActiveListId(ao::ListId listId);
+
+    std::map<ao::ListId, std::vector<ColumnState>> const& listLayouts() const noexcept { return _listLayouts; }
+    void setListLayouts(std::map<ao::ListId, std::vector<ColumnState>> const& layouts);
+
+    std::vector<ColumnState> const& layoutForList(ao::ListId listId) const noexcept;
+    void updateLayout(ao::ListId listId, std::vector<ColumnState> const& layout);
+
+    std::vector<rt::TrackField> activeFieldOrder() const noexcept;
 
     ChangedSignal& signalChanged() noexcept { return _changed; }
 
   private:
-    void load();
-    void save();
+    rt::WorkspaceService& _workspace;
+    rt::Subscription _customPresetsSub;
 
-    std::shared_ptr<rt::ConfigStore> _configStore;
-    TrackPresentationStoreState _state;
+    std::string _activePresentationId{};
+    ao::ListId _activeListId = ao::kInvalidListId;
+    std::map<ao::ListId, std::vector<ColumnState>> _listLayouts{};
     ChangedSignal _changed;
   };
-
-  rt::TrackPresentationSpec specFromState(CustomTrackPresentationState const& state);
 } // namespace ao::gtk

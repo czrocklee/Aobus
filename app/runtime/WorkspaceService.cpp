@@ -5,6 +5,7 @@
 
 #include "LibraryMutationService.h"
 #include "PlaybackService.h"
+#include "TrackPresentation.h"
 #include "ViewService.h"
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
@@ -14,7 +15,9 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -31,6 +34,8 @@ namespace ao::rt
     Subscription listsMutatedSub;
 
     Signal<ViewId> focusedViewChangedSignal;
+    Signal<> customPresetsChangedSignal;
+    std::vector<CustomTrackPresentationPreset> customPresets;
 
     Impl(WorkspaceService* self,
          ViewService& views,
@@ -172,5 +177,43 @@ namespace ao::rt
     _impl->focusedViewChangedSignal.emit(_impl->layoutState.activeViewId);
 
     _impl->views.destroyView(viewId);
+  }
+
+  std::span<CustomTrackPresentationPreset const> WorkspaceService::customPresets() const
+  {
+    return _impl->customPresets;
+  }
+
+  void WorkspaceService::addCustomPreset(CustomTrackPresentationPreset const& preset)
+  {
+    if (auto it = std::ranges::find_if(_impl->customPresets,
+                                      [&](auto const& existingPreset) { return existingPreset.label == preset.label; });
+        it != _impl->customPresets.end())
+    {
+      *it = preset;
+    }
+    else
+    {
+      _impl->customPresets.push_back(preset);
+    }
+
+    _impl->customPresetsChangedSignal.emit();
+  }
+
+  void WorkspaceService::removeCustomPreset(std::string_view presetId)
+  {
+    std::erase_if(_impl->customPresets, [presetId](auto const& existingPreset) { return existingPreset.label == presetId; });
+    _impl->customPresetsChangedSignal.emit();
+  }
+
+  void WorkspaceService::setCustomPresets(std::vector<CustomTrackPresentationPreset> presets)
+  {
+    _impl->customPresets = std::move(presets);
+    _impl->customPresetsChangedSignal.emit();
+  }
+
+  Subscription WorkspaceService::onCustomPresetsChanged(std::move_only_function<void()> handler)
+  {
+    return _impl->customPresetsChangedSignal.connect(std::move(handler));
   }
 } // namespace ao::rt

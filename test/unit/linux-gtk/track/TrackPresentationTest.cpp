@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/track/TrackPresentation.h"
-
+#include "app/linux-gtk/app/GtkLayoutConfig.h"
+#include "app/linux-gtk/app/UIState.h"
 #include "app/linux-gtk/track/TrackFieldUi.h"
 #include "runtime/TrackField.h"
+#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
+#include <filesystem>
+#include <vector>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+  }
+
   TEST_CASE("TrackPresentation - field UI definitions exist for all presentable fields", "[app][presentation]")
   {
     for (auto const& rtDef : rt::trackFieldDefinitions())
@@ -77,52 +83,36 @@ namespace ao::gtk::test
     CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::TrackNumber).has_value());
   }
 
-  TEST_CASE("TrackPresentation - TrackColumnLayoutModel reset produces empty state", "[app][presentation]")
+  TEST_CASE("GtkLayoutConfig persists column layouts to gtk_layout.yaml", "[app][presentation]")
   {
-    auto model = TrackColumnLayoutModel{};
+    auto const tempDir = ao::lmdb::test::TempDir{};
+    auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
+    auto const configPath = configDir / "gtk_layout.yaml";
 
-    for (auto const& width : model.state().widths)
+    auto state = ColumnLayoutState{};
+    auto layout = std::vector<ColumnState>{
+      {.field = rt::TrackField::Title, .width = 321},
+      {.field = rt::TrackField::Artist, .width = 222},
+    };
+    state.listLayouts.emplace(ao::ListId{42}, layout);
+
     {
-      CHECK(width == 0);
+      auto config = GtkLayoutConfig{configDir};
+      config.save(state);
     }
 
-    model.reset();
+    REQUIRE(std::filesystem::exists(configPath));
 
-    for (auto const& width : model.state().widths)
-    {
-      CHECK(width == 0);
-    }
-  }
+    auto loaded = ColumnLayoutState{};
+    auto config = GtkLayoutConfig{configDir};
+    config.load(loaded);
 
-  TEST_CASE("TrackPresentation - TrackColumnLayoutModel setState and signal", "[app][presentation]")
-  {
-    auto model = TrackColumnLayoutModel{};
-    auto fired = false;
-
-    model.signalChanged().connect([&fired] { fired = true; });
-
-    auto state = TrackColumnViewState{};
-    state.widths[static_cast<std::size_t>(rt::TrackField::Title)] = 200;
-    model.setState(state);
-
-    CHECK(fired);
-    CHECK(model.state().widths[static_cast<std::size_t>(rt::TrackField::Title)] == 200);
-  }
-
-  TEST_CASE("TrackPresentation - TrackColumnViewState equality", "[app][presentation]")
-  {
-    auto a = TrackColumnViewState{};
-    auto b = TrackColumnViewState{};
-
-    CHECK(a == b);
-
-    a.widths[static_cast<std::size_t>(rt::TrackField::Title)] = 100;
-    CHECK(a != b);
-
-    b.widths[static_cast<std::size_t>(rt::TrackField::Title)] = 100;
-    CHECK(a == b);
-
-    a.fieldOrder = {rt::TrackField::Album, rt::TrackField::Title};
-    CHECK(a != b);
+    REQUIRE(loaded.listLayouts.contains(ao::ListId{42}));
+    auto const& loadedLayout = loaded.listLayouts.at(ao::ListId{42});
+    REQUIRE(loadedLayout.size() == 2);
+    CHECK(loadedLayout[0].field == rt::TrackField::Title);
+    CHECK(loadedLayout[0].width == 321);
+    CHECK(loadedLayout[1].field == rt::TrackField::Artist);
+    CHECK(loadedLayout[1].width == 222);
   }
 } // namespace ao::gtk::test

@@ -6,9 +6,11 @@
 #include "ao/Type.h"
 #include "ao/lmdb/Transaction.h"
 #include "ao/utility/Log.h"
+#include "app/AppConfig.h"
+#include "app/GtkLayoutConfig.h"
 #include "app/GtkUiServices.h"
 #include "app/MainWindow.h"
-#include "app/WindowStatePersistence.h"
+#include "app/UIState.h"
 #include "image/ImageCache.h"
 #include "list/ListSidebarController.h"
 #include "platform/AudioBackendBootstrap.h"
@@ -20,7 +22,6 @@
 #include "runtime/ListSourceStore.h"
 #include "runtime/NotificationService.h"
 #include "runtime/PlaybackService.h"
-#include "runtime/SessionPersistenceService.h"
 #include "runtime/StateTypes.h"
 #include "runtime/ViewService.h"
 #include "runtime/WorkspaceService.h"
@@ -39,14 +40,10 @@ namespace ao::gtk
 {
   MainWindowCoordinator::MainWindowCoordinator(MainWindow& window,
                                                rt::AppRuntime& runtime,
-                                               std::shared_ptr<rt::ConfigStore> globalConfig,
-                                               std::shared_ptr<rt::ConfigStore> workspaceConfig)
-    : _window{window}
-    , _runtime{runtime}
-    , _globalConfig{std::move(globalConfig)}
-    , _workspaceConfig{std::move(workspaceConfig)}
+                                               std::shared_ptr<AppConfig> config)
+    : _window{window}, _runtime{runtime}, _config{std::move(config)}
   {
-    _persistence = std::make_unique<WindowStatePersistence>(*_globalConfig);
+    _layoutConfig = std::make_unique<GtkLayoutConfig>(_runtime.musicLibrary().rootPath() / ".aobus");
 
     // Initialize cover art cache
     int const imageCacheSize = 100;
@@ -65,11 +62,18 @@ namespace ao::gtk
         .getListMembership = [this](ListId listId) { return &_runtime.sources().sourceFor(listId); }});
 
     // Initialize track presentation store
-    _trackPresentationStore = std::make_unique<TrackPresentationStore>(_workspaceConfig);
+    _trackPresentationStore = std::make_unique<TrackPresentationStore>(_runtime.workspace());
+    _trackPresentationChangedConnection = _trackPresentationStore->signalChanged().connect(
+      [this](ao::ListId /*listId*/, TrackPresentationChangeType type)
+      {
+        if (type == TrackPresentationChangeType::LayoutOnly)
+        {
+          saveColumnLayout();
+        }
+      });
 
     // Initialize track page manager
     _trackPageHost = std::make_unique<TrackPageHost>(_stack,
-                                                     _trackColumnLayoutModel,
                                                      _runtime,
                                                      _playbackSequenceController.get(),
                                                      *_tagEditController,
@@ -158,28 +162,74 @@ namespace ao::gtk
     auto const txn = _runtime.musicLibrary().readTransaction();
     rebuildListPages(txn);
 
-    _runtime.persistence().restore();
+    _runtime.workspace().restoreSession(_runtime.configStore());
 
     if (_runtime.workspace().layoutState().openViews.empty())
     {
       _runtime.workspace().navigateTo(rt::kAllTracksListId);
+      _runtime.workspace().saveSession(_runtime.configStore());
     }
-
-    saveSession();
   }
 
   void MainWindowCoordinator::saveSession()
   {
-    _persistence->saveWindow(_window);
-    _persistence->saveTrackView(_trackColumnLayoutModel);
+    // Window state
+    auto windowState = WindowState{};
 
-    _runtime.persistence().save();
+    if (auto const width = _window.get_width(); width > 0)
+    {
+      windowState.width = width;
+    }
+
+    if (auto const height = _window.get_height(); height > 0)
+    {
+      windowState.height = height;
+    }
+
+    windowState.maximized = _window.is_maximized();
+    _config->saveWindow(windowState);
+
+    saveColumnLayout();
+
+    // App prefs (including playback state and last library)
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLibraryPath = _runtime.musicLibrary().rootPath().string();
+    auto const& pb = _runtime.playback().state();
+    prefs.lastBackend = pb.selectedOutput.backendId.raw();
+    prefs.lastOutputDeviceId = pb.selectedOutput.deviceId.raw();
+    prefs.lastProfile = pb.selectedOutput.profileId.raw();
+    _config->saveAppPrefs(prefs);
+
+    _runtime.workspace().saveSession(_runtime.configStore());
   }
 
   void MainWindowCoordinator::loadSession()
   {
-    _persistence->loadWindow(_window);
-    _persistence->loadTrackView(_trackColumnLayoutModel);
+    // Window state
+    auto windowState = WindowState{};
+    _config->loadWindow(windowState);
+    _window.set_default_size(windowState.width, windowState.height);
+
+    if (windowState.maximized)
+    {
+      _window.maximize();
+    }
+
+    // Column layouts (widths and order)
+    auto columnState = ColumnLayoutState{};
+    _layoutConfig->load(columnState);
+    _trackPresentationStore->setListLayouts(columnState.listLayouts);
+
+    // App prefs (playback restoration)
+    auto prefs = rt::AppPrefsState{};
+    _config->loadAppPrefs(prefs);
+
+    if (!prefs.lastBackend.empty())
+    {
+      _runtime.playback().setOutput(audio::BackendId{prefs.lastBackend},
+                                    audio::DeviceId{prefs.lastOutputDeviceId},
+                                    audio::ProfileId{prefs.lastProfile});
+    }
   }
 
   GtkUiServices MainWindowCoordinator::uiServices()
@@ -190,7 +240,7 @@ namespace ao::gtk
                          .tagEditController = _tagEditController.get(),
                          .importExportCoordinator = _importExportCoordinator.get(),
                          .trackPageHost = _trackPageHost.get(),
-                         .columnLayoutModel = &_trackColumnLayoutModel,
+                         .trackPresentationStore = _trackPresentationStore.get(),
                          .listSidebarController = _listSidebarController.get()};
   }
 
@@ -203,5 +253,12 @@ namespace ao::gtk
     {
       _listSidebarController->rebuildTree(*_trackRowCache, txn);
     }
+  }
+
+  void MainWindowCoordinator::saveColumnLayout()
+  {
+    auto columnState = ColumnLayoutState{};
+    columnState.listLayouts = _trackPresentationStore->listLayouts();
+    _layoutConfig->save(columnState);
   }
 } // namespace ao::gtk

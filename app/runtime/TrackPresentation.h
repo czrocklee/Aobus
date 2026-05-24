@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "StateTypes.h"
 #include "TrackField.h"
 
 #include <span>
@@ -13,6 +12,8 @@
 
 namespace ao::rt
 {
+  inline constexpr std::string_view kDefaultTrackPresentationId = "songs";
+
   struct TrackPresentationSpec final
   {
     std::string id{};
@@ -31,11 +32,17 @@ namespace ao::rt
     std::string_view description{};
   };
 
+  struct CustomTrackPresentationPreset final
+  {
+    std::string label{};
+    std::string basePresetId{};
+    TrackPresentationSpec spec{};
+
+    bool operator==(CustomTrackPresentationPreset const&) const = default;
+  };
+
   std::span<TrackPresentationPreset const> builtinTrackPresentationPresets();
   TrackPresentationPreset const* builtinTrackPresentationPreset(std::string_view id);
   TrackPresentationSpec defaultTrackPresentationSpec();
   TrackPresentationSpec normalizeTrackPresentationSpec(TrackPresentationSpec const& spec);
-
-  TrackListPresentationState presentationStateFromSpec(TrackPresentationSpec const& spec);
-  TrackPresentationSpec presentationSpecFromState(TrackListPresentationState const& state);
 } // namespace ao::rt

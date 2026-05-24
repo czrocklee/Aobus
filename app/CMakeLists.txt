@@ -21,8 +21,8 @@ add_library(app_runtime STATIC
     runtime/ProjectionTypes.h
     runtime/PlaybackService.cpp
     runtime/PlaybackService.h
-    runtime/SessionPersistenceService.cpp
-    runtime/SessionPersistenceService.h
+    runtime/WorkspaceConfig.cpp
+    runtime/WorkspaceConfig.h
     runtime/LibraryMutationService.cpp
     runtime/LibraryMutationService.h
     runtime/ListSourceStore.cpp
@@ -40,8 +40,8 @@ add_library(app_runtime STATIC
     runtime/SmartListEvaluator.h
     runtime/SmartListSource.cpp
     runtime/SmartListSource.h
-    runtime/TrackPresentationPreset.cpp
-    runtime/TrackPresentationPreset.h
+    runtime/TrackPresentation.cpp
+    runtime/TrackPresentation.h
     runtime/TrackField.cpp
     runtime/TrackField.h
     runtime/TrackListProjection.cpp

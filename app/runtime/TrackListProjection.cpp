@@ -13,8 +13,7 @@
 #include "ao/utility/ScopedTimer.h"
 #include "runtime/CorePrimitives.h"
 #include "runtime/ProjectionTypes.h"
-#include "runtime/StateTypes.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 
 #include <algorithm>
 #include <cctype>
@@ -430,7 +429,7 @@ namespace ao::rt
     library::MusicLibrary& library;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
-    std::string presentationId = std::string{kDefaultTrackPresentationId};
+    std::string id = std::string{kDefaultTrackPresentationId};
     std::vector<TrackField> visibleFields;
     std::vector<TrackField> redundantFields;
     Comparator comparator;
@@ -940,7 +939,7 @@ namespace ao::rt
   {
     auto spec = normalizeTrackPresentationSpec(presentation);
 
-    _impl->presentationId = spec.id;
+    _impl->id = spec.id;
     _impl->visibleFields = spec.visibleFields;
     _impl->redundantFields = spec.redundantFields;
 
@@ -1010,15 +1009,14 @@ namespace ao::rt
     return std::nullopt;
   }
 
-  TrackListPresentationSnapshot TrackListProjection::presentation() const
+  TrackPresentationSpec TrackListProjection::presentation() const
   {
-    return TrackListPresentationSnapshot{
-      .presentationId = _impl->presentationId,
+    return TrackPresentationSpec{
+      .id = _impl->id,
       .groupBy = _impl->groupBy,
-      .effectiveSortBy = _impl->sortBy,
+      .sortBy = _impl->sortBy,
       .visibleFields = _impl->visibleFields,
       .redundantFields = _impl->redundantFields,
-      .revision = _impl->rev,
     };
   }
 

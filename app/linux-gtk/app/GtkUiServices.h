@@ -14,7 +14,7 @@ namespace ao::gtk
     class ImportExportCoordinator;
   }
   class TrackPageHost;
-  class TrackColumnLayoutModel;
+  class TrackPresentationStore;
   class ListSidebarController;
 
   /**
@@ -29,7 +29,7 @@ namespace ao::gtk
     TagEditController* tagEditController = nullptr;
     portal::ImportExportCoordinator* importExportCoordinator = nullptr;
     TrackPageHost* trackPageHost = nullptr;
-    TrackColumnLayoutModel* columnLayoutModel = nullptr;
+    TrackPresentationStore* trackPresentationStore = nullptr;
     ListSidebarController* listSidebarController = nullptr;
   };
 } // namespace ao::gtk

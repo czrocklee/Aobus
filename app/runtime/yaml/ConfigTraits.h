@@ -3,19 +3,25 @@
 
 #pragma once
 
+#include "ao/Type.h"
+#include "ao/utility/Log.h"
 #include "runtime/yaml/Utils.h"
 
 #include <boost/pfr/core.hpp>
 #include <boost/pfr/core_name.hpp>
 #include <ryml.hpp>
 
+#include <array>
+#include <charconv>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <map>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -76,10 +82,20 @@ namespace ao::rt::yaml
   template<typename T>
   bool read(ryml::ConstNodeRef node, std::vector<T>& rhs);
 
+  template<typename T, std::size_t N>
+  void write(ryml::NodeRef node, std::array<T, N> const& rhs);
+  template<typename T, std::size_t N>
+  bool read(ryml::ConstNodeRef node, std::array<T, N>& rhs);
+
   template<typename T>
   void write(ryml::NodeRef node, std::map<std::string, T, std::less<>> const& rhs);
   template<typename T>
   bool read(ryml::ConstNodeRef node, std::map<std::string, T, std::less<>>& rhs);
+
+  template<typename T>
+  void write(ryml::NodeRef node, std::map<ao::ListId, T> const& rhs);
+  template<typename T>
+  inline bool read(ryml::ConstNodeRef node, std::map<ao::ListId, T>& rhs);
 
   template<PfrAggregate T>
   void write(ryml::NodeRef node, T const& obj);
@@ -269,6 +285,46 @@ namespace ao::rt::yaml
     return true;
   }
 
+  template<typename T, std::size_t N>
+  inline void write(ryml::NodeRef node, std::array<T, N> const& rhs)
+  {
+    node |= ryml::SEQ;
+
+    for (auto const& item : rhs)
+    {
+      auto child = node.append_child();
+      write(child, item);
+    }
+  }
+
+  template<typename T, std::size_t N>
+  inline bool read(ryml::ConstNodeRef node, std::array<T, N>& rhs)
+  {
+    if (!node.is_seq())
+    {
+      return false;
+    }
+
+    std::size_t index = 0;
+
+    for (auto const& child : node.children())
+    {
+      if (index >= N)
+      {
+        break;
+      }
+
+      if (auto val = T{}; read(child, val))
+      {
+        rhs.at(index) = std::move(val);
+      }
+
+      ++index;
+    }
+
+    return true;
+  }
+
   template<typename T>
   inline void write(ryml::NodeRef node, std::map<std::string, T, std::less<>> const& rhs)
   {
@@ -297,6 +353,52 @@ namespace ao::rt::yaml
       if (auto val = T{}; read(child, val))
       {
         rhs.emplace(yaml::keyView(child), std::move(val));
+      }
+    }
+
+    return true;
+  }
+
+  template<typename T>
+  inline void write(ryml::NodeRef node, std::map<ao::ListId, T> const& rhs)
+  {
+    node |= ryml::MAP;
+
+    for (auto const& [key, value] : rhs)
+    {
+      auto child = node.append_child();
+      yaml::setKey(child, std::to_string(key.raw()));
+      write(child, value);
+    }
+  }
+
+  template<typename T>
+  inline bool read(ryml::ConstNodeRef node, std::map<ao::ListId, T>& rhs)
+  {
+    if (!node.is_map())
+    {
+      return false;
+    }
+
+    rhs.clear();
+
+    for (auto const& child : node.children())
+    {
+      if (auto val = T{}; read(child, val))
+      {
+        auto const keyStr = yaml::keyView(child);
+        std::uint32_t listIdVal = 0;
+        auto const [ptr, ec] = std::from_chars(keyStr.data(), keyStr.data() + keyStr.size(), listIdVal);
+
+        if (ec == std::errc{})
+        {
+          rhs.emplace(ao::ListId{listIdVal}, std::move(val));
+        }
+        else
+        {
+          APP_LOG_WARN(
+            "ConfigTraits: Skipping invalid list ID key in map: {}", std::string_view{keyStr.data(), keyStr.size()});
+        }
       }
     }
 

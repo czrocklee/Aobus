@@ -7,11 +7,10 @@
 #include "runtime/CorePrimitives.h"
 #include "runtime/ProjectionTypes.h"
 #include "runtime/TrackField.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackListAdapter.h"
-#include "track/TrackPresentation.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
@@ -55,7 +54,6 @@ namespace ao::gtk
 
     explicit TrackViewPage(ListId listId,
                            TrackListAdapter& adapter,
-                           TrackColumnLayoutModel& columnLayoutModel,
                            TrackPresentationStore& presentationStore,
                            rt::AppRuntime& runtime,
                            ImageCache& imageCache,
@@ -90,7 +88,9 @@ namespace ao::gtk
     void setPlayingTrackId(TrackId trackId);
 
     void applyPresentation(rt::TrackPresentationSpec const& presentation);
-    void applyPresentation(rt::TrackListPresentationSnapshot const& snapshot);
+
+  protected:
+    void on_map() override;
 
   private:
     void setupHeaderFactory();
@@ -116,7 +116,6 @@ namespace ao::gtk
     ImageCache& _imageCache;
     Glib::RefPtr<Gtk::SortListModel> _groupModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
-    TrackColumnLayoutModel& _columnLayoutModel;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
     TrackId _playingTrackId{kInvalidTrackId};
 

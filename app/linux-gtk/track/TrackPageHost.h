@@ -35,7 +35,6 @@ namespace ao::gtk
     class PlaylistExporter;
   }
   class TrackPresentationStore;
-  class TrackColumnLayoutModel;
 
   /**
    * TrackPageContext holds the per-page state for a track list.
@@ -55,7 +54,6 @@ namespace ao::gtk
   {
   public:
     TrackPageHost(Gtk::Stack& stack,
-                  TrackColumnLayoutModel& layoutModel,
                   rt::AppRuntime& runtime,
                   PlaybackSequenceController* sequenceController,
                   TagEditController& tagEditController,
@@ -101,7 +99,6 @@ namespace ao::gtk
     void handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev);
 
     Gtk::Stack& _stack;
-    TrackColumnLayoutModel& _layoutModel;
     rt::AppRuntime& _runtime;
     PlaybackSequenceController* _playbackSequenceController;
     TagEditController& _tagEditController;

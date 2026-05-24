@@ -5,7 +5,7 @@
 
 #include "CorePrimitives.h"
 #include "ProjectionTypes.h"
-#include "TrackPresentationPreset.h"
+#include "TrackPresentation.h"
 #include "TrackSource.h"
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
@@ -42,7 +42,7 @@ namespace ao::rt
     ViewId viewId() const noexcept override;
     std::uint64_t revision() const noexcept override;
 
-    TrackListPresentationSnapshot presentation() const override;
+    TrackPresentationSpec presentation() const override;
     std::size_t groupCount() const noexcept override;
     TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const override;
     std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const override;

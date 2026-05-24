@@ -20,7 +20,7 @@ namespace ao::rt
 namespace ao::gtk::layout
 {
   /**
-   * @brief Top-level layout document.
+   * @brief Top-level shell layout state.
    */
   struct LayoutDocument final
   {

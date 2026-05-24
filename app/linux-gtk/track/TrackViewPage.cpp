@@ -15,14 +15,13 @@
 #include "runtime/ProjectionTypes.h"
 #include "runtime/StateTypes.h"
 #include "runtime/TrackField.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
 #include "runtime/ViewService.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnFactoryBuilder.h"
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackListAdapter.h"
-#include "track/TrackPresentation.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
 
@@ -117,7 +116,6 @@ namespace ao::gtk
 
   TrackViewPage::TrackViewPage(ListId listId,
                                TrackListAdapter& adapter,
-                               TrackColumnLayoutModel& columnLayoutModel,
                                TrackPresentationStore& presentationStore,
                                rt::AppRuntime& runtime,
                                ImageCache& imageCache,
@@ -131,9 +129,9 @@ namespace ao::gtk
     , _imageCache{imageCache}
     , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
     , _selectionModel{Gtk::MultiSelection::create(_groupModel)}
-    , _columnLayoutModel{columnLayoutModel}
-    , _viewHost{std::make_unique<TrackColumnViewHost>(_adapter, _columnLayoutModel, _selectionModel)}
+    , _viewHost{std::make_unique<TrackColumnViewHost>(_adapter, _presentationStore, _selectionModel, listId)}
   {
+    _presentationStore.setActiveListId(_listId);
     _viewHost->setupSelectionActivation();
 
     _modelChangedConnection = _adapter.signalModelChanged().connect(
@@ -189,6 +187,12 @@ namespace ao::gtk
   }
 
   TrackViewPage::~TrackViewPage() = default;
+
+  void TrackViewPage::on_map()
+  {
+    Gtk::Box::on_map();
+    _presentationStore.setActiveListId(_listId);
+  }
 
   void TrackViewPage::setupHeaderFactory()
   {
@@ -314,12 +318,8 @@ namespace ao::gtk
 
   void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentation)
   {
+    _presentationStore.setActivePresentationId(presentation.id);
     rebuildColumnView(presentation.visibleFields);
-  }
-
-  void TrackViewPage::applyPresentation(rt::TrackListPresentationSnapshot const& snapshot)
-  {
-    rebuildColumnView(snapshot.visibleFields);
   }
 
   void TrackViewPage::setPlayingTrackId(TrackId trackId)
@@ -339,7 +339,7 @@ namespace ao::gtk
     _contextPopover.unparent();
 
     // 2. Create a new generation off-tree.
-    auto& newView = _viewHost->rebuild(_adapter, _columnLayoutModel, _selectionModel, factoryProvider);
+    auto& newView = _viewHost->rebuild(_adapter, _presentationStore, _selectionModel, factoryProvider, _listId);
 
     // 3. Configure structural properties before attaching model (Safe)
     setupColumnViewStyles(newView);

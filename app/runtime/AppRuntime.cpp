@@ -8,7 +8,7 @@
 #include "CoreRuntime.h"
 #include "ListSourceStore.h"
 #include "PlaybackService.h"
-#include "SessionPersistenceService.h"
+#include "WorkspaceConfig.h"
 #include "ViewService.h"
 #include "WorkspaceService.h"
 #include "ao/Type.h"
@@ -24,13 +24,13 @@ namespace ao::rt
     ViewService viewService;
     PlaybackService playbackService;
     WorkspaceService workspaceService;
-    SessionPersistenceService persistenceService;
+    WorkspaceConfig persistenceService;
 
-    Impl(AppRuntime& runtime, std::shared_ptr<ConfigStore> globalConfig, std::shared_ptr<ConfigStore> workspaceConfig)
+    Impl(AppRuntime& runtime, std::shared_ptr<ConfigStore> workspaceConfig)
       : viewService{runtime.async().controlExecutor(), runtime.musicLibrary(), runtime.sources()}
       , playbackService{runtime.async().controlExecutor(), viewService, runtime.musicLibrary()}
       , workspaceService{viewService, playbackService, runtime.mutation(), runtime.musicLibrary()}
-      , persistenceService{workspaceService, viewService, playbackService, runtime, *globalConfig, *workspaceConfig}
+      , persistenceService{workspaceService, viewService, playbackService, runtime, *workspaceConfig}
     {
     }
 
@@ -46,9 +46,7 @@ namespace ao::rt
     : CoreRuntime{std::move(dependencies.executor),
                   std::move(dependencies.musicRoot),
                   std::move(dependencies.databasePath)}
-    , _impl{std::make_unique<Impl>(*this,
-                                   std::move(dependencies.globalConfigStore),
-                                   std::move(dependencies.workspaceConfigStore))}
+    , _impl{std::make_unique<Impl>(*this, std::move(dependencies.workspaceConfigStore))}
   {
   }
 
@@ -64,7 +62,7 @@ namespace ao::rt
     return _impl->workspaceService;
   }
 
-  SessionPersistenceService& AppRuntime::persistence() noexcept
+  WorkspaceConfig& AppRuntime::persistence() noexcept
   {
     return _impl->persistenceService;
   }

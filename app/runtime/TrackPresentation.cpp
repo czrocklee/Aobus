@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "TrackPresentationPreset.h"
+#include "TrackPresentation.h"
 
-#include "StateTypes.h"
 #include "TrackField.h"
 
 #include <algorithm>
@@ -256,27 +255,5 @@ namespace ao::rt
     deduplicate(result.redundantFields);
 
     return result;
-  }
-
-  TrackListPresentationState presentationStateFromSpec(TrackPresentationSpec const& spec)
-  {
-    return TrackListPresentationState{
-      .presentationId = spec.id,
-      .groupBy = spec.groupBy,
-      .sortBy = spec.sortBy,
-      .visibleFields = spec.visibleFields,
-      .redundantFields = spec.redundantFields,
-    };
-  }
-
-  TrackPresentationSpec presentationSpecFromState(TrackListPresentationState const& state)
-  {
-    return TrackPresentationSpec{
-      .id = state.presentationId,
-      .groupBy = state.groupBy,
-      .sortBy = state.sortBy,
-      .visibleFields = state.visibleFields,
-      .redundantFields = state.redundantFields,
-    };
   }
 } // namespace ao::rt

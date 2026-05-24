@@ -6,16 +6,10 @@
 #include "app/GtkUiServices.h"
 #include "runtime/AppRuntime.h"
 #include "runtime/CorePrimitives.h"
-#include "track/TrackPresentation.h"
 
 #include <gtkmm/stack.h>
 
 #include <memory>
-
-namespace ao::rt
-{
-  class ConfigStore;
-}
 
 namespace ao::lmdb
 {
@@ -25,7 +19,8 @@ namespace ao::lmdb
 namespace ao::gtk
 {
   class MainWindow;
-  class WindowStatePersistence;
+  class AppConfig;
+  class GtkLayoutConfig;
   class TrackRowCache;
   class ImageCache;
   class TagEditController;
@@ -41,10 +36,7 @@ namespace ao::gtk
   class MainWindowCoordinator final
   {
   public:
-    MainWindowCoordinator(MainWindow& window,
-                          rt::AppRuntime& runtime,
-                          std::shared_ptr<rt::ConfigStore> globalConfig,
-                          std::shared_ptr<rt::ConfigStore> workspaceConfig);
+    MainWindowCoordinator(MainWindow& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfig> config);
     ~MainWindowCoordinator();
 
     // Not copyable or movable
@@ -68,7 +60,6 @@ namespace ao::gtk
     TagEditController* tagEditController() { return _tagEditController.get(); }
     portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinator.get(); }
     TrackPageHost* trackPageHost() { return _trackPageHost.get(); }
-    TrackColumnLayoutModel* columnLayoutModel() { return &_trackColumnLayoutModel; }
     ListSidebarController* listSidebarController() { return _listSidebarController.get(); }
     TrackPresentationStore* trackPresentationStore() { return _trackPresentationStore.get(); }
 
@@ -77,9 +68,8 @@ namespace ao::gtk
   private:
     MainWindow& _window;
     rt::AppRuntime& _runtime;
-    std::shared_ptr<rt::ConfigStore> _globalConfig;
-    std::shared_ptr<rt::ConfigStore> _workspaceConfig;
-    std::unique_ptr<WindowStatePersistence> _persistence;
+    std::shared_ptr<AppConfig> _config;
+    std::unique_ptr<GtkLayoutConfig> _layoutConfig;
 
     std::unique_ptr<TrackRowCache> _trackRowCache;
     std::unique_ptr<ImageCache> _imageCache;
@@ -91,7 +81,6 @@ namespace ao::gtk
     std::unique_ptr<portal::ImportExportCoordinator> _importExportCoordinator;
 
     Gtk::Stack _stack;
-    TrackColumnLayoutModel _trackColumnLayoutModel;
 
     rt::Subscription _tracksMutatedSubscription;
     rt::Subscription _libraryTaskProgressSubscription;

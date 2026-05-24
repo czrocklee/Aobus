@@ -3,16 +3,16 @@
 
 #include "track/TrackPresentationStore.h"
 
-#include "ao/utility/Log.h"
+#include "ao/Type.h"
 #include "app/UIState.h"
-#include "runtime/ConfigStore.h"
+#include "runtime/CorePrimitives.h"
 #include "runtime/TrackField.h"
-#include "runtime/TrackPresentationPreset.h"
+#include "runtime/TrackPresentation.h"
+#include "runtime/WorkspaceService.h"
 
 #include <algorithm>
-#include <memory>
+#include <map>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -20,39 +20,11 @@
 
 namespace ao::gtk
 {
-  rt::TrackPresentationSpec specFromState(CustomTrackPresentationState const& state)
+  TrackPresentationStore::TrackPresentationStore(rt::WorkspaceService& workspace)
+    : _workspace{workspace}
   {
-    auto spec = rt::TrackPresentationSpec{
-      .id = state.id,
-      .groupBy = static_cast<rt::TrackGroupKey>(state.groupBy),
-    };
-
-    spec.sortBy = state.sortBy |
-                  std::views::transform(
-                    [](auto const& term)
-                    {
-                      return rt::TrackSortTerm{
-                        .field = static_cast<rt::TrackSortField>(term.field),
-                        .ascending = term.ascending,
-                      };
-                    }) |
-                  std::ranges::to<std::vector>();
-
-    spec.visibleFields = state.visibleFields |
-                         std::views::transform([](auto field) { return static_cast<rt::TrackField>(field); }) |
-                         std::ranges::to<std::vector>();
-
-    spec.redundantFields = state.redundantFields |
-                           std::views::transform([](auto field) { return static_cast<rt::TrackField>(field); }) |
-                           std::ranges::to<std::vector>();
-
-    return spec;
-  }
-
-  TrackPresentationStore::TrackPresentationStore(std::shared_ptr<rt::ConfigStore> configStore)
-    : _configStore{std::move(configStore)}
-  {
-    load();
+    _customPresetsSub = _workspace.onCustomPresetsChanged(
+      [this] { _changed.emit(ao::kInvalidListId, TrackPresentationChangeType::FullRebuild); });
   }
 
   std::span<rt::TrackPresentationPreset const> TrackPresentationStore::builtinPresets() const noexcept
@@ -60,9 +32,9 @@ namespace ao::gtk
     return rt::builtinTrackPresentationPresets();
   }
 
-  std::vector<CustomTrackPresentationState> const& TrackPresentationStore::customPresentations() const noexcept
+  std::span<rt::CustomTrackPresentationPreset const> TrackPresentationStore::customPresentations() const noexcept
   {
-    return _state.customPresentations;
+    return _workspace.customPresets();
   }
 
   std::optional<rt::TrackPresentationSpec> TrackPresentationStore::specForId(std::string_view id) const
@@ -72,53 +44,100 @@ namespace ao::gtk
       return builtin->spec;
     }
 
-    auto const it = std::ranges::find(_state.customPresentations, id, &CustomTrackPresentationState::id);
+    auto const presets = _workspace.customPresets();
+    auto const it = std::ranges::find(presets, id, [](auto const& preset) { return preset.spec.id; });
 
-    if (it != _state.customPresentations.end())
+    if (it != presets.end())
     {
-      return specFromState(*it);
+      return it->spec;
     }
 
     return std::nullopt;
   }
 
-  void TrackPresentationStore::setCustomPresentations(std::vector<CustomTrackPresentationState> presentations)
+  void TrackPresentationStore::setActivePresentationId(std::string_view id)
   {
-    _state.customPresentations = std::move(presentations);
-    save();
-    _changed.emit();
+    if (_activePresentationId == id)
+    {
+      return;
+    }
+
+    _activePresentationId = id;
+
+    _changed.emit(_activeListId, TrackPresentationChangeType::LayoutOnly);
   }
 
-  void TrackPresentationStore::addCustomPresentation(CustomTrackPresentationState const& state)
+  std::vector<ColumnState> const& TrackPresentationStore::layoutForList(ao::ListId listId) const noexcept
   {
-    removeCustomPresentation(state.id);
-    _state.customPresentations.push_back(state);
-    save();
-    _changed.emit();
+    static std::vector<ColumnState> const kEmpty{};
+
+    if (auto const it = _listLayouts.find(listId); it != _listLayouts.end())
+    {
+      return it->second;
+    }
+
+    return kEmpty;
+  }
+
+  void TrackPresentationStore::updateLayout(ao::ListId listId, std::vector<ColumnState> const& layout)
+  {
+    if (listId == ao::kInvalidListId)
+    {
+      return;
+    }
+
+    if (_listLayouts[listId] == layout)
+    {
+      return;
+    }
+
+    _listLayouts[listId] = layout;
+    _changed.emit(listId, TrackPresentationChangeType::LayoutOnly);
+  }
+
+  std::vector<rt::TrackField> TrackPresentationStore::activeFieldOrder() const noexcept
+  {
+    auto const& layout = layoutForList(_activeListId);
+    auto order = std::vector<rt::TrackField>{};
+    order.reserve(layout.size());
+
+    for (auto const& col : layout)
+    {
+      order.push_back(col.field);
+    }
+
+    return order;
+  }
+
+  void TrackPresentationStore::setActiveListId(ao::ListId listId)
+  {
+    if (_activeListId == listId)
+    {
+      return;
+    }
+
+    _activeListId = listId;
+    _changed.emit(_activeListId, TrackPresentationChangeType::LayoutOnly);
+  }
+
+  void TrackPresentationStore::setListLayouts(std::map<ao::ListId, std::vector<ColumnState>> const& layouts)
+  {
+    if (_listLayouts == layouts)
+    {
+      return;
+    }
+
+    _listLayouts = layouts;
+    _changed.emit(ao::kInvalidListId, TrackPresentationChangeType::LayoutOnly);
+  }
+
+  void TrackPresentationStore::addCustomPresentation(rt::CustomTrackPresentationPreset const& state)
+  {
+    _workspace.addCustomPreset(state);
   }
 
   void TrackPresentationStore::removeCustomPresentation(std::string_view id)
   {
-    auto const removed = std::erase_if(_state.customPresentations, [&](auto const& pres) { return pres.id == id; });
-
-    if (removed > 0)
-    {
-      save();
-      _changed.emit();
-    }
-  }
-
-  void TrackPresentationStore::load()
-  {
-    if (auto const res = _configStore->load("custom_presentations", _state);
-        !res && res.error().code != Error::Code::NotFound)
-    {
-      APP_LOG_DEBUG("Failed to load custom presentations: {}", res.error().message);
-    }
-  }
-
-  void TrackPresentationStore::save()
-  {
-    _configStore->save("custom_presentations", _state);
+    _workspace.removeCustomPreset(id);
   }
 } // namespace ao::gtk

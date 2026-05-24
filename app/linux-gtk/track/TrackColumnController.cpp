@@ -3,9 +3,11 @@
 
 #include "track/TrackColumnController.h"
 
+#include "ao/Type.h"
+#include "app/UIState.h"
 #include "runtime/TrackField.h"
 #include "track/TrackFieldUi.h"
-#include "track/TrackPresentation.h"
+#include "track/TrackPresentationStore.h"
 
 #include <giomm/listmodel.h>
 #include <glib.h>
@@ -35,12 +37,33 @@ namespace ao::gtk
     constexpr double kTitlePositionDivisor = 2.0;
   }
 
-  TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView, TrackColumnLayoutModel& layoutModel)
-    : _columnView{columnView}, _columnLayoutModel{layoutModel}
+  TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView,
+                                               TrackPresentationStore& presentationStore,
+                                               ao::ListId listId)
+    : _listId{listId}, _columnView{columnView}, _presentationStore{presentationStore}
   {
     _dynamicCssProvider = Gtk::CssProvider::create();
 
-    _layoutChangedConnection = _columnLayoutModel.signalChanged().connect([this] { queueSharedColumnLayoutUpdate(); });
+    _layoutChangedConnection = _presentationStore.signalChanged().connect(
+      [this](ao::ListId listId, TrackPresentationChangeType type)
+      {
+        if (_capturingColumnLayout)
+        {
+          return;
+        }
+
+        if (listId != _listId && listId != ao::kInvalidListId)
+        {
+          return;
+        }
+
+        if (type == TrackPresentationChangeType::FullRebuild)
+        {
+          // FullRebuild might change field order/visibility handled by TrackViewPage,
+          // but we still want to ensure our columns match the store's state if we're active.
+          queueSharedColumnLayoutUpdate();
+        }
+      });
 
     _columnView.signal_map().connect(sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
 
@@ -54,10 +77,20 @@ namespace ao::gtk
 
     if (auto const columns = _columnView.get_columns())
     {
-      _columnNotifyConnections.emplace_back(
-        columns->signal_items_changed().connect([this](::guint, ::guint, ::guint) { updateTitlePositionVariable(); }));
+      _columnNotifyConnections.emplace_back(columns->signal_items_changed().connect(
+        [this](::guint, ::guint, ::guint)
+        {
+          updateTitlePositionVariable();
+
+          if (!_syncingColumnLayout)
+          {
+            queueSharedColumnLayoutUpdate();
+          }
+        }));
     }
   }
+
+  TrackColumnController::~TrackColumnController() = default;
 
   void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)
   {
@@ -114,6 +147,8 @@ namespace ao::gtk
 
     if (auto const columns = _columnView.get_columns(); columns)
     {
+      auto const& storedLayout = _presentationStore.layoutForList(_listId);
+
       // Reorder columns to match visibleFields order
       for (auto const& [idx, field] : std::views::enumerate(visibleFields))
       {
@@ -126,8 +161,16 @@ namespace ao::gtk
 
         ensureColumnPosition(columns, idx, binding->column);
 
-        auto const width = _columnLayoutModel.state().widths.at(static_cast<std::size_t>(field));
-        auto const effectiveWidth = (width == 0 ? binding->defaultWidth : width);
+        // Find width in stored layout if it exists
+        auto width = 0;
+        auto const it = std::ranges::find(storedLayout, field, &ColumnState::field);
+
+        if (it != storedLayout.end())
+        {
+          width = it->width;
+        }
+
+        auto const effectiveWidth = (width <= 0 ? binding->defaultWidth : width);
 
         if (binding->column->get_fixed_width() != effectiveWidth)
         {
@@ -246,7 +289,7 @@ namespace ao::gtk
   {
     _capturingColumnLayout = true;
 
-    auto state = TrackColumnViewState{};
+    auto layout = std::vector<ColumnState>{};
 
     if (auto const columns = _columnView.get_columns(); columns)
     {
@@ -255,7 +298,7 @@ namespace ao::gtk
         auto const obj = columns->get_object(idx);
         auto const gtkColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(obj);
 
-        if (!gtkColumn)
+        if (!gtkColumn || !gtkColumn->get_visible())
         {
           continue;
         }
@@ -267,13 +310,11 @@ namespace ao::gtk
           continue;
         }
 
-        state.widths.at(static_cast<std::size_t>(*optField)) = gtkColumn->get_fixed_width();
+        layout.push_back({.field = *optField, .width = gtkColumn->get_fixed_width()});
       }
     }
 
-    state.fieldOrder = captureCurrentFieldOrder();
-
-    _columnLayoutModel.setState(state);
+    _presentationStore.updateLayout(_listId, layout);
     _capturingColumnLayout = false;
   }
 
@@ -324,7 +365,7 @@ namespace ao::gtk
       ordered.push_back(field);
     };
 
-    for (auto const field : _columnLayoutModel.state().fieldOrder)
+    for (auto const field : _presentationStore.activeFieldOrder())
     {
       appendIfVisible(field);
     }

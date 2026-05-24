@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "../../../../unit/lmdb/TestUtils.h"
+#include "ao/audio/Types.h"
 #include "playback/SeekControl.h"
 #include "playback/TimeLabel.h"
-#include "ao/audio/Types.h"
 #include "runtime/AppRuntime.h"
 #include "runtime/ConfigStore.h"
-#include "runtime/PlaybackService.h"
 #include "runtime/CorePrimitives.h"
-#include "../../../../unit/lmdb/TestUtils.h"
+#include "runtime/PlaybackService.h"
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/adjustment.h> // NOLINT(misc-include-cleaner)
+#include <gtkmm/adjustment.h>  // NOLINT(misc-include-cleaner)
 #include <gtkmm/application.h> // NOLINT(misc-include-cleaner)
 #include <gtkmm/label.h>
 #include <gtkmm/scale.h>
@@ -40,13 +40,12 @@ namespace ao::gtk::test
       rt::AppRuntime runtime;
 
       TestEnvironment()
-        : configStore{std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml")},
-          runtime{rt::AppRuntimeDependencies{
-            .executor = std::make_unique<MockExecutor>(),
-            .musicRoot = tempDir.path(),
-            .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-            .globalConfigStore = configStore,
-            .workspaceConfigStore = configStore}}
+        : configStore{std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml")}
+        , runtime{
+            rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+                                       .musicRoot = tempDir.path(),
+                                       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+                                       .workspaceConfigStore = configStore}}
       {
       }
     };

@@ -50,7 +50,6 @@ namespace ao::gtk::layout::test
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
     SECTION("PlaybackDetailsWidget instantiates")

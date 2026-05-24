@@ -5,6 +5,7 @@
 
 #include "CorePrimitives.h"
 #include "TrackField.h"
+#include "TrackPresentation.h"
 #include "ao/Type.h"
 #include "ao/audio/Backend.h"
 #include "ao/audio/Types.h"
@@ -20,8 +21,6 @@
 
 namespace ao::rt
 {
-  inline constexpr std::string_view kDefaultTrackPresentationId = "songs";
-
   struct OutputProfileSnapshot final
   {
     audio::ProfileId id{};
@@ -156,17 +155,6 @@ namespace ao::rt
     std::uint64_t revision = 0;
   };
 
-  struct TrackListPresentationState final
-  {
-    std::string presentationId = std::string{kDefaultTrackPresentationId};
-    TrackGroupKey groupBy = TrackGroupKey::None;
-    std::vector<TrackSortTerm> sortBy{};
-    std::vector<TrackField> visibleFields{};
-    std::vector<TrackField> redundantFields{};
-
-    bool operator==(TrackListPresentationState const&) const = default;
-  };
-
   enum class ViewLifecycleState : std::uint8_t
   {
     Attached,
@@ -188,7 +176,7 @@ namespace ao::rt
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
     std::vector<TrackId> selection{};
-    TrackListPresentationState presentation{};
+    TrackPresentationSpec presentation{};
     std::uint64_t revision = 0;
   };
 
@@ -198,8 +186,6 @@ namespace ao::rt
     std::string filterExpression{};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
-    std::vector<TrackId> selection{};
-    TrackListPresentationState presentation{};
   };
 
   struct ViewRecord final
@@ -245,7 +231,7 @@ namespace ao::rt
     ViewId viewId{};
   };
 
-  struct GlobalSessionSnapshot final
+  struct AppPrefsState final
   {
     std::string lastLibraryPath;
     std::string lastBackend;
@@ -253,9 +239,10 @@ namespace ao::rt
     std::string lastOutputDeviceId;
   };
 
-  struct WorkspaceSnapshot final
+  struct SessionState final
   {
     std::vector<TrackListViewConfig> openViews;
     std::optional<std::size_t> optActiveViewIndex;
+    std::vector<CustomTrackPresentationPreset> customPresets;
   };
 } // namespace ao::rt

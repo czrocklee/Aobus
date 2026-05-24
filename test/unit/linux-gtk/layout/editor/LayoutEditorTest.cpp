@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "app/linux-gtk/layout/document/LayoutDocument.h"
+#include "layout/document/LayoutDocument.h"
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -367,7 +367,6 @@ namespace ao::gtk::layout::editor::test
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .globalConfigStore = configStore,
                                    .workspaceConfigStore = configStore}};
 
       auto const app = Gtk::Application::create("io.github.aobus.template_test");
@@ -401,7 +400,6 @@ namespace ao::gtk::layout::editor::test
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .globalConfigStore = configStore,
                                    .workspaceConfigStore = configStore}};
 
       auto const app = Gtk::Application::create("io.github.aobus.recursive_test");
@@ -453,7 +451,6 @@ namespace ao::gtk::layout::editor::test
       rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .globalConfigStore = configStore,
                                  .workspaceConfigStore = configStore}};
 
     auto registry = ComponentRegistry{};

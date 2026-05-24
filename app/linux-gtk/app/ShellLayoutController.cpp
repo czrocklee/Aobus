@@ -4,11 +4,11 @@
 #include "app/ShellLayoutController.h"
 
 #include "ao/utility/Log.h"
+#include "app/AppConfig.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include "runtime/AppRuntime.h"
-#include "runtime/ConfigStore.h"
 #include "runtime/async/LifetimeScope.h"
 #include "runtime/async/Runtime.h"
 #include "runtime/async/Task.h"
@@ -32,11 +32,11 @@ namespace ao::gtk
     _context.parentWindow.set_child(_host);
   }
 
-  void ShellLayoutController::loadLayout(rt::ConfigStore& configStore)
+  void ShellLayoutController::loadLayout(AppConfig& config)
   {
     auto& runtime = _context.runtime.async();
     runtime.spawnWithLifetime(&_tasks,
-                              [](ShellLayoutController* self, rt::ConfigStore* store) -> rt::async::Task<void>
+                              [](ShellLayoutController* self, AppConfig* cfg) -> rt::async::Task<void>
                               {
                                 APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
@@ -45,27 +45,22 @@ namespace ao::gtk
                                 APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
 
                                 auto doc = layout::createDefaultLayout();
-
-                                if (auto const res = layout::loadLayout(*store, "linuxGtkLayout", doc);
-                                    !res && res.error().code != Error::Code::NotFound)
-                                {
-                                  APP_LOG_DEBUG("Failed to load layout from config: {}", res.error().message);
-                                }
+                                cfg->loadShellLayout(doc);
 
                                 co_await asyncRuntime->resumeOnControl();
                                 APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
 
                                 self->_activeLayout = doc;
                                 self->_host.setLayout(self->_context, self->_activeLayout);
-                              }(this, &configStore));
+                              }(this, &config));
   }
 
-  void ShellLayoutController::saveLayout(rt::ConfigStore& configStore) const
+  void ShellLayoutController::saveLayout(AppConfig& config) const
   {
-    layout::saveLayout(configStore, "linuxGtkLayout", _activeLayout);
+    config.saveShellLayout(_activeLayout);
   }
 
-  void ShellLayoutController::openEditor(rt::ConfigStore& configStore)
+  void ShellLayoutController::openEditor(AppConfig& config)
   {
     auto const dialog = std::make_shared<layout::editor::LayoutEditorDialog>(
       dynamic_cast<Gtk::Window&>(_context.parentWindow), _registry, _activeLayout);
@@ -81,7 +76,7 @@ namespace ao::gtk
                                             { _host.setLayout(_context, doc); });
 
     dialogPtr->signal_response().connect(
-      [this, sharedDialog = dialog, &configStore](int responseId)
+      [this, sharedDialog = dialog, &config](int responseId)
       {
         _context.editMode = false;
         _context.onNodeMoved = nullptr;
@@ -90,7 +85,7 @@ namespace ao::gtk
         {
           _activeLayout = sharedDialog->document();
           _host.setLayout(_context, _activeLayout);
-          layout::saveLayout(configStore, "linuxGtkLayout", _activeLayout);
+          config.saveShellLayout(_activeLayout);
         }
         else if (responseId == Gtk::ResponseType::CANCEL)
         {
