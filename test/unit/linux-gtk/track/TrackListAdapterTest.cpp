@@ -9,8 +9,8 @@
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
 #include "ao/lmdb/Transaction.h"
-#include <ao/rt/TrackSource.h>
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/rt/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 

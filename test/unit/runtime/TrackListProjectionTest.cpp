@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/TrackListProjection.h>
-
 #include "TestUtils.h"
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
@@ -12,6 +10,7 @@
 #include <ao/rt/SmartListEvaluator.h>
 #include <ao/rt/SmartListSource.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackSource.h>
 
@@ -208,7 +207,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    int count = 0;
+    std::int32_t count = 0;
     auto const sub1 = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
     auto const sub2 = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
     CHECK(count == 2);
@@ -221,7 +220,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    int count = 0;
+    std::int32_t count = 0;
     auto sub = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
     auto const initial = count;
     sub.reset();
@@ -245,12 +244,12 @@ namespace ao::rt::test
     auto ids = std::vector<TrackId>{};
     ids.reserve(20);
 
-    for (int idx = 0; idx < 10; ++idx)
+    for (std::int32_t idx = 0; idx < 10; ++idx)
     {
       ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - idx)), 2020)));
     }
 
-    for (int idx = 0; idx < 10; ++idx)
+    for (std::int32_t idx = 0; idx < 10; ++idx)
     {
       ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - idx)), 2021)));
     }
@@ -395,7 +394,7 @@ namespace ao::rt::test
     auto ids = std::vector<TrackId>{};
     ids.reserve(10);
 
-    for (int i = 0; i < 10; ++i)
+    for (std::int32_t i = 0; i < 10; ++i)
     {
       ids.push_back(env.lib.addTrack(makeSpec("Same", 2020)));
     }
@@ -422,7 +421,7 @@ namespace ao::rt::test
     auto ids = std::vector<TrackId>{};
     ids.reserve(10);
 
-    for (int y = 2019; y >= 2010; --y)
+    for (std::int32_t y = 2019; y >= 2010; --y)
     {
       ids.push_back(env.lib.addTrack(makeSpec(std::format("{}", y), static_cast<std::uint16_t>(y))));
     }
@@ -476,7 +475,7 @@ namespace ao::rt::test
     auto ids = std::vector<TrackId>{};
     ids.reserve(15);
 
-    for (int i = 0; i < 15; ++i)
+    for (std::int32_t i = 0; i < 15; ++i)
     {
       auto title = std::string(1, static_cast<char>('A' + ((i * 7) % 15)));
       ids.push_back(env.lib.addTrack(makeSpec(title, static_cast<std::uint16_t>(2000 + ((i * 3) % 20)))));

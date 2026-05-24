@@ -266,7 +266,7 @@ namespace ao::library
     ArrowProxy operator->() const { return ArrowProxy{**this}; }
 
     Iterator& operator++();
-    Iterator operator++(int);
+    Iterator operator++(std::int32_t);
 
     bool operator==(Iterator const& other) const { return _pos == other._pos; }
 

@@ -214,7 +214,7 @@ namespace ao::media::flac
       return *this;
     }
 
-    MetadataBlockViewIterator operator++(int)
+    MetadataBlockViewIterator operator++(std::int32_t)
     {
       auto tmp = *this;
       increment();

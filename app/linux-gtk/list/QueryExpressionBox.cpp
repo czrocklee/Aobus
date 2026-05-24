@@ -30,6 +30,7 @@
 #include <array>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -50,7 +51,7 @@ namespace ao::gtk
     struct CompletionQuery final
     {
       char trigger = '\0';
-      int tokenStart = -1;
+      std::int32_t tokenStart = -1;
       std::string_view prefix;
     };
 
@@ -115,7 +116,7 @@ namespace ao::gtk
         { return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs)); });
     }
 
-    std::optional<CompletionQuery> completionQueryForCursor(std::string_view text, int cursor)
+    std::optional<CompletionQuery> completionQueryForCursor(std::string_view text, std::int32_t cursor)
     {
       if (cursor <= 0 || std::cmp_greater(cursor, text.size()))
       {
@@ -273,7 +274,7 @@ namespace ao::gtk
     _entry.add_controller(keyController);
 
     auto clickController = Gtk::GestureClick::create();
-    clickController->signal_released().connect([this](int, double, double) { updateCompletion(); });
+    clickController->signal_released().connect([this](std::int32_t, double, double) { updateCompletion(); });
     _entry.add_controller(clickController);
   }
 
@@ -379,11 +380,11 @@ namespace ao::gtk
 
     _suppressNextCompletionUpdate = true;
     _entry.set_text(expr);
-    _entry.set_position(_completionTokenStart + static_cast<int>(replacement.size()));
+    _entry.set_position(_completionTokenStart + static_cast<std::int32_t>(replacement.size()));
     hideCompletion();
   }
 
-  bool QueryExpressionBox::moveCompletionSelection(int delta)
+  bool QueryExpressionBox::moveCompletionSelection(std::int32_t delta)
   {
     if (!_completionSelection || !_completionItems || _completionItems->get_n_items() == 0)
     {
@@ -391,8 +392,8 @@ namespace ao::gtk
     }
 
     auto selected = _completionSelection->get_selected();
-    auto const itemCount = static_cast<int>(_completionItems->get_n_items());
-    auto const current = (selected == kInvalidListPosition) ? 0 : static_cast<int>(selected);
+    auto const itemCount = static_cast<std::int32_t>(_completionItems->get_n_items());
+    auto const current = (selected == kInvalidListPosition) ? 0 : static_cast<std::int32_t>(selected);
     auto const next = std::clamp(current + delta, 0, itemCount - 1);
 
     _completionSelection->set_selected(static_cast<guint>(next));

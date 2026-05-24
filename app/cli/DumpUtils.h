@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <iomanip>
 #include <ios>
 #include <ostream>
@@ -31,7 +32,7 @@ namespace ao::cli
       {
         if (i < chunk)
         {
-          os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[offset + i]) << " ";
+          os << std::hex << std::setw(2) << std::setfill('0') << static_cast<std::int32_t>(data[offset + i]) << " ";
         }
         else
         {

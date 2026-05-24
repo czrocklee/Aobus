@@ -15,6 +15,7 @@
 #include <gtkmm/filedialog.h>
 #include <gtkmm/window.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -66,7 +67,7 @@ namespace ao::gtk::portal
 
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
 
-    void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
+    void onExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
                               rt::ExportMode mode,
                               Glib::RefPtr<Gtk::FileDialog> const& fileDialog);

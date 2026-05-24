@@ -4,10 +4,10 @@
 #include "playback/PlaybackSequenceController.h"
 
 #include "ao/Type.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackService.h>
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/PlaybackService.h>
 
 #include <algorithm>
 #include <cstddef>

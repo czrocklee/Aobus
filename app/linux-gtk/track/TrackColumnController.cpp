@@ -5,9 +5,9 @@
 
 #include "ao/Type.h"
 #include "app/UIState.h"
-#include <ao/rt/TrackField.h>
 #include "track/TrackFieldUi.h"
 #include "track/TrackPresentationStore.h"
+#include <ao/rt/TrackField.h>
 
 #include <giomm/listmodel.h>
 #include <glib.h>
@@ -404,7 +404,7 @@ namespace ao::gtk
       return;
     }
 
-    int totalFixedWidth = 0;
+    std::int32_t totalFixedWidth = 0;
 
     for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
     {

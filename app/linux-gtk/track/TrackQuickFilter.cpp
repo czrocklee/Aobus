@@ -3,12 +3,12 @@
 
 #include "track/TrackQuickFilter.h"
 
+#include "track/TrackListAdapter.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include "track/TrackListAdapter.h"
 
 #include <gdkmm/enums.h>
 #include <glibmm/main.h>

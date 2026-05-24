@@ -353,7 +353,7 @@ namespace ao::library::test
     wtxn.commit();
 
     // Create multiple tracks
-    for (int i = 0; i < 3; ++i)
+    for (std::int32_t i = 0; i < 3; ++i)
     {
       auto hotHeader = TrackHotHeader{};
       auto hotData = std::vector<std::byte>(sizeof(TrackHotHeader));
@@ -372,7 +372,7 @@ namespace ao::library::test
     // Iterate via unified TrackView
     auto rtxn = ReadTransaction{env};
     auto reader = store.reader(rtxn);
-    int count = 0;
+    std::int32_t count = 0;
 
     for (auto it = reader.begin(); it != reader.end(); ++it)
     {
@@ -568,7 +568,7 @@ namespace ao::library::test
     // Create multiple tracks
     auto ids = std::vector<TrackId>{};
 
-    for (int i = 0; i < 5; ++i)
+    for (std::int32_t i = 0; i < 5; ++i)
     {
       auto hotHeader = TrackHotHeader{};
       hotHeader.artistId = DictionaryId{static_cast<std::uint32_t>(i)};
@@ -610,7 +610,7 @@ namespace ao::library::test
     REQUIRE(collectedIds.size() == 5);
 
     // Verify all IDs match
-    for (int i = 0; i < 5; ++i)
+    for (std::int32_t i = 0; i < 5; ++i)
     {
       REQUIRE(collectedIds[i].raw() == ids[i].raw());
     }

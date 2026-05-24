@@ -237,7 +237,7 @@ namespace ao::audio::backend
                                   std::unordered_set<std::uint32_t> const& reachableSet) const;
     void populateGraph(flow::Graph& graph, std::uint32_t streamId) const;
 
-    static void onCoreDone(void* data, std::uint32_t /*id*/, int seq)
+    static void onCoreDone(void* data, std::uint32_t /*id*/, std::int32_t seq)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
 
@@ -396,7 +396,7 @@ namespace ao::audio::backend
     }
 
     static void onNodeParam(void* data,
-                            int /*seq*/,
+                            std::int32_t /*seq*/,
                             std::uint32_t id,
                             std::uint32_t /*index*/,
                             std::uint32_t /*next*/,

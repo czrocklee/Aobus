@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/SmartListEvaluator.h>
-
-#include <ao/rt/SmartListSource.h>
-#include <ao/rt/TrackSource.h>
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/query/ExecutionPlan.h>
+#include <ao/rt/SmartListEvaluator.h>
+#include <ao/rt/SmartListSource.h>
+#include <ao/rt/TrackSource.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/ScopedTimer.h>
 

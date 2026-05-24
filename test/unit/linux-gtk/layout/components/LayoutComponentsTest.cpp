@@ -7,12 +7,12 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
+#include "layout/document/LayoutDocument.h"
+#include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include "layout/document/LayoutDocument.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/yaml/Utils.h>
-#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/menu.h>
@@ -25,6 +25,7 @@
 #include <gtkmm/window.h>
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -198,8 +199,8 @@ namespace ao::gtk::layout::test
       CHECK(btn->has_css_class("ao-output-logo"));
 
       // CSS controls the hit-target size; no explicit set_size_request.
-      int buttonWidth = -1;
-      int buttonHeight = -1;
+      std::int32_t buttonWidth = -1;
+      std::int32_t buttonHeight = -1;
       btn->get_size_request(buttonWidth, buttonHeight);
       CHECK(buttonWidth == -1);
       CHECK(buttonHeight == -1);
@@ -209,8 +210,8 @@ namespace ao::gtk::layout::test
       CHECK(child->has_css_class("ao-soul"));
 
       // CSS controls the glyph size; no explicit set_size_request.
-      int childWidth = -1;
-      int childHeight = -1;
+      std::int32_t childWidth = -1;
+      std::int32_t childHeight = -1;
       child->get_size_request(childWidth, childHeight);
       CHECK(childWidth == -1);
       CHECK(childHeight == -1);
@@ -225,8 +226,8 @@ namespace ao::gtk::layout::test
       CHECK(comp->widget().has_css_class("ao-soul"));
 
       // CSS controls the glyph size; no explicit set_size_request.
-      int width = -1;
-      int height = -1;
+      std::int32_t width = -1;
+      std::int32_t height = -1;
       comp->widget().get_size_request(width, height);
       CHECK(width == -1);
       CHECK(height == -1);

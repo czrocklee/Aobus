@@ -14,10 +14,10 @@
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
 #include "ao/library/TrackView.h"
+#include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/LibraryYamlImporter.h>
 #include <ao/rt/yaml/Utils.h>
-#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -174,8 +175,8 @@ namespace ao::library::test
       REQUIRE(foundMood);
 
       // Check lists
-      int smartCount = 0;
-      int manualCount = 0;
+      std::int32_t smartCount = 0;
+      std::int32_t manualCount = 0;
 
       for (auto const& [lid, lview] : listReader)
       {
@@ -456,7 +457,7 @@ namespace ao::library::test
       auto txn = ml2.readTransaction();
       auto const listReader = ml2.lists().reader(txn);
 
-      int listCount = 0;
+      std::int32_t listCount = 0;
 
       for (auto const& [lid, lview] : listReader)
       {
@@ -898,7 +899,7 @@ library:
     auto txn = ml.readTransaction();
     auto const listReader = ml.lists().reader(txn);
 
-    int listCount = 0;
+    std::int32_t listCount = 0;
 
     for (auto const& [lid, view] : listReader)
     {

@@ -1,23 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/ViewService.h>
-
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
-#include <ao/rt/SmartListSource.h>
-#include <ao/rt/TrackDetailProjection.h>
-#include <ao/rt/TrackListProjection.h>
-#include <ao/rt/TrackSource.h>
-#include <ao/rt/WorkspaceService.h>
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/utility/ScopedTimer.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/SmartListSource.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackDetailProjection.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/TrackSource.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
+#include <ao/utility/ScopedTimer.h>
 
 #include <cstdint>
 #include <functional>

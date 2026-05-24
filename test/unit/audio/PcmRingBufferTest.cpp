@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <thread>
 #include <vector>
@@ -113,7 +114,7 @@ namespace ao::audio::test
 
     auto producer = std::jthread{[&]
                                  {
-                                   for (int i = 0; i < iterations; ++i)
+                                   for (std::int32_t i = 0; i < iterations; ++i)
                                    {
                                      std::byte b = static_cast<std::byte>(i % 256);
 
@@ -128,7 +129,7 @@ namespace ao::audio::test
 
     auto consumer = std::jthread{[&]
                                  {
-                                   int count = 0;
+                                   std::int32_t count = 0;
 
                                    while (!done || buffer.size() > 0)
                                    {

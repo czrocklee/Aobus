@@ -215,13 +215,13 @@ namespace ao::rt::yaml
   template<EnumType T>
   inline void write(ryml::NodeRef node, T const& rhs)
   {
-    node << static_cast<int>(rhs);
+    node << static_cast<std::int32_t>(rhs);
   }
 
   template<EnumType T>
   inline bool read(ryml::ConstNodeRef node, T& rhs)
   {
-    if (int val = 0; read(node, val))
+    if (std::int32_t val = 0; read(node, val))
     {
       rhs = static_cast<T>(val);
       return true;

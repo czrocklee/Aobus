@@ -207,7 +207,7 @@ namespace ao::rt::yaml
   void write(ryml::NodeRef node, LayoutDocument const& value)
   {
     node |= ryml::MAP;
-    node.append_child() << ryml::key("version") << static_cast<int>(value.version);
+    node.append_child() << ryml::key("version") << static_cast<std::int32_t>(value.version);
     write(node.append_child() << ryml::key("root"), value.root);
 
     if (!value.templates.empty())

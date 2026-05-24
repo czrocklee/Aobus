@@ -4,16 +4,16 @@
 #pragma once
 
 #include "ao/Type.h"
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/TrackField.h>
-#include <ao/rt/TrackPresentation.h>
 #include "tag/TagPopover.h"
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>

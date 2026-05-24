@@ -14,6 +14,7 @@
 #include "check/ThreadingPolicyCheck.h"
 #include "check/UnusedSuppressionStyleCheck.h"
 #include "check/UseIfInitStatementCheck.h"
+#include "check/UseStdNumbersCheck.h"
 #include "clang-tidy/ClangTidyModule.h"
 #include "clang-tidy/ClangTidyModuleRegistry.h"
 
@@ -40,6 +41,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<ThreadingPolicyCheck>("aobus-threading-policy");
       checkFactories.registerCheck<UnusedSuppressionStyleCheck>("aobus-readability-unused-suppression-style");
       checkFactories.registerCheck<UseIfInitStatementCheck>("aobus-readability-use-if-init-statement");
+      checkFactories.registerCheck<UseStdNumbersCheck>("aobus-modernize-use-std-numbers");
     }
   };
 

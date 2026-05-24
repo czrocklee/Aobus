@@ -132,7 +132,7 @@ namespace ao::lmdb
     pointer operator->() const;
 
     Iterator& operator++();
-    void operator++(int) { ++*this; }
+    void operator++(std::int32_t) { ++*this; }
     bool operator==(Iterator const& other) const;
     bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
 

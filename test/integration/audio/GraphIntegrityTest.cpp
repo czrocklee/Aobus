@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <thread>
@@ -44,7 +45,7 @@ namespace ao::audio::test
     // Wait for the engine to open the track and populate route state
     bool routeReady = false;
 
-    for (int i = 0; i < 50; ++i)
+    for (std::int32_t i = 0; i < 50; ++i)
     {
       if (auto const snap = engine.status(); snap.routeState.sourceFormat.sampleRate != 0)
       {

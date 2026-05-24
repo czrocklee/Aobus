@@ -4,9 +4,9 @@
 #include "track/TrackColumnFactoryBuilder.h"
 
 #include "ao/library/FileManifestLayout.h"
-#include <ao/rt/TrackField.h>
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowObject.h"
+#include <ao/rt/TrackField.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>

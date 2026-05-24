@@ -256,7 +256,7 @@ namespace ao::gtk
     static constexpr int kCyanSector = 3;
     static constexpr int kBlueSector = 4;
     static constexpr int kMagentaSector = 5;
-    int const sector = static_cast<int>(hue * kSectorCountF);
+    int const sector = static_cast<std::int32_t>(hue * kSectorCountF);
     float const fraction = (hue * kSectorCountF) - static_cast<float>(sector);
     float const pValue = maxValue * (1.0F - saturation);
     float const qValue = maxValue * (1.0F - (fraction * saturation));

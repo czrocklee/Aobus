@@ -32,6 +32,7 @@
 #include <gtkmm/stringlist.h>
 #include <gtkmm/window.h>
 
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -109,9 +110,10 @@ namespace ao::gtk::portal
 
         // 2. Execute Plan with progress dialog
         self->_libraryTaskDialog =
-          std::make_unique<LibraryTaskProgressDialog>(static_cast<int>(plan.items.size()), self->_parent);
+          std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), self->_parent);
         auto* const dialogPtr = self->_libraryTaskDialog.get();
-        self->_libraryTaskDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
+        self->_libraryTaskDialog->signal_response().connect([dialogPtr](std::int32_t /*responseId*/)
+                                                            { dialogPtr->close(); });
 
         self->_libraryTaskProgressSub = self->_runtime.mutation().onLibraryTaskProgress(
           [dialogPtr](auto const& ev) { dialogPtr->updateProgress(ev.message, ev.fraction); });
@@ -175,12 +177,14 @@ namespace ao::gtk::portal
     dialog->add_button("Cancel", Gtk::ResponseType::CANCEL);
     dialog->add_button("Next", Gtk::ResponseType::OK);
 
-    dialog->signal_response().connect([this, modeCombo, dialog](int responseId)
+    dialog->signal_response().connect([this, modeCombo, dialog](std::int32_t responseId)
                                       { onExportModeConfirmed(responseId, modeCombo, dialog); });
     dialog->show();
   }
 
-  void ImportExportCoordinator::onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog)
+  void ImportExportCoordinator::onExportModeConfirmed(std::int32_t responseId,
+                                                      Gtk::DropDown* modeCombo,
+                                                      Gtk::Dialog* dialog)
   {
     if (responseId != Gtk::ResponseType::OK)
     {

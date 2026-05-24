@@ -7,6 +7,7 @@
 #include "ao/lmdb/Database.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <optional>
 #include <span>
@@ -74,7 +75,7 @@ namespace ao::library
         ++_it;
         return *this;
       }
-      void operator++(int) { ++*this; }
+      void operator++(std::int32_t) { ++*this; }
 
       std::pair<std::string_view, FileManifestView> operator*() const;
 

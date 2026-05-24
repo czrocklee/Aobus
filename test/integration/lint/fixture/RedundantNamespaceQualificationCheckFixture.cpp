@@ -1,13 +1,19 @@
-namespace ao {
-  struct Foo {};
+namespace ao
+{
+  struct Foo
+  {};
   void bar();
-  namespace library {
-    struct Track {};
+  namespace library
+  {
+    struct Track
+    {};
   }
 }
 
-namespace ao {
-  void test() {
+namespace ao
+{
+  void test()
+  {
     // POSITIVE
     ao::Foo f;
     // NEGATIVE
@@ -19,8 +25,10 @@ namespace ao {
   }
 }
 
-namespace ao::library {
-  void test2() {
+namespace ao::library
+{
+  void test2()
+  {
     // POSITIVE
     ao::library::Track t;
     // POSITIVE
@@ -28,8 +36,10 @@ namespace ao::library {
   }
 }
 
-namespace other {
-  void test3() {
+namespace other
+{
+  void test3()
+  {
     // NEGATIVE
     ao::Foo f;
     // NEGATIVE

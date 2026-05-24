@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/CoreRuntime.h>
-
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/TrackCommandService.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/rt/async/Runtime.h>
 
 #include <filesystem>

@@ -9,6 +9,7 @@
 #include <glibmm/refptr.h>
 #include <gtkmm/window.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -87,7 +88,7 @@ namespace ao::gtk::layout
     ShellUiContext shell{};
     PortalContext portal{};
 
-    std::function<void(std::string const& nodeId, int posX, int posY)> onNodeMoved{};
+    std::function<void(std::string const& nodeId, std::int32_t posX, std::int32_t posY)> onNodeMoved{};
     bool editMode = false;
 
     void bind(GtkUiServices const& services)

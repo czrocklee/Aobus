@@ -290,7 +290,7 @@ namespace ao::gtk
       removeBtn->signal_clicked().connect(
         [this, i]
         {
-          _sortState.erase(_sortState.begin() + static_cast<long>(i));
+          _sortState.erase(_sortState.begin() + static_cast<std::ptrdiff_t>(i));
           rebuildSortList();
         });
       box->append(*removeBtn);
@@ -361,7 +361,7 @@ namespace ao::gtk
       removeBtn->signal_clicked().connect(
         [this, i]
         {
-          _visibleFieldsState.erase(_visibleFieldsState.begin() + static_cast<long>(i));
+          _visibleFieldsState.erase(_visibleFieldsState.begin() + static_cast<std::ptrdiff_t>(i));
           rebuildVisibleFieldsList();
         });
       box->append(*removeBtn);
@@ -428,7 +428,7 @@ namespace ao::gtk
     auto response = Gtk::ResponseType::CANCEL;
 
     signal_response().connect(
-      [&loop, &response](int resp)
+      [&loop, &response](std::int32_t resp)
       {
         response = static_cast<Gtk::ResponseType>(resp);
         loop->quit();

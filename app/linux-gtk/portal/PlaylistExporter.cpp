@@ -5,8 +5,8 @@
 
 #include "ao/Type.h"
 #include "ao/utility/Log.h"
-#include <ao/rt/TrackSource.h>
 #include "track/TrackRowCache.h"
+#include <ao/rt/TrackSource.h>
 
 #include <glibmm/main.h>
 

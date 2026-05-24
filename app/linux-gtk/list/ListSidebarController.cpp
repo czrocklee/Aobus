@@ -10,12 +10,12 @@
 #include "ao/utility/Log.h"
 #include "list/ListSidebarPanel.h"
 #include "list/SmartListDialog.h"
+#include "track/TrackRowCache.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include "track/TrackRowCache.h"
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -26,6 +26,7 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -175,7 +176,7 @@ namespace ao::gtk
     }
 
     dialog->signal_response().connect(
-      [this, dialog](int responseId)
+      [this, dialog](std::int32_t responseId)
       {
         if (responseId == Gtk::ResponseType::OK)
         {
@@ -215,7 +216,7 @@ namespace ao::gtk
       auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optView->parentId(), *_dataProvider);
       dialog->populate(listId, *optView);
       dialog->signal_response().connect(
-        [this, dialog](int responseId)
+        [this, dialog](std::int32_t responseId)
         {
           if (responseId == Gtk::ResponseType::OK)
           {

@@ -5,8 +5,8 @@
 
 #include "ao/Type.h"
 #include "ao/library/FileManifestStore.h"
-#include <ao/rt/TrackField.h>
 #include "track/TrackFieldUi.h"
+#include <ao/rt/TrackField.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/dialog.h>

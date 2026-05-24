@@ -35,7 +35,7 @@ namespace ao::gtk
     gesture->set_button(1);
 
     gesture->signal_pressed().connect(
-      [this](int /*n_press*/, double posX, double /*posY*/)
+      [this](std::int32_t /*n_press*/, double posX, double /*posY*/)
       {
         _isDragging = true;
 
@@ -48,7 +48,7 @@ namespace ao::gtk
       });
 
     gesture->signal_released().connect(
-      [this](int, double, double)
+      [this](std::int32_t, double, double)
       {
         _isDragging = false;
         _playbackService.seek(static_cast<std::uint32_t>(_scale.get_value()));

@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/rt/async/LifetimeScope.h>
-
 #include <ao/rt/async/Runtime.h>
 #include <ao/rt/async/Task.h>
 #include <ao/utility/Log.h>

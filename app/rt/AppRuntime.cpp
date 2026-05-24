@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
-
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/CoreRuntime.h>
@@ -10,7 +10,6 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/Type.h>
 #include <ao/rt/async/Runtime.h>
 
 #include <memory>

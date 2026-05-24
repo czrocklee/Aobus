@@ -44,7 +44,7 @@ namespace ao::utility
     result.reserve(((data.size() + 2) / kBase64ChunkSize) * kBase64EncodedChunkSize);
 
     std::uint32_t buffer = 0;
-    int bits = 0;
+    std::int32_t bits = 0;
 
     for (auto const byteVal : data)
     {
@@ -79,7 +79,7 @@ namespace ao::utility
     result.reserve((base64.size() / kBase64EncodedChunkSize) * kBase64ChunkSize);
 
     std::uint32_t buffer = 0;
-    int bits = 0;
+    std::int32_t bits = 0;
 
     for (auto const charVal : base64)
     {

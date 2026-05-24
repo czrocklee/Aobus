@@ -16,6 +16,10 @@
 #include "platform/AudioBackendBootstrap.h"
 #include "playback/PlaybackSequenceController.h"
 #include "portal/ImportExportCoordinator.h"
+#include "tag/TagEditController.h"
+#include "track/TrackPageHost.h"
+#include "track/TrackPresentationStore.h"
+#include "track/TrackRowCache.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
@@ -25,10 +29,6 @@
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include "tag/TagEditController.h"
-#include "track/TrackPageHost.h"
-#include "track/TrackPresentationStore.h"
-#include "track/TrackRowCache.h"
 
 #include <filesystem>
 #include <memory>

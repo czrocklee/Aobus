@@ -5,10 +5,10 @@
 
 #include "ao/Type.h"
 #include "portal/PlaylistExporter.h"
+#include "track/TrackViewPage.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include "track/TrackViewPage.h"
 
 #include <gtkmm/stack.h>
 

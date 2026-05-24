@@ -37,7 +37,7 @@ namespace ao::audio::backend::detail
   {
     std::uint32_t outputNodeId = kPwIdAny; // PW_ID_ANY
     std::uint32_t inputNodeId = kPwIdAny;
-    int state = 0; // pw_link_state
+    std::int32_t state = 0; // pw_link_state
   };
 
   struct SinkProps final

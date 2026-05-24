@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/ViewService.h>
-
 #include "TestUtils.h"
 #include "ao/Type.h"
 #include <ao/rt/CorePrimitives.h>
@@ -11,11 +9,13 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/async/Runtime.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <variant>
@@ -305,7 +305,7 @@ namespace ao::rt::test
 
     auto const result = service.createView({}, true);
 
-    int callCount = 0;
+    std::int32_t callCount = 0;
     auto const sub = service.onGroupingChanged([&](auto const&) { ++callCount; });
 
     // First change should publish

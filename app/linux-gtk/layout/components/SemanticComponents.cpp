@@ -11,14 +11,14 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListSidebarController.h"
+#include "tag/TagEditController.h"
+#include "track/TrackPageHost.h"
+#include "track/TrackViewPage.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include "tag/TagEditController.h"
-#include "track/TrackPageHost.h"
-#include "track/TrackViewPage.h"
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>

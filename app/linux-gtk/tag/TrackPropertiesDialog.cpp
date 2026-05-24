@@ -7,11 +7,11 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
 #include "layout/LayoutConstants.h"
+#include "track/TrackFieldUi.h"
+#include "track/TrackRowCache.h"
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
-#include "track/TrackFieldUi.h"
-#include "track/TrackRowCache.h"
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -75,7 +75,7 @@ namespace ao::gtk
     setupUi();
     loadData();
 
-    signal_response().connect([this](int) { close(); });
+    signal_response().connect([this](std::int32_t) { close(); });
     present();
   }
 

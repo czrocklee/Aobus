@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <numbers>
 
 namespace ao::gtk
@@ -54,7 +55,7 @@ namespace ao::gtk
 
     // Click: Immediate jump to position
     auto const click = Gtk::GestureClick::create();
-    click->signal_pressed().connect([this](int, double offsetX, double) { handleAbsoluteClick(offsetX); });
+    click->signal_pressed().connect([this](std::int32_t, double offsetX, double) { handleAbsoluteClick(offsetX); });
     add_controller(click);
 
     // Scroll
@@ -105,19 +106,21 @@ namespace ao::gtk
   {
     static constexpr double kAspectRatio = std::numbers::phi + 1;
     static constexpr int kMinHeight = 24;
-    static constexpr int kMinWidth = static_cast<int>(kMinHeight * kAspectRatio);
+    static constexpr int kMinWidth = static_cast<std::int32_t>(kMinHeight * kAspectRatio);
 
     if (orientation == Gtk::Orientation::HORIZONTAL)
     {
       minimum = kMinWidth;
-      natural =
-        (forSize > 0) ? std::max(kMinWidth, static_cast<int>(static_cast<double>(forSize) * kAspectRatio)) : kMinWidth;
+      natural = (forSize > 0)
+                  ? std::max(kMinWidth, static_cast<std::int32_t>(static_cast<double>(forSize) * kAspectRatio))
+                  : kMinWidth;
     }
     else
     {
       minimum = kMinHeight;
-      natural = (forSize > 0) ? std::max(kMinHeight, static_cast<int>(static_cast<double>(forSize) / kAspectRatio))
-                              : kMinHeight;
+      natural = (forSize > 0)
+                  ? std::max(kMinHeight, static_cast<std::int32_t>(static_cast<double>(forSize) / kAspectRatio))
+                  : kMinHeight;
     }
   }
 
@@ -162,7 +165,7 @@ namespace ao::gtk
     cr->save();
     cr->begin_new_path();
 
-    for (int idx = 0; idx < kNumSegments; ++idx)
+    for (std::int32_t idx = 0; idx < kNumSegments; ++idx)
     {
       float const segmentX = hPadding + (static_cast<float>(idx) * (segmentWidth + segmentGap));
       cr->begin_new_sub_path();

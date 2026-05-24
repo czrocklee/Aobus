@@ -97,19 +97,19 @@ namespace ao::gtk::layout
       }
     }
 
-    int width = -1;
-    int height = -1;
+    std::int32_t width = -1;
+    std::int32_t height = -1;
     bool sizeChanged = false;
 
     if (auto const it = layout.find("minWidth"); it != layout.end())
     {
-      width = static_cast<int>(it->second.asInt());
+      width = static_cast<std::int32_t>(it->second.asInt());
       sizeChanged = true;
     }
 
     if (auto const it = layout.find("minHeight"); it != layout.end())
     {
-      height = static_cast<int>(it->second.asInt());
+      height = static_cast<std::int32_t>(it->second.asInt());
       sizeChanged = true;
     }
 
@@ -157,7 +157,7 @@ namespace ao::gtk::layout
         }
 
         _box.set_orientation(orientation);
-        _box.set_spacing(static_cast<int>(node.getProp<std::int64_t>("spacing", 0)));
+        _box.set_spacing(static_cast<std::int32_t>(node.getProp<std::int64_t>("spacing", 0)));
         _box.set_homogeneous(node.getProp<bool>("homogeneous", false));
         applyCommonProps(_box, node);
 
@@ -217,7 +217,7 @@ namespace ao::gtk::layout
 
         if (auto const it = node.props.find("position"); it != node.props.end())
         {
-          _paned.set_position(static_cast<int>(it->second.asInt()));
+          _paned.set_position(static_cast<std::int32_t>(it->second.asInt()));
         }
       }
 
@@ -279,8 +279,8 @@ namespace ao::gtk::layout
 
         _sw.set_policy(hpolicy, vpolicy);
 
-        _sw.set_min_content_width(static_cast<int>(node.getProp<std::int64_t>("minContentWidth", -1)));
-        _sw.set_min_content_height(static_cast<int>(node.getProp<std::int64_t>("minContentHeight", -1)));
+        _sw.set_min_content_width(static_cast<std::int32_t>(node.getProp<std::int64_t>("minContentWidth", -1)));
+        _sw.set_min_content_height(static_cast<std::int32_t>(node.getProp<std::int64_t>("minContentHeight", -1)));
 
         _sw.set_propagate_natural_width(node.getProp<bool>("propagateNaturalWidth", false));
         _sw.set_propagate_natural_height(node.getProp<bool>("propagateNaturalHeight", false));
@@ -424,9 +424,9 @@ namespace ao::gtk::layout
     {
     public:
       AbsoluteCanvasWidget(bool editMode,
-                           std::function<void(std::string const&, int, int)> onMoved,
+                           std::function<void(std::string const&, std::int32_t, std::int32_t)> onMoved,
                            bool snapToGrid = true,
-                           int gridSize = 8)
+                           std::int32_t gridSize = 8)
         : _editMode{editMode}, _snapToGrid{snapToGrid}, _gridSize{gridSize}, _onMoved{std::move(onMoved)}
       {
         set_hexpand(true);
@@ -466,7 +466,13 @@ namespace ao::gtk::layout
         _children.clear();
       }
 
-      void addChild(std::string const& id, Gtk::Widget& child, int posX, int posY, int width, int height, int zIndex)
+      void addChild(std::string const& id,
+                    Gtk::Widget& child,
+                    std::int32_t posX,
+                    std::int32_t posY,
+                    std::int32_t width,
+                    std::int32_t height,
+                    std::int32_t zIndex)
       {
         child.set_parent(*this);
         _children.push_back({id, &child, posX, posY, width, height, zIndex, _insertCount++, posX, posY, width, height});
@@ -537,10 +543,10 @@ namespace ao::gtk::layout
 
         for (auto const& child : _children)
         {
-          int childMin = 0;
-          int childNatural = 0;
-          int childMinBaseline = -1;
-          int childNaturalBaseline = -1;
+          std::int32_t childMin = 0;
+          std::int32_t childNatural = 0;
+          std::int32_t childMinBaseline = -1;
+          std::int32_t childNaturalBaseline = -1;
           child.widget->measure(orientation, -1, childMin, childNatural, childMinBaseline, childNaturalBaseline);
 
           if (orientation == Gtk::Orientation::HORIZONTAL)
@@ -566,15 +572,15 @@ namespace ao::gtk::layout
           alloc.set_x(child.posX);
           alloc.set_y(child.posY);
 
-          int minWidth = 0;
-          int naturalWidth = 0;
-          int minBaseline = -1;
-          int naturalBaseline = -1;
+          std::int32_t minWidth = 0;
+          std::int32_t naturalWidth = 0;
+          std::int32_t minBaseline = -1;
+          std::int32_t naturalBaseline = -1;
           child.widget->measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, naturalWidth, minBaseline, naturalBaseline);
           int const width = child.reqWidth > 0 ? child.reqWidth : naturalWidth;
 
-          int minHeight = 0;
-          int naturalHeight = 0;
+          std::int32_t minHeight = 0;
+          std::int32_t naturalHeight = 0;
           child.widget->measure(
             Gtk::Orientation::VERTICAL, width, minHeight, naturalHeight, minBaseline, naturalBaseline);
           int const height = child.reqHeight > 0 ? child.reqHeight : naturalHeight;
@@ -602,16 +608,16 @@ namespace ao::gtk::layout
             continue;
           }
 
-          int minWidth = 0;
-          int naturalWidth = 0;
-          int minBaseline = -1;
-          int naturalBaseline = -1;
+          std::int32_t minWidth = 0;
+          std::int32_t naturalWidth = 0;
+          std::int32_t minBaseline = -1;
+          std::int32_t naturalBaseline = -1;
 
           child.widget->measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, naturalWidth, minBaseline, naturalBaseline);
           int const width = child.reqWidth > 0 ? child.reqWidth : naturalWidth;
 
-          int minHeight = 0;
-          int naturalHeight = 0;
+          std::int32_t minHeight = 0;
+          std::int32_t naturalHeight = 0;
           child.widget->measure(
             Gtk::Orientation::VERTICAL, width, minHeight, naturalHeight, minBaseline, naturalBaseline);
           int const height = child.reqHeight > 0 ? child.reqHeight : naturalHeight;
@@ -642,7 +648,7 @@ namespace ao::gtk::layout
           // Resize handles at 4 corners
           double const handleSize = 8.0;
 
-          auto const drawHandle = [&](int handleX, int handleY)
+          auto const drawHandle = [&](std::int32_t handleX, std::int32_t handleY)
           {
             cr->set_dash(std::vector<double>{}, 0);
 
@@ -675,7 +681,7 @@ namespace ao::gtk::layout
 
       static constexpr int kCornerHitRadius = 10;
 
-      bool hitCorner(int cornerX, int cornerY, double mouseX, double mouseY) const
+      bool hitCorner(std::int32_t cornerX, std::int32_t cornerY, double mouseX, double mouseY) const
       {
         return std::abs(mouseX - static_cast<double>(cornerX)) <= kCornerHitRadius &&
                std::abs(mouseY - static_cast<double>(cornerY)) <= kCornerHitRadius;
@@ -750,15 +756,15 @@ namespace ao::gtk::layout
 
         for (auto& child : std::ranges::reverse_view{_children})
         {
-          int minWidth = 0;
-          int naturalWidth = 0;
-          int minBaseline = -1;
-          int naturalBaseline = -1;
+          std::int32_t minWidth = 0;
+          std::int32_t naturalWidth = 0;
+          std::int32_t minBaseline = -1;
+          std::int32_t naturalBaseline = -1;
           child.widget->measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, naturalWidth, minBaseline, naturalBaseline);
           int const width = child.reqWidth > 0 ? child.reqWidth : naturalWidth;
 
-          int minHeight = 0;
-          int naturalHeight = 0;
+          std::int32_t minHeight = 0;
+          std::int32_t naturalHeight = 0;
           child.widget->measure(
             Gtk::Orientation::VERTICAL, width, minHeight, naturalHeight, minBaseline, naturalBaseline);
           int const height = child.reqHeight > 0 ? child.reqHeight : naturalHeight;
@@ -804,16 +810,16 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (int const offX = static_cast<int>(offsetX), offY = static_cast<int>(offsetY);
+        if (int const offX = static_cast<std::int32_t>(offsetX), offY = static_cast<std::int32_t>(offsetY);
             _resizeCorner != ResizeCorner::None)
         {
-          auto const snap = [this](int value)
+          auto const snap = [this](std::int32_t value)
           { return _snapToGrid ? ((value + _gridSize / 2) / _gridSize) * _gridSize : value; };
 
-          int childNaturalWidth = 0;
-          int childNaturalHeight = 0;
-          int childMinBaseline = -1;
-          int childNaturalBaseline = -1;
+          std::int32_t childNaturalWidth = 0;
+          std::int32_t childNaturalHeight = 0;
+          std::int32_t childMinBaseline = -1;
+          std::int32_t childNaturalBaseline = -1;
 
           _dragChild->widget->measure(Gtk::Orientation::HORIZONTAL,
                                       -1,
@@ -875,7 +881,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (int const offX = static_cast<int>(offsetX), offY = static_cast<int>(offsetY);
+        if (int const offX = static_cast<std::int32_t>(offsetX), offY = static_cast<std::int32_t>(offsetY);
             _resizeCorner == ResizeCorner::None)
         {
           _dragChild->posX = _dragChild->startX + offX;
@@ -914,27 +920,27 @@ namespace ao::gtk::layout
       {
         std::string id;
         Gtk::Widget* widget;
-        int posX;
-        int posY;
-        int reqWidth;
-        int reqHeight;
-        int zIndex;
-        int insertOrder;
-        int startX;
-        int startY;
-        int startReqWidth;
-        int startReqHeight;
+        std::int32_t posX;
+        std::int32_t posY;
+        std::int32_t reqWidth;
+        std::int32_t reqHeight;
+        std::int32_t zIndex;
+        std::int32_t insertOrder;
+        std::int32_t startX;
+        std::int32_t startY;
+        std::int32_t startReqWidth;
+        std::int32_t startReqHeight;
       };
 
       std::vector<ChildData> _children;
       std::string _selectedId;
-      int _insertCount = 0;
+      std::int32_t _insertCount = 0;
 
       bool _editMode = false;
       bool _snapToGrid = true;
-      int _gridSize = 8;
+      std::int32_t _gridSize = 8;
       ResizeCorner _resizeCorner = ResizeCorner::None;
-      std::function<void(std::string const&, int, int)> _onMoved;
+      std::function<void(std::string const&, std::int32_t, std::int32_t)> _onMoved;
       Glib::RefPtr<Gtk::GestureDrag> _drag;
       ChildData* _dragChild = nullptr;
     };
@@ -946,18 +952,18 @@ namespace ao::gtk::layout
         : _canvas{ctx.editMode,
                   ctx.onNodeMoved,
                   node.getProp<bool>("snapToGrid", true),
-                  static_cast<int>(node.getProp<std::int64_t>("gridSize", 8))}
+                  static_cast<std::int32_t>(node.getProp<std::int64_t>("gridSize", 8))}
       {
         for (auto const& childNode : node.children)
         {
           auto child = ctx.registry.create(ctx, childNode);
           applyCommonProps(child->widget(), childNode);
 
-          int const posX = static_cast<int>(childNode.getLayout<std::int64_t>("x", 0));
-          int const posY = static_cast<int>(childNode.getLayout<std::int64_t>("y", 0));
-          int const width = static_cast<int>(childNode.getLayout<std::int64_t>("width", -1));
-          int const height = static_cast<int>(childNode.getLayout<std::int64_t>("height", -1));
-          int const zIndex = static_cast<int>(childNode.getLayout<std::int64_t>("zIndex", 0));
+          int const posX = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("x", 0));
+          int const posY = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("y", 0));
+          int const width = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("width", -1));
+          int const height = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("height", -1));
+          int const zIndex = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("zIndex", 0));
 
           _canvas.addChild(childNode.id, child->widget(), posX, posY, width, height, zIndex);
           _children.push_back(std::move(child));

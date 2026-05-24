@@ -410,7 +410,7 @@ namespace ao::library::test
     auto const data = createColdData();
     auto const view = makeColdView(data);
 
-    int count = 0;
+    std::int32_t count = 0;
 
     for ([[maybe_unused]] auto const& [k, v] : view.custom())
     {
@@ -426,7 +426,7 @@ namespace ao::library::test
     auto const data = createColdData({}, pairs, "/path/to/file.flac");
     auto const view = makeColdView(data);
 
-    int count = 0;
+    std::int32_t count = 0;
 
     for (auto const& [k, v] : view.custom())
     {
@@ -476,7 +476,7 @@ namespace ao::library::test
     auto const data = createColdData({}, {}, "");
     auto const view = makeColdView(data);
 
-    int count = 0;
+    std::int32_t count = 0;
 
     for ([[maybe_unused]] auto const& [key, value] : view.custom())
     {
@@ -493,7 +493,7 @@ namespace ao::library::test
     auto const data = createColdData({}, pairs, "");
     auto const view = makeColdView(data);
 
-    int count = 0;
+    std::int32_t count = 0;
 
     for (auto const& [key, value] : view.custom())
     {
@@ -590,7 +590,7 @@ namespace ao::library::test
     // Create 100 entries to force binary search path
     auto pairs = std::vector<std::pair<std::string, std::string>>{};
 
-    for (int i = 0; i < 100; ++i)
+    for (std::int32_t i = 0; i < 100; ++i)
     {
       pairs.emplace_back(std::format("key{}", i), std::format("value{}", i));
     }
@@ -617,7 +617,7 @@ namespace ao::library::test
     auto const data = createColdData({}, pairs, "");
     auto const view = makeColdView(data);
 
-    int count = 0;
+    std::int32_t count = 0;
 
     for (auto const& [k, v] : view.custom())
     {

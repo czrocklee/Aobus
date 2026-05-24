@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/LibraryMutationService.h>
-
 #include "TestUtils.h"
 #include "ao/Type.h"
+#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/async/Runtime.h>
 

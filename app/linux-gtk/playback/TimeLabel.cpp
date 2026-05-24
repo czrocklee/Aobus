@@ -27,8 +27,8 @@ namespace ao::gtk
     // This ensures a tight fit without layout jitter when time changes.
     // The "tnum" feature in app.css guarantees all digits have the same width.
     auto const pangoLayout = _label.create_pango_layout("00:00 / 00:00");
-    int textWidth = 0;
-    int textHeight = 0;
+    std::int32_t textWidth = 0;
+    std::int32_t textHeight = 0;
     pangoLayout->get_pixel_size(textWidth, textHeight);
 
     // Lock the width to the measured size, with a small tolerance.

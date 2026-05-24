@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/TrackListProjection.h>
-
-#include <ao/rt/TrackField.h>
-#include <ao/rt/TrackSource.h>
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/utility/ScopedTimer.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/TrackSource.h>
+#include <ao/utility/ScopedTimer.h>
 
 #include <algorithm>
 #include <cctype>
@@ -166,7 +165,7 @@ namespace ao::rt
       return library::TrackStore::Reader::LoadMode::Hot;
     }
 
-    int compareNumeric(auto lhsVal, auto rhsVal)
+    std::int32_t compareNumeric(auto lhsVal, auto rhsVal)
     {
       if (lhsVal < rhsVal)
       {
@@ -181,7 +180,7 @@ namespace ao::rt
       return 0;
     }
 
-    int compareSingleField(TrackSortTerm const& term, SortKeys const& lhs, SortKeys const& rhs)
+    std::int32_t compareSingleField(TrackSortTerm const& term, SortKeys const& lhs, SortKeys const& rhs)
     {
       switch (term.field)
       {

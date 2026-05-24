@@ -7,8 +7,8 @@ set -euo pipefail
 
 # Setup relative paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-BUILD_DIR="/tmp/build/debug-clang-tidy"
+export PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+export BUILD_DIR="/tmp/build/debug-clang-tidy"
 PLUGIN="$BUILD_DIR/lint/libAobusLintPlugin.so"
 
 echo "=== [1] Building AobusLintPlugin Module ==="
@@ -38,47 +38,85 @@ get_check_alias() {
         ThreadingPolicyCheckFixture.cpp) echo "aobus-threading-policy" ;;
         UnusedSuppressionStyleCheckFixture.cpp) echo "aobus-readability-unused-suppression-style" ;;
         UseIfInitStatementCheckFixture.cpp) echo "aobus-readability-use-if-init-statement" ;;
+        UseStdNumbersCheckFixture.cpp) echo "aobus-modernize-use-std-numbers" ;;
         *) return 1 ;;
     esac
 }
 
-FIXTURE_DIR="$SCRIPT_DIR/fixture"
-VERIFIER="$SCRIPT_DIR/verify_diagnostics.py"
+export FIXTURE_DIR="$SCRIPT_DIR/fixture"
+export VERIFIER="$SCRIPT_DIR/verify_diagnostics.py"
 
-echo "=== [2] Running Per-Check Integration Tests ==="
+run_test() {
+    local FIXTURE="$1"
+    local FNAME=$(basename "$FIXTURE")
+    local ALIAS=$(get_check_alias "$FNAME") || return 0
 
+    local TEST_TMP=$(mktemp -d "/tmp/aobus_test_${FNAME}_XXXXXX")
+    local ACTUAL="$TEST_TMP/actual.txt"
+    local LOG_FILE="$TEST_TMP/run.log"
+
+    {
+        echo "--- Testing: $ALIAS ($FNAME) ---"
+        EXTRA_CHECKS="-*,$ALIAS" "$PROJECT_ROOT/script/run-clang-tidy.sh" \
+            -p "$BUILD_DIR" \
+            "$FIXTURE" > "$ACTUAL" 2>&1 || true
+
+        if ! "$VERIFIER" "$FIXTURE" --check "$ALIAS" --input "$ACTUAL"; then
+            echo "ERROR: Diagnostic Verification FAILED for $FNAME"
+            exit 1
+        fi
+
+        # Testing Auto-Fix Capability
+        local FIXED_FILE="$TEST_TMP/$FNAME"
+        cp "$FIXTURE" "$FIXED_FILE"
+        cp "$FIXTURE_DIR/TestHelpers.h" "$TEST_TMP/TestHelpers.h"
+
+        EXTRA_CHECKS="-*,$ALIAS" "$PROJECT_ROOT/script/run-clang-tidy.sh" \
+            -p "$BUILD_DIR" \
+            --fix \
+            "$FIXED_FILE" > /dev/null 2>&1 || true
+
+        if ! nix-shell --run "g++ -std=c++23 -fsyntax-only -I${PROJECT_ROOT}/include -I${PROJECT_ROOT}/lib -I$TEST_TMP $FIXED_FILE"; then
+            echo "ERROR: Auto-Fix Compilation FAILED for $FNAME"
+            exit 1
+        fi
+    } > "$LOG_FILE" 2>&1
+
+    if [[ $? -eq 0 ]]; then
+        echo "  [PASS] $FNAME"
+        rm -rf "$TEST_TMP"
+        return 0
+    else
+        echo "  [FAIL] $FNAME (See $LOG_FILE)"
+        return 1
+    fi
+}
+
+echo "=== [2] Running Per-Check Integration Tests (in parallel) ==="
+
+PIDS=()
 for FIXTURE in "$FIXTURE_DIR"/*Fixture.cpp; do
-    FNAME=$(basename "$FIXTURE")
-    ALIAS=$(get_check_alias "$FNAME") || continue
-
-    echo "--- Testing: $ALIAS ($FNAME) ---"
-
-    ACTUAL="/tmp/actual_$FNAME.txt"
-
-    EXTRA_CHECKS="-*,$ALIAS" "$PROJECT_ROOT/script/run-clang-tidy.sh" \
-        -p "$BUILD_DIR" \
-        "$FIXTURE" > "$ACTUAL" 2>&1 || true
-
-    "$VERIFIER" "$FIXTURE" --check "$ALIAS" --input "$ACTUAL"
-
-    echo "  [Diagnostic Verification: PASSED]"
-
-    # Testing Auto-Fix Capability
-    FIXED_FILE="/tmp/fixed_$FNAME"
-    cp "$FIXTURE" "$FIXED_FILE"
-
-    cp "$FIXTURE_DIR/TestHelpers.h" "/tmp/TestHelpers.h"
-
-    EXTRA_CHECKS="-*,$ALIAS" "$PROJECT_ROOT/script/run-clang-tidy.sh" \
-        -p "$BUILD_DIR" \
-        --fix \
-        "$FIXED_FILE" > /dev/null 2>&1 || true
-
-    nix-shell --run "g++ -std=c++23 -fsyntax-only -I${PROJECT_ROOT}/include -I${PROJECT_ROOT}/lib -I/tmp $FIXED_FILE"
-
-    echo "  [Auto-Fix & Compilation: PASSED]"
-
-    rm -f "$ACTUAL" "$FIXED_FILE" "/tmp/TestHelpers.h"
+    run_test "$FIXTURE" &
+    PIDS+=($!)
 done
+
+FAILED=0
+for PID in "${PIDS[@]}"; do
+    if ! wait $PID; then
+        FAILED=1
+    fi
+done
+
+if [[ $FAILED -eq 1 ]]; then
+    echo "=== INTEGRATION TESTS FAILED ==="
+    # Find and print the logs of failed tests
+    for LOG in /tmp/aobus_test_*/run.log; do
+        if [[ -f "$LOG" ]] && grep -q "ERROR" "$LOG"; then
+            echo ""
+            cat "$LOG"
+        fi
+    done
+    exit 1
+fi
 
 echo "=== ALL INTEGRATION TESTS PASSED SUCCESSFULLY ==="

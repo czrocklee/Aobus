@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/NotificationService.h>
-
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
 
 #include <algorithm>

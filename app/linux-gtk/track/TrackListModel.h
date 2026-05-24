@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/rt/ProjectionTypes.h>
 #include "track/TrackRowCache.h"
+#include <ao/rt/ProjectionTypes.h>
 
 #include <giomm/listmodel.h>
 #include <glib-object.h>

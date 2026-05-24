@@ -11,6 +11,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <cstdint>
+
 namespace ao::library::test
 {
   using namespace ao::lmdb;
@@ -98,7 +100,7 @@ namespace ao::library::test
     // Verify only one resource exists
     auto rtxn = ReadTransaction{env};
     auto reader = store.reader(rtxn);
-    int count = 0;
+    std::int32_t count = 0;
 
     for (auto it = reader.begin(); it != reader.end(); ++it)
     {

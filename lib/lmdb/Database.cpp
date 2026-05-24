@@ -269,7 +269,7 @@ namespace ao::lmdb
     std::span<std::byte> reserve(::MDB_cursor* cursor,
                                  std::span<std::byte const> keyView,
                                  std::size_t size,
-                                 unsigned int flags)
+                                 std::uint32_t flags)
     {
       gsl_Expects(cursor != nullptr);
 

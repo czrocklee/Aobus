@@ -125,7 +125,7 @@ namespace ao::library
     return *this;
   }
 
-  TrackView::CustomProxy::Iterator TrackView::CustomProxy::Iterator::operator++(int)
+  TrackView::CustomProxy::Iterator TrackView::CustomProxy::Iterator::operator++(std::int32_t)
   {
     auto tmp = Iterator{*this};
     ++_pos;

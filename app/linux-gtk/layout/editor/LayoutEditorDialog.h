@@ -25,6 +25,7 @@
 #include <gtkmm/window.h>
 #include <sigc++/signal.h>
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -45,7 +46,7 @@ namespace ao::gtk::layout::editor
 
     sigc::signal<void(LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
 
-    void updateNodePosition(std::string_view nodeId, int posX, int posY);
+    void updateNodePosition(std::string_view nodeId, std::int32_t posX, std::int32_t posY);
 
   private:
     // Tree Model columns

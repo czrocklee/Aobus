@@ -6,6 +6,7 @@
 #include <lmdb.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -18,10 +19,10 @@ namespace ao::lmdb
   public:
     struct Options
     {
-      unsigned int flags = 0;
+      std::uint32_t flags = 0;
       mdb_mode_t mode = kDefaultEnvironmentMode;
       MDB_dbi maxDatabases = 0;
-      unsigned int maxReaders = 0;
+      std::uint32_t maxReaders = 0;
       std::size_t mapSize = 0;
     };
 

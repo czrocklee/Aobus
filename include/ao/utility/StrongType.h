@@ -5,6 +5,7 @@
 
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <ostream>
@@ -92,7 +93,7 @@ namespace ao::utility
       return *this;
     }
 
-    StrongType operator++(int)
+    StrongType operator++(std::int32_t)
       requires std::is_integral_v<T>
     {
       auto tmp = *this;
@@ -107,7 +108,7 @@ namespace ao::utility
       return *this;
     }
 
-    StrongType operator--(int)
+    StrongType operator--(std::int32_t)
       requires std::is_integral_v<T>
     {
       auto tmp = *this;

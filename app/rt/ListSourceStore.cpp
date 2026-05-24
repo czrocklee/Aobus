@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/ListSourceStore.h>
-
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ManualListSource.h>
-#include <ao/rt/SmartListSource.h>
-#include <ao/rt/TrackSource.h>
 #include <ao/Type.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/ListSourceStore.h>
+#include <ao/rt/ManualListSource.h>
+#include <ao/rt/SmartListSource.h>
+#include <ao/rt/TrackSource.h>
 
 #include <algorithm>
 #include <memory>

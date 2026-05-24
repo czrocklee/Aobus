@@ -5,12 +5,12 @@
 
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/TrackSource.h>
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/TrackSource.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/liststore.h>

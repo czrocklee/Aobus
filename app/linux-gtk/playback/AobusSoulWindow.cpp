@@ -24,6 +24,7 @@
 #include <gtkmm/window.h>
 
 #include <cmath>
+#include <cstdint>
 #include <memory>
 
 namespace ao::gtk
@@ -47,7 +48,7 @@ namespace ao::gtk
     centerBox->set_valign(Gtk::Align::CENTER);
     centerBox->set_halign(Gtk::Align::CENTER);
 
-    int logoHeight = kDefaultLogoHeight;
+    std::int32_t logoHeight = kDefaultLogoHeight;
 
     if (auto const display = Gdk::Display::get_default(); display != nullptr)
     {
@@ -60,14 +61,14 @@ namespace ao::gtk
 
           if (geometry.get_height() > 0)
           {
-            logoHeight =
-              static_cast<int>(std::round(static_cast<double>(geometry.get_height()) / AobusSoul::kGoldenRatio));
+            logoHeight = static_cast<std::int32_t>(
+              std::round(static_cast<double>(geometry.get_height()) / AobusSoul::kGoldenRatio));
           }
         }
       }
     }
 
-    auto const logoWidth = static_cast<int>(std::round(static_cast<double>(logoHeight) * (147.0 / 65.0)));
+    auto const logoWidth = static_cast<std::int32_t>(std::round(static_cast<double>(logoHeight) * (147.0 / 65.0)));
     _bigSoul.setShowFullLogo(true);
     _bigSoul.set_size_request(logoWidth, logoHeight);
     _bigSoul.set_halign(Gtk::Align::CENTER);
@@ -77,7 +78,7 @@ namespace ao::gtk
 
     auto const gesture = Gtk::GestureClick::create();
     gesture->signal_released().connect(
-      [this](int, double, double)
+      [this](std::int32_t, double, double)
       {
         Glib::signal_idle().connect(
           [this]

@@ -11,6 +11,11 @@
 #include "ao/utility/Log.h"
 #include "list/ListSidebarController.h"
 #include "playback/PlaybackSequenceController.h"
+#include "tag/TagEditController.h"
+#include "track/TrackListAdapter.h"
+#include "track/TrackPresentationStore.h"
+#include "track/TrackRowCache.h"
+#include "track/TrackViewPage.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListSourceStore.h>
@@ -20,11 +25,6 @@
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include "tag/TagEditController.h"
-#include "track/TrackListAdapter.h"
-#include "track/TrackPresentationStore.h"
-#include "track/TrackRowCache.h"
-#include "track/TrackViewPage.h"
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>

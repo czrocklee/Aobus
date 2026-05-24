@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/TrackDetailProjection.h>
-
 #include "TestUtils.h"
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
@@ -11,6 +9,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackDetailProjection.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/async/Runtime.h>

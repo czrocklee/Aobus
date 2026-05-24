@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/ConfigStore.h>
-
 #include "ao/Exception.h"
 #include "ao/utility/StrongType.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/rt/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -46,13 +45,13 @@ namespace ao::rt::test
 
     struct Inner final
     {
-      int value = 0;
+      std::int32_t value = 0;
       std::string label{};
     };
 
     struct ComplexAggregate final
     {
-      int count = 0;
+      std::int32_t count = 0;
       double rate = 0.0;
       bool enabled = true;
       std::string name{};
@@ -95,7 +94,7 @@ namespace ao::rt::test
     struct WithStrongId final
     {
       TestStringId id{};
-      int count = 0;
+      std::int32_t count = 0;
     };
 
     struct WithEmptyContainers final
@@ -478,7 +477,7 @@ namespace ao::rt::test
       auto loadedEnums = WithEnums{};
       REQUIRE(reloaded.load("enums", loadedEnums));
       CHECK(loadedEnums.simple == Color::Blue);
-      int const expectedFlags = static_cast<int>(Flags::Read) | static_cast<int>(Flags::Execute);
+      int const expectedFlags = static_cast<std::int32_t>(Flags::Read) | static_cast<std::int32_t>(Flags::Execute);
       CHECK(static_cast<int>(loadedEnums.bitmask) == expectedFlags);
 
       auto loadedOpt = AllOptional{};

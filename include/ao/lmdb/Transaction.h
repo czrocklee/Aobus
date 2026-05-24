@@ -7,6 +7,7 @@
 
 #include <lmdb.h>
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 
@@ -38,7 +39,7 @@ namespace ao::lmdb
     {
     }
 
-    static auto create(MDB_env* env, MDB_txn* parent, unsigned int flags);
+    static auto create(MDB_env* env, MDB_txn* parent, std::uint32_t flags);
 
     MDB_txn* handle() const noexcept { return _handle.get(); }
     MDB_txn* releaseHandle() noexcept { return _handle.release(); }

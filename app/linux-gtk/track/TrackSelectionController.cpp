@@ -119,7 +119,7 @@ namespace ao::gtk
     primaryClickController->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
 
     primaryClickController->signal_pressed().connect(
-      [this, primaryClickController](int nPress, double xPos, double yPos)
+      [this, primaryClickController](std::int32_t nPress, double xPos, double yPos)
       {
         if (nPress != 2)
         {
@@ -151,7 +151,7 @@ namespace ao::gtk
     secondaryClickController->set_button(GDK_BUTTON_SECONDARY);
 
     secondaryClickController->signal_released().connect(
-      [this](int, double xPos, double yPos)
+      [this](std::int32_t, double xPos, double yPos)
       {
         if (selectedTrackCount() == 0)
         {

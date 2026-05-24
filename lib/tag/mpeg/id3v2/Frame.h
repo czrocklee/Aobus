@@ -130,8 +130,7 @@ namespace ao::tag::mpeg::id3v2
     {
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
-        throwException<Exception>(
-          "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
+        throwException<Exception>("invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
       }
     }
 
@@ -150,8 +149,7 @@ namespace ao::tag::mpeg::id3v2
     {
       if (sizeof(Layout) > size())
       {
-        throwException<Exception>(
-          "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
+        throwException<Exception>("invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
       }
 
       return *static_cast<Layout const*>(_data);
@@ -228,7 +226,7 @@ namespace ao::tag::mpeg::id3v2
       return *this;
     }
 
-    FrameViewIterator operator++(int)
+    FrameViewIterator operator++(std::int32_t)
     {
       auto tmp = *this;
       increment();

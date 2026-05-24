@@ -44,7 +44,7 @@ namespace ao::gtk
     void updateCompletion();
     void hideCompletion();
     void applySelectedCompletion();
-    bool moveCompletionSelection(int delta);
+    bool moveCompletionSelection(std::int32_t delta);
 
     Gtk::Entry _entry;
     Gtk::Popover _completionPopover;

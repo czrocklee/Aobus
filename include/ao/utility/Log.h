@@ -43,7 +43,7 @@ namespace ao::log
    */
   inline spdlog::source_loc toSpdlog(std::source_location const& loc)
   {
-    return {loc.file_name(), static_cast<int>(loc.line()), loc.function_name()};
+    return {loc.file_name(), static_cast<std::int32_t>(loc.line()), loc.function_name()};
   }
 } // namespace ao::log
 

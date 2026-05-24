@@ -141,7 +141,7 @@ namespace ao::audio::detail
     {
       errorMsg = std::format("{} does not support {} channels and Aobus has no channel remapper yet",
                              backendId,
-                             static_cast<int>(info.sourceFormat.channels));
+                             static_cast<std::int32_t>(info.sourceFormat.channels));
       return false;
     }
 

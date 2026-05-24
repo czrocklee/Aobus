@@ -16,6 +16,7 @@
 #include <gtkmm/dialog.h>
 #include <gtkmm/window.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -67,7 +68,7 @@ namespace ao::gtk
     auto* const dialogPtr = dialog.get();
 
     _context.editMode = true;
-    _context.onNodeMoved = [dialogPtr](std::string const& nodeId, int posX, int posY)
+    _context.onNodeMoved = [dialogPtr](std::string const& nodeId, std::int32_t posX, std::int32_t posY)
     { dialogPtr->updateNodePosition(nodeId, posX, posY); };
 
     _host.setLayout(_context, _activeLayout);
@@ -76,7 +77,7 @@ namespace ao::gtk
                                             { _host.setLayout(_context, doc); });
 
     dialogPtr->signal_response().connect(
-      [this, sharedDialog = dialog, &config](int responseId)
+      [this, sharedDialog = dialog, &config](std::int32_t responseId)
       {
         _context.editMode = false;
         _context.onNodeMoved = nullptr;

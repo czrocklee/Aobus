@@ -6,11 +6,11 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "layout/document/LayoutDocument.h"
+#include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include "layout/document/LayoutDocument.h"
 #include <ao/rt/CorePrimitives.h>
-#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -559,8 +559,8 @@ namespace ao::gtk::layout::test
       auto* const spacer = box->get_first_child();
       REQUIRE(spacer != nullptr);
 
-      int width = -1;
-      int height = -1;
+      std::int32_t width = -1;
+      std::int32_t height = -1;
       spacer->get_size_request(width, height);
 
       int const expectedW = 200;

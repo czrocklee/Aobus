@@ -9,6 +9,13 @@
 #include "image/ImageCache.h"
 #include "image/ImageWidget.h"
 #include "layout/LayoutConstants.h"
+#include "tag/TagPopover.h"
+#include "track/TrackColumnFactoryBuilder.h"
+#include "track/TrackColumnViewHost.h"
+#include "track/TrackFieldUi.h"
+#include "track/TrackListAdapter.h"
+#include "track/TrackPresentationStore.h"
+#include "track/TrackRowObject.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
@@ -17,13 +24,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
-#include "tag/TagPopover.h"
-#include "track/TrackColumnFactoryBuilder.h"
-#include "track/TrackColumnViewHost.h"
-#include "track/TrackFieldUi.h"
-#include "track/TrackListAdapter.h"
-#include "track/TrackPresentationStore.h"
-#include "track/TrackRowObject.h"
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -47,6 +47,7 @@
 #include <gtkmm/sortlistmodel.h>
 
 #include <array>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <memory>
@@ -402,7 +403,7 @@ namespace ao::gtk
 
   void TrackViewPage::showTagPopover(TagPopover& popover, double posX, double posY)
   {
-    auto const rect = Gdk::Rectangle{static_cast<int>(posX), static_cast<int>(posY), 1, 1};
+    auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY), 1, 1};
 
     if (popover.get_parent() != &_viewHost->columnView())
     {

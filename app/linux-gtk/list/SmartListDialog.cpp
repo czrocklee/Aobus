@@ -7,16 +7,16 @@
 #include "ao/library/ListStore.h"
 #include "ao/library/ListView.h"
 #include "ao/library/MusicLibrary.h"
+#include "track/TrackListAdapter.h"
+#include "track/TrackRowCache.h"
+#include "track/TrackRowObject.h"
+#include "track/TrackViewPage.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/SmartListEvaluator.h>
 #include <ao/rt/SmartListSource.h>
 #include <ao/rt/TrackSource.h>
-#include "track/TrackListAdapter.h"
-#include "track/TrackRowCache.h"
-#include "track/TrackRowObject.h"
-#include "track/TrackViewPage.h"
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>

@@ -118,15 +118,19 @@ if [[ ! -f "$COMPILE_DB" ]]; then
     fi
     echo "Configure done."
     echo "Building targets to generate necessary headers (gperf)..."
-    cmake --build "$BUILD_DIR" -j$(nproc) 2>&1 | tail -5
+    if ! cmake --build "$BUILD_DIR" -j$(nproc) 2>&1 | tail -5; then
+        echo "ERROR: Build failed during header generation." >&2
+        exit 1
+    fi
     echo "Build done."
 fi
 
-if [[ ! -f "$PLUGIN" ]]; then
-    echo "AobusLintPlugin missing, building..."
-    cmake --build "$BUILD_DIR" --target AobusLintPlugin -j$(nproc) 2>&1 | tail -5
-    echo "Plugin built."
+echo "Building AobusLintPlugin (incremental)..."
+if ! cmake --build "$BUILD_DIR" --target AobusLintPlugin -j$(nproc) > /dev/null; then
+    echo "ERROR: Failed to build AobusLintPlugin." >&2
+    exit 1
 fi
+
 
 # System include paths (NixOS)
 ISYSTEM_ARGS=()

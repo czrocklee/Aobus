@@ -13,6 +13,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <memory>
 #include <thread>
@@ -115,7 +116,7 @@ namespace ao::audio::test
       REQUIRE(source->initialize());
 
       // Wait for async failure
-      int retries = 0;
+      std::int32_t retries = 0;
 
       while (errorCount.load() == 0 && retries < 100)
       {
@@ -140,7 +141,7 @@ namespace ao::audio::test
       REQUIRE(source->read(out) == 20);
 
       // Wait for EOF to be processed if not already
-      int retries = 0;
+      std::int32_t retries = 0;
 
       while (!source->isDrained() && retries < 100)
       {

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/TrackSource.h>
-
 #include <ao/Type.h>
+#include <ao/rt/TrackSource.h>
 
 #include <cstddef>
 #include <span>

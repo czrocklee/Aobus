@@ -9,6 +9,7 @@
 #include "ao/lmdb/Transaction.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <optional>
 #include <span>
@@ -76,7 +77,7 @@ namespace ao::library
     bool operator==(Iterator const& other) const;
     bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
     Iterator& operator++();
-    void operator++(int) { ++*this; }
+    void operator++(std::int32_t) { ++*this; }
     value_type operator*() const;
 
   private:

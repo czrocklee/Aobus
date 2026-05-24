@@ -7,11 +7,11 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/utility/ScopedTimer.h"
 #include "ao/utility/VariantVisitor.h"
-#include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/TrackSource.h>
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/TrackSource.h>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/trim.hpp>

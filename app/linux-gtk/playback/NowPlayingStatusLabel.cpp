@@ -11,6 +11,7 @@
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/label.h>
 
+#include <cstdint>
 #include <format>
 
 namespace ao::gtk
@@ -23,7 +24,8 @@ namespace ao::gtk
     _label.set_tooltip_text("Click to show playing list");
 
     auto const clickGesture = Gtk::GestureClick::create();
-    clickGesture->signal_pressed().connect([this](int, double, double) { _playbackService.revealPlayingTrack(); });
+    clickGesture->signal_pressed().connect([this](std::int32_t, double, double)
+                                           { _playbackService.revealPlayingTrack(); });
 
     _label.add_controller(clickGesture);
     _label.set_cursor(Gdk::Cursor::create("pointer"));

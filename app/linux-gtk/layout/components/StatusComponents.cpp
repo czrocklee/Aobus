@@ -10,10 +10,10 @@
 #include "playback/NowPlayingStatusLabel.h"
 #include "playback/PlaybackDetailsWidget.h"
 #include "portal/LibraryTaskProgressIndicator.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/ListSourceStore.h>
 #include "track/LibraryTrackCountLabel.h"
 #include "track/StatusNotificationLabel.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListSourceStore.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>

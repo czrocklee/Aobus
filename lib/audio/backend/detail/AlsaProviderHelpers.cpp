@@ -46,7 +46,7 @@ namespace ao::audio::backend::detail
 
     for (auto const rate : std::to_array({44100, 48000, 88200, 96000, 176400, 192000}))
     {
-      if (::snd_pcm_hw_params_test_rate(pcm.get(), params, static_cast<unsigned int>(rate), 0) == 0)
+      if (::snd_pcm_hw_params_test_rate(pcm.get(), params, static_cast<std::uint32_t>(rate), 0) == 0)
       {
         caps.sampleRates.push_back(static_cast<std::uint32_t>(rate));
       }
@@ -79,7 +79,7 @@ namespace ao::audio::backend::detail
 
     for (auto const channelCount : std::to_array({1, 2, 4, 6, 8}))
     {
-      if (::snd_pcm_hw_params_test_channels(pcm.get(), params, static_cast<unsigned int>(channelCount)) == 0)
+      if (::snd_pcm_hw_params_test_channels(pcm.get(), params, static_cast<std::uint32_t>(channelCount)) == 0)
       {
         caps.channelCounts.push_back(static_cast<std::uint8_t>(channelCount));
       }
@@ -110,7 +110,7 @@ namespace ao::audio::backend::detail
           {
             ::snd_pcm_info_t* info = nullptr;
             snd_pcm_info_alloca(&info);
-            ::snd_pcm_info_set_device(info, static_cast<unsigned int>(device));
+            ::snd_pcm_info_set_device(info, static_cast<std::uint32_t>(device));
             ::snd_pcm_info_set_stream(info, SND_PCM_STREAM_PLAYBACK);
 
             if (::snd_ctl_pcm_info(ctl.get(), info) == 0)

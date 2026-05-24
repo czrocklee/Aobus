@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <ao/rt/TrackField.h>
+#include "ao/Type.h"
 #include "track/TrackPresentationStore.h"
+#include <ao/rt/TrackField.h>
 
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
-#include "ao/Type.h"
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/cssprovider.h>

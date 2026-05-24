@@ -1161,7 +1161,7 @@ namespace ao::query::test
       // 2. Find a colliding tag B
       auto tagB = std::string{};
 
-      for (int i = 0; i < 1000; ++i)
+      for (std::int32_t i = 0; i < 1000; ++i)
       {
         auto const candidate = std::format("collision_tag_{}", i);
 

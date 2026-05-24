@@ -13,6 +13,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -411,7 +412,7 @@ namespace ao::library::test
     // Insert 10,000 unique short strings to force vector reallocation multiple times
     auto wtxn3 = WriteTransaction{env};
 
-    for (int i = 0; i < 10000; ++i)
+    for (std::int32_t i = 0; i < 10000; ++i)
     {
       dict.put(wtxn3, "string_" + std::to_string(i));
     }

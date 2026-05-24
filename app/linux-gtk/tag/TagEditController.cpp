@@ -4,14 +4,14 @@
 #include "tag/TagEditController.h"
 
 #include "ao/utility/Log.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/StateTypes.h>
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/StateTypes.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>
@@ -27,6 +27,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <memory>
 #include <span>
@@ -168,7 +169,7 @@ namespace ao::gtk
     _contextPopover->set_child(*menuBox);
     _contextPopover->set_parent(page);
 
-    auto const rect = Gdk::Rectangle{static_cast<int>(posX), static_cast<int>(posY), 1, 1};
+    auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY), 1, 1};
     _contextPopover->set_pointing_to(rect);
     _contextPopover->popup();
   }

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/rt/TrackField.h>
 #include "track/TrackRowObject.h"
+#include <ao/rt/TrackField.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/signallistitemfactory.h>

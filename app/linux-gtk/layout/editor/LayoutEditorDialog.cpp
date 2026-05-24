@@ -233,7 +233,7 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  void LayoutEditorDialog::updateNodePosition(std::string_view nodeId, int posX, int posY)
+  void LayoutEditorDialog::updateNodePosition(std::string_view nodeId, std::int32_t posX, std::int32_t posY)
   {
     if (auto* const node = findNodeById(&_document.root, nodeId); node != nullptr)
     {

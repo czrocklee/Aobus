@@ -91,7 +91,7 @@ namespace ao::audio::backend
     }
 
     void playbackLoop(std::stop_token const& stopToken) const;
-    void recoverFromXrun(int err) const;
+    void recoverFromXrun(std::int32_t err) const;
 
     bool initMixer(::snd_pcm_t* pcm);
     void applyVolume(float vol) const;
@@ -105,7 +105,7 @@ namespace ao::audio::backend
     Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
 
     bool waitForFrames(::snd_pcm_uframes_t periodSize) const;
-    void handleXrun(int err) const;
+    void handleXrun(std::int32_t err) const;
     void commitFrames(::snd_pcm_uframes_t offset, ::snd_pcm_uframes_t framesRead) const;
   };
 
@@ -189,7 +189,7 @@ namespace ao::audio::backend
 
     if (committed < 0)
     {
-      handleXrun(static_cast<int>(committed));
+      handleXrun(static_cast<std::int32_t>(committed));
     }
     else
     {
@@ -211,7 +211,7 @@ namespace ao::audio::backend
 
     if (avail < 0)
     {
-      handleXrun(static_cast<int>(avail));
+      handleXrun(static_cast<std::int32_t>(avail));
       return false;
     }
 
@@ -235,12 +235,12 @@ namespace ao::audio::backend
     return true;
   }
 
-  void AlsaExclusiveBackend::Impl::handleXrun(int err) const
+  void AlsaExclusiveBackend::Impl::handleXrun(std::int32_t err) const
   {
     recoverFromXrun(err);
   }
 
-  void AlsaExclusiveBackend::Impl::recoverFromXrun(int err) const
+  void AlsaExclusiveBackend::Impl::recoverFromXrun(std::int32_t err) const
   {
     if (err == -EPIPE)
     {
@@ -272,7 +272,7 @@ namespace ao::audio::backend
       return false;
     }
 
-    int card = ::snd_pcm_info_get_card(info);
+    std::int32_t card = ::snd_pcm_info_get_card(info);
 
     ::snd_mixer_t* raw = nullptr;
 
@@ -342,12 +342,12 @@ namespace ao::audio::backend
 
     if (float const clamped = std::clamp(vol, 0.0F, 1.0F); hasDB)
     {
-      long const db = dbMin + static_cast<long>(static_cast<float>(dbMax - dbMin) * clamped);
+      long const db = dbMin + static_cast<std::ptrdiff_t>(static_cast<float>(dbMax - dbMin) * clamped);
       ::snd_mixer_selem_set_playback_dB_all(mixerElem, db, 0);
     }
     else
     {
-      long const val = volMin + static_cast<long>(static_cast<float>(volMax - volMin) * clamped);
+      long const val = volMin + static_cast<std::ptrdiff_t>(static_cast<float>(volMax - volMin) * clamped);
       ::snd_mixer_selem_set_playback_volume_all(mixerElem, val);
     }
   }
@@ -631,7 +631,7 @@ namespace ao::audio::backend
     }
 
     _impl->paused = false;
-    int err = 0;
+    std::int32_t err = 0;
 
     if (_impl->canPause)
     {

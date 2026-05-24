@@ -65,7 +65,7 @@ namespace ao::rt::test
     auto ids = std::vector<TrackId>{};
     ids.reserve(kTrackCount);
 
-    for (int idx = 0; idx < kTrackCount; ++idx)
+    for (std::int32_t idx = 0; idx < kTrackCount; ++idx)
     {
       ids.push_back(env.addTrack(TrackSpec{.title = std::format("Track {:05d}", idx),
                                            .artist = std::format("Artist {:03d}", idx % 100),
@@ -93,7 +93,7 @@ namespace ao::rt::test
       auto newIds = std::vector<TrackId>{};
       newIds.reserve(100);
 
-      for (int idx = 0; idx < 100; ++idx)
+      for (std::int32_t idx = 0; idx < 100; ++idx)
       {
         newIds.push_back(env.addTrack(TrackSpec{.title = std::format("New Track {:05d}", idx)}));
       }
@@ -125,7 +125,7 @@ namespace ao::rt::test
       {
         auto const t0 = std::chrono::steady_clock::now();
 
-        for (int i = 0; i < kIterations; ++i)
+        for (std::int32_t i = 0; i < kIterations; ++i)
         {
           [[maybe_unused]] auto const optResult = proj.indexOf(id);
         }

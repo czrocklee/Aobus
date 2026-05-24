@@ -181,7 +181,7 @@ namespace ao::gtk
     auto clickController = Gtk::GestureClick::create();
     clickController->set_button(GDK_BUTTON_SECONDARY);
     clickController->signal_pressed().connect(
-      [this, listItem, rowBox](int /*nPress*/, double xPos, double yPos)
+      [this, listItem, rowBox](std::int32_t /*nPress*/, double xPos, double yPos)
       {
         if (auto const position = listItem->get_position(); position != kInvalidListPosition)
         {
@@ -196,7 +196,8 @@ namespace ao::gtk
           return;
         }
 
-        auto rect = Gdk::Rectangle{static_cast<int>(optPoint->get_x()), static_cast<int>(optPoint->get_y()), 1, 1};
+        auto rect = Gdk::Rectangle{
+          static_cast<std::int32_t>(optPoint->get_x()), static_cast<std::int32_t>(optPoint->get_y()), 1, 1};
 
         if (_callbacks.onContextMenuRequested)
         {

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/LibraryYamlExporter.h>
-
 #include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
@@ -15,10 +13,11 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/tag/TagFile.h>
-#include <ao/utility/Base64.h>
+#include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/yaml/Utils.h>
+#include <ao/tag/TagFile.h>
+#include <ao/utility/Base64.h>
 
 #include <algorithm>
 #include <array>

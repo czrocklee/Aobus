@@ -19,6 +19,7 @@ extern "C"
 }
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -70,14 +71,14 @@ namespace ao::audio::backend::test
           if (core)
           {
             auto props = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
-                                                                                              "support.null-audio-sink",
-                                                                                              "node.name",
-                                                                                              "rs-test-dummy-sink",
-                                                                                              "media.class",
-                                                                                              "Audio/Sink",
-                                                                                              "object.linger",
-                                                                                              "false",
-                                                                                              nullptr));
+                                                                                          "support.null-audio-sink",
+                                                                                          "node.name",
+                                                                                          "rs-test-dummy-sink",
+                                                                                          "media.class",
+                                                                                          "Audio/Sink",
+                                                                                          "object.linger",
+                                                                                          "false",
+                                                                                          nullptr));
 
             // Create node via adapter factory
             void* const p =
@@ -146,7 +147,7 @@ namespace ao::audio::backend::test
       bool found = false;
 
       // Wait a bit for PipeWire to propagate the new node to the provider's registry
-      for (int i = 0; i < 20; ++i)
+      for (std::int32_t i = 0; i < 20; ++i)
       {
         for (auto const& d : *currentDevices)
         {
@@ -189,14 +190,14 @@ namespace ao::audio::backend::test
         if (core)
         {
           auto props = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
-                                                                                            "support.null-audio-sink",
-                                                                                            "node.name",
-                                                                                            "ao-test-duplex-sink",
-                                                                                            "media.class",
-                                                                                            "Audio/Duplex",
-                                                                                            "object.linger",
-                                                                                            "false",
-                                                                                            nullptr));
+                                                                                        "support.null-audio-sink",
+                                                                                        "node.name",
+                                                                                        "ao-test-duplex-sink",
+                                                                                        "media.class",
+                                                                                        "Audio/Duplex",
+                                                                                        "object.linger",
+                                                                                        "false",
+                                                                                        nullptr));
           void* const p =
             ::pw_core_create_object(core.get(), "adapter", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, &props->dict, 0);
           proxy.reset(static_cast<::pw_proxy*>(p));
@@ -208,7 +209,7 @@ namespace ao::audio::backend::test
       {
         bool found = false;
 
-        for (int i = 0; i < 20; ++i)
+        for (std::int32_t i = 0; i < 20; ++i)
         {
           for (auto const& d : *currentDevices)
           {

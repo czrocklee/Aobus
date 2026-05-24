@@ -5,12 +5,12 @@
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "layout/document/LayoutDocument.h"
+#include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include "layout/document/LayoutDocument.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/yaml/Utils.h> // NOLINT(misc-include-cleaner)
-#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -271,7 +271,7 @@ namespace ao::gtk::layout::editor::test
     SECTION("signalApplyPreview is emitted on document changes")
     {
       auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc);
-      int count = 0;
+      std::int32_t count = 0;
 
       dialog->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
 

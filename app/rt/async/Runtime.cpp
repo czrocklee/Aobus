@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/async/Runtime.h>
-
-#include <ao/utility/Log.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/async/Runtime.h>
 #include <ao/rt/async/Task.h>
+#include <ao/utility/Log.h>
 
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>

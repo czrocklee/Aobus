@@ -4,9 +4,9 @@
 #include "track/TrackListModel.h"
 
 #include "ao/Type.h"
-#include <ao/rt/ProjectionTypes.h>
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
+#include <ao/rt/ProjectionTypes.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/private/listmodel_p.h>

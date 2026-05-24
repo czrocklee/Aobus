@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/NotificationService.h>
-
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include <cstdint>
 
 namespace ao::rt::test
 {
@@ -128,7 +129,7 @@ namespace ao::rt::test
 
     auto const id = service.post(NotificationSeverity::Info, "Scanning", true);
 
-    int updatedCount = 0;
+    std::int32_t updatedCount = 0;
     auto sub = service.onUpdated([&](auto const&) { ++updatedCount; });
 
     service.clearProgress(id);
@@ -150,7 +151,7 @@ namespace ao::rt::test
     service.post(NotificationSeverity::Info, "a");
     service.post(NotificationSeverity::Info, "b");
 
-    int dismissedCount = 0;
+    std::int32_t dismissedCount = 0;
     auto sub = service.onDismissed([&](auto const&) { ++dismissedCount; });
 
     service.dismissAll();
@@ -164,7 +165,7 @@ namespace ao::rt::test
     service.post(NotificationSeverity::Info, "a");
     service.post(NotificationSeverity::Info, "b");
 
-    int changedCount = 0;
+    std::int32_t changedCount = 0;
     auto sub = service.onChanged([&] { ++changedCount; });
 
     service.dismissAll();

@@ -4,9 +4,9 @@
 #pragma once
 
 #include "ao/library/FileManifestStore.h"
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
-#include <ao/library/MusicLibrary.h>
 
 #include <chrono>
 #include <cstdint>

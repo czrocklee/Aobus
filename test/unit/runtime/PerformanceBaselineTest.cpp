@@ -41,11 +41,11 @@ namespace ao::rt::test
       std::vector<TrackId> ids;
     };
 
-    void buildLibrary(ScaleBench& bench, int trackCount)
+    void buildLibrary(ScaleBench& bench, std::int32_t trackCount)
     {
       bench.ids.reserve(trackCount);
 
-      for (int idx = 0; idx < trackCount; ++idx)
+      for (std::int32_t idx = 0; idx < trackCount; ++idx)
       {
         auto const spec = TrackSpec{
           .title = std::format("Track {:06d}", idx),
@@ -88,7 +88,7 @@ namespace ao::rt::test
       std::vector<TrackId> _ids;
     };
 
-    Timings measureScale(ScaleBench& bench, int trackCount)
+    Timings measureScale(ScaleBench& bench, std::int32_t trackCount)
     {
       auto t = Timings{};
       auto& lib = bench.lib.library();
@@ -126,7 +126,7 @@ namespace ao::rt::test
       constexpr int kLookupIters = 10000;
       auto const t5 = std::chrono::steady_clock::now();
 
-      for (int i = 0; i < kLookupIters; ++i)
+      for (std::int32_t i = 0; i < kLookupIters; ++i)
       {
         [[maybe_unused]] auto const optResult = proj.indexOf(midId);
       }

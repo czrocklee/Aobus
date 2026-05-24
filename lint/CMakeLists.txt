@@ -25,8 +25,9 @@ add_library(AobusLintPlugin MODULE
   check/ThreadingPolicyCheck.cpp
   check/UnusedSuppressionStyleCheck.cpp
   check/UseIfInitStatementCheck.cpp
-  checkFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");
-  checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");
+  check/LambdaParamsCheck.cpp
+  check/MemberOrderCheck.cpp
+  check/UseStdNumbersCheck.cpp
   AobusLintModule.cpp
 )
 

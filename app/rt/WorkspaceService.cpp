@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/WorkspaceService.h>
-
-#include <ao/rt/ConfigStore.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/PlaybackService.h>
-#include <ao/rt/TrackPresentation.h>
-#include <ao/rt/ViewService.h>
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/utility/Log.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
+#include <ao/utility/Log.h>
 
 #include <algorithm>
 #include <functional>
