@@ -8,8 +8,8 @@
 #include "ao/audio/Types.h"
 #include "ao/audio/flow/Graph.h"
 #include "layout/LayoutConstants.h"
-#include "runtime/PlaybackService.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/PlaybackService.h>
+#include <ao/rt/StateTypes.h>
 
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>

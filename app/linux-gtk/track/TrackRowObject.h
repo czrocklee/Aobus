@@ -4,8 +4,8 @@
 #pragma once
 
 #include "ao/Type.h"
-#include "ao/library/FileManifestStore.h"
-#include "runtime/TrackField.h"
+#include "ao/library/FileManifestLayout.h"
+#include <ao/rt/TrackField.h>
 
 #include <glibmm/object.h>
 #include <glibmm/property.h>

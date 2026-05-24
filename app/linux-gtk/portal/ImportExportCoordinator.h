@@ -4,9 +4,9 @@
 #pragma once
 
 #include "portal/LibraryTaskProgressDialog.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/LibraryYamlExporter.h"
-#include "runtime/async/LifetimeScope.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryYamlExporter.h>
+#include <ao/rt/async/LifetimeScope.h>
 
 #include <giomm/asyncresult.h>
 #include <glibmm/refptr.h>

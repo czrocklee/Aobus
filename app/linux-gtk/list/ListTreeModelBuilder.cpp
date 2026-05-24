@@ -8,8 +8,8 @@
 #include "ao/library/MusicLibrary.h"
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/CorePrimitives.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/liststore.h>

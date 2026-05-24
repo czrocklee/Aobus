@@ -5,10 +5,10 @@
 #include "ao/audio/Types.h"
 #include "playback/SeekControl.h"
 #include "playback/TimeLabel.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/ConfigStore.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/PlaybackService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/adjustment.h>  // NOLINT(misc-include-cleaner)

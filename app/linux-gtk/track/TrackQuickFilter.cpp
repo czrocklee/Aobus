@@ -3,11 +3,11 @@
 
 #include "track/TrackQuickFilter.h"
 
-#include "runtime/AppRuntime.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/ProjectionTypes.h"
-#include "runtime/ViewService.h"
-#include "runtime/WorkspaceService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include "track/TrackListAdapter.h"
 
 #include <gdkmm/enums.h>

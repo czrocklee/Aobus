@@ -3,8 +3,8 @@
 
 #include "app/linux-gtk/track/TrackFieldUi.h"
 
-#include "runtime/StateTypes.h"
-#include "runtime/TrackField.h"
+#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackField.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>

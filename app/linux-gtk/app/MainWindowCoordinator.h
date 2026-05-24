@@ -4,10 +4,11 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/CorePrimitives.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
 
 #include <gtkmm/stack.h>
+#include <sigc++/scoped_connection.h>
 
 #include <memory>
 
@@ -66,6 +67,8 @@ namespace ao::gtk
     portal::ImportExportCoordinator& importExport() { return *_importExportCoordinator; }
 
   private:
+    void saveColumnLayout();
+
     MainWindow& _window;
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfig> _config;
@@ -86,5 +89,6 @@ namespace ao::gtk
     rt::Subscription _libraryTaskProgressSubscription;
     rt::Subscription _libraryTaskCompletedSubscription;
     rt::Subscription _listsMutatedSubscription;
+    sigc::scoped_connection _trackPresentationChangedConnection;
   };
 } // namespace ao::gtk

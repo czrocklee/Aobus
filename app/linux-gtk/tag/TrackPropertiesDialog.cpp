@@ -7,9 +7,9 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
 #include "layout/LayoutConstants.h"
-#include "runtime/LibraryMutationService.h"
-#include "runtime/StateTypes.h"
-#include "runtime/TrackField.h"
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackField.h>
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
 

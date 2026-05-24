@@ -17,7 +17,7 @@ namespace ao::gtk
 {
   /**
    * @brief Manages persistence of GTK layout state (column widths, etc.).
-   * 
+   *
    * This class exclusively owns the `gtk_layout.yaml` file within a library.
    */
   class GtkLayoutConfig final

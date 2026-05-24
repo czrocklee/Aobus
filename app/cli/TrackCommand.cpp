@@ -12,8 +12,8 @@
 #include "ao/query/ExecutionPlan.h"
 #include "ao/query/Parser.h"
 #include "ao/query/PlanEvaluator.h"
-#include "runtime/CoreRuntime.h"
-#include "runtime/TrackCommandService.h"
+#include <ao/rt/CoreRuntime.h>
+#include <ao/rt/TrackCommandService.h>
 
 #include <CLI/App.hpp>
 

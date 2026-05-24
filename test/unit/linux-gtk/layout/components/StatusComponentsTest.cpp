@@ -9,10 +9,10 @@
 #include "app/linux-gtk/portal/LibraryTaskProgressIndicator.h"
 #include "app/linux-gtk/track/LibraryTrackCountLabel.h"
 #include "app/linux-gtk/track/StatusNotificationLabel.h"
-#include "app/runtime/AppRuntime.h"
-#include "app/runtime/ConfigStore.h"
-#include "app/runtime/ListSourceStore.h"
-#include "runtime/CorePrimitives.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/ListSourceStore.h>
+#include <ao/rt/CorePrimitives.h>
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>

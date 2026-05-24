@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ao/Type.h"
-#include "runtime/TrackSource.h"
+#include <ao/rt/TrackSource.h>
 #include "track/TrackRowCache.h"
 
 #include <sigc++/connection.h>

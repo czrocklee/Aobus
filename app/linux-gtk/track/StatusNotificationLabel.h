@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "runtime/CorePrimitives.h"
+#include <ao/rt/CorePrimitives.h>
 #include "track/SelectionInfoLabel.h"
 
 #include <gtkmm/label.h>

@@ -4,7 +4,7 @@
 #include "track/TrackListModel.h"
 
 #include "ao/Type.h"
-#include "runtime/ProjectionTypes.h"
+#include <ao/rt/ProjectionTypes.h>
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 

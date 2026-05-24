@@ -8,8 +8,8 @@
 #include "playback/AobusSoulBinding.h"
 #include "playback/AobusSoulWindow.h"
 #include "playback/OutputListItems.h"
-#include "runtime/PlaybackService.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/PlaybackService.h>
+#include <ao/rt/StateTypes.h>
 
 #include <gdk/gdk.h>
 #include <giomm/liststore.h>

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "runtime/CorePrimitives.h"
-#include "runtime/PlaybackService.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/PlaybackService.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/widget.h>

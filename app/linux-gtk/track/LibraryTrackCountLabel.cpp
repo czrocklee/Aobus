@@ -4,7 +4,7 @@
 #include "track/LibraryTrackCountLabel.h"
 
 #include "ao/Type.h"
-#include "runtime/TrackSource.h"
+#include <ao/rt/TrackSource.h>
 
 #include <cstddef>
 #include <format>

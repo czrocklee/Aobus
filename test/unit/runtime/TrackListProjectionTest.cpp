@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "runtime/TrackListProjection.h"
+#include <ao/rt/TrackListProjection.h>
 
 #include "TestUtils.h"
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/ProjectionTypes.h"
-#include "runtime/SmartListEvaluator.h"
-#include "runtime/SmartListSource.h"
-#include "runtime/TrackField.h"
-#include "runtime/TrackPresentation.h"
-#include "runtime/TrackSource.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/SmartListEvaluator.h>
+#include <ao/rt/SmartListSource.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 

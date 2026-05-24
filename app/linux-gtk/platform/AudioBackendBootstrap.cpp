@@ -3,7 +3,7 @@
 
 #include "AudioBackendBootstrap.h"
 
-#include "runtime/AppRuntime.h"
+#include <ao/rt/AppRuntime.h>
 
 #include <memory>
 

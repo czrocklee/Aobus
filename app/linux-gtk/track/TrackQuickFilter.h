@@ -4,8 +4,8 @@
 #pragma once
 
 #include "ao/Error.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/ProjectionTypes.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ProjectionTypes.h>
 
 #include <gtkmm/entry.h>
 #include <sigc++/scoped_connection.h>

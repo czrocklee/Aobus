@@ -4,7 +4,7 @@
 #include "playback/SeekControl.h"
 
 #include "ao/audio/Types.h"
-#include "runtime/PlaybackService.h"
+#include <ao/rt/PlaybackService.h>
 
 #include <gdkmm/event.h>
 #include <gdkmm/frameclock.h>

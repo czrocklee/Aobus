@@ -7,7 +7,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutHost.h"
-#include "runtime/async/LifetimeScope.h"
+#include <ao/rt/async/LifetimeScope.h>
 
 #include <gtkmm/window.h>
 

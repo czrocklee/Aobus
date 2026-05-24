@@ -5,9 +5,9 @@
 
 #include "ao/Type.h"
 #include "ao/lmdb/Transaction.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/LibraryMutationService.h"
-#include "runtime/TrackSource.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/TrackSource.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>

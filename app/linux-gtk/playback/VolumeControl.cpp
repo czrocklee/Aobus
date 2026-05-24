@@ -3,8 +3,8 @@
 
 #include "playback/VolumeControl.h"
 
-#include "runtime/PlaybackService.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/PlaybackService.h>
+#include <ao/rt/StateTypes.h>
 
 #include <gtkmm/enums.h>
 

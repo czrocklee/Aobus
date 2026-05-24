@@ -5,7 +5,7 @@
 
 #include "ao/Type.h"
 #include "list/QueryExpressionBox.h"
-#include "runtime/LibraryMutationService.h"
+#include <ao/rt/LibraryMutationService.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>

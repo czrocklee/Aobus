@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "runtime/CorePrimitives.h"
-#include "runtime/LibraryMutationService.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryMutationService.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>

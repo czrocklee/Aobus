@@ -7,7 +7,7 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/ResourceStore.h"
 #include "image/ImageCache.h"
-#include "runtime/ProjectionTypes.h"
+#include <ao/rt/ProjectionTypes.h>
 
 #include <gdkmm/pixbuf.h>
 #include <giomm/memoryinputstream.h>

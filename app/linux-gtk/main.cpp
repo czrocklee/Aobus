@@ -9,9 +9,9 @@
 #include "app/MainWindow.h"
 #include "app/StyleManager.h"
 #include "portal/ImportExportCoordinator.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/ConfigStore.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/StateTypes.h>
 
 #include <CLI/CLI.hpp>
 #include <giomm/simpleaction.h>
@@ -165,7 +165,8 @@ namespace
   {
     if (std::filesystem::is_directory(path))
     {
-      windows.push_back(createWindow(*app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}, appConfig));
+      windows.push_back(
+        createWindow(*app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}, appConfig));
     }
   }
 }

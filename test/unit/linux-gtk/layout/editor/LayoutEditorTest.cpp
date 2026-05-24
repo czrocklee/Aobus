@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "layout/document/LayoutDocument.h"
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "app/runtime/AppRuntime.h"
-#include "app/runtime/ConfigStore.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/yaml/Utils.h" // NOLINT(misc-include-cleaner)
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
+#include "layout/document/LayoutDocument.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/yaml/Utils.h> // NOLINT(misc-include-cleaner)
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>

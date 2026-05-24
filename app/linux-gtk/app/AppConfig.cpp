@@ -7,8 +7,8 @@
 #include "ao/utility/Log.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
-#include "runtime/ConfigStore.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/StateTypes.h>
 
 #include <filesystem>
 #include <memory>
@@ -77,10 +77,5 @@ namespace ao::gtk
     {
       APP_LOG_ERROR("AppConfig: Failed to flush shell layout: {}", res.error().message);
     }
-  }
-
-  rt::ConfigStore& AppConfig::store() const
-  {
-    return *_store;
   }
 } // namespace ao::gtk

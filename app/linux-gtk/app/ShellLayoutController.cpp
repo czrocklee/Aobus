@@ -8,10 +8,10 @@
 #include "layout/document/LayoutDocument.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/LayoutRuntime.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/async/LifetimeScope.h"
-#include "runtime/async/Runtime.h"
-#include "runtime/async/Task.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/async/LifetimeScope.h>
+#include <ao/rt/async/Runtime.h>
+#include <ao/rt/async/Task.h>
 
 #include <gtkmm/dialog.h>
 #include <gtkmm/window.h>

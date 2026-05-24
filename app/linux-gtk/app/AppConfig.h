@@ -5,7 +5,7 @@
 
 #include "UIState.h"
 #include "layout/document/LayoutDocument.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/StateTypes.h>
 
 #include <filesystem>
 #include <memory>
@@ -19,7 +19,7 @@ namespace ao::gtk
 {
   /**
    * @brief Manages persistence of global application configuration.
-   * 
+   *
    * This class exclusively owns the global `config.yaml` file.
    */
   class AppConfig final
@@ -41,12 +41,6 @@ namespace ao::gtk
 
     void loadShellLayout(layout::LayoutDocument& state) const;
     void saveShellLayout(layout::LayoutDocument const& state);
-
-    /**
-     * @brief Access the underlying store (for cases where direct access is needed, e.g. AppRuntime).
-     * @todo Consider if we can avoid this by moving AppRuntime's persistence needs here.
-     */
-    rt::ConfigStore& store() const;
 
   private:
     std::unique_ptr<rt::ConfigStore> _store;

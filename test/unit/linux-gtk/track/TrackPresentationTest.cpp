@@ -4,7 +4,7 @@
 #include "app/linux-gtk/app/GtkLayoutConfig.h"
 #include "app/linux-gtk/app/UIState.h"
 #include "app/linux-gtk/track/TrackFieldUi.h"
-#include "runtime/TrackField.h"
+#include <ao/rt/TrackField.h>
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_message.hpp>

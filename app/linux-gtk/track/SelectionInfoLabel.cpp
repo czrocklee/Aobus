@@ -3,8 +3,8 @@
 
 #include "track/SelectionInfoLabel.h"
 
-#include "runtime/AppRuntime.h"
-#include "runtime/ViewService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ViewService.h>
 
 #include <gtkmm/enums.h>
 

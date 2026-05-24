@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "runtime/ProjectionTypes.h"
+#include <ao/rt/ProjectionTypes.h>
 #include "track/TrackRowCache.h"
 
 #include <giomm/listmodel.h>

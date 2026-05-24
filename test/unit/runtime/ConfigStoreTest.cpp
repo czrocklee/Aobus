@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "runtime/ConfigStore.h"
+#include <ao/rt/ConfigStore.h>
 
 #include "ao/Exception.h"
 #include "ao/utility/StrongType.h"

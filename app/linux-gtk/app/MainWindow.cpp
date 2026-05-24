@@ -9,7 +9,7 @@
 #include "app/MenuController.h"
 #include "app/UIState.h"
 #include "portal/ImportExportCoordinator.h"
-#include "runtime/AppRuntime.h"
+#include <ao/rt/AppRuntime.h>
 
 #include <gtkmm/applicationwindow.h>
 

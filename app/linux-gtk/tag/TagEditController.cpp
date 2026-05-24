@@ -4,10 +4,10 @@
 #include "tag/TagEditController.h"
 
 #include "ao/utility/Log.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/LibraryMutationService.h"
-#include "runtime/NotificationService.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/StateTypes.h>
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"

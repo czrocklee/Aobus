@@ -1,59 +1,31 @@
-# app/runtime: Shared application runtime (UI-neutral, used by all frontends)
+# app/rt: Shared application runtime (UI-neutral, used by all frontends)
 add_library(app_runtime STATIC
-    runtime/AppRuntime.cpp
-    runtime/AppRuntime.h
-    runtime/async/Runtime.cpp
-    runtime/async/Runtime.h
-    runtime/async/Task.h
-    runtime/async/LifetimeScope.cpp
-    runtime/async/LifetimeScope.h
-    runtime/CoreRuntime.cpp
-    runtime/CoreRuntime.h
-    runtime/LibraryYamlImporter.cpp
-    runtime/LibraryYamlImporter.h
-    runtime/LibraryYamlExporter.cpp
-    runtime/LibraryYamlExporter.h
-    runtime/AllTracksSource.cpp
-    runtime/AllTracksSource.h
-    runtime/CorePrimitives.h
-    runtime/ConfigStore.cpp
-    runtime/ConfigStore.h
-    runtime/ProjectionTypes.h
-    runtime/PlaybackService.cpp
-    runtime/PlaybackService.h
-    runtime/WorkspaceConfig.cpp
-    runtime/WorkspaceConfig.h
-    runtime/LibraryMutationService.cpp
-    runtime/LibraryMutationService.h
-    runtime/ListSourceStore.cpp
-    runtime/ListSourceStore.h
-    runtime/ManualListSource.cpp
-    runtime/ManualListSource.h
-    runtime/WorkspaceService.cpp
-    runtime/WorkspaceService.h
-    runtime/NotificationService.cpp
-    runtime/NotificationService.h
-    runtime/StateTypes.h
-    runtime/TrackCommandService.cpp
-    runtime/TrackCommandService.h
-    runtime/SmartListEvaluator.cpp
-    runtime/SmartListEvaluator.h
-    runtime/SmartListSource.cpp
-    runtime/SmartListSource.h
-    runtime/TrackPresentation.cpp
-    runtime/TrackPresentation.h
-    runtime/TrackField.cpp
-    runtime/TrackField.h
-    runtime/TrackListProjection.cpp
-    runtime/TrackListProjection.h
-    runtime/TrackDetailProjection.cpp
-    runtime/TrackDetailProjection.h
-    runtime/TrackSource.cpp
-    runtime/TrackSource.h
-    runtime/ViewService.cpp
-    runtime/ViewService.h
+    rt/AppRuntime.cpp
+    rt/async/Runtime.cpp
+    rt/async/LifetimeScope.cpp
+    rt/CoreRuntime.cpp
+    rt/LibraryYamlImporter.cpp
+    rt/LibraryYamlExporter.cpp
+    rt/AllTracksSource.cpp
+    rt/ConfigStore.cpp
+    rt/PlaybackService.cpp
+    rt/LibraryMutationService.cpp
+    rt/ListSourceStore.cpp
+    rt/ManualListSource.cpp
+    rt/WorkspaceService.cpp
+    rt/NotificationService.cpp
+    rt/TrackCommandService.cpp
+    rt/SmartListEvaluator.cpp
+    rt/SmartListSource.cpp
+    rt/TrackPresentation.cpp
+    rt/TrackField.cpp
+    rt/TrackListProjection.cpp
+    rt/TrackDetailProjection.cpp
+    rt/TrackSource.cpp
+    rt/ViewService.cpp
 )
-target_include_directories(app_runtime PUBLIC "${CMAKE_SOURCE_DIR}/app")
+target_include_directories(app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(app_runtime PUBLIC PkgRapidYaml)
 target_link_libraries(app_runtime PRIVATE ao Boost::headers)
 

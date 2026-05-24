@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "runtime/async/LifetimeScope.h"
+#include <ao/rt/async/LifetimeScope.h>
 
 #include "TestUtils.h"
-#include "runtime/ImmediateControlExecutor.h"
-#include "runtime/async/Runtime.h"
-#include "runtime/async/Task.h"
+#include <ao/rt/ImmediateControlExecutor.h>
+#include <ao/rt/async/Runtime.h>
+#include <ao/rt/async/Task.h>
 
 #include <catch2/catch_test_macros.hpp>
 

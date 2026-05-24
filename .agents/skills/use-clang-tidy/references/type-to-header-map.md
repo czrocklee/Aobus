@@ -420,23 +420,23 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
-| `ao::rt::AppRuntime` | `<runtime/AppRuntime.h>` | `ao::rt` |
-| `ao::rt::ViewService` | `<runtime/ViewService.h>` | `ao::rt` |
-| `ao::rt::ViewId` | `<runtime/CorePrimitives.h>` | `ao::rt` |
-| `ao::rt::NotificationId` | `<runtime/CorePrimitives.h>` | `ao::rt` |
-| `ao::rt::Subscription` | `<runtime/CorePrimitives.h>` | `ao::rt` |
-| `ao::rt::PlaybackService` | `<runtime/PlaybackService.h>` | `ao::rt` |
-| `ao::rt::TrackSource` | `<runtime/TrackSource.h>` | `ao::rt` |
-| `ao::rt::ConfigStore` | `<runtime/ConfigStore.h>` | `ao::rt` |
-| `ao::rt::ITrackListProjection` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::TrackListProjectionDeltaBatch` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::ProjectionInsertRange` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::ProjectionRemoveRange" | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::ProjectionUpdateRange" | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::PlaybackState` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::SessionSnapshot` | `<runtime/StateTypes.h>` | `ao::rt` |
+| `ao::rt::AppRuntime` | `<rt/AppRuntime.h>` | `ao::rt` |
+| `ao::rt::ViewService` | `<rt/ViewService.h>` | `ao::rt` |
+| `ao::rt::ViewId` | `<rt/CorePrimitives.h>` | `ao::rt` |
+| `ao::rt::NotificationId` | `<rt/CorePrimitives.h>` | `ao::rt` |
+| `ao::rt::Subscription` | `<rt/CorePrimitives.h>` | `ao::rt` |
+| `ao::rt::PlaybackService` | `<rt/PlaybackService.h>` | `ao::rt` |
+| `ao::rt::TrackSource` | `<rt/TrackSource.h>` | `ao::rt` |
+| `ao::rt::ConfigStore` | `<rt/ConfigStore.h>` | `ao::rt` |
+| `ao::rt::ITrackListProjection` | `<rt/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::TrackListProjectionDeltaBatch` | `<rt/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::ProjectionInsertRange` | `<rt/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::ProjectionRemoveRange" | `<rt/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::ProjectionUpdateRange" | `<rt/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::PlaybackState` | `<rt/StateTypes.h>` | `ao::rt` |
+| `ao::rt::SessionSnapshot` | `<rt/StateTypes.h>` | `ao::rt` |
 
-> **Internal Path Rule:** Always prefer relative paths (e.g., `"runtime/CorePrimitives.h"`) when including from within the same module (e.g., `app/linux-gtk/track/`). Use global paths (`<ao/rt/...>`) when including from other modules.
+> **Internal Path Rule:** Always prefer relative paths (e.g., `"rt/CorePrimitives.h"`) when including from within the same module (e.g., `app/linux-gtk/track/`). Use global paths (`<ao/rt/...>`) when including from other modules.
 
 ### GTK/App (`ao::gtk::`)
 

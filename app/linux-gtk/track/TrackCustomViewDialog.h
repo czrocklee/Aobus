@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "runtime/TrackField.h"
-#include "runtime/TrackPresentation.h"
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/dialog.h>

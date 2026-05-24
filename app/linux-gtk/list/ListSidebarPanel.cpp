@@ -7,7 +7,7 @@
 #include "ao/lmdb/Transaction.h"
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
-#include "runtime/AppRuntime.h"
+#include <ao/rt/AppRuntime.h>
 
 #include <gdk/gdk.h>
 #include <gdkmm/graphene_point.h>

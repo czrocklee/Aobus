@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#pragma once
+
+#include "CorePrimitives.h"
+#include "ProjectionTypes.h"
+#include "StateTypes.h"
+#include "TrackPresentation.h"
+#include "ao/Type.h"
+#include <ao/rt/TrackField.h>
+
+#include <functional>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
+namespace ao::rt
+{
+  class ListSourceStore;
+  class TrackSource;
+  class WorkspaceService;
+  class LibraryMutationService;
+
+  class ViewService final
+  {
+  public:
+    struct FilterChanged final
+    {
+      ViewId viewId{};
+      std::string filterExpression{};
+    };
+
+    struct SortChanged final
+    {
+      ViewId viewId{};
+      std::vector<TrackSortTerm> sortBy{};
+    };
+
+    struct GroupingChanged final
+    {
+      ViewId viewId{};
+      TrackGroupKey groupBy = TrackGroupKey::None;
+    };
+
+    struct SelectionChanged final
+    {
+      ViewId viewId{};
+      std::vector<TrackId> selection{};
+    };
+
+    struct ListChanged final
+    {
+      ViewId viewId{};
+      ListId listId{};
+    };
+
+    struct PresentationChanged final
+    {
+      ViewId viewId{};
+      TrackPresentationSpec presentation{};
+    };
+
+    ViewService(IControlExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources);
+    ~ViewService();
+
+    ViewService(ViewService const&) = delete;
+    ViewService& operator=(ViewService const&) = delete;
+    ViewService(ViewService&&) = delete;
+    ViewService& operator=(ViewService&&) = delete;
+
+    CreateTrackListViewReply createView(TrackListViewConfig const& initial, bool attached = true);
+    void destroyView(ViewId viewId);
+    void setFilter(ViewId viewId, std::string filterExpression);
+    void setSort(ViewId viewId, std::vector<TrackSortTerm> sortBy);
+    void setGrouping(ViewId viewId, TrackGroupKey groupBy);
+    void setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
+    TrackPresentationSpec setPresentation(ViewId viewId, std::string_view presentationId);
+    void setSelection(ViewId viewId, std::vector<TrackId> selection);
+    void openListInView(ViewId viewId, ListId listId);
+
+    Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
+    Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);
+    Subscription onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler);
+    Subscription onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler);
+    Subscription onSortChanged(std::move_only_function<void(SortChanged const&)> handler);
+    Subscription onGroupingChanged(std::move_only_function<void(GroupingChanged const&)> handler);
+    Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
+    Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
+    Subscription onListChanged(std::move_only_function<void(ListChanged const&)> handler);
+
+    std::vector<ViewRecord> listViews() const;
+
+    TrackListViewState trackListState(ViewId viewId) const;
+    std::shared_ptr<ITrackListProjection> trackListProjection(ViewId viewId);
+    std::shared_ptr<ITrackDetailProjection> detailProjection(DetailTarget const& target,
+                                                             WorkspaceService& workspace,
+                                                             LibraryMutationService& mutation);
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+  };
+} // namespace ao::rt

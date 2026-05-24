@@ -10,7 +10,7 @@
 #include "ao/library/TrackStore.h"
 #include "ao/tag/TagFile.h"
 #include "ao/utility/Finder.h"
-#include "runtime/CoreRuntime.h"
+#include <ao/rt/CoreRuntime.h>
 
 #include <CLI/App.hpp>
 

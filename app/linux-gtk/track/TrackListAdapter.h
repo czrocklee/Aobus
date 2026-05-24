@@ -5,9 +5,9 @@
 
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/ProjectionTypes.h"
-#include "runtime/TrackSource.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/TrackSource.h>
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"

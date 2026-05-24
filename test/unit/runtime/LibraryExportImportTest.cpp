@@ -14,9 +14,9 @@
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
 #include "ao/library/TrackView.h"
-#include "runtime/LibraryYamlExporter.h"
-#include "runtime/LibraryYamlImporter.h"
-#include "runtime/yaml/Utils.h"
+#include <ao/rt/LibraryYamlExporter.h>
+#include <ao/rt/LibraryYamlImporter.h>
+#include <ao/rt/yaml/Utils.h>
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>

@@ -5,8 +5,8 @@
 
 #include "app/AobusSoul.h"
 #include "playback/AobusSoulBinding.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/PlaybackService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/PlaybackService.h>
 
 #include <gdkmm/monitor.h>
 #include <gdkmm/rectangle.h>

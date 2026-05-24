@@ -7,8 +7,8 @@
 #include "TagCommand.h"
 #include "TrackCommand.h"
 #include "ao/Exception.h"
-#include "runtime/CoreRuntime.h"
-#include "runtime/ImmediateControlExecutor.h"
+#include <ao/rt/CoreRuntime.h>
+#include <ao/rt/ImmediateControlExecutor.h>
 
 #include <CLI/CLI.hpp>
 

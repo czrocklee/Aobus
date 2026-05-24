@@ -7,9 +7,9 @@
 #include "ao/utility/Log.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/document/LayoutYaml.h"
-#include "runtime/ConfigStore.h"
-#include "runtime/yaml/ConfigTraits.h" // NOLINT(misc-include-cleaner)
-#include "runtime/yaml/Utils.h"
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/yaml/ConfigTraits.h> // NOLINT(misc-include-cleaner)
+#include <ao/rt/yaml/Utils.h>
 
 #include <giomm/resource.h>
 #include <glib.h>

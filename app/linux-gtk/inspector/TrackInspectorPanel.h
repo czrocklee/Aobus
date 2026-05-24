@@ -5,8 +5,8 @@
 
 #include "ao/Type.h"
 #include "image/ImageCache.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/ProjectionTypes.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ProjectionTypes.h>
 #include "tag/TagEditor.h"
 
 #include <gdkmm/pixbuf.h>

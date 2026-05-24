@@ -3,13 +3,13 @@
 
 #include "app/linux-gtk/layout/components/Containers.h"
 
-#include "layout/document/LayoutDocument.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "app/runtime/AppRuntime.h"
-#include "app/runtime/ConfigStore.h"
-#include "runtime/CorePrimitives.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
+#include "layout/document/LayoutDocument.h"
+#include <ao/rt/CorePrimitives.h>
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>

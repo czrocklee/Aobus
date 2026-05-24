@@ -4,7 +4,7 @@
 #include "portal/LibraryTaskProgressIndicator.h"
 
 #include "layout/LayoutConstants.h"
-#include "runtime/LibraryMutationService.h"
+#include <ao/rt/LibraryMutationService.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>

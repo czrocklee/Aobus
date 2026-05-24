@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "runtime/TrackDetailProjection.h"
+#include <ao/rt/TrackDetailProjection.h>
 
 #include "TestUtils.h"
-#include "runtime/ConfigStore.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/LibraryMutationService.h"
-#include "runtime/ListSourceStore.h"
-#include "runtime/PlaybackService.h"
-#include "runtime/ProjectionTypes.h"
-#include "runtime/StateTypes.h"
-#include "runtime/ViewService.h"
-#include "runtime/WorkspaceService.h"
-#include "runtime/async/Runtime.h"
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/ListSourceStore.h>
+#include <ao/rt/PlaybackService.h>
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/StateTypes.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
+#include <ao/rt/async/Runtime.h>
 
 #include <catch2/catch_test_macros.hpp>
 

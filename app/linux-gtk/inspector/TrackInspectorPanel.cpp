@@ -7,12 +7,12 @@
 #include "ao/library/ResourceStore.h"
 #include "ao/utility/Log.h"
 #include "image/ImageCache.h"
-#include "runtime/LibraryMutationService.h"
-#include "runtime/ListSourceStore.h"
-#include "runtime/ProjectionTypes.h"
-#include "runtime/StateTypes.h"
-#include "runtime/TrackSource.h"
-#include "runtime/ViewService.h"
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/ListSourceStore.h>
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackSource.h>
+#include <ao/rt/ViewService.h>
 
 #include <gdkmm/pixbuf.h>
 #include <giomm/memoryinputstream.h>

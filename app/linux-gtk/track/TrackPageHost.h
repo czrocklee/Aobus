@@ -5,9 +5,9 @@
 
 #include "ao/Type.h"
 #include "portal/PlaylistExporter.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/PlaybackService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/PlaybackService.h>
 #include "track/TrackViewPage.h"
 
 #include <gtkmm/stack.h>

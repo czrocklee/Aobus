@@ -6,7 +6,7 @@
 #include "app/AobusSoul.h"
 #include "playback/AobusSoulBinding.h"
 #include "playback/AobusSoulWindow.h"
-#include "runtime/PlaybackService.h"
+#include <ao/rt/PlaybackService.h>
 
 #include <giomm/liststore.h>
 #include <glibmm/object.h>

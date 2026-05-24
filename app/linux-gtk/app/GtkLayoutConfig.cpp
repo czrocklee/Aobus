@@ -5,7 +5,7 @@
 
 #include "UIState.h"
 #include "ao/utility/Log.h"
-#include "runtime/ConfigStore.h"
+#include <ao/rt/ConfigStore.h>
 
 #include <filesystem>
 #include <memory>

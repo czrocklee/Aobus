@@ -19,7 +19,7 @@
 #include "playback/TimeLabel.h"
 #include "playback/TransportButton.h"
 #include "playback/VolumeControl.h"
-#include "runtime/AppRuntime.h"
+#include <ao/rt/AppRuntime.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>

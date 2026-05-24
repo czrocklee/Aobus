@@ -3,8 +3,8 @@
 
 #include "track/StatusNotificationLabel.h"
 
-#include "runtime/AppRuntime.h"
-#include "runtime/NotificationService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/NotificationService.h>
 
 #include <glibmm/main.h>
 #include <gtk/gtkstyleprovider.h>

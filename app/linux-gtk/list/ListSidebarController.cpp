@@ -10,11 +10,11 @@
 #include "ao/utility/Log.h"
 #include "list/ListSidebarPanel.h"
 #include "list/SmartListDialog.h"
-#include "runtime/AppRuntime.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/LibraryMutationService.h"
-#include "runtime/ViewService.h"
-#include "runtime/WorkspaceService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include "track/TrackRowCache.h"
 
 #include <gdkmm/rectangle.h>

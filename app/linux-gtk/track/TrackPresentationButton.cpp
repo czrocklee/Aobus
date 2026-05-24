@@ -3,12 +3,12 @@
 
 #include "track/TrackPresentationButton.h"
 
-#include "runtime/AppRuntime.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/StateTypes.h"
-#include "runtime/TrackPresentation.h"
-#include "runtime/ViewService.h"
-#include "runtime/WorkspaceService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include "track/TrackCustomViewDialog.h"
 #include "track/TrackPresentationStore.h"
 

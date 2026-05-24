@@ -8,7 +8,7 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListSidebarController.h"
-#include "runtime/CorePrimitives.h"
+#include <ao/rt/CorePrimitives.h>
 #include "track/TrackPageHost.h"
 #include "track/TrackPresentationButton.h"
 #include "track/TrackQuickFilter.h"

@@ -7,8 +7,8 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
-#include "runtime/CoreRuntime.h"
-#include "runtime/TrackCommandService.h"
+#include <ao/rt/CoreRuntime.h>
+#include <ao/rt/TrackCommandService.h>
 
 #include <CLI/App.hpp>
 

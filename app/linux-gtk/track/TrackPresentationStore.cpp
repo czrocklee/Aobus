@@ -5,10 +5,10 @@
 
 #include "ao/Type.h"
 #include "app/UIState.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/TrackField.h"
-#include "runtime/TrackPresentation.h"
-#include "runtime/WorkspaceService.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/WorkspaceService.h>
 
 #include <algorithm>
 #include <map>

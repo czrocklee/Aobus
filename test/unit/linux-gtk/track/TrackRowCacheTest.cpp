@@ -42,7 +42,7 @@ namespace ao::gtk::test
       std::uint16_t discNumber = 0;
       std::uint16_t trackNumber = 0;
       std::chrono::milliseconds duration{0};
-      std::optional<std::uint32_t> coverArtId;
+      std::optional<std::uint32_t> optCoverArtId;
       bool missing = false;
     };
 

@@ -8,7 +8,7 @@
 #include "ao/library/ListBuilder.h"
 #include "ao/library/ListStore.h"
 #include "ao/library/MusicLibrary.h"
-#include "runtime/CoreRuntime.h"
+#include <ao/rt/CoreRuntime.h>
 
 #include <CLI/App.hpp>
 

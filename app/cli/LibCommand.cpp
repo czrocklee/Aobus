@@ -10,9 +10,9 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/ResourceStore.h"
 #include "ao/utility/ByteView.h"
-#include "runtime/CoreRuntime.h"
-#include "runtime/LibraryYamlExporter.h"
-#include "runtime/LibraryYamlImporter.h"
+#include <ao/rt/CoreRuntime.h>
+#include <ao/rt/LibraryYamlExporter.h>
+#include <ao/rt/LibraryYamlImporter.h>
 
 #include <CLI/App.hpp>
 

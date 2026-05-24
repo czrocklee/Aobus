@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "runtime/AppRuntime.h"
-#include "runtime/ConfigStore.h"
-#include "runtime/CorePrimitives.h"
-#include "runtime/PlaybackService.h"
-#include "runtime/StateTypes.h"
-#include "runtime/TrackField.h"
-#include "runtime/ViewService.h"
-#include "runtime/WorkspaceConfig.h"
-#include "runtime/WorkspaceService.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/PlaybackService.h>
+#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -86,7 +85,7 @@ namespace ao::rt::test
       // Setup state in first runtime
       runtime.workspace().navigateTo(ListId{10});
       runtime.workspace().navigateTo(ListId{20});
-      runtime.persistence().save();
+      runtime.workspace().saveSession(runtime.configStore());
 
       auto loaded = rt::SessionState{};
       workspaceConfigStore->load("workspace", loaded);
@@ -99,7 +98,7 @@ namespace ao::rt::test
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = workspaceConfigStore}};
 
-      session2.persistence().restore();
+      session2.workspace().restoreSession(session2.configStore());
 
       auto const layout = session2.workspace().layoutState();
       CHECK(layout.openViews.size() == 2);
@@ -117,7 +116,7 @@ namespace ao::rt::test
       CHECK(savedState.groupBy == TrackGroupKey::Artist);
       CHECK_FALSE(savedState.sortBy.empty());
 
-      runtime.persistence().save();
+      runtime.workspace().saveSession(runtime.configStore());
 
       auto loaded = rt::SessionState{};
       workspaceConfigStore->load("workspace", loaded);
@@ -131,7 +130,7 @@ namespace ao::rt::test
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = workspaceConfigStore}};
 
-      session2.persistence().restore();
+      session2.workspace().restoreSession(session2.configStore());
 
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);
@@ -144,7 +143,7 @@ namespace ao::rt::test
     {
       // Ungrouped view
       runtime.workspace().navigateTo(ListId{10});
-      runtime.persistence().save();
+      runtime.workspace().saveSession(runtime.configStore());
 
       auto session2 = rt::AppRuntime{
         rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
@@ -152,7 +151,7 @@ namespace ao::rt::test
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = workspaceConfigStore}};
 
-      session2.persistence().restore();
+      session2.workspace().restoreSession(session2.configStore());
 
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);

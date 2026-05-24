@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ao/audio/Backend.h"
-#include "runtime/CorePrimitives.h"
+#include <ao/rt/CorePrimitives.h>
 
 namespace ao::rt
 {

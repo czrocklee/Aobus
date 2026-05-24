@@ -5,7 +5,7 @@
 
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
-#include "runtime/yaml/Utils.h" // NOLINT(misc-include-cleaner)
+#include <ao/rt/yaml/Utils.h> // NOLINT(misc-include-cleaner)
 
 namespace ao::rt::yaml
 {

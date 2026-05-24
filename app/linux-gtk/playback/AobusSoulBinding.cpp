@@ -6,8 +6,8 @@
 #include "ao/audio/Backend.h"
 #include "ao/audio/Types.h"
 #include "app/AobusSoul.h"
-#include "runtime/PlaybackService.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/PlaybackService.h>
+#include <ao/rt/StateTypes.h>
 
 #include <gdkmm/rgba.h>
 

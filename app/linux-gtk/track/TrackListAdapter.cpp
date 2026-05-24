@@ -7,8 +7,8 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/utility/ScopedTimer.h"
 #include "ao/utility/VariantVisitor.h"
-#include "runtime/ProjectionTypes.h"
-#include "runtime/TrackSource.h"
+#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/TrackSource.h>
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "ao/library/FileManifestStore.h"
-#include "runtime/StateTypes.h"
-#include "runtime/TrackField.h"
+#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackField.h>
 #include <ao/library/MusicLibrary.h>
 
 #include <chrono>

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "runtime/NotificationService.h"
+#include <ao/rt/NotificationService.h>
 
-#include "runtime/CorePrimitives.h"
-#include "runtime/StateTypes.h"
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/StateTypes.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>

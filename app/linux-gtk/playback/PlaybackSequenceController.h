@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ao/Type.h"
-#include "runtime/CorePrimitives.h"
+#include <ao/rt/CorePrimitives.h>
 
 #include <cstddef>
 #include <memory>

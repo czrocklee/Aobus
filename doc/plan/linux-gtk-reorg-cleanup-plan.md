@@ -476,11 +476,11 @@ Split `layout/` into sub-directories to match the target structure. This is sepa
 | `layout/LayoutDocument.*` | `layout/document/LayoutDocument.*` |
 | `layout/LayoutNode.h` | `layout/document/LayoutNode.h` |
 | `layout/LayoutYaml.h` | `layout/document/LayoutYaml.h` |
-| `layout/ILayoutComponent.h` | `layout/runtime/ILayoutComponent.h` |
-| `layout/ComponentContext.h` | `layout/runtime/ComponentContext.h` |
-| `layout/ComponentRegistry.*` | `layout/runtime/ComponentRegistry.*` |
-| `layout/LayoutHost.*` | `layout/runtime/LayoutHost.*` |
-| `layout/LayoutRuntime.*` | `layout/runtime/LayoutRuntime.*` |
+| `layout/ILayoutComponent.h` | `layout/rt/ILayoutComponent.h` |
+| `layout/ComponentContext.h` | `layout/rt/ComponentContext.h` |
+| `layout/ComponentRegistry.*` | `layout/rt/ComponentRegistry.*` |
+| `layout/LayoutHost.*` | `layout/rt/LayoutHost.*` |
+| `layout/LayoutRuntime.*` | `layout/rt/LayoutRuntime.*` |
 
 `layout/LayoutConstants.h` stays at the `layout/` root; it is a leaf dependency used by both `document/` and `components/`.
 
@@ -492,8 +492,8 @@ Update all layout-internal includes to use the new sub-directory paths:
 
 ```cpp
 #include "layout/document/LayoutDocument.h"
-#include "layout/runtime/ComponentContext.h"
-#include "layout/runtime/ComponentRegistry.h"
+#include "layout/rt/ComponentContext.h"
+#include "layout/rt/ComponentRegistry.h"
 ```
 
 ### Verification

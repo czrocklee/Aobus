@@ -9,7 +9,7 @@
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
 #include "ao/lmdb/Transaction.h"
-#include "runtime/TrackSource.h"
+#include <ao/rt/TrackSource.h>
 #include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -44,7 +44,7 @@ namespace ao::model::test
     std::uint16_t year = 0;
     std::uint16_t discNumber = 0;
     std::uint16_t trackNumber = 0;
-    std::optional<std::uint32_t> coverArtId;
+    std::optional<std::uint32_t> optCoverArtId;
     bool missing = false;
   };
 
@@ -152,7 +152,7 @@ namespace ao::model::test
 
       if (auto const coverArtId = metadata.coverArtId(); coverArtId != 0)
       {
-        row.coverArtId = coverArtId;
+        row.optCoverArtId = coverArtId;
       }
 
       auto const result = _rowCache.emplace(id, std::move(row));
