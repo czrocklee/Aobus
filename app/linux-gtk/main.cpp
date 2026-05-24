@@ -24,6 +24,7 @@
 #include <gtkmm/application.h>
 
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -96,7 +97,7 @@ namespace
   struct CliOptions final
   {
     log::LogLevel logLevel = log::LogLevel::Info;
-    int exitCode = 0;
+    std::int32_t exitCode = 0;
     bool shouldExit = false;
   };
 
@@ -116,7 +117,7 @@ namespace
                                                                  {"critical", log::LogLevel::Critical},
                                                                  {"off", log::LogLevel::Off}};
 
-    int verbosity = 0;
+    std::int32_t verbosity = 0;
     cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
 
     cliApp.add_option("--log-level", options.logLevel, "Set the logging level")
@@ -133,7 +134,7 @@ namespace
 
     try
     {
-      cliApp.parse(static_cast<int>(args.size()), args.data());
+      cliApp.parse(static_cast<std::int32_t>(args.size()), args.data());
     }
     catch (CLI::ParseError const& e)
     {
@@ -279,7 +280,7 @@ int main(int argc, char* argv[])
       gtkArgv.push_back(arg.data());
     }
 
-    int const gtkArgc = static_cast<int>(gtkArgv.size());
+    std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArgv.size());
 
     APP_LOG_INFO("Entering GTK main loop");
     return app->run(gtkArgc, gtkArgv.data());

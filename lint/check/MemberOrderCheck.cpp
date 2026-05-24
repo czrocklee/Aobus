@@ -8,6 +8,8 @@
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/Specifiers.h>
 
+#include <cstdint>
+
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::readability
@@ -49,7 +51,7 @@ namespace clang::tidy::readability
     }
 
     void verifyAccessSpecifierOrder(CXXRecordDecl const* record,
-                                    int lastAccessValue,
+                                    std::int32_t lastAccessValue,
                                     bool sawExplicitAccess,
                                     ClangTidyCheck& check)
     {
@@ -69,7 +71,7 @@ namespace clang::tidy::readability
 
         if (auto const* as = dyn_cast<AccessSpecDecl>(decl))
         {
-          int const newAccess = static_cast<int>(as->getAccess());
+          std::int32_t const newAccess = static_cast<std::int32_t>(as->getAccess());
 
           if (sawExplicitAccess && newAccess < lastAccessValue && !reported)
           {
@@ -120,7 +122,7 @@ namespace clang::tidy::readability
     }
 
     // class: default is private (2), struct: default is public (0)
-    int const lastAccessValue = (record->isClass() && !record->isStruct()) ? 2 : 0;
+    std::int32_t const lastAccessValue = (record->isClass() && !record->isStruct()) ? 2 : 0;
     bool const sawMemberInImplicit = hasImplicitMembersBeforeAccessSpecifier(record);
 
     verifyAccessSpecifierOrder(record, lastAccessValue, sawMemberInImplicit, *this);

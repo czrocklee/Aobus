@@ -16,9 +16,7 @@ TEST_CASE("builtinTrackPresentationPresets contains all expected ids", "[runtime
   auto presets = builtinTrackPresentationPresets();
 
   auto findPreset = [&](std::string_view id) -> bool
-  {
-    return std::ranges::find(presets, id, [](TrackPresentationPreset const& p) { return p.spec.id; }) != presets.end();
-  };
+  { return std::ranges::contains(presets, id, [](TrackPresentationPreset const& p) { return p.spec.id; }); };
 
   CHECK(findPreset("songs"));
   CHECK(findPreset("albums"));

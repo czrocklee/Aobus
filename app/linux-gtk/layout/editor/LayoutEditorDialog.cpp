@@ -758,8 +758,7 @@ namespace ao::gtk::layout::editor
       auto layoutProps = optDescriptorOption ? optDescriptorOption->layoutProps : std::vector<PropertyDescriptor>{};
       auto const addCommon = [&](PropertyDescriptor prop)
       {
-        if (std::ranges::find_if(layoutProps, [&](auto const& lp) { return lp.name == prop.name; }) ==
-            layoutProps.end())
+        if (!std::ranges::contains(layoutProps, prop.name, &PropertyDescriptor::name))
         {
           layoutProps.push_back(prop);
         }

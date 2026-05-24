@@ -28,6 +28,9 @@ add_library(AobusLintPlugin MODULE
   check/LambdaParamsCheck.cpp
   check/MemberOrderCheck.cpp
   check/UseStdNumbersCheck.cpp
+  check/UseRangesContainsCheck.cpp
+  check/UseRangesProjectionCheck.cpp
+  check/UseRangesAnyOfCheck.cpp
   AobusLintModule.cpp
 )
 

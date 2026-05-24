@@ -327,16 +327,16 @@ fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
     if $ALL_MODE; then
-        echo "Checking all .cpp/.h/.hpp files in lib/ app/ include/ test/" >&2
+        echo "Checking all .cpp/.h/.hpp files in lib/ app/ include/ test/ lint/" >&2
         mapfile -t FILES < <(
-            find lib app include test -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
-                ! -name 'fakeit.hpp' ! -name 'main.cpp' ! -path '*/test/integration/lint/*' | sort
+            find lib app include test lint -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
+                ! -path '*/test/integration/lint/*' | sort
         )
     elif [[ ${#FOLDER_DIRS[@]} -gt 0 ]]; then
         echo "Checking folders: ${FOLDER_DIRS[*]}" >&2
         mapfile -t FILES < <(
             find "${FOLDER_DIRS[@]}" -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
-                ! -name 'fakeit.hpp' ! -name 'main.cpp' ! -path '*/test/integration/lint/*' | sort
+                ! -path '*/test/integration/lint/*' | sort
         )
     else
         # Default to the local main branch; when already on main, use the previous commit.

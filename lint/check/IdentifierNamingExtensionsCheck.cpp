@@ -1,8 +1,9 @@
 #include "check/IdentifierNamingExtensionsCheck.h"
+
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
-#include <algorithm>
+
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
@@ -10,6 +11,8 @@
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/Specifiers.h>
 #include <llvm/ADT/StringRef.h>
+
+#include <algorithm>
 
 using namespace clang::ast_matchers;
 
@@ -24,7 +27,7 @@ namespace clang::tidy::readability
 
     bool hasPrivateMembers(CXXRecordDecl const* record)
     {
-      return std::ranges::contains(record->fields(), AS_private, &clang::Decl::getAccess);
+      return std::ranges::contains(record->fields(), AS_private, &Decl::getAccess);
     }
   } // namespace
 

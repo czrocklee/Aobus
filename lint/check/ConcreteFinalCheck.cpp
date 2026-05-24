@@ -1,7 +1,8 @@
 #include "check/ConcreteFinalCheck.h"
+
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
-#include <algorithm>
+
 #include <clang/AST/Attrs.inc>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
@@ -11,6 +12,8 @@
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/Specifiers.h>
+
+#include <algorithm>
 
 using namespace clang::ast_matchers;
 
@@ -64,7 +67,7 @@ namespace clang::tidy::readability
       }
 
       // Skip if has protected ctor or dtor — suggests designed for inheritance
-      if (std::ranges::contains(record->ctors(), AS_protected, &clang::Decl::getAccess))
+      if (std::ranges::contains(record->ctors(), AS_protected, &Decl::getAccess))
       {
         return false;
       }

@@ -38,6 +38,9 @@ get_check_alias() {
         ThreadingPolicyCheckFixture.cpp) echo "aobus-threading-policy" ;;
         UnusedSuppressionStyleCheckFixture.cpp) echo "aobus-readability-unused-suppression-style" ;;
         UseIfInitStatementCheckFixture.cpp) echo "aobus-readability-use-if-init-statement" ;;
+        UseRangesContainsCheckFixture.cpp) echo "aobus-modernize-use-ranges-contains" ;;
+        UseRangesProjectionCheckFixture.cpp) echo "aobus-modernize-use-ranges-projection" ;;
+        UseRangesAnyOfCheckFixture.cpp) echo "aobus-modernize-use-ranges-any-of" ;;
         UseStdNumbersCheckFixture.cpp) echo "aobus-modernize-use-std-numbers" ;;
         *) return 1 ;;
     esac

@@ -98,7 +98,7 @@ namespace ao::rt
 
   void WorkspaceService::addView(ViewId const viewId)
   {
-    if (std::ranges::find(_impl->layoutState.openViews, viewId) == _impl->layoutState.openViews.end())
+    if (!std::ranges::contains(_impl->layoutState.openViews, viewId))
     {
       _impl->layoutState.openViews.push_back(viewId);
       _impl->layoutState.revision++;
@@ -149,7 +149,7 @@ namespace ao::rt
 
     if (targetViewId != rt::kInvalidViewId)
     {
-      if (std::ranges::find(_impl->layoutState.openViews, targetViewId) == _impl->layoutState.openViews.end())
+      if (!std::ranges::contains(_impl->layoutState.openViews, targetViewId))
       {
         _impl->layoutState.openViews.push_back(targetViewId);
       }

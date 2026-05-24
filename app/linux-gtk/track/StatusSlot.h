@@ -14,10 +14,10 @@
 #include <gtkmm/label.h>
 #include <gtkmm/progressbar.h>
 #include <gtkmm/widget.h>
+#include <sigc++/connection.h>
 
 #include <chrono>
 #include <cstddef>
-#include <memory>
 #include <optional>
 #include <string>
 

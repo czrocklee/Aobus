@@ -1,4 +1,5 @@
 #include "check/BracedInitializationCheck.h"
+
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
@@ -12,7 +13,10 @@
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Lex/Lexer.h"
+
 #include <llvm/ADT/StringSwitch.h>
+
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -64,10 +68,10 @@ namespace clang::tidy::readability
         return false;
       }
 
-      unsigned numSourceArgs = 0;
+      std::uint32_t numSourceArgs = 0;
       Expr const* firstArg = nullptr;
 
-      for (unsigned i = 0; i < construct->getNumArgs(); ++i)
+      for (std::uint32_t i = 0; i < construct->getNumArgs(); ++i)
       {
         if (Expr const* const arg = construct->getArg(i); arg != nullptr && !isa<CXXDefaultArgExpr>(arg))
         {
@@ -166,9 +170,9 @@ namespace clang::tidy::readability
         return true;
       }
 
-      static constexpr int kScanNeighborhood = 3;
+      static constexpr std::int32_t kScanNeighborhood = 3;
 
-      for (int i = 1; i <= kScanNeighborhood; ++i)
+      for (std::int32_t i = 1; i <= kScanNeighborhood; ++i)
       {
         if (*(data + i) == expected)
         {
@@ -247,9 +251,8 @@ namespace clang::tidy::readability
         return std::nullopt;
       }
 
-      return BraceTarget{.lParen = cast->getLParenLoc(),
-                         .rParen = cast->getRParenLoc(),
-                         .name = cast->getType().getAsString()};
+      return BraceTarget{
+        .lParen = cast->getLParenLoc(), .rParen = cast->getRParenLoc(), .name = cast->getType().getAsString()};
     }
 
     std::optional<BraceTarget> analyzeTempObject(CXXTemporaryObjectExpr const* temp)

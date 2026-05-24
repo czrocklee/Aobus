@@ -161,7 +161,7 @@ namespace ao::rt
 
         for (auto const id : trackIds)
         {
-          if (std::ranges::find(_impl->cachedSnapshot.trackIds, id) != _impl->cachedSnapshot.trackIds.end())
+          if (std::ranges::contains(_impl->cachedSnapshot.trackIds, id))
           {
             intersect = true;
             break;

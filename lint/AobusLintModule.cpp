@@ -14,6 +14,9 @@
 #include "check/ThreadingPolicyCheck.h"
 #include "check/UnusedSuppressionStyleCheck.h"
 #include "check/UseIfInitStatementCheck.h"
+#include "check/UseRangesAnyOfCheck.h"
+#include "check/UseRangesContainsCheck.h"
+#include "check/UseRangesProjectionCheck.h"
 #include "check/UseStdNumbersCheck.h"
 #include "clang-tidy/ClangTidyModule.h"
 #include "clang-tidy/ClangTidyModuleRegistry.h"
@@ -36,11 +39,15 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<BracedInitializationCheck>("aobus-modernize-braced-initialization");
       checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");
       checkFactories.registerCheck<OptionalNamingAndUsageCheck>("aobus-readability-optional-naming-and-usage");
-      checkFactories.registerCheck<RedundantNamespaceQualificationCheck>("aobus-readability-redundant-namespace-qualification");
+      checkFactories.registerCheck<RedundantNamespaceQualificationCheck>(
+        "aobus-readability-redundant-namespace-qualification");
       checkFactories.registerCheck<StdCLibraryQualificationCheck>("aobus-readability-std-c-library-qualification");
       checkFactories.registerCheck<ThreadingPolicyCheck>("aobus-threading-policy");
       checkFactories.registerCheck<UnusedSuppressionStyleCheck>("aobus-readability-unused-suppression-style");
       checkFactories.registerCheck<UseIfInitStatementCheck>("aobus-readability-use-if-init-statement");
+      checkFactories.registerCheck<UseRangesContainsCheck>("aobus-modernize-use-ranges-contains");
+      checkFactories.registerCheck<UseRangesProjectionCheck>("aobus-modernize-use-ranges-projection");
+      checkFactories.registerCheck<modernize::UseRangesAnyOfCheck>("aobus-modernize-use-ranges-any-of");
       checkFactories.registerCheck<UseStdNumbersCheck>("aobus-modernize-use-std-numbers");
     }
   };

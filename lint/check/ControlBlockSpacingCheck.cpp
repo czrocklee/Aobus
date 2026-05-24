@@ -18,6 +18,7 @@
 #include <llvm/Support/Casting.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <utility>
 #include <vector>
@@ -28,16 +29,16 @@ namespace clang::tidy::readability
 {
   namespace
   {
-    bool isCommentAtLineStart(unsigned commentOffset, StringRef buffer)
+    bool isCommentAtLineStart(std::uint32_t commentOffset, StringRef buffer)
     {
       if (commentOffset == 0)
       {
         return true;
       }
 
-      for (int i = static_cast<int>(commentOffset) - 1; i >= 0; --i)
+      for (std::int32_t i = static_cast<std::int32_t>(commentOffset) - 1; i >= 0; --i)
       {
-        char const ch = buffer[static_cast<size_t>(i)];
+        char const ch = buffer[static_cast<std::size_t>(i)];
 
         if (ch == '\n' || ch == '\r')
         {
@@ -68,14 +69,14 @@ namespace clang::tidy::readability
       {
         auto const& prevToken = tokens[currIdx - 1];
         auto const& currToken = tokens[currIdx];
-        unsigned const prevEnd = sm.getFileOffset(prevToken.getLocation()) + prevToken.getLength();
-        unsigned const nextStart = sm.getFileOffset(currToken.getLocation());
+        std::uint32_t const prevEnd = sm.getFileOffset(prevToken.getLocation()) + prevToken.getLength();
+        std::uint32_t const nextStart = sm.getFileOffset(currToken.getLocation());
 
         if (StringRef const gap = buffer.substr(prevEnd, nextStart - prevEnd); gap.count('\n') >= 2)
         {
           if (currIdx == tokenIndex)
           {
-            unsigned const commentOffset = sm.getFileOffset(prevToken.getLocation());
+            std::uint32_t const commentOffset = sm.getFileOffset(prevToken.getLocation());
 
             if (isCommentAtLineStart(commentOffset, buffer))
             {
@@ -99,7 +100,7 @@ namespace clang::tidy::readability
     size_t skipSameLineTokens(size_t startIndex,
                               std::vector<Token> const& tokens,
                               SourceManager const& sm,
-                              unsigned line)
+                              std::uint32_t line)
     {
       size_t idx = startIndex;
 
@@ -118,7 +119,7 @@ namespace clang::tidy::readability
       if (idx < tokens.size() && tokens[idx].is(tok::raw_identifier) && tokens[idx].getRawIdentifier() == "while")
       {
         idx++;
-        unsigned const whileLine = sm.getSpellingLineNumber(tokens[idx - 1].getLocation());
+        std::uint32_t const whileLine = sm.getSpellingLineNumber(tokens[idx - 1].getLocation());
 
         while (idx < tokens.size() && sm.getSpellingLineNumber(tokens[idx].getLocation()) == whileLine)
         {
@@ -146,7 +147,7 @@ namespace clang::tidy::readability
       while (codeIdx < tokens.size() && tokens[codeIdx].is(tok::comment))
       {
         codeIdx++;
-        unsigned const commentLine = sm.getSpellingLineNumber(tokens[codeIdx - 1].getLocation());
+        std::uint32_t const commentLine = sm.getSpellingLineNumber(tokens[codeIdx - 1].getLocation());
 
         while (codeIdx < tokens.size() && sm.getSpellingLineNumber(tokens[codeIdx].getLocation()) == commentLine)
         {
@@ -231,11 +232,11 @@ namespace clang::tidy::readability
     {
       size_t const codePrevIndex = commentStartIndex - 1;
       auto const prevCodeTok = Token{tokens[codePrevIndex]};
-      unsigned const prevEnd = sm.getFileOffset(prevCodeTok.getLocation()) + prevCodeTok.getLength();
+      std::uint32_t const prevEnd = sm.getFileOffset(prevCodeTok.getLocation()) + prevCodeTok.getLength();
       auto const nextToken = Token{tokens[commentStartIndex]};
-      unsigned const nextStart = sm.getFileOffset(nextToken.getLocation());
+      std::uint32_t const nextStart = sm.getFileOffset(nextToken.getLocation());
       StringRef const gap = buffer.substr(prevEnd, nextStart - prevEnd);
-      int const newlines = static_cast<int>(gap.count('\n'));
+      std::int32_t const newlines = static_cast<std::int32_t>(gap.count('\n'));
 
       bool const isBlockStart = prevCodeTok.is(tok::l_brace) || prevCodeTok.is(tok::colon);
 
@@ -259,12 +260,14 @@ namespace clang::tidy::readability
                                                        ASTContext& context,
                                                        StringRef stmtName)
   {
-    unsigned const offset = sm.getFileOffset(loc);
+    std::uint32_t const offset = sm.getFileOffset(loc);
     FileID const fid = sm.getFileID(loc);
     auto const& tokens = getTokens(fid, sm, context.getLangOpts());
 
-    auto const it = llvm::lower_bound(
-      tokens, offset, [&](Token const& token, unsigned off) { return sm.getFileOffset(token.getLocation()) < off; });
+    auto const it = llvm::lower_bound(tokens,
+                                      offset,
+                                      [&](Token const& token, std::uint32_t off)
+                                      { return sm.getFileOffset(token.getLocation()) < off; });
 
     if (it == tokens.end() || sm.getFileOffset(it->getLocation()) != offset)
     {
@@ -278,12 +281,14 @@ namespace clang::tidy::readability
 
   void ControlBlockSpacingCheck::checkBlockStart(SourceLocation loc, SourceManager& sm, ASTContext& context)
   {
-    unsigned const offset = sm.getFileOffset(loc);
+    std::uint32_t const offset = sm.getFileOffset(loc);
     FileID const fid = sm.getFileID(loc);
     auto const& tokens = getTokens(fid, sm, context.getLangOpts());
 
-    auto const it = llvm::lower_bound(
-      tokens, offset, [&](Token const& token, unsigned off) { return sm.getFileOffset(token.getLocation()) < off; });
+    auto const it = llvm::lower_bound(tokens,
+                                      offset,
+                                      [&](Token const& token, std::uint32_t off)
+                                      { return sm.getFileOffset(token.getLocation()) < off; });
 
     if (it == tokens.end() || sm.getFileOffset(it->getLocation()) != offset)
     {
@@ -294,9 +299,9 @@ namespace clang::tidy::readability
 
     if (index + 1 < tokens.size())
     {
-      unsigned const prevEnd = offset + 1;
+      std::uint32_t const prevEnd = offset + 1;
       auto const& nextToken = tokens[index + 1];
-      unsigned const nextStart = sm.getFileOffset(nextToken.getLocation());
+      std::uint32_t const nextStart = sm.getFileOffset(nextToken.getLocation());
       StringRef const gap = sm.getBufferData(fid).substr(prevEnd, nextStart - prevEnd);
 
       if (gap.count('\n') >= 2)
@@ -307,8 +312,8 @@ namespace clang::tidy::readability
 
         if (firstNl != StringRef::npos && lastNl != StringRef::npos && firstNl != lastNl)
         {
-          SourceLocation const removeStart = loc.getLocWithOffset(1 + static_cast<int>(firstNl) + 1);
-          SourceLocation const removeEnd = loc.getLocWithOffset(1 + static_cast<int>(lastNl) + 1);
+          SourceLocation const removeStart = loc.getLocWithOffset(1 + static_cast<std::int32_t>(firstNl) + 1);
+          SourceLocation const removeEnd = loc.getLocWithOffset(1 + static_cast<std::int32_t>(lastNl) + 1);
           db << FixItHint::CreateRemoval(CharSourceRange::getCharRange(removeStart, removeEnd));
         }
       }
@@ -317,12 +322,14 @@ namespace clang::tidy::readability
 
   void ControlBlockSpacingCheck::checkBlockEnd(SourceLocation loc, SourceManager& sm, ASTContext& context)
   {
-    unsigned const offset = sm.getFileOffset(loc);
+    std::uint32_t const offset = sm.getFileOffset(loc);
     FileID const fid = sm.getFileID(loc);
     auto const& tokens = getTokens(fid, sm, context.getLangOpts());
 
-    auto const it = llvm::lower_bound(
-      tokens, offset, [&](Token const& token, unsigned off) { return sm.getFileOffset(token.getLocation()) < off; });
+    auto const it = llvm::lower_bound(tokens,
+                                      offset,
+                                      [&](Token const& token, std::uint32_t off)
+                                      { return sm.getFileOffset(token.getLocation()) < off; });
 
     if (it == tokens.end() || sm.getFileOffset(it->getLocation()) != offset)
     {
@@ -334,8 +341,8 @@ namespace clang::tidy::readability
     if (index > 0)
     {
       auto const& prevToken = tokens[index - 1];
-      unsigned const prevEnd = sm.getFileOffset(prevToken.getLocation()) + prevToken.getLength();
-      unsigned const nextStart = offset;
+      std::uint32_t const prevEnd = sm.getFileOffset(prevToken.getLocation()) + prevToken.getLength();
+      std::uint32_t const nextStart = offset;
       StringRef const gap = sm.getBufferData(fid).substr(prevEnd, nextStart - prevEnd);
 
       if (gap.count('\n') >= 2)
@@ -347,9 +354,9 @@ namespace clang::tidy::readability
         if (firstNl != StringRef::npos && lastNl != StringRef::npos && firstNl != lastNl)
         {
           SourceLocation const removeStart = prevToken.getLocation().getLocWithOffset(
-            static_cast<int>(prevToken.getLength()) + static_cast<int>(firstNl) + 1);
+            static_cast<std::int32_t>(prevToken.getLength()) + static_cast<std::int32_t>(firstNl) + 1);
           SourceLocation const removeEnd = prevToken.getLocation().getLocWithOffset(
-            static_cast<int>(prevToken.getLength()) + static_cast<int>(lastNl) + 1);
+            static_cast<std::int32_t>(prevToken.getLength()) + static_cast<std::int32_t>(lastNl) + 1);
           db << FixItHint::CreateRemoval(CharSourceRange::getCharRange(removeStart, removeEnd));
         }
       }
@@ -383,13 +390,15 @@ namespace clang::tidy::readability
                                                         ASTContext& context,
                                                         bool isDoWhile)
   {
-    unsigned const offset = sm.getFileOffset(rBraceLoc);
+    std::uint32_t const offset = sm.getFileOffset(rBraceLoc);
     FileID const fid = sm.getFileID(rBraceLoc);
     auto const& tokens = getTokens(fid, sm, context.getLangOpts());
     StringRef const buffer = sm.getBufferData(fid);
 
-    auto const it = llvm::lower_bound(
-      tokens, offset, [&](Token const& token, unsigned off) { return sm.getFileOffset(token.getLocation()) < off; });
+    auto const it = llvm::lower_bound(tokens,
+                                      offset,
+                                      [&](Token const& token, std::uint32_t off)
+                                      { return sm.getFileOffset(token.getLocation()) < off; });
 
     if (it == tokens.end() || sm.getFileOffset(it->getLocation()) != offset)
     {
@@ -397,7 +406,7 @@ namespace clang::tidy::readability
     }
 
     size_t const rBraceIdx = static_cast<size_t>(std::distance(tokens.begin(), it));
-    unsigned const rBraceLine = sm.getSpellingLineNumber(rBraceLoc);
+    std::uint32_t const rBraceLine = sm.getSpellingLineNumber(rBraceLoc);
 
     size_t nextIdx = skipSameLineTokens(rBraceIdx + 1, tokens, sm, rBraceLine);
 
@@ -422,13 +431,13 @@ namespace clang::tidy::readability
 
     // For do-while, the "closing brace" conceptually ends at the while(); line,
     // so measure the gap from the last token of the while() condition (the ';').
-    unsigned const gapStartOffset =
+    std::uint32_t const gapStartOffset =
       isDoWhile ? sm.getFileOffset(tokens[nextIdx - 1].getLocation()) + 1 : sm.getFileOffset(rBraceLoc) + 1;
 
-    unsigned const nextCodeStart = sm.getFileOffset(tokens[codeIdx].getLocation());
+    std::uint32_t const nextCodeStart = sm.getFileOffset(tokens[codeIdx].getLocation());
     StringRef const gap = buffer.substr(gapStartOffset, nextCodeStart - gapStartOffset);
 
-    if (int const newlines = static_cast<int>(gap.count('\n')); newlines < 2)
+    if (std::int32_t const newlines = static_cast<std::int32_t>(gap.count('\n')); newlines < 2)
     {
       if (newlines >= 1 && codeIdx > nextIdx && tokens[codeIdx - 1].is(tok::comment))
       {
@@ -563,7 +572,7 @@ namespace clang::tidy::readability
         {
           if (auto const* parentTry = grandparent.get<CXXTryStmt>())
           {
-            if (unsigned const numHandlers = parentTry->getNumHandlers();
+            if (std::uint32_t const numHandlers = parentTry->getNumHandlers();
                 numHandlers > 0 && parentTry->getHandler(numHandlers - 1) != parentCatch)
             {
               isIntermediateBranch = true;
@@ -571,7 +580,7 @@ namespace clang::tidy::readability
           }
         }
       }
-      else if (parent.get<DoStmt>())
+      else if (parent.get<DoStmt>() != nullptr)
       {
         isDo = true;
       }

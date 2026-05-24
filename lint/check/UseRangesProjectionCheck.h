@@ -7,12 +7,10 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 2.6.5: avoid redundant namespace qualification when the
-  /// reference is already within that namespace (or a sub-namespace).
-  class RedundantNamespaceQualificationCheck : public ClangTidyCheck
+  class UseRangesProjectionCheck : public ClangTidyCheck
   {
   public:
-    RedundantNamespaceQualificationCheck(StringRef name, ClangTidyContext* context)
+    UseRangesProjectionCheck(StringRef name, ClangTidyContext* context)
       : ClangTidyCheck{name, context}
     {
     }

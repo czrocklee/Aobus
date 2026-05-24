@@ -1,15 +1,22 @@
 #include "check/RedundantNamespaceQualificationCheck.h"
 
-#include "clang/AST/ASTContext.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Lex/Lexer.h"
-
+#include <clang/AST/ASTContext.h>
+#include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
+#include <clang/AST/DeclBase.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/NestedNameSpecifier.h>
 #include <clang/AST/TypeLoc.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
+#include <llvm/ADT/SmallVector.h>
+
+#include <algorithm>
 
 using namespace clang::ast_matchers;
 
@@ -20,6 +27,7 @@ namespace clang::tidy::readability
     DeclContext const* getEnclosingContext(ASTContext& context, DynTypedNode const& node)
     {
       auto parents = context.getParents(node);
+
       if (parents.empty())
       {
         return nullptr;
@@ -27,28 +35,32 @@ namespace clang::tidy::readability
 
       for (auto const& parent : parents)
       {
-        if (auto const* d = parent.get<Decl>())
+        if (auto const* decl = parent.get<Decl>())
         {
-          if (auto const* dc = dyn_cast<DeclContext>(d))
+          if (auto const* dc = dyn_cast<DeclContext>(decl))
           {
             return dc;
           }
-          return d->getDeclContext();
+
+          return decl->getDeclContext();
         }
+
         if (auto const* dc = getEnclosingContext(context, parent))
         {
           return dc;
         }
       }
+
       return nullptr;
     }
 
     bool isAncestor(DeclContext const* ancestor, DeclContext const* descendant)
     {
-      if ((ancestor == nullptr) || (descendant == nullptr))
+      if (ancestor == nullptr || descendant == nullptr)
       {
         return false;
       }
+
       for (auto const* dc = descendant; dc != nullptr; dc = dc->getParent())
       {
         if (dc == ancestor)
@@ -56,6 +68,7 @@ namespace clang::tidy::readability
           return true;
         }
       }
+
       return false;
     }
   } // namespace
@@ -70,27 +83,30 @@ namespace clang::tidy::readability
   {
     // Enforces Rule 2.6.5: avoid redundant namespace qualification.
     auto const& sm = *result.SourceManager;
-    NestedNameSpecifierLoc specLoc;
-    DynTypedNode node;
+    auto specLoc = NestedNameSpecifierLoc{};
+    auto node = DynTypedNode{};
 
-    if (auto const* r = result.Nodes.getNodeAs<DeclRefExpr>("declRef"))
+    if (auto const* declRef = result.Nodes.getNodeAs<DeclRefExpr>("declRef"))
     {
-      if (!r->hasQualifier())
+      if (!declRef->hasQualifier())
       {
         return;
       }
-      specLoc = r->getQualifierLoc();
-      node = DynTypedNode::create(*r);
+
+      specLoc = declRef->getQualifierLoc();
+      node = DynTypedNode::create(*declRef);
     }
-    else if (auto const* t = result.Nodes.getNodeAs<TypeLoc>("typeLoc"))
+    else if (auto const* typeLoc = result.Nodes.getNodeAs<TypeLoc>("typeLoc"))
     {
-      auto et = t->getAs<ElaboratedTypeLoc>();
+      auto et = typeLoc->getAs<ElaboratedTypeLoc>();
+
       if (!et)
       {
         return;
       }
+
       specLoc = et.getQualifierLoc();
-      node = DynTypedNode::create(*t);
+      node = DynTypedNode::create(*typeLoc);
     }
     else
     {
@@ -103,37 +119,44 @@ namespace clang::tidy::readability
     }
 
     SourceLocation const loc = specLoc.getBeginLoc();
+
     if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
     {
       return;
     }
 
     DeclContext const* currentContext = getEnclosingContext(*result.Context, node);
+
     if (currentContext == nullptr)
     {
       return;
     }
 
-    SmallVector<NestedNameSpecifierLoc, 4> chain;
-    for (NestedNameSpecifierLoc l = specLoc; l; l = l.getPrefix())
-    {
-      chain.push_back(l);
-    }
-    std::reverse(chain.begin(), chain.end());
+    auto chain = SmallVector<NestedNameSpecifierLoc, 4>{};
 
-    NestedNameSpecifierLoc lastRedundant;
-    for (auto const& l : chain)
+    for (auto currentLoc = specLoc; currentLoc; currentLoc = currentLoc.getPrefix())
     {
-      NestedNameSpecifier* spec = l.getNestedNameSpecifier();
+      chain.push_back(currentLoc);
+    }
+
+    std::ranges::reverse(chain);
+
+    auto lastRedundant = NestedNameSpecifierLoc{};
+
+    for (auto const& specLocItem : chain)
+    {
+      NestedNameSpecifier const* spec = specLocItem.getNestedNameSpecifier();
+
       if (spec->getKind() == NestedNameSpecifier::Global)
       {
         // Keep global qualification if present, as it's usually intentional.
         break;
       }
 
-      if ((spec->getKind() == NestedNameSpecifier::Namespace) || (spec->getKind() == NestedNameSpecifier::NamespaceAlias))
+      if (spec->getKind() == NestedNameSpecifier::Namespace || spec->getKind() == NestedNameSpecifier::NamespaceAlias)
       {
         NamespaceDecl const* ns = nullptr;
+
         if (spec->getKind() == NestedNameSpecifier::Namespace)
         {
           ns = spec->getAsNamespace();
@@ -143,24 +166,24 @@ namespace clang::tidy::readability
           ns = spec->getAsNamespaceAlias()->getNamespace();
         }
 
-        if ((ns != nullptr) && isAncestor(ns, currentContext))
+        if (ns != nullptr && isAncestor(ns, currentContext))
         {
-          lastRedundant = l;
+          lastRedundant = specLocItem;
           continue;
         }
       }
+
       break;
     }
 
     if (lastRedundant)
     {
-      SourceRange const range{specLoc.getBeginLoc(), lastRedundant.getEndLoc()};
-      CharSourceRange const charRange = CharSourceRange::getCharRange(range.getBegin(), Lexer::getLocForEndOfToken(range.getEnd(), 0, sm, result.Context->getLangOpts()));
-      StringRef const redundantText = Lexer::getSourceText(charRange, sm, result.Context->getLangOpts());
+      auto const range = SourceRange{specLoc.getBeginLoc(), lastRedundant.getEndLoc()};
+      auto const charRange = CharSourceRange::getCharRange(
+        range.getBegin(), Lexer::getLocForEndOfToken(range.getEnd(), 0, sm, result.Context->getLangOpts()));
+      auto const redundantText = Lexer::getSourceText(charRange, sm, result.Context->getLangOpts());
 
-      diag(loc, "redundant namespace qualification '%0'")
-        << redundantText
-        << FixItHint::CreateRemoval(range);
+      diag(loc, "redundant namespace qualification '%0'") << redundantText << FixItHint::CreateRemoval(range);
     }
   }
 } // namespace clang::tidy::readability

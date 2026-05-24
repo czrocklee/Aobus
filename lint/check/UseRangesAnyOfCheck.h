@@ -4,20 +4,21 @@
 #include <clang-tidy/ClangTidyDiagnosticConsumer.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Basic/LLVM.h>
+#include <clang/Basic/LangOptions.h>
 
-namespace clang::tidy::readability
+namespace clang::tidy::modernize
 {
-  /// Enforces Rule 2.6.5: avoid redundant namespace qualification when the
-  /// reference is already within that namespace (or a sub-namespace).
-  class RedundantNamespaceQualificationCheck : public ClangTidyCheck
+  class UseRangesAnyOfCheck : public ClangTidyCheck
   {
   public:
-    RedundantNamespaceQualificationCheck(StringRef name, ClangTidyContext* context)
+    UseRangesAnyOfCheck(StringRef name, ClangTidyContext* context)
       : ClangTidyCheck{name, context}
     {
     }
 
+    bool isLanguageVersionSupported(LangOptions const& langOpts) const override { return langOpts.CPlusPlus20; }
+
     void registerMatchers(ast_matchers::MatchFinder* finder) override;
     void check(ast_matchers::MatchFinder::MatchResult const& result) override;
   };
-} // namespace clang::tidy::readability
+} // namespace clang::tidy::modernize

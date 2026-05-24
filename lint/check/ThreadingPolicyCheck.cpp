@@ -1,4 +1,5 @@
 #include "ThreadingPolicyCheck.h"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
@@ -11,6 +12,8 @@
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/DiagnosticIDs.h>
 #include <clang/Basic/LLVM.h>
+
+#include <cstdint>
 
 using namespace clang;
 using namespace clang::ast_matchers;
@@ -43,7 +46,7 @@ namespace clang::tidy::readability
 
     bool hasLockTagArgument(CXXConstructExpr const* ctorExpr)
     {
-      for (unsigned i = 0; i < ctorExpr->getNumArgs(); ++i)
+      for (std::uint32_t i = 0; i < ctorExpr->getNumArgs(); ++i)
       {
         if (auto const* arg = ctorExpr->getArg(i)->IgnoreParenImpCasts(); isLockTagType(arg->getType()))
         {
@@ -142,7 +145,7 @@ namespace clang::tidy::readability
         return false;
       }
 
-      bool isUniqueLockParam(CallExpr const* call, unsigned argIndex)
+      bool isUniqueLockParam(CallExpr const* call, std::uint32_t argIndex)
       {
         auto const* func = call->getDirectCallee();
 
@@ -167,7 +170,7 @@ namespace clang::tidy::readability
 
       bool checkCallArgs(CallExpr* call)
       {
-        for (unsigned i = 0; i < call->getNumArgs(); ++i)
+        for (std::uint32_t i = 0; i < call->getNumArgs(); ++i)
         {
           auto const* arg = call->getArg(i)->IgnoreParenImpCasts();
           auto const* dre = dyn_cast<DeclRefExpr>(arg);
@@ -227,16 +230,15 @@ namespace clang::tidy::readability
   {
     // Match std::thread usages (Rule 4.4.2)
     finder->addMatcher(
-      varDecl(
-        hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(cxxRecordDecl(hasName("::std::thread")))))),
-        unless(hasAncestor(functionDecl(isDefinition(), isMain()))))
+      varDecl(hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(cxxRecordDecl(hasName("::std::thread")))))),
+              unless(hasAncestor(functionDecl(isDefinition(), isMain()))))
         .bind("threadVar"),
       this);
 
     // Match std::unique_lock that could be std::scoped_lock (Rule 4.4.3)
-    finder->addMatcher(varDecl(hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(anyOf(
-                                 classTemplateSpecializationDecl(hasName("::std::unique_lock")),
-                                 cxxRecordDecl(hasName("::std::unique_lock"))))))))
+    finder->addMatcher(varDecl(hasType(hasUnqualifiedDesugaredType(recordType(
+                                 hasDeclaration(anyOf(classTemplateSpecializationDecl(hasName("::std::unique_lock")),
+                                                      cxxRecordDecl(hasName("::std::unique_lock"))))))))
                          .bind("uniqueLock"),
                        this);
 
@@ -244,7 +246,7 @@ namespace clang::tidy::readability
     finder->addMatcher(varDecl(hasType(isVolatileQualified())).bind("volatileVar"), this);
   }
 
-  void ThreadingPolicyCheck::check(const MatchFinder::MatchResult& result)
+  void ThreadingPolicyCheck::check(MatchFinder::MatchResult const& result)
   {
     if (auto const* threadVar = result.Nodes.getNodeAs<VarDecl>("threadVar"))
     {

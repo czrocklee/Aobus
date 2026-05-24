@@ -145,7 +145,7 @@ namespace ao::gtk
     // Remove closed views
     for (auto it = _trackPages.begin(); it != _trackPages.end();)
     {
-      if (std::ranges::find(state.openViews, it->first) == state.openViews.end())
+      if (!std::ranges::contains(state.openViews, it->first))
       {
         if (it->second.page)
         {

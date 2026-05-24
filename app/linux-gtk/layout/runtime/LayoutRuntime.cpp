@@ -38,7 +38,7 @@ namespace ao::gtk::layout
           return LayoutNode{.id = node.id, .type = "[TemplateError] Missing templateId"};
         }
 
-        if (std::ranges::find(visited, templateId) != visited.end())
+        if (std::ranges::contains(visited, templateId))
         {
           auto chain = std::string{};
 

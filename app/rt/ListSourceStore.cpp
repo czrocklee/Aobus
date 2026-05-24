@@ -133,7 +133,7 @@ namespace ao::rt
 
       for (auto const& [childId, childSource] : _sources)
       {
-        if (std::ranges::find(toErase, childId) != toErase.end())
+        if (std::ranges::contains(toErase, childId))
         {
           continue;
         }
