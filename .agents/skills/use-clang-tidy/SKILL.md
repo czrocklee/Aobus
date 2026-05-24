@@ -115,11 +115,12 @@ Common acceptable cases: GTKmm `make_refptr_for_instance(new T)`, GLib/GTK macro
 - Do not wrap C APIs in one-off abstractions that only hide a warning.
 - Do not split clear local logic into many single-use functions just to reduce a metric.
 
-## Include-cleaner Triage
+- **Include-cleaner Triage**: For paired-header types, add direct includes to the `.cpp` rather than relying on the header's transitive includes. Suppress only when the tool genuinely cannot resolve the header, such as some GLib C macros.
+- **Finding Missing Headers**: If `misc-include-cleaner` flags a symbol but you don't know the header:
+  - For standard libs, use `pkg-config --cflags <name>`.
+  - For Clang/LLVM internals, grep `/tmp/build/debug-clang-tidy/compile_commands.json` for `-isystem` paths, or use `llvm-config --cxxflags`.
 
-For paired-header types, add direct includes to the `.cpp` rather than relying on the header's transitive includes. Suppress only when the tool genuinely cannot resolve the header, such as some GLib C macros.
-
-## `--fix` Policy
+## Verification
 
 Use `--fix` only for mechanical, reviewable diagnostics in a focused file set. After `--fix`, inspect the changed code before continuing, because generated edits can alter formatting or choose a less idiomatic local pattern. Do not use `--fix --all` unless the user explicitly asked for broad automatic cleanup.
 

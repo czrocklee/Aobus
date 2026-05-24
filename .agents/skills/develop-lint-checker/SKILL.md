@@ -31,6 +31,12 @@ Do not guess the AST structure. Always dump it.
     ```
 3.  **Analyze the Output**: Search the dumped text for your variables or function calls to see the exact Clang AST node names.
 
+### 🔍 Finding Internal Clang/LLVM Headers
+If you need to find the header for an AST node or a Clang-Tidy class:
+- **`compile_commands.json`**: For the most accurate truth, grep `-isystem` paths in `/tmp/build/debug-clang-tidy/compile_commands.json` for a successfully compiled lint check.
+- **`llvm-config`**: Use `nix-shell --run "llvm-config --cxxflags"` to see the base include paths for the current LLVM version.
+- **Header Convention**: Clang headers are almost always in `<clang/AST/...>` or `<clang-tidy/...>` and follow the class name.
+
 ### ⚠️ Important AST Pitfalls in C++20 / Aobus:
 -   **Niebloids (`std::ranges` algorithms)**: Standard range algorithms (like `std::ranges::find_if`) are *not* matched by standard `callExpr()`. They are function objects (Niebloids) and appear as `CXXOperatorCallExpr` with `hasOverloadedOperatorName("()")`. The 0th argument is the functor itself, so your actual arguments start at index `1`.
 -   **Implicit Casts**: C++ introduces many silent AST nodes (e.g., `IntegralCast`, `LValueToRValue`, `FunctionToPointerDecay`). If your matcher fails inexplicably, liberally wrap your inner matchers in `ignoringParenImpCasts(...)`.

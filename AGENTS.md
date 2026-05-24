@@ -13,8 +13,7 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 `nix-shell` needs `shell.nix` in CWD. Always run from the project root.
 
 > [!TIP]
-> External library headers are in the Nix store; check build config for paths. Use `nix-shell -p` for extra tools. 
-
+> External library headers are in the Nix store; check build config for paths. Use `nix-shell -p` for extra tools. For rapid library discovery, use `nix-shell --run "pkg-config --cflags <lib-name>"` (e.g., `gtkmm-4.0`).
 ## Working Rules
 1. **Language:** Always use English for code comments, commit messages, and documentation to maintain international accessibility.
 2. **Search:** Use `rg` for searching. Prefer narrow scopes when possible.
