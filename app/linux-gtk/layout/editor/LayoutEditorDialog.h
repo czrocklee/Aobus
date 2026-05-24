@@ -12,6 +12,7 @@
 #include <glibmm/ustring.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/comboboxtext.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/menubutton.h>
@@ -34,7 +35,10 @@ namespace ao::gtk::layout::editor
   class LayoutEditorDialog final : public Gtk::Dialog
   {
   public:
-    LayoutEditorDialog(Gtk::Window& parent, ComponentRegistry const& registry, LayoutDocument initialDoc);
+    LayoutEditorDialog(Gtk::Window& parent,
+                       ComponentRegistry const& registry,
+                       LayoutDocument initialDoc,
+                       std::string initialPresetId);
     ~LayoutEditorDialog() override;
 
     LayoutEditorDialog(LayoutEditorDialog const&) = delete;
@@ -43,6 +47,7 @@ namespace ao::gtk::layout::editor
     LayoutEditorDialog& operator=(LayoutEditorDialog&&) = delete;
 
     LayoutDocument const& document() const { return _document; }
+    std::string getSelectedPresetId() const { return _comboPresets.get_active_id(); }
 
     sigc::signal<void(LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
 
@@ -102,6 +107,7 @@ namespace ao::gtk::layout::editor
     void onRaiseZ();
     void onLowerZ();
     void onResetDefault();
+    void onPresetChanged();
 
     LayoutNode* findParentOf(LayoutNode* root, LayoutNode* target);
 
@@ -123,6 +129,7 @@ namespace ao::gtk::layout::editor
     Gtk::Button _btnRaiseZ{"Raise Z"};
     Gtk::Button _btnLowerZ{"Lower Z"};
     Gtk::Button _btnReset{"Reset Default"};
+    Gtk::ComboBoxText _comboPresets;
 
     Gtk::PopoverMenu _addPopover;
     Gtk::PopoverMenu _wrapPopover;

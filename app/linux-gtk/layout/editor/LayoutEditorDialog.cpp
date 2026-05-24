@@ -48,7 +48,8 @@ namespace ao::gtk::layout::editor
 {
   LayoutEditorDialog::LayoutEditorDialog(Gtk::Window& parent,
                                          ComponentRegistry const& registry,
-                                         LayoutDocument initialDoc)
+                                         LayoutDocument initialDoc,
+                                         std::string initialPresetId)
     : Gtk::Dialog{"Layout Editor", parent, true}, _registry{registry}, _document{std::move(initialDoc)}
   {
     int const defaultWidth = 800;
@@ -60,6 +61,14 @@ namespace ao::gtk::layout::editor
     add_button("Save", Gtk::ResponseType::OK);
 
     setupUi();
+
+    if (!initialPresetId.empty())
+    {
+      _comboPresets.set_active_id(initialPresetId);
+    }
+
+    _comboPresets.signal_changed().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onPresetChanged));
+
     populateTree();
   }
 
@@ -88,6 +97,10 @@ namespace ao::gtk::layout::editor
     _toolbar.append(_btnRaiseZ);
     _toolbar.append(_btnLowerZ);
     _toolbar.append(_btnReset);
+
+    _comboPresets.append("classic", "Classic");
+    _comboPresets.append("modern", "Modern");
+    _toolbar.append(_comboPresets);
 
     _actionGroup = Gio::SimpleActionGroup::create();
     insert_action_group("editor", _actionGroup);
@@ -491,7 +504,34 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onResetDefault()
   {
-    _document = createDefaultLayout();
+    if (auto const presetId = _comboPresets.get_active_id(); presetId == "modern")
+    {
+      _document = createBuiltInLayout(LayoutPresetId::Modern);
+    }
+    else
+    {
+      _document = createBuiltInLayout(LayoutPresetId::Classic);
+    }
+
+    populateTree();
+    notifyPreview();
+  }
+
+  void LayoutEditorDialog::onPresetChanged()
+  {
+    if (auto const presetId = _comboPresets.get_active_id(); presetId == "classic")
+    {
+      _document = createBuiltInLayout(LayoutPresetId::Classic);
+    }
+    else if (presetId == "modern")
+    {
+      _document = createBuiltInLayout(LayoutPresetId::Modern);
+    }
+    else
+    {
+      return;
+    }
+
     populateTree();
     notifyPreview();
   }

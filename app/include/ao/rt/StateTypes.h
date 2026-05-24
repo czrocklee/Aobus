@@ -236,6 +236,7 @@ namespace ao::rt
     std::string lastBackend;
     std::string lastProfile;
     std::string lastOutputDeviceId;
+    std::string lastLayoutPreset;
   };
 
   struct SessionState final

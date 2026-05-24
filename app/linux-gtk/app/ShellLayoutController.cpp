@@ -9,6 +9,7 @@
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/StateTypes.h>
 #include <ao/rt/async/LifetimeScope.h>
 #include <ao/rt/async/Runtime.h>
 #include <ao/rt/async/Task.h>
@@ -36,24 +37,40 @@ namespace ao::gtk
   void ShellLayoutController::loadLayout(AppConfig& config)
   {
     auto& runtime = _context.runtime.async();
-    runtime.spawnWithLifetime(&_tasks,
-                              [](ShellLayoutController* self, AppConfig* cfg) -> rt::async::Task<void>
-                              {
-                                APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
+    runtime.spawnWithLifetime(
+      &_tasks,
+      [](ShellLayoutController* self, AppConfig* cfg) -> rt::async::Task<void>
+      {
+        APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
-                                auto* const asyncRuntime = &self->_context.runtime.async();
-                                co_await asyncRuntime->resumeOnWorker();
-                                APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
+        auto* const asyncRuntime = &self->_context.runtime.async();
+        co_await asyncRuntime->resumeOnWorker();
+        APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
 
-                                auto doc = layout::createDefaultLayout();
-                                cfg->loadShellLayout(doc);
+        auto prefs = rt::AppPrefsState{};
+        cfg->loadAppPrefs(prefs);
 
-                                co_await asyncRuntime->resumeOnControl();
-                                APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
+        auto presetId = layout::LayoutPresetId::Classic;
 
-                                self->_activeLayout = doc;
-                                self->_host.setLayout(self->_context, self->_activeLayout);
-                              }(this, &config));
+        if (prefs.lastLayoutPreset == "modern")
+        {
+          presetId = layout::LayoutPresetId::Modern;
+        }
+        else if (!prefs.lastLayoutPreset.empty() && prefs.lastLayoutPreset != "classic")
+        {
+          APP_LOG_DEBUG(
+            "ShellLayoutController: Unknown layout preset '{}', falling back to classic", prefs.lastLayoutPreset);
+        }
+
+        auto doc = layout::createBuiltInLayout(presetId);
+        cfg->loadShellLayout(doc);
+
+        co_await asyncRuntime->resumeOnControl();
+        APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
+
+        self->_activeLayout = doc;
+        self->_host.setLayout(self->_context, self->_activeLayout);
+      }(this, &config));
   }
 
   void ShellLayoutController::saveLayout(AppConfig& config) const
@@ -63,8 +80,13 @@ namespace ao::gtk
 
   void ShellLayoutController::openEditor(AppConfig& config)
   {
+    auto prefs = rt::AppPrefsState{};
+    config.loadAppPrefs(prefs);
+
+    auto const presetId = prefs.lastLayoutPreset.empty() ? "classic" : prefs.lastLayoutPreset;
+
     auto const dialog = std::make_shared<layout::editor::LayoutEditorDialog>(
-      dynamic_cast<Gtk::Window&>(_context.parentWindow), _registry, _activeLayout);
+      dynamic_cast<Gtk::Window&>(_context.parentWindow), _registry, _activeLayout, presetId);
     auto* const dialogPtr = dialog.get();
 
     _context.editMode = true;
@@ -87,6 +109,14 @@ namespace ao::gtk
           _activeLayout = sharedDialog->document();
           _host.setLayout(_context, _activeLayout);
           config.saveShellLayout(_activeLayout);
+
+          if (auto const presetIdDialog = sharedDialog->getSelectedPresetId(); !presetIdDialog.empty())
+          {
+            auto prefsUpdate = rt::AppPrefsState{};
+            config.loadAppPrefs(prefsUpdate);
+            prefsUpdate.lastLayoutPreset = presetIdDialog;
+            config.saveAppPrefs(prefsUpdate);
+          }
         }
         else if (responseId == Gtk::ResponseType::CANCEL)
         {

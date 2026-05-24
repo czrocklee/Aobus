@@ -41,6 +41,9 @@ get_check_alias() {
         UseRangesContainsCheckFixture.cpp) echo "aobus-modernize-use-ranges-contains" ;;
         UseRangesProjectionCheckFixture.cpp) echo "aobus-modernize-use-ranges-projection" ;;
         UseRangesAnyOfCheckFixture.cpp) echo "aobus-modernize-use-ranges-any-of" ;;
+        UseEraseIfCheckFixture.cpp) echo "aobus-modernize-use-erase-if" ;;
+        UseRangesMinMaxCheckFixture.cpp) echo "aobus-modernize-use-ranges-min-max" ;;
+        UseStartsWithCheckFixture.cpp) echo "aobus-modernize-use-starts-with" ;;
         UseStdNumbersCheckFixture.cpp) echo "aobus-modernize-use-std-numbers" ;;
         *) return 1 ;;
     esac

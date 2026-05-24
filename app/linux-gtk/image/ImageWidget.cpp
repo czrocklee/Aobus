@@ -14,6 +14,7 @@
 #include <glibmm/error.h>
 #include <glibmm/refptr.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -28,10 +29,16 @@ namespace ao::gtk
     : _library{library}, _cache{cache}
   {
     set_keep_aspect_ratio(true);
+    set_can_shrink(true);
     set_alternative_text("No cover art");
   }
 
   ImageWidget::~ImageWidget() = default;
+
+  void ImageWidget::setTargetSize(std::int32_t size)
+  {
+    _targetSize = size;
+  }
 
   void ImageWidget::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
   {
@@ -102,7 +109,7 @@ namespace ao::gtk
     {
       auto const memStream = Gio::MemoryInputStream::create();
       memStream->add_data(bytes.data(), std::ssize(bytes), nullptr);
-      set_pixbuf(Gdk::Pixbuf::create_from_stream(memStream));
+      setImagePixbuf(Gdk::Pixbuf::create_from_stream(memStream));
     }
     catch (Glib::Error const&)
     {
@@ -110,9 +117,34 @@ namespace ao::gtk
     }
   }
 
+  Glib::RefPtr<Gdk::Pixbuf> ImageWidget::scalePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf) const
+  {
+    if (!pixbuf || _targetSize <= 0)
+    {
+      return pixbuf;
+    }
+
+    std::int32_t const width = pixbuf->get_width();
+    std::int32_t const height = pixbuf->get_height();
+
+    if (width <= _targetSize && height <= _targetSize)
+    {
+      return pixbuf; // Already small enough
+    }
+
+    double const scale = std::min(static_cast<double>(_targetSize) / static_cast<double>(width),
+                                  static_cast<double>(_targetSize) / static_cast<double>(height));
+
+    std::int32_t const newWidth = std::max(1, static_cast<std::int32_t>(static_cast<double>(width) * scale));
+    std::int32_t const newHeight = std::max(1, static_cast<std::int32_t>(static_cast<double>(height) * scale));
+
+    return pixbuf->scale_simple(newWidth, newHeight, Gdk::InterpType::BILINEAR);
+  }
+
   void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
   {
-    pixbuf ? set_pixbuf(pixbuf) : clearImage();
+    auto const scaled = scalePixbuf(pixbuf);
+    scaled ? set_pixbuf(scaled) : clearImage();
   }
 
   void ImageWidget::clearImage()

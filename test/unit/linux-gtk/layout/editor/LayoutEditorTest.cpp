@@ -237,14 +237,14 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("Dialog constructs without crash")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc);
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc, "classic");
       REQUIRE(dialog != nullptr);
       dialog->close();
     }
 
     SECTION("document returns the initial document on construction")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc);
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc, "classic");
       auto const& returned = dialog->document();
 
       CHECK(returned.root.type == doc.root.type);
@@ -259,7 +259,7 @@ namespace ao::gtk::layout::editor::test
       auto modified = LayoutDocument{};
       modified.root.type = "spacer";
 
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, modified);
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, modified, "classic");
 
       // The dialog copies the document, so modifications to the dialog's copy
       // are reflected. Just verify the initial copy is correct.
@@ -270,7 +270,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("signalApplyPreview is emitted on document changes")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc);
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc, "classic");
       std::int32_t count = 0;
 
       dialog->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });

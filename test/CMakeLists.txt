@@ -124,6 +124,7 @@ add_executable(ao_test_gtk
     unit/linux-gtk/layout/document/LayoutModelTest.cpp
     unit/linux-gtk/layout/components/ContainersTest.cpp
     unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
+    unit/linux-gtk/layout/components/PlaybackImageTest.cpp
     unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
     unit/linux-gtk/layout/components/StatusComponentsTest.cpp
     unit/app/linux-gtk/playback/PlaybackPositionInterpolatorTest.cpp

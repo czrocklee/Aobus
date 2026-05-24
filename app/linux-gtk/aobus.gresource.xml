@@ -3,5 +3,6 @@
   <gresource prefix="/org/aobus">
     <file>app.css</file>
     <file>layout/default_layout.yaml</file>
+    <file>layout/modern_layout.yaml</file>
   </gresource>
 </gresources>

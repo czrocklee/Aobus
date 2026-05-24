@@ -25,6 +25,7 @@
 #include <gtkmm/object.h>
 #include <gtkmm/widget.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -33,6 +34,8 @@ namespace ao::gtk::layout
 {
   namespace
   {
+    constexpr std::int32_t kThumbnailSize = 56;
+
     /**
      * @brief Helper to get the transport button callback.
      */
@@ -90,7 +93,7 @@ namespace ao::gtk::layout
     class PlaybackImageComponent final : public ILayoutComponent
     {
     public:
-      PlaybackImageComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      PlaybackImageComponent(LayoutContext& ctx, LayoutNode const& node)
       {
         if (ctx.inspector.imageCache == nullptr)
         {
@@ -100,6 +103,15 @@ namespace ao::gtk::layout
 
         _widget = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
 
+        auto const variant = node.getProp<std::string>("variant", "default");
+
+        if (variant == "thumbnail")
+        {
+          _widget->setTargetSize(kThumbnailSize);
+          _widget->set_size_request(kThumbnailSize, kThumbnailSize);
+          _widget->add_css_class("ao-nowplaying-image-thumb");
+        }
+
         _sub = ctx.runtime.playback().onNowPlayingChanged(
           [this, &ctx](auto const& ev)
           {
@@ -108,6 +120,20 @@ namespace ao::gtk::layout
               _currentTrackId = ev.trackId;
               updateImage(ctx.runtime.musicLibrary());
             }
+          });
+
+        _stoppedSub = ctx.runtime.playback().onStopped(
+          [this, &ctx]
+          {
+            _currentTrackId = kInvalidTrackId;
+            updateImage(ctx.runtime.musicLibrary());
+          });
+
+        _idleSub = ctx.runtime.playback().onIdle(
+          [this, &ctx]
+          {
+            _currentTrackId = kInvalidTrackId;
+            updateImage(ctx.runtime.musicLibrary());
           });
 
         // Initial update
@@ -147,6 +173,8 @@ namespace ao::gtk::layout
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
       rt::Subscription _sub;
+      rt::Subscription _stoppedSub;
+      rt::Subscription _idleSub;
     };
 
     /**
@@ -303,7 +331,11 @@ namespace ao::gtk::layout
                                 .displayName = "Playback Cover Art",
                                 .category = "Playback",
                                 .container = false,
-                                .props = {},
+                                .props = {{.name = "variant",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Variant",
+                                           .defaultValue = LayoutValue{"default"},
+                                           .enumValues = {"default", "thumbnail"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},

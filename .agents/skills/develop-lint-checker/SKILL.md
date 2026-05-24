@@ -20,27 +20,39 @@ Always prioritize integration tests. You must define the expected behavior befor
     nix-shell --run "./test/integration/lint/run_integration_test.sh aobus-your-check-alias"
     ```
 
-## 2. AST Debugging & Exploration (Crucial)
+## 2. AST Debugging — MANDATORY: `clang-query` First
 
-Do not guess the AST structure. Always dump it.
+**Never implement `check()` before the matcher is confirmed in `clang-query`.** Guessing AST structure is the #1 cause of "compiles but silently doesn't fire."
 
-1.  **Create a Scratch File**: Write a minimal reproducible C++ file (e.g., `scratch.cpp`) containing the pattern you want to match.
-2.  **Dump the AST**:
+### Workflow
+
+1. Create a scratch file with the target pattern.
+2. Write the query in a file (`clang-query` only parses single-line `match` interactively):
     ```bash
-    nix-shell -p clang-tools --run "clang++ -std=c++23 -fsyntax-only -Xclang -ast-dump scratch.cpp > scratch_ast.txt"
+    cat > /tmp/query.txt << 'EOF'
+    enable output dump
+    match cxxMemberCallExpr(callee(cxxMethodDecl(hasName("erase")))).bind("root")
+    EOF
     ```
-3.  **Analyze the Output**: Search the dumped text for your variables or function calls to see the exact Clang AST node names.
+3. Add one clause at a time, re-run after each change:
+    ```bash
+    nix-shell -p clang-tools --run "clang-query -p /tmp/build/debug-clang-tidy -f /tmp/query.txt /tmp/scratch.cpp"
+    ```
+4. Also test against your fixture file to catch include path differences.
+5. Only write C++ once the full matcher hits in `clang-query`.
 
-### 🔍 Finding Internal Clang/LLVM Headers
-If you need to find the header for an AST node or a Clang-Tidy class:
-- **`compile_commands.json`**: For the most accurate truth, grep `-isystem` paths in `/tmp/build/debug-clang-tidy/compile_commands.json` for a successfully compiled lint check.
-- **`llvm-config`**: Use `nix-shell --run "llvm-config --cxxflags"` to see the base include paths for the current LLVM version.
-- **Header Convention**: Clang headers are almost always in `<clang/AST/...>` or `<clang-tidy/...>` and follow the class name.
+### Raw AST Dump (supplement)
 
-### ⚠️ Important AST Pitfalls in C++20 / Aobus:
--   **Niebloids (`std::ranges` algorithms)**: Standard range algorithms (like `std::ranges::find_if`) are *not* matched by standard `callExpr()`. They are function objects (Niebloids) and appear as `CXXOperatorCallExpr` with `hasOverloadedOperatorName("()")`. The 0th argument is the functor itself, so your actual arguments start at index `1`.
--   **Implicit Casts**: C++ introduces many silent AST nodes (e.g., `IntegralCast`, `LValueToRValue`, `FunctionToPointerDecay`). If your matcher fails inexplicably, liberally wrap your inner matchers in `ignoringParenImpCasts(...)`.
--   **Return Values**: When extracting `return item.id;`, the `memberExpr` will likely be wrapped in an `ImplicitCastExpr`. Always use `hasReturnValue(ignoringParenImpCasts(...))`.
+```bash
+nix-shell -p clang-tools --run "clang++ -std=c++23 -fsyntax-only -Xclang -ast-dump scratch.cpp" 2>&1 > /tmp/ast.txt
+```
+
+### ⚠️ Common Pitfalls
+
+- **`ignoringParenImpCasts` only strips `ImplicitCastExpr`**: Arguments are often wrapped in deeper chains (`ImplicitCastExpr → CXXConstructExpr → MaterializeTemporaryExpr → ...`). Use `hasDescendant(...)` in the matcher, or manually strip these nodes in `check()`.
+- **Bind type MUST match GetNodeAs type**: `.bind("x")` on `varDecl()` means `getNodeAs<VarDecl>("x")`. Writing `getNodeAs<DeclRefExpr>("x")` silently returns null — the #1 reason "matcher works in clang-query but check doesn't fire."
+- **`equalsBoundNode` on `varDecl`, not `declRefExpr`**: Two `DeclRefExpr` nodes are different AST nodes even if they reference the same variable. Bind `varDecl` for container identity checks.
+- **Niebloids**: `std::ranges` algorithms are function objects, matched via `CXXOperatorCallExpr` + `hasOverloadedOperatorName("()")`. Arguments start at index 1.
 
 ## 3. Implementation Steps
 

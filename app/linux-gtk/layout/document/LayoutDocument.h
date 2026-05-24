@@ -29,10 +29,21 @@ namespace ao::gtk::layout
     std::map<std::string, LayoutNode, std::less<>> templates{};
   };
 
+  enum class LayoutPresetId : std::uint8_t
+  {
+    Classic,
+    Modern
+  };
+
   /**
    * @brief Create a built-in default layout document.
    */
   LayoutDocument createDefaultLayout();
+
+  /**
+   * @brief Create a built-in layout document by preset ID.
+   */
+  LayoutDocument createBuiltInLayout(LayoutPresetId presetId);
 
   /**
    * @brief Get a map of all built-in layout templates.

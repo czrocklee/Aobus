@@ -27,10 +27,13 @@ add_library(AobusLintPlugin MODULE
   check/UseIfInitStatementCheck.cpp
   check/LambdaParamsCheck.cpp
   check/MemberOrderCheck.cpp
+  check/UseEraseIfCheck.cpp
   check/UseStdNumbersCheck.cpp
   check/UseRangesContainsCheck.cpp
   check/UseRangesProjectionCheck.cpp
   check/UseRangesAnyOfCheck.cpp
+  check/UseRangesMinMaxCheck.cpp
+  check/UseStartsWithCheck.cpp
   AobusLintModule.cpp
 )
 

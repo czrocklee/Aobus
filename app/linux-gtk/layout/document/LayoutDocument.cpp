@@ -249,22 +249,22 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    LayoutDocument loadBuiltInLayout()
+    LayoutDocument loadBuiltInLayout(std::string_view path)
     {
       try
       {
-        auto const bytes = Gio::Resource::lookup_data_global("/org/aobus/layout/default_layout.yaml");
+        auto const bytes = Gio::Resource::lookup_data_global(std::string{path});
         gsize size = 0;
         auto const* const data = static_cast<char const*>(bytes->get_data(size));
 
-        auto tree = ryml::Tree{rt::yaml::callbacks("default_layout.yaml")};
+        auto tree = ryml::Tree{rt::yaml::callbacks(std::string{path}.c_str())};
         ryml::parse_in_arena(rt::yaml::toCsubstr(std::string_view{data, size}), &tree);
 
         auto doc = LayoutDocument{};
 
         if (!rt::yaml::read(tree.rootref(), doc))
         {
-          APP_LOG_CRITICAL("LayoutDocument: Failed to decode built-in layout");
+          APP_LOG_CRITICAL("LayoutDocument: Failed to decode built-in layout from {}", path);
           throw std::runtime_error{"Failed to decode built-in layout"};
         }
 
@@ -272,7 +272,7 @@ namespace ao::gtk::layout
       }
       catch (Glib::Error const& e)
       {
-        APP_LOG_CRITICAL("LayoutDocument: GResource error: {}", e.what());
+        APP_LOG_CRITICAL("LayoutDocument: GResource error loading {}: {}", path, e.what());
         throw;
       }
     }
@@ -280,12 +280,23 @@ namespace ao::gtk::layout
 
   LayoutDocument createDefaultLayout()
   {
-    return loadBuiltInLayout();
+    return createBuiltInLayout(LayoutPresetId::Classic);
+  }
+
+  LayoutDocument createBuiltInLayout(LayoutPresetId presetId)
+  {
+    switch (presetId)
+    {
+      case LayoutPresetId::Classic: return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
+      case LayoutPresetId::Modern: return loadBuiltInLayout("/org/aobus/layout/modern_layout.yaml");
+    }
+
+    return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
   }
 
   std::map<std::string, LayoutNode, std::less<>> getBuiltInTemplates()
   {
-    return loadBuiltInLayout().templates;
+    return createDefaultLayout().templates;
   }
 
   Result<> loadLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument& doc)

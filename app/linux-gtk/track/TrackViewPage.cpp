@@ -214,6 +214,7 @@ namespace ao::gtk
         box->add_css_class("ao-track-section-box");
 
         auto* const cover = Gtk::make_managed<ImageWidget>(_runtime.musicLibrary(), _imageCache);
+        cover->setTargetSize(kSectionCoverSize);
         cover->set_size_request(kSectionCoverSize, kSectionCoverSize);
         cover->add_css_class("ao-track-section-cover");
         cover->set_valign(Gtk::Align::CENTER);

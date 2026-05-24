@@ -12,6 +12,7 @@
 #include <gtkmm/picture.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <span>
 
@@ -35,6 +36,8 @@ namespace ao::gtk
     ImageWidget(ImageWidget&&) = delete;
     ImageWidget& operator=(ImageWidget&&) = delete;
 
+    void setTargetSize(std::int32_t size);
+
     void setImageFromBytes(std::span<std::byte const> bytes);
     void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
     void clearImage();
@@ -46,9 +49,11 @@ namespace ao::gtk
 
   private:
     void onDetailSnapshot(rt::TrackDetailSnapshot const& snap);
+    Glib::RefPtr<Gdk::Pixbuf> scalePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf) const;
 
     library::MusicLibrary& _library;
     ImageCache& _cache;
+    std::int32_t _targetSize = 0;
     std::shared_ptr<rt::ITrackDetailProjection> _detailProjection;
     rt::Subscription _detailSub;
   };

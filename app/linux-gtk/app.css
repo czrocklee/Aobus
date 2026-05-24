@@ -479,3 +479,111 @@ columnview row.ao-missing-row label {
   margin: -4px;
   border-radius: 50%;
 }
+/* ===== Modern Bottom Bar ===== */
+
+/* Glass-morphism background for the entire bottom bar */
+.ao-modern-bottom-bar {
+  background: alpha(@view_bg_color, 0.92);
+  border-top: 1px solid alpha(currentColor, 0.08);
+  padding: 8px 16px;
+  min-height: 72px;
+}
+
+/* Prominent circular play button */
+.ao-play-button-prominent {
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 50%;
+  background: @accent_bg_color;
+  color: @accent_fg_color;
+  padding: 0;
+  transition: transform 150ms, box-shadow 150ms;
+}
+
+.ao-play-button-prominent:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px alpha(@accent_bg_color, 0.35);
+}
+
+.ao-play-button-prominent:active {
+  transform: scale(0.96);
+}
+
+/* Small circular secondary control buttons */
+.ao-play-button-circular {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  padding: 0;
+}
+
+/* Now-playing artwork thumbnail in control bar */
+.ao-nowplaying-image-thumb {
+  border-radius: 4px;
+  width: 56px;
+  height: 56px;
+  max-width: 56px;
+  max-height: 56px;
+  box-shadow: 0 1px 4px alpha(black, 0.15);
+}
+
+/* Modern thin seekbar */
+.ao-seekbar-modern trough {
+  min-height: 3px;
+  border-radius: 2px;
+  background: alpha(currentColor, 0.10);
+}
+
+.ao-seekbar-modern:hover trough {
+  min-height: 5px;
+  border-radius: 3px;
+}
+
+.ao-seekbar-modern highlight {
+  background: alpha(currentColor, 0.55);
+  border-radius: 2px;
+}
+
+.ao-seekbar-modern:hover highlight {
+  background: @accent_color;
+}
+
+.ao-seekbar-modern slider {
+  min-width: 12px;
+  min-height: 12px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.ao-seekbar-modern:hover slider {
+  opacity: 1;
+}
+
+/* Now-playing text group in bottom bar */
+.ao-nowplaying-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.ao-nowplaying-artist {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.ao-modern-center-group {
+  min-width: 300px;
+  max-width: 700px;
+}
+
+.ao-modern-time-label {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  font-feature-settings: "tnum";
+}
+
+/* Bottom bar right-side status */
+.ao-bottom-bar-status {
+  font-size: 0.8rem;
+  opacity: 0.55;
+}

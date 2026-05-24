@@ -1,0 +1,154 @@
+version: 1
+root:
+  id: app-root
+  type: box
+  props:
+    orientation: vertical
+  children:
+    - type: app.menuBar
+
+    # === Main content (no top playback strip) ===
+    - id: main-paned
+      type: split
+      props:
+        orientation: horizontal
+        position: 330
+      layout:
+        vexpand: true
+      children:
+        - id: left-sidebar
+          type: box
+          props:
+            orientation: vertical
+          children:
+            - type: library.listTree
+              layout:
+                vexpand: true
+        - type: box
+          props:
+            orientation: vertical
+          children:
+            - type: box
+              props:
+                orientation: horizontal
+                spacing: 6
+              layout:
+                cssClasses: ao-track-controls-bar
+              children:
+                - type: track.quickFilter
+                  layout:
+                    hexpand: true
+                - type: track.presentationButton
+            - id: workspace-with-inspector
+              type: app.workspaceWithInspector
+              layout:
+                vexpand: true
+
+    # === Modern bottom bar ===
+    - type: template
+      props:
+        templateId: playback.modernBar
+
+templates:
+  playback.modernBar:
+    type: box
+    props:
+      orientation: horizontal
+      spacing: 16
+    layout:
+      cssClasses: ao-modern-bottom-bar
+      hexpand: true
+    children:
+
+      # --- Left: image + now-playing text (fixed width/flex to not push center) ---
+      - type: box
+        props:
+          orientation: horizontal
+          spacing: 12
+        layout:
+          halign: start
+          valign: center
+          hexpand: true
+        children:
+          - type: playback.image
+            props:
+              variant: thumbnail
+          - type: box
+            props:
+              orientation: vertical
+              spacing: 2
+            layout:
+              valign: center
+            children:
+              - type: playback.currentTitleLabel
+                layout:
+                  cssClasses: ao-nowplaying-title
+              - type: playback.currentArtistLabel
+                layout:
+                  cssClasses: ao-nowplaying-artist
+
+      # --- Center: Controls + seekbar ---
+      - type: box
+        props:
+          orientation: vertical
+          spacing: 8
+        layout:
+          hexpand: true
+          valign: center
+          cssClasses: ao-modern-center-group
+        children:
+          # Seekbar row
+          - type: box
+            props:
+              orientation: horizontal
+              spacing: 8
+            layout:
+              hexpand: true
+            children:
+              - type: playback.timeLabel
+                layout:
+                  cssClasses: ao-modern-time-label
+              - type: playback.seekSlider
+                layout:
+                  cssClasses: ao-seekbar-modern
+                  hexpand: true
+              - type: status.playbackDetails # Duration/total time could go here, reusing status for now
+                layout:
+                  cssClasses: ao-modern-time-label
+          # Transport controls
+          - type: box
+            props:
+              orientation: horizontal
+              spacing: 16
+            layout:
+              halign: center
+            children:
+              - type: playback.stopButton
+                props:
+                  size: small
+                layout:
+                  cssClasses: ao-play-button-circular
+              - type: playback.playPauseButton
+                props:
+                  size: large
+                layout:
+                  cssClasses: ao-play-button-prominent
+
+      # --- Right: volume + output + status ---
+      - type: box
+        props:
+          orientation: horizontal
+          spacing: 12
+        layout:
+          halign: end
+          valign: center
+          hexpand: true
+        children:
+          - type: playback.volumeControl
+          - type: playback.outputButton
+          - type: separator
+            props:
+              orientation: vertical
+            layout:
+              cssClasses: ao-status-separator
+          - type: status.statusSlot
