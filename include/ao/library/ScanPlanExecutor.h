@@ -73,7 +73,7 @@ namespace ao::library
 
   private:
     void processItem(std::size_t itemIndex,
-                     ao::lmdb::WriteTransaction& txn,
+                     lmdb::WriteTransaction& txn,
                      TrackStore::Writer& trackWriter,
                      FileManifestStore::Writer& manifestWriter,
                      DictionaryStore& dict);

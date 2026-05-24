@@ -9,6 +9,7 @@
 #include "check/LocalInitializationStyleCheck.h"
 #include "check/MemberOrderCheck.h"
 #include "check/OptionalNamingAndUsageCheck.h"
+#include "check/RedundantNamespaceQualificationCheck.h"
 #include "check/StdCLibraryQualificationCheck.h"
 #include "check/ThreadingPolicyCheck.h"
 #include "check/UnusedSuppressionStyleCheck.h"
@@ -34,6 +35,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<BracedInitializationCheck>("aobus-modernize-braced-initialization");
       checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");
       checkFactories.registerCheck<OptionalNamingAndUsageCheck>("aobus-readability-optional-naming-and-usage");
+      checkFactories.registerCheck<RedundantNamespaceQualificationCheck>("aobus-readability-redundant-namespace-qualification");
       checkFactories.registerCheck<StdCLibraryQualificationCheck>("aobus-readability-std-c-library-qualification");
       checkFactories.registerCheck<ThreadingPolicyCheck>("aobus-threading-policy");
       checkFactories.registerCheck<UnusedSuppressionStyleCheck>("aobus-readability-unused-suppression-style");

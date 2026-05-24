@@ -380,7 +380,8 @@ namespace clang::tidy::readability
 
   void ControlBlockSpacingCheck::checkSpacingAfterBlock(SourceLocation rBraceLoc,
                                                         SourceManager& sm,
-                                                        ASTContext& context)
+                                                        ASTContext& context,
+                                                        bool isDoWhile)
   {
     unsigned const offset = sm.getFileOffset(rBraceLoc);
     FileID const fid = sm.getFileID(rBraceLoc);
@@ -404,8 +405,6 @@ namespace clang::tidy::readability
     {
       return;
     }
-
-    bool const isDoWhile = tokens[nextIdx].is(tok::raw_identifier) && tokens[nextIdx].getRawIdentifier() == "while";
 
     nextIdx = skipDoWhileCondition(nextIdx, tokens, sm);
 
@@ -540,6 +539,7 @@ namespace clang::tidy::readability
     // Skip blank-line-after check when the `}` is directly followed by
     // `else` or `else if` — only the final branch closure needs spacing.
     bool isIntermediateBranch = false;
+    bool isDo = false;
 
     for (auto const& parent : result.Context->getParents(*ctrlBody))
     {
@@ -571,11 +571,15 @@ namespace clang::tidy::readability
           }
         }
       }
+      else if (parent.get<DoStmt>())
+      {
+        isDo = true;
+      }
     }
 
     if (!isIntermediateBranch)
     {
-      checkSpacingAfterBlock(rBraceLoc, sm, *result.Context);
+      checkSpacingAfterBlock(rBraceLoc, sm, *result.Context, isDo);
     }
   }
 } // namespace clang::tidy::readability

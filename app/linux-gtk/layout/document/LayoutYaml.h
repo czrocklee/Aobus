@@ -10,11 +10,11 @@
 namespace ao::rt::yaml
 {
   void write(ryml::NodeRef node, ao::gtk::layout::LayoutValue const& value);
-  bool read(ryml::ConstNodeRef node, ao::gtk::layout::LayoutValue& value);
+  bool read(ryml::ConstNodeRef node, gtk::layout::LayoutValue& value);
 
   void write(ryml::NodeRef node, ao::gtk::layout::LayoutNode const& value);
-  bool read(ryml::ConstNodeRef node, ao::gtk::layout::LayoutNode& value);
+  bool read(ryml::ConstNodeRef node, gtk::layout::LayoutNode& value);
 
   void write(ryml::NodeRef node, ao::gtk::layout::LayoutDocument const& value);
-  bool read(ryml::ConstNodeRef node, ao::gtk::layout::LayoutDocument& value);
+  bool read(ryml::ConstNodeRef node, gtk::layout::LayoutDocument& value);
 } // namespace ao::rt::yaml

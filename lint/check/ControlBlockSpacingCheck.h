@@ -39,7 +39,7 @@ namespace clang::tidy::readability
     void checkControlStatement(SourceLocation loc, SourceManager& sm, ASTContext& context, StringRef stmtName);
     void checkBlockStart(SourceLocation loc, SourceManager& sm, ASTContext& context);
     void checkBlockEnd(SourceLocation loc, SourceManager& sm, ASTContext& context);
-    void checkSpacingAfterBlock(SourceLocation rBraceLoc, SourceManager& sm, ASTContext& context);
+    void checkSpacingAfterBlock(SourceLocation rBraceLoc, SourceManager& sm, ASTContext& context, bool isDoWhile);
 
     void handleControlStatement(Stmt const* ctrl,
                                 SourceManager& sm,

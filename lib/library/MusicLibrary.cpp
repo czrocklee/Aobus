@@ -68,13 +68,13 @@ namespace ao::library
     {
       if (header.magic != kLibraryMetaMagic)
       {
-        ao::throwException<Exception>(
+        throwException<Exception>(
           "Invalid library metadata magic 0x{:08x} (expected 0x{:08x})", header.magic, kLibraryMetaMagic);
       }
 
       if (header.libraryVersion > kLibraryVersion)
       {
-        ao::throwException<Exception>(
+        throwException<Exception>(
           "Unsupported library version {} (maximum supported {})", header.libraryVersion, kLibraryVersion);
       }
     }

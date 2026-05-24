@@ -51,7 +51,7 @@ namespace ao::gtk
 
     std::string _filterExpression;
     bool _filterPending = false;
-    std::optional<ao::Error> _optFilterError;
+    std::optional<Error> _optFilterError;
 
     sigc::scoped_connection _textChangedConn;
     sigc::scoped_connection _debounceTimer;

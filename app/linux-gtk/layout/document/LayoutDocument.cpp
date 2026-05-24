@@ -49,12 +49,12 @@ namespace ao::rt::yaml
 
           for (auto const& item : nodeValue)
           {
-            yaml::setValue(node.append_child(), item);
+            setValue(node.append_child(), item);
           }
         }
         else if constexpr (std::is_same_v<T, std::string>)
         {
-          yaml::setValue(node, nodeValue);
+          setValue(node, nodeValue);
         }
         else
         {
@@ -74,7 +74,7 @@ namespace ao::rt::yaml
 
     if (node.has_val())
     {
-      auto const scalar = yaml::scalarView(node);
+      auto const scalar = scalarView(node);
 
       if (scalar == "true")
       {
@@ -125,7 +125,7 @@ namespace ao::rt::yaml
       {
         if (item.has_val())
         {
-          sequence.emplace_back(yaml::scalarView(item));
+          sequence.emplace_back(scalarView(item));
         }
       }
 
@@ -176,27 +176,27 @@ namespace ao::rt::yaml
       return false;
     }
 
-    if (auto const idNode = yaml::findChild(node, "id"); idNode.readable())
+    if (auto const idNode = findChild(node, "id"); idNode.readable())
     {
-      value.id = yaml::scalarView(idNode);
+      value.id = scalarView(idNode);
     }
 
-    if (auto const typeNode = yaml::findChild(node, "type"); typeNode.readable())
+    if (auto const typeNode = findChild(node, "type"); typeNode.readable())
     {
-      value.type = yaml::scalarView(typeNode);
+      value.type = scalarView(typeNode);
     }
 
-    if (auto const propsNode = yaml::findChild(node, "props"); propsNode.readable())
+    if (auto const propsNode = findChild(node, "props"); propsNode.readable())
     {
       read(propsNode, value.props);
     }
 
-    if (auto const layoutNode = yaml::findChild(node, "layout"); layoutNode.readable())
+    if (auto const layoutNode = findChild(node, "layout"); layoutNode.readable())
     {
       read(layoutNode, value.layout);
     }
 
-    if (auto const childrenNode = yaml::findChild(node, "children"); childrenNode.readable())
+    if (auto const childrenNode = findChild(node, "children"); childrenNode.readable())
     {
       read(childrenNode, value.children);
     }
@@ -225,8 +225,8 @@ namespace ao::rt::yaml
       return false;
     }
 
-    auto const versionNode = yaml::findChild(node, "version");
-    auto const rootNode = yaml::findChild(node, "root");
+    auto const versionNode = findChild(node, "version");
+    auto const rootNode = findChild(node, "root");
 
     if (!versionNode.readable() || !rootNode.readable())
     {
@@ -236,7 +236,7 @@ namespace ao::rt::yaml
     read(versionNode, value.version);
     read(rootNode, value.root);
 
-    if (auto const templatesNode = yaml::findChild(node, "templates"); templatesNode.readable())
+    if (auto const templatesNode = findChild(node, "templates"); templatesNode.readable())
     {
       read(templatesNode, value.templates);
     }

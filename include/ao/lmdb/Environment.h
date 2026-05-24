@@ -39,7 +39,7 @@ namespace ao::lmdb
     MDB_env* handle() const noexcept { return _handle.get(); }
 
   private:
-    std::unique_ptr<MDB_env, decltype([](auto* env) { mdb_env_close(env); })> _handle;
+    std::unique_ptr<MDB_env, decltype([](auto* env) { ::mdb_env_close(env); })> _handle;
 
     friend class Database;
     friend class ReadTransaction;

@@ -192,6 +192,10 @@ CONFIG_BASE="
   {key: 'readability-identifier-naming.MethodCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.MethodIgnoredRegexp', value: '^property_.*|^signal_.*|^vfunc_.*|^on_.*'},
   {key: 'readability-identifier-naming.PublicMemberCase', value: 'camelBack'},
+  {key: 'readability-identifier-naming.ProtectedMemberCase', value: 'camelBack'},
+  {key: 'readability-identifier-naming.ProtectedMemberPrefix', value: '_'},
+  {key: 'readability-identifier-naming.PrivateMemberCase', value: 'camelBack'},
+  {key: 'readability-identifier-naming.PrivateMemberPrefix', value: '_'},
   {key: 'readability-identifier-naming.ParameterCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.LocalVariableCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.TypeAliasCase', value: 'CamelCase'},
@@ -287,7 +291,10 @@ run_one() {
         [[ -n "$arg" ]] && extra_args+=("$arg")
     done <<< "$ISYSTEM_ARGS_STR"
     [[ -f "$PLUGIN" ]] && extra_args+=("-load=$PLUGIN")
-    $FIX_MODE && extra_args+=("-fix")
+    if $FIX_MODE; then
+        local fix_file="${tmp%.log}.yaml"
+        extra_args+=("-export-fixes=$fix_file")
+    fi
 
     clang-tidy -p "$BUILD_DIR" ${EXTRA_TIDY_ARGS:-} \
         -config="$config" \
@@ -485,6 +492,11 @@ run_batch() {
         fi
     else
         echo "  No warnings found."
+    fi
+
+    if $FIX_MODE; then
+        echo "  Applying fixes safely..."
+        clang-apply-replacements "$tmpdir"
     fi
 
     rm -rf "$tmpdir"

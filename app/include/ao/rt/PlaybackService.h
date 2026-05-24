@@ -55,7 +55,7 @@ namespace ao::rt
     {
       TrackId trackId = kInvalidTrackId;
       ListId preferredListId = kInvalidListId;
-      ViewId preferredViewId = rt::kInvalidViewId;
+      ViewId preferredViewId = kInvalidViewId;
     };
 
     PlaybackService(IControlExecutor& executor, ViewService& views, library::MusicLibrary& library);

@@ -93,9 +93,9 @@ namespace ao::rt::yaml
   bool read(ryml::ConstNodeRef node, std::map<std::string, T, std::less<>>& rhs);
 
   template<typename T>
-  void write(ryml::NodeRef node, std::map<ao::ListId, T> const& rhs);
+  void write(ryml::NodeRef node, std::map<ListId, T> const& rhs);
   template<typename T>
-  inline bool read(ryml::ConstNodeRef node, std::map<ao::ListId, T>& rhs);
+  inline bool read(ryml::ConstNodeRef node, std::map<ListId, T>& rhs);
 
   template<PfrAggregate T>
   void write(ryml::NodeRef node, T const& obj);
@@ -106,7 +106,7 @@ namespace ao::rt::yaml
 
   inline void write(ryml::NodeRef node, std::string_view value)
   {
-    yaml::setValue(node, value);
+    setValue(node, value);
   }
 
   inline void write(ryml::NodeRef node, std::string const& value)
@@ -121,7 +121,7 @@ namespace ao::rt::yaml
       return false;
     }
 
-    auto const view = yaml::scalarView(node);
+    auto const view = scalarView(node);
     value = view;
     return true;
   }
@@ -174,7 +174,7 @@ namespace ao::rt::yaml
       return false;
     }
 
-    rhs = yaml::scalarView(node);
+    rhs = scalarView(node);
     return true;
   }
 
@@ -333,7 +333,7 @@ namespace ao::rt::yaml
     for (auto const& [key, value] : rhs)
     {
       auto child = node.append_child();
-      yaml::setKey(child, key);
+      setKey(child, key);
       write(child, value);
     }
   }
@@ -352,7 +352,7 @@ namespace ao::rt::yaml
     {
       if (auto val = T{}; read(child, val))
       {
-        rhs.emplace(yaml::keyView(child), std::move(val));
+        rhs.emplace(keyView(child), std::move(val));
       }
     }
 
@@ -360,20 +360,20 @@ namespace ao::rt::yaml
   }
 
   template<typename T>
-  inline void write(ryml::NodeRef node, std::map<ao::ListId, T> const& rhs)
+  inline void write(ryml::NodeRef node, std::map<ListId, T> const& rhs)
   {
     node |= ryml::MAP;
 
     for (auto const& [key, value] : rhs)
     {
       auto child = node.append_child();
-      yaml::setKey(child, std::to_string(key.raw()));
+      setKey(child, std::to_string(key.raw()));
       write(child, value);
     }
   }
 
   template<typename T>
-  inline bool read(ryml::ConstNodeRef node, std::map<ao::ListId, T>& rhs)
+  inline bool read(ryml::ConstNodeRef node, std::map<ListId, T>& rhs)
   {
     if (!node.is_map())
     {
@@ -386,13 +386,13 @@ namespace ao::rt::yaml
     {
       if (auto val = T{}; read(child, val))
       {
-        auto const keyStr = yaml::keyView(child);
+        auto const keyStr = keyView(child);
         std::uint32_t listIdVal = 0;
         auto const [ptr, ec] = std::from_chars(keyStr.data(), keyStr.data() + keyStr.size(), listIdVal);
 
         if (ec == std::errc{})
         {
-          rhs.emplace(ao::ListId{listIdVal}, std::move(val));
+          rhs.emplace(ListId{listIdVal}, std::move(val));
         }
         else
         {
@@ -414,7 +414,7 @@ namespace ao::rt::yaml
                                {
                                  constexpr auto kNames = boost::pfr::names_as_array<T>();
                                  auto child = node.append_child();
-                                 yaml::setKey(child, kNames.at(index));
+                                 setKey(child, kNames.at(index));
                                  write(child, field);
                                  ++index;
                                });
@@ -435,7 +435,7 @@ namespace ao::rt::yaml
                                  constexpr auto kNames = boost::pfr::names_as_array<T>();
                                  auto const key = kNames.at(index);
 
-                                 if (auto const child = yaml::findChild(node, key); child.readable())
+                                 if (auto const child = findChild(node, key); child.readable())
                                  {
                                    if (!read(child, field))
                                    {

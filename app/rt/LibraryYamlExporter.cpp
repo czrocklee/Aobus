@@ -96,7 +96,7 @@ namespace ao::rt
 
     struct MetadataDispatch final
     {
-      rt::TrackField field;
+      TrackField field;
       MetadataStringGetter strGet = nullptr;
       MetadataStringBaseGetter strBaseGet = nullptr;
       MetadataNumberGetter numGet = nullptr;
@@ -104,46 +104,46 @@ namespace ao::rt
     };
 
     constexpr auto kMetadataDispatch = std::to_array<MetadataDispatch>({
-      {.field = rt::TrackField::Title,
+      {.field = TrackField::Title,
        .strGet = [](auto const& meta, auto&) { return meta.title(); },
        .strBaseGet = [](auto const& base) { return base.title(); }},
-      {.field = rt::TrackField::Artist,
+      {.field = TrackField::Artist,
        .strGet = [](auto const& meta, auto& dict)
        { return meta.artistId() != kInvalidDictionaryId ? dict.get(meta.artistId()) : std::string_view{}; },
        .strBaseGet = [](auto const& base) { return base.artist(); }},
-      {.field = rt::TrackField::Album,
+      {.field = TrackField::Album,
        .strGet = [](auto const& meta, auto& dict)
        { return meta.albumId() != kInvalidDictionaryId ? dict.get(meta.albumId()) : std::string_view{}; },
        .strBaseGet = [](auto const& base) { return base.album(); }},
-      {.field = rt::TrackField::AlbumArtist,
+      {.field = TrackField::AlbumArtist,
        .strGet = [](auto const& meta, auto& dict)
        { return meta.albumArtistId() != kInvalidDictionaryId ? dict.get(meta.albumArtistId()) : std::string_view{}; },
        .strBaseGet = [](auto const& base) { return base.albumArtist(); }},
-      {.field = rt::TrackField::Composer,
+      {.field = TrackField::Composer,
        .strGet = [](auto const& meta, auto& dict)
        { return meta.composerId() != kInvalidDictionaryId ? dict.get(meta.composerId()) : std::string_view{}; },
        .strBaseGet = [](auto const& base) { return base.composer(); }},
-      {.field = rt::TrackField::Genre,
+      {.field = TrackField::Genre,
        .strGet = [](auto const& meta, auto& dict)
        { return meta.genreId() != kInvalidDictionaryId ? dict.get(meta.genreId()) : std::string_view{}; },
        .strBaseGet = [](auto const& base) { return base.genre(); }},
-      {.field = rt::TrackField::Work,
+      {.field = TrackField::Work,
        .strGet = [](auto const& meta, auto& dict)
        { return meta.workId() != kInvalidDictionaryId ? dict.get(meta.workId()) : std::string_view{}; },
        .strBaseGet = [](auto const& base) { return base.work(); }},
-      {.field = rt::TrackField::Year,
+      {.field = TrackField::Year,
        .numGet = [](auto const& meta) { return meta.year(); },
        .numBaseGet = [](auto const& base) { return base.year(); }},
-      {.field = rt::TrackField::TrackNumber,
+      {.field = TrackField::TrackNumber,
        .numGet = [](auto const& meta) { return meta.trackNumber(); },
        .numBaseGet = [](auto const& base) { return base.trackNumber(); }},
-      {.field = rt::TrackField::TotalTracks,
+      {.field = TrackField::TotalTracks,
        .numGet = [](auto const& meta) { return meta.totalTracks(); },
        .numBaseGet = [](auto const& base) { return base.totalTracks(); }},
-      {.field = rt::TrackField::DiscNumber,
+      {.field = TrackField::DiscNumber,
        .numGet = [](auto const& meta) { return meta.discNumber(); },
        .numBaseGet = [](auto const& base) { return base.discNumber(); }},
-      {.field = rt::TrackField::TotalDiscs,
+      {.field = TrackField::TotalDiscs,
        .numGet = [](auto const& meta) { return meta.totalDiscs(); },
        .numBaseGet = [](auto const& base) { return base.totalDiscs(); }},
     });
@@ -166,7 +166,7 @@ namespace ao::rt
 
       for (auto const& map : kMetadataDispatch)
       {
-        if (auto const key = rt::trackFieldId(map.field); map.strGet != nullptr)
+        if (auto const key = trackFieldId(map.field); map.strGet != nullptr)
         {
           auto const current = map.strGet(metadata, dict);
           bool const shouldEmit = hasBaseline ? (current != map.strBaseGet(*optBaselineMeta)) : !current.empty();
@@ -210,7 +210,7 @@ namespace ao::rt
 
     struct PropertyDispatch final
     {
-      rt::TrackField field;
+      TrackField field;
       PropertyU64Getter u64Get = nullptr;
       PropertyU32Getter u32Get = nullptr;
       PropertyU16Getter u16Get = nullptr;
@@ -218,12 +218,12 @@ namespace ao::rt
     };
 
     constexpr auto kPropertyDispatch = std::to_array<PropertyDispatch>({
-      {.field = rt::TrackField::Duration, .u32Get = [](auto const& prop) { return prop.durationMs(); }},
-      {.field = rt::TrackField::Bitrate, .u32Get = [](auto const& prop) { return prop.bitrate(); }},
-      {.field = rt::TrackField::SampleRate, .u32Get = [](auto const& prop) { return prop.sampleRate(); }},
-      {.field = rt::TrackField::Codec, .u16Get = [](auto const& prop) { return prop.codecId(); }},
-      {.field = rt::TrackField::Channels, .u8Get = [](auto const& prop) { return prop.channels(); }},
-      {.field = rt::TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth(); }},
+      {.field = TrackField::Duration, .u32Get = [](auto const& prop) { return prop.durationMs(); }},
+      {.field = TrackField::Bitrate, .u32Get = [](auto const& prop) { return prop.bitrate(); }},
+      {.field = TrackField::SampleRate, .u32Get = [](auto const& prop) { return prop.sampleRate(); }},
+      {.field = TrackField::Codec, .u16Get = [](auto const& prop) { return prop.codecId(); }},
+      {.field = TrackField::Channels, .u8Get = [](auto const& prop) { return prop.channels(); }},
+      {.field = TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth(); }},
     });
 
     void emitTrackProperties(ryml::NodeRef& node,
@@ -232,7 +232,7 @@ namespace ao::rt
     {
       for (auto const& map : kPropertyDispatch)
       {
-        if (auto const key = rt::trackFieldId(map.field); map.u64Get != nullptr)
+        if (auto const key = trackFieldId(map.field); map.u64Get != nullptr)
         {
           node.append_child() << ryml::key(key) << map.u64Get(property);
         }

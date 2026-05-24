@@ -40,6 +40,17 @@ void testControlBlockSpacing(int x)
     x--;
   }
 
+  // NEGATIVE: standalone while after if with proper spacing (not a do-while)
+  if (x > 0)
+  {
+    x++;
+  }
+
+  while (x > 100)
+  {
+    x--;
+  }
+
   if (x > 0)
   {
     x++;

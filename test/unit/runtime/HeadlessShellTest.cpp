@@ -35,8 +35,8 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
 
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+    auto runtime = AppRuntime{
+      AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = workspaceConfigStore}};
@@ -45,7 +45,7 @@ namespace ao::rt::test
     {
       auto const layout = runtime.workspace().layoutState();
       CHECK(layout.openViews.empty());
-      CHECK(layout.activeViewId == rt::kInvalidViewId);
+      CHECK(layout.activeViewId == kInvalidViewId);
     }
 
     SECTION("Navigate to list ID creates a view and marks it active")
@@ -87,13 +87,13 @@ namespace ao::rt::test
       runtime.workspace().navigateTo(ListId{20});
       runtime.workspace().saveSession(runtime.configStore());
 
-      auto loaded = rt::SessionState{};
+      auto loaded = SessionState{};
       workspaceConfigStore->load("workspace", loaded);
       CHECK(loaded.openViews.size() == 2);
 
       // Create new runtime with same persistence
-      auto session2 = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      auto session2 = AppRuntime{
+        AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = workspaceConfigStore}};
@@ -102,7 +102,7 @@ namespace ao::rt::test
 
       auto const layout = session2.workspace().layoutState();
       CHECK(layout.openViews.size() == 2);
-      CHECK(layout.activeViewId != rt::kInvalidViewId);
+      CHECK(layout.activeViewId != kInvalidViewId);
     }
 
     SECTION("Session persistence preserves groupBy across instances")
@@ -118,14 +118,14 @@ namespace ao::rt::test
 
       runtime.workspace().saveSession(runtime.configStore());
 
-      auto loaded = rt::SessionState{};
+      auto loaded = SessionState{};
       workspaceConfigStore->load("workspace", loaded);
       REQUIRE(loaded.openViews.size() == 1);
       CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
 
       // Restore in new runtime
-      auto session2 = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      auto session2 = AppRuntime{
+        AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = workspaceConfigStore}};
@@ -145,8 +145,8 @@ namespace ao::rt::test
       runtime.workspace().navigateTo(ListId{10});
       runtime.workspace().saveSession(runtime.configStore());
 
-      auto session2 = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      auto session2 = AppRuntime{
+        AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = workspaceConfigStore}};

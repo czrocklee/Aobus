@@ -123,7 +123,7 @@ namespace ao::gtk::layout
     private:
       void updateImage(library::MusicLibrary& library)
       {
-        if (_currentTrackId == ao::kInvalidTrackId)
+        if (_currentTrackId == kInvalidTrackId)
         {
           _widget->clearImage();
           return;
@@ -145,7 +145,7 @@ namespace ao::gtk::layout
 
       std::unique_ptr<ImageWidget> _widget;
       Gtk::Label* _error = nullptr;
-      TrackId _currentTrackId = ao::kInvalidTrackId;
+      TrackId _currentTrackId = kInvalidTrackId;
       rt::Subscription _sub;
     };
 

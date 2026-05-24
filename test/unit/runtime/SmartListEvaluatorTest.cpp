@@ -258,8 +258,8 @@ namespace ao::rt::test
       source.addInitial(second);
       source.addInitial(first);
 
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
-      auto filtered = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto filtered = SmartListSource{source, testLibrary.library(), engine};
       auto spy = ObserverSpy{};
       filtered.attach(&spy);
 
@@ -286,9 +286,9 @@ namespace ao::rt::test
       source.addInitial(first);
       source.addInitial(second);
 
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
-      auto hotList = rt::SmartListSource{source, testLibrary.library(), engine};
-      auto coldList = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto hotList = SmartListSource{source, testLibrary.library(), engine};
+      auto coldList = SmartListSource{source, testLibrary.library(), engine};
       hotList.setExpression("$year >= 2021");
       hotList.reload();
       coldList.setExpression("@duration >= 240000");
@@ -322,9 +322,9 @@ namespace ao::rt::test
       auto source = MutableTrackSource{};
       source.addInitial(original);
 
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
-      auto hotList = rt::SmartListSource{source, testLibrary.library(), engine};
-      auto coldList = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto hotList = SmartListSource{source, testLibrary.library(), engine};
+      auto coldList = SmartListSource{source, testLibrary.library(), engine};
       hotList.setExpression("$year >= 2021");
       hotList.reload();
       coldList.setExpression("@duration >= 240000");
@@ -363,8 +363,8 @@ namespace ao::rt::test
       auto source = MutableTrackSource{};
       source.addInitial(trackId);
 
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
-      auto filtered = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto filtered = SmartListSource{source, testLibrary.library(), engine};
       filtered.setExpression("$year >= 2021");
       filtered.reload();
 
@@ -413,12 +413,12 @@ namespace ao::rt::test
       source.addInitial(legacy);
       source.addInitial(modern);
 
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
-      auto parent = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto parent = SmartListSource{source, testLibrary.library(), engine};
       parent.setExpression("$year >= 2021");
       parent.reload();
 
-      auto child = rt::SmartListSource{parent, testLibrary.library(), engine};
+      auto child = SmartListSource{parent, testLibrary.library(), engine};
       child.setExpression("@duration >= 240000");
       child.reload();
 
@@ -463,9 +463,9 @@ namespace ao::rt::test
       auto source = MutableTrackSource{};
       source.addInitial(first);
 
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
-      auto validList = rt::SmartListSource{source, testLibrary.library(), engine};
-      auto invalidList = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto validList = SmartListSource{source, testLibrary.library(), engine};
+      auto invalidList = SmartListSource{source, testLibrary.library(), engine};
       validList.setExpression("$year >= 2021");
       validList.reload();
       invalidList.setExpression("   ");
@@ -515,10 +515,10 @@ namespace ao::rt::test
     SECTION("source destruction is handled gracefully")
     {
       auto testLibrary = TestMusicLibrary{};
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
+      auto engine = SmartListEvaluator{testLibrary.library()};
 
       auto source = std::make_unique<MutableTrackSource>();
-      auto filtered = std::make_unique<rt::SmartListSource>(*source, testLibrary.library(), engine);
+      auto filtered = std::make_unique<SmartListSource>(*source, testLibrary.library(), engine);
 
       auto spy = ObserverSpy{};
       filtered->attach(&spy);
@@ -538,10 +538,10 @@ namespace ao::rt::test
     SECTION("batch operations emit batch notifications")
     {
       auto testLibrary = TestMusicLibrary{};
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
+      auto engine = SmartListEvaluator{testLibrary.library()};
       auto source = MutableTrackSource{};
 
-      auto list = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto list = SmartListSource{source, testLibrary.library(), engine};
       list.setExpression("$year >= 2020");
       list.reload();
 
@@ -579,13 +579,13 @@ namespace ao::rt::test
     SECTION("load mode optimization for mixed access profiles")
     {
       auto testLibrary = TestMusicLibrary{};
-      auto engine = rt::SmartListEvaluator{testLibrary.library()};
+      auto engine = SmartListEvaluator{testLibrary.library()};
       auto source = MutableTrackSource{};
 
-      auto hotList = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto hotList = SmartListSource{source, testLibrary.library(), engine};
       hotList.setExpression("$year >= 2020"); // Hot metadata
 
-      auto coldList = rt::SmartListSource{source, testLibrary.library(), engine};
+      auto coldList = SmartListSource{source, testLibrary.library(), engine};
       coldList.setExpression("@duration >= 180000"); // Cold property
 
       auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, 200000));

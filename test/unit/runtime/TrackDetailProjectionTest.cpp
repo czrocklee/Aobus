@@ -64,7 +64,7 @@ namespace ao::rt::test
 
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = rt::kAllTracksListId});
+    auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
 
     auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
@@ -94,7 +94,7 @@ namespace ao::rt::test
     auto const id1 = env.lib.addTrack("Selected");
     auto const id2 = env.lib.addTrack("Other");
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = rt::kAllTracksListId});
+    auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
 
     auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
@@ -116,7 +116,7 @@ namespace ao::rt::test
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A", .artist = "Same", .album = "AlbumX"});
     auto const id2 = env.lib.addTrack(TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = rt::kAllTracksListId});
+    auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1, id2});
 
     auto const proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);

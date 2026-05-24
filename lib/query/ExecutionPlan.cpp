@@ -48,7 +48,7 @@ namespace ao::query
             return entry->field;
           }
 
-          ao::throwException<Exception>("unknown property field '@{}'", name);
+          throwException<Exception>("unknown property field '@{}'", name);
         }
         case VariableType::Metadata:
         {
@@ -58,14 +58,14 @@ namespace ao::query
             return entry->field;
           }
 
-          ao::throwException<Exception>("unknown metadata field '${}'", name);
+          throwException<Exception>("unknown metadata field '${}'", name);
         }
         case VariableType::Tag: return Field::Tag;
         case VariableType::Custom: return Field::Custom;
         default: break;
       }
 
-      ao::throwException<Exception>("unsupported variable type for '{}'", name);
+      throwException<Exception>("unsupported variable type for '{}'", name);
     }
 
     OpCode toOpCode(Operator op)
@@ -82,8 +82,8 @@ namespace ao::query
         case Operator::LessEqual: return OpCode::Le;
         case Operator::Greater: return OpCode::Gt;
         case Operator::GreaterEqual: return OpCode::Ge;
-        case Operator::Add: ao::throwException<Exception>("operator '+' is not yet supported in query execution");
-        default: ao::throwException<Exception>("unsupported operator");
+        case Operator::Add: throwException<Exception>("operator '+' is not yet supported in query execution");
+        default: throwException<Exception>("unsupported operator");
       }
     }
 
@@ -323,14 +323,14 @@ namespace ao::query
         default: break;
       }
 
-      ao::throwException<Exception>("unit '{}' is not supported for {} constants", normalized, fieldName(field));
+      throwException<Exception>("unit '{}' is not supported for {} constants", normalized, fieldName(field));
     }
 
     std::int64_t scaleUnitConstant(UnitConstantExpression const& constant, Field field)
     {
       if (field == Field::TagBloom)
       {
-        ao::throwException<Exception>("unit literal '{}' requires a numeric field context", constant.lexeme);
+        throwException<Exception>("unit literal '{}' requires a numeric field context", constant.lexeme);
       }
 
       auto lexeme = std::string_view{constant.lexeme};
@@ -347,7 +347,7 @@ namespace ao::query
 
       if (suffixStart == lexeme.end())
       {
-        ao::throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
+        throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
@@ -356,14 +356,14 @@ namespace ao::query
 
       if (numberPart.empty() || suffixPart.empty())
       {
-        ao::throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
+        throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const dotPos = numberPart.find('.');
 
       if (dotPos != std::string_view::npos && numberPart.find('.', dotPos + 1) != std::string_view::npos)
       {
-        ao::throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
+        throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const wholePart = numberPart.substr(0, dotPos);
@@ -371,7 +371,7 @@ namespace ao::query
 
       if (wholePart.empty() || (dotPos != std::string_view::npos && fractionPart.empty()))
       {
-        ao::throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
+        throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const optWhole = parseUnsigned(wholePart);
@@ -381,7 +381,7 @@ namespace ao::query
 
       if (!optWhole || !optFraction || !optDenominator)
       {
-        ao::throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
+        throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const optScaledWhole = checkedMul(*optWhole, *optDenominator);
@@ -391,12 +391,12 @@ namespace ao::query
 
       if (!optScaledNumerator)
       {
-        ao::throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
+        throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
       }
 
       if (*optScaledNumerator % *optDenominator != 0)
       {
-        ao::throwException<Exception>(
+        throwException<Exception>(
           "unit literal '{}' does not resolve to an integer {} value", constant.lexeme, fieldName(field));
       }
 
@@ -406,7 +406,7 @@ namespace ao::query
       {
         if (magnitude > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         {
-          ao::throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
+          throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
         }
 
         return static_cast<std::int64_t>(magnitude);
@@ -416,7 +416,7 @@ namespace ao::query
 
       if (magnitude > negativeLimit)
       {
-        ao::throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
+        throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
       }
 
       if (magnitude == negativeLimit)

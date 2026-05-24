@@ -127,7 +127,7 @@ namespace ao::rt::test
 
     SECTION("destroy publishes ViewDestroyed event")
     {
-      auto received = rt::kInvalidViewId;
+      auto received = kInvalidViewId;
       auto const sub = service.onDestroyed([&](auto viewId) { received = viewId; });
 
       service.destroyView(viewId);

@@ -259,7 +259,7 @@ namespace ao::query
       return root;
     }
 
-    ao::throwException<Exception>("parsing {} error", expr);
+    throwException<Exception>("parsing {} error", expr);
   }
 }
 

@@ -963,7 +963,7 @@ library:
 
     for (auto const& [id, view] : trackReader)
     {
-      auto builder = library::TrackBuilder::fromView(view, ml.dictionary());
+      auto builder = TrackBuilder::fromView(view, ml.dictionary());
       CHECK(builder.property().uri().find("./") == std::string_view::npos);
       CHECK(builder.property().uri().find('\\') == std::string_view::npos);
       CHECK(builder.property().uri().find("..") == std::string_view::npos);

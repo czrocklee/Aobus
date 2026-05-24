@@ -85,7 +85,7 @@ namespace ao::gtk::test
 
   TEST_CASE("GtkLayoutConfig persists column layouts to gtk_layout.yaml", "[app][presentation]")
   {
-    auto const tempDir = ao::lmdb::test::TempDir{};
+    auto const tempDir = lmdb::test::TempDir{};
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
     auto const configPath = configDir / "gtk_layout.yaml";
 
@@ -94,7 +94,7 @@ namespace ao::gtk::test
       {.field = rt::TrackField::Title, .width = 321},
       {.field = rt::TrackField::Artist, .width = 222},
     };
-    state.listLayouts.emplace(ao::ListId{42}, layout);
+    state.listLayouts.emplace(ListId{42}, layout);
 
     {
       auto config = GtkLayoutConfig{configDir};
@@ -107,8 +107,8 @@ namespace ao::gtk::test
     auto config = GtkLayoutConfig{configDir};
     config.load(loaded);
 
-    REQUIRE(loaded.listLayouts.contains(ao::ListId{42}));
-    auto const& loadedLayout = loaded.listLayouts.at(ao::ListId{42});
+    REQUIRE(loaded.listLayouts.contains(ListId{42}));
+    auto const& loadedLayout = loaded.listLayouts.at(ListId{42});
     REQUIRE(loadedLayout.size() == 2);
     CHECK(loadedLayout[0].field == rt::TrackField::Title);
     CHECK(loadedLayout[0].width == 321);

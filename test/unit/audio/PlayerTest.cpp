@@ -36,9 +36,6 @@ namespace ao::audio::test
 
     class TestBackend final : public NullBackend
     {
-      BackendId _backendId;
-      ProfileId _profileId;
-
     public:
       TestBackend(BackendId b, ProfileId p)
         : _backendId{std::move(b)}, _profileId{std::move(p)}
@@ -47,6 +44,10 @@ namespace ao::audio::test
 
       BackendId backendId() const noexcept override { return _backendId; }
       ProfileId profileId() const noexcept override { return _profileId; }
+
+    private:
+      BackendId _backendId;
+      ProfileId _profileId;
     };
   } // namespace
 

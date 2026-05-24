@@ -67,9 +67,9 @@ namespace ao::library
     using iterator_category = std::input_iterator_tag;
 
     Iterator() = default;
-    Iterator(Iterator const&) = default;
+    Iterator(Iterator const&) = delete;
     ~Iterator() = default;
-    Iterator& operator=(Iterator const&) = default;
+    Iterator& operator=(Iterator const&) = delete;
     Iterator(Iterator&&) = default;
     Iterator& operator=(Iterator&&) = default;
 

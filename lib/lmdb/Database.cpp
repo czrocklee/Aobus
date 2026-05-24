@@ -40,7 +40,7 @@ namespace ao::lmdb
     {
       if (val.mv_size != sizeof(T))
       {
-        ao::throwException<Exception>("read: bad value size");
+        throwException<Exception>("read: bad value size");
       }
 
       T value;

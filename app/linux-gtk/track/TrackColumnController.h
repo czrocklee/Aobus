@@ -28,7 +28,7 @@ namespace ao::gtk
   public:
     using FactoryProvider = std::function<Glib::RefPtr<Gtk::ListItemFactory>(rt::TrackField)>;
 
-    TrackColumnController(Gtk::ColumnView& columnView, TrackPresentationStore& presentationStore, ao::ListId listId);
+    TrackColumnController(Gtk::ColumnView& columnView, TrackPresentationStore& presentationStore, ListId listId);
     ~TrackColumnController();
 
     TrackColumnController(TrackColumnController const&) = delete;
@@ -75,7 +75,7 @@ namespace ao::gtk
     ColumnBinding* findColumnBinding(rt::TrackField field);
     ColumnBinding const* findColumnBinding(rt::TrackField field) const;
 
-    ao::ListId _listId;
+    ListId _listId;
     Gtk::ColumnView& _columnView;
     TrackPresentationStore& _presentationStore;
 

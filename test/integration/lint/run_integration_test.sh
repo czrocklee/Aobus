@@ -33,6 +33,7 @@ get_check_alias() {
         BracedInitializationCheckFixture.cpp) echo "aobus-modernize-braced-initialization" ;;
         MemberOrderCheckFixture.cpp) echo "aobus-readability-member-order" ;;
         OptionalNamingAndUsageCheckFixture.cpp) echo "aobus-readability-optional-naming-and-usage" ;;
+        RedundantNamespaceQualificationCheckFixture.cpp) echo "aobus-readability-redundant-namespace-qualification" ;;
         StdCLibraryQualificationCheckFixture.cpp) echo "aobus-readability-std-c-library-qualification" ;;
         ThreadingPolicyCheckFixture.cpp) echo "aobus-threading-policy" ;;
         UnusedSuppressionStyleCheckFixture.cpp) echo "aobus-readability-unused-suppression-style" ;;

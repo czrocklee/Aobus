@@ -127,23 +127,23 @@ namespace ao::query::test
       TrackView view() const { return TrackView{_hotData, _coldData}; }
       TrackView hotOnlyView() const { return TrackView{_hotData, std::span<std::byte const>{}}; }
       TrackView coldOnlyView() const { return TrackView{std::span<std::byte const>{}, _coldData}; }
-      DictionaryStore& dictionary() { return *_dict; }
+      DictionaryStore& dictionary() { return *_optDict; }
 
     private:
       void init(TrackSpec const& spec, DictionaryStore* dict)
       {
         auto temp = TempDir{};
         auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
-        _env.emplace(temp.path(), envOpts);
-        auto wtxn = WriteTransaction{*_env};
+        _optEnv.emplace(temp.path(), envOpts);
+        auto wtxn = WriteTransaction{*_optEnv};
 
         if (dict == nullptr)
         {
-          _dict.emplace(Database{wtxn, "dict"}, wtxn);
-          dict = &*_dict;
+          _optDict.emplace(Database{wtxn, "dict"}, wtxn);
+          dict = &*_optDict;
         }
 
-        _resources.emplace(Database{wtxn, "resources"});
+        _optResources.emplace(Database{wtxn, "resources"});
 
         TrackBuilder builder = TrackBuilder::createNew();
         builder.metadata().title(spec.title);
@@ -179,7 +179,7 @@ namespace ao::query::test
         }
 
         _hotData = builder.serializeHot(wtxn, *dict);
-        _coldData = builder.serializeCold(wtxn, *dict, *_resources);
+        _coldData = builder.serializeCold(wtxn, *dict, *_optResources);
 
         // Manual ID overrides if specified
         auto* header = utility::layout::asMutablePtr<library::TrackHotHeader>(_hotData);
@@ -217,9 +217,9 @@ namespace ao::query::test
         }
       }
 
-      std::optional<Environment> _env;
-      std::optional<DictionaryStore> _dict;
-      std::optional<ResourceStore> _resources;
+      std::optional<Environment> _optEnv;
+      std::optional<DictionaryStore> _optDict;
+      std::optional<ResourceStore> _optResources;
       std::vector<std::byte> _hotData;
       std::vector<std::byte> _coldData;
     };

@@ -28,7 +28,7 @@ namespace ao::gtk
     TrackColumnViewHost(TrackListAdapter& adapter,
                         TrackPresentationStore& presentationStore,
                         Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
-                        ao::ListId listId);
+                        ListId listId);
     ~TrackColumnViewHost();
 
     // Not copyable or movable
@@ -63,7 +63,7 @@ namespace ao::gtk
                              TrackPresentationStore& presentationStore,
                              Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                              FactoryProvider const& factoryProvider,
-                             ao::ListId listId);
+                             ListId listId);
 
   private:
     void connectSelectionSignals();

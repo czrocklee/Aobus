@@ -69,7 +69,7 @@ namespace ao::audio::backend::test
 
           if (core)
           {
-            auto props = ao::utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
+            auto props = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
                                                                                               "support.null-audio-sink",
                                                                                               "node.name",
                                                                                               "rs-test-dummy-sink",
@@ -115,7 +115,7 @@ namespace ao::audio::backend::test
 
     // Quick check if we can connect to a daemon
     {
-      auto loop = ao::utility::makeUniquePtr<::pw_main_loop_destroy>(::pw_main_loop_new(nullptr));
+      auto loop = utility::makeUniquePtr<::pw_main_loop_destroy>(::pw_main_loop_new(nullptr));
       auto context = PwContextPtr{::pw_context_new(::pw_main_loop_get_loop(loop.get()), nullptr, 0)};
       auto core = PwCorePtr{::pw_context_connect(context.get(), nullptr, 0)};
 
@@ -188,7 +188,7 @@ namespace ao::audio::backend::test
 
         if (core)
         {
-          auto props = ao::utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
+          auto props = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
                                                                                             "support.null-audio-sink",
                                                                                             "node.name",
                                                                                             "ao-test-duplex-sink",

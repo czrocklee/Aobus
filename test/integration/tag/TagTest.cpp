@@ -27,7 +27,7 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-    auto const file = tag::TagFile::open(path);
+    auto const file = TagFile::open(path);
     REQUIRE(file != nullptr);
 
     auto builder = file->loadTrack();
@@ -51,7 +51,7 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("hires." + std::string{format});
 
-    auto const file = tag::TagFile::open(path);
+    auto const file = TagFile::open(path);
     REQUIRE(file != nullptr);
 
     auto builder = file->loadTrack();
@@ -75,7 +75,7 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-    auto const file = tag::TagFile::open(path);
+    auto const file = TagFile::open(path);
     auto builder = file->loadTrack();
     auto& prop = builder.property();
 
@@ -101,7 +101,7 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("hires." + std::string{format});
 
-    auto const file = tag::TagFile::open(path);
+    auto const file = TagFile::open(path);
     auto builder = file->loadTrack();
     auto& prop = builder.property();
 
@@ -149,7 +149,7 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("with_cover." + std::string{format});
 
-    auto const file = tag::TagFile::open(path);
+    auto const file = TagFile::open(path);
     REQUIRE(file != nullptr);
 
     auto builder = file->loadTrack();
@@ -183,7 +183,7 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("empty." + std::string{format});
 
-    auto const file = tag::TagFile::open(path);
+    auto const file = TagFile::open(path);
     REQUIRE(file != nullptr);
 
     auto builder = file->loadTrack();

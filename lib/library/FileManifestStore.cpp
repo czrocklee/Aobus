@@ -28,7 +28,7 @@ namespace ao::library
     {
       if (uri.length() > kMaxUriLength)
       {
-        ao::throwException<Exception>("URI exceeds maximum supported length of {} bytes", kMaxUriLength);
+        throwException<Exception>("URI exceeds maximum supported length of {} bytes", kMaxUriLength);
       }
     }
 

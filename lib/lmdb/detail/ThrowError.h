@@ -13,7 +13,7 @@ namespace ao::lmdb
   {
     if (code != MDB_SUCCESS)
     {
-      ao::throwException<Exception>("{}: {}", origin, ::mdb_strerror(code));
+      throwException<Exception>("{}: {}", origin, ::mdb_strerror(code));
     }
   }
 }

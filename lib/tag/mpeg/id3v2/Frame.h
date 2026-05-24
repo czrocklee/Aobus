@@ -130,7 +130,7 @@ namespace ao::tag::mpeg::id3v2
     {
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
-        ao::throwException<Exception>(
+        throwException<Exception>(
           "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
       }
     }
@@ -150,7 +150,7 @@ namespace ao::tag::mpeg::id3v2
     {
       if (sizeof(Layout) > size())
       {
-        ao::throwException<Exception>(
+        throwException<Exception>(
           "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
       }
 

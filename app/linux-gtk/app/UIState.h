@@ -33,6 +33,6 @@ namespace ao::gtk
 
   struct ColumnLayoutState final
   {
-    std::map<ao::ListId, std::vector<ColumnState>> listLayouts;
+    std::map<ListId, std::vector<ColumnState>> listLayouts;
   };
 } // namespace ao::gtk

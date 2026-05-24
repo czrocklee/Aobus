@@ -86,7 +86,7 @@ namespace ao::rt
 
   struct LayoutState final
   {
-    ViewId activeViewId = rt::kInvalidViewId;
+    ViewId activeViewId = kInvalidViewId;
     std::vector<ViewId> openViews{};
     std::vector<ViewId> navigationStack{};
     std::uint64_t revision = 0;

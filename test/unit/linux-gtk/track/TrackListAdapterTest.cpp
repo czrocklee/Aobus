@@ -33,7 +33,6 @@ namespace ao::model::test
   // Test-specific RowData definition
   struct RowData final
   {
-    using TrackId = ao::TrackId;
     TrackId id;
     std::string artist;
     std::string album;

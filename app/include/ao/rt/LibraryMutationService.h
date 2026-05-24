@@ -67,7 +67,7 @@ namespace ao::rt
 
     // C++20 Async variants
     async::Task<void> importLibraryAsync(std::filesystem::path path);
-    async::Task<void> exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode);
+    async::Task<void> exportLibraryAsync(std::filesystem::path path, ExportMode mode);
     async::Task<library::ScanPlan> buildScanPlanAsync();
     async::Task<void> applyScanPlanAsync(library::ScanPlan plan);
 

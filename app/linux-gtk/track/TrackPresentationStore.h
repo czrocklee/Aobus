@@ -51,13 +51,13 @@ namespace ao::gtk
     void setActivePresentationId(std::string_view id);
     std::string_view activePresentationId() const noexcept { return _activePresentationId; }
 
-    void setActiveListId(ao::ListId listId);
+    void setActiveListId(ListId listId);
 
-    std::map<ao::ListId, std::vector<ColumnState>> const& listLayouts() const noexcept { return _listLayouts; }
-    void setListLayouts(std::map<ao::ListId, std::vector<ColumnState>> const& layouts);
+    std::map<ListId, std::vector<ColumnState>> const& listLayouts() const noexcept { return _listLayouts; }
+    void setListLayouts(std::map<ListId, std::vector<ColumnState>> const& layouts);
 
-    std::vector<ColumnState> const& layoutForList(ao::ListId listId) const noexcept;
-    void updateLayout(ao::ListId listId, std::vector<ColumnState> const& layout);
+    std::vector<ColumnState> const& layoutForList(ListId listId) const noexcept;
+    void updateLayout(ListId listId, std::vector<ColumnState> const& layout);
 
     std::vector<rt::TrackField> activeFieldOrder() const noexcept;
 
@@ -68,8 +68,8 @@ namespace ao::gtk
     rt::Subscription _customPresetsSub;
 
     std::string _activePresentationId{};
-    ao::ListId _activeListId = ao::kInvalidListId;
-    std::map<ao::ListId, std::vector<ColumnState>> _listLayouts{};
+    ListId _activeListId = kInvalidListId;
+    std::map<ListId, std::vector<ColumnState>> _listLayouts{};
     ChangedSignal _changed;
   };
 } // namespace ao::gtk

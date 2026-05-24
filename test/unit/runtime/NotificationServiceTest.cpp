@@ -15,7 +15,7 @@ namespace ao::rt::test
   {
     auto service = NotificationService{};
 
-    auto receivedId = rt::kInvalidNotificationId;
+    auto receivedId = kInvalidNotificationId;
     auto sub = service.onPosted([&](auto id) { receivedId = id; });
 
     auto id = service.post(NotificationSeverity::Info, "test message");
@@ -28,7 +28,7 @@ namespace ao::rt::test
 
     auto id = service.post(NotificationSeverity::Warning, "warning");
 
-    auto dismissedId = rt::kInvalidNotificationId;
+    auto dismissedId = kInvalidNotificationId;
     auto sub = service.onDismissed([&](auto id) { dismissedId = id; });
 
     service.dismiss(id);
@@ -102,7 +102,7 @@ namespace ao::rt::test
 
     auto const id = service.post(NotificationSeverity::Info, "Scanning", true);
 
-    auto updatedId = rt::kInvalidNotificationId;
+    auto updatedId = kInvalidNotificationId;
     auto sub = service.onUpdated([&](auto incomingId) { updatedId = incomingId; });
 
     service.updateProgress(id,

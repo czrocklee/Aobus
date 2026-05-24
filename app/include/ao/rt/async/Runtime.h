@@ -19,7 +19,7 @@ namespace ao::rt::async
   class Runtime final
   {
   public:
-    explicit Runtime(rt::IControlExecutor& uiExecutor);
+    explicit Runtime(IControlExecutor& uiExecutor);
     ~Runtime();
 
     Runtime(Runtime const&) = delete;
@@ -27,7 +27,7 @@ namespace ao::rt::async
     Runtime(Runtime&&) = delete;
     Runtime& operator=(Runtime&&) = delete;
 
-    rt::IControlExecutor& controlExecutor() noexcept;
+    IControlExecutor& controlExecutor() noexcept;
 
     void requestStop() noexcept;
     void join();
@@ -52,7 +52,7 @@ namespace ao::rt::async
     void spawnWithLifetime(LifetimeScope* scope, Task<void> task);
 
   private:
-    rt::IControlExecutor& _uiExecutor;
+    IControlExecutor& _uiExecutor;
     boost::asio::thread_pool _workerPool;
     bool _stopRequested{false};
   };

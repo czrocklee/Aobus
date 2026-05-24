@@ -20,12 +20,13 @@ add_library(AobusLintPlugin MODULE
   check/LocalInitializationStyleCheck.cpp
   check/BracedInitializationCheck.cpp
   check/OptionalNamingAndUsageCheck.cpp
+  check/RedundantNamespaceQualificationCheck.cpp
   check/StdCLibraryQualificationCheck.cpp
   check/ThreadingPolicyCheck.cpp
   check/UnusedSuppressionStyleCheck.cpp
   check/UseIfInitStatementCheck.cpp
-  check/LambdaParamsCheck.cpp
-  check/MemberOrderCheck.cpp
+  checkFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");
+  checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");
   AobusLintModule.cpp
 )
 
@@ -38,6 +39,7 @@ target_include_directories(AobusLintPlugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(AobusLintPlugin PRIVATE
   clangTidy
+  clangTidyUtils
   clangTidyReadabilityModule
   clangAST
   clangASTMatchers
