@@ -81,6 +81,10 @@
 /* StatusNotificationLabel */
 .ao-status-message {}
 
+.ao-status-info    { color: @theme_text_color; }
+.ao-status-warning { color: @warning_color; }
+.ao-status-error   { color: @error_color; }
+
 /* Section Header (generic) */
 .ao-section-header {
   margin-bottom: var(--ao-spacing-sm);

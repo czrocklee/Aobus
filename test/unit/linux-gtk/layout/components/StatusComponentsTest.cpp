@@ -6,9 +6,8 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/playback/NowPlayingStatusLabel.h"
 #include "app/linux-gtk/playback/PlaybackDetailsWidget.h"
-#include "app/linux-gtk/portal/LibraryTaskProgressIndicator.h"
 #include "app/linux-gtk/track/LibraryTrackCountLabel.h"
-#include "app/linux-gtk/track/StatusNotificationLabel.h"
+#include "app/linux-gtk/track/StatusSlot.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
@@ -19,7 +18,6 @@
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
-#include <gtkmm/stack.h>
 
 #include <functional>
 #include <memory>
@@ -68,12 +66,6 @@ namespace ao::gtk::layout::test
       CHECK(gtkLabel->get_text().empty());
     }
 
-    SECTION("portal::LibraryTaskProgressIndicator instantiates and is hidden by default")
-    {
-      auto indicator = portal::LibraryTaskProgressIndicator{runtime.mutation()};
-      REQUIRE(indicator.get_visible() == false);
-    }
-
     SECTION("LibraryTrackCountLabel instantiates and shows 0 tracks")
     {
       auto label = LibraryTrackCountLabel{runtime.sources().allTracks()};
@@ -82,10 +74,10 @@ namespace ao::gtk::layout::test
       CHECK(gtkLabel->get_text() == "0 tracks");
     }
 
-    SECTION("StatusNotificationLabel instantiates")
+    SECTION("StatusSlot instantiates")
     {
-      auto label = StatusNotificationLabel{runtime.notifications(), runtime.views()};
-      REQUIRE(dynamic_cast<Gtk::Stack*>(&label.widget()) != nullptr);
+      auto slot = StatusSlot{runtime.mutation(), runtime.notifications(), runtime.views()};
+      REQUIRE(dynamic_cast<Gtk::Box*>(&slot.widget()) != nullptr);
     }
 
     SECTION("StatusComponents Registration")
@@ -93,9 +85,11 @@ namespace ao::gtk::layout::test
       auto registry = ComponentRegistry{};
       registerStatusComponents(registry);
 
-      auto const optDesc = registry.getDescriptor("status.libraryTaskProgress");
-      REQUIRE(optDesc.has_value());
-      CHECK(optDesc->displayName == "Library Task Progress");
+      {
+        auto const optDesc = registry.getDescriptor("status.statusSlot");
+        REQUIRE(optDesc.has_value());
+        CHECK(optDesc->displayName == "Status Slot");
+      }
     }
   }
 } // namespace ao::gtk::layout::test

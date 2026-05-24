@@ -343,15 +343,15 @@ namespace ao::gtk::layout::editor::test
       CHECK(bar.children[2].getLayout<std::string>("cssClasses", "") == "ao-grouping-region");
     }
 
-    SECTION("status.defaultBar template contains 8 children")
+    SECTION("status.defaultBar template contains 7 children")
     {
       auto const templates = getBuiltInTemplates();
       auto const& bar = templates.at("status.defaultBar");
 
       CHECK(bar.type == "box");
 
-      // 8 children: playbackDetails, spacer, nowPlaying, spacer, importProgress, notification, separator, trackCount
-      int const expectedChildren = 8;
+      // 7 children: playbackDetails, spacer, nowPlaying, spacer, statusSlot, separator, trackCount
+      int const expectedChildren = 7;
       CHECK(bar.children.size() == expectedChildren);
     }
 

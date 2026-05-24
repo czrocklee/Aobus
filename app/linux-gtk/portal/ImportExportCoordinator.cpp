@@ -130,6 +130,7 @@ namespace ao::gtk::portal
         {
           APP_LOG_ERROR("Scan failed: {}", e.what());
           self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+          self->_runtime.mutation().notifyLibraryTaskCompleted(0);
         }
 
         self->_libraryTaskProgressSub.reset();

@@ -28,7 +28,7 @@ add_library(aobus-gtk-lib STATIC
 
     track/LibraryTrackCountLabel.cpp
     track/SelectionInfoLabel.cpp
-    track/StatusNotificationLabel.cpp
+    track/StatusSlot.cpp
     track/TrackPageHost.cpp
     track/TrackViewPage.cpp
     track/TrackColumnController.cpp
@@ -78,7 +78,6 @@ add_library(aobus-gtk-lib STATIC
 
     portal/ImportExportCoordinator.cpp
     portal/LibraryTaskProgressDialog.cpp
-    portal/LibraryTaskProgressIndicator.cpp
     portal/PlaylistExporter.cpp
 
     layout/document/LayoutDocument.cpp

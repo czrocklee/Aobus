@@ -9,9 +9,8 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/NowPlayingStatusLabel.h"
 #include "playback/PlaybackDetailsWidget.h"
-#include "portal/LibraryTaskProgressIndicator.h"
 #include "track/LibraryTrackCountLabel.h"
-#include "track/StatusNotificationLabel.h"
+#include "track/StatusSlot.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListSourceStore.h>
 
@@ -54,32 +53,18 @@ namespace ao::gtk::layout
       NowPlayingStatusLabel _widget;
     };
 
-    class LibraryTaskProgressComponent final : public ILayoutComponent
+    class StatusSlotComponent final : public ILayoutComponent
     {
     public:
-      LibraryTaskProgressComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.mutation()}
-      {
-      }
-
-      Gtk::Widget& widget() override { return _widget; }
-
-    private:
-      portal::LibraryTaskProgressIndicator _widget;
-    };
-
-    class StatusNotificationComponent final : public ILayoutComponent
-    {
-    public:
-      StatusNotificationComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.notifications(), ctx.runtime.views()}
+      StatusSlotComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.runtime.mutation(), ctx.runtime.notifications(), ctx.runtime.views()}
       {
       }
 
       Gtk::Widget& widget() override { return _widget.widget(); }
 
     private:
-      StatusNotificationLabel _widget;
+      StatusSlot _widget;
     };
 
     class LibraryTrackCountComponent final : public ILayoutComponent
@@ -127,15 +112,9 @@ namespace ao::gtk::layout
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<NowPlayingStatusComponent>(ctx, node); });
 
-    registry.registerComponent(
-      {.type = "status.libraryTaskProgress", .displayName = "Library Task Progress", .category = "Status"},
-      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<LibraryTaskProgressComponent>(ctx, node); });
-
-    registry.registerComponent(
-      {.type = "status.notification", .displayName = "Status Notifications", .category = "Status"},
-      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<StatusNotificationComponent>(ctx, node); });
+    registry.registerComponent({.type = "status.statusSlot", .displayName = "Status Slot", .category = "Status"},
+                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               { return std::make_unique<StatusSlotComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.trackCount", .displayName = "Library Track Count", .category = "Status"},
