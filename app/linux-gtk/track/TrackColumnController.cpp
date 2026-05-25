@@ -107,17 +107,12 @@ namespace ao::gtk
 
       auto const title = Glib::ustring{rtDef.label.data(), rtDef.label.size()};
       auto const column = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
-      auto const* uiDef = trackFieldUiDefinition(rtDef.field);
 
       column->set_id(Glib::ustring{rtDef.id.data(), rtDef.id.size()});
 
       column->set_resizable(true);
 
-      if (uiDef != nullptr)
-      {
-        column->set_expand(uiDef->columnExpands);
-        column->set_fixed_width(uiDef->defaultColumnWidth);
-      }
+      column->set_fixed_width(defaultWidthForField(rtDef.field));
 
       _columnNotifyConnections.emplace_back(column->property_fixed_width().signal_changed().connect(
         [this]
@@ -135,10 +130,32 @@ namespace ao::gtk
 
       _columnView.append_column(column);
 
-      _columns.push_back(
-        {.field = rtDef.field, .column = column, .defaultWidth = uiDef != nullptr ? uiDef->defaultColumnWidth : -1});
+      _columns.push_back({.field = rtDef.field, .column = column, .defaultWidth = defaultWidthForField(rtDef.field)});
     }
   }
+
+  namespace
+  {
+    rt::TrackField chooseExpandingColumn(std::span<rt::TrackField const> visibleFields)
+    {
+      if (std::ranges::contains(visibleFields, rt::TrackField::Tags))
+      {
+        return rt::TrackField::Tags;
+      }
+
+      if (std::ranges::contains(visibleFields, rt::TrackField::Title))
+      {
+        return rt::TrackField::Title;
+      }
+
+      if (!visibleFields.empty())
+      {
+        return visibleFields.front();
+      }
+
+      return rt::TrackField::Title;
+    }
+  } // namespace
 
   void TrackColumnController::applyColumnLayout(std::span<rt::TrackField const> visibleFields)
   {
@@ -227,36 +244,11 @@ namespace ao::gtk
 
   void TrackColumnController::updateColumnExpansion(std::span<rt::TrackField const> visibleFields)
   {
-    auto expanding = rt::TrackField::Tags;
+    auto const expanding = chooseExpandingColumn(visibleFields);
 
-    for (auto const field : visibleFields)
+    for (auto& data : _columns)
     {
-      if (fieldIsExpanding(field))
-      {
-        expanding = field;
-        break;
-      }
-    }
-
-    if (!std::ranges::contains(visibleFields, expanding))
-    {
-      // Fallback: first visible field
-      if (auto const titleField = rt::TrackField::Title; std::ranges::contains(visibleFields, titleField))
-      {
-        expanding = titleField;
-      }
-      else if (!visibleFields.empty())
-      {
-        expanding = visibleFields.front();
-      }
-    }
-
-    for (auto& binding : _columns)
-    {
-      if (auto const shouldExpand = binding.field == expanding; binding.column->get_expand() != shouldExpand)
-      {
-        binding.column->set_expand(shouldExpand);
-      }
+      data.column->set_expand(data.field == expanding);
     }
   }
 
@@ -445,16 +437,22 @@ namespace ao::gtk
 
     if (found)
     {
+      auto css = std::string{};
+
       if (viewWidth > 0)
       {
         double const percentage = (titleX / viewWidth) * 100.0;
-        auto const css = std::format("columnview {{ --ao-title-x: {:.1f}%; }}", percentage);
-        _dynamicCssProvider->load_from_data(css);
+        css = std::format("columnview {{ --ao-title-x: {:.1f}%; }}", percentage);
       }
       else
       {
-        auto const css = std::format("columnview {{ --ao-title-x: {:.1f}px; }}", titleX);
-        _dynamicCssProvider->load_from_data(css);
+        css = std::format("columnview {{ --ao-title-x: {:.1f}px; }}", titleX);
+      }
+
+      if (css != _lastTitleCss)
+      {
+        _lastTitleCss = css;
+        _dynamicCssProvider->load_from_data(_lastTitleCss);
       }
     }
   }

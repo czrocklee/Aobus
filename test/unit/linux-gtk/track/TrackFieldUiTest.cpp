@@ -3,12 +3,14 @@
 
 #include "app/linux-gtk/track/TrackFieldUi.h"
 
+#include <ao/Error.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -21,6 +23,7 @@ using namespace ao::rt;
 namespace
 {
   using Raw = detail::TrackFieldRawValue;
+  using Edit = detail::TrackFieldEditValue;
   using Dur = detail::Duration;
 
   auto const kAllFields = trackFieldDefinitions();
@@ -211,6 +214,70 @@ TEST_CASE("TrackFieldUi formatValue returns empty for non-matching variant", "[g
   CHECK(formatted.empty());
 }
 
+TEST_CASE("TrackFieldUi parseInlineEdit for text fields produces edit string", "[gtk][trackfieldui]")
+{
+  auto const* def = trackFieldUiDefinition(TrackField::Title);
+
+  REQUIRE(def != nullptr);
+  REQUIRE(def->parseInlineEdit != nullptr);
+
+  auto const result = def->parseInlineEdit("New Title");
+
+  REQUIRE(result);
+
+  auto const* value = std::get_if<std::string>(&*result);
+
+  REQUIRE(value != nullptr);
+  CHECK(*value == "New Title");
+}
+
+TEST_CASE("TrackFieldUi parseInlineEdit for numeric fields produces edit uint16_t", "[gtk][trackfieldui]")
+{
+  auto const* def = trackFieldUiDefinition(TrackField::Year);
+
+  REQUIRE(def != nullptr);
+  REQUIRE(def->parseInlineEdit != nullptr);
+
+  auto const result = def->parseInlineEdit(" 2024 ");
+
+  REQUIRE(result);
+
+  auto const* value = std::get_if<std::uint16_t>(&*result);
+
+  REQUIRE(value != nullptr);
+  CHECK(*value == 2024);
+}
+
+TEST_CASE("TrackFieldUi parseInlineEdit for empty numeric text clears value", "[gtk][trackfieldui]")
+{
+  auto const* def = trackFieldUiDefinition(TrackField::TrackNumber);
+
+  REQUIRE(def != nullptr);
+  REQUIRE(def->parseInlineEdit != nullptr);
+
+  auto const result = def->parseInlineEdit("");
+
+  REQUIRE(result);
+
+  auto const* value = std::get_if<std::uint16_t>(&*result);
+
+  REQUIRE(value != nullptr);
+  CHECK(*value == 0);
+}
+
+TEST_CASE("TrackFieldUi parseInlineEdit for invalid numeric text returns error", "[gtk][trackfieldui]")
+{
+  auto const* def = trackFieldUiDefinition(TrackField::TrackNumber);
+
+  REQUIRE(def != nullptr);
+  REQUIRE(def->parseInlineEdit != nullptr);
+
+  auto const result = def->parseInlineEdit("12a");
+
+  REQUIRE_FALSE(result);
+  CHECK(result.error().code == ao::Error::Code::FormatRejected);
+}
+
 TEST_CASE("TrackFieldUi writePatch for text fields sets optional string", "[gtk][trackfieldui]")
 {
   auto const* def = trackFieldUiDefinition(TrackField::Title);
@@ -219,7 +286,7 @@ TEST_CASE("TrackFieldUi writePatch for text fields sets optional string", "[gtk]
   REQUIRE(def->writePatch != nullptr);
 
   auto patch = MetadataPatch{};
-  auto const value = Raw{std::in_place_type<std::string>, "New Title"};
+  auto const value = Edit{std::in_place_type<std::string>, "New Title"};
   auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
 
   def->writePatch(ctx);
@@ -236,7 +303,7 @@ TEST_CASE("TrackFieldUi writePatch for artist sets optArtist", "[gtk][trackfield
   REQUIRE(def->writePatch != nullptr);
 
   auto patch = MetadataPatch{};
-  auto const value = Raw{std::in_place_type<std::string>, "New Artist"};
+  auto const value = Edit{std::in_place_type<std::string>, "New Artist"};
   auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
 
   def->writePatch(ctx);
@@ -253,7 +320,7 @@ TEST_CASE("TrackFieldUi writePatch for album sets optAlbum", "[gtk][trackfieldui
   REQUIRE(def->writePatch != nullptr);
 
   auto patch = MetadataPatch{};
-  auto const value = Raw{std::in_place_type<std::string>, "New Album"};
+  auto const value = Edit{std::in_place_type<std::string>, "New Album"};
   auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
 
   def->writePatch(ctx);
@@ -270,7 +337,7 @@ TEST_CASE("TrackFieldUi writePatch for numeric fields sets uint16_t", "[gtk][tra
   REQUIRE(def->writePatch != nullptr);
 
   auto patch = MetadataPatch{};
-  auto const value = Raw{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(1999)};
+  auto const value = Edit{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(1999)};
   auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
 
   def->writePatch(ctx);
@@ -287,7 +354,7 @@ TEST_CASE("TrackFieldUi writePatch for track number", "[gtk][trackfieldui]")
   REQUIRE(def->writePatch != nullptr);
 
   auto patch = MetadataPatch{};
-  auto const value = Raw{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(7)};
+  auto const value = Edit{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(7)};
   auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
 
   def->writePatch(ctx);
@@ -304,7 +371,7 @@ TEST_CASE("TrackFieldUi writePatch for disc number", "[gtk][trackfieldui]")
   REQUIRE(def->writePatch != nullptr);
 
   auto patch = MetadataPatch{};
-  auto const value = Raw{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(2)};
+  auto const value = Edit{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(2)};
   auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
 
   def->writePatch(ctx);
@@ -332,7 +399,7 @@ TEST_CASE("TrackFieldUi all text metadata fields have writePatch", "[gtk][trackf
     INFO("Field: " << trackFieldId(field));
     REQUIRE(def != nullptr);
     CHECK(def->writePatch != nullptr);
-    CHECK(def->propertyDialogEditable);
+    CHECK(def->parseInlineEdit != nullptr);
   }
 }
 
@@ -353,74 +420,85 @@ TEST_CASE("TrackFieldUi all numeric metadata fields have writePatch", "[gtk][tra
     INFO("Field: " << trackFieldId(field));
     REQUIRE(def != nullptr);
     CHECK(def->writePatch != nullptr);
-    CHECK(def->propertyDialogEditable);
+    CHECK(def->parseInlineEdit != nullptr);
   }
 }
 
-TEST_CASE("TrackFieldUi drag query prefixes exist", "[gtk][trackfieldui]")
+TEST_CASE("TrackFieldUi inline editable fields include key metadata columns", "[gtk][trackfieldui]")
 {
-  CHECK(trackFieldUiDefinition(TrackField::Artist)->dragQueryPrefix == "$a=");
-  CHECK(trackFieldUiDefinition(TrackField::Album)->dragQueryPrefix == "$al=");
-  CHECK(trackFieldUiDefinition(TrackField::Genre)->dragQueryPrefix == "$g=");
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Title)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Artist)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Album)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::AlbumArtist)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Genre)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Composer)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Work)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Year)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::DiscNumber)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::TotalDiscs)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::TrackNumber)));
+  CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::TotalTracks)));
+
+  CHECK_FALSE(canInlineEdit(*trackFieldUiDefinition(TrackField::Duration)));
 }
 
-TEST_CASE("TrackFieldUi drag prefix empty for non-draggable fields", "[gtk][trackfieldui]")
+TEST_CASE("TrackFieldUi inline editable fields have parser, writer, and edit hooks", "[gtk][trackfieldui]")
 {
-  CHECK(trackFieldUiDefinition(TrackField::Title)->dragQueryPrefix.empty());
-  CHECK(trackFieldUiDefinition(TrackField::Duration)->dragQueryPrefix.empty());
-  CHECK(trackFieldUiDefinition(TrackField::Year)->dragQueryPrefix.empty());
+  for (auto const& def : trackFieldUiDefinitions())
+  {
+    if (!canInlineEdit(def))
+    {
+      continue;
+    }
+
+    INFO("Field: " << trackFieldId(def.field));
+    CHECK(def.parseInlineEdit != nullptr);
+    CHECK(def.writePatch != nullptr);
+    CHECK(def.readRowEditValue != nullptr);
+    CHECK(def.applyRowEditValue != nullptr);
+  }
 }
 
-TEST_CASE("TrackFieldUi column visible by default for built-in fields", "[gtk][trackfieldui]")
+TEST_CASE("TrackFieldUi inline editing parse/apply for numeric fields", "[gtk][trackfieldui]")
 {
-  CHECK(trackFieldUiDefinition(TrackField::Title)->columnVisibleByDefault);
-  CHECK(trackFieldUiDefinition(TrackField::Artist)->columnVisibleByDefault);
-  CHECK(trackFieldUiDefinition(TrackField::Album)->columnVisibleByDefault);
-  CHECK(trackFieldUiDefinition(TrackField::Duration)->columnVisibleByDefault);
-  CHECK(trackFieldUiDefinition(TrackField::Tags)->columnVisibleByDefault);
-}
+  auto const fields = std::to_array({TrackField::Year,
+                                     TrackField::DiscNumber,
+                                     TrackField::TotalDiscs,
+                                     TrackField::TrackNumber,
+                                     TrackField::TotalTracks});
 
-TEST_CASE("TrackFieldUi column not visible by default for curated fields", "[gtk][trackfieldui]")
-{
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::AlbumArtist)->columnVisibleByDefault);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Genre)->columnVisibleByDefault);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Composer)->columnVisibleByDefault);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Work)->columnVisibleByDefault);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Year)->columnVisibleByDefault);
-}
+  for (auto const field : fields)
+  {
+    auto const* def = trackFieldUiDefinition(field);
+    INFO("Field: " << trackFieldId(field));
+    REQUIRE(def != nullptr);
+    REQUIRE(def->parseInlineEdit != nullptr);
 
-TEST_CASE("TrackFieldUi column expanding only Tags", "[gtk][trackfieldui]")
-{
-  CHECK(trackFieldUiDefinition(TrackField::Tags)->columnExpands);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Title)->columnExpands);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Artist)->columnExpands);
-}
+    SECTION("parse valid")
+    {
+      auto const result = def->parseInlineEdit("123");
+      REQUIRE(result.has_value());
+      auto const* val = std::get_if<std::uint16_t>(&result.value());
+      REQUIRE(val != nullptr);
+      CHECK(*val == 123);
+    }
 
-TEST_CASE("TrackFieldUi column numeric fields", "[gtk][trackfieldui]")
-{
-  CHECK(trackFieldUiDefinition(TrackField::Year)->columnNumeric);
-  CHECK(trackFieldUiDefinition(TrackField::DiscNumber)->columnNumeric);
-  CHECK(trackFieldUiDefinition(TrackField::TrackNumber)->columnNumeric);
-  CHECK(trackFieldUiDefinition(TrackField::Duration)->columnNumeric);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Title)->columnNumeric);
-}
+    SECTION("parse empty")
+    {
+      auto const result = def->parseInlineEdit("");
+      REQUIRE(result.has_value());
+      auto const* val = std::get_if<std::uint16_t>(&result.value());
+      REQUIRE(val != nullptr);
+      CHECK(*val == 0);
+    }
 
-TEST_CASE("TrackFieldUi column tags cell only Tags", "[gtk][trackfieldui]")
-{
-  CHECK(trackFieldUiDefinition(TrackField::Tags)->columnTagsCell);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Title)->columnTagsCell);
-}
-
-TEST_CASE("TrackFieldUi inline editable only Title/Artist/Album", "[gtk][trackfieldui]")
-{
-  CHECK(trackFieldUiDefinition(TrackField::Title)->inlineEditable);
-  CHECK(trackFieldUiDefinition(TrackField::Artist)->inlineEditable);
-  CHECK(trackFieldUiDefinition(TrackField::Album)->inlineEditable);
-
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::AlbumArtist)->inlineEditable);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Genre)->inlineEditable);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Year)->inlineEditable);
-  CHECK_FALSE(trackFieldUiDefinition(TrackField::Duration)->inlineEditable);
+    SECTION("parse invalid")
+    {
+      CHECK_FALSE(def->parseInlineEdit("abc").has_value());
+      CHECK_FALSE(def->parseInlineEdit("-1").has_value());
+      CHECK_FALSE(def->parseInlineEdit("70000").has_value());
+    }
+  }
 }
 
 TEST_CASE("TrackFieldUi readRowText is non-null for presentable fields", "[gtk][trackfieldui]")
@@ -459,24 +537,10 @@ TEST_CASE("TrackFieldUi readViewRawValue is non-null for non-synthetic fields", 
   }
 }
 
-TEST_CASE("TrackFieldUi property dialog readonly fields", "[gtk][trackfieldui]")
-{
-  CHECK(trackFieldUiDefinition(TrackField::FilePath)->propertyDialogReadonly);
-  CHECK(trackFieldUiDefinition(TrackField::Codec)->propertyDialogReadonly);
-  CHECK(trackFieldUiDefinition(TrackField::SampleRate)->propertyDialogReadonly);
-  CHECK(trackFieldUiDefinition(TrackField::Channels)->propertyDialogReadonly);
-  CHECK(trackFieldUiDefinition(TrackField::BitDepth)->propertyDialogReadonly);
-  CHECK(trackFieldUiDefinition(TrackField::Bitrate)->propertyDialogReadonly);
-  CHECK(trackFieldUiDefinition(TrackField::Duration)->propertyDialogReadonly);
-  CHECK(trackFieldUiDefinition(TrackField::FileSize)->propertyDialogReadonly);
-  CHECK(trackFieldUiDefinition(TrackField::ModifiedTime)->propertyDialogReadonly);
-}
-
 TEST_CASE("TrackFieldUi Tags has no writePatch", "[gtk][trackfieldui]")
 {
   auto const* def = trackFieldUiDefinition(TrackField::Tags);
 
   REQUIRE(def != nullptr);
   CHECK(def->writePatch == nullptr);
-  CHECK_FALSE(def->propertyDialogEditable);
 }

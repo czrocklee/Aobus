@@ -4,6 +4,7 @@
 #include "track/TrackSelectionController.h"
 
 #include "ao/Type.h"
+#include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
 
@@ -13,12 +14,15 @@
 #include <glib.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gesture.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/gesturelongpress.h>
 #include <gtkmm/multiselection.h>
+#include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <sigc++/functors/mem_fun.h>
 
@@ -41,13 +45,31 @@ namespace ao::gtk
     {
       for (auto const* current = widget; current != nullptr; current = current->get_parent())
       {
-        if (current->has_css_class("track-tags-cell"))
+        if (current->has_css_class(detail::kTagsCellCssClass))
         {
           return true;
         }
       }
 
       return false;
+    }
+
+    Gtk::Stack* findInlineEditStack(Gtk::Widget const* widget)
+    {
+      auto* current = const_cast<Gtk::Widget*>(widget); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+
+      while (current != nullptr)
+      {
+        if (auto* const stack = dynamic_cast<Gtk::Stack*>(current);
+            stack != nullptr && stack->get_child_by_name("edit") != nullptr)
+        {
+          return stack;
+        }
+
+        current = current->get_parent();
+      }
+
+      return nullptr;
     }
   } // namespace
 
@@ -146,6 +168,33 @@ namespace ao::gtk
       });
 
     _columnView.add_controller(primaryClickController);
+
+    auto const longPressController = Gtk::GestureLongPress::create();
+    longPressController->set_touch_only(false);
+    longPressController->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+
+    longPressController->signal_pressed().connect(
+      [this, longPressController](double xPos, double yPos)
+      {
+        auto* const target = _columnView.pick(xPos, yPos, Gtk::PickFlags::NON_TARGETABLE);
+        auto* const stack = findInlineEditStack(target);
+
+        if (stack == nullptr)
+        {
+          return;
+        }
+
+        longPressController->set_state(Gtk::EventSequenceState::CLAIMED);
+        _suppressNextTrackActivation = true;
+        stack->set_visible_child("edit");
+
+        if (auto* const entry = dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit")))
+        {
+          entry->grab_focus();
+        }
+      });
+
+    _columnView.add_controller(longPressController);
 
     auto const secondaryClickController = Gtk::GestureClick::create();
     secondaryClickController->set_button(GDK_BUTTON_SECONDARY);

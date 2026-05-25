@@ -13,6 +13,7 @@
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -28,22 +29,14 @@ namespace ao::gtk
 
     TrackId getTrackId() const { return _id; }
 
-    Glib::ustring getArtist() const { return _propertyArtist.get_value(); }
-    void setArtist(Glib::ustring const& artist);
-    Glib::PropertyProxy<Glib::ustring> property_artist();
-
-    Glib::ustring getAlbum() const { return _propertyAlbum.get_value(); }
-    void setAlbum(Glib::ustring const& album);
-    Glib::PropertyProxy<Glib::ustring> property_album();
-
-    Glib::ustring getTitle() const { return _propertyTitle.get_value(); }
-    void setTitle(Glib::ustring const& title);
-    Glib::PropertyProxy<Glib::ustring> property_title();
+    Glib::ustring const* stringField(rt::TrackField field) const noexcept;
+    bool setStringField(rt::TrackField field, Glib::ustring const& value);
 
     Glib::ustring getFieldText(rt::TrackField field) const;
 
-    Glib::ustring const& getTags() const;
-    void setTags(Glib::ustring const& tags);
+    Glib::ustring const& getTags() const { return _tags; }
+    void setTags(Glib::ustring const& tags) { _tags = tags; }
+
     std::chrono::milliseconds getDuration() const { return _duration; }
 
     std::uint64_t getResourceId() const { return _optResourceId.value_or(0); }
@@ -53,18 +46,21 @@ namespace ao::gtk
     std::uint8_t getBitDepth() const { return _bitDepth; }
     std::uint16_t getCodecId() const { return _codecId; }
 
-    DictionaryId getAlbumArtistId() const { return _albumArtistId; }
-    DictionaryId getGenreId() const { return _genreId; }
-    DictionaryId getComposerId() const { return _composerId; }
-    DictionaryId getWorkId() const { return _workId; }
-    DictionaryId getArtistId() const { return _artistId; }
-    DictionaryId getAlbumId() const { return _albumId; }
-
     std::uint16_t getYear() const { return _year; }
+    void setYear(std::uint16_t year);
+
     std::uint16_t getDiscNumber() const { return _discNumber; }
+    void setDiscNumber(std::uint16_t discNumber);
+
     std::uint16_t getTotalDiscs() const { return _totalDiscs; }
+    void setTotalDiscs(std::uint16_t totalDiscs);
+
     std::uint16_t getTrackNumber() const { return _trackNumber; }
+    void setTrackNumber(std::uint16_t trackNumber);
+
     std::uint16_t getTotalTracks() const { return _totalTracks; }
+    void setTotalTracks(std::uint16_t totalTracks);
+
     std::uint32_t getBitrate() const { return _bitrate; }
     std::uint64_t getFileSize() const { return _fileSize; }
     std::uint64_t getModifiedTime() const { return _modifiedTime; }
@@ -106,12 +102,7 @@ namespace ao::gtk
     TrackId _id;
     TrackRowCache const* _provider = nullptr;
 
-    DictionaryId _artistId{0};
-    DictionaryId _albumId{0};
-    DictionaryId _albumArtistId{0};
-    DictionaryId _genreId{0};
-    DictionaryId _composerId{0};
-    DictionaryId _workId{0};
+    std::array<Glib::ustring, rt::kTrackFieldCount> _text{};
 
     Glib::ustring _tags;
 
@@ -133,8 +124,5 @@ namespace ao::gtk
     library::FileStatus _status = library::FileStatus::Available;
 
     Glib::Property<bool> _propertyPlaying;
-    Glib::Property<Glib::ustring> _propertyTitle;
-    Glib::Property<Glib::ustring> _propertyArtist;
-    Glib::Property<Glib::ustring> _propertyAlbum;
   };
 } // namespace ao::gtk

@@ -5,20 +5,26 @@
 
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
+#include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <ctime>
 #include <format>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <variant>
 
@@ -74,6 +80,91 @@ namespace ao::gtk
     std::string formatUint16(std::uint16_t value)
     {
       return value == 0 ? std::string{} : std::format("{}", value);
+    }
+
+    std::string_view trimAsciiWhitespace(std::string_view value)
+    {
+      auto const first = value.find_first_not_of(" \t\n\r\f\v");
+
+      if (first == std::string_view::npos)
+      {
+        return {};
+      }
+
+      auto const last = value.find_last_not_of(" \t\n\r\f\v");
+      return value.substr(first, last - first + 1);
+    }
+
+    TrackFieldEditValue makeTextEditValue(std::string_view value)
+    {
+      return TrackFieldEditValue{std::in_place_type<std::string>, std::string{value}};
+    }
+
+    Result<TrackFieldEditValue> parseTextEditValue(std::string_view value)
+    {
+      return makeTextEditValue(value);
+    }
+
+    Result<TrackFieldEditValue> parseUint16EditValue(std::string_view value)
+    {
+      auto const trimmed = trimAsciiWhitespace(value);
+
+      if (trimmed.empty())
+      {
+        return TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(0)};
+      }
+
+      auto parsed = std::uint32_t{0};
+      auto const* const begin = trimmed.data();
+      auto const* const end = trimmed.data() + trimmed.size();
+      auto const [ptr, ec] = std::from_chars(begin, end, parsed);
+
+      if (ec != std::errc{} || ptr != end || parsed > std::numeric_limits<std::uint16_t>::max())
+      {
+        return makeError(Error::Code::FormatRejected, "Enter a whole number from 0 to 65535.");
+      }
+
+      return TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(parsed)};
+    }
+
+    // ---- Row edit value helpers ----
+
+    TrackFieldEditValue readStringEditValue(TrackRowObject const& row, rt::TrackField field)
+    {
+      if (auto const* stringPtr = row.stringField(field))
+      {
+        return TrackFieldEditValue{std::in_place_type<std::string>, std::string{stringPtr->raw()}};
+      }
+
+      return TrackFieldEditValue{};
+    }
+
+    bool applyStringEditValue(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField field)
+    {
+      if (auto const* str = std::get_if<std::string>(&value))
+      {
+        return row.setStringField(field, *str);
+      }
+
+      return false;
+    }
+
+    template<auto Getter>
+    TrackFieldEditValue readUint16Field(TrackRowObject const& row, rt::TrackField /*field*/)
+    {
+      return TrackFieldEditValue{std::in_place_type<std::uint16_t>, (row.*Getter)()};
+    }
+
+    template<auto Setter>
+    bool applyUint16Field(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField /*field*/)
+    {
+      if (auto const* val = std::get_if<std::uint16_t>(&value))
+      {
+        (row.*Setter)(*val);
+        return true;
+      }
+
+      return false;
     }
 
     std::string formatFileSize(std::uint64_t fileSize)
@@ -348,8 +439,20 @@ namespace ao::gtk
     {
       writeUint16Patch(ctx, ctx.patch.optTotalTracks);
     }
+  } // namespace
 
-    // ---- Registry ----
+  namespace detail
+  {
+    bool canInlineEdit(TrackFieldUiDefinition const& def)
+    {
+      return def.parseInlineEdit != nullptr && def.readRowEditValue != nullptr && def.applyRowEditValue != nullptr &&
+             def.writePatch != nullptr;
+    }
+  } // namespace detail
+
+  namespace
+  {
+    using namespace detail;
 
     using F = rt::TrackField;
 
@@ -374,81 +477,58 @@ namespace ao::gtk
       return {};
     };
 
-    // Struct field order: field, defaultColumnWidth, dragQueryPrefix,
-    //   columnVisibleByDefault, columnExpands, columnNumeric, columnTagsCell,
-    //   inlineEditable, propertyDialogEditable, propertyDialogReadonly,
-    //   readRowText, readViewRawValue, formatValue, writePatch
+    // Struct field order: field,
+    //   readRowText, readViewRawValue, formatValue, parseInlineEdit, writePatch
     auto buildUiDefs()
     {
       return std::to_array<TrackFieldUiDefinition>({
         // ---- Metadata: text ----
         {
           .field = F::Title,
-          .defaultColumnWidth = kWidthTitle,
-          .dragQueryPrefix = {},
-          .columnVisibleByDefault = true,
-          .columnExpands = false,
-          .columnNumeric = false,
-          .columnTagsCell = false,
-          .inlineEditable = true,
-          .propertyDialogEditable = true,
-          .propertyDialogReadonly = false,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return row.getTitle().raw(); },
+          { return std::string{row.stringField(rt::TrackField::Title)->raw()}; },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const&,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::string>, view.metadata().title()}; },
           .formatValue = readStr,
+          .parseInlineEdit = parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
           .writePatch = writeTitlePatch,
         },
         {
           .field = F::Artist,
-          .defaultColumnWidth = kWidthArtist,
-          .dragQueryPrefix = "$a=",
-          .columnVisibleByDefault = true,
-          .inlineEditable = true,
-          .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return row.getArtist().raw(); },
+          { return std::string{row.stringField(rt::TrackField::Artist)->raw()}; },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().artistId())}; },
           .formatValue = readStr,
+          .parseInlineEdit = parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
           .writePatch = writeArtistPatch,
         },
         {
           .field = F::Album,
-          .defaultColumnWidth = kWidthAlbum,
-          .dragQueryPrefix = "$al=",
-          .columnVisibleByDefault = true,
-          .inlineEditable = true,
-          .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return row.getAlbum().raw(); },
+          { return std::string{row.stringField(rt::TrackField::Album)->raw()}; },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().albumId())}; },
           .formatValue = readStr,
+          .parseInlineEdit = parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
           .writePatch = writeAlbumPatch,
         },
         {
           .field = F::AlbumArtist,
-          .defaultColumnWidth = kWidthAlbumArtist,
-          .propertyDialogEditable = true,
-          .readRowText = +[](TrackRowObject const& row, TrackRowCache const& cache) -> std::string
-          {
-            auto const id = row.getAlbumArtistId();
-
-            if (id.raw() == 0)
-            {
-              return {};
-            }
-
-            return cache.resolveDictionaryString(id).raw();
-          },
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return std::string{row.stringField(rt::TrackField::AlbumArtist)->raw()}; },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
@@ -456,81 +536,56 @@ namespace ao::gtk
             return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().albumArtistId())};
           },
           .formatValue = readStr,
+          .parseInlineEdit = parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
           .writePatch = writeAlbumArtistPatch,
         },
         {
           .field = F::Genre,
-          .defaultColumnWidth = kWidthGenre,
-          .dragQueryPrefix = "$g=",
-          .propertyDialogEditable = true,
-          .readRowText = +[](TrackRowObject const& row, TrackRowCache const& cache) -> std::string
-          {
-            auto const id = row.getGenreId();
-
-            if (id.raw() == 0)
-            {
-              return {};
-            }
-
-            return cache.resolveDictionaryString(id).raw();
-          },
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return std::string{row.stringField(rt::TrackField::Genre)->raw()}; },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().genreId())}; },
           .formatValue = readStr,
+          .parseInlineEdit = parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
           .writePatch = writeGenrePatch,
         },
         {
           .field = F::Composer,
-          .defaultColumnWidth = kWidthGenre,
-          .propertyDialogEditable = true,
-          .readRowText = +[](TrackRowObject const& row, TrackRowCache const& cache) -> std::string
-          {
-            auto const id = row.getComposerId();
-
-            if (id.raw() == 0)
-            {
-              return {};
-            }
-
-            return cache.resolveDictionaryString(id).raw();
-          },
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return std::string{row.stringField(rt::TrackField::Composer)->raw()}; },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().composerId())}; },
           .formatValue = readStr,
+          .parseInlineEdit = parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
           .writePatch = writeComposerPatch,
         },
         {
           .field = F::Work,
-          .defaultColumnWidth = kWidthGenre,
-          .propertyDialogEditable = true,
-          .readRowText = +[](TrackRowObject const& row, TrackRowCache const& cache) -> std::string
-          {
-            auto const id = row.getWorkId();
-
-            if (id.raw() == 0)
-            {
-              return {};
-            }
-
-            return cache.resolveDictionaryString(id).raw();
-          },
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return std::string{row.stringField(rt::TrackField::Work)->raw()}; },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const& dict,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().workId())}; },
           .formatValue = readStr,
+          .parseInlineEdit = parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
           .writePatch = writeWorkPatch,
         },
         // ---- Metadata: number ----
         {
           .field = F::Year,
-          .defaultColumnWidth = kWidthYear,
-          .columnNumeric = true,
-          .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatUint16(row.getYear()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -538,13 +593,13 @@ namespace ao::gtk
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().year()}; },
           .formatValue = readUint16,
+          .parseInlineEdit = parseUint16EditValue,
+          .readRowEditValue = readUint16Field<&TrackRowObject::getYear>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setYear>,
           .writePatch = writeYearPatch,
         },
         {
           .field = F::DiscNumber,
-          .defaultColumnWidth = kWidthDisc,
-          .columnNumeric = true,
-          .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatUint16(row.getDiscNumber()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -552,11 +607,13 @@ namespace ao::gtk
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().discNumber()}; },
           .formatValue = readUint16,
+          .parseInlineEdit = parseUint16EditValue,
+          .readRowEditValue = readUint16Field<&TrackRowObject::getDiscNumber>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setDiscNumber>,
           .writePatch = writeDiscNumberPatch,
         },
         {
           .field = F::TotalDiscs,
-          .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatUint16(row.getTotalDiscs()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -564,13 +621,13 @@ namespace ao::gtk
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().totalDiscs()}; },
           .formatValue = readUint16,
+          .parseInlineEdit = parseUint16EditValue,
+          .readRowEditValue = readUint16Field<&TrackRowObject::getTotalDiscs>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setTotalDiscs>,
           .writePatch = writeTotalDiscsPatch,
         },
         {
           .field = F::TrackNumber,
-          .defaultColumnWidth = kWidthTrack,
-          .columnNumeric = true,
-          .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatUint16(row.getTrackNumber()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -578,11 +635,13 @@ namespace ao::gtk
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().trackNumber()}; },
           .formatValue = readUint16,
+          .parseInlineEdit = parseUint16EditValue,
+          .readRowEditValue = readUint16Field<&TrackRowObject::getTrackNumber>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setTrackNumber>,
           .writePatch = writeTrackNumberPatch,
         },
         {
           .field = F::TotalTracks,
-          .propertyDialogEditable = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatUint16(row.getTotalTracks()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -590,15 +649,14 @@ namespace ao::gtk
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().totalTracks()}; },
           .formatValue = readUint16,
+          .parseInlineEdit = parseUint16EditValue,
+          .readRowEditValue = readUint16Field<&TrackRowObject::getTotalTracks>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setTotalTracks>,
           .writePatch = writeTotalTracksPatch,
         },
         // ---- Duration ----
         {
           .field = F::Duration,
-          .defaultColumnWidth = kWidthDuration,
-          .columnVisibleByDefault = true,
-          .columnNumeric = true,
-          .propertyDialogReadonly = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatDuration(row.getDuration()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -613,10 +671,6 @@ namespace ao::gtk
         // ---- Tags ----
         {
           .field = F::Tags,
-          .defaultColumnWidth = kWidthTags,
-          .columnVisibleByDefault = true,
-          .columnExpands = true,
-          .columnTagsCell = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return row.getTags().raw(); },
           .readViewRawValue = readTagsViewRawValue,
@@ -625,8 +679,6 @@ namespace ao::gtk
         // ---- Technical ----
         {
           .field = F::FilePath,
-          .defaultColumnWidth = kWidthPath,
-          .propertyDialogReadonly = true,
           .readRowText = readFilePathRowText,
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const&,
@@ -636,8 +688,6 @@ namespace ao::gtk
         },
         {
           .field = F::Codec,
-          .defaultColumnWidth = kWidthTechnical,
-          .propertyDialogReadonly = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const& cache) -> std::string
           { return formatCodec(row.getCodecId(), cache.dictionary()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -648,9 +698,6 @@ namespace ao::gtk
         },
         {
           .field = F::SampleRate,
-          .defaultColumnWidth = kWidthTechnical,
-          .columnNumeric = true,
-          .propertyDialogReadonly = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatSampleRate(row.getSampleRate()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -669,9 +716,6 @@ namespace ao::gtk
         },
         {
           .field = F::Channels,
-          .defaultColumnWidth = kWidthTechnical,
-          .columnNumeric = true,
-          .propertyDialogReadonly = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatChannels(row.getChannels()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -693,9 +737,6 @@ namespace ao::gtk
         },
         {
           .field = F::BitDepth,
-          .defaultColumnWidth = kWidthTechnical,
-          .columnNumeric = true,
-          .propertyDialogReadonly = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatBitDepth(row.getBitDepth()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -717,9 +758,6 @@ namespace ao::gtk
         },
         {
           .field = F::Bitrate,
-          .defaultColumnWidth = kWidthTechnical,
-          .columnNumeric = true,
-          .propertyDialogReadonly = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatBitrate(row.getBitrate()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -738,9 +776,6 @@ namespace ao::gtk
         },
         {
           .field = F::FileSize,
-          .defaultColumnWidth = kWidthTechnical,
-          .columnNumeric = true,
-          .propertyDialogReadonly = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatFileSize(row.getFileSize()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -769,8 +804,6 @@ namespace ao::gtk
         },
         {
           .field = F::ModifiedTime,
-          .defaultColumnWidth = kWidthTime,
-          .propertyDialogReadonly = true,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return formatTime(row.getModifiedTime()); },
           .readViewRawValue = +[](library::TrackView const& view,
@@ -800,22 +833,18 @@ namespace ao::gtk
         // ---- Synthetic ----
         {
           .field = F::DisplayTrackNumber,
-          .defaultColumnWidth = kWidthTrack,
-          .columnNumeric = true,
           .readRowText = readDisplayTrackNumber,
           .readViewRawValue = nullptr,
           .formatValue = readStr,
         },
         {
           .field = F::TechnicalSummary,
-          .defaultColumnWidth = kWidthTime,
           .readRowText = readTechnicalSummary,
           .readViewRawValue = nullptr,
           .formatValue = readStr,
         },
         {
           .field = F::Quality,
-          .defaultColumnWidth = kWidthTechnical,
           .readRowText = +[](TrackRowObject const&, TrackRowCache const&) -> std::string { return ""; },
           // Future synthetic field — no readers yet.
         },
@@ -835,41 +864,75 @@ namespace ao::gtk
     return uiDefinitions();
   }
 
+  namespace
+  {
+    auto const& uiDefLookup()
+    {
+      static auto const table = []
+      {
+        auto arr = std::array<TrackFieldUiDefinition const*, rt::kTrackFieldCount>{};
+
+        for (auto const& def : uiDefinitions())
+        {
+          if (auto const idx = static_cast<std::size_t>(def.field); idx < arr.size())
+          {
+            arr.at(idx) = &def;
+          }
+        }
+
+        return arr;
+      }();
+
+      return table;
+    }
+  } // namespace
+
   TrackFieldUiDefinition const* trackFieldUiDefinition(rt::TrackField field)
   {
-    for (auto const& def : uiDefinitions())
+    auto const idx = static_cast<std::size_t>(field);
+
+    if (idx >= rt::kTrackFieldCount)
     {
-      if (def.field == field)
-      {
-        return &def;
-      }
+      return nullptr;
     }
 
-    return nullptr;
+    return uiDefLookup().at(idx);
   }
 
   std::int32_t defaultWidthForField(rt::TrackField field)
   {
-    if (auto const* uiDef = trackFieldUiDefinition(field); uiDef != nullptr)
+    switch (field)
     {
-      return uiDef->defaultColumnWidth;
+      case rt::TrackField::Title: return kWidthTitle;
+      case rt::TrackField::Artist: return kWidthArtist;
+      case rt::TrackField::Album: return kWidthAlbum;
+      case rt::TrackField::AlbumArtist: return kWidthAlbumArtist;
+      case rt::TrackField::Genre:
+      case rt::TrackField::Composer:
+      case rt::TrackField::Work: return kWidthGenre;
+      case rt::TrackField::Year: return kWidthYear;
+      case rt::TrackField::DiscNumber: return kWidthDisc;
+      case rt::TrackField::TrackNumber: return kWidthTrack;
+      case rt::TrackField::Duration: return kWidthDuration;
+      case rt::TrackField::Tags: return kWidthTags;
+      case rt::TrackField::FilePath: return kWidthPath;
+      case rt::TrackField::Codec:
+      case rt::TrackField::SampleRate:
+      case rt::TrackField::Channels:
+      case rt::TrackField::BitDepth:
+      case rt::TrackField::Bitrate:
+      case rt::TrackField::FileSize:
+      case rt::TrackField::Quality: return kWidthTechnical;
+      case rt::TrackField::ModifiedTime: return kWidthTime;
+      case rt::TrackField::DisplayTrackNumber: return kWidthTrack;
+      case rt::TrackField::TechnicalSummary: return kWidthTechnicalSummary;
+      default: return -1;
     }
-
-    return -1;
-  }
-
-  bool fieldIsExpanding(rt::TrackField field)
-  {
-    auto const* uiDef = trackFieldUiDefinition(field);
-
-    return uiDef != nullptr && uiDef->columnExpands;
   }
 
   bool fieldIsVisibleByDefault(rt::TrackField field)
   {
-    auto const* uiDef = trackFieldUiDefinition(field);
-
-    return uiDef != nullptr && uiDef->columnVisibleByDefault;
+    return std::ranges::contains(rt::defaultTrackPresentationSpec().visibleFields, field);
   }
 
   std::string_view fieldColumnTitle(rt::TrackField field)

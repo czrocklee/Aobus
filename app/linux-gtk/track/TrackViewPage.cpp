@@ -56,6 +56,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 namespace ao::gtk
 {
@@ -348,14 +349,14 @@ namespace ao::gtk
     // 4. Apply decorations (Section Headers)
     updateSectionHeaders();
 
-    // 5. Restore playing state in the new controller before attaching model
+    // 5. Attach the model first so items_changed has a listener
+    newView.set_model(_selectionModel);
+
+    // 6. Restore playing state after model is attached
     if (_playingTrackId != kInvalidTrackId)
     {
       _viewHost->selectionController().setPlayingTrackId(_playingTrackId);
     }
-
-    // 6. Attach the model
-    newView.set_model(_selectionModel);
 
     // 7. Swap the child in the live UI tree
     _scrolledWindow.set_child(newView);
@@ -424,24 +425,27 @@ namespace ao::gtk
 
     auto const* uiDef = trackFieldUiDefinition(field);
 
-    if (uiDef == nullptr || uiDef->writePatch == nullptr)
+    if (uiDef == nullptr || uiDef->writePatch == nullptr || uiDef->parseInlineEdit == nullptr ||
+        uiDef->readRowEditValue == nullptr || uiDef->applyRowEditValue == nullptr)
     {
       return;
     }
 
+    auto const editValueResult = uiDef->parseInlineEdit(newValue);
+
+    if (!editValueResult)
+    {
+      setStatusMessage(editValueResult.error().message);
+      return;
+    }
+
+    auto const editValue = *editValueResult;
     auto patch = rt::MetadataPatch{};
-    auto const rawValue = detail::TrackFieldRawValue{newValue};
-    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = rawValue};
+    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = editValue};
     uiDef->writePatch(ctx);
 
-    // Optimistic update for fields with property-backed setters
-    switch (field)
-    {
-      case rt::TrackField::Title: row->setTitle(newValue); break;
-      case rt::TrackField::Artist: row->setArtist(newValue); break;
-      case rt::TrackField::Album: row->setAlbum(newValue); break;
-      default: break;
-    }
+    auto const oldEditValue = uiDef->readRowEditValue(*row, field);
+    uiDef->applyRowEditValue(*row, editValue, field);
 
     auto const trackIds = std::array{row->getTrackId()};
     auto const result = _runtime.mutation().updateMetadata(trackIds, patch);
@@ -449,15 +453,11 @@ namespace ao::gtk
     if (!result)
     {
       APP_LOG_ERROR("Metadata update failed: {}", result.error().message);
-
-      switch (field)
-      {
-        case rt::TrackField::Title: row->setTitle(oldValue); break;
-        case rt::TrackField::Artist: row->setArtist(oldValue); break;
-        case rt::TrackField::Album: row->setAlbum(oldValue); break;
-        default: break;
-      }
+      uiDef->applyRowEditValue(*row, oldEditValue, field);
+      return;
     }
+
+    clearStatusMessage();
   }
 
   void TrackViewPage::setupColumnViewStyles(Gtk::ColumnView& view)

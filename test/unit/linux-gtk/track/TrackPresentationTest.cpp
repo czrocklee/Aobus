@@ -41,12 +41,6 @@ namespace ao::gtk::test
     CHECK(defaultWidthForField(rt::TrackField::AlbumArtist) == 180);
   }
 
-  TEST_CASE("TrackPresentation - field is expanding", "[app][presentation]")
-  {
-    CHECK(fieldIsExpanding(rt::TrackField::Tags));
-    CHECK_FALSE(fieldIsExpanding(rt::TrackField::Title));
-  }
-
   TEST_CASE("TrackPresentation - field visible by default", "[app][presentation]")
   {
     CHECK(fieldIsVisibleByDefault(rt::TrackField::Title));

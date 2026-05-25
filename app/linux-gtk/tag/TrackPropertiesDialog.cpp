@@ -50,6 +50,20 @@ namespace ao::gtk
     constexpr double kSpinMin = 0.0;
     constexpr double kSpinMax = 65535.0;
     constexpr int kSpinDigits = 0;
+
+    bool shouldShowEditableMetadataRow(rt::TrackFieldDefinition const& rtDef,
+                                       detail::TrackFieldUiDefinition const& uiDef)
+    {
+      return rtDef.category == rt::TrackFieldCategory::Metadata && rtDef.editable &&
+             rtDef.field != rt::TrackField::Tags && uiDef.writePatch != nullptr;
+    }
+
+    bool shouldShowReadonlyPropertyRow(rt::TrackFieldDefinition const& rtDef,
+                                       detail::TrackFieldUiDefinition const& uiDef)
+    {
+      return rtDef.category == rt::TrackFieldCategory::Technical && !rtDef.synthetic &&
+             uiDef.readViewRawValue != nullptr && uiDef.formatValue != nullptr;
+    }
   } // namespace
 
   TrackPropertiesDialog::TrackPropertiesDialog(Gtk::Window& parent,
@@ -116,14 +130,9 @@ namespace ao::gtk
 
     for (auto const& def : trackFieldUiDefinitions())
     {
-      if (!def.propertyDialogEditable || def.field == rt::TrackField::Tags)
-      {
-        continue;
-      }
+      auto const* const rtDef = rt::trackFieldDefinition(def.field);
 
-      auto const* const fieldDef = trackFieldDefinition(def.field);
-
-      if (fieldDef == nullptr)
+      if (rtDef == nullptr || !shouldShowEditableMetadataRow(*rtDef, def))
       {
         continue;
       }
@@ -131,7 +140,7 @@ namespace ao::gtk
       auto* const widget = createEditorWidget(def.field);
 
       auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kFieldRowSpacing);
-      auto* const label = Gtk::make_managed<Gtk::Label>(std::string{fieldDef->label});
+      auto* const label = Gtk::make_managed<Gtk::Label>(std::string{rtDef->label});
 
       label->set_halign(Gtk::Align::START);
       label->set_valign(Gtk::Align::CENTER);
@@ -169,14 +178,9 @@ namespace ao::gtk
 
     for (auto const& def : trackFieldUiDefinitions())
     {
-      if (!def.propertyDialogReadonly)
-      {
-        continue;
-      }
+      auto const* const rtDef = rt::trackFieldDefinition(def.field);
 
-      auto const* const fieldDef = trackFieldDefinition(def.field);
-
-      if (fieldDef == nullptr)
+      if (rtDef == nullptr || !shouldShowReadonlyPropertyRow(*rtDef, def))
       {
         continue;
       }
@@ -184,7 +188,7 @@ namespace ao::gtk
       auto* const widget = createReadonlyWidget(def.field);
 
       auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kFieldRowSpacing);
-      auto* const label = Gtk::make_managed<Gtk::Label>(std::string{fieldDef->label});
+      auto* const label = Gtk::make_managed<Gtk::Label>(std::string{rtDef->label});
 
       label->set_halign(Gtk::Align::START);
       label->set_valign(Gtk::Align::CENTER);
@@ -376,15 +380,19 @@ namespace ao::gtk
       }
 
       auto rawValue = detail::TrackFieldRawValue{};
+      auto editValue = detail::TrackFieldEditValue{};
 
       if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget))
       {
-        rawValue = detail::TrackFieldRawValue{std::in_place_type<std::string>, entry->get_text().raw()};
+        auto const text = entry->get_text().raw();
+        rawValue = detail::TrackFieldRawValue{std::in_place_type<std::string>, text};
+        editValue = detail::TrackFieldEditValue{std::in_place_type<std::string>, std::move(text)};
       }
       else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget))
       {
-        rawValue = detail::TrackFieldRawValue{
-          std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(spin->get_value_as_int())};
+        auto const value = static_cast<std::uint16_t>(spin->get_value_as_int());
+        rawValue = detail::TrackFieldRawValue{std::in_place_type<std::uint16_t>, value};
+        editValue = detail::TrackFieldEditValue{std::in_place_type<std::uint16_t>, value};
       }
       else
       {
@@ -396,7 +404,7 @@ namespace ao::gtk
         continue;
       }
 
-      auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = rawValue};
+      auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = editValue};
       def->writePatch(ctx);
     }
 

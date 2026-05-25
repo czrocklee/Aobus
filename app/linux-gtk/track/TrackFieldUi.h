@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ao/library/FileManifestStore.h"
+#include <ao/Error.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
@@ -34,44 +35,46 @@ namespace ao::gtk
     using TrackFieldRawValue =
       std::variant<std::monostate, std::string, std::uint16_t, std::uint32_t, std::uint64_t, Duration>;
 
+    using TrackFieldEditValue = std::variant<std::monostate, std::string, std::uint16_t>;
+
     struct TrackFieldEditContext final
     {
       rt::MetadataPatch& patch;
-      TrackFieldRawValue const& value;
+      TrackFieldEditValue const& value;
     };
+
+    constexpr auto kTagsCellCssClass = "ao-track-tags-cell";
 
     using TrackRowTextReader = std::string (*)(TrackRowObject const&, TrackRowCache const&);
     using TrackViewRawReader = TrackFieldRawValue (*)(library::TrackView const&,
                                                       library::DictionaryStore const&,
                                                       library::FileManifestStore::Reader const*);
     using TrackFieldFormatter = std::string (*)(TrackFieldRawValue const&);
+    using TrackInlineEditParser = Result<TrackFieldEditValue> (*)(std::string_view);
+    using TrackRowEditReader = TrackFieldEditValue (*)(TrackRowObject const&, rt::TrackField);
+    using TrackRowEditApplier = bool (*)(TrackRowObject&, TrackFieldEditValue const&, rt::TrackField);
     using TrackFieldPatchWriter = void (*)(TrackFieldEditContext const&);
 
     struct TrackFieldUiDefinition final
     {
-      rt::TrackField field;
-      std::int32_t defaultColumnWidth = -1;
-      std::string_view dragQueryPrefix{};
-      bool columnVisibleByDefault = false;
-      bool columnExpands = false;
-      bool columnNumeric = false;
-      bool columnTagsCell = false;
-      bool inlineEditable = false;
-      bool propertyDialogEditable = false;
-      bool propertyDialogReadonly = false;
+      rt::TrackField field = rt::TrackField::Title;
 
       TrackRowTextReader readRowText = nullptr;
       TrackViewRawReader readViewRawValue = nullptr;
       TrackFieldFormatter formatValue = nullptr;
+      TrackInlineEditParser parseInlineEdit = nullptr;
+      TrackRowEditReader readRowEditValue = nullptr;
+      TrackRowEditApplier applyRowEditValue = nullptr;
       TrackFieldPatchWriter writePatch = nullptr;
     };
+
+    bool canInlineEdit(TrackFieldUiDefinition const& def);
   } // namespace detail
 
   std::span<detail::TrackFieldUiDefinition const> trackFieldUiDefinitions();
   detail::TrackFieldUiDefinition const* trackFieldUiDefinition(rt::TrackField field);
 
   std::int32_t defaultWidthForField(rt::TrackField field);
-  bool fieldIsExpanding(rt::TrackField field);
   bool fieldIsVisibleByDefault(rt::TrackField field);
   std::string_view fieldColumnTitle(rt::TrackField field);
 

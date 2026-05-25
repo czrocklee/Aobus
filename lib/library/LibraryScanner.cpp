@@ -30,7 +30,7 @@ namespace ao::library
 
     void processEntry(std::filesystem::directory_entry const& entry,
                       std::filesystem::path const& root,
-                      ao::library::FileManifestStore::Reader const& manifestReader,
+                       FileManifestStore::Reader const& manifestReader,
                       std::unordered_set<std::string>& seenUris,
                       ScanPlan& plan)
     {

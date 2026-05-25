@@ -251,7 +251,7 @@ namespace ao::gtk::detail
 {
   using Duration = std::chrono::milliseconds;
 
-  // Variant alternatives cover all field value kinds:
+  // Read/display variant alternatives cover all field value kinds:
   //   std::monostate   for uninitialized / empty
   //   std::string      for text fields (title, track path, codec name, ...)
   //   std::uint16_t    for numeric metadata (year, disc, track numbers)
@@ -262,57 +262,82 @@ namespace ao::gtk::detail
   using TrackFieldRawValue =
     std::variant<std::monostate, std::string, std::uint16_t, std::uint32_t, std::uint64_t, Duration>;
 
+  // Write/edit values are separate from raw read values. They only carry
+  // values that can become an rt::MetadataPatch.
+  using TrackFieldEditValue = std::variant<std::monostate, std::string, std::uint16_t>;
+
   // Duration alias.
   using Duration = std::chrono::milliseconds;
 
   struct TrackFieldEditContext final
   {
     rt::MetadataPatch& patch;
-    TrackFieldRawValue const& value;
+    TrackFieldEditValue const& value;
   };
 
   using TrackRowTextReader = std::string (*)(TrackRowObject const&, TrackRowCache const&);
-  using TrackViewRawReader = TrackFieldRawValue (*)(library::TrackView const&, library::DictionaryStore const&);
+  using TrackViewRawReader = TrackFieldRawValue (*)(library::TrackView const&,
+                                                    library::DictionaryStore const&,
+                                                    library::FileManifestStore::Reader const*);
   using TrackFieldFormatter = std::string (*)(TrackFieldRawValue const&);
+  using TrackInlineEditParser = Result<TrackFieldEditValue> (*)(std::string_view);
   using TrackFieldPatchWriter = void (*)(TrackFieldEditContext const&);
+  using TrackRowEditReader = TrackFieldEditValue (*)(TrackRowObject const&, rt::TrackField);
+  using TrackRowEditApplier = bool (*)(TrackRowObject&, TrackFieldEditValue const&, rt::TrackField);
 
   struct TrackFieldUiDefinition final
   {
     rt::TrackField field;
-    std::int32_t defaultColumnWidth = -1;
-    std::string_view dragQueryPrefix{};
-    bool columnVisibleByDefault = false;
-    bool columnExpands = false;
-    bool columnNumeric = false;
-    bool columnTagsCell = false;
-    bool inlineEditable = false;
-    bool propertyDialogEditable = false;
-    bool propertyDialogReadonly = false;
 
     TrackRowTextReader readRowText = nullptr;
     TrackViewRawReader readViewRawValue = nullptr;
     TrackFieldFormatter formatValue = nullptr;
+
+    TrackInlineEditParser parseInlineEdit = nullptr;
+    TrackRowEditReader readRowEditValue = nullptr;
+    TrackRowEditApplier applyRowEditValue = nullptr;
     TrackFieldPatchWriter writePatch = nullptr;
   };
+
+  bool canInlineEdit(TrackFieldUiDefinition const& def);
 }
 
 namespace ao::gtk
 {
   std::span<detail::TrackFieldUiDefinition const> trackFieldUiDefinitions();
   detail::TrackFieldUiDefinition const* trackFieldUiDefinition(rt::TrackField field);
+
+  std::int32_t defaultWidthForField(rt::TrackField field);
+  bool fieldIsVisibleByDefault(rt::TrackField field);
 }
 ```
 
-The registry uses function pointers, not named functions. Lambdas (with no captures) are converted to function pointers via the unary `+` prefix:
+The registry uses function pointers, not named functions. Lambdas (with no captures) are converted to function pointers via the unary `+` prefix.
+
+### Capability Helpers
+
+Inline editing capability is derived from the presence of all required hooks:
+
 ```cpp
-static auto const defs = std::to_array<TrackFieldUiDefinition>({
-  {
-    .field = F::Title,
-    .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string { ... },
-    ...
-  },
-});
+bool canInlineEdit(detail::TrackFieldUiDefinition const& def)
+{
+  return def.parseInlineEdit != nullptr &&
+         def.readRowEditValue != nullptr &&
+         def.applyRowEditValue != nullptr &&
+         def.writePatch != nullptr;
+}
 ```
+
+This ensures a field is only editable if it can be parsed, read from a row, applied back to a row, and written to a metadata patch.
+
+### Column Policy
+
+Column-specific layout policy is moved out of the shared behavior registry:
+
+- **Default Widths**: Managed by `defaultWidthForField(field)` using a policy switch.
+- **Default Visibility**: Derived from `rt::defaultTrackPresentationSpec().visibleFields`.
+- **Expansion**: `TrackColumnController` chooses the single expanding column (preferring `Tags`, then `Title`, then first visible).
+- **Tags Cell**: Identified by the `detail::kTagsCellCssClass` constant ("ao-track-tags-cell").
 
 Table cells and Properties dialog aggregation intentionally use different read paths:
 
@@ -366,11 +391,12 @@ Gtk column has TrackField
 
 Inline editing is field-capability driven. Implemented rules:
 
-1. A field can be inline edited only if `TrackFieldUiDefinition::inlineEditable` is true and `writePatch` is not null.
-2. Commit compares old display value to the new editor value through the field definition.
-3. Commit writes `rt::MetadataPatch` through `writePatch`.
-4. Optimistic row updates are field-based -- no `Title`/`Artist`/`Album` branches remain.
-5. Row reactivity uses invalidate-and-reload for fields that cannot be updated optimistically.
+1. A field can be inline edited only if `canInlineEdit(def)` returns true (implies parser, row-edit hooks, and patch writer are all non-null).
+2. Commit compares old display value to the new editor text through the field definition.
+3. Commit parses editor text into `TrackFieldEditValue`, then writes `rt::MetadataPatch` through `writePatch`.
+4. `TrackFieldRawValue` is not used on the write path; it remains the read/format/mixed-value comparison type.
+5. All metadata fields (text and number) are inline editable, except `Tags`. Numeric inline edits are parsed as `std::uint16_t`; empty text clears the number to 0.
+6. Optimistic row updates are field-based for currently inline-editable fields and are rolled back on mutation failure.
 
 ## Properties Dialog
 
@@ -389,15 +415,14 @@ std::vector<FieldEditor> _editors;
 std::vector<FieldEditor> _readonlyRows;
 ```
 
-The dialog builds rows by filtering the GTK field UI registry:
+The dialog builds rows by filtering the registry using local policy helpers:
 
-- `propertyDialogEditable` for editable metadata rows
-- `propertyDialogReadonly` for technical and synthetic read-only rows
-- `TrackField::Tags` is explicitly skipped in the metadata tab (handled by `TagEditController`), as seen in `app/linux-gtk/tag/TrackPropertiesDialog.cpp:119`
+- `shouldShowEditableMetadataRow` for editable metadata rows (Metadata category, editable, not Tags, has `writePatch`).
+- `shouldShowReadonlyPropertyRow` for technical read-only rows (Technical category, not synthetic, has `readViewRawValue` and `formatValue`).
 
 Mixed-value aggregation is generic and based on raw field values read via `readViewRawValue`.
 
-Save is generic: iterates editable editors and calls `writePatch` for non-mixed changed values.
+Save is generic: iterates editable editors, compares widget-derived `TrackFieldRawValue` against the original raw value, and calls `writePatch` with `TrackFieldEditValue` for non-mixed changed values.
 
 Widget creation is centralized in helpers (`createEditorWidget`, `createReadonlyWidget`) that map `TrackFieldValueKind` to GTK widgets (`Text` to `Gtk::Entry`, numeric kinds to `Gtk::SpinButton`, and read-only technical values to `Gtk::Label`).
 
@@ -415,18 +440,6 @@ Synthetic fields may be presentable and read-only when they have a real display 
 
 Fields can be editable without being visible in built-in table presentations. For example, `TotalDiscs` and `TotalTracks` are Properties-dialog metadata fields and may be presentable for custom columns, but they should not appear in the default built-in column sets unless a presentation explicitly asks for them.
 
-## Drag-To-Query
-
-Drag query generation uses `dragQueryPrefix` from the GTK field UI definition (`app/linux-gtk/track/TrackFieldUi.cpp`).
-
-| Field | Prefix |
-| --- | --- |
-| Artist | `$a=` |
-| Album | `$al=` |
-| Genre | `$g=` |
-
-If a field is draggable but has no prefix, drag content generation returns null.
-
 ## Verified Invariants
 
 All invariants have been verified and pass:
@@ -438,7 +451,7 @@ All invariants have been verified and pass:
 5. Runtime has no GTK dependencies. **VERIFIED**
 6. GTK field display/edit behavior is centralized in `TrackFieldUiDefinition`. **VERIFIED**
 7. Properties dialog rows are generated from field definitions. **VERIFIED**
-8. Inline editing and drag-to-query are field-capability driven. **VERIFIED**
+8. Inline editing is field-capability driven. **VERIFIED**
 9. Technical and synthetic fields can be columns without becoming editable metadata. **VERIFIED**
 10. No feature code performs repeated field dispatch outside the central registries. **VERIFIED**
 
@@ -450,8 +463,8 @@ All invariants have been verified and pass:
 | `app/runtime/TrackField.cpp` | 25-entry `constexpr std::to_array` registry, `trackFieldFromId`, `trackFieldId`, `trackFieldDefinition` |
 | `app/runtime/TrackPresentationPreset.h` | `TrackPresentationSpec` using `std::vector<TrackField>` for `visibleFields`/`redundantFields` |
 | `app/runtime/TrackPresentationPreset.cpp` | Built-in presets expressed in `TrackField`, normalization |
-| `app/linux-gtk/track/TrackFieldUi.h` | `TrackFieldRawValue` variant (6 alternatives), `TrackFieldUiDefinition`, function pointer typedefs |
-| `app/linux-gtk/track/TrackFieldUi.cpp` | 25-entry `static auto const` UI registry with `+`-prefixed lambda readers/writers/formatters |
+| `app/linux-gtk/track/TrackFieldUi.h` | `TrackFieldRawValue`, `TrackFieldEditValue`, `TrackFieldUiDefinition`, function pointer typedefs |
+| `app/linux-gtk/track/TrackFieldUi.cpp` | 25-entry `static auto const` UI registry with `+`-prefixed lambda readers/writers/formatters/parsers |
 | `app/linux-gtk/track/TrackPresentation.h` | `kTrackFieldCount`, `TrackColumnViewState` with `std::array<std::int32_t, kTrackFieldCount>`, `TrackColumnLayoutModel` |
 | `app/linux-gtk/track/TrackPresentation.cpp` | Helper functions delegating to UI registry, `redundantFieldToColumn` |
 | `app/linux-gtk/track/TrackColumnController.h` | Column controller using field-based bindings |

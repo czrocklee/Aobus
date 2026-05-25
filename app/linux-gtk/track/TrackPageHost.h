@@ -11,7 +11,6 @@
 #include <ao/rt/PlaybackService.h>
 
 #include <gtkmm/stack.h>
-#include <sigc++/connection.h>
 
 #include <map>
 #include <memory>

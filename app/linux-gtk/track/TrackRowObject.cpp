@@ -20,12 +20,27 @@
 
 namespace ao::gtk
 {
+  namespace
+  {
+    bool isTextBackedField(rt::TrackField field)
+    {
+      switch (field)
+      {
+        case rt::TrackField::Title:
+        case rt::TrackField::Artist:
+        case rt::TrackField::Album:
+        case rt::TrackField::AlbumArtist:
+        case rt::TrackField::Genre:
+        case rt::TrackField::Composer:
+        case rt::TrackField::Work: return true;
+
+        default: return false;
+      }
+    }
+  } // namespace
+
   TrackRowObject::TrackRowObject()
-    : Glib::ObjectBase{"TrackRowObject"}
-    , _propertyPlaying{*this, "playing", false}
-    , _propertyTitle{*this, "title", ""}
-    , _propertyArtist{*this, "artist", ""}
-    , _propertyAlbum{*this, "album", ""}
+    : Glib::ObjectBase{"TrackRowObject"}, _propertyPlaying{*this, "playing", false}
   {
   }
 
@@ -44,42 +59,37 @@ namespace ao::gtk
     _propertyPlaying.set_value(playing);
   }
 
-  Glib::PropertyProxy<Glib::ustring> TrackRowObject::property_title()
-  {
-    return _propertyTitle.get_proxy();
-  }
-
-  void TrackRowObject::setTitle(Glib::ustring const& title)
-  {
-    _propertyTitle.set_value(title);
-  }
-
-  Glib::PropertyProxy<Glib::ustring> TrackRowObject::property_artist()
-  {
-    return _propertyArtist.get_proxy();
-  }
-
-  void TrackRowObject::setArtist(Glib::ustring const& artist)
-  {
-    _propertyArtist.set_value(artist);
-  }
-
-  Glib::PropertyProxy<Glib::ustring> TrackRowObject::property_album()
-  {
-    return _propertyAlbum.get_proxy();
-  }
-
-  void TrackRowObject::setAlbum(Glib::ustring const& album)
-  {
-    _propertyAlbum.set_value(album);
-  }
-
   Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, TrackRowCache const& provider)
   {
     auto obj = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
     obj->_id = id;
     obj->_provider = &provider;
     return obj;
+  }
+
+  Glib::ustring const* TrackRowObject::stringField(rt::TrackField field) const noexcept
+  {
+    auto const idx = static_cast<std::size_t>(field);
+
+    if (idx >= _text.size() || !isTextBackedField(field))
+    {
+      return nullptr;
+    }
+
+    return &_text[idx];
+  }
+
+  bool TrackRowObject::setStringField(rt::TrackField field, Glib::ustring const& value)
+  {
+    auto const idx = static_cast<std::size_t>(field);
+
+    if (idx >= _text.size() || !isTextBackedField(field))
+    {
+      return false;
+    }
+
+    _text[idx] = value;
+    return true;
   }
 
   void TrackRowObject::populate(Glib::ustring const& title,
@@ -106,14 +116,13 @@ namespace ao::gtk
                                 std::uint64_t modifiedTime,
                                 library::FileStatus status)
   {
-    _propertyTitle.set_value(title);
-    _propertyArtist.set_value(_provider->resolveDictionaryString(artist));
-    _propertyAlbum.set_value(_provider->resolveDictionaryString(album));
-
-    _albumArtistId = albumArtist;
-    _genreId = genre;
-    _composerId = composer;
-    _workId = work;
+    _text[static_cast<std::size_t>(rt::TrackField::Title)] = title;
+    _text[static_cast<std::size_t>(rt::TrackField::Artist)] = _provider->resolveDictionaryString(artist);
+    _text[static_cast<std::size_t>(rt::TrackField::Album)] = _provider->resolveDictionaryString(album);
+    _text[static_cast<std::size_t>(rt::TrackField::AlbumArtist)] = _provider->resolveDictionaryString(albumArtist);
+    _text[static_cast<std::size_t>(rt::TrackField::Genre)] = _provider->resolveDictionaryString(genre);
+    _text[static_cast<std::size_t>(rt::TrackField::Composer)] = _provider->resolveDictionaryString(composer);
+    _text[static_cast<std::size_t>(rt::TrackField::Work)] = _provider->resolveDictionaryString(work);
 
     _tags = tags;
     _duration = duration;
@@ -136,6 +145,11 @@ namespace ao::gtk
 
   Glib::ustring TrackRowObject::getFieldText(rt::TrackField field) const
   {
+    if (auto const* text = stringField(field))
+    {
+      return *text;
+    }
+
     auto const* uiDef = trackFieldUiDefinition(field);
 
     if (uiDef == nullptr || uiDef->readRowText == nullptr)
@@ -147,13 +161,28 @@ namespace ao::gtk
     return Glib::ustring{uiDef->readRowText(*this, *_provider)};
   }
 
-  void TrackRowObject::setTags(Glib::ustring const& tags)
+  void TrackRowObject::setYear(std::uint16_t year)
   {
-    _tags = tags;
+    _year = year;
   }
 
-  Glib::ustring const& TrackRowObject::getTags() const
+  void TrackRowObject::setDiscNumber(std::uint16_t discNumber)
   {
-    return _tags;
+    _discNumber = discNumber;
+  }
+
+  void TrackRowObject::setTotalDiscs(std::uint16_t totalDiscs)
+  {
+    _totalDiscs = totalDiscs;
+  }
+
+  void TrackRowObject::setTrackNumber(std::uint16_t trackNumber)
+  {
+    _trackNumber = trackNumber;
+  }
+
+  void TrackRowObject::setTotalTracks(std::uint16_t totalTracks)
+  {
+    _totalTracks = totalTracks;
   }
 } // namespace ao::gtk

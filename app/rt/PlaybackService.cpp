@@ -389,6 +389,10 @@ namespace ao::rt
     _impl->state = _impl->buildState(*_impl->player);
     _impl->stoppedSignal.emit();
     _impl->idleSignal.emit();
+    _impl->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
+      .trackId = kInvalidTrackId,
+      .sourceListId = kInvalidListId,
+    });
   }
 
   void PlaybackService::seek(std::uint32_t const positionMs, SeekMode const mode)
