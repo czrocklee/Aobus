@@ -3,7 +3,7 @@
 
 #include "track/TrackQuickFilter.h"
 
-#include "track/TrackListAdapter.h"
+#include "track/TrackFilterResolver.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
@@ -104,7 +104,7 @@ namespace ao::gtk
     _filterStatusSub =
       _runtime.views().onFilterStatusChanged(sigc::mem_fun(*this, &TrackQuickFilter::onFilterStatusChanged));
 
-    auto const resolved = TrackListAdapter::resolveFilterExpression(state.filterExpression);
+    auto const resolved = resolveTrackFilterExpression(state.filterExpression);
     _filterExpression = resolved.expression;
     _filterPending = false;
     _optFilterError.reset();
@@ -133,7 +133,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const resolved = TrackListAdapter::resolveFilterExpression(filterText.raw());
+    auto const resolved = resolveTrackFilterExpression(filterText.raw());
     _filterExpression = resolved.expression;
     _filterPending = true;
 

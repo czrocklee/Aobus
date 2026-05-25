@@ -117,10 +117,15 @@ namespace ao::rt
 
     std::optional<TrackSortField> optSortField{};
     std::optional<TrackGroupKey> optGroupKey{};
+
+    std::string_view filterExpressionVariable{};
   };
 
   std::span<TrackFieldDefinition const> trackFieldDefinitions();
   TrackFieldDefinition const* trackFieldDefinition(TrackField field);
   std::optional<TrackField> trackFieldFromId(std::string_view id);
   std::string_view trackFieldId(TrackField field);
+
+  std::string_view trackFieldFilterExpressionVariable(TrackField field);
+  bool trackFieldSupportsFilterExpression(TrackField field);
 } // namespace ao::rt

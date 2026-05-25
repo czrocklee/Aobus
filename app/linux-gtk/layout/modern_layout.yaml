@@ -75,17 +75,24 @@ templates:
           - type: playback.image
             props:
               variant: thumbnail
+              action: jumpToAlbum
           - type: box
             props:
               orientation: vertical
-              spacing: 2
+              spacing: 6
             layout:
               valign: center
+              halign: start
             children:
               - type: playback.currentTitleLabel
+
+                props:
+                  action: reveal
                 layout:
                   cssClasses: ao-nowplaying-title
               - type: playback.currentArtistLabel
+                props:
+                  action: filterByField
                 layout:
                   cssClasses: ao-nowplaying-artist
 
@@ -148,6 +155,7 @@ templates:
         layout:
           slot: end
           valign: center
+          halign: end
         children:
           - type: playback.volumeControl
           - type: playback.outputButton

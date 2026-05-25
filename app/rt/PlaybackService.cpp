@@ -429,10 +429,13 @@ namespace ao::rt
 
   void PlaybackService::revealPlayingTrack()
   {
+    revealTrack(_impl->state.trackId, kInvalidViewId, _impl->state.sourceListId);
+  }
+
+  void PlaybackService::revealTrack(TrackId const trackId, ViewId const preferredViewId, ListId const preferredListId)
+  {
     _impl->revealTrackRequestedSignal.emit(PlaybackService::RevealTrackRequested{
-      .trackId = _impl->state.trackId,
-      .preferredListId = _impl->state.sourceListId,
-    });
+      .trackId = trackId, .preferredListId = preferredListId, .preferredViewId = preferredViewId});
   }
 
   void PlaybackService::addProvider(std::unique_ptr<audio::IBackendProvider> provider)

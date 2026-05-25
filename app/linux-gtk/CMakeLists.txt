@@ -36,7 +36,7 @@ add_library(aobus-gtk-lib STATIC
     track/TrackQuickFilter.cpp
     track/TrackPresentationButton.cpp
     track/TrackSelectionController.cpp
-    track/TrackListAdapter.cpp
+    track/TrackFilterResolver.cpp
     track/TrackListModel.cpp
     track/TrackPresentationStore.cpp
     track/TrackCustomViewDialog.cpp

@@ -27,15 +27,15 @@ namespace ao::gtk
     // This ensures a tight fit without layout jitter when time changes.
     // The "tnum" feature in app.css guarantees all digits have the same width.
     auto const templateText = std::string{[this]
-    {
-      switch (_mode)
-      {
-        case TimeLabelMode::Elapsed:
-        case TimeLabelMode::Duration: return "00:00";
-        case TimeLabelMode::Default:
-        default: return "00:00 / 00:00";
-      }
-    }()};
+                                          {
+                                            switch (_mode)
+                                            {
+                                              case TimeLabelMode::Elapsed:
+                                              case TimeLabelMode::Duration: return "00:00";
+                                              case TimeLabelMode::Default:
+                                              default: return "00:00 / 00:00";
+                                            }
+                                          }()};
 
     auto const pangoLayout = _label.create_pango_layout(templateText);
     std::int32_t textWidth = 0;
@@ -128,9 +128,13 @@ namespace ao::gtk
 
     switch (int const secInMin = 60; _mode)
     {
-      case TimeLabelMode::Elapsed: _label.set_text(std::format("{:d}:{:02d}", posSec / secInMin, posSec % secInMin)); break;
+      case TimeLabelMode::Elapsed:
+        _label.set_text(std::format("{:d}:{:02d}", posSec / secInMin, posSec % secInMin));
+        break;
 
-      case TimeLabelMode::Duration: _label.set_text(std::format("{:d}:{:02d}", durSec / secInMin, durSec % secInMin)); break;
+      case TimeLabelMode::Duration:
+        _label.set_text(std::format("{:d}:{:02d}", durSec / secInMin, durSec % secInMin));
+        break;
 
       case TimeLabelMode::Default:
       default:

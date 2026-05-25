@@ -147,6 +147,8 @@ namespace ao::rt
 
     std::optional<TrackSortField> sortField{};
     std::optional<TrackGroupKey> groupKey{};
+
+    std::string_view filterExpressionVariable{};
   };
 
   std::span<TrackFieldDefinition const> trackFieldDefinitions();
@@ -187,6 +189,32 @@ Field ids are persistence-facing. Do not rename them after release without migra
 | `DisplayTrackNumber` | `display-track-number` |
 | `TechnicalSummary` | `technical-summary` |
 | `Quality` | `quality` |
+
+### Filter Expression Variables
+
+Registry-backed fields support generating valid `lib/expr` filter expressions (e.g., for click-to-filter navigation). The variable name is explicitly defined in the registry to handle naming mismatches (e.g., `AlbumArtist` is `$albumArtist` while its ID is `album-artist`).
+
+| Field | Filter Expression Variable |
+| --- | --- |
+| `Title` | `$title` |
+| `Artist` | `$artist` |
+| `Album` | `$album` |
+| `AlbumArtist` | `$albumArtist` |
+| `Genre` | `$genre` |
+| `Composer` | `$composer` |
+| `Work` | `$work` |
+| `Year` | `$year` |
+| `DiscNumber` | `$discNumber` |
+| `TotalDiscs` | `$totalDiscs` |
+| `TrackNumber` | `$trackNumber` |
+| `TotalTracks` | `$totalTracks` |
+| `Duration` | `@duration` |
+| `SampleRate` | `@sampleRate` |
+| `Channels` | `@channels` |
+| `BitDepth` | `@bitDepth` |
+| `Bitrate` | `@bitrate` |
+
+Fields without a defined variable (e.g., `Tags`, `TechnicalSummary`) do not currently support automated filter generation.
 
 ## Presentation Specs
 

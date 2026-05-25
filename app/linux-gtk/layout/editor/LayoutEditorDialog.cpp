@@ -534,8 +534,8 @@ namespace ao::gtk::layout::editor
     // In a more complete implementation, we'd compare against the built-in default.
     auto* const confirmation = Gtk::make_managed<Gtk::MessageDialog>(
       *this, "Switch to " + presetId + " preset?", false, Gtk::MessageType::QUESTION, Gtk::ButtonsType::YES_NO, true);
-    confirmation->set_secondary_text(
-      "This will replace your current layout with the default " + presetId + " preset. Any unsaved changes will be lost.");
+    confirmation->set_secondary_text("This will replace your current layout with the default " + presetId +
+                                     " preset. Any unsaved changes will be lost.");
 
     confirmation->signal_response().connect(
       [this, presetId, confirmation](std::int32_t response)
@@ -559,8 +559,7 @@ namespace ao::gtk::layout::editor
           // Revert combo selection without triggering signal again
           _comboPresets.set_active_id(
             _document.root.layout.contains("cssClasses") &&
-                std::ranges::contains(_document.root.layout.at("cssClasses").asStringList(),
-                                      "ao-layout-preset-modern")
+                std::ranges::contains(_document.root.layout.at("cssClasses").asStringList(), "ao-layout-preset-modern")
               ? "modern"
               : "classic");
         }

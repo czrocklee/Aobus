@@ -1,0 +1,7 @@
+{
+  "owner": "NixOS",
+  "repo": "nixpkgs",
+  "ref": "release-26.05",
+  "rev": "632e240fd5f18d9a6f0e326085c407d4940784b2",
+  "sha256": "136mw4dybypppbd99b0znn784y6hkq7mk7dc508fzldb8d2gcb09"
+}

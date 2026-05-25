@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-// Standalone test for app::uigtk::TrackListAdapter without GTKMM dependency.
+// Standalone test for app::uigtk::TrackListModel without GTKMM dependency.
 // Tests adapter functionality with test doubles for GTK objects.
 
 #include "ao/Type.h"
@@ -48,7 +48,7 @@ namespace ao::model::test
   };
 
   /**
-   * TestTrackRowProvider - Standalone test double for app::uigtk::TrackListAdapter tests.
+   * TestTrackRowProvider - Standalone test double for app::uigtk::TrackListModel tests.
    * Named differently to avoid symbol collision when linking.
    */
   class TestTrackRowProvider final
@@ -362,7 +362,7 @@ namespace ao::gtk::test
     };
 
     /**
-     * Filter matcher - standalone version matching app::uigtk::TrackListAdapter logic.
+     * Filter matcher - standalone version matching app::uigtk::TrackListModel logic.
      */
     bool matchesFilter(RowData const& rowData, std::string_view filter)
     {
@@ -395,7 +395,7 @@ namespace ao::gtk::test
 
   using namespace ao::lmdb::test;
 
-  TEST_CASE("app::uigtk::TrackListAdapter", "[app][adapter]")
+  TEST_CASE("app::uigtk::TrackListModel", "[app][adapter]")
   {
     SECTION("TestTrackRowProvider loads row data for filtering")
     {

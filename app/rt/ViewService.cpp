@@ -315,6 +315,9 @@ namespace ao::rt
     applyPresentation(it->second);
     _impl->groupingChangedSignal.post(
       _impl->executor, ViewService::GroupingChanged{.viewId = viewId, .groupBy = groupBy});
+    _impl->presentationChangedSignal.post(
+      _impl->executor,
+      ViewService::PresentationChanged{.viewId = viewId, .presentation = it->second.state.presentation});
   }
 
   void ViewService::setPresentation(ViewId viewId, TrackPresentationSpec const& presentation)

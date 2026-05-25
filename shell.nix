@@ -1,7 +1,11 @@
 {
-  pkgs ? import (builtins.fetchTarball {
-    url = "https://github.com/NixOS/nixpkgs/archive/refs/heads/nixos-unstable.tar.gz";
-  }) { },
+  pkgs ? import (
+    let pin = builtins.fromJSON (builtins.readFile ./nixpkgs.json);
+    in builtins.fetchTarball {
+      url = "https://github.com/${pin.owner}/${pin.repo}/archive/${pin.rev}.tar.gz";
+      sha256 = pin.sha256;
+    }
+  ) { },
 }:
 let
   lexy-src = (
@@ -78,7 +82,7 @@ pkgs.mkShell {
     export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${pkgs.gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
     # Set Lexy include path
     export CPLUS_INCLUDE_PATH="${lexy}/include:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
-    echo "Using nixpkgs pinned to nixos-unstable"
+    echo "Using nixpkgs pinned (see nixpkgs.json)"
     echo "Using GCC by default"
   '';
 }

@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
+#include <gtkmm/button.h>
 #include <gtkmm/window.h>
 
 #include <cstdint>
@@ -62,11 +63,16 @@ namespace ao::gtk::layout::test
       REQUIRE(comp != nullptr);
       auto& widget = comp->widget();
 
-      CHECK_FALSE(widget.has_css_class("ao-nowplaying-image-thumb"));
+      auto* const button = dynamic_cast<Gtk::Button*>(&widget);
+      REQUIRE(button != nullptr);
+      auto* const picture = button->get_child();
+      REQUIRE(picture != nullptr);
+
+      CHECK_FALSE(picture->has_css_class("ao-nowplaying-image-thumb"));
 
       std::int32_t width = -1;
       std::int32_t height = -1;
-      widget.get_size_request(width, height);
+      picture->get_size_request(width, height);
       CHECK(width == -1);
       CHECK(height == -1);
     }
@@ -80,13 +86,18 @@ namespace ao::gtk::layout::test
       REQUIRE(comp != nullptr);
       auto& widget = comp->widget();
 
-      CHECK(widget.has_css_class("ao-nowplaying-image-thumb"));
+      auto* const button = dynamic_cast<Gtk::Button*>(&widget);
+      REQUIRE(button != nullptr);
+      auto* const picture = button->get_child();
+      REQUIRE(picture != nullptr);
+
+      CHECK(picture->has_css_class("ao-nowplaying-image-thumb"));
       CHECK_FALSE(widget.get_hexpand());
       CHECK_FALSE(widget.get_vexpand());
 
       std::int32_t width = -1;
       std::int32_t height = -1;
-      widget.get_size_request(width, height);
+      picture->get_size_request(width, height);
       CHECK(width == 56);
       CHECK(height == 56);
     }

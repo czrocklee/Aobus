@@ -252,3 +252,35 @@ TEST_CASE("TrackField known labels", "[runtime][trackfield]")
   CHECK(trackFieldDefinition(TrackField::TechnicalSummary)->label == "Technical");
   CHECK(trackFieldDefinition(TrackField::Quality)->label == "Quality");
 }
+
+TEST_CASE("TrackField filter expression variables are correct", "[runtime][trackfield]")
+{
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Title) == "$title");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Artist) == "$artist");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Album) == "$album");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::AlbumArtist) == "$albumArtist");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Genre) == "$genre");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Composer) == "$composer");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Work) == "$work");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Year) == "$year");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::DiscNumber) == "$discNumber");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::TotalDiscs) == "$totalDiscs");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::TrackNumber) == "$trackNumber");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::TotalTracks) == "$totalTracks");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Duration) == "@duration");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::SampleRate) == "@sampleRate");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Channels) == "@channels");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::BitDepth) == "@bitDepth");
+  CHECK(trackFieldFilterExpressionVariable(TrackField::Bitrate) == "@bitrate");
+}
+
+TEST_CASE("TrackField supports filter expression helper works", "[runtime][trackfield]")
+{
+  CHECK(trackFieldSupportsFilterExpression(TrackField::Artist));
+  CHECK(trackFieldSupportsFilterExpression(TrackField::AlbumArtist));
+  CHECK(trackFieldSupportsFilterExpression(TrackField::Duration));
+
+  CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::Tags));
+  CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::TechnicalSummary));
+  CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::Quality));
+}

@@ -117,7 +117,8 @@ target_compile_options(ao_integration_test PRIVATE -Wno-array-bounds)
 
 # ao_test_gtk: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_test_gtk
-    unit/linux-gtk/track/TrackListAdapterTest.cpp
+    unit/linux-gtk/track/TrackFilterResolverTest.cpp
+    unit/linux-gtk/track/TrackListModelTest.cpp
     unit/linux-gtk/track/TrackPresentationTest.cpp
     unit/linux-gtk/track/TrackFieldUiTest.cpp
     unit/linux-gtk/track/TrackRowCacheTest.cpp

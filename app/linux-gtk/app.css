@@ -81,9 +81,17 @@
 /* StatusNotificationLabel */
 .ao-status-message {}
 
-.ao-status-info    { color: @theme_text_color; }
-.ao-status-warning { color: @warning_color; }
-.ao-status-error   { color: @error_color; }
+.ao-status-info {
+  color: @theme_text_color;
+}
+
+.ao-status-warning {
+  color: @warning_color;
+}
+
+.ao-status-error {
+  color: @error_color;
+}
 
 /* Section Header (generic) */
 .ao-section-header {
@@ -410,7 +418,7 @@ columnview row {
   min-height: 38px;
 }
 
-columnview > listview > row:selected {
+columnview>listview>row:selected {
   background-color: alpha(@theme_selected_bg_color, 0.2);
   color: @theme_fg_color;
   border-radius: 6px;
@@ -479,6 +487,7 @@ columnview row.ao-missing-row label {
   margin: -4px;
   border-radius: 50%;
 }
+
 /* ===== Modern Bottom Bar ===== */
 
 /* Glass-morphism background for the entire bottom bar */
@@ -520,10 +529,8 @@ columnview row.ao-missing-row label {
 /* Now-playing artwork thumbnail in control bar */
 .ao-nowplaying-image-thumb {
   border-radius: 4px;
-  width: 56px;
-  height: 56px;
-  max-width: 56px;
-  max-height: 56px;
+  min-width: 56px;
+  min-height: 56px;
   box-shadow: 0 1px 4px alpha(black, 0.15);
 }
 
@@ -563,26 +570,34 @@ columnview row.ao-missing-row label {
 /* Now-playing text group in bottom bar */
 .ao-nowplaying-title {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 
 .ao-nowplaying-artist {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   opacity: 0.7;
 }
 
 .ao-modern-center-group {
   min-width: 300px;
-  max-width: 700px;
 }
 
-.ao-modern-time-label {
+.ao-time-label {
   font-size: 0.75rem;
   opacity: 0.6;
   font-feature-settings: "tnum";
 }
 
+.ao-clickable {
+}
+
+.ao-clickable:hover {
+  opacity: 0.8;
+}
+
+
 /* Bottom bar right-side status */
+
 .ao-bottom-bar-status {
   font-size: 0.8rem;
   opacity: 0.55;
@@ -627,7 +642,8 @@ columnview row.ao-missing-row label {
 }
 
 .ao-layout-preset-modern columnview row {
-  min-height: 44px; /* Slightly taller than classic */
+  min-height: 44px;
+  /* Slightly taller than classic */
   border-radius: 4px;
   margin: 0 4px;
 }
@@ -636,12 +652,13 @@ columnview row.ao-missing-row label {
   background-color: alpha(currentColor, 0.03);
 }
 
-.ao-layout-preset-modern columnview > listview > row:selected {
+.ao-layout-preset-modern columnview>listview>row:selected {
   background-color: alpha(@theme_selected_bg_color, 0.12);
-  color: inherit; /* Don't force white text if bg is soft */
+  color: inherit;
+  /* Don't force white text if bg is soft */
 }
 
-.ao-layout-preset-modern columnview > listview > row:selected label {
+.ao-layout-preset-modern columnview>listview>row:selected label {
   color: @theme_selected_bg_color;
   font-weight: 500;
 }

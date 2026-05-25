@@ -326,18 +326,6 @@ namespace ao::gtk
     _viewHost->selectionController().setPlayingTrackId(trackId);
   }
 
-  void TrackViewPage::revealTrack(TrackId trackId)
-  {
-    if (trackId == kInvalidTrackId)
-    {
-      return;
-    }
-
-    _viewHost->selectionController().selectTrack(trackId);
-
-    Glib::signal_idle().connect_once([this, trackId] { _viewHost->selectionController().selectTrack(trackId); });
-  }
-
   void TrackViewPage::rebuildColumnView(std::span<rt::TrackField const> visibleFields)
   {
     auto const factoryProvider = [this](rt::TrackField field)

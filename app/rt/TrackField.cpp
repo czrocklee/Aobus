@@ -28,6 +28,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .optSortField = TrackSortField::Title,
+        .filterExpressionVariable = "$title",
       },
       {
         .field = F::Artist,
@@ -41,6 +42,7 @@ namespace ao::rt
         .groupable = true,
         .optSortField = TrackSortField::Artist,
         .optGroupKey = TrackGroupKey::Artist,
+        .filterExpressionVariable = "$artist",
       },
       {
         .field = F::Album,
@@ -54,6 +56,7 @@ namespace ao::rt
         .groupable = true,
         .optSortField = TrackSortField::Album,
         .optGroupKey = TrackGroupKey::Album,
+        .filterExpressionVariable = "$album",
       },
       {
         .field = F::AlbumArtist,
@@ -67,6 +70,7 @@ namespace ao::rt
         .groupable = true,
         .optSortField = TrackSortField::AlbumArtist,
         .optGroupKey = TrackGroupKey::AlbumArtist,
+        .filterExpressionVariable = "$albumArtist",
       },
       {
         .field = F::Genre,
@@ -80,6 +84,7 @@ namespace ao::rt
         .groupable = true,
         .optSortField = TrackSortField::Genre,
         .optGroupKey = TrackGroupKey::Genre,
+        .filterExpressionVariable = "$genre",
       },
       {
         .field = F::Composer,
@@ -93,6 +98,7 @@ namespace ao::rt
         .groupable = true,
         .optSortField = TrackSortField::Composer,
         .optGroupKey = TrackGroupKey::Composer,
+        .filterExpressionVariable = "$composer",
       },
       {
         .field = F::Work,
@@ -106,6 +112,7 @@ namespace ao::rt
         .groupable = true,
         .optSortField = TrackSortField::Work,
         .optGroupKey = TrackGroupKey::Work,
+        .filterExpressionVariable = "$work",
       },
       // --- Metadata: number ---
       {
@@ -120,6 +127,7 @@ namespace ao::rt
         .groupable = true,
         .optSortField = TrackSortField::Year,
         .optGroupKey = TrackGroupKey::Year,
+        .filterExpressionVariable = "$year",
       },
       {
         .field = F::DiscNumber,
@@ -131,6 +139,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .optSortField = TrackSortField::DiscNumber,
+        .filterExpressionVariable = "$discNumber",
       },
       {
         .field = F::TotalDiscs,
@@ -140,6 +149,7 @@ namespace ao::rt
         .valueKind = Vk::Number,
         .presentable = true,
         .editable = true,
+        .filterExpressionVariable = "$totalDiscs",
       },
       {
         .field = F::TrackNumber,
@@ -151,6 +161,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .optSortField = TrackSortField::TrackNumber,
+        .filterExpressionVariable = "$trackNumber",
       },
       {
         .field = F::TotalTracks,
@@ -160,6 +171,7 @@ namespace ao::rt
         .valueKind = Vk::Number,
         .presentable = true,
         .editable = true,
+        .filterExpressionVariable = "$totalTracks",
       },
       // --- Duration ---
       {
@@ -171,6 +183,7 @@ namespace ao::rt
         .presentable = true,
         .sortable = true,
         .optSortField = TrackSortField::Duration,
+        .filterExpressionVariable = "@duration",
       },
       // --- Tags ---
       {
@@ -205,6 +218,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
+        .filterExpressionVariable = "@sampleRate",
       },
       {
         .field = F::Channels,
@@ -213,6 +227,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
+        .filterExpressionVariable = "@channels",
       },
       {
         .field = F::BitDepth,
@@ -221,6 +236,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
+        .filterExpressionVariable = "@bitDepth",
       },
       {
         .field = F::Bitrate,
@@ -229,6 +245,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
+        .filterExpressionVariable = "@bitrate",
       },
       {
         .field = F::FileSize,
@@ -318,5 +335,20 @@ namespace ao::rt
     }
 
     return {};
+  }
+
+  std::string_view trackFieldFilterExpressionVariable(TrackField const field)
+  {
+    if (auto const* const def = trackFieldDefinition(field))
+    {
+      return def->filterExpressionVariable;
+    }
+
+    return {};
+  }
+
+  bool trackFieldSupportsFilterExpression(TrackField const field)
+  {
+    return !trackFieldFilterExpressionVariable(field).empty();
   }
 } // namespace ao::rt

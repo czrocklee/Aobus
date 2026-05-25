@@ -92,6 +92,7 @@ namespace ao::rt
     void setVolume(float volume);
     void setMuted(bool muted);
     void revealPlayingTrack();
+    void revealTrack(TrackId trackId, ViewId preferredViewId = kInvalidViewId, ListId preferredListId = kInvalidListId);
 
     void addProvider(std::unique_ptr<audio::IBackendProvider> provider);
 

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ao/Type.h"
-#include "track/TrackListAdapter.h"
+#include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
 
 #include <glibmm/refptr.h>
@@ -30,7 +30,7 @@ namespace ao::gtk
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId> const&, Gtk::Widget*)>;
 
     TrackSelectionController(Gtk::ColumnView& columnView,
-                             TrackListAdapter& adapter,
+                             Glib::RefPtr<TrackListModel> model,
                              Glib::RefPtr<Gtk::MultiSelection> selectionModel);
 
     void setupActivation();
@@ -58,7 +58,7 @@ namespace ao::gtk
     TrackId trackIdAtPosition(std::uint32_t position) const noexcept;
 
     Gtk::ColumnView& _columnView;
-    TrackListAdapter& _adapter;
+    Glib::RefPtr<TrackListModel> _model;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
 
     TrackId _playingTrackId{kInvalidTrackId};

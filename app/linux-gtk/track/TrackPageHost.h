@@ -11,6 +11,7 @@
 #include <ao/rt/PlaybackService.h>
 
 #include <gtkmm/stack.h>
+#include <sigc++/connection.h>
 
 #include <map>
 #include <memory>
@@ -26,7 +27,7 @@ namespace ao::gtk
   class PlaybackSequenceController;
   class TagEditController;
   class TrackRowCache;
-  class TrackListAdapter;
+  class TrackListModel;
   class TrackViewPage;
   class ImageCache;
 
@@ -42,7 +43,7 @@ namespace ao::gtk
   struct TrackPageContext final
   {
     rt::ViewId viewId{};
-    std::unique_ptr<TrackListAdapter> adapter = {};
+    Glib::RefPtr<TrackListModel> model = {};
     std::unique_ptr<TrackViewPage> page = {};
     std::unique_ptr<portal::PlaylistExporter> exporter = {};
   };
@@ -97,7 +98,6 @@ namespace ao::gtk
     void bindTrackPage(TrackPageContext& ctx);
     void syncLayout();
     void handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev);
-
     Gtk::Stack& _stack;
     rt::AppRuntime& _runtime;
     PlaybackSequenceController* _playbackSequenceController;

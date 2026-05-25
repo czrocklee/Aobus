@@ -5,7 +5,7 @@
 
 #include "ao/Type.h"
 #include "track/TrackColumnController.h"
-#include "track/TrackListAdapter.h"
+#include "track/TrackListModel.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackSelectionController.h"
 
@@ -21,13 +21,13 @@
 
 namespace ao::gtk
 {
-  TrackColumnViewHost::TrackColumnViewHost(TrackListAdapter& adapter,
+  TrackColumnViewHost::TrackColumnViewHost(Glib::RefPtr<TrackListModel> model,
                                            TrackPresentationStore& presentationStore,
                                            Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                            ao::ListId listId)
     : _columnView{std::make_unique<Gtk::ColumnView>()}
     , _columnController{std::make_unique<TrackColumnController>(*_columnView, presentationStore, listId)}
-    , _selectionController{std::make_unique<TrackSelectionController>(*_columnView, adapter, selectionModel)}
+    , _selectionController{std::make_unique<TrackSelectionController>(*_columnView, model, selectionModel)}
   {
     connectSelectionSignals();
   }
@@ -61,14 +61,14 @@ namespace ao::gtk
       [this](std::vector<TrackId> const& ids, Gtk::Widget* widget) { _tagEditRequestedSignal.emit(ids, widget); });
   }
 
-  Gtk::ColumnView& TrackColumnViewHost::rebuild(TrackListAdapter& adapter,
+  Gtk::ColumnView& TrackColumnViewHost::rebuild(Glib::RefPtr<TrackListModel> model,
                                                 TrackPresentationStore& presentationStore,
                                                 Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                                 FactoryProvider const& factoryProvider,
                                                 ao::ListId listId)
   {
     auto newView = std::make_unique<Gtk::ColumnView>();
-    auto newSelection = std::make_unique<TrackSelectionController>(*newView, adapter, selectionModel);
+    auto newSelection = std::make_unique<TrackSelectionController>(*newView, model, selectionModel);
     auto newColumn = std::make_unique<TrackColumnController>(*newView, presentationStore, listId);
 
     // Retire old generation

@@ -6,7 +6,7 @@
 #include "ao/Type.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnViewHost.h"
-#include "track/TrackListAdapter.h"
+#include "track/TrackListModel.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
@@ -53,7 +53,7 @@ namespace ao::gtk
     using CreateSmartListRequestedSignal = sigc::signal<void(std::string)>;
 
     explicit TrackViewPage(ListId listId,
-                           TrackListAdapter& adapter,
+                           Glib::RefPtr<TrackListModel> model,
                            TrackPresentationStore& presentationStore,
                            rt::AppRuntime& runtime,
                            ImageCache& imageCache,
@@ -79,7 +79,7 @@ namespace ao::gtk
     TagEditRequestedSignal& signalTagEditRequested() noexcept { return _viewHost->signalTagEditRequested(); }
 
     CreateSmartListRequestedSignal& signalCreateSmartListRequested() noexcept;
-    rt::ITrackListProjection* projection() const noexcept { return _adapter.projection(); }
+    rt::ITrackListProjection* projection() const noexcept { return _model ? _model->projection() : nullptr; }
 
     void showTagPopover(TagPopover& popover, double posX, double posY);
     void setStatusMessage(std::string_view message);
@@ -110,7 +110,7 @@ namespace ao::gtk
     // Models
     ListId _listId;
     rt::ViewId _viewId{};
-    TrackListAdapter& _adapter;
+    Glib::RefPtr<TrackListModel> _model;
     TrackPresentationStore& _presentationStore;
     rt::AppRuntime& _runtime;
     ImageCache& _imageCache;

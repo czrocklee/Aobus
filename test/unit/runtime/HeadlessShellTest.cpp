@@ -62,6 +62,24 @@ namespace ao::rt::test
       CHECK(viewState.listId == listId);
     }
 
+    SECTION("Navigate to All Tracks does not reuse a filtered All Tracks view")
+    {
+      auto const filteredView = runtime.views().createView(
+        TrackListViewConfig{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""});
+
+      runtime.workspace().addView(filteredView.viewId);
+      runtime.workspace().setFocusedView(filteredView.viewId);
+      runtime.workspace().navigateTo(GlobalViewKind::AllTracks);
+
+      auto const layout = runtime.workspace().layoutState();
+      REQUIRE(layout.openViews.size() == 2);
+      CHECK(layout.activeViewId != filteredView.viewId);
+
+      auto const activeState = runtime.views().trackListState(layout.activeViewId);
+      CHECK(activeState.listId == kAllTracksListId);
+      CHECK(activeState.filterExpression.empty());
+    }
+
     SECTION("Closing a view updates the layout")
     {
       runtime.workspace().navigateTo(ListId{1});

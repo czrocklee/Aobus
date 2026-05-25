@@ -18,14 +18,14 @@
 
 namespace ao::gtk
 {
-  class TrackListAdapter;
+  class TrackListModel;
 
   class TrackColumnViewHost final
   {
   public:
     using FactoryProvider = TrackColumnController::FactoryProvider;
 
-    TrackColumnViewHost(TrackListAdapter& adapter,
+    TrackColumnViewHost(Glib::RefPtr<TrackListModel> model,
                         TrackPresentationStore& presentationStore,
                         Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                         ListId listId);
@@ -59,7 +59,7 @@ namespace ao::gtk
 
     // Build a new ColumnView generation off-tree and return it.
     // The old generation is retired. Caller swaps the scrolled-window child.
-    Gtk::ColumnView& rebuild(TrackListAdapter& adapter,
+    Gtk::ColumnView& rebuild(Glib::RefPtr<TrackListModel> model,
                              TrackPresentationStore& presentationStore,
                              Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                              FactoryProvider const& factoryProvider,

@@ -37,7 +37,7 @@ namespace ao::rt
 
 namespace ao::gtk
 {
-  class TrackListAdapter;
+  class TrackListModel;
   class TrackRowCache;
 
   class SmartListDialog final : public Gtk::Dialog
@@ -92,7 +92,7 @@ namespace ao::gtk
     TrackRowCache const& _trackRowCache;
     std::unique_ptr<rt::SmartListSource> _previewFilteredList;
     std::unique_ptr<rt::SmartListEvaluator> _previewEngine;
-    std::unique_ptr<TrackListAdapter> _previewAdapter;
+    Glib::RefPtr<TrackListModel> _previewModel;
     bool _expressionValid = true;
 
     // Edit mode state

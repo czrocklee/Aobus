@@ -224,6 +224,17 @@ The track page host should own page lifecycle in the GTK stack. If binding logic
 continues to grow, split a `TrackPageBinder` that wires runtime projections,
 selection, playback reveal, and tag actions to a page instance.
 
+Playback reveal requests that immediately follow navigation or presentation
+changes should be applied through the page reveal API. The page should select the
+track immediately and repeat the select/scroll action from GTK idle, so stack
+visibility changes and `ColumnView` model/layout resets have settled before the
+final scroll request.
+
+`TrackPageHost` should keep a pending reveal per target view while navigation,
+projection rebinding, or presentation rebuilds are in flight. It may try the
+reveal immediately, but it should retry after projection or presentation changes
+before clearing the pending request from GTK idle.
+
 ## CLI Rule
 
 The CLI should not depend on GUI workspace/view runtime. Shared CLI/GTK behavior

@@ -4,7 +4,7 @@
 #include "track/TrackSelectionController.h"
 
 #include "ao/Type.h"
-#include "track/TrackListAdapter.h"
+#include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
 
 #include <gdk/gdk.h>
@@ -52,10 +52,10 @@ namespace ao::gtk
   } // namespace
 
   TrackSelectionController::TrackSelectionController(Gtk::ColumnView& columnView,
-                                                     TrackListAdapter& adapter,
+                                                     Glib::RefPtr<TrackListModel> model,
                                                      Glib::RefPtr<Gtk::MultiSelection> selectionModel)
     : _columnView{columnView}
-    , _adapter{adapter}
+    , _model{std::move(model)}
     , _selectionModel{std::move(selectionModel)}
     , _selectionChangedConnection{_selectionModel->signal_selection_changed().connect(
         sigc::mem_fun(*this, &TrackSelectionController::onSelectionChanged))}
@@ -282,7 +282,7 @@ namespace ao::gtk
 
   void TrackSelectionController::selectTrack(TrackId trackId)
   {
-    auto const optIndex = _adapter.indexOf(trackId);
+    auto const optIndex = _model->indexOf(trackId);
 
     if (!optIndex || *optIndex >= _selectionModel->get_n_items())
     {
@@ -297,7 +297,7 @@ namespace ao::gtk
 
   void TrackSelectionController::scrollToTrack(TrackId trackId)
   {
-    auto const optIndex = _adapter.indexOf(trackId);
+    auto const optIndex = _model->indexOf(trackId);
 
     if (!optIndex || *optIndex >= _selectionModel->get_n_items())
     {
@@ -310,45 +310,13 @@ namespace ao::gtk
 
   void TrackSelectionController::setPlayingTrackId(TrackId trackId)
   {
-    auto const model = _selectionModel->get_model();
-
-    if (!model)
-    {
-      return;
-    }
-
-    if (_playingTrackId != kInvalidTrackId)
-    {
-      if (auto const optIdx = _adapter.indexOf(_playingTrackId); optIdx && *optIdx < model->get_n_items())
-      {
-        auto const item = model->get_object(static_cast<::guint>(*optIdx));
-
-        if (auto const row = std::dynamic_pointer_cast<TrackRowObject>(item))
-        {
-          row->setPlaying(false);
-        }
-      }
-    }
-
     _playingTrackId = trackId;
-
-    if (trackId != kInvalidTrackId)
-    {
-      if (auto const optIdx = _adapter.indexOf(trackId); optIdx && *optIdx < model->get_n_items())
-      {
-        auto const item = model->get_object(static_cast<::guint>(*optIdx));
-
-        if (auto const row = std::dynamic_pointer_cast<TrackRowObject>(item))
-        {
-          row->setPlaying(true);
-        }
-      }
-    }
+    _model->setPlayingTrackId(trackId);
   }
 
   std::vector<TrackId> TrackSelectionController::getVisibleTrackIds() const noexcept
   {
-    auto* const proj = _adapter.projection();
+    auto* const proj = _model->projection();
 
     if (proj == nullptr)
     {

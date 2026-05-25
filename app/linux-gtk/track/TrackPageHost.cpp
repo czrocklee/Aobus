@@ -25,7 +25,6 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 
-#include <glibmm/main.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 
@@ -81,8 +80,6 @@ namespace ao::gtk
         {
           ctx->page->setPlayingTrackId(_playingTrackId);
         }
-
-        revealPendingTrack(ev.viewId);
       });
 
     _presentationChangedSub = _runtime.views().onPresentationChanged(
@@ -101,8 +98,6 @@ namespace ao::gtk
         {
           ctx->page->setPlayingTrackId(_playingTrackId);
         }
-
-        revealPendingTrack(ev.viewId);
       });
   }
   void TrackPageHost::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
@@ -193,7 +188,6 @@ namespace ao::gtk
 
   TrackPageHost::~TrackPageHost()
   {
-    _pendingRevealClearConnection.disconnect();
     clear();
   }
 
@@ -348,51 +342,6 @@ namespace ao::gtk
 
     bindTrackPage(ctx);
     _trackPages[viewId] = std::move(ctx);
-    revealPendingTrack(viewId);
-  }
-
-  void TrackPageHost::queueRevealTrack(rt::ViewId viewId, TrackId trackId)
-  {
-    if (viewId == rt::kInvalidViewId || trackId == kInvalidTrackId)
-    {
-      return;
-    }
-
-    _pendingRevealTracks[viewId] = trackId;
-    revealPendingTrack(viewId);
-  }
-
-  void TrackPageHost::revealPendingTrack(rt::ViewId viewId)
-  {
-    auto const it = _pendingRevealTracks.find(viewId);
-
-    if (it == _pendingRevealTracks.end())
-    {
-      return;
-    }
-
-    auto* const ctx = find(viewId);
-
-    if (ctx == nullptr || ctx->page == nullptr)
-    {
-      return;
-    }
-
-    auto const trackId = it->second;
-    ctx->page->revealTrack(trackId);
-
-    _pendingRevealClearConnection.disconnect();
-    _pendingRevealClearConnection = Glib::signal_idle().connect(
-      [this, viewId, trackId]
-      {
-        if (auto const pendingIt = _pendingRevealTracks.find(viewId);
-            pendingIt != _pendingRevealTracks.end() && pendingIt->second == trackId)
-        {
-          _pendingRevealTracks.erase(pendingIt);
-        }
-
-        return false;
-      });
   }
 
   void TrackPageHost::bindTrackPage(TrackPageContext& ctx)
