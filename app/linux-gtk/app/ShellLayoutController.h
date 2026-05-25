@@ -11,6 +11,8 @@
 
 #include <gtkmm/window.h>
 
+#include <string>
+
 namespace ao::gtk
 {
   class AppConfig;
@@ -37,6 +39,7 @@ namespace ao::gtk
     layout::LayoutContext _context;
     layout::LayoutHost _host;
     layout::LayoutDocument _activeLayout;
+    std::string _activePresetId;
     rt::async::LifetimeScope _tasks;
   };
 } // namespace ao::gtk

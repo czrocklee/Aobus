@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <string_view>
 
 namespace ao::rt
 {
@@ -39,8 +40,8 @@ namespace ao::gtk
     void loadAppPrefs(rt::AppPrefsState& state) const;
     void saveAppPrefs(rt::AppPrefsState const& state);
 
-    void loadShellLayout(layout::LayoutDocument& state) const;
-    void saveShellLayout(layout::LayoutDocument const& state);
+    void loadShellLayout(layout::LayoutDocument& state, std::string_view presetId) const;
+    void saveShellLayout(layout::LayoutDocument const& state, std::string_view presetId);
 
   private:
     std::unique_ptr<rt::ConfigStore> _store;

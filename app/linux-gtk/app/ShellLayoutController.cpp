@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/ShellLayoutController.h"
+#include "ShellLayoutController.h"
 
-#include "ao/utility/Log.h"
-#include "app/AppConfig.h"
+#include "AppConfig.h"
+#include "ao/rt/async/Runtime.h"
+#include "ao/rt/async/Task.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/editor/LayoutEditorDialog.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutContext.h"
+#include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/rt/async/LifetimeScope.h>
-#include <ao/rt/async/Runtime.h>
-#include <ao/rt/async/Task.h>
+#include <ao/utility/Log.h>
 
 #include <gtkmm/dialog.h>
 #include <gtkmm/window.h>
@@ -20,6 +22,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -51,10 +54,12 @@ namespace ao::gtk
         cfg->loadAppPrefs(prefs);
 
         auto presetId = layout::LayoutPresetId::Classic;
+        auto presetIdStr = std::string{"classic"};
 
         if (prefs.lastLayoutPreset == "modern")
         {
           presetId = layout::LayoutPresetId::Modern;
+          presetIdStr = "modern";
         }
         else if (!prefs.lastLayoutPreset.empty() && prefs.lastLayoutPreset != "classic")
         {
@@ -63,11 +68,12 @@ namespace ao::gtk
         }
 
         auto doc = layout::createBuiltInLayout(presetId);
-        cfg->loadShellLayout(doc);
+        cfg->loadShellLayout(doc, presetIdStr);
 
         co_await asyncRuntime->resumeOnControl();
         APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
 
+        self->_activePresetId = std::move(presetIdStr);
         self->_activeLayout = doc;
         self->_host.setLayout(self->_context, self->_activeLayout);
       }(this, &config));
@@ -75,7 +81,7 @@ namespace ao::gtk
 
   void ShellLayoutController::saveLayout(AppConfig& config) const
   {
-    config.saveShellLayout(_activeLayout);
+    config.saveShellLayout(_activeLayout, _activePresetId);
   }
 
   void ShellLayoutController::openEditor(AppConfig& config)
@@ -83,10 +89,10 @@ namespace ao::gtk
     auto prefs = rt::AppPrefsState{};
     config.loadAppPrefs(prefs);
 
-    auto const presetId = prefs.lastLayoutPreset.empty() ? "classic" : prefs.lastLayoutPreset;
+    auto const initialPresetId = _activePresetId.empty() ? "classic" : _activePresetId;
 
     auto const dialog = std::make_shared<layout::editor::LayoutEditorDialog>(
-      dynamic_cast<Gtk::Window&>(_context.parentWindow), _registry, _activeLayout, presetId);
+      dynamic_cast<Gtk::Window&>(_context.parentWindow), _registry, _activeLayout, initialPresetId);
     auto* const dialogPtr = dialog.get();
 
     _context.editMode = true;
@@ -107,16 +113,19 @@ namespace ao::gtk
         if (responseId == Gtk::ResponseType::OK)
         {
           _activeLayout = sharedDialog->document();
-          _host.setLayout(_context, _activeLayout);
-          config.saveShellLayout(_activeLayout);
 
           if (auto const presetIdDialog = sharedDialog->getSelectedPresetId(); !presetIdDialog.empty())
           {
+            _activePresetId = presetIdDialog;
+
             auto prefsUpdate = rt::AppPrefsState{};
             config.loadAppPrefs(prefsUpdate);
-            prefsUpdate.lastLayoutPreset = presetIdDialog;
+            prefsUpdate.lastLayoutPreset = _activePresetId;
             config.saveAppPrefs(prefsUpdate);
           }
+
+          _host.setLayout(_context, _activeLayout);
+          config.saveShellLayout(_activeLayout, _activePresetId);
         }
         else if (responseId == Gtk::ResponseType::CANCEL)
         {

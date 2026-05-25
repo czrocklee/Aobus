@@ -222,6 +222,15 @@ namespace ao::gtk
         _button.set_icon_name(isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic");
         _button.set_tooltip_text(isPlaying ? "Pause" : "Play");
 
+        if (isPlaying)
+        {
+          _button.add_css_class("is-playing");
+        }
+        else
+        {
+          _button.remove_css_class("is-playing");
+        }
+
         if (_showLabel)
         {
           _button.set_label(isPlaying ? "Pause" : "Play");

@@ -11,6 +11,7 @@
 #include <ao/rt/StateTypes.h>
 
 #include <filesystem>
+#include <format>
 #include <memory>
 
 namespace ao::gtk
@@ -61,21 +62,24 @@ namespace ao::gtk
     }
   }
 
-  void AppConfig::loadShellLayout(layout::LayoutDocument& state) const
+  void AppConfig::loadShellLayout(layout::LayoutDocument& state, std::string_view presetId) const
   {
-    if (auto const res = _store->load("linuxGtkLayout", state); !res && res.error().code != Error::Code::NotFound)
+    auto const key = std::format("linuxGtkLayout_{}", presetId);
+
+    if (auto const res = _store->load(key, state); !res && res.error().code != Error::Code::NotFound)
     {
-      APP_LOG_DEBUG("AppConfig: Failed to load shell layout: {}", res.error().message);
+      APP_LOG_DEBUG("AppConfig: Failed to load shell layout ({}): {}", key, res.error().message);
     }
   }
 
-  void AppConfig::saveShellLayout(layout::LayoutDocument const& state)
+  void AppConfig::saveShellLayout(layout::LayoutDocument const& state, std::string_view presetId)
   {
-    _store->save("linuxGtkLayout", state);
+    auto const key = std::format("linuxGtkLayout_{}", presetId);
+    _store->save(key, state);
 
     if (auto const res = _store->flush(); !res)
     {
-      APP_LOG_ERROR("AppConfig: Failed to flush shell layout: {}", res.error().message);
+      APP_LOG_ERROR("AppConfig: Failed to flush shell layout ({}): {}", key, res.error().message);
     }
   }
 } // namespace ao::gtk

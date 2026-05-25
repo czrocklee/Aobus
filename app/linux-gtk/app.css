@@ -542,21 +542,21 @@ columnview row.ao-missing-row label {
 
 /* Force absolute centering of the image within the button */
 .ao-play-button-prominent image {
-  margin: 0;
+  margin: auto;
   padding: 0;
-  halign: center;
-  valign: center;
 }
 
 /* The play triangle in the screenshot was too high and too far left. 
-   Push it down and right to compensate for the visual weight. */
-.ao-play-button-prominent image[icon-name*="start"] {
+   Push it down and right to compensate for the visual weight. 
+   This applies when NOT playing (showing the start/triangle icon) */
+.ao-play-button-prominent:not(.is-playing) image {
   margin-left: 3px;
   margin-top: 2px;
 }
 
-/* Pause icon is vertically balanced, but check horizontal */
-.ao-play-button-prominent image[icon-name*="pause"] {
+/* Pause icon is vertically balanced, but check horizontal.
+   This applies when IS playing (showing the pause icon) */
+.ao-play-button-prominent.is-playing image {
   margin-left: 0;
   margin-top: 0;
 }
@@ -680,14 +680,27 @@ columnview row.ao-missing-row label {
 /* Search pill styling */
 .ao-layout-preset-modern .ao-modern-track-controls-bar entry {
   border-radius: var(--ao-radius-full);
-  background: alpha(currentColor, 0.04);
-  border: 1px solid alpha(currentColor, 0.08);
+  background: alpha(currentColor, 0.05);
+  border: 1px solid alpha(currentColor, 0.07);
   box-shadow: none;
+  padding: 6px 14px;
+  min-height: 36px;
+  transition: all 200ms ease;
 }
 
 .ao-layout-preset-modern .ao-modern-track-controls-bar entry:focus {
-  background: alpha(currentColor, 0.06);
-  border-color: alpha(@accent_color, 0.4);
+  background: @theme_base_color;
+  border-color: alpha(@accent_color, 0.5);
+  box-shadow: 0 0 0 2px alpha(@accent_color, 0.15);
+}
+
+/* Ensure entry icons align with the pill shape */
+.ao-layout-preset-modern .ao-modern-track-controls-bar entry image.left {
+  margin-left: 4px;
+}
+
+.ao-layout-preset-modern .ao-modern-track-controls-bar entry image.right {
+  margin-right: 4px;
 }
 
 /* Modern Table row polish */
@@ -696,23 +709,73 @@ columnview row.ao-missing-row label {
 }
 
 .ao-layout-preset-modern columnview row {
-  min-height: 44px;
-  /* Slightly taller than classic */
-  border-radius: 4px;
-  margin: 0 4px;
+  min-height: 52px; /* Increased to compensate for removed vertical margin (48 + 2*2) */
+  border-radius: 6px;
+  margin: 0 8px; /* Only horizontal margin to avoid GTK height calculation bugs */
+  padding: 0 4px;
+  border: 1px solid transparent;
+  transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 .ao-layout-preset-modern columnview row:hover {
-  background-color: alpha(currentColor, 0.03);
+  background-color: alpha(currentColor, 0.04);
 }
 
 .ao-layout-preset-modern columnview>listview>row:selected {
-  background-color: alpha(@theme_selected_bg_color, 0.12);
+  background-color: alpha(@theme_selected_bg_color, 0.1);
+  border-color: alpha(@theme_selected_bg_color, 0.05);
   color: inherit;
-  /* Don't force white text if bg is soft */
+}
+
+.ao-layout-preset-modern columnview>listview>row:selected:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.14);
 }
 
 .ao-layout-preset-modern columnview>listview>row:selected label {
   color: @theme_selected_bg_color;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+/* Specific styling for the playing row in Modern mode */
+.ao-layout-preset-modern columnview row.ao-playing-row {
+  background-image: linear-gradient(to right,
+      alpha(@warning_bg_color, 0.15) 0%,
+      alpha(@warning_bg_color, 0.05) var(--ao-title-x, 35%),
+      transparent 100%);
+  background-color: transparent;
+  border-left: 3px solid @warning_bg_color;
+  border-radius: 2px 6px 6px 2px;
+}
+
+.ao-layout-preset-modern .ao-playing-title {
+  color: @warning_bg_color;
+  font-weight: 800;
+}
+
+/* Modern Track Section (Album) separation */
+.ao-layout-preset-modern .ao-track-section-box {
+  margin-top: 32px; /* Stronger separation between groups */
+  margin-bottom: 8px;
+  padding: 16px;
+  background: alpha(currentColor, 0.03);
+  border-radius: var(--ao-radius-md);
+  border-bottom: none;
+  border-top: 1px solid alpha(currentColor, 0.05);
+}
+
+/* First section in a list shouldn't have such a large top margin */
+listview > row:first-child .ao-track-section-box {
+  margin-top: 8px;
+}
+
+.ao-layout-preset-modern .ao-track-section-header {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: @theme_fg_color;
+  letter-spacing: -0.01em;
+}
+
+.ao-layout-preset-modern .ao-track-section-cover {
+  box-shadow: 0 4px 12px alpha(black, 0.2);
+  border-radius: 6px;
 }
