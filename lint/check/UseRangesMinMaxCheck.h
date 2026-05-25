@@ -5,19 +5,17 @@
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Basic/LLVM.h>
 
-#include <string>
-
 namespace clang::tidy::readability
 {
-class UseRangesMinMaxCheck : public ClangTidyCheck
-{
-public:
-  UseRangesMinMaxCheck(StringRef name, ClangTidyContext* context)
-    : ClangTidyCheck{name, context}
+  class UseRangesMinMaxCheck : public ClangTidyCheck
   {
-  }
+  public:
+    UseRangesMinMaxCheck(StringRef name, ClangTidyContext* context)
+      : ClangTidyCheck{name, context}
+    {
+    }
 
-  void registerMatchers(ast_matchers::MatchFinder* finder) override;
-  void check(ast_matchers::MatchFinder::MatchResult const& result) override;
-};
+    void registerMatchers(ast_matchers::MatchFinder* finder) override;
+    void check(ast_matchers::MatchFinder::MatchResult const& result) override;
+  };
 } // namespace clang::tidy::readability

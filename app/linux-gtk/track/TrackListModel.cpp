@@ -4,6 +4,8 @@
 #include "track/TrackListModel.h"
 
 #include "ao/Type.h"
+#include "ao/utility/ScopedTimer.h"
+#include "ao/utility/VariantVisitor.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/rt/ProjectionTypes.h>
@@ -14,6 +16,16 @@
 #include <glib.h>
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
+#include <gsl-lite/gsl-lite.hpp>
+
+#include <cstddef>
+#include <format>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <utility>
+#include <variant>
 
 namespace
 {
@@ -26,29 +38,64 @@ namespace
 
 namespace ao::gtk
 {
-  ProjectionTrackModel::ProjectionTrackModel()
-    : Glib::ObjectBase{typeid(ProjectionTrackModel)}, Gio::ListModel{getListModelIfaceClass()}
+  TrackListModel::TrackListModel()
+    : Glib::ObjectBase{typeid(TrackListModel)}, Gio::ListModel{getListModelIfaceClass()}
   {
   }
 
-  Glib::RefPtr<ProjectionTrackModel> ProjectionTrackModel::create()
+  Glib::RefPtr<TrackListModel> TrackListModel::create(TrackRowCache const& provider)
   {
-    return Glib::make_refptr_for_instance<ProjectionTrackModel>(new ProjectionTrackModel{});
+    auto model = Glib::make_refptr_for_instance<TrackListModel>(new TrackListModel{});
+    model->_provider = &provider;
+    return model;
   }
 
-  void ProjectionTrackModel::setProjection(rt::ITrackListProjection* projection, TrackRowCache const& provider)
+  void TrackListModel::bindProjection(std::shared_ptr<rt::ITrackListProjection> projection)
   {
-    _projection = projection;
-    _provider = &provider;
+    _projectionSub.reset();
+
+    auto const oldSize = static_cast<::guint>(_modelSize);
+    auto const newSize = static_cast<::guint>(projection->size());
+
+    _projection = std::move(projection);
+    _modelSize = newSize;
+
+    if (oldSize != newSize || oldSize > 0)
+    {
+      notifyReset(oldSize, newSize);
+    }
+
+    _projectionSub = _projection->subscribe(std::bind_front(&TrackListModel::applyDeltaBatch, this));
   }
 
-  void ProjectionTrackModel::clearProjection()
+  void TrackListModel::clearProjection()
   {
+    _projectionSub.reset();
     _projection = nullptr;
-    _provider = nullptr;
+    _modelSize = 0;
   }
 
-  ::GType ProjectionTrackModel::get_item_type_vfunc()
+  std::optional<std::size_t> TrackListModel::indexOf(TrackId trackId) const noexcept
+  {
+    return (_projection != nullptr) ? _projection->indexOf(trackId) : std::nullopt;
+  }
+
+  std::optional<std::size_t> TrackListModel::groupIndexForTrack(TrackId trackId) const noexcept
+  {
+    if (_projection == nullptr)
+    {
+      return std::nullopt;
+    }
+
+    if (auto const optIdx = _projection->indexOf(trackId))
+    {
+      return _projection->groupIndexAt(*optIdx);
+    }
+
+    return std::nullopt;
+  }
+
+  ::GType TrackListModel::get_item_type_vfunc()
   {
     if (_cachedItemType != G_TYPE_INVALID)
     {
@@ -77,12 +124,12 @@ namespace ao::gtk
     return G_TYPE_OBJECT;
   }
 
-  ::guint ProjectionTrackModel::get_n_items_vfunc()
+  ::guint TrackListModel::get_n_items_vfunc()
   {
-    return (_projection != nullptr) ? static_cast<::guint>(_projection->size()) : 0;
+    return static_cast<::guint>(_modelSize);
   }
 
-  ::gpointer ProjectionTrackModel::get_item_vfunc(::guint position)
+  ::gpointer TrackListModel::get_item_vfunc(::guint position)
   {
     if (_projection == nullptr || _provider == nullptr)
     {
@@ -102,27 +149,112 @@ namespace ao::gtk
       return nullptr;
     }
 
+    // Synchronize playing state before returning the object to the UI
+    row->setPlaying(trackId == _playingTrackId);
+
     auto* const gobj = row->gobj();
     (g_object_ref)(gobj);
     return gobj;
   }
 
-  void ProjectionTrackModel::notifyReset(::guint oldSize, ::guint newSize)
+  void TrackListModel::setPlayingTrackId(TrackId id)
+  {
+    auto const oldId = _playingTrackId;
+    _playingTrackId = id;
+
+    if (_projection == nullptr)
+    {
+      return;
+    }
+
+    // Notify UI that the playing/previously-playing rows need a refresh
+    if (oldId != kInvalidTrackId)
+    {
+      if (auto const optIdx = _projection->indexOf(oldId))
+      {
+        items_changed(static_cast<::guint>(*optIdx), 1, 1);
+      }
+    }
+
+    if (id != kInvalidTrackId)
+    {
+      if (auto const optIdx = _projection->indexOf(id))
+      {
+        items_changed(static_cast<::guint>(*optIdx), 1, 1);
+      }
+    }
+  }
+
+  void TrackListModel::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch)
+  {
+    auto const timer = utility::ScopedTimer{
+      std::format("TrackListModel::applyDeltas ({} deltas, rev={})", batch.deltas.size(), batch.revision)};
+
+    for (auto const& delta : batch.deltas)
+    {
+      std::visit(utility::makeVisitor([this](rt::ProjectionReset const&) { applyResetDelta(); },
+                                      std::bind_front(&TrackListModel::applyInsertRange, this),
+                                      std::bind_front(&TrackListModel::applyRemoveRange, this),
+                                      std::bind_front(&TrackListModel::applyUpdateRange, this)),
+                 delta);
+    }
+
+    gsl_Expects(_modelSize == _projection->size());
+  }
+
+  void TrackListModel::applyResetDelta()
+  {
+    auto const newSize = static_cast<::guint>(_projection->size());
+    auto const oldSize = static_cast<::guint>(_modelSize);
+    notifyReset(oldSize, newSize);
+    _modelSize = newSize;
+  }
+
+  void TrackListModel::applyInsertRange(rt::ProjectionInsertRange const& delta)
+  {
+    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const count = static_cast<::guint>(delta.range.count);
+    notifyInsert(pos, count);
+    _modelSize += count;
+  }
+
+  void TrackListModel::applyRemoveRange(rt::ProjectionRemoveRange const& delta)
+  {
+    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const count = static_cast<::guint>(delta.range.count);
+    notifyRemove(pos, count);
+    _modelSize -= count;
+  }
+
+  void TrackListModel::applyUpdateRange(rt::ProjectionUpdateRange const& delta)
+  {
+    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const count = static_cast<::guint>(delta.range.count);
+
+    for (auto const idx : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
+    {
+      _provider->invalidate(_projection->trackIdAt(idx));
+    }
+
+    notifyUpdate(pos, count);
+  }
+
+  void TrackListModel::notifyReset(::guint oldSize, ::guint newSize)
   {
     items_changed(0, oldSize, newSize);
   }
 
-  void ProjectionTrackModel::notifyInsert(::guint position, ::guint count)
+  void TrackListModel::notifyInsert(::guint position, ::guint count)
   {
     items_changed(position, 0, count);
   }
 
-  void ProjectionTrackModel::notifyRemove(::guint position, ::guint count)
+  void TrackListModel::notifyRemove(::guint position, ::guint count)
   {
     items_changed(position, count, 0);
   }
 
-  void ProjectionTrackModel::notifyUpdate(::guint position, ::guint count)
+  void TrackListModel::notifyUpdate(::guint position, ::guint count)
   {
     items_changed(position, count, count);
   }

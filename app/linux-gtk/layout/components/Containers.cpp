@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -1095,6 +1096,7 @@ namespace ao::gtk::layout
                                 .optMaxChildren = std::nullopt},
                                createBox);
 
+    constexpr std::size_t kCenterBoxMaxChildren = 3;
     registry.registerComponent({.type = "centerBox",
                                 .displayName = "Center Box",
                                 .category = "Containers",
@@ -1105,12 +1107,12 @@ namespace ao::gtk::layout
                                            .defaultValue = LayoutValue{"horizontal"},
                                            .enumValues = {"horizontal", "vertical"}}},
                                 .layoutProps = {{.name = "slot",
-                                                .kind = PropertyKind::Enum,
-                                                .label = "Slot",
-                                                .defaultValue = LayoutValue{""},
-                                                .enumValues = {"", "start", "center", "end"}}},
+                                                 .kind = PropertyKind::Enum,
+                                                 .label = "Slot",
+                                                 .defaultValue = LayoutValue{""},
+                                                 .enumValues = {"", "start", "center", "end"}}},
                                 .minChildren = 0,
-                                .optMaxChildren = 3},
+                                .optMaxChildren = kCenterBoxMaxChildren},
                                createCenterBox);
 
     registry.registerComponent(

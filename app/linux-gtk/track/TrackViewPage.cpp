@@ -13,7 +13,7 @@
 #include "track/TrackColumnFactoryBuilder.h"
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackFieldUi.h"
-#include "track/TrackListAdapter.h"
+#include "track/TrackListModel.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
 #include <ao/rt/AppRuntime.h>
@@ -55,6 +55,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -76,14 +77,15 @@ namespace ao::gtk
     class ProjectionGroupSectionSorter final : public Gtk::Sorter
     {
     public:
-      static Glib::RefPtr<ProjectionGroupSectionSorter> create(TrackListAdapter& adapter)
+      static Glib::RefPtr<ProjectionGroupSectionSorter> create(Glib::RefPtr<TrackListModel> model)
       {
-        return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(new ProjectionGroupSectionSorter{adapter});
+        return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(
+          new ProjectionGroupSectionSorter{std::move(model)});
       }
 
     protected:
-      explicit ProjectionGroupSectionSorter(TrackListAdapter& adapter)
-        : Glib::ObjectBase{typeid(ProjectionGroupSectionSorter)}, Gtk::Sorter{}, _adapter{adapter}
+      explicit ProjectionGroupSectionSorter(Glib::RefPtr<TrackListModel> model)
+        : Glib::ObjectBase{typeid(ProjectionGroupSectionSorter)}, Gtk::Sorter{}, _model{std::move(model)}
       {
       }
 
@@ -97,8 +99,8 @@ namespace ao::gtk
           return Gtk::Ordering::EQUAL;
         }
 
-        auto const optLhsGroup = _adapter.groupIndexForTrack(lhs->getTrackId());
-        auto const optRhsGroup = _adapter.groupIndexForTrack(rhs->getTrackId());
+        auto const optLhsGroup = _model->groupIndexForTrack(lhs->getTrackId());
+        auto const optRhsGroup = _model->groupIndexForTrack(rhs->getTrackId());
 
         if (!optLhsGroup || !optRhsGroup || *optLhsGroup == *optRhsGroup)
         {
@@ -111,12 +113,12 @@ namespace ao::gtk
       Order get_order_vfunc() override { return Order::PARTIAL; }
 
     private:
-      TrackListAdapter& _adapter;
+      Glib::RefPtr<TrackListModel> _model;
     };
   } // namespace
 
   TrackViewPage::TrackViewPage(ListId listId,
-                               TrackListAdapter& adapter,
+                               Glib::RefPtr<TrackListModel> model,
                                TrackPresentationStore& presentationStore,
                                rt::AppRuntime& runtime,
                                ImageCache& imageCache,
@@ -124,23 +126,17 @@ namespace ao::gtk
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _viewId{viewId}
-    , _adapter{adapter}
+    , _model{std::move(model)}
+
     , _presentationStore{presentationStore}
     , _runtime{runtime}
     , _imageCache{imageCache}
-    , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
+    , _groupModel{Gtk::SortListModel::create(_model, Glib::RefPtr<Gtk::Sorter>{})}
     , _selectionModel{Gtk::MultiSelection::create(_groupModel)}
-    , _viewHost{std::make_unique<TrackColumnViewHost>(_adapter, _presentationStore, _selectionModel, listId)}
+    , _viewHost{std::make_unique<TrackColumnViewHost>(_model, _presentationStore, _selectionModel, listId)}
   {
     _presentationStore.setActiveListId(_listId);
     _viewHost->setupSelectionActivation();
-
-    _modelChangedConnection = _adapter.signalModelChanged().connect(
-      [this]
-      {
-        APP_LOG_INFO("TrackViewPage: Underlying model changed, updating SortListModel...");
-        _groupModel->set_model(_adapter.getModel());
-      });
 
     _themeRefreshConnection = StyleManager::instance().signalRefreshed().connect(
       [this]
@@ -252,7 +248,7 @@ namespace ao::gtk
         auto text = std::string{};
         auto coverArtId = kInvalidResourceId;
 
-        if (auto* const proj = _adapter.projection())
+        if (auto* const proj = _model->projection())
         {
           auto const start = header->get_start();
 
@@ -284,7 +280,7 @@ namespace ao::gtk
         }
       });
 
-    _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_adapter));
+    _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_model));
     _viewHost->columnView().set_header_factory(_sectionHeaderFactory);
   }
 
@@ -330,6 +326,18 @@ namespace ao::gtk
     _viewHost->selectionController().setPlayingTrackId(trackId);
   }
 
+  void TrackViewPage::revealTrack(TrackId trackId)
+  {
+    if (trackId == kInvalidTrackId)
+    {
+      return;
+    }
+
+    _viewHost->selectionController().selectTrack(trackId);
+
+    Glib::signal_idle().connect_once([this, trackId] { _viewHost->selectionController().selectTrack(trackId); });
+  }
+
   void TrackViewPage::rebuildColumnView(std::span<rt::TrackField const> visibleFields)
   {
     auto const factoryProvider = [this](rt::TrackField field)
@@ -341,7 +349,7 @@ namespace ao::gtk
     _contextPopover.unparent();
 
     // 2. Create a new generation off-tree.
-    auto& newView = _viewHost->rebuild(_adapter, _presentationStore, _selectionModel, factoryProvider, _listId);
+    auto& newView = _viewHost->rebuild(_model, _presentationStore, _selectionModel, factoryProvider, _listId);
 
     // 3. Configure structural properties before attaching model (Safe)
     setupColumnViewStyles(newView);
@@ -381,7 +389,7 @@ namespace ao::gtk
 
   void TrackViewPage::updateSectionHeaders()
   {
-    auto* const proj = _adapter.projection();
+    auto* const proj = _model->projection();
     auto const groupBy = proj != nullptr ? proj->presentation().groupBy : rt::TrackGroupKey::None;
 
     if (groupBy == rt::TrackGroupKey::None)
@@ -392,7 +400,7 @@ namespace ao::gtk
       return;
     }
 
-    _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_adapter));
+    _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_model));
     _viewHost->columnView().set_header_factory(_sectionHeaderFactory);
     _viewHost->columnView().set_show_row_separators(false);
   }

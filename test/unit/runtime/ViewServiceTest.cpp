@@ -9,6 +9,7 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/async/Runtime.h>
 
@@ -296,6 +297,22 @@ namespace ao::rt::test
 
     service.setGrouping(result.viewId, TrackGroupKey::Composer);
     CHECK(received == TrackGroupKey::Composer);
+  }
+
+  TEST_CASE("ViewService - setGrouping publishes PresentationChanged", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto service = env.makeService();
+
+    auto const result = service.createView({}, true);
+
+    auto received = TrackPresentationSpec{};
+    auto const sub = service.onPresentationChanged([&](auto const& ev) { received = ev.presentation; });
+
+    service.setGrouping(result.viewId, TrackGroupKey::Album);
+
+    CHECK(received.id == "albums");
+    CHECK(received.groupBy == TrackGroupKey::Album);
   }
 
   TEST_CASE("ViewService - setGrouping no-ops does not publish event", "[app][runtime][view]")

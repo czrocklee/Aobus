@@ -12,13 +12,12 @@
 #include "list/ListSidebarController.h"
 #include "playback/PlaybackSequenceController.h"
 #include "tag/TagEditController.h"
-#include "track/TrackListAdapter.h"
+#include "track/TrackListModel.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/ManualListSource.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ProjectionTypes.h>
@@ -26,6 +25,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 
+#include <glibmm/main.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 
@@ -69,18 +69,20 @@ namespace ao::gtk
       {
         auto* ctx = find(ev.viewId);
 
-        if (ctx == nullptr || ctx->adapter == nullptr)
+        if (ctx == nullptr || ctx->model == nullptr)
         {
           return;
         }
 
-        ctx->adapter->bindProjection(ev.projection);
+        ctx->model->bindProjection(ev.projection);
         ctx->page->applyPresentation(ev.projection->presentation());
 
         if (_playingTrackId != kInvalidTrackId)
         {
           ctx->page->setPlayingTrackId(_playingTrackId);
         }
+
+        revealPendingTrack(ev.viewId);
       });
 
     _presentationChangedSub = _runtime.views().onPresentationChanged(
@@ -99,12 +101,18 @@ namespace ao::gtk
         {
           ctx->page->setPlayingTrackId(_playingTrackId);
         }
+
+        revealPendingTrack(ev.viewId);
       });
   }
-
   void TrackPageHost::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
   {
     auto viewId = rt::ViewId{ev.preferredViewId};
+
+    APP_LOG_DEBUG("TrackPageHost: handleRevealTrack received, trackId: {}, preferredViewId: {}, preferredListId: {}",
+                  ev.trackId.raw(),
+                  ev.preferredViewId.raw(),
+                  ev.preferredListId.raw());
 
     // Fallback: If no view ID specified, try to find a view currently displaying the requested list
     if (viewId == rt::kInvalidViewId && ev.preferredListId != kInvalidListId)
@@ -121,15 +129,25 @@ namespace ao::gtk
 
     if (viewId != rt::kInvalidViewId)
     {
+      APP_LOG_DEBUG("TrackPageHost: Revealing in viewId: {}", viewId.raw());
       _runtime.workspace().setFocusedView(viewId);
 
       if (ev.trackId != kInvalidTrackId)
       {
         if (auto* ctx = find(viewId))
         {
+          APP_LOG_DEBUG("TrackPageHost: Calling selectTrack on page for trackId: {}", ev.trackId.raw());
           ctx->page->selectionController().selectTrack(ev.trackId);
         }
+        else
+        {
+          APP_LOG_DEBUG("TrackPageHost: Could not find page context for viewId: {}", viewId.raw());
+        }
       }
+    }
+    else
+    {
+      APP_LOG_DEBUG("TrackPageHost: No valid viewId found for reveal");
     }
   }
 
@@ -175,6 +193,7 @@ namespace ao::gtk
 
   TrackPageHost::~TrackPageHost()
   {
+    _pendingRevealClearConnection.disconnect();
     clear();
   }
 
@@ -300,13 +319,10 @@ namespace ao::gtk
     auto const state = _runtime.views().trackListState(viewId);
     auto const listId = ListId{state.listId};
 
-    // Provide dummy source, bindProjection takes over
-    auto adapter =
-      std::make_unique<TrackListAdapter>(_runtime.sources().allTracks(), _runtime.musicLibrary(), dataProvider);
-    adapter->bindProjection(proj);
+    auto model = TrackListModel::create(dataProvider);
+    model->bindProjection(proj);
 
-    auto trackPage =
-      std::make_unique<TrackViewPage>(listId, *adapter, _presentationStore, _runtime, *_imageCache, viewId);
+    auto trackPage = std::make_unique<TrackViewPage>(listId, model, _presentationStore, _runtime, *_imageCache, viewId);
     auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = std::string{"List"};
@@ -328,10 +344,55 @@ namespace ao::gtk
 
     _stack.add(*trackPage, pageId, listName);
 
-    auto ctx = TrackPageContext{.viewId = viewId, .adapter = std::move(adapter), .page = std::move(trackPage)};
+    auto ctx = TrackPageContext{.viewId = viewId, .model = std::move(model), .page = std::move(trackPage)};
 
     bindTrackPage(ctx);
     _trackPages[viewId] = std::move(ctx);
+    revealPendingTrack(viewId);
+  }
+
+  void TrackPageHost::queueRevealTrack(rt::ViewId viewId, TrackId trackId)
+  {
+    if (viewId == rt::kInvalidViewId || trackId == kInvalidTrackId)
+    {
+      return;
+    }
+
+    _pendingRevealTracks[viewId] = trackId;
+    revealPendingTrack(viewId);
+  }
+
+  void TrackPageHost::revealPendingTrack(rt::ViewId viewId)
+  {
+    auto const it = _pendingRevealTracks.find(viewId);
+
+    if (it == _pendingRevealTracks.end())
+    {
+      return;
+    }
+
+    auto* const ctx = find(viewId);
+
+    if (ctx == nullptr || ctx->page == nullptr)
+    {
+      return;
+    }
+
+    auto const trackId = it->second;
+    ctx->page->revealTrack(trackId);
+
+    _pendingRevealClearConnection.disconnect();
+    _pendingRevealClearConnection = Glib::signal_idle().connect(
+      [this, viewId, trackId]
+      {
+        if (auto const pendingIt = _pendingRevealTracks.find(viewId);
+            pendingIt != _pendingRevealTracks.end() && pendingIt->second == trackId)
+        {
+          _pendingRevealTracks.erase(pendingIt);
+        }
+
+        return false;
+      });
   }
 
   void TrackPageHost::bindTrackPage(TrackPageContext& ctx)

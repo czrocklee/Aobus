@@ -7,7 +7,7 @@
 #include "ao/library/ListStore.h"
 #include "ao/library/ListView.h"
 #include "ao/library/MusicLibrary.h"
-#include "track/TrackListAdapter.h"
+#include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackViewPage.h"
@@ -16,6 +16,7 @@
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/SmartListEvaluator.h>
 #include <ao/rt/SmartListSource.h>
+#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackSource.h>
 
 #include <glibmm/main.h>
@@ -43,6 +44,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 using namespace std::string_literals;
 
@@ -315,7 +317,7 @@ namespace ao::gtk
 
   void SmartListDialog::rebuildPreviewSource()
   {
-    // Use deferred execution to avoid GTK accessing freed adapter during event processing
+    // Use deferred execution to avoid GTK accessing freed model during event processing
     // Schedule model replacement to happen after current GTK event is processed
     Glib::signal_idle().connect_once(
       [this]
@@ -324,9 +326,9 @@ namespace ao::gtk
         auto emptySelection = Glib::RefPtr<Gtk::SelectionModel>{};
         _previewColumnView.set_model(emptySelection);
 
-        // Now safe to reset adapter and filtered list
+        // Now safe to reset projection and filtered list
         _previewFilteredList.reset();
-        _previewAdapter.reset();
+        _previewModel.reset();
 
         auto& parentSource = _runtime.sources().sourceFor(_parentListId);
 
@@ -334,10 +336,14 @@ namespace ao::gtk
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList =
           std::make_unique<rt::SmartListSource>(parentSource, _runtime.musicLibrary(), *_previewEngine);
-        _previewAdapter =
-          std::make_unique<TrackListAdapter>(*_previewFilteredList, _runtime.musicLibrary(), _trackRowCache);
 
-        auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
+        auto proj =
+          std::make_shared<rt::TrackListProjection>(rt::kInvalidViewId, *_previewFilteredList, _runtime.musicLibrary());
+
+        _previewModel = TrackListModel::create(_trackRowCache);
+        _previewModel->bindProjection(std::move(proj));
+
+        auto selectionModel = Gtk::SingleSelection::create(_previewModel);
         _previewColumnView.set_model(selectionModel);
 
         updateSourceLabels();

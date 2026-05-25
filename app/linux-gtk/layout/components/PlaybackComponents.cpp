@@ -6,6 +6,7 @@
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
+#include "ao/utility/Log.h"
 #include "app/AobusSoul.h"
 #include "image/ImageWidget.h"
 #include "layout/document/LayoutNode.h"
@@ -20,10 +21,17 @@
 #include "playback/TransportButton.h"
 #include "playback/VolumeControl.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 
+#include <gdkmm/cursor.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/widget.h>
+#include <unistd.h>
 
 #include <cstdint>
 #include <functional>
@@ -76,8 +84,28 @@ namespace ao::gtk::layout
     class NowPlayingFieldComponent final : public ILayoutComponent
     {
     public:
-      NowPlayingFieldComponent(LayoutContext& ctx, NowPlayingFieldLabel::Field field)
-        : _label{ctx.runtime.playback(), field}
+      NowPlayingFieldComponent(LayoutContext& ctx, LayoutNode const& node, rt::TrackField field)
+        : _label{ctx.runtime,
+                 field,
+                 [action = node.getProp<std::string>("action", "none")]
+                 {
+                   if (action == "reveal")
+                   {
+                     return NowPlayingFieldLabel::Action::Reveal;
+                   }
+
+                   if (action == "playPause")
+                   {
+                     return NowPlayingFieldLabel::Action::PlayPause;
+                   }
+
+                   if (action == "filterByField")
+                   {
+                     return NowPlayingFieldLabel::Action::FilterByField;
+                   }
+
+                   return NowPlayingFieldLabel::Action::None;
+                 }()}
       {
       }
 
@@ -93,83 +121,155 @@ namespace ao::gtk::layout
     class PlaybackImageComponent final : public ILayoutComponent
     {
     public:
+      enum class Action : std::uint8_t
+      {
+        None,
+        JumpToAlbum
+      };
+
       PlaybackImageComponent(LayoutContext& ctx, LayoutNode const& node)
+        : _runtime{ctx.runtime}
       {
         if (ctx.inspector.imageCache == nullptr)
         {
+          APP_LOG_ERROR("[PID {}] PlaybackImage: FAILED to create - imageCache is NULL in context!", getpid());
           _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
           return;
         }
 
-        _widget = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
+        _imageWidget = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
 
         auto const variant = node.getProp<std::string>("variant", "default");
 
         if (variant == "thumbnail")
         {
-          _widget->setTargetSize(kThumbnailSize);
-          _widget->set_size_request(kThumbnailSize, kThumbnailSize);
-          _widget->add_css_class("ao-nowplaying-image-thumb");
+          _imageWidget->setTargetSize(kThumbnailSize);
+          _imageWidget->set_size_request(kThumbnailSize, kThumbnailSize);
+          _imageWidget->add_css_class("ao-nowplaying-image-thumb");
         }
 
-        _sub = ctx.runtime.playback().onNowPlayingChanged(
-          [this, &ctx](auto const& ev)
+        auto const actionStr = node.getProp<std::string>("action", "none");
+        APP_LOG_DEBUG("[PID {}] PlaybackImage: Parsing action property, raw value: '{}'", getpid(), actionStr);
+
+        _action = [actionStr]
+        {
+          if (actionStr == "jumpToAlbum")
+          {
+            return Action::JumpToAlbum;
+          }
+
+          return Action::None;
+        }();
+
+        _button.set_child(*_imageWidget);
+        _button.set_has_frame(false); // Make it flat
+        _button.add_css_class("ao-image-button");
+
+        if (_action != Action::None)
+        {
+          _button.set_cursor(Gdk::Cursor::create("pointer"));
+          _button.add_css_class("ao-clickable");
+          _button.signal_clicked().connect([this] { onImageClicked(); });
+        }
+
+        _sub = _runtime.playback().onNowPlayingChanged(
+          [this](auto const& ev)
           {
             if (ev.trackId != _currentTrackId)
             {
               _currentTrackId = ev.trackId;
-              updateImage(ctx.runtime.musicLibrary());
+              updateImage();
             }
           });
 
-        _stoppedSub = ctx.runtime.playback().onStopped(
-          [this, &ctx]
+        _stoppedSub = _runtime.playback().onStopped(
+          [this]
           {
             _currentTrackId = kInvalidTrackId;
-            updateImage(ctx.runtime.musicLibrary());
+            updateImage();
           });
 
-        _idleSub = ctx.runtime.playback().onIdle(
-          [this, &ctx]
+        _idleSub = _runtime.playback().onIdle(
+          [this]
           {
             _currentTrackId = kInvalidTrackId;
-            updateImage(ctx.runtime.musicLibrary());
+            updateImage();
           });
 
         // Initial update
-        _currentTrackId = ctx.runtime.playback().state().trackId;
-        updateImage(ctx.runtime.musicLibrary());
+        _currentTrackId = _runtime.playback().state().trackId;
+        updateImage();
       }
 
       Gtk::Widget& widget() override
       {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widget);
+        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(_button);
       }
 
     private:
-      void updateImage(library::MusicLibrary& library)
+      void onImageClicked()
       {
         if (_currentTrackId == kInvalidTrackId)
         {
-          _widget->clearImage();
+          APP_LOG_DEBUG("[PID {}] PlaybackImage: Click ignored, no current track", getpid());
           return;
         }
 
-        auto const txn = library.readTransaction();
-        auto const reader = library.tracks().reader(txn);
+        APP_LOG_DEBUG("[PID {}] PlaybackImage: Cover clicked, action: {}", getpid(), static_cast<int>(_action));
+
+        switch (_action)
+        {
+          case Action::JumpToAlbum:
+            _runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks);
+
+            if (auto const viewId = _runtime.workspace().layoutState().activeViewId; viewId != rt::kInvalidViewId)
+            {
+              APP_LOG_DEBUG("[PID {}] PlaybackImage: Navigated to AllTracks, activeViewId: {}. Setting grouping to "
+                            "Album and revealing track {}",
+                            getpid(),
+                            viewId.raw(),
+                            _currentTrackId.raw());
+              _runtime.views().setGrouping(viewId, rt::TrackGroupKey::Album);
+              _runtime.playback().revealTrack(_currentTrackId, viewId);
+            }
+            else
+            {
+              APP_LOG_DEBUG("[PID {}] PlaybackImage: Navigation failed to yield an active view ID", getpid());
+            }
+
+            break;
+
+          case Action::None:
+          default: break;
+        }
+      }
+
+      void updateImage()
+      {
+        if (_currentTrackId == kInvalidTrackId)
+        {
+          _imageWidget->clearImage();
+          return;
+        }
+
+        auto const txn = _runtime.musicLibrary().readTransaction();
+        auto const reader = _runtime.musicLibrary().tracks().reader(txn);
         auto const optView = reader.get(_currentTrackId, library::TrackStore::Reader::LoadMode::Both);
 
         if (optView)
         {
-          _widget->loadImage(ResourceId{optView->metadata().coverArtId()});
+          _imageWidget->loadImage(ResourceId{optView->metadata().coverArtId()});
         }
         else
         {
-          _widget->clearImage();
+          _imageWidget->clearImage();
         }
       }
 
-      std::unique_ptr<ImageWidget> _widget;
+      rt::AppRuntime& _runtime;
+      Action _action = Action::None;
+      std::unique_ptr<ImageWidget> _imageWidget;
+      Gtk::Button _button;
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
       rt::Subscription _sub;
@@ -218,18 +318,21 @@ namespace ao::gtk::layout
     {
     public:
       TimeLabelComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _label{ctx.runtime.playback(), [mode = node.getProp<std::string>("mode", "default")]
-                                         {
-                                           if (mode == "elapsed")
-                                           {
-                                             return TimeLabelMode::Elapsed;
-                                           }
-                                           if (mode == "duration")
-                                           {
-                                             return TimeLabelMode::Duration;
-                                           }
-                                           return TimeLabelMode::Default;
-                                         }()}
+        : _label{ctx.runtime.playback(),
+                 [mode = node.getProp<std::string>("mode", "default")]
+                 {
+                   if (mode == "elapsed")
+                   {
+                     return TimeLabelMode::Elapsed;
+                   }
+
+                   if (mode == "duration")
+                   {
+                     return TimeLabelMode::Duration;
+                   }
+
+                   return TimeLabelMode::Default;
+                 }()}
       {
       }
 
@@ -290,14 +393,14 @@ namespace ao::gtk::layout
       return std::make_unique<VolumeControlComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createCurrentTitleLabel(LayoutContext& ctx, LayoutNode const& /*node*/)
+    std::unique_ptr<ILayoutComponent> createCurrentTitleLabel(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<NowPlayingFieldComponent>(ctx, NowPlayingFieldLabel::Field::Title);
+      return std::make_unique<NowPlayingFieldComponent>(ctx, node, rt::TrackField::Title);
     }
 
-    std::unique_ptr<ILayoutComponent> createCurrentArtistLabel(LayoutContext& ctx, LayoutNode const& /*node*/)
+    std::unique_ptr<ILayoutComponent> createCurrentArtistLabel(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<NowPlayingFieldComponent>(ctx, NowPlayingFieldLabel::Field::Artist);
+      return std::make_unique<NowPlayingFieldComponent>(ctx, node, rt::TrackField::Artist);
     }
 
     std::unique_ptr<ILayoutComponent> createSeekSlider(LayoutContext& ctx, LayoutNode const& node)
@@ -346,7 +449,12 @@ namespace ao::gtk::layout
                                            .kind = PropertyKind::Enum,
                                            .label = "Variant",
                                            .defaultValue = LayoutValue{"default"},
-                                           .enumValues = {"default", "thumbnail"}}},
+                                           .enumValues = {"default", "thumbnail"}},
+                                          {.name = "action",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Action",
+                                           .defaultValue = LayoutValue{"none"},
+                                           .enumValues = {"none", "jumpToAlbum"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
@@ -400,7 +508,11 @@ namespace ao::gtk::layout
                                 .displayName = "Current Title Label",
                                 .category = "Playback",
                                 .container = false,
-                                .props = {},
+                                .props = {{.name = "action",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Action",
+                                           .defaultValue = LayoutValue{"none"},
+                                           .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
@@ -410,7 +522,11 @@ namespace ao::gtk::layout
                                 .displayName = "Current Artist Label",
                                 .category = "Playback",
                                 .container = false,
-                                .props = {},
+                                .props = {{.name = "action",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Action",
+                                           .defaultValue = LayoutValue{"none"},
+                                           .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},

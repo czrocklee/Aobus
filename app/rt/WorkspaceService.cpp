@@ -142,13 +142,15 @@ namespace ao::rt
     {
       if (auto const kind = std::get<GlobalViewKind>(target); kind == GlobalViewKind::AllTracks)
       {
-        auto const res = _impl->views.createView(TrackListViewConfig{}, true);
-        targetViewId = res.viewId;
+        navigateTo(rt::kAllTracksListId);
+        return;
       }
     }
 
     if (targetViewId != rt::kInvalidViewId)
     {
+      APP_LOG_DEBUG("WorkspaceService: Navigating to existing viewId: {}", targetViewId.raw());
+
       if (!std::ranges::contains(_impl->layoutState.openViews, targetViewId))
       {
         _impl->layoutState.openViews.push_back(targetViewId);
@@ -157,6 +159,10 @@ namespace ao::rt
       _impl->layoutState.activeViewId = targetViewId;
       _impl->layoutState.revision++;
       _impl->focusedViewChangedSignal.emit(targetViewId);
+    }
+    else
+    {
+      APP_LOG_DEBUG("WorkspaceService: Navigation failed to find or create target view");
     }
   }
 
