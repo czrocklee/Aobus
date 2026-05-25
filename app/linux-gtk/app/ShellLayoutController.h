@@ -40,6 +40,7 @@ namespace ao::gtk
     layout::LayoutHost _host;
     layout::LayoutDocument _activeLayout;
     std::string _activePresetId;
+    bool _isCustomized = false;
     rt::async::LifetimeScope _tasks;
   };
 } // namespace ao::gtk

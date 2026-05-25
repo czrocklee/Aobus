@@ -34,17 +34,28 @@ root:
           layout:
             cssClasses: ao-modern-content-shell
           children:
-            - type: box
-              props:
-                orientation: horizontal
-                spacing: 6
+            - type: centerBox
               layout:
                 cssClasses: ao-modern-track-controls-bar
+                hexpand: true
               children:
+                - type: track.presentationButton
+                  props:
+                    variant: title
+                  layout:
+                    slot: start
+                    halign: start
+                    cssClasses: ao-modern-section-title-button
                 - type: track.quickFilter
                   layout:
-                    hexpand: true
-                - type: track.presentationButton
+                    slot: center
+                    halign: center
+                    cssClasses: ao-modern-search-pill
+                - type: status.trackCount
+                  layout:
+                    slot: end
+                    halign: end
+                    cssClasses: ao-modern-header-stats
             - id: workspace-with-inspector
               type: app.workspaceWithInspector
               layout:
@@ -68,14 +79,11 @@ templates:
         layout:
           cssClasses: ao-seekbar-modern-full
           hexpand: true
-
       - type: centerBox
         layout:
           cssClasses: ao-modern-bottom-bar-content
           hexpand: true
         children:
-
-          # --- Start Slot: image + now-playing text ---
           - type: box
             props:
               orientation: horizontal
@@ -86,18 +94,19 @@ templates:
             children:
               - type: playback.image
                 props:
-                  variant: thumbnail
                   action: jumpToAlbum
+                  variant: thumbnail
+                layout:
+                  cssClasses: ao-nowplaying-image-thumb
               - type: box
                 props:
                   orientation: vertical
-                  spacing: 6
+                  spacing: 4
                 layout:
-                  valign: center
                   halign: start
+                  valign: center
                 children:
                   - type: playback.currentTitleLabel
-
                     props:
                       action: reveal
                     layout:
@@ -107,17 +116,15 @@ templates:
                       action: filterByField
                     layout:
                       cssClasses: ao-nowplaying-artist
-
-          # --- Center Slot: Controls + time ---
           - type: box
             props:
               orientation: horizontal
               spacing: 16
             layout:
+              cssClasses: ao-modern-center-group
+              halign: center
               slot: center
               valign: center
-              halign: center
-              cssClasses: ao-modern-center-group
             children:
               - type: playback.timeLabel
                 props:
@@ -153,16 +160,14 @@ templates:
                   mode: duration
                 layout:
                   cssClasses: ao-modern-time-label
-
-          # --- End Slot: volume + output ---
           - type: box
             props:
               orientation: horizontal
               spacing: 12
             layout:
+              halign: end
               slot: end
               valign: center
-              halign: end
             children:
               - type: playback.volumeControl
               - type: playback.outputButton

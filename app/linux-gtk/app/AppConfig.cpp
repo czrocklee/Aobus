@@ -62,14 +62,17 @@ namespace ao::gtk
     }
   }
 
-  void AppConfig::loadShellLayout(layout::LayoutDocument& state, std::string_view presetId) const
+  bool AppConfig::loadShellLayout(layout::LayoutDocument& state, std::string_view presetId) const
   {
     auto const key = std::format("linuxGtkLayout_{}", presetId);
+    auto const res = _store->load(key, state);
 
-    if (auto const res = _store->load(key, state); !res && res.error().code != Error::Code::NotFound)
+    if (!res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("AppConfig: Failed to load shell layout ({}): {}", key, res.error().message);
     }
+
+    return res.has_value();
   }
 
   void AppConfig::saveShellLayout(layout::LayoutDocument const& state, std::string_view presetId)

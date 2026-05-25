@@ -40,7 +40,7 @@ namespace ao::gtk
     void loadAppPrefs(rt::AppPrefsState& state) const;
     void saveAppPrefs(rt::AppPrefsState const& state);
 
-    void loadShellLayout(layout::LayoutDocument& state, std::string_view presetId) const;
+    bool loadShellLayout(layout::LayoutDocument& state, std::string_view presetId) const;
     void saveShellLayout(layout::LayoutDocument const& state, std::string_view presetId);
 
   private:

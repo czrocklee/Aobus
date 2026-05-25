@@ -68,11 +68,12 @@ namespace ao::gtk
         }
 
         auto doc = layout::createBuiltInLayout(presetId);
-        cfg->loadShellLayout(doc, presetIdStr);
+        auto const customized = cfg->loadShellLayout(doc, presetIdStr);
 
         co_await asyncRuntime->resumeOnControl();
         APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
 
+        self->_isCustomized = customized;
         self->_activePresetId = std::move(presetIdStr);
         self->_activeLayout = doc;
         self->_host.setLayout(self->_context, self->_activeLayout);
@@ -81,7 +82,10 @@ namespace ao::gtk
 
   void ShellLayoutController::saveLayout(AppConfig& config) const
   {
-    config.saveShellLayout(_activeLayout, _activePresetId);
+    if (_isCustomized)
+    {
+      config.saveShellLayout(_activeLayout, _activePresetId);
+    }
   }
 
   void ShellLayoutController::openEditor(AppConfig& config)
@@ -113,6 +117,7 @@ namespace ao::gtk
         if (responseId == Gtk::ResponseType::OK)
         {
           _activeLayout = sharedDialog->document();
+          _isCustomized = true;
 
           if (auto const presetIdDialog = sharedDialog->getSelectedPresetId(); !presetIdDialog.empty())
           {

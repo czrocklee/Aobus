@@ -34,6 +34,8 @@ namespace ao::gtk
     _popover.set_child(_menuBox);
     _button.set_popover(_popover);
 
+    _menuBox.add_css_class("ao-presentation-menu-box");
+
     append(_button);
 
     _focusSub = _runtime.workspace().onFocusedViewChanged([this](rt::ViewId viewId) { onFocusedViewChanged(viewId); });
@@ -108,7 +110,7 @@ namespace ao::gtk
       auto* const btn = Gtk::make_managed<Gtk::Button>(std::string{preset.label});
       btn->set_halign(Gtk::Align::FILL);
       btn->set_has_frame(false);
-      btn->get_style_context()->add_class("flat");
+      btn->add_css_class("ao-presentation-menu-item");
 
       auto const id = std::string{preset.spec.id};
       btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
@@ -129,7 +131,7 @@ namespace ao::gtk
         auto* const btn = Gtk::make_managed<Gtk::Button>(custom.label);
         btn->set_halign(Gtk::Align::FILL);
         btn->set_has_frame(false);
-        btn->get_style_context()->add_class("flat");
+        btn->add_css_class("ao-presentation-menu-item");
 
         auto const id = custom.spec.id;
         btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
@@ -145,7 +147,7 @@ namespace ao::gtk
     auto* const createBtn = Gtk::make_managed<Gtk::Button>("Create Custom View...");
     createBtn->set_halign(Gtk::Align::FILL);
     createBtn->set_has_frame(false);
-    createBtn->get_style_context()->add_class("flat");
+    createBtn->add_css_class("ao-presentation-menu-item");
     createBtn->signal_clicked().connect([this] { onCreateCustomViewClicked(); });
     _menuBox.append(*createBtn);
   }

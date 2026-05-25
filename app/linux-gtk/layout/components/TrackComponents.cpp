@@ -3,20 +3,17 @@
 
 #include "layout/components/TrackComponents.h"
 
-#include "ao/Type.h"
 #include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "list/ListSidebarController.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackPresentationButton.h"
 #include "track/TrackQuickFilter.h"
-#include <ao/rt/CorePrimitives.h>
 
 #include <gtkmm/widget.h>
 
 #include <memory>
-#include <string>
 
 namespace ao::gtk::layout
 {
@@ -31,21 +28,6 @@ namespace ao::gtk::layout
       TrackQuickFilterComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _widget{ctx.runtime}
       {
-        _widget.signalCreateSmartListRequested().connect(
-          [&ctx](std::string const& expression)
-          {
-            if (ctx.track.pageHost != nullptr && ctx.list.sidebarController != nullptr)
-            {
-              auto parentId = ctx.track.pageHost->activeListId();
-
-              if (parentId == rt::kAllTracksListId)
-              {
-                parentId = kInvalidListId;
-              }
-
-              ctx.list.sidebarController->createSmartListFromExpression(parentId, expression);
-            }
-          });
       }
 
       Gtk::Widget& widget() override { return _widget; }
@@ -60,12 +42,20 @@ namespace ao::gtk::layout
     class TrackPresentationButtonComponent final : public ILayoutComponent
     {
     public:
-      TrackPresentationButtonComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      TrackPresentationButtonComponent(LayoutContext& ctx, LayoutNode const& node)
         : _widget{ctx.runtime}
       {
         if (ctx.track.pageHost != nullptr)
         {
           _widget.setPresentationStore(&ctx.track.pageHost->presentationStore());
+        }
+
+        if (auto const it = node.props.find("variant"); it != node.props.end())
+        {
+          if (auto const variant = it->second.asString(); variant == "title")
+          {
+            _widget.add_css_class("ao-variant-title");
+          }
         }
       }
 
@@ -93,7 +83,10 @@ namespace ao::gtk::layout
                                 .displayName = "Presentation",
                                 .category = "Tracks",
                                 .container = false,
-                                .props = {},
+                                .props = {{.name = "variant",
+                                           .kind = PropertyKind::String,
+                                           .label = "Variant",
+                                           .defaultValue = LayoutValue{"default"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},

@@ -11,7 +11,7 @@
   --ao-gap-lg: 8px;
   --ao-gap-xl: 12px;
 
-  /* Margin/Padding 间距 - 所有的边距控制都应该通过这些变量在 CSS 中完成 */
+  /* Margin/Padding 间距 - 所有的边距控制都应该通过 these 变量在 CSS 中完成 */
   --ao-spacing-xs: 2px;
   --ao-spacing-sm: 4px;
   --ao-spacing-md: 6px;
@@ -164,10 +164,29 @@
   padding: var(--ao-spacing-xs) var(--ao-spacing-sm);
 }
 
-/* Presentation Menu */
+/* Presentation Menu Dropdown */
+.ao-presentation-menu-box {
+  padding: 8px;
+  min-width: 200px;
+}
+
+.ao-presentation-menu-item {
+  padding: 10px 16px;
+  margin: 2px 0;
+  border-radius: var(--ao-radius-sm);
+  transition: all 150ms ease;
+  font-weight: 500;
+}
+
+.ao-presentation-menu-item:hover {
+  background: alpha(@theme_selected_bg_color, 0.1);
+  color: @theme_selected_bg_color;
+}
+
 .ao-presentation-menu-separator {
-  margin-top: var(--ao-spacing-sm);
-  margin-bottom: var(--ao-spacing-sm);
+  margin-top: 8px;
+  margin-bottom: 8px;
+  opacity: 0.1;
 }
 
 /* Dialogs */
@@ -542,7 +561,7 @@ columnview row.ao-missing-row label {
 
 /* Force absolute centering of the image within the button */
 .ao-play-button-prominent image {
-  margin: auto;
+  margin: 0;
   padding: 0;
 }
 
@@ -671,36 +690,123 @@ columnview row.ao-missing-row label {
   border: 1px solid alpha(currentColor, 0.05);
 }
 
-/* Modern Track Controls Bar (search row) */
+/* Modern Track Controls Bar (The Header Island) */
 .ao-layout-preset-modern .ao-modern-track-controls-bar {
-  padding: var(--ao-spacing-lg);
-  border-bottom: 1px solid alpha(currentColor, 0.03);
+  padding: 24px 20px 12px 20px;
+  border-bottom: none;
 }
 
-/* Search pill styling */
+.ao-layout-preset-modern .ao-modern-section-title {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: @theme_fg_color;
+  opacity: 0.9;
+}
+
+/* Dynamic Presentation Title Button */
+.ao-modern-section-title-button button {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: @theme_fg_color;
+  opacity: 0.9;
+  transition: opacity 200ms ease, color 200ms ease;
+}
+
+.ao-modern-section-title-button button:hover {
+  opacity: 1.0;
+  color: @theme_selected_bg_color;
+  background: transparent;
+}
+
+/* Hide the arrow icon on the title variant */
+.ao-variant-title button > box > image {
+  opacity: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ao-variant-title button > box {
+  padding: 0;
+  margin: 0;
+}
+
+/* Elastic Search Pill (The precision tool) */
 .ao-layout-preset-modern .ao-modern-track-controls-bar entry {
   border-radius: var(--ao-radius-full);
-  background: alpha(currentColor, 0.05);
-  border: 1px solid alpha(currentColor, 0.07);
+  background-color: alpha(@theme_fg_color, 0.08);
+  border: 1px solid alpha(@theme_fg_color, 0.1);
   box-shadow: none;
-  padding: 6px 14px;
+  padding: 0 14px;
   min-height: 36px;
+  min-width: 320px; /* Reliable centered width */
   transition: all 200ms ease;
 }
 
 .ao-layout-preset-modern .ao-modern-track-controls-bar entry:focus {
-  background: @theme_base_color;
+  background-color: @theme_base_color;
   border-color: alpha(@accent_color, 0.5);
-  box-shadow: 0 0 0 2px alpha(@accent_color, 0.15);
+  box-shadow: 0 8px 20px -6px alpha(black, 0.15);
 }
 
-/* Ensure entry icons align with the pill shape */
+/* Header Metadata/Stats on the right */
+.ao-modern-header-stats {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: @theme_fg_color;
+  opacity: 0.45;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Ensure entry text is always visible against its background */
+.ao-layout-preset-modern .ao-modern-track-controls-bar entry text {
+  color: @theme_fg_color;
+}
+
+/* Specific styling for the primary search icon */
 .ao-layout-preset-modern .ao-modern-track-controls-bar entry image.left {
+  opacity: 0.6;
   margin-left: 4px;
 }
 
-.ao-layout-preset-modern .ao-modern-track-controls-bar entry image.right {
-  margin-right: 4px;
+.ao-layout-preset-modern .ao-modern-track-controls-bar entry:focus image.left {
+  opacity: 1.0;
+  color: @theme_selected_bg_color;
+}
+
+/* Modern View/Presentation Button (The Ghost Icon) */
+.ao-layout-preset-modern .ao-modern-view-button {
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 50%;
+  padding: 0;
+  background: alpha(currentColor, 0.04);
+  border: 1px solid alpha(currentColor, 0.05);
+  color: alpha(currentColor, 0.6);
+  transition: all 200ms ease;
+}
+
+.ao-layout-preset-modern .ao-modern-view-button:hover {
+  background: alpha(@theme_selected_bg_color, 0.1);
+  color: @theme_selected_bg_color;
+  border-color: alpha(@theme_selected_bg_color, 0.2);
+}
+
+.ao-layout-preset-modern .ao-modern-view-button label {
+  opacity: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ao-layout-preset-modern .ao-modern-view-button image {
+  margin: 0;
 }
 
 /* Modern Table row polish */
@@ -754,18 +860,19 @@ columnview row.ao-missing-row label {
 
 /* Modern Track Section (Album) separation */
 .ao-layout-preset-modern .ao-track-section-box {
-  margin-top: 32px; /* Stronger separation between groups */
-  margin-bottom: 8px;
-  padding: 16px;
+  padding-top: 32px; /* Use padding instead of margin to fix Gtk-CRITICAL */
+  padding-bottom: 16px;
+  padding-left: 16px;
+  padding-right: 16px;
   background: alpha(currentColor, 0.03);
   border-radius: var(--ao-radius-md);
   border-bottom: none;
   border-top: 1px solid alpha(currentColor, 0.05);
 }
 
-/* First section in a list shouldn't have such a large top margin */
+/* First section in a list shouldn't have such a large top padding */
 listview > row:first-child .ao-track-section-box {
-  margin-top: 8px;
+  padding-top: 16px;
 }
 
 .ao-layout-preset-modern .ao-track-section-header {

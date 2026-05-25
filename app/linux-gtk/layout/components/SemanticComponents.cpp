@@ -101,6 +101,26 @@ namespace ao::gtk::layout
     };
 
     /**
+     * @brief A simple text label component.
+     */
+    class LabelComponent final : public ILayoutComponent
+    {
+    public:
+      LabelComponent(LayoutContext& /*ctx*/, LayoutNode const& node)
+      {
+        if (auto const it = node.props.find("label"); it != node.props.end())
+        {
+          _label.set_text(it->second.asString());
+        }
+      }
+
+      Gtk::Widget& widget() override { return _label; }
+
+    private:
+      Gtk::Label _label;
+    };
+
+    /**
      * @brief library.openLibraryButton
      */
     class OpenLibraryButton final : public ILayoutComponent
@@ -282,6 +302,17 @@ namespace ao::gtk::layout
 
   void registerSemanticComponents(ComponentRegistry& registry)
   {
+    registry.registerComponent({.type = "label",
+                                .displayName = "Text Label",
+                                .category = "Generic",
+                                .container = false,
+                                .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"}},
+                                .layoutProps = {},
+                                .minChildren = 0,
+                                .optMaxChildren = 0},
+                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               { return std::make_unique<LabelComponent>(ctx, node); });
+
     registry.registerComponent({.type = "library.listTree",
                                 .displayName = "Library Tree",
                                 .category = "Library",
