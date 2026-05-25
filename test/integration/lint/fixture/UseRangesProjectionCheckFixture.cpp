@@ -1,20 +1,20 @@
-#include "TestHelpers.h"
-
 #include <algorithm>
+#include <cstdint>
+#include <iterator>
 #include <vector>
 
 struct Item
 {
-  int id;
+  std::int32_t id;
   bool isValid() const { return id > 0; }
 };
 
 void testProjections(std::vector<Item>& v)
 {
   // POSITIVE
-  bool anyValid = std::ranges::any_of(v, [](Item const& item) { return item.isValid(); });
+  bool const anyValid = std::ranges::any_of(v, [](Item const& item) { return item.isValid(); });
 
-  std::vector<int> ids;
+  auto ids = std::vector<int>{};
   // POSITIVE
   std::ranges::transform(v, std::back_inserter(ids), [](Item const& item) { return item.id; });
 

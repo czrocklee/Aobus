@@ -1,4 +1,4 @@
-#include "TestHelpers.h"
+#include <cstdint>
 
 // NEGATIVE: Correct order (public -> protected -> private)
 class CorrectOrderDemo
@@ -10,13 +10,13 @@ protected:
   void doProtected();
 
 private:
-  int _val1;
+  std::int32_t _val1;
 };
 
 class OrderDemo
 {
 private:
-  int _val1;
+  std::int32_t _val1;
 
   // POSITIVE
 public:
@@ -26,7 +26,7 @@ public:
 class StructOrderDemo
 {
 protected:
-  int val1;
+  std::int32_t val1;
 
   // POSITIVE
 public:

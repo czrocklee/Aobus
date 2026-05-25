@@ -76,7 +76,11 @@ namespace clang::tidy::readability
   void RedundantNamespaceQualificationCheck::registerMatchers(MatchFinder* finder)
   {
     finder->addMatcher(declRefExpr().bind("declRef"), this);
-    finder->addMatcher(typeLoc(loc(elaboratedType())).bind("typeLoc"), this);
+    finder->addMatcher(
+      typeLoc(anyOf(elaboratedTypeLoc().bind("elaboratedTypeLoc"),
+                    qualifiedTypeLoc(hasUnqualifiedLoc(elaboratedTypeLoc().bind("elaboratedTypeLoc")))))
+        .bind("typeLoc"),
+      this);
   }
 
   void RedundantNamespaceQualificationCheck::check(MatchFinder::MatchResult const& result)
@@ -96,17 +100,17 @@ namespace clang::tidy::readability
       specLoc = declRef->getQualifierLoc();
       node = DynTypedNode::create(*declRef);
     }
-    else if (auto const* typeLoc = result.Nodes.getNodeAs<TypeLoc>("typeLoc"))
+    else if (auto const* typeLoc = result.Nodes.getNodeAs<ElaboratedTypeLoc>("elaboratedTypeLoc"))
     {
-      auto et = typeLoc->getAs<ElaboratedTypeLoc>();
+      auto const* contextTypeLoc = result.Nodes.getNodeAs<TypeLoc>("typeLoc");
 
-      if (!et)
+      if (contextTypeLoc == nullptr)
       {
         return;
       }
 
-      specLoc = et.getQualifierLoc();
-      node = DynTypedNode::create(*typeLoc);
+      specLoc = typeLoc->getQualifierLoc();
+      node = DynTypedNode::create(*contextTypeLoc);
     }
     else
     {

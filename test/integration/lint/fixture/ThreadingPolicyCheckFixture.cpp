@@ -1,4 +1,3 @@
-#include "TestHelpers.h"
 
 #include <mutex>
 #include <thread>
@@ -6,24 +5,24 @@
 void testThreadingPolicy()
 {
   // POSITIVE
-  std::thread t([] {});
+  auto t = std::thread{[] {}};
   t.join();
 
   // NEGATIVE
-  std::jthread jt([] {});
+  auto jt = std::jthread{[] {}};
 
   // POSITIVE
-  [[maybe_unused]] int volatile volatileVar = 0;
+  [[maybe_unused]] int const volatile volatileVar = 0;
 
-  std::mutex m;
+  auto m = std::mutex{};
 
   // POSITIVE
-  [[maybe_unused]] std::unique_lock<std::mutex> redundantLock(m);
+  [[maybe_unused]] auto redundantLock = std::unique_lock<std::mutex>{m};
 
   // NEGATIVE
-  [[maybe_unused]] std::unique_lock<std::mutex> deferLock(m, std::defer_lock);
+  [[maybe_unused]] auto deferLock = std::unique_lock<std::mutex>{m, std::defer_lock};
 
   // NEGATIVE
-  std::unique_lock<std::mutex> manualLock(m);
+  auto manualLock = std::unique_lock<std::mutex>{m};
   manualLock.unlock();
 }

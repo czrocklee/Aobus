@@ -1,6 +1,6 @@
-#include "TestHelpers.h"
-
 #include <algorithm>
+#include <cstdint>
+#include <ranges>
 #include <vector>
 
 void testFind(std::vector<int> const& v)
@@ -16,7 +16,7 @@ void testFind(std::vector<int> const& v)
   }
 
   // POSITIVE
-  bool found = std::ranges::find(v, 7) != std::end(v);
+  bool const found = std::ranges::find(v, 7) != std::end(v);
 
   // NEGATIVE
   if (std::ranges::contains(v, 8))
@@ -42,5 +42,5 @@ void testCount(std::vector<int> const& v)
   }
 
   // NEGATIVE
-  int c = std::ranges::count(v, 8);
+  std::int32_t const c = std::ranges::count(v, 8);
 }

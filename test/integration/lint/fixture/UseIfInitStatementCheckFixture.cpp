@@ -1,11 +1,10 @@
-#include "TestHelpers.h"
-
+#include <cstdint>
 #include <iostream>
 
-void testUseIfInit(int cond)
+static void testUseIfInit(std::int32_t cond)
 {
   // POSITIVE
-  int localX = cond * 2;
+  std::int32_t const localX = cond * 2;
 
   if (localX > 10)
   {
@@ -13,7 +12,7 @@ void testUseIfInit(int cond)
   }
 
   // POSITIVE
-  int localSwitch = cond + 1;
+  std::int32_t const localSwitch = cond + 1;
 
   switch (localSwitch)
   {
@@ -22,7 +21,7 @@ void testUseIfInit(int cond)
   }
 
   // NEGATIVE
-  int usedAfter = cond * 3;
+  std::int32_t const usedAfter = cond * 3;
 
   if (usedAfter > 0)
   {
@@ -32,15 +31,15 @@ void testUseIfInit(int cond)
   std::cout << usedAfter;
 
   // NEGATIVE
-  constexpr int constVar = 42;
+  constexpr std::int32_t kConstVar = 42;
 
-  if (constVar > 0)
+  if (kConstVar > 0)
   {
-    std::cout << constVar;
+    std::cout << kConstVar;
   }
 
   // NEGATIVE
-  if (int localY = cond * 2; localY > 10)
+  if (std::int32_t const localY = cond * 2; localY > 10)
   {
     std::cout << localY;
   }

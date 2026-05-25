@@ -1,7 +1,7 @@
-#include "TestHelpers.h"
+#include <cstdint>
 
 // POSITIVE
-auto testTrailing() -> int
+auto testTrailing() -> std::int32_t
 {
   return 10;
 }
@@ -9,12 +9,12 @@ auto testTrailing() -> int
 // POSITIVE
 auto testNecessaryTrailing() -> decltype(auto)
 {
-  static int x = 5;
+  static std::int32_t x = 5;
   return (x);
 }
 
 // NEGATIVE
-auto lambdaWithTrailing = [](int x) -> double { return x * 1.0; };
+auto lambdaWithTrailing = [](std::int32_t x) -> double { return x * 1.0; };
 
 // NEGATIVE
 template<typename T>
@@ -22,4 +22,4 @@ struct DeductionDemo
 {
   DeductionDemo(T) {}
 };
-DeductionDemo(int) -> DeductionDemo<double>;
+DeductionDemo(std::int32_t) -> DeductionDemo<double>;

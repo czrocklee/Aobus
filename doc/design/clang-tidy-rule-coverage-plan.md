@@ -29,7 +29,7 @@ The current plugin registers these checks:
 | --- | --- | --- |
 | `aobus-readability-control-block-spacing` | Rule 2.1.2: blank lines around control blocks, no blank lines at block start/end, spacing between `TEST_CASE`/`SECTION` | Intended to be implemented under `lint/check/`. Treat the current working-tree move/deletion state as a recovery item: there must be no stale deleted old-path files, `AobusLintModule.cpp` must include the live header, `lint/CMakeLists.txt` must compile the live source, and the plugin must build before this plan is used as a gate. After recovery, expand it for blank lines after control blocks. |
 | `aobus-readability-optional-naming-and-usage` | Rule 3.2.1.1: `std::optional` variables use `opt` prefix and avoid `.has_value()` existence checks | Implemented. |
-| `aobus-readability-redundant-namespace-qualification` | Rule 2.6.5: avoid redundant namespace qualification | Implemented. |
+| `aobus-readability-redundant-namespace-qualification` | Rule 2.6.5: avoid redundant namespace qualification | Implemented. Covers redundant qualifiers in regular and top-level cv-qualified type spellings. |
 | `aobus-modernize-lambda-params` | Rule 3.4.7: omit `()` on lambdas that take no arguments | Implemented. |
 | `aobus-threading-policy` | Rule 4.4.2 (jthread), 4.4.3 (scoped_lock), 4.4.4 (no volatile) | Implemented. Covers condition variables, lock tags, and argument transfers. |
 

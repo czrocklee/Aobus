@@ -1,6 +1,6 @@
-#include "TestHelpers.h"
+#include <cstdint>
 
-void testUnusedSuppression(int param)
+void testUnusedSuppression(std::int32_t param)
 {
   // POSITIVE
   (void)param;
@@ -9,5 +9,5 @@ void testUnusedSuppression(int param)
   static_cast<void>(param);
 
   // NEGATIVE
-  [[maybe_unused]] int param2 = 10;
+  [[maybe_unused]] std::int32_t const param2 = 10;
 }

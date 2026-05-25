@@ -52,12 +52,17 @@ get_check_alias() {
 export FIXTURE_DIR="$SCRIPT_DIR/fixture"
 export VERIFIER="$SCRIPT_DIR/verify_diagnostics.py"
 
-run_test() {
+declare -A TMP_DIRS
+declare -A FIX_ALIASES
+
+run_diag() {
     local FIXTURE="$1"
     local FNAME=$(basename "$FIXTURE")
     local ALIAS=$(get_check_alias "$FNAME") || return 0
+    FIX_ALIASES["$FNAME"]="$ALIAS"
 
     local TEST_TMP=$(mktemp -d "/tmp/aobus_test_${FNAME}_XXXXXX")
+    TMP_DIRS["$FNAME"]="$TEST_TMP"
     local ACTUAL="$TEST_TMP/actual.txt"
     local LOG_FILE="$TEST_TMP/run.log"
 
@@ -71,8 +76,29 @@ run_test() {
             echo "ERROR: Diagnostic Verification FAILED for $FNAME"
             exit 1
         fi
+        echo "DIAG_PASS"
+    } > "$LOG_FILE" 2>&1
 
-        # Testing Auto-Fix Capability
+    if [[ $? -eq 0 ]]; then
+        echo "  [DIAG PASS] $FNAME"
+        return 0
+    else
+        echo "  [DIAG FAIL] $FNAME (See $LOG_FILE)"
+        return 1
+    fi
+}
+
+run_fix() {
+    local FIXTURE="$1"
+    local FNAME=$(basename "$FIXTURE")
+    local ALIAS="${FIX_ALIASES["$FNAME"]:-}"
+    [[ -z "$ALIAS" ]] && return 0
+
+    local TEST_TMP="${TMP_DIRS["$FNAME"]}"
+    local LOG_FILE="$TEST_TMP/run.log"
+
+    {
+        echo "--- Auto-Fix: $ALIAS ($FNAME) ---"
         local FIXED_FILE="$TEST_TMP/$FNAME"
         cp "$FIXTURE" "$FIXED_FILE"
         cp "$FIXTURE_DIR/TestHelpers.h" "$TEST_TMP/TestHelpers.h"
@@ -86,32 +112,40 @@ run_test() {
             echo "ERROR: Auto-Fix Compilation FAILED for $FNAME"
             exit 1
         fi
-    } > "$LOG_FILE" 2>&1
+    } >> "$LOG_FILE" 2>&1
 
     if [[ $? -eq 0 ]]; then
-        echo "  [PASS] $FNAME"
+        echo "  [FIX PASS] $FNAME"
         rm -rf "$TEST_TMP"
         return 0
     else
-        echo "  [FAIL] $FNAME (See $LOG_FILE)"
+        echo "  [FIX FAIL] $FNAME (See $LOG_FILE)"
         return 1
     fi
 }
 
-echo "=== [2] Running Per-Check Integration Tests (in parallel) ==="
-
+echo "=== [2] Diagnostic Verification (parallel) ==="
+DIAG_FAILED=0
 PIDS=()
 for FIXTURE in "$FIXTURE_DIR"/*Fixture.cpp; do
-    run_test "$FIXTURE" &
+    run_diag "$FIXTURE" &
     PIDS+=($!)
 done
-
-FAILED=0
 for PID in "${PIDS[@]}"; do
     if ! wait $PID; then
-        FAILED=1
+        DIAG_FAILED=1
     fi
 done
+
+echo "=== [3] Auto-Fix Verification (serial) ==="
+FIX_FAILED=0
+for FIXTURE in "$FIXTURE_DIR"/*Fixture.cpp; do
+    if ! run_fix "$FIXTURE"; then
+        FIX_FAILED=1
+    fi
+done
+
+FAILED=$((DIAG_FAILED + FIX_FAILED))
 
 if [[ $FAILED -eq 1 ]]; then
     echo "=== INTEGRATION TESTS FAILED ==="

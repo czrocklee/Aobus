@@ -9,16 +9,16 @@ extern "C" void system_like_c_func()
 void testStdCQualification()
 {
   // POSITIVE
-  [[maybe_unused]] size_t len = strlen("Hello");
+  [[maybe_unused]] size_t const len = strlen("Hello");
 
   // POSITIVE
-  [[maybe_unused]] double d = sin(3.14);
+  [[maybe_unused]] double const d = sin(3.14);
 
   // NEGATIVE
-  [[maybe_unused]] std::size_t len2 = std::strlen("Hello");
+  [[maybe_unused]] std::size_t const len2 = std::strlen("Hello");
 
   // NEGATIVE
-  [[maybe_unused]] double d2 = std::sin(3.14);
+  [[maybe_unused]] double const d2 = std::sin(3.14);
 
   // POSITIVE
   [[maybe_unused]] void* p = malloc(10);

@@ -1,6 +1,8 @@
 #include "TestHelpers.h"
 
+#include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 void testLocalInitialization()
@@ -21,15 +23,15 @@ void testLocalInitialization()
   std::vector<int> explicitVec(10, 2);
 
   // POSITIVE
-  int bracedPrimitive{5};
+  std::int32_t bracedPrimitive{5};
 
   // NEGATIVE
-  [[maybe_unused]] auto modernVal = int{5};
+  [[maybe_unused]] auto modernVal = std::int32_t{5};
   [[maybe_unused]] auto optStr = "hello"s;
   [[maybe_unused]] auto optSv = "world"sv;
   [[maybe_unused]] auto optVec = std::vector<int>(10, 2);
-  [[maybe_unused]] int optPrimitive = 5;
+  [[maybe_unused]] std::int32_t optPrimitive = 5;
 
   // NEGATIVE
-  [[maybe_unused]] int* optPointer = nullptr;
+  [[maybe_unused]] std::int32_t* optPointer = nullptr;
 }

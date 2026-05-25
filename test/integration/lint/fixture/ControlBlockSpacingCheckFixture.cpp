@@ -1,6 +1,6 @@
-#include "TestHelpers.h"
+#include <cstdint>
 
-void testControlBlockSpacing(int x)
+void testControlBlockSpacing(std::int32_t x)
 {
   // NEGATIVE
   if (x > 0)
@@ -9,7 +9,7 @@ void testControlBlockSpacing(int x)
   }
 
   // NEGATIVE
-  for (int i = 0; i < 10; ++i)
+  for (std::int32_t i = 0; i < 10; ++i)
   {
     x += i;
   }
@@ -64,7 +64,7 @@ void testControlBlockSpacing(int x)
   }
 
   x++;
-  for (int i = 0; i < 10; ++i) // POSITIVE
+  for (std::int32_t i = 0; i < 10; ++i) // POSITIVE
   {
     x += i;
   }
@@ -88,7 +88,7 @@ void testControlBlockSpacing(int x)
   }
   while (x > 0);
 
-  for (int i = 0; i < 10; ++i)
+  for (std::int32_t i = 0; i < 10; ++i)
   {
     x += i;
   } // POSITIVE
@@ -114,7 +114,7 @@ void testControlBlockSpacing(int x)
   x++;
 }
 
-void testControlBlockCommentSpacing(int x)
+void testControlBlockCommentSpacing(std::int32_t x)
 {
   // This is some description
 
@@ -130,7 +130,7 @@ void testControlBlockCommentSpacing(int x)
   }
 }
 
-void testControlBlockTryCatchSpacing(int x)
+void testControlBlockTryCatchSpacing(std::int32_t x)
 {
   x++;
   try // POSITIVE
@@ -140,7 +140,7 @@ void testControlBlockTryCatchSpacing(int x)
       throw 42;
     }
   }
-  catch (int)
+  catch (std::int32_t)
   {
     x = 0;
   }
@@ -149,7 +149,7 @@ void testControlBlockTryCatchSpacing(int x)
   {
     throw 42;
   }
-  catch (int)
+  catch (std::int32_t)
   {
     x = 1;
   } // POSITIVE
@@ -159,7 +159,7 @@ void testControlBlockTryCatchSpacing(int x)
   {
     throw 42;
   }
-  catch (int)
+  catch (std::int32_t)
   {
     x = 2;
   }
@@ -168,7 +168,7 @@ void testControlBlockTryCatchSpacing(int x)
   {
     throw 42;
   }
-  catch (int)
+  catch (std::int32_t)
   {
     x = 3;
   }

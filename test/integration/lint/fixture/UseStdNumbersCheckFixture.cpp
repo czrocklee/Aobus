@@ -33,10 +33,7 @@ struct AlsaMock
   // POSITIVE
   long unrelatedLong = 0;
 
-  void callAlsa()
-  {
-    some_c_api(&volumeMin, 1);
-  }
+  void callAlsa() { some_c_api(&volumeMin, 1); }
 };
 
 void testLogic()

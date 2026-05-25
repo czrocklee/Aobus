@@ -1,4 +1,4 @@
-#include "TestHelpers.h"
+#include <cstdint>
 
 namespace
 {
@@ -12,7 +12,7 @@ namespace
   // POSITIVE
   struct UnmarkedStruct
   {
-    int val;
+    std::int32_t val;
   };
 
   // NEGATIVE

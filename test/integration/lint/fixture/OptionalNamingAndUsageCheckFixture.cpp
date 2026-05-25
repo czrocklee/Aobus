@@ -1,4 +1,3 @@
-#include "TestHelpers.h"
 
 #include <optional>
 
@@ -17,7 +16,7 @@ class TestClass
 void testOptionalUsage()
 {
   // POSITIVE
-  [[maybe_unused]] std::optional<int> noMarker = 42;
+  [[maybe_unused]] auto noMarker = std::optional<int>{42};
 
   // NEGATIVE
   [[maybe_unused]] auto optValidName = std::optional<int>{42};

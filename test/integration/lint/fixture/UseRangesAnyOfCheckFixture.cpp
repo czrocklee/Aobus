@@ -1,11 +1,11 @@
-#include "TestHelpers.h"
-
 #include <algorithm>
+#include <cstdint>
+#include <ranges>
 #include <vector>
 
 void testAnyAll(std::vector<int> const& v)
 {
-  auto pred = [](int x) { return x > 0; };
+  auto pred = [](std::int32_t x) { return x > 0; };
 
   // POSITIVE
   if (std::ranges::find_if(v, pred) != v.end())
@@ -13,12 +13,12 @@ void testAnyAll(std::vector<int> const& v)
   }
 
   // POSITIVE
-  if (std::ranges::find_if(v, [](int x) { return x > 0; }) != std::ranges::end(v))
+  if (std::ranges::find_if(v, [](std::int32_t x) { return x > 0; }) != std::ranges::end(v))
   {
   }
 
   // POSITIVE
-  bool hasPositive = std::ranges::find_if(v, pred) != std::end(v);
+  bool const hasPositive = std::ranges::find_if(v, pred) != std::end(v);
 
   // NEGATIVE
   if (std::ranges::any_of(v, pred))
@@ -37,6 +37,7 @@ void testAnyAll(std::vector<int> const& v)
 
   // NEGATIVE
   auto it = std::ranges::find_if(v, pred);
+
   if (it != v.end())
   {
     // using iterator, should not be converted

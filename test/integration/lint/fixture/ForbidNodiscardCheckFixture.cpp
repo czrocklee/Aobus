@@ -1,7 +1,7 @@
-#include "TestHelpers.h"
+#include <cstdint>
 
 // POSITIVE
-[[nodiscard]] int getForbiddenVal()
+[[nodiscard]] std::int32_t getForbiddenVal()
 {
   return 42;
 }
@@ -15,7 +15,7 @@ class [[nodiscard]] ForbiddenClass
 {};
 
 // NEGATIVE
-int getConformingVal()
+std::int32_t getConformingVal()
 {
   return 42;
 }

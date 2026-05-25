@@ -8,13 +8,13 @@
 class BracedDemoBase
 {
 public:
-  BracedDemoBase(int /*val*/) {}
+  BracedDemoBase(std::int32_t /*val*/) {}
 };
 
 class BracedDemo final : public BracedDemoBase
 {
-  static constexpr int kInitVal1 = 10;
-  static constexpr int kInitVal2 = 20;
+  static constexpr std::int32_t kInitVal1 = 10;
+  static constexpr std::int32_t kInitVal2 = 20;
 
 public:
   BracedDemo()
@@ -68,10 +68,10 @@ public:
 
     // NEGATIVE: Scalar Casts (Should be IGNORED)
     [[maybe_unused]] auto const u1 = std::uintptr_t(&s1);
-    [[maybe_unused]] auto const i1 = int(1.5);
+    [[maybe_unused]] auto const i1 = std::int32_t(1.5);
   }
 
 private:
   Foo _data;
-  int _intData;
+  std::int32_t _intData;
 };

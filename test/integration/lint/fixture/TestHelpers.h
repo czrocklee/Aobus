@@ -1,21 +1,24 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Helper definitions to simulate Aobus environment
 // --- Mocks for UseStdNumbersCheck ---
 extern "C"
 {
-  void some_c_api(long* ptr, int val);
-  typedef unsigned long c_size_t;
+  void some_c_api(long* ptr, std::int32_t val);
+  using c_size_t = unsigned long;
 }
 
 namespace gtkmm_mock
 {
   struct Widget
   {
-    virtual void on_draw(int x) = 0;
+    virtual ~Widget() = default;
+    virtual void on_draw(std::int32_t val) = 0;
   };
 }
 
@@ -25,21 +28,21 @@ namespace ao::async
   {};
 
   template<typename F>
-  void runOnMainThread(F&& f)
+  void runOnMainThread(F&& func)
   {
-    f();
+    std::forward<F>(func)();
   }
 }
 
 struct Foo
 {
   Foo() = default;
-  Foo(int) {}
-  Foo(int, int) {}
+  Foo(std::int32_t /*val*/) {}
+  Foo(std::int32_t /*val1*/, std::int32_t /*val2*/) {}
 };
 
 struct LocalFoo
 {
   LocalFoo() = default;
-  LocalFoo(int) {}
+  LocalFoo(std::int32_t /*val*/) {}
 };
