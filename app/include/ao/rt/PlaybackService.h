@@ -39,6 +39,16 @@ namespace ao::rt
       bool ready = false;
     };
 
+    struct ShuffleModeChanged final
+    {
+      ShuffleMode mode = ShuffleMode::Off;
+    };
+
+    struct RepeatModeChanged final
+    {
+      RepeatMode mode = RepeatMode::Off;
+    };
+
     enum class SeekMode : std::uint8_t
     {
       Final,
@@ -79,12 +89,16 @@ namespace ao::rt
     Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
     Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
     Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
+    Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
+    Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
 
     void play(audio::TrackPlaybackDescriptor const& descriptor, ListId sourceListId);
     TrackId playSelectionInView(ViewId viewId);
     void pause();
     void resume();
     void stop();
+    void setShuffleMode(ShuffleMode mode);
+    void setRepeatMode(RepeatMode mode);
     void seek(std::uint32_t positionMs, SeekMode mode = SeekMode::Final);
     void setOutput(audio::BackendId const& backendId,
                    audio::DeviceId const& deviceId,
@@ -100,4 +114,4 @@ namespace ao::rt
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
-}
+} // namespace ao::rt

@@ -122,9 +122,36 @@
 
 .ao-playback-button {
   padding: 0;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: var(--ao-radius-md);
+  color: alpha(currentColor, 0.4);
+  transition: all 150ms ease;
+}
+
+.playback-button-small {
   min-width: 32px;
   min-height: 32px;
-  border-radius: var(--ao-radius-md);
+  -gtk-icon-size: 16px;
+}
+
+.playback-button-large {
+  min-width: 42px;
+  min-height: 42px;
+  -gtk-icon-size: 24px;
+}
+
+.ao-playback-button:hover {
+  background-color: alpha(currentColor, 0.05);
+  color: currentColor;
+}
+
+.ao-playback-button.active {
+  color: @theme_selected_bg_color;
+}
+
+.ao-playback-button.active:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.1);
 }
 
 /* Track Controls Bar */
@@ -510,11 +537,28 @@ columnview row.ao-missing-row label {
   color: @accent_fg_color;
   padding: 0;
   transition: transform 150ms, box-shadow 150ms;
+  -gtk-icon-size: 28px; /* Slightly larger icon */
 }
 
-.ao-play-button-prominent:hover {
-  transform: scale(1.08);
-  box-shadow: 0 4px 12px alpha(@accent_bg_color, 0.35);
+/* Force absolute centering of the image within the button */
+.ao-play-button-prominent image {
+  margin: 0;
+  padding: 0;
+  halign: center;
+  valign: center;
+}
+
+/* The play triangle in the screenshot was too high and too far left. 
+   Push it down and right to compensate for the visual weight. */
+.ao-play-button-prominent image[icon-name*="start"] {
+  margin-left: 3px;
+  margin-top: 2px;
+}
+
+/* Pause icon is vertically balanced, but check horizontal */
+.ao-play-button-prominent image[icon-name*="pause"] {
+  margin-left: 0;
+  margin-top: 0;
 }
 
 .ao-play-button-prominent:active {

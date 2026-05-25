@@ -1,14 +1,16 @@
-# GResource compilation
+# GResource compilation with automatic dependency tracking
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/resources.c
     COMMAND ${GLIB_COMPILE_RESOURCES_EXECUTABLE}
             --target=${CMAKE_CURRENT_BINARY_DIR}/resources.c
             --sourcedir=${CMAKE_CURRENT_SOURCE_DIR}
             --generate-source
+            --dependency-file=${CMAKE_CURRENT_BINARY_DIR}/resources.c.d
             ${CMAKE_CURRENT_SOURCE_DIR}/aobus.gresource.xml
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/aobus.gresource.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/app.css
-            ${CMAKE_CURRENT_SOURCE_DIR}/layout/default_layout.yaml
+    DEPFILE ${CMAKE_CURRENT_BINARY_DIR}/resources.c.d
+    COMMENT "Compiling GResources for aobus-gtk"
+    VERBATIM
 )
 set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/resources.c PROPERTIES COMPILE_OPTIONS "-Wno-overlength-strings")
 

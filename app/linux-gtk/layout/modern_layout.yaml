@@ -124,16 +124,30 @@ templates:
                   mode: elapsed
                 layout:
                   cssClasses: ao-modern-time-label
-              - type: playback.stopButton
+              - type: box
                 props:
-                  size: small
+                  orientation: horizontal
+                  spacing: 12
                 layout:
-                  cssClasses: ao-play-button-circular
-              - type: playback.playPauseButton
-                props:
-                  size: large
-                layout:
-                  cssClasses: ao-play-button-prominent
+                  valign: center
+                children:
+                  - type: playback.shuffleButton
+                    props:
+                      size: normal
+                  - type: playback.previousButton
+                    props:
+                      size: large
+                  - type: playback.playPauseButton
+                    props:
+                      size: large
+                    layout:
+                      cssClasses: ao-play-button-prominent
+                  - type: playback.nextButton
+                    props:
+                      size: large
+                  - type: playback.repeatButton
+                    props:
+                      size: normal
               - type: playback.timeLabel
                 props:
                   mode: duration

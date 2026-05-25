@@ -47,11 +47,11 @@ namespace ao::gtk::layout
     /**
      * @brief Helper to get the transport button callback.
      */
-    std::function<void()> getTransportCallback(rt::AppRuntime& runtime, TransportButton::Action action)
+    std::function<void()> getTransportCallback(LayoutContext& ctx, TransportButton::Action action)
     {
       if (action == TransportButton::Action::Play || action == TransportButton::Action::PlayPause)
       {
-        return [&runtime] { runtime.playSelectionInFocusedView(); };
+        return [&ctx] { ctx.runtime.playSelectionInFocusedView(); };
       }
 
       return {};
@@ -65,8 +65,9 @@ namespace ao::gtk::layout
     public:
       TransportButtonComponent(LayoutContext& ctx, LayoutNode const& node, TransportButton::Action action)
         : _button{ctx.runtime.playback(),
+                  ctx.playback.sequenceController,
                   action,
-                  getTransportCallback(ctx.runtime, action),
+                  getTransportCallback(ctx, action),
                   node.getProp<bool>("showLabel", false),
                   node.getProp<std::string>("size", "normal")}
       {
@@ -388,6 +389,26 @@ namespace ao::gtk::layout
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Stop);
     }
 
+    std::unique_ptr<ILayoutComponent> createNextButton(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Next);
+    }
+
+    std::unique_ptr<ILayoutComponent> createPreviousButton(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Previous);
+    }
+
+    std::unique_ptr<ILayoutComponent> createShuffleButton(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Shuffle);
+    }
+
+    std::unique_ptr<ILayoutComponent> createRepeatButton(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Repeat);
+    }
+
     std::unique_ptr<ILayoutComponent> createVolumeControl(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<VolumeControlComponent>(ctx, node);
@@ -493,6 +514,74 @@ namespace ao::gtk::layout
        .minChildren = 0,
        .optMaxChildren = 0},
       createStopButton);
+
+    registry.registerComponent(
+      {.type = "playback.nextButton",
+       .displayName = "Next Button",
+       .category = "Playback",
+       .container = false,
+       .props =
+         {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
+          {.name = "size",
+           .kind = PropertyKind::Enum,
+           .label = "Size",
+           .defaultValue = LayoutValue{"normal"},
+           .enumValues = {"small", "normal", "large"}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      createNextButton);
+
+    registry.registerComponent(
+      {.type = "playback.previousButton",
+       .displayName = "Previous Button",
+       .category = "Playback",
+       .container = false,
+       .props =
+         {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
+          {.name = "size",
+           .kind = PropertyKind::Enum,
+           .label = "Size",
+           .defaultValue = LayoutValue{"normal"},
+           .enumValues = {"small", "normal", "large"}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      createPreviousButton);
+
+    registry.registerComponent(
+      {.type = "playback.shuffleButton",
+       .displayName = "Shuffle Button",
+       .category = "Playback",
+       .container = false,
+       .props =
+         {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
+          {.name = "size",
+           .kind = PropertyKind::Enum,
+           .label = "Size",
+           .defaultValue = LayoutValue{"normal"},
+           .enumValues = {"small", "normal", "large"}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      createShuffleButton);
+
+    registry.registerComponent(
+      {.type = "playback.repeatButton",
+       .displayName = "Repeat Button",
+       .category = "Playback",
+       .container = false,
+       .props =
+         {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
+          {.name = "size",
+           .kind = PropertyKind::Enum,
+           .label = "Size",
+           .defaultValue = LayoutValue{"normal"},
+           .enumValues = {"small", "normal", "large"}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      createRepeatButton);
 
     registry.registerComponent({.type = "playback.volumeControl",
                                 .displayName = "Volume Control",

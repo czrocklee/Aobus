@@ -15,6 +15,8 @@
 
 namespace ao::gtk
 {
+  class PlaybackSequenceController;
+
   class TransportButton final
   {
   public:
@@ -24,9 +26,14 @@ namespace ao::gtk
       Pause,
       Stop,
       PlayPause,
+      Next,
+      Previous,
+      Shuffle,
+      Repeat,
     };
 
     TransportButton(rt::PlaybackService& playbackService,
+                    PlaybackSequenceController* sequenceController,
                     Action action,
                     std::function<void()> onPlaySelection = {},
                     bool showLabel = false,
@@ -42,8 +49,10 @@ namespace ao::gtk
 
   private:
     void refresh();
+    void handleClicked();
 
     rt::PlaybackService& _playbackService;
+    PlaybackSequenceController* _sequenceController;
     Action _action;
     std::function<void()> _onPlaySelection;
     bool _showLabel = false;
@@ -54,5 +63,7 @@ namespace ao::gtk
     rt::Subscription _idleSub;
     rt::Subscription _stoppedSub;
     rt::Subscription _preparingSub;
+    rt::Subscription _shuffleSub;
+    rt::Subscription _repeatSub;
   };
 } // namespace ao::gtk

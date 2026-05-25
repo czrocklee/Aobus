@@ -62,11 +62,25 @@ namespace ao::rt
     bool operator==(OutputSelection const&) const = default;
   };
 
+  enum class ShuffleMode : std::uint8_t
+  {
+    Off,
+    On,
+  };
+
+  enum class RepeatMode : std::uint8_t
+  {
+    Off,
+    One,
+    All,
+  };
+
   struct PlaybackState final
   {
     audio::Transport transport = audio::Transport::Idle;
     TrackId trackId{};
     ListId sourceListId = kInvalidListId;
+    ViewId sourceViewId = kInvalidViewId;
     std::string trackTitle{};
     std::string trackArtist{};
     std::uint32_t positionMs = 0;
@@ -75,6 +89,9 @@ namespace ao::rt
     bool muted = false;
     bool volumeAvailable = false;
     bool ready = false;
+
+    ShuffleMode shuffleMode = ShuffleMode::Off;
+    RepeatMode repeatMode = RepeatMode::Off;
 
     OutputSelection selectedOutput{};
     std::vector<OutputBackendSnapshot> availableOutputs{};

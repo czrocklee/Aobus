@@ -102,6 +102,8 @@ namespace ao::rt
     library::MusicLibrary& library;
     TrackId currentTrackId = kInvalidTrackId;
     ListId currentSourceListId = kInvalidListId;
+    ShuffleMode shuffleMode = ShuffleMode::Off;
+    RepeatMode repeatMode = RepeatMode::Off;
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
     std::uint32_t currentTrackDurationMs = 0;
@@ -116,6 +118,8 @@ namespace ao::rt
     Signal<PlaybackService::QualityChanged const&> qualityChangedSignal;
     Signal<PlaybackService::RevealTrackRequested const&> revealTrackRequestedSignal;
     Signal<PlaybackService::SeekUpdate const&> seekUpdateSignal;
+    Signal<PlaybackService::ShuffleModeChanged const&> shuffleModeChangedSignal;
+    Signal<PlaybackService::RepeatModeChanged const&> repeatModeChangedSignal;
 
     void ensureReady() const
     {
@@ -156,6 +160,8 @@ namespace ao::rt
       snapshot.sourceListId = currentSourceListId;
       snapshot.trackTitle = currentTrackTitle;
       snapshot.trackArtist = currentTrackArtist;
+      snapshot.shuffleMode = shuffleMode;
+      snapshot.repeatMode = repeatMode;
 
       if (snapshot.durationMs == 0)
       {
@@ -293,6 +299,16 @@ namespace ao::rt
     return _impl->seekUpdateSignal.connect(std::move(handler));
   }
 
+  Subscription PlaybackService::onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler)
+  {
+    return _impl->shuffleModeChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler)
+  {
+    return _impl->repeatModeChangedSignal.connect(std::move(handler));
+  }
+
   PlaybackState const& PlaybackService::state() const
   {
     return _impl->state;
@@ -395,6 +411,20 @@ namespace ao::rt
     });
   }
 
+  void PlaybackService::setShuffleMode(ShuffleMode const mode)
+  {
+    _impl->shuffleMode = mode;
+    _impl->state = _impl->buildState(*_impl->player);
+    _impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode});
+  }
+
+  void PlaybackService::setRepeatMode(RepeatMode const mode)
+  {
+    _impl->repeatMode = mode;
+    _impl->state = _impl->buildState(*_impl->player);
+    _impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode});
+  }
+
   void PlaybackService::seek(std::uint32_t const positionMs, SeekMode const mode)
   {
     if (mode == SeekMode::Final)
@@ -446,4 +476,4 @@ namespace ao::rt
   {
     _impl->player->addProvider(std::move(provider));
   }
-}
+} // namespace ao::rt

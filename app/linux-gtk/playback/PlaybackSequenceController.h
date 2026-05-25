@@ -5,6 +5,7 @@
 
 #include "ao/Type.h"
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/StateTypes.h>
 
 #include <cstddef>
 #include <memory>
@@ -43,6 +44,12 @@ namespace ao::gtk
     // Builds the sequence from visible tracks, resolves the descriptor for
     // startTrackId, dispatches PlayTrack, and subscribes to transport events.
     bool playFromPage(TrackViewPage& page, TrackId startTrackId);
+
+    // Transport controls
+    void next();
+    void previous();
+    void setShuffleMode(rt::ShuffleMode mode);
+    void setRepeatMode(rt::RepeatMode mode);
 
     // Resume playback from a paused state.
     void resume();
