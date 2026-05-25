@@ -25,6 +25,40 @@ namespace ao::media::mp4
   {
   }
 
+  bool Demuxer::applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample)
+  {
+    if (samples.empty() || timeToSample.empty())
+    {
+      return false;
+    }
+
+    std::size_t sampleIndex = 0;
+    std::uint64_t sampleTime = 0;
+
+    for (auto const& entry : timeToSample)
+    {
+      if (entry.sampleCount == 0 || entry.sampleDelta == 0)
+      {
+        return false;
+      }
+
+      for (std::uint32_t sample = 0; sample < entry.sampleCount; ++sample)
+      {
+        if (sampleIndex >= samples.size())
+        {
+          return false;
+        }
+
+        samples[sampleIndex].startTime = sampleTime;
+        samples[sampleIndex].duration = entry.sampleDelta;
+        sampleTime += entry.sampleDelta;
+        ++sampleIndex;
+      }
+    }
+
+    return sampleIndex == samples.size();
+  }
+
   bool Demuxer::buildSampleOffsets(std::vector<SampleEntry>& samples,
                                    std::span<std::uint64_t const> chunkOffsets,
                                    std::span<SampleToChunkEntry const> sampleToChunk)
@@ -85,6 +119,21 @@ namespace ao::media::mp4
     }
 
     return sampleIndex == samples.size();
+  }
+
+  void Demuxer::parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out)
+  {
+    auto const* header = utility::layout::view<SttsAtomLayout>(bytes);
+    auto const count = header->entryCount.value();
+
+    out.resize(count);
+    auto const entries = utility::layout::viewArray<SttsAtomLayout::Entry>(bytes.subspan(sizeof(SttsAtomLayout)));
+
+    for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
+    {
+      out[index].sampleCount = entry.sampleCount.value();
+      out[index].sampleDelta = entry.sampleDelta.value();
+    }
   }
 
   void Demuxer::parseStsz(std::span<std::byte const> bytes)
@@ -166,6 +215,7 @@ namespace ao::media::mp4
     RootAtom const root = fromBuffer(_fileData);
     auto chunkOffsets = std::vector<std::uint64_t>{};
     auto sampleToChunk = std::vector<SampleToChunkEntry>{};
+    auto timeToSample = std::vector<TimeToSampleEntry>{};
 
     // mdhd path
     static constexpr std::array kMdhdPath = {
@@ -222,7 +272,7 @@ namespace ao::media::mp4
     }
 
     stblNode->visitChildren(
-      [this, &chunkOffsets, &sampleToChunk](Atom const& atom)
+      [this, &chunkOffsets, &sampleToChunk, &timeToSample](Atom const& atom)
       {
         auto type = atom.type();
         auto const& view = utility::unsafeDowncast<AtomView const>(atom);
@@ -230,6 +280,10 @@ namespace ao::media::mp4
         if (auto const atomBytes = view.bytes(); type == "stsz")
         {
           parseStsz(atomBytes);
+        }
+        else if (type == "stts")
+        {
+          parseStts(atomBytes, timeToSample);
         }
         else if (type == "stsc")
         {
@@ -255,6 +309,11 @@ namespace ao::media::mp4
     if (!buildSampleOffsets(_samples, chunkOffsets, sampleToChunk))
     {
       return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample offsets");
+    }
+
+    if (!timeToSample.empty() && !applySampleTiming(_samples, timeToSample))
+    {
+      return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample timing");
     }
 
     return {};
@@ -295,6 +354,43 @@ namespace ao::media::mp4
     }
 
     return _fileData.subspan(entry.offset, entry.size);
+  }
+
+  std::uint32_t Demuxer::sampleIndexAtTime(std::uint64_t const time) const noexcept
+  {
+    if (_samples.empty())
+    {
+      return 0;
+    }
+
+    if (_samples.front().duration == 0)
+    {
+      if (_duration == 0)
+      {
+        return 0;
+      }
+
+      if (time >= _duration)
+      {
+        return sampleCount();
+      }
+
+      auto const scaledIndex = (static_cast<long double>(time) * static_cast<long double>(_samples.size())) /
+                               static_cast<long double>(_duration);
+
+      return static_cast<std::uint32_t>(
+        std::min<std::uint64_t>(static_cast<std::uint64_t>(scaledIndex), _samples.size()));
+    }
+
+    for (auto const& [index, sample] : std::ranges::views::enumerate(_samples))
+    {
+      if (time < sample.startTime + sample.duration)
+      {
+        return static_cast<std::uint32_t>(index);
+      }
+    }
+
+    return sampleCount();
   }
 
   std::uint32_t Demuxer::timescale() const

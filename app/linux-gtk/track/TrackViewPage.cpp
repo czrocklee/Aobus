@@ -56,7 +56,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
 
 namespace ao::gtk
 {
@@ -416,9 +415,7 @@ namespace ao::gtk
                                            rt::TrackField field,
                                            std::string newValue)
   {
-    auto const oldValue = row->getFieldText(field);
-
-    if (newValue == oldValue)
+    if (auto const oldValue = row->getFieldText(field); newValue == oldValue)
     {
       return;
     }
@@ -439,7 +436,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const editValue = *editValueResult;
+    auto const& editValue = *editValueResult;
     auto patch = rt::MetadataPatch{};
     auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = editValue};
     uiDef->writePatch(ctx);

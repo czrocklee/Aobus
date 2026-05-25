@@ -477,7 +477,7 @@ columnview row.ao-missing-row label {
 }
 
 .ao-seekbar highlight {
-  background: @theme_selected_bg_color;
+  background: @accent_bg_color;
   border-radius: 3px;
 }
 
@@ -491,11 +491,14 @@ columnview row.ao-missing-row label {
 /* ===== Modern Bottom Bar ===== */
 
 /* Glass-morphism background for the entire bottom bar */
-.ao-modern-bottom-bar {
+.ao-modern-bottom-bar-wrapper {
   background: alpha(@view_bg_color, 0.92);
   border-top: 1px solid alpha(currentColor, 0.08);
+}
+
+.ao-modern-bottom-bar-content {
   padding: 8px 16px;
-  min-height: 72px;
+  min-height: 60px;
 }
 
 /* Prominent circular play button */
@@ -534,36 +537,43 @@ columnview row.ao-missing-row label {
   box-shadow: 0 1px 4px alpha(black, 0.15);
 }
 
-/* Modern thin seekbar */
-.ao-seekbar-modern trough {
-  min-height: 3px;
-  border-radius: 2px;
-  background: alpha(currentColor, 0.10);
+/* Modern full-width seekbar */
+.ao-seekbar-modern-full {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  margin: 0;
+  /* Pull it up to cover the border exactly */
+  margin-top: -11px;
+  /* Cancel bottom padding to not push other elements down */
+  margin-bottom: -10px;
 }
 
-.ao-seekbar-modern:hover trough {
-  min-height: 5px;
-  border-radius: 3px;
+.ao-seekbar-modern-full trough {
+  margin: 0;
+  border-radius: 0;
+  min-height: 2px;
+  background: transparent;
 }
 
-.ao-seekbar-modern highlight {
-  background: alpha(currentColor, 0.55);
-  border-radius: 2px;
+.ao-seekbar-modern-full:hover trough {
+  min-height: 6px;
 }
 
-.ao-seekbar-modern:hover highlight {
+.ao-seekbar-modern-full highlight {
+  border-radius: 0;
   background: @accent_color;
 }
 
-.ao-seekbar-modern slider {
-  min-width: 12px;
-  min-height: 12px;
+.ao-seekbar-modern-full slider {
+  min-width: 20px;
+  min-height: 20px;
   border-radius: 50%;
   opacity: 0;
   transition: opacity 150ms;
+  margin: -8px; /* Center slider on the trough */
 }
 
-.ao-seekbar-modern:hover slider {
+.ao-seekbar-modern-full:hover slider {
   opacity: 1;
 }
 

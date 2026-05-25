@@ -6,12 +6,14 @@
 #include "ao/audio/Types.h"
 #include <ao/rt/PlaybackService.h>
 
-#include <gdkmm/event.h>
 #include <gdkmm/frameclock.h>
+#include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/gesturedrag.h>
 
+#include <algorithm>
 #include <cstdint>
 
 namespace ao::gtk
@@ -19,6 +21,13 @@ namespace ao::gtk
   namespace
   {
     constexpr double kDefaultMaxRange = 100.0;
+    constexpr int kSeekDebounceMs = 50;
+
+    bool isAdvancingTransport(audio::Transport const transport) noexcept
+    {
+      return transport == audio::Transport::Playing || transport == audio::Transport::Buffering ||
+             transport == audio::Transport::Seeking;
+    }
   }
 
   SeekControl::SeekControl(rt::PlaybackService& playbackService)
@@ -31,74 +40,25 @@ namespace ao::gtk
     _scale.set_valign(Gtk::Align::CENTER);
     _scale.add_css_class("ao-seekbar");
 
-    auto const gesture = Gtk::GestureClick::create();
-    gesture->set_button(1);
+    _scale.signal_value_changed().connect([this] { handleScaleValueChanged(); });
 
-    gesture->signal_pressed().connect(
-      [this](std::int32_t /*n_press*/, double posX, double /*posY*/)
-      {
-        _isDragging = true;
+    auto const clickGesture = Gtk::GestureClick::create();
+    clickGesture->set_button(1);
+    clickGesture->signal_pressed().connect([this](std::int32_t /*nPress*/, double /*posX*/, double /*posY*/)
+                                           { beginUserInteraction(); });
+    clickGesture->signal_released().connect([this](std::int32_t /*nPress*/, double /*posX*/, double /*posY*/)
+                                            { endUserInteraction(); });
+    _scale.add_controller(clickGesture);
 
-        if (int const width = _scale.get_width(); width > 0)
-        {
-          double const newValue = (posX / static_cast<double>(width)) * static_cast<double>(_durationMs);
-          _scale.set_value(newValue);
-          _playbackService.seek(static_cast<std::uint32_t>(newValue));
-        }
-      });
-
-    gesture->signal_released().connect(
-      [this](std::int32_t, double, double)
-      {
-        _isDragging = false;
-        _playbackService.seek(static_cast<std::uint32_t>(_scale.get_value()));
-      });
-
-    gesture->signal_cancel().connect(
-      [this](Gdk::EventSequence*)
-      {
-        if (_isDragging)
-        {
-          _isDragging = false;
-          _playbackService.seek(static_cast<std::uint32_t>(_scale.get_value()));
-        }
-      });
-
-    _scale.add_controller(gesture);
-
-    _scale.signal_value_changed().connect(
-      [this]
-      {
-        if (_isDragging && !_updating)
-        {
-          _playbackService.seek(static_cast<std::uint32_t>(_scale.get_value()), rt::PlaybackService::SeekMode::Preview);
-        }
-      });
+    auto const dragGesture = Gtk::GestureDrag::create();
+    dragGesture->set_button(1);
+    dragGesture->signal_drag_begin().connect([this](double /*posX*/, double /*posY*/) { beginUserInteraction(); });
+    dragGesture->signal_drag_end().connect([this](double /*offsetX*/, double /*offsetY*/) { endUserInteraction(); });
+    _scale.add_controller(dragGesture);
 
     auto const resetCallback = [this] { reset(); };
 
-    _startedSub = _playbackService.onStarted(
-      [this]
-      {
-        auto const& state = _playbackService.state();
-        _interpolator.updateState(state.positionMs, state.durationMs, true);
-
-        if (state.durationMs > 0)
-        {
-          _durationMs = state.durationMs;
-          _updating = true;
-          _scale.set_range(0, static_cast<double>(state.durationMs));
-          _scale.set_value(static_cast<double>(state.positionMs));
-          _updating = false;
-          _scale.set_sensitive(true);
-        }
-        else
-        {
-          _durationMs = 0;
-          _scale.set_range(0, kDefaultMaxRange);
-          _scale.set_sensitive(false);
-        }
-      });
+    _startedSub = _playbackService.onStarted([this] { handleStarted(); });
 
     _pausedSub = _playbackService.onPaused(
       [this]
@@ -117,23 +77,18 @@ namespace ao::gtk
         if (ev.mode == rt::PlaybackService::SeekMode::Final)
         {
           auto const& state = _playbackService.state();
-          bool const isPlaying =
-            (state.transport == audio::Transport::Playing || state.transport == audio::Transport::Buffering ||
-             state.transport == audio::Transport::Seeking);
 
-          _interpolator.updateState(ev.positionMs, state.durationMs, isPlaying);
+          setScaleRange(state.durationMs);
+          _scale.set_sensitive(state.durationMs > 0);
+          _interpolator.updateState(ev.positionMs, state.durationMs, isAdvancingTransport(state.transport));
 
-          if (!_isDragging && !_updating)
+          if (_interactionState == InteractionState::Idle)
           {
-            _updating = true;
-            _scale.set_value(static_cast<double>(ev.positionMs));
-            _updating = false;
+            setScaleValue(ev.positionMs);
           }
         }
         else if (ev.mode == rt::PlaybackService::SeekMode::Preview)
         {
-          // Ensure that the next frame after dragging ends or previewing starts
-          // will pick up the correct base position.
           _interpolator.updateState(ev.positionMs, _durationMs, _interpolator.isPlaying());
         }
       });
@@ -141,13 +96,10 @@ namespace ao::gtk
     _scale.add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
-        if (_interpolator.isPlaying() && !_isDragging)
+        if (_interpolator.isPlaying() && _interactionState == InteractionState::Idle)
         {
           auto const displayPos = _interpolator.interpolate(clock->get_frame_time());
-
-          _updating = true;
-          _scale.set_value(static_cast<double>(displayPos));
-          _updating = false;
+          setScaleValue(displayPos);
         }
 
         return true;
@@ -156,13 +108,151 @@ namespace ao::gtk
     reset();
   }
 
+  SeekControl::~SeekControl()
+  {
+    _debounceConnection.disconnect();
+  }
+
+  void SeekControl::handleStarted()
+  {
+    _interactionState = InteractionState::Idle;
+    _pendingFinalSeek = false;
+
+    auto const& state = _playbackService.state();
+    _interpolator.updateState(state.positionMs, state.durationMs, true);
+    setScaleRange(state.durationMs);
+
+    if (state.durationMs > 0)
+    {
+      setScaleValue(state.positionMs);
+      _scale.set_sensitive(true);
+    }
+    else
+    {
+      setScaleValue(0);
+      _scale.set_sensitive(false);
+    }
+  }
+
+  void SeekControl::handleScaleValueChanged()
+  {
+    if (_updatingScale || _durationMs == 0)
+    {
+      return;
+    }
+
+    if (_interactionState == InteractionState::Pointer)
+    {
+      previewSeekFromScale();
+      return;
+    }
+
+    commitSeekFromScale();
+  }
+
+  void SeekControl::beginUserInteraction()
+  {
+    if (!_scale.get_sensitive() || _durationMs == 0)
+    {
+      return;
+    }
+
+    if (_interactionState != InteractionState::Pointer)
+    {
+      _pendingFinalSeek = false;
+    }
+
+    _interactionState = InteractionState::Pointer;
+  }
+
+  void SeekControl::endUserInteraction()
+  {
+    if (_interactionState != InteractionState::Pointer)
+    {
+      return;
+    }
+
+    _interactionState = InteractionState::Idle;
+
+    if (_pendingFinalSeek)
+    {
+      commitSeekFromScale();
+    }
+  }
+
+  void SeekControl::previewSeekFromScale()
+  {
+    auto const positionMs = scalePositionMs();
+    _pendingFinalSeek = true;
+    _interpolator.updateState(positionMs, _durationMs, false);
+    _playbackService.seek(positionMs, rt::PlaybackService::SeekMode::Preview);
+  }
+
+  void SeekControl::executeDebouncedFinalSeek()
+  {
+    _debounceConnection.disconnect();
+
+    if (_durationMs > 0)
+    {
+      _playbackService.seek(scalePositionMs(), rt::PlaybackService::SeekMode::Final);
+    }
+  }
+
+  void SeekControl::commitSeekFromScale()
+  {
+    if (_durationMs == 0)
+    {
+      return;
+    }
+
+    _pendingFinalSeek = false;
+    _debounceConnection.disconnect();
+
+    _debounceConnection = Glib::signal_timeout().connect(
+      [this] -> bool
+      {
+        executeDebouncedFinalSeek();
+        return false;
+      },
+      kSeekDebounceMs);
+  }
+
+  void SeekControl::setScaleRange(std::uint32_t const durationMs)
+  {
+    _durationMs = durationMs;
+
+    _updatingScale = true;
+    _scale.set_range(0, durationMs > 0 ? static_cast<double>(durationMs) : kDefaultMaxRange);
+    _updatingScale = false;
+  }
+
+  void SeekControl::setScaleValue(std::uint32_t const positionMs)
+  {
+    std::uint32_t const upper = _durationMs > 0 ? _durationMs : 0;
+    auto const clampedPositionMs = std::min(positionMs, upper);
+
+    _updatingScale = true;
+    _scale.set_value(static_cast<double>(clampedPositionMs));
+    _updatingScale = false;
+  }
+
+  std::uint32_t SeekControl::scalePositionMs() const noexcept
+  {
+    auto const upper = _durationMs > 0 ? static_cast<double>(_durationMs) : kDefaultMaxRange;
+    auto const value = std::clamp(_scale.get_value(), 0.0, upper);
+
+    return static_cast<std::uint32_t>(value);
+  }
+
   void SeekControl::reset()
   {
-    _scale.set_value(0);
+    _interactionState = InteractionState::Idle;
+    _pendingFinalSeek = false;
 
-    _durationMs = 0;
-    _scale.set_range(0, kDefaultMaxRange);
+    setScaleRange(0);
+    setScaleValue(0);
     _scale.set_sensitive(false);
     _interpolator.reset();
+    _debounceConnection.disconnect();
   }
 } // namespace ao::gtk

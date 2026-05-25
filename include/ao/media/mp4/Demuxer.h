@@ -19,10 +19,12 @@ namespace ao::media::mp4
   class Demuxer final
   {
   public:
-    struct SampleEntry
+    struct SampleEntry final
     {
-      std::uint64_t offset;
-      std::uint32_t size;
+      std::uint64_t offset = 0;
+      std::uint32_t size = 0;
+      std::uint64_t startTime = 0;
+      std::uint32_t duration = 0;
     };
 
     /**
@@ -64,6 +66,12 @@ namespace ao::media::mp4
     std::span<std::byte const> getSamplePayload(std::uint32_t index) const;
 
     /**
+     * @brief Maps a media timestamp in mdhd timescale units to the sample packet containing it.
+     * @return The packet index, or sampleCount() when the timestamp is at or beyond the end.
+     */
+    std::uint32_t sampleIndexAtTime(std::uint64_t time) const noexcept;
+
+    /**
      * @brief The timescale parsed from the media header (mdhd). Useful for calculating durations.
      */
     std::uint32_t timescale() const;
@@ -80,11 +88,19 @@ namespace ao::media::mp4
       std::uint32_t samplesPerChunk = 0;
     };
 
+    struct TimeToSampleEntry final
+    {
+      std::uint32_t sampleCount = 0;
+      std::uint32_t sampleDelta = 0;
+    };
+
+    void parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out);
     void parseStsz(std::span<std::byte const> bytes);
     void parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
     void parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
     void parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
 
+    static bool applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample);
     static bool buildSampleOffsets(std::vector<SampleEntry>& samples,
                                    std::span<std::uint64_t const> chunkOffsets,
                                    std::span<SampleToChunkEntry const> sampleToChunk);

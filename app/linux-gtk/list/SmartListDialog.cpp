@@ -16,6 +16,7 @@
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/SmartListEvaluator.h>
 #include <ao/rt/SmartListSource.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackSource.h>
 
@@ -276,32 +277,32 @@ namespace ao::gtk
 
         if (auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child()); row && label)
         {
-          auto const& title = row->getTitle();
-          auto const& artist = row->getArtist();
-          auto const& album = row->getAlbum();
+          auto const* title = row->stringField(rt::TrackField::Title);
+          auto const* artist = row->stringField(rt::TrackField::Artist);
+          auto const* album = row->stringField(rt::TrackField::Album);
           auto formatted = std::string{"(untitled)"};
 
-          if (!title.empty())
+          if (title != nullptr && !title->empty())
           {
-            formatted = title.raw();
+            formatted = title->raw();
 
-            if (!artist.empty())
+            if (artist != nullptr && !artist->empty())
             {
-              formatted = std::format("{} - {}", formatted, artist.raw());
+              formatted = std::format("{} - {}", formatted, artist->raw());
             }
 
-            if (!album.empty())
+            if (album != nullptr && !album->empty())
             {
-              formatted = std::format("{} ({})", formatted, album.raw());
+              formatted = std::format("{} ({})", formatted, album->raw());
             }
           }
-          else if (!artist.empty())
+          else if (artist != nullptr && !artist->empty())
           {
-            formatted = artist.raw();
+            formatted = artist->raw();
 
-            if (!album.empty())
+            if (album != nullptr && !album->empty())
             {
-              formatted = std::format("{} ({})", formatted, album.raw());
+              formatted = std::format("{} ({})", formatted, album->raw());
             }
           }
 

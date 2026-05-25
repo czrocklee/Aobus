@@ -48,5 +48,8 @@ namespace ao::gtk
     rt::Subscription _seekUpdateSub;
 
     bool _isPreviewing = false;
+    std::uint32_t _lastPosSec = 0;
+    std::uint32_t _lastDurSec = 0;
+    bool _dirty = true;
   };
 } // namespace ao::gtk

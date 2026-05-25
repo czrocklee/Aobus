@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <functional>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace ao::gtk
@@ -85,6 +86,7 @@ namespace ao::gtk
     bool _syncingColumnLayout = false;
     bool _capturingColumnLayout = false;
     Glib::RefPtr<Gtk::CssProvider> _dynamicCssProvider;
+    std::string _lastTitleCss;
     std::vector<sigc::scoped_connection> _columnNotifyConnections;
   };
 } // namespace ao::gtk

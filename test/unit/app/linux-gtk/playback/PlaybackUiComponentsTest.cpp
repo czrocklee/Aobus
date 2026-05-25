@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -50,6 +51,14 @@ namespace ao::gtk::test
       }
     };
   } // namespace
+
+  class SeekControlTestPeer final
+  {
+  public:
+    static void beginPointerSeek(SeekControl& control) { control.beginUserInteraction(); }
+    static void endPointerSeek(SeekControl& control) { control.endUserInteraction(); }
+    static void flushPendingSeeks(SeekControl& control) { control.executeDebouncedFinalSeek(); }
+  };
 
   TEST_CASE("Playback UI Components - Integration Behavior", "[playback][ui]")
   {
@@ -95,6 +104,89 @@ namespace ao::gtk::test
       // Note: Final scale value in SeekControl might not update during dragging
       // but the TimeLabel should reflect the preview position immediately.
       CHECK(label->get_text() == "1:00 / 5:00");
+    }
+
+    SECTION("SeekControl commits pointer seek exactly once on release")
+    {
+      auto seekControl = SeekControl{playback};
+      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+
+      REQUIRE(scale != nullptr);
+
+      auto const desc = audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .title = "Test", .durationMs = 300000};
+      playback.play(desc, ListId{1});
+
+      auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
+      [[maybe_unused]] auto seekSub =
+        playback.onSeekUpdate([&seekEvents](rt::PlaybackService::SeekUpdate const& ev) { seekEvents.push_back(ev); });
+
+      SeekControlTestPeer::beginPointerSeek(seekControl);
+      scale->set_value(120000.0);
+
+      REQUIRE(seekEvents.size() == 1);
+      CHECK(seekEvents[0].mode == rt::PlaybackService::SeekMode::Preview);
+      CHECK(seekEvents[0].positionMs == 120000);
+
+      SeekControlTestPeer::endPointerSeek(seekControl);
+      SeekControlTestPeer::flushPendingSeeks(seekControl);
+
+      REQUIRE(seekEvents.size() == 2);
+      CHECK(seekEvents[1].mode == rt::PlaybackService::SeekMode::Final);
+      CHECK(seekEvents[1].positionMs == 120000);
+
+      SeekControlTestPeer::endPointerSeek(seekControl);
+
+      CHECK(seekEvents.size() == 2);
+    }
+
+    SECTION("SeekControl ignores release after reset")
+    {
+      auto seekControl = SeekControl{playback};
+      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+
+      REQUIRE(scale != nullptr);
+
+      auto const desc = audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .durationMs = 100000};
+      playback.play(desc, ListId{1});
+
+      auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
+      [[maybe_unused]] auto seekSub =
+        playback.onSeekUpdate([&seekEvents](rt::PlaybackService::SeekUpdate const& ev) { seekEvents.push_back(ev); });
+
+      SeekControlTestPeer::beginPointerSeek(seekControl);
+      scale->set_value(40000.0);
+
+      REQUIRE(seekEvents.size() == 1);
+      CHECK(seekEvents[0].mode == rt::PlaybackService::SeekMode::Preview);
+
+      playback.stop();
+      SeekControlTestPeer::endPointerSeek(seekControl);
+
+      CHECK(seekEvents.size() == 1);
+      CHECK(scale->get_sensitive() == false);
+      CHECK(scale->get_value() == 0.0);
+    }
+
+    SECTION("SeekControl applies external final seek without emitting another seek")
+    {
+      auto seekControl = SeekControl{playback};
+      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+
+      REQUIRE(scale != nullptr);
+
+      auto const desc = audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .durationMs = 100000};
+      playback.play(desc, ListId{1});
+
+      auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
+      [[maybe_unused]] auto seekSub =
+        playback.onSeekUpdate([&seekEvents](rt::PlaybackService::SeekUpdate const& ev) { seekEvents.push_back(ev); });
+
+      playback.seek(45000, rt::PlaybackService::SeekMode::Final);
+
+      REQUIRE(seekEvents.size() == 1);
+      CHECK(seekEvents[0].mode == rt::PlaybackService::SeekMode::Final);
+      CHECK(seekEvents[0].positionMs == 45000);
+      CHECK(scale->get_value() == 45000.0);
     }
 
     SECTION("Reset on idle/stop")

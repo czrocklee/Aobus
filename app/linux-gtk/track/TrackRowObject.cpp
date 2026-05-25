@@ -15,6 +15,7 @@
 #include <glibmm/ustring.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -76,7 +77,7 @@ namespace ao::gtk
       return nullptr;
     }
 
-    return &_text[idx];
+    return &_text.at(idx);
   }
 
   bool TrackRowObject::setStringField(rt::TrackField field, Glib::ustring const& value)
@@ -88,7 +89,7 @@ namespace ao::gtk
       return false;
     }
 
-    _text[idx] = value;
+    _text.at(idx) = value;
     return true;
   }
 

@@ -118,6 +118,9 @@ namespace ao::gtk
 
     _interpolator.reset();
     _isPreviewing = false;
+    _dirty = true;
+    _lastPosSec = 0;
+    _lastDurSec = 0;
   }
 
   void TimeLabel::updateLabel(std::uint32_t posMs, std::uint32_t durMs)
@@ -125,6 +128,36 @@ namespace ao::gtk
     int const msInSec = 1000;
     auto const posSec = posMs / msInSec;
     auto const durSec = durMs / msInSec;
+
+    switch (_mode)
+    {
+      case TimeLabelMode::Elapsed:
+        if (!_dirty && posSec == _lastPosSec)
+        {
+          return;
+        }
+
+        break;
+      case TimeLabelMode::Duration:
+        if (!_dirty && durSec == _lastDurSec)
+        {
+          return;
+        }
+
+        break;
+      case TimeLabelMode::Default:
+      default:
+        if (!_dirty && posSec == _lastPosSec && durSec == _lastDurSec)
+        {
+          return;
+        }
+
+        break;
+    }
+
+    _lastPosSec = posSec;
+    _lastDurSec = durSec;
+    _dirty = false;
 
     switch (int const secInMin = 60; _mode)
     {

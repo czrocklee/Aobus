@@ -128,6 +128,29 @@ namespace ao::media::mp4
   static_assert(alignof(StsdAtomLayout) == 1);
   static_assert(std::is_trivial_v<StsdAtomLayout>);
 
+  // stts (Time To Sample Box)
+  // Fixed header: length + type + version/flags + entryCount (16 bytes)
+  // Followed by entryCount entries of 8 bytes each
+  struct SttsAtomLayout
+  {
+    static constexpr std::size_t kByteCount = 16;
+    using FixedSize = std::false_type;
+
+    AtomLayout common;
+    boost::endian::big_uint32_buf_t versionAndFlags;
+    boost::endian::big_uint32_buf_t entryCount;
+
+    struct Entry
+    {
+      boost::endian::big_uint32_buf_t sampleCount;
+      boost::endian::big_uint32_buf_t sampleDelta;
+    };
+  };
+
+  static_assert(sizeof(SttsAtomLayout) == SttsAtomLayout::kByteCount);
+  static_assert(alignof(SttsAtomLayout) == 1);
+  static_assert(std::is_trivial_v<SttsAtomLayout>);
+
   // stsz (Sample Size Box)  // Fixed header: length + type + version/flags + sampleSize + sampleCount (20 bytes)
   // Followed by sampleCount entries of 4 bytes each (when sampleSize == 0)
   struct StszAtomLayout

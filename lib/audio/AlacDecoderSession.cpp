@@ -70,6 +70,26 @@ namespace ao::audio
     {
       decoder = std::make_unique<ALACDecoder>();
     }
+
+    std::uint64_t firstFrameIndex(std::uint32_t sampleIndex) const noexcept
+    {
+      if (!demuxer)
+      {
+        return 0;
+      }
+
+      if (auto const sampleInfo = demuxer->getSampleInfo(sampleIndex);
+          timescale > 0 && (sampleInfo.startTime > 0 || sampleInfo.duration > 0))
+      {
+        return (sampleInfo.startTime * info.sourceFormat.sampleRate) / timescale;
+      }
+
+      auto const frameLength = decoder->mConfig.frameLength > 0
+                                 ? decoder->mConfig.frameLength
+                                 : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
+
+      return static_cast<std::uint64_t>(sampleIndex) * frameLength;
+    }
   };
 
   AlacDecoderSession::AlacDecoderSession(Format outputFormat)
@@ -152,14 +172,20 @@ namespace ao::audio
     _impl->timescale = 0;
   }
 
-  Result<> AlacDecoderSession::seek(std::uint32_t /*positionMs*/)
+  Result<> AlacDecoderSession::seek(std::uint32_t positionMs)
   {
     if (_impl->timescale == 0)
     {
       return makeError(Error::Code::SeekFailed, "Timescale is 0");
     }
 
-    _impl->currentSampleIndex = 0;
+    if (!_impl->demuxer)
+    {
+      return makeError(Error::Code::SeekFailed, "ALAC demuxer is not open");
+    }
+
+    auto const targetTime = (static_cast<std::uint64_t>(positionMs) * _impl->timescale) / 1000U;
+    _impl->currentSampleIndex = _impl->demuxer->sampleIndexAtTime(targetTime);
     return {};
   }
 
@@ -174,6 +200,7 @@ namespace ao::audio
       return PcmBlock{.bytes = {}, .endOfStream = true};
     }
 
+    auto const firstFrameIndex = _impl->firstFrameIndex(_impl->currentSampleIndex);
     auto const packet = _impl->demuxer->getSamplePayload(_impl->currentSampleIndex);
 
     if (packet.empty())
@@ -239,6 +266,7 @@ namespace ao::audio
         .bytes = _impl->targetPcm,
         .bitDepth = targetBps,
         .frames = numFrames,
+        .firstFrameIndex = firstFrameIndex,
         .endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount()),
       };
     }
@@ -264,6 +292,7 @@ namespace ao::audio
       .bytes = _impl->targetPcm,
       .bitDepth = targetBps,
       .frames = numFrames,
+      .firstFrameIndex = firstFrameIndex,
       .endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount()),
     };
   }

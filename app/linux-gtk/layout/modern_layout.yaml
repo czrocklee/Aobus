@@ -57,85 +57,73 @@ root:
 
 templates:
   playback.modernBar:
-    type: centerBox
+    type: box
+    props:
+      orientation: vertical
     layout:
-      cssClasses: ao-modern-bottom-bar
+      cssClasses: ao-modern-bottom-bar-wrapper
       hexpand: true
     children:
-
-      # --- Start Slot: image + now-playing text ---
-      - type: box
-        props:
-          orientation: horizontal
-          spacing: 12
+      - type: playback.seekSlider
         layout:
-          slot: start
-          valign: center
-        children:
-          - type: playback.image
-            props:
-              variant: thumbnail
-              action: jumpToAlbum
-          - type: box
-            props:
-              orientation: vertical
-              spacing: 6
-            layout:
-              valign: center
-              halign: start
-            children:
-              - type: playback.currentTitleLabel
+          cssClasses: ao-seekbar-modern-full
+          hexpand: true
 
-                props:
-                  action: reveal
-                layout:
-                  cssClasses: ao-nowplaying-title
-              - type: playback.currentArtistLabel
-                props:
-                  action: filterByField
-                layout:
-                  cssClasses: ao-nowplaying-artist
-
-      # --- Center Slot: Controls + seekbar ---
-      - type: box
-        props:
-          orientation: vertical
-          spacing: 8
+      - type: centerBox
         layout:
-          slot: center
-          valign: center
-          cssClasses: ao-modern-center-group
+          cssClasses: ao-modern-bottom-bar-content
+          hexpand: true
         children:
-          # Seekbar row
+
+          # --- Start Slot: image + now-playing text ---
           - type: box
             props:
               orientation: horizontal
-              spacing: 8
+              spacing: 12
             layout:
-              hexpand: true
+              slot: start
+              valign: center
+            children:
+              - type: playback.image
+                props:
+                  variant: thumbnail
+                  action: jumpToAlbum
+              - type: box
+                props:
+                  orientation: vertical
+                  spacing: 6
+                layout:
+                  valign: center
+                  halign: start
+                children:
+                  - type: playback.currentTitleLabel
+
+                    props:
+                      action: reveal
+                    layout:
+                      cssClasses: ao-nowplaying-title
+                  - type: playback.currentArtistLabel
+                    props:
+                      action: filterByField
+                    layout:
+                      cssClasses: ao-nowplaying-artist
+
+          # --- Center Slot: Controls + time ---
+          - type: box
+            props:
+              orientation: horizontal
+              spacing: 16
+            layout:
+              slot: center
+              valign: center
+              halign: center
+              cssClasses: ao-modern-center-group
             children:
               - type: playback.timeLabel
                 props:
                   mode: elapsed
                 layout:
                   cssClasses: ao-modern-time-label
-              - type: playback.seekSlider
-                layout:
-                  cssClasses: ao-seekbar-modern
-                  hexpand: true
-              - type: playback.timeLabel
-                props:
-                  mode: duration
-                layout:
-                  cssClasses: ao-modern-time-label
-          # Transport controls
-          - type: box
-            props:
-              orientation: horizontal
-              spacing: 16
-            layout:
-              halign: center
-            children:
               - type: playback.stopButton
                 props:
                   size: small
@@ -146,16 +134,21 @@ templates:
                   size: large
                 layout:
                   cssClasses: ao-play-button-prominent
+              - type: playback.timeLabel
+                props:
+                  mode: duration
+                layout:
+                  cssClasses: ao-modern-time-label
 
-      # --- End Slot: volume + output ---
-      - type: box
-        props:
-          orientation: horizontal
-          spacing: 12
-        layout:
-          slot: end
-          valign: center
-          halign: end
-        children:
-          - type: playback.volumeControl
-          - type: playback.outputButton
+          # --- End Slot: volume + output ---
+          - type: box
+            props:
+              orientation: horizontal
+              spacing: 12
+            layout:
+              slot: end
+              valign: center
+              halign: end
+            children:
+              - type: playback.volumeControl
+              - type: playback.outputButton

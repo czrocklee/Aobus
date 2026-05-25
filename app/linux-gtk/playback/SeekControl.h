@@ -9,8 +9,14 @@
 
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
+#include <sigc++/connection.h>
 
 #include <cstdint>
+
+namespace ao::gtk::test
+{
+  class SeekControlTestPeer;
+}
 
 namespace ao::gtk
 {
@@ -21,7 +27,7 @@ namespace ao::gtk
   {
   public:
     explicit SeekControl(rt::PlaybackService& playbackService);
-    ~SeekControl() = default;
+    ~SeekControl();
 
     SeekControl(SeekControl const&) = delete;
     SeekControl& operator=(SeekControl const&) = delete;
@@ -31,14 +37,32 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _scale; }
 
   private:
+    enum class InteractionState : std::uint8_t
+    {
+      Idle,
+      Pointer,
+    };
+
+    void handleStarted();
+    void handleScaleValueChanged();
+    void beginUserInteraction();
+    void endUserInteraction();
+    void previewSeekFromScale();
+    void commitSeekFromScale();
+    void executeDebouncedFinalSeek();
+    void setScaleRange(std::uint32_t durationMs);
+    void setScaleValue(std::uint32_t positionMs);
+    std::uint32_t scalePositionMs() const noexcept;
     void reset();
 
     rt::PlaybackService& _playbackService;
     Gtk::Scale _scale;
     PlaybackPositionInterpolator _interpolator;
     std::uint32_t _durationMs = 0;
-    bool _isDragging = false;
-    bool _updating = false;
+    InteractionState _interactionState = InteractionState::Idle;
+    bool _pendingFinalSeek = false;
+    bool _updatingScale = false;
+    sigc::connection _debounceConnection;
 
     rt::Subscription _startedSub;
     rt::Subscription _pausedSub;
@@ -46,5 +70,7 @@ namespace ao::gtk
     rt::Subscription _stoppedSub;
     rt::Subscription _preparingSub;
     rt::Subscription _seekUpdateSub;
+
+    friend class test::SeekControlTestPeer;
   };
 } // namespace ao::gtk
