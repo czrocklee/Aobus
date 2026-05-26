@@ -134,6 +134,17 @@ namespace ao::rt::test
       service.destroyView(viewId);
       CHECK(received == viewId);
     }
+
+    SECTION("destroy releases the owned projection")
+    {
+      auto projection = service.trackListProjection(viewId);
+      REQUIRE(projection != nullptr);
+
+      service.destroyView(viewId);
+
+      CHECK(service.trackListProjection(viewId) == nullptr);
+      CHECK(projection->viewId() == viewId);
+    }
   }
 
   TEST_CASE("ViewService - trackListState access", "[app][runtime][view]")
@@ -322,4 +333,166 @@ namespace ao::rt::test
     service.setPresentation(result.viewId, albumPreset->spec);
     CHECK(callCount == 2);
   }
-}
+
+  TEST_CASE("ViewService - setPresentation with preset string", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto service = env.makeService();
+    auto const result = service.createView({}, true);
+
+    auto const spec = service.setPresentation(result.viewId, "artists");
+    auto const snap = service.trackListState(result.viewId);
+
+    CHECK(spec.id == "artists");
+    CHECK(snap.groupBy == TrackGroupKey::Artist);
+
+    // Invalid viewId
+    auto const specInv = service.setPresentation(ViewId{999}, "artists");
+    CHECK(specInv.id.empty());
+  }
+
+  TEST_CASE("ViewService - openListInView", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto service = env.makeService();
+    auto const trackId = env.library.addTrack(TrackSpec{.title = "List Track"});
+    auto const listId = env.mutation.createList(LibraryMutationService::ListDraft{
+      .kind = LibraryMutationService::ListKind::Manual,
+      .name = "Manual",
+      .trackIds = {trackId},
+    });
+
+    auto const result = service.createView({}, true);
+
+    auto listChanged = kInvalidListId;
+    auto sub = service.onListChanged([&](auto const& ev) { listChanged = ev.listId; });
+
+    auto projectionChanged = TrackListProjectionChanged{};
+    auto projectionSub = service.onProjectionChanged([&](auto const& ev) { projectionChanged = ev; });
+
+    service.openListInView(result.viewId, listId);
+    auto const snap = service.trackListState(result.viewId);
+    auto const projection = service.trackListProjection(result.viewId);
+
+    REQUIRE(projection != nullptr);
+    CHECK(snap.listId == listId);
+    CHECK(listChanged == listId);
+    CHECK(projectionChanged.viewId == result.viewId);
+    CHECK(projectionChanged.projection == projection);
+    REQUIRE(projection->size() == 1);
+    CHECK(projection->trackIdAt(0) == trackId);
+
+    // Invalid viewId does not crash
+    REQUIRE_NOTHROW(service.openListInView(ViewId{999}, listId));
+  }
+
+  TEST_CASE("ViewService - setFilter", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto const oldTrackId = env.library.addTrack(TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = env.library.addTrack(TrackSpec{.title = "New", .year = 2021});
+    env.store->reloadAllTracks();
+
+    auto service = env.makeService();
+    auto const result = service.createView({}, true);
+
+    auto filterStr = std::string{};
+    auto filterSub = service.onFilterChanged([&](auto const& ev) { filterStr = ev.filterExpression; });
+
+    auto statusStr = std::string{};
+    auto statusHasError = true;
+    auto statusSub = service.onFilterStatusChanged(
+      [&](auto const& ev)
+      {
+        statusStr = ev.expression;
+        statusHasError = static_cast<bool>(ev.optError);
+      });
+
+    auto projView = kInvalidViewId;
+    auto projectionChangedCount = std::int32_t{0};
+    auto projSub = service.onProjectionChanged(
+      [&](auto const& ev)
+      {
+        projView = ev.viewId;
+        ++projectionChangedCount;
+      });
+
+    SECTION("setting a new filter expression creates adHocSource")
+    {
+      service.setFilter(result.viewId, "$year > 2000");
+      auto const snap = service.trackListState(result.viewId);
+      auto const filteredProjection = service.trackListProjection(result.viewId);
+
+      REQUIRE(filteredProjection != nullptr);
+      CHECK(snap.filterExpression == "$year > 2000");
+      CHECK(filterStr == "$year > 2000");
+      CHECK(statusStr == "$year > 2000");
+      CHECK_FALSE(statusHasError);
+      CHECK(projView == result.viewId);
+      CHECK(projectionChangedCount == 1);
+      REQUIRE(filteredProjection->size() == 1);
+      CHECK(filteredProjection->trackIdAt(0) == newTrackId);
+
+      // setting another filter updates adHocSource
+      service.setFilter(result.viewId, "$year > 2025");
+      auto const snap2 = service.trackListState(result.viewId);
+      auto const updatedFilteredProjection = service.trackListProjection(result.viewId);
+      CHECK(snap2.filterExpression == "$year > 2025");
+      CHECK(filterStr == "$year > 2025");
+      CHECK(projectionChangedCount == 1);
+      CHECK(updatedFilteredProjection == filteredProjection);
+      REQUIRE(updatedFilteredProjection != nullptr);
+      CHECK(updatedFilteredProjection->size() == 0);
+
+      // clearing filter removes adHocSource
+      service.setFilter(result.viewId, "");
+      auto const snap3 = service.trackListState(result.viewId);
+      auto const unfilteredProjection = service.trackListProjection(result.viewId);
+      CHECK(snap3.filterExpression.empty());
+      CHECK(filterStr.empty());
+      CHECK(projectionChangedCount == 2);
+      CHECK(unfilteredProjection != filteredProjection);
+      REQUIRE(unfilteredProjection != nullptr);
+      REQUIRE(unfilteredProjection->size() == 2);
+      CHECK(unfilteredProjection->indexOf(oldTrackId).has_value());
+      CHECK(unfilteredProjection->indexOf(newTrackId).has_value());
+    }
+
+    SECTION("invalid view ID is safe")
+    {
+      REQUIRE_NOTHROW(service.setFilter(ViewId{999}, "foo"));
+    }
+  }
+
+  TEST_CASE("ViewService - openListInView with active filter", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto const oldTrackId = env.library.addTrack(TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = env.library.addTrack(TrackSpec{.title = "New", .year = 2021});
+    env.store->reloadAllTracks();
+
+    auto const oldListId = env.mutation.createList(LibraryMutationService::ListDraft{
+      .kind = LibraryMutationService::ListKind::Manual,
+      .name = "Old only",
+      .trackIds = {oldTrackId},
+    });
+
+    auto service = env.makeService();
+    auto const result = service.createView({.filterExpression = "$year > 2000"}, true);
+    auto const initialProjection = service.trackListProjection(result.viewId);
+
+    REQUIRE(initialProjection != nullptr);
+    REQUIRE(initialProjection->size() == 1);
+    CHECK(initialProjection->trackIdAt(0) == newTrackId);
+
+    service.openListInView(result.viewId, oldListId);
+    auto const snap = service.trackListState(result.viewId);
+    auto const projection = service.trackListProjection(result.viewId);
+
+    REQUIRE(projection != nullptr);
+    CHECK(snap.listId == oldListId);
+    CHECK(snap.filterExpression == "$year > 2000"); // retains filter
+    CHECK(projection != initialProjection);
+    CHECK(projection->size() == 0);
+  }
+} // namespace ao::rt::test

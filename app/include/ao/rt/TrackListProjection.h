@@ -65,6 +65,8 @@ namespace ao::rt
     void onUpdated(std::span<TrackId const> ids) override;
     void onRemoved(std::span<TrackId const> ids) override;
 
+    void onSourceDestroyed() override;
+
     void publishDelta(TrackListProjectionDeltaBatch const& batch);
 
     struct Impl;

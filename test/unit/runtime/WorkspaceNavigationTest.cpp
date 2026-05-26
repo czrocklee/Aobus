@@ -6,6 +6,8 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
@@ -15,8 +17,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <string>
@@ -493,5 +497,189 @@ namespace ao::rt::test
     CHECK(state.listId == ListId{10});
     CHECK(runtime.workspace().canGoBack() == false);
     CHECK(runtime.workspace().canGoForward() == true);
+  }
+
+  TEST_CASE("WorkspaceService - onFocusedViewChanged emits on focus changes", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    auto focusedViewId = kInvalidViewId;
+    auto const sub = runtime.workspace().onFocusedViewChanged([&](ViewId id) { focusedViewId = id; });
+
+    runtime.workspace().navigateTo(ListId{10});
+    auto activeViewId = runtime.workspace().layoutState().activeViewId;
+    CHECK(focusedViewId == activeViewId);
+  }
+
+  TEST_CASE("WorkspaceService - custom presets management", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    std::int32_t emitCount = 0;
+    auto const sub = runtime.workspace().onCustomPresetsChanged([&] { emitCount++; });
+
+    auto preset = CustomTrackPresentationPreset{};
+    preset.label = "custom1";
+    preset.spec.id = "custom1_id";
+    preset.spec.groupBy = TrackGroupKey::Composer;
+
+    runtime.workspace().addCustomPreset(preset);
+    CHECK(emitCount == 1);
+
+    auto presets = runtime.workspace().customPresets();
+    REQUIRE(presets.size() == 1);
+    CHECK(presets[0].label == "custom1");
+
+    // Add another preset to see if it updates
+    preset.spec.groupBy = TrackGroupKey::Work;
+    runtime.workspace().addCustomPreset(preset);
+    CHECK(emitCount == 2);
+    presets = runtime.workspace().customPresets();
+    REQUIRE(presets.size() == 1);
+    CHECK(presets[0].spec.groupBy == TrackGroupKey::Work);
+
+    // Retrieve preset by id
+    runtime.workspace().navigateTo(ListId{10});
+    auto const spec = runtime.workspace().setActivePresentation("custom1_id");
+    CHECK(spec.groupBy == TrackGroupKey::Work);
+
+    // Remove preset
+    runtime.workspace().removeCustomPreset("custom1");
+    CHECK(emitCount == 3);
+    CHECK(runtime.workspace().customPresets().empty());
+  }
+
+  TEST_CASE("WorkspaceService - lists deleted causes views to close", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    auto listId = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "Test List"});
+    runtime.workspace().navigateTo(listId);
+
+    auto activeViewId = runtime.workspace().layoutState().activeViewId;
+    CHECK(activeViewId != kInvalidViewId);
+
+    runtime.mutation().deleteList(listId);
+
+    auto layout = runtime.workspace().layoutState();
+    CHECK(!std::ranges::contains(layout.openViews, activeViewId));
+  }
+
+  TEST_CASE("WorkspaceService - jumpToAlbum valid track reveals track", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    auto const trackId =
+      TrackId{100}; // jumpToAlbum doesn't validate if track exists in library, it just passes the ID to playback
+
+    bool revealCalled = false;
+    auto const sub = runtime.playback().onRevealTrackRequested(
+      [&](PlaybackService::RevealTrackRequested const& req)
+      {
+        if (req.trackId == trackId)
+        {
+          revealCalled = true;
+        }
+      });
+
+    runtime.workspace().jumpToAlbum(trackId);
+    CHECK(revealCalled == true);
+
+    auto state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    CHECK(state.listId == kAllTracksListId);
+    CHECK(state.presentation.id == "albums");
+  }
+
+  TEST_CASE("WorkspaceService - session flush error path", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    // Create a config store using a directory path, which will fail to open as a file
+    auto badConfigStore = std::make_shared<ConfigStore>(tempDir.path());
+    // Should not throw, but flush will fail and log an error
+    REQUIRE_NOTHROW(runtime.workspace().saveSession(*badConfigStore));
+  }
+
+  TEST_CASE("WorkspaceService - session restore error path", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    auto const configPath = tempDir.path() + "/bad.yaml";
+    std::ofstream{configPath} << "workspace: \"not a map\"";
+
+    auto badConfigStore = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
+    // Should not throw, just return early and log a warning
+    REQUIRE_NOTHROW(runtime.workspace().restoreSession(*badConfigStore));
+  }
+
+  TEST_CASE("WorkspaceService - invalid navigation targets and presentations are handled gracefully", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    // Test invalid target (invalid GlobalViewKind)
+    runtime.workspace().navigateTo(static_cast<GlobalViewKind>(999));
+    CHECK(runtime.workspace().layoutState().activeViewId == kInvalidViewId);
+
+    // Test invalid presentation ID
+    auto spec = runtime.workspace().setActivePresentation("non_existent_preset");
+    CHECK(spec.id.empty());
+  }
+
+  TEST_CASE("WorkspaceService - goBack recreates view if destroyed", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    auto const listA = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "A"});
+    auto const listB = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "B"});
+
+    runtime.workspace().navigateTo(listA, {.recordHistory = true});
+    auto const viewA = runtime.workspace().layoutState().activeViewId;
+
+    runtime.workspace().navigateTo(listB, {.recordHistory = true});
+    auto const viewB = runtime.workspace().layoutState().activeViewId;
+
+    CHECK(viewA != viewB);
+
+    // Destroy View A
+    runtime.workspace().closeView(viewA);
+
+    // Go back to listA, this should recreate the view
+    CHECK(runtime.workspace().goBack());
+
+    auto const newViewA = runtime.workspace().layoutState().activeViewId;
+    CHECK(newViewA != kInvalidViewId);
+    CHECK(newViewA != viewA); // Should be a new ID since it was recreated
+  }
+
+  TEST_CASE("WorkspaceService - session restore falls back to front view if active is lost", "[workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    auto const listId = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "A list"});
+    auto const configPath = tempDir.path() + "/config.yaml";
+
+    {
+      auto file = std::ofstream{configPath};
+      file << "workspace:\n";
+      file << "  activeListId: 9999\n";
+      file << "  openViews:\n";
+      file << "    - listId: " << static_cast<std::uint32_t>(listId) << "\n";
+    }
+
+    auto store = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
+    runtime.workspace().restoreSession(*store);
+
+    auto layout = runtime.workspace().layoutState();
+    CHECK(layout.openViews.size() == 1);
+    CHECK(layout.activeViewId == layout.openViews.front());
   }
 }

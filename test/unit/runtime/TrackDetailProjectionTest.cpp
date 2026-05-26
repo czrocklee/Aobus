@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtils.h"
+#include <ao/Type.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
@@ -17,8 +18,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -133,5 +137,77 @@ namespace ao::rt::test
 
     // Albums differ
     CHECK(snap.album.mixed);
+  }
+
+  TEST_CASE("TrackDetailProjection with ExplicitSelectionTarget", "[projection]")
+  {
+    auto env = Env{};
+    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
+    auto const proj =
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector<TrackId>{id1}}, env.workspace, env.mutation);
+    auto const snap = proj->snapshot();
+    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    CHECK(snap.title.optValue.value() == "Song A");
+  }
+
+  TEST_CASE("TrackDetailProjection with FocusedViewTarget", "[projection]")
+  {
+    auto env = Env{};
+    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
+    auto const id2 = env.lib.addTrack(TrackSpec{.title = "Song B"});
+
+    auto const proj = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.mutation);
+
+    // Subscribe to verify notifications
+    std::int32_t callCount = 0;
+    auto sub = proj->subscribe([&](TrackDetailSnapshot const&) { callCount++; });
+    CHECK(callCount == 1); // Called immediately
+
+    auto const reply1 = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
+    env.views.setSelection(reply1.viewId, {id1});
+    env.workspace.navigateTo(GlobalViewKind::AllTracks); // Should trigger onFocusedViewChanged
+
+    CHECK(callCount >= 2);
+    CHECK(proj->snapshot().title.optValue.value() == "Song A");
+
+    // Change selection in the focused view
+    env.views.setSelection(reply1.viewId, {id2});
+    CHECK(proj->snapshot().title.optValue.value() == "Song B");
+
+    // Change focus away
+    env.workspace.closeView(reply1.viewId);
+    // Unsubscribe
+    sub = {};
+
+    // Now trigger a selection change in the old view, should NOT update because it's no longer focused
+    env.views.setSelection(reply1.viewId, {id1});
+    CHECK(proj->snapshot().title.optValue.value() == "Song B");
+  }
+
+  TEST_CASE("TrackDetailProjection with non-existent track", "[projection]")
+  {
+    auto env = Env{};
+    auto const proj = env.views.detailProjection(
+      ExplicitSelectionTarget{std::vector<TrackId>{TrackId{9999}}}, env.workspace, env.mutation);
+    auto const snap = proj->snapshot();
+    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    CHECK_FALSE(snap.title.optValue.has_value());
+  }
+
+  TEST_CASE("TrackDetailProjection with tags", "[projection]")
+  {
+    auto env = Env{};
+    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
+
+    // Add tag
+    auto const targetIds = std::vector<TrackId>{id1};
+    auto const tagsToAdd = std::vector<std::string>{"MyTag"};
+    env.mutation.editTags(targetIds, tagsToAdd, {});
+
+    auto const proj =
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector<TrackId>{id1}}, env.workspace, env.mutation);
+    auto const snap = proj->snapshot();
+    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    CHECK(snap.commonTagIds.size() == 1);
   }
 } // namespace ao::rt::test

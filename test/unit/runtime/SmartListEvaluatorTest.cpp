@@ -597,5 +597,170 @@ namespace ao::rt::test
       CHECK(hotList.size() == 1);
       CHECK(coldList.size() == 1);
     }
+
+    SECTION("evaluator destruction detaches from sources")
+    {
+      auto testLibrary = TestMusicLibrary{};
+      auto source = MutableTrackSource{};
+      auto engine = std::make_unique<SmartListEvaluator>(testLibrary.library());
+      auto list = std::make_unique<SmartListSource>(source, testLibrary.library(), *engine);
+
+      // Destroy engine BEFORE source and list
+      // Note: list won't be able to reload anymore but we just want to hit the destructor
+      engine.reset();
+      list.reset();
+    }
+
+    SECTION("single mutations on base source are handled correctly")
+    {
+      auto testLibrary = TestMusicLibrary{};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto source = MutableTrackSource{};
+
+      auto list = SmartListSource{source, testLibrary.library(), engine};
+      list.setExpression("$year >= 2020");
+      list.reload();
+
+      auto t1 = testLibrary.addTrack(makeTrackSpec("Old", 2010));
+      auto t2 = testLibrary.addTrack(makeTrackSpec("New1", 2021));
+
+      // Single Insert
+      source.insert(t2, source.size());
+      CHECK(list.size() == 1);
+
+      source.insert(t1, source.size());
+      CHECK(list.size() == 1);
+
+      // Single Update
+      testLibrary.updateTrack(t1, [](TrackBuilder& builder) { builder.metadata().year(2022); });
+      source.update(t1);
+      CHECK(list.size() == 2);
+
+      // Single Remove
+      source.remove(t2);
+      CHECK(list.size() == 1);
+    }
+
+    SECTION("batch mutations trigger flat_set optimizations")
+    {
+      auto testLibrary = TestMusicLibrary{};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto source = MutableTrackSource{};
+
+      auto list = SmartListSource{source, testLibrary.library(), engine};
+      list.setExpression("$year >= 2020");
+      list.reload();
+
+      auto t1 = testLibrary.addTrack(makeTrackSpec("Old", 2010));
+      auto t2 = testLibrary.addTrack(makeTrackSpec("New1", 2021));
+      auto t3 = testLibrary.addTrack(makeTrackSpec("New2", 2022));
+
+      auto const batchArray = std::to_array<TrackId>({t1, t2, t3});
+      source.batchInsert(batchArray);
+      CHECK(list.size() == 2);
+
+      auto const removeArray = std::to_array<TrackId>({t1});
+      source.batchRemove(removeArray);
+      CHECK(list.size() == 2); // t2 and t3
+
+      // Trigger batch update that causes transitions
+      // t2 matches -> won't match (removed)
+      // t1 doesn't match -> will match (inserted)
+      // t3 matches -> still matches (updated)
+      testLibrary.updateTrack(t2, [](TrackBuilder& builder) { builder.metadata().year(2010); }); // Remove
+      source.insert(t1, source.size()); // re-add t1 to source so it can be updated
+      testLibrary.updateTrack(t1, [](TrackBuilder& builder) { builder.metadata().year(2025); });       // Insert
+      testLibrary.updateTrack(t3, [](TrackBuilder& builder) { builder.metadata().title("Updated"); }); // Update
+
+      auto const updateArray = std::to_array<TrackId>({t1, t2, t3});
+      source.batchUpdate(updateArray);
+
+      CHECK(list.size() == 2); // t1 and t3
+    }
+
+    SECTION("HotAndCold access profile optimization")
+    {
+      auto testLibrary = TestMusicLibrary{};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto source = MutableTrackSource{};
+
+      auto list = SmartListSource{source, testLibrary.library(), engine};
+      // Requires both metadata and property reader
+      list.setExpression("$year >= 2020 && @duration >= 180000");
+
+      auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, 200000));
+      auto t2 = testLibrary.addTrack(makeTrackSpec("Bad", 2022, 1000));
+      auto const batchArray = std::array{t1, t2};
+      source.batchInsert(batchArray);
+
+      list.reload();
+      CHECK(list.size() == 1);
+      CHECK(list.trackIdAt(0) == t1);
+    }
+
+    SECTION("SmartListSource::notifyUpdated relays to evaluator")
+    {
+      auto testLibrary = TestMusicLibrary{};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto source = MutableTrackSource{};
+
+      auto list = SmartListSource{source, testLibrary.library(), engine};
+      list.setExpression("$year >= 2020");
+      list.reload();
+
+      auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2020));
+      auto const batchArray = std::array{t1};
+      source.batchInsert(batchArray);
+
+      // Mutate via base library, then notify list directly
+      testLibrary.updateTrack(t1, [](TrackBuilder& builder) { builder.metadata().year(2022); });
+      list.notifyUpdated(t1);
+
+      CHECK(list.size() == 1);
+    }
+
+    SECTION("SmartListSource::indexOf and TrackSource::notifyUpdated coverage")
+    {
+      auto testLibrary = TestMusicLibrary{};
+      auto engine = SmartListEvaluator{testLibrary.library()};
+      auto source = MutableTrackSource{};
+
+      auto list = SmartListSource{source, testLibrary.library(), engine};
+      list.setExpression("$year >= 2020");
+      list.reload();
+
+      auto t1 = testLibrary.addTrack(makeTrackSpec("Track1", 2020));
+      auto t2 = testLibrary.addTrack(makeTrackSpec("Track2", 2010));
+      auto t3 = testLibrary.addTrack(makeTrackSpec("Track3", 2021));
+
+      source.batchInsert(std::to_array<TrackId>({t1, t2, t3}));
+
+      // Test SmartListSource::indexOf
+      CHECK(list.indexOf(t1) == 0);                      // Present
+      CHECK(list.indexOf(t3) == 1);                      // Present (flat_set sorted by ID)
+      CHECK(list.indexOf(t2) == std::nullopt);           // Filtered out
+      CHECK(list.indexOf(TrackId{999}) == std::nullopt); // Non-existent
+
+      // Test TrackSource::notifyUpdated(TrackId id) without index
+      auto spy = ObserverSpy{};
+      source.attach(&spy);
+
+      // Call the base class method directly
+      source.TrackSource::notifyUpdated(t3); // Calls TrackSource::notifyUpdated(id)
+
+      REQUIRE(spy.events.size() == 1);
+      CHECK(spy.events[0].kind == ObserverSpy::EventKind::Updated);
+      CHECK(spy.events[0].id == t3);
+
+      // t2 is not in source's indexOf (wait, it IS in source, just not in list)
+      // Let's call it on a non-existent track
+      spy.clear();
+      source.TrackSource::notifyUpdated(TrackId{999});
+      CHECK(spy.events.empty()); // Should not notify since it's not in the source
+
+      source.detach(&spy);
+
+      // Destructor for TrackSource is implicitly covered when MutableTrackSource is destroyed
+    }
   }
 } // namespace ao::rt::test

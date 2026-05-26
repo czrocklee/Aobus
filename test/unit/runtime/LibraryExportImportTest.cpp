@@ -19,6 +19,7 @@
 #include <ao/rt/LibraryYamlImporter.h>
 #include <ao/rt/yaml/Utils.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -818,6 +819,7 @@ library:
 
     auto trackId1 = kInvalidTrackId;
     auto trackId2 = kInvalidTrackId;
+    auto trackId3 = kInvalidTrackId;
     {
       auto txn = ml.writeTransaction();
       auto& dict = ml.dictionary();
@@ -846,8 +848,26 @@ library:
                                                                                 p2c.writeTo(c);
                                                                               });
 
+      auto trackBuilder3 = TrackBuilder::createNew();
+      trackBuilder3.property().uri("cover.flac");
+      trackBuilder3.metadata().title("Different Title");
+      trackBuilder3.metadata().rating(5);
+      auto coverData = std::vector<std::byte>{std::byte{1}, std::byte{2}, std::byte{3}};
+      trackBuilder3.metadata().coverArtData(coverData);
+      auto const [p3h, p3c] = trackBuilder3.prepare(txn, dict, ml.resources());
+      std::tie(trackId3, std::ignore) = ml.tracks().writer(txn).createHotCold(p3h.size(),
+                                                                              p3c.size(),
+                                                                              [&](TrackId, auto h, auto c)
+                                                                              {
+                                                                                p3h.writeTo(h);
+                                                                                p3c.writeTo(c);
+                                                                              });
+
       txn.commit();
     }
+
+    std::filesystem::copy_file(std::filesystem::current_path() / "test/integration/tag/test_data/with_cover.flac",
+                               std::filesystem::path{temp.path()} / "cover.flac");
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";
     auto exporter = rt::LibraryYamlExporter{ml};
@@ -859,9 +879,13 @@ library:
       auto root = tree.rootref();
       auto tracks = root["library"]["tracks"];
       REQUIRE(tracks.is_seq());
-      REQUIRE(tracks.num_children() == 2);
+      REQUIRE(tracks.num_children() == 3);
 
       CHECK(yaml::scalarView(tracks[0]["title"]) == "Should Export Fully");
+      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
+      CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
+      CHECK(yaml::scalarView(tracks[2]["rating"]) == "5");
+      CHECK(tracks[2].has_child("coverArtBase64"));
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
     }
   }
@@ -1065,5 +1089,75 @@ library:
       REQUIRE(optList);
       CHECK(optList->tracks().empty());
     }
+  }
+
+  TEST_CASE("Library Import Coverage", "[app][core][yaml]")
+  {
+    auto const temp = TempDir{};
+    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto importer = rt::LibraryYamlImporter{ml};
+    auto const yamlPath = std::filesystem::path{temp.path()} / "coverage.yaml";
+
+    // Create symlink to valid flac
+    auto const songPath = std::filesystem::path{temp.path()} / "A.flac";
+    std::filesystem::copy_file(
+      std::filesystem::current_path() / "test/integration/tag/test_data/basic_metadata.flac", songPath);
+
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << "version: 1\n";
+      yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
+      yaml << "export_mode: metadata\n";
+      yaml << "library:\n";
+      yaml << "  tracks:\n";
+      yaml << "    - uri: \"A.flac\"\n";
+      yaml << "      year: 2024\n";
+      yaml << "      track_number: 1\n";
+      yaml << "      disc_number: 1\n";
+
+      // Test hex decode
+      std::filesystem::copy_file(songPath, std::filesystem::path{temp.path()} / "J.flac");
+      yaml << "    - uri: \"J.flac\"\n";
+      yaml << "  lists:\n";
+      yaml << "    - id: 1\n";
+      yaml << "      name: \"Coverage List\"\n";
+      yaml << "      type: manual\n";
+      yaml << "      tracks:\n";
+      yaml << "        - id: 1\n";
+      yaml << "        - 2\n";
+    }
+
+    auto result = importer.importFromYaml(yamlPath);
+
+    if (!result)
+    {
+      INFO("Import failed: " << result.error().message);
+    }
+
+    REQUIRE(result);
+
+    // Delta mode coverage
+    auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
+    {
+      auto yaml = std::ofstream{yamlPathDelta};
+      yaml << "version: 1\n";
+      yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
+      yaml << "export_mode: delta\n";
+      yaml << "library:\n";
+      yaml << "  tracks:\n";
+      yaml << "    - uri: \"A.flac\"\n";
+      yaml << "      year: 2024\n";
+      yaml << "      track_number: 1\n";
+      yaml << "      disc_number: 1\n";
+      yaml << "  lists:\n";
+      yaml << "    - id: 1\n";
+      yaml << "      name: \"Coverage List\"\n";
+      yaml << "      type: manual\n";
+      yaml << "      tracks:\n";
+      yaml << "        - id: 1\n";
+    }
+
+    auto resultDelta = importer.importFromYaml(yamlPathDelta, rt::ImportMode::Merge);
+    REQUIRE(resultDelta);
   }
 } // namespace ao::library::test

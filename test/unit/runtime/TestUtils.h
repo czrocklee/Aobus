@@ -13,6 +13,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -80,6 +81,38 @@ namespace ao::rt::test
       auto [id, _] = writer.createHotCold(hotData, coldData);
       txn.commit();
       return id;
+    }
+
+    void updateTrack(TrackId id, std::move_only_function<void(TrackSpec&)> updater)
+    {
+      auto txn = _library.writeTransaction();
+      auto reader = _library.tracks().reader(txn);
+      auto writer = _library.tracks().writer(txn);
+
+      auto optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+
+      if (!optView)
+      {
+        return;
+      }
+
+      auto spec = TrackSpec{.title = std::string{optView->metadata().title()},
+                            .artist = std::string{_library.dictionary().getOrDefault(optView->metadata().artistId())},
+                            .album = std::string{_library.dictionary().getOrDefault(optView->metadata().albumId())},
+                            .work = std::string{_library.dictionary().getOrDefault(optView->metadata().workId())},
+                            .year = optView->metadata().year()};
+
+      updater(spec);
+
+      auto builder = library::TrackBuilder::createNew();
+      builder.metadata().title(spec.title).artist(spec.artist).album(spec.album).work(spec.work).year(spec.year);
+
+      auto hotData = builder.serializeHot(txn, _library.dictionary());
+      auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
+
+      writer.updateHot(id, hotData);
+      writer.updateCold(id, coldData);
+      txn.commit();
     }
 
     TrackId addTrack(std::string_view title) { return addTrack(TrackSpec{.title = std::string{title}}); }

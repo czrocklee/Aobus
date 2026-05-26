@@ -440,6 +440,7 @@ namespace ao::rt
     std::unordered_map<DictionaryId, std::string> normCache;
     std::unordered_set<std::string> stringPool;
     std::vector<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>> subscribers;
+    bool sourceDestroyed = false;
 
     void rebuildGroups()
     {
@@ -921,7 +922,10 @@ namespace ao::rt
 
   TrackListProjection::~TrackListProjection()
   {
-    _impl->source.detach(this);
+    if (!_impl->sourceDestroyed)
+    {
+      _impl->source.detach(this);
+    }
   }
 
   ViewId TrackListProjection::viewId() const noexcept
@@ -1109,5 +1113,10 @@ namespace ao::rt
   void TrackListProjection::publishDelta(TrackListProjectionDeltaBatch const& batch)
   {
     _impl->publishDelta(batch);
+  }
+
+  void TrackListProjection::onSourceDestroyed()
+  {
+    _impl->sourceDestroyed = true;
   }
 } // namespace ao::rt

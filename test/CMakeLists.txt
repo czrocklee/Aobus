@@ -61,6 +61,10 @@ add_executable(ao_test
     unit/runtime/TrackFieldTest.cpp
     unit/runtime/TrackListProjectionTest.cpp
     unit/runtime/TrackListProjectionScaleTest.cpp
+    unit/runtime/TrackCommandServiceTest.cpp
+    unit/runtime/PlaybackServiceTest.cpp
+  unit/runtime/AllTracksSourceTest.cpp
+  unit/runtime/ListSourceStoreTest.cpp
     unit/runtime/TrackDetailProjectionTest.cpp
     unit/runtime/LibraryMutationServiceTest.cpp
     unit/runtime/NotificationServiceTest.cpp
@@ -69,6 +73,7 @@ add_executable(ao_test
     unit/runtime/ManualListSourceTest.cpp
     unit/runtime/NavigationHistoryTest.cpp
     unit/runtime/WorkspaceNavigationTest.cpp
+    unit/runtime/AppRuntimeTest.cpp
     unit/runtime/HeadlessShellTest.cpp
     unit/runtime/LibraryExportImportTest.cpp
 )

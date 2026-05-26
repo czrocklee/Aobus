@@ -284,3 +284,10 @@ TEST_CASE("TrackField supports filter expression helper works", "[runtime][track
   CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::TechnicalSummary));
   CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::Quality));
 }
+
+TEST_CASE("TrackField properties - Invalid Field", "[field]")
+{
+  auto const invalidField = static_cast<TrackField>(255);
+  CHECK(trackFieldId(invalidField).empty());
+  CHECK(trackFieldFilterExpressionVariable(invalidField).empty());
+}

@@ -191,4 +191,32 @@ namespace ao::rt::test
     CHECK(updatedRevision > postedRevision);
     CHECK(service.feed().revision > updatedRevision);
   }
+
+  TEST_CASE("NotificationService - updateContent modifies content and emits signals", "[app][runtime][notification]")
+  {
+    auto service = NotificationService{};
+    auto id = service.post(NotificationSeverity::Info, "old");
+
+    bool updatedFired = false;
+    auto sub1 = service.onUpdated(
+      [&](auto updatedId)
+      {
+        if (updatedId == id)
+        {
+          updatedFired = true;
+        }
+      });
+
+    bool changedFired = false;
+    auto sub2 = service.onChanged([&] { changedFired = true; });
+
+    service.updateContent(id, NotificationContentState{.title = "new"});
+
+    CHECK(updatedFired);
+    CHECK(changedFired);
+
+    auto feed = service.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries[0].content.title == "new");
+  }
 }

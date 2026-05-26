@@ -190,6 +190,12 @@ namespace ao::rt
     {
       it->second.state.lifecycle = ViewLifecycleState::Destroyed;
       _impl->destroyedSignal.post(_impl->executor, viewId);
+
+      // Reset projection and ad-hoc source to detach from TrackSource,
+      // preventing dangling references if the underlying source is deleted.
+      it->second.projection.reset();
+      it->second.adHocSource.reset();
+      it->second.activeSource = nullptr;
     }
   }
 
@@ -209,7 +215,7 @@ namespace ao::rt
       _impl->executor,
       ViewService::FilterChanged{.viewId = viewId, .filterExpression = it->second.state.filterExpression});
 
-    if (it->second.adHocSource)
+    if (it->second.adHocSource && !it->second.state.filterExpression.empty())
     {
       it->second.adHocSource->setExpression(it->second.state.filterExpression);
       it->second.adHocSource->reload();
@@ -235,6 +241,7 @@ namespace ao::rt
     {
       // Switching from adHocSource to no filter
       auto* baseSource = &_impl->sources.sourceFor(it->second.state.listId);
+      it->second.projection.reset();
       it->second.adHocSource.reset();
       it->second.activeSource = baseSource;
       it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
@@ -322,6 +329,8 @@ namespace ao::rt
 
     it->second.state.listId = listId;
     it->second.state.revision++;
+
+    it->second.projection.reset();
 
     if (auto* baseSource = &_impl->sources.sourceFor(listId); it->second.adHocSource)
     {
