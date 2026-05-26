@@ -284,8 +284,7 @@ int main(int argc, char* argv[])
 
     auto windows = std::vector<Glib::RefPtr<MainWindow>>{};
 
-    app->signal_activate().connect(
-      [&app, &windows] { onAppActivate(app, windows); });
+    app->signal_activate().connect([&app, &windows] { onAppActivate(app, windows); });
 
     auto gtkArgv = buildGtkArgv(argc, argv);
     std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArgv.size());

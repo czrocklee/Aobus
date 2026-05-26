@@ -3,13 +3,13 @@
 
 #include "playback/NowPlayingFieldLabel.h"
 
-#include "ao/audio/Types.h"
 #include "ao/utility/Log.h"
+#include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/eventcontroller.h>
@@ -18,11 +18,8 @@
 #include <pangomm/layout.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <cstdint>
-#include <format>
-#include <string>
-#include <string_view>
+#include <memory>
 
 namespace ao::gtk
 {
@@ -37,23 +34,6 @@ namespace ao::gtk
         default: return "";
       }
     }
-
-    std::string quoteExpressionString(std::string_view value)
-    {
-      if (!value.contains('"'))
-      {
-        return std::format("\"{}\"", value);
-      }
-
-      if (!value.contains('\''))
-      {
-        return std::format("'{}'", value);
-      }
-
-      auto sanitized = std::string{value};
-      std::ranges::replace(sanitized, '"', '\'');
-      return std::format("\"{}\"", sanitized);
-    }
   } // namespace
 
   NowPlayingFieldLabel::NowPlayingFieldLabel(rt::AppRuntime& runtime, rt::TrackField field, Action action)
@@ -61,7 +41,7 @@ namespace ao::gtk
   {
     _label.set_ellipsize(Pango::EllipsizeMode::END);
     _label.add_css_class(cssClassForField(field));
-    _label.set_selectable(false); // Selection can block click gestures
+    _label.set_selectable(false);
 
     if (_action != Action::None)
     {
@@ -75,11 +55,8 @@ namespace ao::gtk
       _label.add_controller(gesture);
     }
 
-    auto const refreshCallback = [this] { refresh(); };
-    _nowPlayingSub = _runtime.playback().onNowPlayingChanged([refreshCallback](auto const&) { refreshCallback(); });
-    _idleSub = _runtime.playback().onIdle(refreshCallback);
-
-    refresh();
+    _controller = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
+      _runtime.playback(), [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 
   void NowPlayingFieldLabel::onLabelClicked()
@@ -89,11 +66,15 @@ namespace ao::gtk
                   static_cast<int>(_field),
                   static_cast<int>(_action));
 
-    switch (_action)
-    {
-      case Action::Reveal: _runtime.playback().revealPlayingTrack(); break;
+    auto const cmd = _controller->resolveAction(_action, _field);
 
-      case Action::PlayPause:
+    using Type = uimodel::playback::NowPlayingActionCommand::Type;
+
+    switch (cmd.type)
+    {
+      case Type::Reveal: _runtime.playback().revealPlayingTrack(); break;
+
+      case Type::PlayPause:
         if (_runtime.playback().state().transport == audio::Transport::Playing)
         {
           _runtime.playback().pause();
@@ -105,80 +86,18 @@ namespace ao::gtk
 
         break;
 
-      case Action::FilterByField:
-      {
-        auto const& state = _runtime.playback().state();
-        auto value = std::string{};
-
-        switch (_field)
-        {
-          case rt::TrackField::Title: value = state.trackTitle; break;
-          case rt::TrackField::Artist: value = state.trackArtist; break;
-          default: break;
-        }
-
-        if (auto const variable = rt::trackFieldFilterExpressionVariable(_field); !variable.empty() && !value.empty())
-        {
-          auto const query = std::format("{} = {}", variable, quoteExpressionString(value));
-          APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), query);
-          _runtime.workspace().navigateTo(query);
-        }
-        else
-        {
-          APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigation skipped (empty variable or value)", getpid());
-        }
-
+      case Type::Navigate:
+        APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), cmd.navigateQuery);
+        _runtime.workspace().navigateTo(cmd.navigateQuery);
         break;
-      }
 
-      case Action::None:
+      case Type::None:
       default: break;
     }
   }
 
-  void NowPlayingFieldLabel::refresh()
+  void NowPlayingFieldLabel::applyState(ao::uimodel::playback::NowPlayingViewState const& view)
   {
-    auto const& state = _runtime.playback().state();
-
-    if (state.transport == audio::Transport::Idle)
-    {
-      if (_field == rt::TrackField::Title)
-      {
-        _label.set_text("Not Playing");
-      }
-      else
-      {
-        _label.set_text("");
-      }
-
-      return;
-    }
-
-    if (_field == rt::TrackField::Title)
-    {
-      if (!state.trackTitle.empty())
-      {
-        _label.set_text(state.trackTitle);
-      }
-      else
-      {
-        _label.set_text(std::format("{}", state.trackId.raw()));
-      }
-    }
-    else if (_field == rt::TrackField::Artist)
-    {
-      if (!state.trackArtist.empty())
-      {
-        _label.set_text(state.trackArtist);
-      }
-      else
-      {
-        _label.set_text("Unknown Artist");
-      }
-    }
-    else
-    {
-      _label.set_text("");
-    }
+    _label.set_text(uimodel::playback::NowPlayingViewModel::getFieldText(view, _field));
   }
 } // namespace ao::gtk

@@ -123,7 +123,8 @@ namespace ao::rt::test
     CHECK(entry.content.optProgress->label == "Halfway");
   }
 
-  TEST_CASE("NotificationService - clearProgress publishes only when progress exists", "[app][unit][runtime][notification]")
+  TEST_CASE("NotificationService - clearProgress publishes only when progress exists",
+            "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -192,7 +193,8 @@ namespace ao::rt::test
     CHECK(service.feed().revision > updatedRevision);
   }
 
-  TEST_CASE("NotificationService - updateContent modifies content and emits signals", "[app][unit][runtime][notification]")
+  TEST_CASE("NotificationService - updateContent modifies content and emits signals",
+            "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
     auto id = service.post(NotificationSeverity::Info, "old");

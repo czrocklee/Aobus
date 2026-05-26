@@ -12,6 +12,7 @@ fi
 BUILD_DIR="/tmp/build/coverage"
 JOBS=$(nproc)
 TEST_FILTER=""
+SUITE="core"
 
 usage() {
     cat <<'EOF'
@@ -42,6 +43,9 @@ while [[ $# -gt 0 ]]; do
         -p*) BUILD_DIR="${1#-p}"; shift ;;
         -j) JOBS="$2"; shift 2 ;;
         -j*) JOBS="${1#-j}"; shift ;;
+        --suite) SUITE="$2"; shift 2 ;;
+        --gtk) SUITE="gtk"; shift ;;
+        --all) SUITE="all"; shift ;;
         -h|--help) usage ;;
         *) TEST_FILTER="$1"; shift ;;
     esac
@@ -65,12 +69,56 @@ echo "Clearing old .gcda files..."
 find "$BUILD_DIR" -name "*.gcda" -delete
 
 # 4. Run Tests
-echo "Running tests..."
-if [[ -n "$TEST_FILTER" ]]; then
-    "$BUILD_DIR/test/ao_test" "$TEST_FILTER"
-else
-    "$BUILD_DIR/test/ao_test"
-fi
+echo "Running tests (suite: $SUITE)..."
+
+run_core() {
+    echo "Running core tests..."
+    if [[ -n "$TEST_FILTER" ]]; then
+        "$BUILD_DIR/test/ao_test" "$TEST_FILTER"
+    else
+        "$BUILD_DIR/test/ao_test"
+    fi
+}
+
+run_gtk() {
+    echo "Running GTK tests..."
+    local GTK_TEST_BIN="$BUILD_DIR/test/ao_test_gtk"
+    
+    local CMD=()
+    if [[ -n "${DISPLAY:-}" ]] || [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        # Display is available, run directly
+        CMD=("$GTK_TEST_BIN")
+    elif command -v xvfb-run >/dev/null 2>&1; then
+        # No display, use xvfb-run
+        CMD=(xvfb-run -a "$GTK_TEST_BIN")
+    else
+        echo "Error: GTK coverage requires either a display (DISPLAY/WAYLAND_DISPLAY) or xvfb-run."
+        exit 1
+    fi
+
+    if [[ -n "$TEST_FILTER" ]]; then
+        CMD+=("$TEST_FILTER")
+    fi
+
+    "${CMD[@]}"
+}
+
+case "$SUITE" in
+    core)
+        run_core
+        ;;
+    gtk)
+        run_gtk
+        ;;
+    all)
+        run_core
+        run_gtk
+        ;;
+    *)
+        echo "Error: Invalid suite '$SUITE'. Allowed values: core, gtk, all."
+        exit 1
+        ;;
+esac
 
 # 5. Generate and Parse Coverage
 echo ""

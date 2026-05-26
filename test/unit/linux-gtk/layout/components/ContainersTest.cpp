@@ -3,6 +3,7 @@
 
 #include "app/linux-gtk/layout/components/Containers.h"
 
+#include "../../GtkTestSupport.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
@@ -10,8 +11,6 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
-
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
@@ -25,23 +24,16 @@
 #include <gtkmm/window.h>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <vector>
 
 namespace ao::gtk::layout::test
 {
+  using ao::gtk::test::ImmediateExecutor;
+
   namespace
   {
     using namespace ao::lmdb::test;
-
-    class MockExecutor final : public rt::IControlExecutor
-    {
-    public:
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
   } // namespace
 
   TEST_CASE("LayoutRuntime building", "[layout][unit][containers]")
@@ -52,7 +44,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -190,7 +182,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -277,7 +269,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -474,7 +466,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -613,7 +605,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -667,7 +659,7 @@ namespace ao::gtk::layout::test
         std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir2.path()} / "config.yaml");
 
       auto runtime = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+        rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                    .musicRoot = tempDir2.path(),
                                    .databasePath = std::filesystem::path{tempDir2.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = configStore2}};

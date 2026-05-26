@@ -41,6 +41,8 @@ namespace ao::gtk
                        int& naturalBaseline) const override;
 
   private:
+    friend class AobusSoulTestPeer;
+
     struct Impl;
 
     static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;

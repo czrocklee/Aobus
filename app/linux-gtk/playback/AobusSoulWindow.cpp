@@ -4,9 +4,9 @@
 #include "playback/AobusSoulWindow.h"
 
 #include "app/AobusSoul.h"
-#include "playback/AobusSoulBinding.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/uimodel/playback/AobusSoulViewModel.h>
 
 #include <gdkmm/monitor.h>
 #include <gdkmm/rectangle.h>
@@ -110,10 +110,7 @@ namespace ao::gtk
     fullscreen();
   }
 
-  AobusSoulWindow::~AobusSoulWindow()
-  {
-    _soulBinding.reset();
-  }
+  AobusSoulWindow::~AobusSoulWindow() = default;
 
   void AobusSoulWindow::bind(rt::PlaybackService& playback)
   {
@@ -121,7 +118,13 @@ namespace ao::gtk
 
     if (get_visible())
     {
-      _soulBinding = std::make_unique<AobusSoulBinding>(_bigSoul, *_playback);
+      _controller = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
+        *_playback,
+        [this](ao::uimodel::playback::AobusSoulViewState const& view)
+        {
+          _bigSoul.breathe(view.isBreathing);
+          _bigSoul.setAura(Gdk::RGBA{view.auraColor});
+        });
     }
   }
 
@@ -131,13 +134,19 @@ namespace ao::gtk
 
     if (_playback != nullptr)
     {
-      _soulBinding = std::make_unique<AobusSoulBinding>(_bigSoul, *_playback);
+      _controller = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
+        *_playback,
+        [this](ao::uimodel::playback::AobusSoulViewState const& view)
+        {
+          _bigSoul.breathe(view.isBreathing);
+          _bigSoul.setAura(Gdk::RGBA{view.auraColor});
+        });
     }
   }
 
   void AobusSoulWindow::on_hide()
   {
-    _soulBinding.reset();
+    _controller.reset();
     Gtk::Window::on_hide();
   }
 } // namespace ao::gtk

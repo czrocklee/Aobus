@@ -75,5 +75,4 @@ namespace ao::library::test
     auto const optView = store.reader(rtxn).get("nonexistent.flac");
     CHECK_FALSE(optView.has_value());
   }
-
 } // namespace ao::library::test

@@ -4,9 +4,10 @@
 #pragma once
 
 #include "app/AobusSoul.h"
-#include "playback/AobusSoulBinding.h"
 #include "playback/AobusSoulWindow.h"
 #include <ao/rt/PlaybackService.h>
+#include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/uimodel/playback/AudioOutputViewModel.h>
 
 #include <giomm/liststore.h>
 #include <glibmm/object.h>
@@ -39,16 +40,19 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _button; }
 
   private:
+    friend class OutputSelectorTestPeer;
+
     Gtk::Widget* createRow(Glib::RefPtr<Glib::Object> const& item);
     void rebuildModel();
 
     rt::PlaybackService& _playback;
     Gtk::Button _button;
     AobusSoul _soul;
-    std::unique_ptr<AobusSoulBinding> _soulBinding;
-    std::unique_ptr<AobusSoulWindow> _soulWindow;
+    std::unique_ptr<uimodel::playback::AudioOutputViewModel> _outputController{};
+    std::unique_ptr<uimodel::playback::AobusSoulViewModel> _soulController{};
+    std::unique_ptr<AobusSoulWindow> _soulWindow{};
     Gtk::Popover _popover;
     Gtk::ListBox _listBox;
-    Glib::RefPtr<Gio::ListStore<Glib::Object>> _store;
+    Glib::RefPtr<Gio::ListStore<Glib::Object>> _store{};
   };
 } // namespace ao::gtk

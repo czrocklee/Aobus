@@ -3,15 +3,16 @@
 
 #pragma once
 
-#include "playback/PlaybackPositionInterpolator.h"
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/uimodel/playback/PlaybackPositionInterpolator.h>
+#include <ao/uimodel/playback/SeekViewModel.h>
 
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
 #include <sigc++/connection.h>
 
 #include <cstdint>
+#include <memory>
 
 namespace ao::gtk::test
 {
@@ -43,7 +44,8 @@ namespace ao::gtk
       Pointer,
     };
 
-    void handleStarted();
+    void applyState(uimodel::playback::SeekViewState const& view);
+
     void handleScaleValueChanged();
     void beginUserInteraction();
     void endUserInteraction();
@@ -55,21 +57,15 @@ namespace ao::gtk
     std::uint32_t scalePositionMs() const noexcept;
     void reset();
 
-    rt::PlaybackService& _playbackService;
     Gtk::Scale _scale;
-    PlaybackPositionInterpolator _interpolator;
+    uimodel::playback::PlaybackPositionInterpolator _interpolator;
+    std::unique_ptr<uimodel::playback::SeekViewModel> _controller{};
+
     std::uint32_t _durationMs = 0;
     InteractionState _interactionState = InteractionState::Idle;
     bool _pendingFinalSeek = false;
     bool _updatingScale = false;
     sigc::connection _debounceConnection;
-
-    rt::Subscription _startedSub;
-    rt::Subscription _pausedSub;
-    rt::Subscription _idleSub;
-    rt::Subscription _stoppedSub;
-    rt::Subscription _preparingSub;
-    rt::Subscription _seekUpdateSub;
 
     friend class test::SeekControlTestPeer;
   };

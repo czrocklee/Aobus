@@ -3,48 +3,20 @@
 
 #include "playback/PlaybackDetailsWidget.h"
 
-#include "ao/audio/Backend.h"
-#include "ao/audio/Format.h"
-#include "ao/audio/Types.h"
-#include "ao/audio/flow/Graph.h"
 #include "layout/LayoutConstants.h"
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 
-#include <algorithm>
-#include <format>
-#include <iterator>
+#include <memory>
 #include <string>
-#include <unordered_set>
 
 namespace ao::gtk
 {
   namespace
   {
-    std::string formatStream(audio::Format const& format)
-    {
-      constexpr auto kKhzMultiplier = 1000.0;
-      auto const channelsText = [&] -> std::string
-      {
-        if (format.channels == 1)
-        {
-          return "Mono";
-        }
-
-        if (format.channels == 2)
-        {
-          return "Stereo";
-        }
-
-        return std::format("{} ch", format.channels);
-      }();
-
-      return std::format("{:.1f} kHz · {}-bit · {}", format.sampleRate / kKhzMultiplier, format.bitDepth, channelsText);
-    }
-
     void clearSinkStatusClasses(Gtk::Image& image)
     {
       for (auto const& cls : {"ao-quality-perfect",
@@ -56,10 +28,26 @@ namespace ao::gtk
         image.remove_css_class(cls);
       }
     }
+
+    char const* categoryToCssClass(uimodel::playback::AudioQualityCategory category)
+    {
+      using Category = uimodel::playback::AudioQualityCategory;
+
+      switch (category)
+      {
+        case Category::Perfect: return "ao-quality-perfect";
+        case Category::Lossless: return "ao-quality-lossless";
+        case Category::Intervention: return "ao-quality-intervention";
+        case Category::Lossy: return "ao-quality-lossy";
+        case Category::Clipped: return "ao-quality-clipped";
+        case Category::Unknown: return "";
+      }
+
+      return "";
+    }
   }
 
   PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playbackService)
-    : _playbackService{playbackService}
   {
     _container.set_spacing(layout::kSpacingLarge);
     _container.add_css_class("ao-playback-details");
@@ -72,128 +60,32 @@ namespace ao::gtk
     _container.append(_streamInfoLabel);
     _container.append(_sinkStatusIcon);
 
-    _startedSub = _playbackService.onStarted([this] { updateState(); });
-    _pausedSub = _playbackService.onPaused([this] { updateState(); });
-    _idleSub = _playbackService.onIdle([this] { updateState(); });
-    _stoppedSub = _playbackService.onStopped([this] { updateState(); });
-    _outputChangedSub = _playbackService.onOutputChanged([this](auto const&) { updateState(); });
-    _qualityChangedSub = _playbackService.onQualityChanged([this](auto const&) { updateState(); });
-
-    updateState();
+    _controller = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
+      playbackService, [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 
   PlaybackDetailsWidget::~PlaybackDetailsWidget() = default;
 
-  void PlaybackDetailsWidget::updateState()
+  void PlaybackDetailsWidget::applyState(ao::uimodel::playback::NowPlayingViewState const& view)
   {
-    auto const& state = _playbackService.state();
+    _streamInfoLabel.set_text(view.streamInfo);
 
-    if (state.transport == audio::Transport::Idle)
+    if (view.pipelineTooltip != _lastTooltipText)
     {
-      _streamInfoLabel.set_text(state.ready ? "" : "Connecting to audio engine...");
-      _sinkStatusIcon.set_visible(false);
-      _lastTooltipText.clear();
-      return;
+      _container.set_tooltip_text(view.pipelineTooltip);
+      _streamInfoLabel.set_tooltip_text(view.pipelineTooltip);
+      _sinkStatusIcon.set_tooltip_text(view.pipelineTooltip);
+      _lastTooltipText = view.pipelineTooltip;
     }
 
-    // Source Format from Decoder Node
-    auto const it = std::ranges::find_if(
-      state.flow.nodes, [](auto const& node) { return node.type == audio::flow::NodeType::Decoder && node.optFormat; });
-
-    auto const info = (it != state.flow.nodes.end() && it->optFormat) ? formatStream(*it->optFormat) : std::string{};
-    _streamInfoLabel.set_text(info);
-
-    updateTooltip(state);
-
-    // Update status icon
     clearSinkStatusClasses(_sinkStatusIcon);
-    _sinkStatusIcon.set_visible(true);
+    _sinkStatusIcon.set_visible(view.isActive);
 
-    using Quality = audio::Quality;
+    auto const* const cssClass = categoryToCssClass(view.qualityCategory);
 
-    switch (state.quality)
+    if (cssClass[0] != '\0')
     {
-      case Quality::BitwisePerfect:
-      case Quality::LosslessPadded: _sinkStatusIcon.add_css_class("ao-quality-perfect"); break;
-      case Quality::LosslessFloat: _sinkStatusIcon.add_css_class("ao-quality-lossless"); break;
-      case Quality::LinearIntervention: _sinkStatusIcon.add_css_class("ao-quality-intervention"); break;
-      case Quality::LossySource: _sinkStatusIcon.add_css_class("ao-quality-lossy"); break;
-      case Quality::Clipped: _sinkStatusIcon.add_css_class("ao-quality-clipped"); break;
-      case Quality::Unknown: _sinkStatusIcon.set_visible(false); break;
-    }
-  }
-
-  void PlaybackDetailsWidget::updateTooltip(rt::PlaybackState const& state)
-  {
-    auto tooltip = std::string{"Audio Pipeline:\n"};
-    auto const nodeTypeString = [](audio::flow::NodeType type)
-    {
-      using Type = audio::flow::NodeType;
-
-      switch (type)
-      {
-        case Type::Decoder: return "[Source]";
-        case Type::Engine: return "[Engine]";
-        case Type::Stream: return "[Stream]";
-        case Type::Intermediary: return "[Filter]";
-        case Type::Sink: return "[Device]";
-        case Type::ExternalSource: return "[Other Source]";
-      }
-
-      return "[Unknown]";
-    };
-
-    {
-      auto currentId = std::string{"ao-decoder"};
-      auto visited = std::unordered_set<std::string>{};
-
-      while (!currentId.empty() && !visited.contains(currentId))
-      {
-        visited.insert(currentId);
-        auto const it = std::ranges::find(state.flow.nodes, currentId, &audio::flow::Node::id);
-
-        if (it == state.flow.nodes.end())
-        {
-          break;
-        }
-
-        auto const& node = *it;
-        std::format_to(std::back_inserter(tooltip), "• {} {}", nodeTypeString(node.type), node.name);
-
-        if (node.optFormat)
-        {
-          std::format_to(std::back_inserter(tooltip), " ({})", formatStream(*node.optFormat));
-        }
-
-        if (node.volumeNotUnity)
-        {
-          tooltip += " [Vol Control]";
-        }
-
-        if (node.isMuted)
-        {
-          tooltip += " [Muted]";
-        }
-
-        tooltip += "\n";
-
-        auto const linkIt = std::ranges::find_if(
-          state.flow.connections, [&](auto const& link) { return link.isActive && link.sourceId == currentId; });
-        currentId = (linkIt != state.flow.connections.end()) ? linkIt->destId : "";
-      }
-    }
-
-    if (!state.qualityTooltip.empty())
-    {
-      std::format_to(std::back_inserter(tooltip), "\n{}", state.qualityTooltip);
-    }
-
-    if (tooltip != _lastTooltipText)
-    {
-      _container.set_tooltip_text(tooltip);
-      _streamInfoLabel.set_tooltip_text(tooltip);
-      _sinkStatusIcon.set_tooltip_text(tooltip);
-      _lastTooltipText = tooltip;
+      _sinkStatusIcon.add_css_class(cssClass);
     }
   }
 } // namespace ao::gtk

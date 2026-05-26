@@ -4,10 +4,12 @@
 #pragma once
 
 #include "playback/VolumeBar.h"
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/uimodel/playback/VolumeViewModel.h>
 
 #include <gtkmm/widget.h>
+
+#include <memory>
 
 namespace ao::gtk
 {
@@ -18,17 +20,20 @@ namespace ao::gtk
   {
   public:
     explicit VolumeControl(rt::PlaybackService& playbackService);
+    ~VolumeControl();
+
+    VolumeControl(VolumeControl const&) = delete;
+    VolumeControl& operator=(VolumeControl const&) = delete;
+    VolumeControl(VolumeControl&&) = delete;
+    VolumeControl& operator=(VolumeControl&&) = delete;
 
     Gtk::Widget& widget() { return _volumeBar; }
 
   private:
-    void refresh();
+    void applyState(uimodel::playback::VolumeViewState const& view);
 
-    rt::PlaybackService& _playbackService;
     VolumeBar _volumeBar;
     bool _updating = false;
-
-    rt::Subscription _outputSub;
-    rt::Subscription _startedSub;
+    std::unique_ptr<uimodel::playback::VolumeViewModel> _controller;
   };
 } // namespace ao::gtk

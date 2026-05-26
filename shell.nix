@@ -74,6 +74,7 @@ pkgs.mkShell {
       pipewire
       alsa-lib
       udev
+      xvfb-run
     ]
     ++ [ lexy ];
   shellHook = ''

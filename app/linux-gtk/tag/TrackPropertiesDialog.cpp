@@ -90,7 +90,6 @@ namespace ao::gtk
     loadData();
 
     signal_response().connect([this](std::int32_t) { close(); });
-    present();
   }
 
   TrackPropertiesDialog::~TrackPropertiesDialog() = default;

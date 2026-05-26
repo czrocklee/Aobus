@@ -62,6 +62,8 @@ namespace ao::gtk
     void bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection);
 
   private:
+    friend class TrackInspectorPanelTestPeer;
+
     void setupUi();
     void buildHeroSection();
     void buildMetadataSection();

@@ -23,9 +23,8 @@
 
 using namespace ao;
 
-  namespace ao::rt::test
+namespace ao::rt::test
 {
-
   using namespace ao::rt;
   using namespace ao::lmdb::test;
 
@@ -93,5 +92,4 @@ using namespace ao;
     // Cover polymorphic destruction of CoreRuntime
     auto const core = std::unique_ptr<CoreRuntime>{std::move(app)};
   }
-
 } // namespace ao::rt::test

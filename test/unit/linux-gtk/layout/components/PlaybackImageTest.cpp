@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "../../GtkTestSupport.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -8,30 +9,21 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
-
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/button.h>
 #include <gtkmm/window.h>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 
 namespace ao::gtk::layout::test
 {
   using namespace ao::lmdb::test;
+  using ao::gtk::test::ImmediateExecutor;
 
   namespace
   {
-    class MockExecutor final : public rt::IControlExecutor
-    {
-    public:
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
   } // namespace
 
   TEST_CASE("playback.image variant support", "[layout][unit][components]")
@@ -42,7 +34,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};

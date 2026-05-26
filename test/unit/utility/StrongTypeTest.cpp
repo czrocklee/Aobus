@@ -12,10 +12,9 @@
 #include <string_view>
 #include <unordered_set>
 
-
 namespace ao::utility::test
 {
-    using namespace ao::utility;
+  using namespace ao::utility;
 
   namespace
   {
@@ -99,5 +98,4 @@ namespace ao::utility::test
       CHECK(formatted == "42");
     }
   }
-
 } // namespace ao::utility::test

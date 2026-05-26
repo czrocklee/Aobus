@@ -1,179 +1,32 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
-// Standalone test for row data loading without GTKMM dependency.
-// Tests ao::model::TrackRowCache functionality in isolation.
+#include "track/TrackRowCache.h"
 
 #include "ao/Type.h"
+#include "ao/audio/Types.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackBuilder.h"
 #include "ao/library/TrackStore.h"
-#include "ao/library/TrackView.h"
 #include "ao/lmdb/Transaction.h"
+#include <ao/rt/TrackField.h>
 #include "test/unit/lmdb/TestUtils.h"
+#include "track/TrackRowObject.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <glibmm/refptr.h>
+#include <gtkmm/application.h>
 
 #include <chrono>
 #include <cstdint>
-#include <exception>
 #include <optional>
 #include <string>
-#include <string_view>
-#include <unordered_map>
-#include <utility>
 
 namespace ao::gtk::test
 {
   namespace
   {
     using namespace ao::lmdb::test;
-
-    struct RowData final
-    {
-      TrackId id;
-      std::string artist;
-      std::string album;
-      std::string albumArtist;
-      std::string genre;
-      std::string title;
-      std::string tags;
-      std::uint16_t year = 0;
-      std::uint16_t discNumber = 0;
-      std::uint16_t trackNumber = 0;
-      std::chrono::milliseconds duration{0};
-      std::optional<std::uint32_t> optCoverArtId;
-      bool missing = false;
-    };
-
-    /**
-     * Standalone TrackRowCache test double.
-     * Mirrors the real ao::model::TrackRowCache but without GTKMM includes.
-     */
-    class TrackRowCache final
-    {
-    public:
-      explicit TrackRowCache(library::MusicLibrary& ml);
-
-      std::optional<RowData> getRow(TrackId id);
-      void invalidateHot(TrackId id);
-
-    private:
-      std::string resolveDictionaryString(DictionaryId id);
-
-      library::MusicLibrary* _ml;
-      library::TrackStore* _store;
-      library::DictionaryStore* _dict;
-
-      std::unordered_map<TrackId, RowData> _rowCache;
-      std::unordered_map<DictionaryId, std::string> _stringCache;
-    };
-
-    std::string TrackRowCache::resolveDictionaryString(DictionaryId id)
-    {
-      if (auto it = _stringCache.find(id); it != _stringCache.end())
-      {
-        return it->second;
-      }
-
-      auto result = std::string{};
-
-      try
-      {
-        auto const str = _dict->get(id);
-        result = std::string{str};
-      }
-      catch (std::exception const&)
-      {
-        result = {};
-      }
-
-      auto const insertResult = _stringCache.emplace(id, result);
-      return insertResult.first->second;
-    }
-
-    std::string joinResolvedTags(library::TrackView::TagProxy tags, library::DictionaryStore const& dictionary)
-    {
-      auto text = std::string{};
-      bool first = true;
-
-      for (auto const tagId : tags)
-      {
-        auto const tag = dictionary.get(tagId);
-
-        if (tag.empty())
-        {
-          continue;
-        }
-
-        if (!first)
-        {
-          text += ", ";
-        }
-
-        text += tag;
-        first = false;
-      }
-
-      return text;
-    }
-
-    TrackRowCache::TrackRowCache(library::MusicLibrary& ml)
-      : _ml{&ml}, _store{&ml.tracks()}, _dict{&ml.dictionary()}
-    {
-    }
-
-    std::optional<RowData> TrackRowCache::getRow(TrackId id)
-    {
-      if (auto it = _rowCache.find(id); it != _rowCache.end())
-      {
-        if (it->second.missing)
-        {
-          return std::nullopt;
-        }
-
-        return it->second;
-      }
-
-      lmdb::ReadTransaction const txn(_ml->readTransaction());
-      auto reader = _store->reader(txn);
-
-      auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
-
-      if (!optView)
-      {
-        auto row = RowData{};
-        row.id = id;
-        row.missing = true;
-        _rowCache.emplace(id, std::move(row));
-        return std::nullopt;
-      }
-
-      auto const& view = *optView;
-      auto const& metadata = view.metadata();
-
-      auto row = RowData{};
-      row.id = id;
-      row.artist = resolveDictionaryString(metadata.artistId());
-      row.album = resolveDictionaryString(metadata.albumId());
-      row.albumArtist = resolveDictionaryString(metadata.albumArtistId());
-      row.genre = resolveDictionaryString(metadata.genreId());
-      row.title = std::string{metadata.title()};
-      row.year = metadata.year();
-      row.discNumber = metadata.discNumber();
-      row.trackNumber = metadata.trackNumber();
-      row.duration = std::chrono::milliseconds{view.property().durationMs()};
-
-      row.tags = joinResolvedTags(view.tags(), *_dict);
-
-      _rowCache.emplace(id, row);
-      return row;
-    }
-
-    void TrackRowCache::invalidateHot(TrackId id)
-    {
-      _rowCache.erase(id);
-    }
 
     struct TrackSpec final
     {
@@ -221,8 +74,7 @@ namespace ao::gtk::test
           .channels(2)
           .bitDepth(16);
 
-        auto const hotData = builder.serializeHot(txn, _library.dictionary());
-        auto const coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
+        auto const [hotData, coldData] = builder.serialize(txn, _library.dictionary(), _library.resources());
         auto [id, _] = writer.createHotCold(hotData, coldData);
         txn.commit();
         return id;
@@ -236,6 +88,7 @@ namespace ao::gtk::test
 
   TEST_CASE("TrackRowCache loads track data correctly", "[app][unit][model]")
   {
+    auto const app = Gtk::Application::create("io.github.aobus.row_cache_test");
     auto testLibrary = TestMusicLibrary{};
 
     SECTION("Basic data loading")
@@ -258,20 +111,70 @@ namespace ao::gtk::test
 
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const optRow1 = provider.getRow(id1);
-      REQUIRE(optRow1.has_value());
-      CHECK(optRow1->artist == "Artist 1");
-      CHECK(optRow1->album == "Album 1");
-      CHECK(optRow1->title == "Track 1");
-      CHECK(optRow1->genre == "Genre 1");
-      CHECK(optRow1->year == 2021);
-      CHECK(optRow1->trackNumber == 1);
-      CHECK(optRow1->duration.count() == 180000);
+      auto const row1 = provider.getTrackRow(id1);
+      REQUIRE(row1);
+      CHECK(row1->getFieldText(rt::TrackField::Artist) == "Artist 1");
+      CHECK(row1->getFieldText(rt::TrackField::Album) == "Album 1");
+      CHECK(row1->getFieldText(rt::TrackField::Title) == "Track 1");
+      CHECK(row1->getFieldText(rt::TrackField::Genre) == "Genre 1");
+      CHECK(row1->getYear() == 2021);
+      CHECK(row1->getTrackNumber() == 1);
+      CHECK(row1->getDuration().count() == 180000);
 
-      auto const optRow2 = provider.getRow(id2);
-      REQUIRE(optRow2.has_value());
-      CHECK(optRow2->title == "Track 2");
-      CHECK(optRow2->duration.count() == 240000);
+      auto const row2 = provider.getTrackRow(id2);
+      REQUIRE(row2);
+      CHECK(row2->getFieldText(rt::TrackField::Title) == "Track 2");
+      CHECK(row2->getDuration().count() == 240000);
+
+      // Verify playing properties and setters/getters
+      CHECK_FALSE(row1->isPlaying());
+      row1->setPlaying(true);
+      CHECK(row1->isPlaying());
+      auto const proxy = row1->property_playing();
+      CHECK(proxy.get_value() == true);
+
+      // Verify custom string fields and failure paths
+      CHECK(row1->setStringField(rt::TrackField::Artist, "New Artist"));
+      CHECK(row1->getFieldText(rt::TrackField::Artist) == "New Artist");
+      CHECK_FALSE(row1->setStringField(rt::TrackField::Duration, "Failed"));
+
+      // Verify other metadata and resource/playback properties
+      row1->setYear(2025);
+      row1->setDiscNumber(2);
+      row1->setTotalDiscs(3);
+      row1->setTrackNumber(4);
+      row1->setTotalTracks(10);
+      CHECK(row1->getYear() == 2025);
+      CHECK(row1->getDiscNumber() == 2);
+      CHECK(row1->getTotalDiscs() == 3);
+      CHECK(row1->getTrackNumber() == 4);
+      CHECK(row1->getTotalTracks() == 10);
+      CHECK(row1->getSampleRate() == 44100);
+      CHECK(row1->getChannels() == 2);
+      CHECK(row1->getBitDepth() == 16);
+    }
+
+    SECTION("Cache helper methods")
+    {
+      auto spec = TrackSpec{};
+      spec.durationMs = 120000;
+      auto const id = testLibrary.addTrack(spec);
+
+      auto provider = TrackRowCache{testLibrary.library()};
+
+      auto const optUri = provider.getUriPath(id);
+      REQUIRE(optUri.has_value());
+      CHECK(optUri->string() == "/tmp/test.flac");
+
+      auto const optDesc = provider.getPlaybackDescriptor(id);
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->durationMs == 120000);
+
+      auto const optCover = provider.getCoverArtId(id);
+      CHECK_FALSE(optCover.has_value());
+
+      provider.clearCache();
+      provider.remove(id);
     }
 
     SECTION("Caching works")
@@ -279,10 +182,12 @@ namespace ao::gtk::test
       auto const id1 = testLibrary.addTrack({});
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const optRow1A = provider.getRow(id1);
-      auto const optRow1B = provider.getRow(id1);
+      auto const row1A = provider.getTrackRow(id1);
+      auto const row1B = provider.getTrackRow(id1);
 
-      CHECK(optRow1A->title == optRow1B->title);
+      REQUIRE(row1A);
+      REQUIRE(row1B);
+      CHECK(row1A == row1B);
     }
 
     SECTION("Invalidation")
@@ -290,18 +195,31 @@ namespace ao::gtk::test
       auto const id1 = testLibrary.addTrack({});
       auto provider = TrackRowCache{testLibrary.library()};
 
-      provider.getRow(id1);
-      provider.invalidateHot(id1);
-      // Next call will reload from DB (implicitly tested by it working after change)
+      auto const row1 = provider.getTrackRow(id1);
+      REQUIRE(row1);
+      provider.invalidate(id1);
+
+      auto const row1New = provider.getTrackRow(id1);
+      CHECK(row1 != row1New);
+    }
+
+    SECTION("Dictionary resolution")
+    {
+      testLibrary.addTrack({.title = "Test Dictionary String"});
+      auto provider = TrackRowCache{testLibrary.library()};
+      auto const id = DictionaryId{1}; // Assuming ID 1 exists because it's the first string added to the dict
+
+      auto const& name = provider.resolveDictionaryString(id);
+      CHECK_FALSE(name.empty());
+
+      provider.clearCache();
     }
 
     SECTION("Non-existent track")
     {
       auto provider = TrackRowCache{testLibrary.library()};
-      auto const dummyId = TrackId{9999};
-
-      auto const optRow = provider.getRow(dummyId);
-      CHECK_FALSE(optRow.has_value());
+      auto const row = provider.getTrackRow(TrackId{999});
+      CHECK_FALSE(row);
     }
   }
 } // namespace ao::gtk::test

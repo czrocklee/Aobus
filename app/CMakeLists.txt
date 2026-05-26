@@ -1,34 +1,56 @@
-# app/rt: Shared application runtime (UI-neutral, used by all frontends)
+# app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(app_runtime STATIC
-    rt/AppRuntime.cpp
-    rt/async/Runtime.cpp
-    rt/async/LifetimeScope.cpp
-    rt/CoreRuntime.cpp
-    rt/LibraryYamlImporter.cpp
-    rt/LibraryYamlExporter.cpp
-    rt/AllTracksSource.cpp
-    rt/ConfigStore.cpp
-    rt/PlaybackService.cpp
-    rt/LibraryMutationService.cpp
-    rt/ListSourceStore.cpp
-    rt/ManualListSource.cpp
-    rt/NavigationHistory.cpp
-    rt/WorkspaceService.cpp
-    rt/NotificationService.cpp
-    rt/TrackCommandService.cpp
-    rt/SmartListEvaluator.cpp
-    rt/SmartListSource.cpp
-    rt/TrackPresentation.cpp
-    rt/TrackField.cpp
-    rt/TrackListProjection.cpp
-    rt/TrackDetailProjection.cpp
-    rt/TrackSource.cpp
-    rt/ViewService.cpp
+    runtime/AppRuntime.cpp
+    runtime/async/Runtime.cpp
+    runtime/async/LifetimeScope.cpp
+    runtime/CoreRuntime.cpp
+    runtime/LibraryYamlImporter.cpp
+    runtime/LibraryYamlExporter.cpp
+    runtime/AllTracksSource.cpp
+    runtime/ConfigStore.cpp
+    runtime/PlaybackService.cpp
+    runtime/LibraryMutationService.cpp
+    runtime/ListSourceStore.cpp
+    runtime/ManualListSource.cpp
+    runtime/NavigationHistory.cpp
+    runtime/WorkspaceService.cpp
+    runtime/NotificationService.cpp
+    runtime/TrackCommandService.cpp
+    runtime/SmartListEvaluator.cpp
+    runtime/SmartListSource.cpp
+    runtime/TrackPresentation.cpp
+    runtime/TrackField.cpp
+    runtime/TrackListProjection.cpp
+    runtime/TrackDetailProjection.cpp
+    runtime/TrackSource.cpp
+    runtime/ViewService.cpp
 )
 target_include_directories(app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(app_runtime PUBLIC PkgRapidYaml)
 target_link_libraries(app_runtime PRIVATE ao Boost::headers)
+
+# ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
+add_library(ao_app_uimodel STATIC
+    uimodel/list/ListActionPolicy.cpp
+    uimodel/list/SmartListEditorModel.cpp
+    uimodel/playback/AobusSoulViewModel.cpp
+    uimodel/playback/AudioOutputViewModel.cpp
+    uimodel/playback/NowPlayingViewModel.cpp
+    uimodel/playback/PlaybackPositionInterpolator.cpp
+    uimodel/playback/PlaybackQueueModel.cpp
+    uimodel/playback/PlaybackTimeViewModel.cpp
+    uimodel/playback/SeekViewModel.cpp
+    uimodel/playback/TransportViewModel.cpp
+    uimodel/playback/VolumeViewModel.cpp
+    uimodel/track/TrackPageRoute.cpp
+    uimodel/track/TrackFilterViewModel.cpp
+    uimodel/tag/TagEditWorkflow.cpp
+)
+target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(ao_app_uimodel PRIVATE "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_app_uimodel PUBLIC app_runtime)
+target_link_libraries(ao_app_uimodel PRIVATE ao)
 
 # Frontends
 add_subdirectory(linux-gtk)

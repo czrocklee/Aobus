@@ -68,6 +68,8 @@ namespace ao::gtk
     void showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo);
 
   private:
+    friend class TagEditControllerTestPeer;
+
     void setupActions();
     void showTagsPopover(TrackViewPage& page, double posX, double posY);
     void showPropertiesDialog();

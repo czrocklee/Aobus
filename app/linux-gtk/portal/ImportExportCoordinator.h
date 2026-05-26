@@ -7,6 +7,7 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/async/LifetimeScope.h>
+#include <ao/rt/async/Task.h>
 
 #include <giomm/asyncresult.h>
 #include <glibmm/refptr.h>

@@ -3,6 +3,7 @@
 
 #include "app/linux-gtk/layout/components/StatusComponents.h"
 
+#include "../../GtkTestSupport.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/playback/NowPlayingStatusLabel.h"
 #include "app/linux-gtk/playback/PlaybackDetailsWidget.h"
@@ -11,7 +12,6 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListSourceStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -19,22 +19,15 @@
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 
-#include <functional>
 #include <memory>
 
 namespace ao::gtk::layout::test
 {
+  using ao::gtk::test::ImmediateExecutor;
+
   namespace
   {
     using namespace ao::lmdb::test;
-
-    class MockExecutor final : public rt::IControlExecutor
-    {
-    public:
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
   } // namespace
 
   TEST_CASE("Status bar components", "[gtk][unit][shell]")
@@ -45,7 +38,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};

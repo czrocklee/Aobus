@@ -3,42 +3,31 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/uimodel/playback/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/TransportViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/widget.h>
 
-#include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace ao::gtk
 {
-  class PlaybackSequenceController;
-
   class TransportButton final
   {
   public:
-    enum class Action : std::uint8_t
-    {
-      Play,
-      Pause,
-      Stop,
-      PlayPause,
-      Next,
-      Previous,
-      Shuffle,
-      Repeat,
-    };
+    using Action = uimodel::playback::TransportAction;
 
     TransportButton(rt::PlaybackService& playbackService,
-                    PlaybackSequenceController* sequenceController,
+                    uimodel::playback::PlaybackQueueModel* queueModel,
                     Action action,
                     std::function<void()> onPlaySelection = {},
                     bool showLabel = false,
                     std::string const& size = "normal");
-    ~TransportButton() = default;
+    ~TransportButton();
 
     TransportButton(TransportButton const&) = delete;
     TransportButton& operator=(TransportButton const&) = delete;
@@ -48,22 +37,11 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _button; }
 
   private:
-    void refresh();
-    void handleClicked();
+    friend class TransportButtonTestPeer;
 
-    rt::PlaybackService& _playbackService;
-    PlaybackSequenceController* _sequenceController;
-    Action _action;
-    std::function<void()> _onPlaySelection;
-    bool _showLabel = false;
+    void applyState(uimodel::playback::TransportViewState const& view);
+
     Gtk::Button _button;
-
-    rt::Subscription _startedSub;
-    rt::Subscription _pausedSub;
-    rt::Subscription _idleSub;
-    rt::Subscription _stoppedSub;
-    rt::Subscription _preparingSub;
-    rt::Subscription _shuffleSub;
-    rt::Subscription _repeatSub;
+    std::unique_ptr<uimodel::playback::TransportViewModel> _controller;
   };
 } // namespace ao::gtk

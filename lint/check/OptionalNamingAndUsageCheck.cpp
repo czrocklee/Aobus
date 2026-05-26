@@ -47,7 +47,7 @@ namespace clang::tidy::readability
 
       if (!name.empty() && !name.starts_with_insensitive("opt"))
       {
-        diag(decl->getLocation(), "std::optional %0 %1 should contain 'opt' in its name to indicate it is optional")
+        diag(decl->getLocation(), "std::optional %0 %1 should start with 'opt' to indicate it is optional")
           << (llvm::isa<FieldDecl>(decl) ? "member" : "variable") << decl;
       }
     }

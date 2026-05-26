@@ -263,7 +263,8 @@ namespace ao::library::test
     REQUIRE(dict.getId("#fav").raw() == 4);
   }
 
-  TEST_CASE("Dictionary - put same string as getOrIntern returns reserved ID and persists", "[library][unit][dictionary]")
+  TEST_CASE("Dictionary - put same string as getOrIntern returns reserved ID and persists",
+            "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};

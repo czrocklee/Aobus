@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "../../GtkTestSupport.h"
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -9,7 +10,6 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/yaml/Utils.h> // NOLINT(misc-include-cleaner)
 
 #include <catch2/catch_test_macros.hpp>
@@ -21,7 +21,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -31,15 +30,10 @@
 
 namespace ao::gtk::layout::editor::test
 {
+  using ao::gtk::test::ImmediateExecutor;
+
   namespace
   {
-    class MockExecutor final : public rt::IControlExecutor
-    {
-    public:
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
   } // namespace
 
   using namespace ao::lmdb::test;
@@ -364,7 +358,7 @@ namespace ao::gtk::layout::editor::test
       auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
       auto runtime = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+        rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = configStore}};
@@ -397,7 +391,7 @@ namespace ao::gtk::layout::editor::test
       auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
       auto runtime = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+        rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                    .musicRoot = tempDir.path(),
                                    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = configStore}};
@@ -448,7 +442,7 @@ namespace ao::gtk::layout::editor::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};

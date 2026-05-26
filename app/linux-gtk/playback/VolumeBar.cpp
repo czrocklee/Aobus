@@ -3,6 +3,8 @@
 
 #include "playback/VolumeBar.h"
 
+#include <ao/uimodel/playback/VolumeViewModel.h>
+
 #include <gdkmm/graphene_rect.h>
 #include <gdkmm/rgba.h>
 #include <glibmm/refptr.h>
@@ -211,38 +213,24 @@ namespace ao::gtk
 
   void VolumeBar::handleAbsoluteClick(double offsetX)
   {
-    auto const width = get_width();
-
-    if (width <= 0)
-    {
-      return;
-    }
-
-    float const vol = std::clamp(static_cast<float>(offsetX / static_cast<double>(width)), 0.0F, 1.0F);
+    float const vol = ao::uimodel::playback::VolumeViewModel::resolveVolumeOffset(get_width(), offsetX, 0.0F);
     setVolume(vol);
     _volumeChanged.emit(_volume);
   }
 
   void VolumeBar::handleDragUpdate(double offsetX)
   {
-    auto const width = get_width();
-
-    if (width <= 0)
-    {
-      return;
-    }
-
-    float const delta = static_cast<float>(offsetX / static_cast<double>(width));
-    float const vol = std::clamp(_dragStartVolume + delta, 0.0F, 1.0F);
+    float const vol =
+      ao::uimodel::playback::VolumeViewModel::resolveVolumeOffset(get_width(), offsetX, _dragStartVolume);
     setVolume(vol);
     _volumeChanged.emit(_volume);
   }
 
   void VolumeBar::handleScroll(double /*dx*/, double dy)
   {
-    float const delta = (dy > 0) ? -kScrollStep : kScrollStep;
+    float const newVol = ao::uimodel::playback::VolumeViewModel::resolveVolumeScroll(_volume, dy);
 
-    if (auto const newVol = std::clamp(_volume + delta, 0.0F, 1.0F); std::abs(_volume - newVol) > kVolumeEpsilon)
+    if (std::abs(_volume - newVol) > kVolumeEpsilon)
     {
       _volume = newVol;
       _volumeChanged.emit(_volume);

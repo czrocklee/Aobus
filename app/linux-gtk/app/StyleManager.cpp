@@ -237,15 +237,27 @@ namespace ao::gtk
       {
         auto const gsettings = Gio::Settings::create("org.gnome.desktop.interface");
 
-        if (keyfile->has_key("Settings", "gtk-theme-name"))
+        auto* const source = ::g_settings_schema_source_get_default();
+        auto* const schema = ::g_settings_schema_source_lookup(source, "org.gnome.desktop.interface", TRUE);
+
+        auto const hasSchemaKey = [schema](char const* key)
+        { return schema != nullptr && ::g_settings_schema_has_key(schema, key); };
+
+        if (keyfile->has_key("Settings", "gtk-theme-name") && hasSchemaKey("gtk-theme-name"))
         {
           gsettings->set_string("gtk-theme-name", keyfile->get_string("Settings", "gtk-theme-name"));
         }
 
-        if (keyfile->has_key("Settings", "gtk-application-prefer-dark-theme"))
+        if (keyfile->has_key("Settings", "gtk-application-prefer-dark-theme") &&
+            hasSchemaKey("gtk-application-prefer-dark-theme"))
         {
           gsettings->set_boolean(
             "gtk-application-prefer-dark-theme", keyfile->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
+        }
+
+        if (schema != nullptr)
+        {
+          ::g_settings_schema_unref(schema);
         }
       }
       else

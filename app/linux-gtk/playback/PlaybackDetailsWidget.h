@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -11,12 +11,12 @@
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
+#include <memory>
 #include <string>
 
 namespace ao::rt
 {
   class PlaybackService;
-  struct PlaybackState;
 }
 
 namespace ao::gtk
@@ -40,20 +40,14 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _container; }
 
   private:
-    void updateState();
-    void updateTooltip(rt::PlaybackState const& state);
+    friend class PlaybackDetailsWidgetTestPeer;
 
-    rt::PlaybackService& _playbackService;
+    void applyState(uimodel::playback::NowPlayingViewState const& view);
+
     Gtk::Box _container{Gtk::Orientation::HORIZONTAL};
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
-
-    rt::Subscription _startedSub;
-    rt::Subscription _pausedSub;
-    rt::Subscription _idleSub;
-    rt::Subscription _stoppedSub;
-    rt::Subscription _outputChangedSub;
-    rt::Subscription _qualityChangedSub;
+    std::unique_ptr<uimodel::playback::NowPlayingViewModel> _controller{};
 
     std::string _lastTooltipText;
   };

@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
-#include <cstdint>
+#include <memory>
 
 namespace ao::rt
 {
@@ -21,20 +21,14 @@ namespace ao::gtk
   class NowPlayingFieldLabel final
   {
   public:
-    enum class Action : std::uint8_t
-    {
-      None,
-      Reveal,
-      PlayPause,
-      FilterByField
-    };
+    using Action = uimodel::playback::NowPlayingFieldAction;
 
     NowPlayingFieldLabel(rt::AppRuntime& runtime, rt::TrackField field, Action action = Action::None);
 
     Gtk::Widget& widget() { return _label; }
 
   private:
-    void refresh();
+    void applyState(uimodel::playback::NowPlayingViewState const& view);
     void onLabelClicked();
 
     rt::AppRuntime& _runtime;
@@ -42,7 +36,6 @@ namespace ao::gtk
     Action _action;
     Gtk::Label _label;
 
-    rt::Subscription _nowPlayingSub;
-    rt::Subscription _idleSub;
+    std::unique_ptr<uimodel::playback::NowPlayingViewModel> _controller;
   };
 } // namespace ao::gtk

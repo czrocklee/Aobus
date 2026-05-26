@@ -84,7 +84,7 @@ namespace ao::rt::test
       // Destroy scope while task is blocked at the barrier
     }
 
-// Now release the barrier - task should resume but be cancelled at resumeOnControl
+    // Now release the barrier - task should resume but be cancelled at resumeOnControl
     barrier.release();
 
     // Yield a bounded number of times to let the worker thread process the cancellation.

@@ -9,10 +9,8 @@
 #include <algorithm>
 #include <string_view>
 
-
-  namespace ao::rt::test
+namespace ao::rt::test
 {
-
   using namespace ao::rt;
 
   TEST_CASE("builtinTrackPresentationPresets contains all expected ids", "[runtime][unit][presentation]")
@@ -262,5 +260,4 @@
     CHECK(!trackFieldFromId("").has_value());
     CHECK(!trackFieldFromId("unknown-field").has_value());
   }
-
 } // namespace ao::rt::test

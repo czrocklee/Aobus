@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "../../GtkTestSupport.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
@@ -11,7 +12,6 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -26,7 +26,6 @@
 
 #include <array>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -34,17 +33,10 @@
 namespace ao::gtk::layout::test
 {
   using namespace ao::lmdb::test;
+  using ao::gtk::test::ImmediateExecutor;
 
   namespace
   {
-    class MockExecutor final : public rt::IControlExecutor
-    {
-    public:
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
-
     LayoutContext makeContext(ComponentRegistry& registry, rt::AppRuntime& runtime, Gtk::Window& window)
     {
       return LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
@@ -59,7 +51,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -267,7 +259,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -376,7 +368,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -478,7 +470,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};
@@ -525,7 +517,7 @@ namespace ao::gtk::layout::test
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
+      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
                                  .musicRoot = tempDir.path(),
                                  .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                                  .workspaceConfigStore = configStore}};

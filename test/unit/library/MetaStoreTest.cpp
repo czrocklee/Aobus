@@ -49,11 +49,8 @@ namespace ao::library::test
     auto db = Database{wtxn, "meta"};
     auto store = MetaStore{db};
 
-    auto header = MetaHeader{.magic = 0xDEADBEEF,
-                             .libraryVersion = 42,
-                             .flags = 0,
-                             .createdAtUnixMs = 1234567890,
-                             .libraryId = {}};
+    auto header =
+      MetaHeader{.magic = 0xDEADBEEF, .libraryVersion = 42, .flags = 0, .createdAtUnixMs = 1234567890, .libraryId = {}};
     store.create(wtxn, header);
     wtxn.commit();
 
@@ -73,11 +70,8 @@ namespace ao::library::test
     auto db = Database{wtxn, "meta"};
     auto store = MetaStore{db};
 
-    auto header = MetaHeader{.magic = 0xAAAAAAAA,
-                             .libraryVersion = 1,
-                             .flags = 0,
-                             .createdAtUnixMs = 100,
-                             .libraryId = {}};
+    auto header =
+      MetaHeader{.magic = 0xAAAAAAAA, .libraryVersion = 1, .flags = 0, .createdAtUnixMs = 100, .libraryId = {}};
     store.create(wtxn, header);
     wtxn.commit();
 

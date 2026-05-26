@@ -10,10 +10,9 @@
 #include <ios>
 #include <string_view>
 
-
 namespace ao::utility::test
 {
-    using namespace ao::utility;
+  using namespace ao::utility;
 
   TEST_CASE("MappedFile - mapping and unmapping", "[utility][unit][mapped_file]")
   {
@@ -63,5 +62,4 @@ namespace ao::utility::test
 
     std::filesystem::remove_all(tempDir);
   }
-
 } // namespace ao::utility::test

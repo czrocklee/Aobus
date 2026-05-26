@@ -55,7 +55,7 @@ namespace ao::log
 
 // Core log macros
 #define AO_LOG_CALL(loggerExpr, level, loc, ...)                                                                       \
-  do  /* NOLINT(cppcoreguidelines-avoid-do-while) */                                                                           \
+  do /* NOLINT(cppcoreguidelines-avoid-do-while) */                                                                    \
   {                                                                                                                    \
     auto const& logger = (loggerExpr);                                                                                 \
     if (logger != nullptr && logger->should_log(level))                                                                \

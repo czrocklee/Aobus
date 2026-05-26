@@ -13,7 +13,7 @@
 namespace ao::gtk
 {
   ListRowObject::ListRowObject()
-    : _listId{kInvalidListId}, _parentId{kInvalidListId}
+    : Glib::ObjectBase{"ListRowObject"}, _listId{kInvalidListId}, _parentId{kInvalidListId}
   {
   }
 

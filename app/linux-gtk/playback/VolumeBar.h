@@ -43,6 +43,8 @@ namespace ao::gtk
     void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
 
   private:
+    friend class VolumeBarTestPeer;
+
     void handleAbsoluteClick(double offsetX);
     void handleDragUpdate(double offsetX);
     void handleScroll(double dx, double dy);

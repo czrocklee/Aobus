@@ -49,24 +49,49 @@ get_check_alias() {
     esac
 }
 
+expects_auto_fix() {
+    local alias="$1"
+    case "$alias" in
+        aobus-modernize-braced-initialization | \
+            aobus-modernize-concrete-final | \
+            aobus-modernize-lambda-params | \
+            aobus-modernize-use-erase-if | \
+            aobus-modernize-use-ranges-min-max | \
+            aobus-modernize-use-starts-with | \
+            aobus-modernize-use-std-numbers | \
+            aobus-readability-control-block-spacing | \
+            aobus-readability-redundant-namespace-qualification | \
+            aobus-readability-use-if-init-statement)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 export FIXTURE_DIR="$SCRIPT_DIR/fixture"
 export VERIFIER="$SCRIPT_DIR/verify_diagnostics.py"
+RUN_TMP_ROOT=$(mktemp -d "/tmp/aobus_lint_integration_XXXXXX")
+FAILED=1
 
-declare -A TMP_DIRS
-declare -A FIX_ALIASES
+cleanup() {
+    if [[ "${FAILED:-0}" -eq 0 ]]; then
+        rm -rf "$RUN_TMP_ROOT"
+    fi
+}
+trap cleanup EXIT
 
 run_diag() {
     local FIXTURE="$1"
     local FNAME=$(basename "$FIXTURE")
     local ALIAS=$(get_check_alias "$FNAME") || return 0
-    FIX_ALIASES["$FNAME"]="$ALIAS"
 
-    local TEST_TMP=$(mktemp -d "/tmp/aobus_test_${FNAME}_XXXXXX")
-    TMP_DIRS["$FNAME"]="$TEST_TMP"
+    local TEST_TMP=$(mktemp -d "$RUN_TMP_ROOT/${FNAME}.diag.XXXXXX")
     local ACTUAL="$TEST_TMP/actual.txt"
     local LOG_FILE="$TEST_TMP/run.log"
 
-    {
+    if {
         echo "--- Testing: $ALIAS ($FNAME) ---"
         EXTRA_CHECKS="-*,$ALIAS" "$PROJECT_ROOT/script/run-clang-tidy.sh" \
             -p "$BUILD_DIR" \
@@ -74,12 +99,10 @@ run_diag() {
 
         if ! "$VERIFIER" "$FIXTURE" --check "$ALIAS" --input "$ACTUAL"; then
             echo "ERROR: Diagnostic Verification FAILED for $FNAME"
-            exit 1
+            return 1
         fi
         echo "DIAG_PASS"
-    } > "$LOG_FILE" 2>&1
-
-    if [[ $? -eq 0 ]]; then
+    } > "$LOG_FILE" 2>&1; then
         echo "  [DIAG PASS] $FNAME"
         return 0
     else
@@ -91,13 +114,12 @@ run_diag() {
 run_fix() {
     local FIXTURE="$1"
     local FNAME=$(basename "$FIXTURE")
-    local ALIAS="${FIX_ALIASES["$FNAME"]:-}"
-    [[ -z "$ALIAS" ]] && return 0
+    local ALIAS=$(get_check_alias "$FNAME") || return 0
 
-    local TEST_TMP="${TMP_DIRS["$FNAME"]}"
+    local TEST_TMP=$(mktemp -d "$RUN_TMP_ROOT/${FNAME}.fix.XXXXXX")
     local LOG_FILE="$TEST_TMP/run.log"
 
-    {
+    if {
         echo "--- Auto-Fix: $ALIAS ($FNAME) ---"
         local FIXED_FILE="$TEST_TMP/$FNAME"
         cp "$FIXTURE" "$FIXED_FILE"
@@ -108,18 +130,81 @@ run_fix() {
             --fix \
             "$FIXED_FILE" > /dev/null 2>&1 || true
 
-        if ! nix-shell --run "g++ -std=c++23 -fsyntax-only -I${PROJECT_ROOT}/include -I${PROJECT_ROOT}/lib -I$TEST_TMP $FIXED_FILE"; then
-            echo "ERROR: Auto-Fix Compilation FAILED for $FNAME"
-            exit 1
+        if expects_auto_fix "$ALIAS" && cmp -s "$FIXTURE" "$FIXED_FILE"; then
+            echo "ERROR: Auto-Fix did not modify $FNAME"
+            return 1
         fi
-    } >> "$LOG_FILE" 2>&1
 
-    if [[ $? -eq 0 ]]; then
+        if ! g++ -std=c++23 -fsyntax-only -I"${PROJECT_ROOT}/include" -I"${PROJECT_ROOT}/lib" -I"$TEST_TMP" "$FIXED_FILE"; then
+            echo "ERROR: Auto-Fix Compilation FAILED for $FNAME"
+            return 1
+        fi
+    } >> "$LOG_FILE" 2>&1; then
         echo "  [FIX PASS] $FNAME"
         rm -rf "$TEST_TMP"
         return 0
     else
         echo "  [FIX FAIL] $FNAME (See $LOG_FILE)"
+        return 1
+    fi
+}
+
+run_apply_conflict_smoke() {
+    local TEST_TMP
+    TEST_TMP=$(mktemp -d "$RUN_TMP_ROOT/apply-conflict.XXXXXX")
+    local SOURCE="$TEST_TMP/sample.cpp"
+    local LOG_FILE="$TEST_TMP/run.log"
+
+    if {
+        echo "--- Replacement Insert Conflict Smoke ---"
+        printf 'int main() {}\n' > "$SOURCE"
+
+        cat > "$TEST_TMP/a.yaml" <<EOF
+---
+MainSourceFile:  '$SOURCE'
+Diagnostics:
+  - DiagnosticName:  test-a
+    DiagnosticMessage:
+      Message:         'insert a'
+      FilePath:        '$SOURCE'
+      FileOffset:      0
+      Replacements:
+        - FilePath:        '$SOURCE'
+          Offset:          0
+          Length:          0
+          ReplacementText: '/*a*/'
+    Level:           Warning
+    BuildDirectory:  '$TEST_TMP'
+...
+EOF
+
+        cat > "$TEST_TMP/b.yaml" <<EOF
+---
+MainSourceFile:  '$SOURCE'
+Diagnostics:
+  - DiagnosticName:  test-b
+    DiagnosticMessage:
+      Message:         'insert b'
+      FilePath:        '$SOURCE'
+      FileOffset:      0
+      Replacements:
+        - FilePath:        '$SOURCE'
+          Offset:          0
+          Length:          0
+          ReplacementText: '/*b*/'
+    Level:           Warning
+    BuildDirectory:  '$TEST_TMP'
+...
+EOF
+
+        clang-apply-replacements --ignore-insert-conflict "$TEST_TMP"
+        grep -q '/\*a\*/' "$SOURCE"
+        grep -q '/\*b\*/' "$SOURCE"
+    } > "$LOG_FILE" 2>&1; then
+        echo "  [APPLY PASS] insert conflict smoke"
+        return 0
+    else
+        echo "  [APPLY FAIL] insert conflict smoke (See $LOG_FILE)"
         return 1
     fi
 }
@@ -145,17 +230,23 @@ for FIXTURE in "$FIXTURE_DIR"/*Fixture.cpp; do
     fi
 done
 
-FAILED=$((DIAG_FAILED + FIX_FAILED))
+echo "=== [4] Replacement Application Smoke ==="
+APPLY_FAILED=0
+if ! run_apply_conflict_smoke; then
+    APPLY_FAILED=1
+fi
 
-if [[ $FAILED -eq 1 ]]; then
+FAILED=$((DIAG_FAILED + FIX_FAILED + APPLY_FAILED))
+
+if [[ $FAILED -ne 0 ]]; then
     echo "=== INTEGRATION TESTS FAILED ==="
-    # Find and print the logs of failed tests
-    for LOG in /tmp/aobus_test_*/run.log; do
+    # Print only logs produced by this run; /tmp may contain stale failures.
+    while IFS= read -r LOG; do
         if [[ -f "$LOG" ]] && grep -q "ERROR" "$LOG"; then
             echo ""
             cat "$LOG"
         fi
-    done
+    done < <(find "$RUN_TMP_ROOT" -type f -name run.log | sort)
     exit 1
 fi
 

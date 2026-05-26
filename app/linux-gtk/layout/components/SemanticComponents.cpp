@@ -10,7 +10,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "list/ListSidebarController.h"
+#include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackViewPage.h"
@@ -71,7 +71,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      ListSidebarController* _controller = nullptr;
+      ListNavigationController* _controller = nullptr;
       Gtk::Label* _error = nullptr;
     };
 

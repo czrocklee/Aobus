@@ -9,9 +9,9 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/uimodel/tag/TagEditWorkflow.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>
@@ -26,9 +26,7 @@
 #include <gtkmm/window.h>
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
-#include <format>
 #include <memory>
 #include <span>
 #include <string>
@@ -40,35 +38,6 @@ namespace ao::gtk
   namespace
   {
     constexpr int kContextMenuButtonSpacing = 2;
-
-    std::string tagChangeStatusMessage(std::size_t trackCount, std::size_t addedCount, std::size_t removedCount)
-    {
-      auto parts = std::vector<std::string>{};
-
-      if (addedCount > 0)
-      {
-        parts.push_back(std::format("added {}", addedCount));
-      }
-
-      if (removedCount > 0)
-      {
-        parts.push_back(std::format("removed {}", removedCount));
-      }
-
-      if (parts.empty())
-      {
-        return std::format("Tags unchanged for {} track{}", trackCount, trackCount == 1 ? "" : "s");
-      }
-
-      auto message = std::format("Tags {}", parts[0]);
-
-      if (parts.size() > 1)
-      {
-        message += " and " + parts[1];
-      }
-
-      return std::format("{} for {} track{}", message, trackCount, trackCount == 1 ? "" : "s");
-    }
   }
 
   TagEditController::TagEditController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks)
@@ -197,8 +166,9 @@ namespace ao::gtk
       return;
     }
 
-    Gtk::make_managed<TrackPropertiesDialog>(
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
       _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, _optActiveSelection->selectedIds);
+    dialog->present();
   }
 
   void TagEditController::showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)
@@ -242,18 +212,23 @@ namespace ao::gtk
 
     auto& selection = *_optActiveSelection;
 
-    if (selection.selectedIds.empty() || (tagsToAdd.empty() && tagsToRemove.empty()))
+    auto request = ao::uimodel::tag::TagEditRequest{};
+    request.selectedIds = selection.selectedIds;
+    request.tagsToAdd.assign(tagsToAdd.begin(), tagsToAdd.end());
+    request.tagsToRemove.assign(tagsToRemove.begin(), tagsToRemove.end());
+
+    auto workflow = ao::uimodel::tag::TagEditWorkflow{_runtime.mutation()};
+    auto const result = workflow.apply(request);
+
+    if (result.optError)
     {
+      APP_LOG_ERROR("{}", result.notificationText);
+      _runtime.notifications().post(rt::NotificationSeverity::Error, result.notificationText);
       return;
     }
 
-    auto const result = _runtime.mutation().editTags(selection.selectedIds, tagsToAdd, tagsToRemove);
-
-    if (!result)
+    if (!result.applied)
     {
-      auto const errorMsg = std::format("Failed to edit tags: {}", result.error().message);
-      APP_LOG_ERROR("{}", errorMsg);
-      _runtime.notifications().post(rt::NotificationSeverity::Error, errorMsg);
       return;
     }
 
@@ -262,8 +237,6 @@ namespace ao::gtk
       _callbacks.onTagsMutated();
     }
 
-    _runtime.notifications().post(
-      rt::NotificationSeverity::Info,
-      tagChangeStatusMessage(selection.selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
+    _runtime.notifications().post(rt::NotificationSeverity::Info, result.notificationText);
   }
 } // namespace ao::gtk

@@ -3,12 +3,8 @@
 
 #include "track/TrackQuickFilter.h"
 
-#include "track/TrackFilterResolver.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/ViewService.h>
-#include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/track/TrackFilterViewModel.h>
 
 #include <gdkmm/enums.h>
 #include <glibmm/main.h>
@@ -18,7 +14,7 @@
 #include <gtkmm/entry.h>
 #include <sigc++/functors/mem_fun.h>
 
-#include <format>
+#include <memory>
 #include <string>
 
 namespace ao::gtk
@@ -31,8 +27,6 @@ namespace ao::gtk
   TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime)
     : _runtime{runtime}
     , _textChangedConn{signal_changed().connect(sigc::mem_fun(*this, &TrackQuickFilter::onFilterTextChanged))}
-    , _focusSub{
-        _runtime.workspace().onFocusedViewChanged(sigc::mem_fun(*this, &TrackQuickFilter::onFocusedViewChanged))}
   {
     set_placeholder_text("Quick filter or expression...");
     set_hexpand(true);
@@ -45,9 +39,9 @@ namespace ao::gtk
     signal_icon_press().connect(
       [this](Gtk::Entry::IconPosition iconPosition)
       {
-        if (iconPosition == Gtk::Entry::IconPosition::SECONDARY && !_filterExpression.empty())
+        if (iconPosition == Gtk::Entry::IconPosition::SECONDARY && !_resolvedExpression.empty())
         {
-          _signalCreateSmartListRequested.emit(_filterExpression);
+          _signalCreateSmartListRequested.emit(_resolvedExpression);
         }
       });
 
@@ -69,48 +63,13 @@ namespace ao::gtk
 
     add_controller(dropTarget);
 
-    onFocusedViewChanged(_runtime.workspace().layoutState().activeViewId);
+    _controller = std::make_unique<ao::uimodel::track::TrackFilterViewModel>(
+      _runtime.views(),
+      _runtime.workspace(),
+      [this](ao::uimodel::track::TrackFilterViewState const& state) { applyState(state); });
   }
 
   TrackQuickFilter::~TrackQuickFilter() = default;
-
-  void TrackQuickFilter::onFocusedViewChanged(rt::ViewId viewId)
-  {
-    _viewId = viewId;
-    _filterStatusSub.reset();
-
-    if (_viewId == rt::kInvalidViewId)
-    {
-      set_sensitive(false);
-      _filterExpression.clear();
-      _filterPending = false;
-      _optFilterError.reset();
-
-      _textChangedConn.block();
-      set_text("");
-      _textChangedConn.unblock();
-
-      updateUi();
-      return;
-    }
-
-    set_sensitive(true);
-    auto const state = _runtime.views().trackListState(_viewId);
-
-    _textChangedConn.block();
-    set_text(state.filterExpression);
-    _textChangedConn.unblock();
-
-    _filterStatusSub =
-      _runtime.views().onFilterStatusChanged(sigc::mem_fun(*this, &TrackQuickFilter::onFilterStatusChanged));
-
-    auto const resolved = resolveTrackFilterExpression(state.filterExpression);
-    _filterExpression = resolved.expression;
-    _filterPending = false;
-    _optFilterError.reset();
-
-    updateUi();
-  }
 
   void TrackQuickFilter::onFilterTextChanged()
   {
@@ -118,65 +77,34 @@ namespace ao::gtk
     _debounceTimer = Glib::signal_timeout().connect(
       [this]
       {
-        onFilterDebounced();
+        _controller->updateFilter(get_text().raw());
         return false;
       },
       kFilterDebounceMs);
   }
 
-  void TrackQuickFilter::onFilterDebounced()
+  void TrackQuickFilter::applyState(ao::uimodel::track::TrackFilterViewState const& view)
   {
-    auto const filterText = get_text();
+    set_sensitive(view.enabled);
+    _resolvedExpression = view.resolvedExpression;
 
-    if (_viewId == rt::kInvalidViewId)
+    if (get_text().raw() != view.entryText)
     {
-      return;
+      _textChangedConn.block();
+      set_text(view.entryText);
+      _textChangedConn.unblock();
     }
 
-    auto const resolved = resolveTrackFilterExpression(filterText.raw());
-    _filterExpression = resolved.expression;
-    _filterPending = true;
-
-    if (resolved.mode == TrackFilterMode::None)
-    {
-      _runtime.views().setFilter(_viewId, "");
-    }
-    else
-    {
-      _runtime.views().setFilter(_viewId, resolved.expression);
-    }
-
-    updateUi();
-  }
-
-  void TrackQuickFilter::onFilterStatusChanged(rt::FilterStatusChanged const& status)
-  {
-    if (status.viewId != _viewId)
-    {
-      return;
-    }
-
-    _filterPending = status.pending;
-    _optFilterError = status.optError;
-
-    updateUi();
-  }
-
-  void TrackQuickFilter::updateUi()
-  {
-    if (_optFilterError)
+    if (view.hasError)
     {
       add_css_class("error");
-      // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-      set_tooltip_text(std::format("Expression error: {}", _optFilterError->message));
     }
     else
     {
       remove_css_class("error");
-      set_tooltip_text("");
     }
 
-    auto const canCreateSmartList = !_filterExpression.empty() && !_filterPending && !_optFilterError;
-    set_icon_sensitive(Gtk::Entry::IconPosition::SECONDARY, canCreateSmartList);
+    set_tooltip_text(view.tooltip);
+    set_icon_sensitive(Gtk::Entry::IconPosition::SECONDARY, view.canCreateSmartList);
   }
 } // namespace ao::gtk

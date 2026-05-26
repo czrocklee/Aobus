@@ -13,7 +13,6 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "playback/AobusSoulBinding.h"
 #include "playback/NowPlayingFieldLabel.h"
 #include "playback/OutputSelector.h"
 #include "playback/SeekControl.h"
@@ -25,6 +24,7 @@
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/playback/AobusSoulViewModel.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/label.h>
@@ -64,7 +64,7 @@ namespace ao::gtk::layout
     public:
       TransportButtonComponent(LayoutContext& ctx, LayoutNode const& node, TransportButton::Action action)
         : _button{ctx.runtime.playback(),
-                  ctx.playback.sequenceController,
+                  ctx.playback.queueModel,
                   action,
                   getTransportCallback(ctx, action),
                   node.getProp<bool>("showLabel", false),
@@ -305,15 +305,15 @@ namespace ao::gtk::layout
                  {
                    if (mode == "elapsed")
                    {
-                     return TimeLabelMode::Elapsed;
+                     return TimeLabel::Mode::Elapsed;
                    }
 
                    if (mode == "duration")
                    {
-                     return TimeLabelMode::Duration;
+                     return TimeLabel::Mode::Duration;
                    }
 
-                   return TimeLabelMode::Default;
+                   return TimeLabel::Mode::Default;
                  }()}
       {
       }
@@ -348,7 +348,14 @@ namespace ao::gtk::layout
     {
     public:
       QualityIndicatorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _runtime{ctx.runtime}, _soulBinding{std::make_unique<AobusSoulBinding>(_soul, _runtime.playback())}
+        : _runtime{ctx.runtime}
+        , _soulController{std::make_unique<uimodel::playback::AobusSoulViewModel>(
+            _runtime.playback(),
+            [this](uimodel::playback::AobusSoulViewState const& view)
+            {
+              _soul.breathe(view.isBreathing);
+              _soul.setAura(Gdk::RGBA{view.auraColor});
+            })}
       {
       }
 
@@ -357,7 +364,7 @@ namespace ao::gtk::layout
     private:
       rt::AppRuntime& _runtime;
       AobusSoul _soul{};
-      std::unique_ptr<AobusSoulBinding> _soulBinding;
+      std::unique_ptr<uimodel::playback::AobusSoulViewModel> _soulController;
     };
 
     std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)

@@ -17,6 +17,10 @@ namespace ao::lmdb
   class ReadTransaction;
 }
 
+namespace ao::uimodel::playback
+{
+  class PlaybackQueueModel;
+}
 namespace ao::gtk
 {
   class MainWindow;
@@ -25,10 +29,9 @@ namespace ao::gtk
   class TrackRowCache;
   class ImageCache;
   class TagEditController;
-  class ListSidebarController;
+  class ListNavigationController;
   class TrackPresentationStore;
   class TrackPageHost;
-  class PlaybackSequenceController;
   namespace portal
   {
     class ImportExportCoordinator;
@@ -57,11 +60,11 @@ namespace ao::gtk
 
     TrackRowCache* trackRowCache() { return _trackRowCache.get(); }
     ImageCache* imageCache() { return _imageCache.get(); }
-    PlaybackSequenceController* playbackSequenceController() { return _playbackSequenceController.get(); }
+    uimodel::playback::PlaybackQueueModel* playbackQueueModel() { return _playbackSequenceController.get(); }
     TagEditController* tagEditController() { return _tagEditController.get(); }
     portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinator.get(); }
     TrackPageHost* trackPageHost() { return _trackPageHost.get(); }
-    ListSidebarController* listSidebarController() { return _listSidebarController.get(); }
+    ListNavigationController* listSidebarController() { return _listSidebarController.get(); }
     TrackPresentationStore* trackPresentationStore() { return _trackPresentationStore.get(); }
 
     portal::ImportExportCoordinator& importExport() { return *_importExportCoordinator; }
@@ -77,10 +80,10 @@ namespace ao::gtk
     std::unique_ptr<TrackRowCache> _trackRowCache;
     std::unique_ptr<ImageCache> _imageCache;
     std::unique_ptr<TagEditController> _tagEditController;
-    std::unique_ptr<ListSidebarController> _listSidebarController;
+    std::unique_ptr<ListNavigationController> _listSidebarController;
     std::unique_ptr<TrackPresentationStore> _trackPresentationStore;
     std::unique_ptr<TrackPageHost> _trackPageHost;
-    std::unique_ptr<PlaybackSequenceController> _playbackSequenceController;
+    std::unique_ptr<uimodel::playback::PlaybackQueueModel> _playbackSequenceController;
     std::unique_ptr<portal::ImportExportCoordinator> _importExportCoordinator;
 
     Gtk::Stack _stack;

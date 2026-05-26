@@ -67,15 +67,30 @@ add_executable(ao_test
     unit/audio/backend/detail/PipeWireMonitorHelpersTest.cpp
     unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
 
+    # ui model tests (no platform deps)
+    unit/uimodel/list/ListActionPolicyTest.cpp
+    unit/uimodel/list/SmartListEditorModelTest.cpp
+    unit/uimodel/playback/AobusSoulViewModelTest.cpp
+    unit/uimodel/playback/AudioOutputViewModelTest.cpp
+    unit/uimodel/playback/NowPlayingViewModelTest.cpp
+    unit/uimodel/playback/PlaybackQueueModelTest.cpp
+    unit/uimodel/playback/PlaybackPositionInterpolatorTest.cpp
+    unit/uimodel/playback/PlaybackTimeViewModelTest.cpp
+    unit/uimodel/playback/SeekViewModelTest.cpp
+    unit/uimodel/playback/TransportViewModelTest.cpp
+    unit/uimodel/playback/VolumeViewModelTest.cpp
+    unit/uimodel/track/TrackFilterViewModelTest.cpp
+    unit/uimodel/track/TrackPageRouteTest.cpp
+
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/SmartListEvaluatorTest.cpp
     unit/runtime/TrackPresentationTest.cpp
+    unit/runtime/TrackCommandServiceTest.cpp
     unit/runtime/TrackFieldTest.cpp
     unit/runtime/TrackListProjectionTest.cpp
     unit/runtime/TrackListProjectionScaleTest.cpp
-    unit/runtime/TrackCommandServiceTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
   unit/runtime/AllTracksSourceTest.cpp
   unit/runtime/ListSourceStoreTest.cpp
@@ -93,7 +108,7 @@ add_executable(ao_test
 )
 
 target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
+target_link_libraries(ao_test PRIVATE ao ao_audio ao_app_uimodel app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(ao_test PRIVATE PIPEWIRE_FOUND)
@@ -118,7 +133,7 @@ add_executable(ao_integration_test
 )
 
 target_include_directories(ao_integration_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_integration_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
+target_link_libraries(ao_integration_test PRIVATE ao ao_audio ao_app_uimodel app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(ao_integration_test PRIVATE PIPEWIRE_FOUND)
@@ -139,8 +154,36 @@ target_compile_options(ao_integration_test PRIVATE -Wno-array-bounds)
 
 # ao_test_gtk: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_test_gtk
+    unit/linux-gtk/list/ListModelTest.cpp
+    unit/linux-gtk/list/ListTreeModelBuilderTest.cpp
+    unit/linux-gtk/list/QueryExpressionBoxTest.cpp
+    unit/linux-gtk/list/SmartListDialogTest.cpp
+    unit/linux-gtk/list/ListNavigationControllerTest.cpp
+    unit/linux-gtk/inspector/TrackInspectorPanelTest.cpp
+    unit/linux-gtk/tag/TagEditWorkflowTest.cpp
+    unit/linux-gtk/tag/TagEditorTest.cpp
+    unit/linux-gtk/tag/TagEditControllerTest.cpp
+    unit/linux-gtk/tag/TagPopoverTest.cpp
+    unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp
+    unit/linux-gtk/image/ImageWidgetTest.cpp
+    unit/linux-gtk/image/ImageCacheTest.cpp
+    unit/linux-gtk/app/AobusSoulTest.cpp
+    unit/linux-gtk/app/StyleManagerTest.cpp
+    unit/linux-gtk/app/AppConfigTest.cpp
+    unit/linux-gtk/app/ShellLayoutControllerTest.cpp
+    unit/linux-gtk/app/GtkLayoutConfigTest.cpp
     unit/linux-gtk/track/TrackFilterResolverTest.cpp
     unit/linux-gtk/track/TrackListModelTest.cpp
+    unit/linux-gtk/track/TrackSelectionControllerTest.cpp
+    unit/linux-gtk/track/TrackPageHostTest.cpp
+    unit/linux-gtk/track/TrackViewPageTest.cpp
+    unit/linux-gtk/track/TrackColumnControllerTest.cpp
+    unit/linux-gtk/track/TrackColumnFactoryBuilderTest.cpp
+    unit/linux-gtk/track/TrackPresentationStoreTest.cpp
+    unit/linux-gtk/track/TrackQuickFilterTest.cpp
+    unit/linux-gtk/track/TrackPageRouteTest.cpp
+    unit/linux-gtk/track/TrackPresentationButtonTest.cpp
+    unit/linux-gtk/track/TrackCustomViewDialogTest.cpp
     unit/linux-gtk/track/TrackPresentationTest.cpp
     unit/linux-gtk/track/TrackFieldUiTest.cpp
     unit/linux-gtk/track/TrackRowCacheTest.cpp
@@ -150,8 +193,17 @@ add_executable(ao_test_gtk
     unit/linux-gtk/layout/components/PlaybackImageTest.cpp
     unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
     unit/linux-gtk/layout/components/StatusComponentsTest.cpp
-    unit/app/linux-gtk/playback/PlaybackPositionInterpolatorTest.cpp
-    unit/app/linux-gtk/playback/PlaybackUiComponentsTest.cpp
+    unit/linux-gtk/app/AppConfigTest.cpp
+    unit/linux-gtk/playback/PlaybackUiComponentsTest.cpp
+    unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
+    unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp
+    unit/linux-gtk/playback/NowPlayingStatusLabelTest.cpp
+    unit/linux-gtk/playback/OutputSelectorTest.cpp
+    unit/linux-gtk/playback/OutputSelectorStateTest.cpp
+    unit/linux-gtk/playback/OutputListItemsTest.cpp
+    unit/linux-gtk/playback/TransportButtonTest.cpp
+    unit/linux-gtk/playback/TimeLabelTest.cpp
+    unit/linux-gtk/portal/PlaylistExporterTest.cpp
 )
 
 target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
@@ -169,7 +221,7 @@ add_executable(ao_perf_baseline
 )
 
 target_include_directories(ao_perf_baseline PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_perf_baseline PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
+target_link_libraries(ao_perf_baseline PRIVATE ao ao_audio ao_app_uimodel app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
     target_compile_definitions(ao_perf_baseline PRIVATE PIPEWIRE_FOUND)

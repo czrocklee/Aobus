@@ -63,6 +63,8 @@ namespace ao::gtk
     void setLocalExpression(std::string_view expression);
 
   private:
+    friend class SmartListDialogTestPeer;
+
     void setupUi();
     void setupPreview();
     void setupPreviewColumns();
@@ -85,6 +87,7 @@ namespace ao::gtk
     Gtk::ScrolledWindow _previewScrolledWindow;
     Gtk::ColumnView _previewColumnView;
     sigc::connection _exprTimeoutConnection;
+    sigc::connection _rebuildConnection;
 
     // Preview infrastructure
     rt::AppRuntime& _runtime;

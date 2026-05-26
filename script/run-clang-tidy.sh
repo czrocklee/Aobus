@@ -454,6 +454,7 @@ run_batch() {
     local tmpdir
     tmpdir=$(mktemp -d /tmp/tidy-XXXXXX)
     local running=0 total=${#files[@]} done=0
+    local batch_status=0
     local logs=()
     local index=0
     for f in "${files[@]}"; do
@@ -467,7 +468,9 @@ run_batch() {
         ((running++))
 
         if ((running >= JOBS)); then
-            wait -n 2>/dev/null || true
+            if ! wait -n 2>/dev/null; then
+                batch_status=1
+            fi
             ((running--))
             ((done++))
             printf "\r  [%d/%d]" $done $total >&2
@@ -475,7 +478,9 @@ run_batch() {
     done
     # Drain remaining
     while ((running > 0)); do
-        wait -n 2>/dev/null || true
+        if ! wait -n 2>/dev/null; then
+            batch_status=1
+        fi
         ((running--))
         ((done++))
         printf "\r  [%d/%d]" $done $total >&2
@@ -499,12 +504,40 @@ run_batch() {
     fi
 
     if $FIX_MODE; then
-        echo "  Applying fixes safely..."
-        clang-apply-replacements "$tmpdir"
+        if ((batch_status != 0)); then
+            echo "  Skipping automatic fixes because clang-tidy failed for at least one file."
+        else
+            local fix_file_count=0
+            local replacement_count=0
+            fix_file_count=$(find "$tmpdir" -type f -name '*.yaml' | wc -l | tr -d ' ')
+            replacement_count=$(
+                find "$tmpdir" -type f -name '*.yaml' -print0 \
+                    | xargs -0 grep -h -E '^[[:space:]]+- FilePath:' 2>/dev/null \
+                    | wc -l \
+                    | tr -d ' '
+            )
+
+            if ((replacement_count == 0)); then
+                if ((fix_file_count == 0)); then
+                    echo "  No automatic fixes were exported."
+                else
+                    echo "  No automatic replacements were exported ($fix_file_count diagnostic fix file(s) contained no replacements)."
+                fi
+            else
+                echo "  Applying $replacement_count replacement(s) from $fix_file_count fix file(s) safely..."
+                if ! clang-apply-replacements --ignore-insert-conflict "$tmpdir"; then
+                    echo "ERROR: clang-apply-replacements failed." >&2
+                    batch_status=1
+                fi
+            fi
+        fi
     fi
 
     rm -rf "$tmpdir"
+    return "$batch_status"
 }
 
-run_batch STRICT  "${STRT_FILES[@]}"
-run_batch RELAXED "${RELX_FILES[@]}"
+overall_status=0
+run_batch STRICT "${STRT_FILES[@]}" || overall_status=1
+run_batch RELAXED "${RELX_FILES[@]}" || overall_status=1
+exit "$overall_status"

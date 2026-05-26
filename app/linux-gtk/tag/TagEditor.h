@@ -47,6 +47,8 @@ namespace ao::gtk
     TagsChangedSignal& signalTagsChanged() { return _tagsChanged; }
 
   private:
+    friend class TagEditorTestPeer;
+
     void setupUi();
     void collectTagData();
     void rebuildCurrentTags();

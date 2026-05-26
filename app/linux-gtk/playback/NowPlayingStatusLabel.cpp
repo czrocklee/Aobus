@@ -3,16 +3,15 @@
 
 #include "playback/NowPlayingStatusLabel.h"
 
-#include "ao/audio/Types.h"
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/label.h>
 
 #include <cstdint>
-#include <format>
+#include <memory>
 
 namespace ao::gtk
 {
@@ -30,40 +29,14 @@ namespace ao::gtk
     _label.add_controller(clickGesture);
     _label.set_cursor(Gdk::Cursor::create("pointer"));
 
-    _startedSub = _playbackService.onStarted([this] { updateState(); });
-    _pausedSub = _playbackService.onPaused([this] { updateState(); });
-    _idleSub = _playbackService.onIdle([this] { updateState(); });
-    _stoppedSub = _playbackService.onStopped([this] { updateState(); });
-
-    updateState();
+    _controller = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
+      _playbackService, [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 
   NowPlayingStatusLabel::~NowPlayingStatusLabel() = default;
 
-  void NowPlayingStatusLabel::updateState()
+  void NowPlayingStatusLabel::applyState(ao::uimodel::playback::NowPlayingViewState const& view)
   {
-    auto const& state = _playbackService.state();
-
-    if (state.transport == audio::Transport::Idle)
-    {
-      _label.set_text("");
-      return;
-    }
-
-    if (!state.trackTitle.empty())
-    {
-      if (!state.trackArtist.empty())
-      {
-        _label.set_text(std::format("{} - {}", state.trackArtist, state.trackTitle));
-      }
-      else
-      {
-        _label.set_text(state.trackTitle);
-      }
-    }
-    else
-    {
-      _label.set_text("");
-    }
+    _label.set_text(view.combinedStatus);
   }
 } // namespace ao::gtk

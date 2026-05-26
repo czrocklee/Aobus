@@ -17,10 +17,8 @@
 #include <utility>
 #include <variant>
 
-
-  namespace ao::gtk::test
+namespace ao::gtk::test
 {
-
   using namespace ao::gtk;
   using namespace ao::rt;
 
@@ -548,5 +546,4 @@
     REQUIRE(def != nullptr);
     CHECK(def->writePatch == nullptr);
   }
-
 } // namespace ao::gtk::test

@@ -340,7 +340,7 @@ namespace ao::gtk
     _completionSelection->set_selected(0);
     _completionListView.scroll_to(0);
 
-    if (!_completionPopover.get_visible())
+    if (!_suppressPopup && !_completionPopover.get_visible())
     {
       _completionPopover.popup();
     }

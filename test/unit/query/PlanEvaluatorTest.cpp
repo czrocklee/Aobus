@@ -443,7 +443,8 @@ namespace ao::query::test
     CHECK(evaluator.evaluateFull(plan, missingArtistTrack) == false);
   }
 
-  TEST_CASE("PlanEvaluator - OR between artist LIKE and tag does not over-prune on bloom filter", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - OR between artist LIKE and tag does not over-prune on bloom filter",
+            "[query][unit][plan_evaluator]")
   {
     auto temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};

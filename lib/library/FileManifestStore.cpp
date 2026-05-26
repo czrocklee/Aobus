@@ -60,6 +60,11 @@ namespace ao::library
   {
     validateUri(uri);
 
+    if (uri.empty())
+    {
+      return std::nullopt;
+    }
+
     auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
     auto const key = padUri(uri, buffer);
 

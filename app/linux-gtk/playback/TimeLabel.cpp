@@ -3,21 +3,20 @@
 
 #include "playback/TimeLabel.h"
 
-#include "ao/audio/Types.h"
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/uimodel/playback/PlaybackTimeViewModel.h>
 
 #include <gdkmm/frameclock.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
 
 #include <cstdint>
-#include <format>
+#include <memory>
 
 namespace ao::gtk
 {
-  TimeLabel::TimeLabel(rt::PlaybackService& playbackService, TimeLabelMode mode)
-    : _playbackService{playbackService}, _mode{mode}
+  TimeLabel::TimeLabel(rt::PlaybackService& playbackService, Mode mode)
+    : _mode{mode}
   {
     _label.set_halign(Gtk::Align::CENTER);
     _label.set_valign(Gtk::Align::CENTER);
@@ -26,16 +25,7 @@ namespace ao::gtk
     // Use Pango to measure the exact pixel width of the template string.
     // This ensures a tight fit without layout jitter when time changes.
     // The "tnum" feature in app.css guarantees all digits have the same width.
-    auto const templateText = std::string{[this]
-                                          {
-                                            switch (_mode)
-                                            {
-                                              case TimeLabelMode::Elapsed:
-                                              case TimeLabelMode::Duration: return "00:00";
-                                              case TimeLabelMode::Default:
-                                              default: return "00:00 / 00:00";
-                                            }
-                                          }()};
+    auto const templateText = ao::uimodel::playback::PlaybackTimeViewModel::describeTimeTemplate(_mode);
 
     auto const pangoLayout = _label.create_pango_layout(templateText);
     std::int32_t textWidth = 0;
@@ -47,49 +37,8 @@ namespace ao::gtk
 
     _label.set_text(templateText);
 
-    auto const resetCallback = [this] { reset(); };
-
-    _startedSub = _playbackService.onStarted(
-      [this]
-      {
-        _isPreviewing = false;
-        auto const& state = _playbackService.state();
-        _interpolator.updateState(state.positionMs, state.durationMs, true);
-        updateLabel(state.positionMs, state.durationMs);
-      });
-
-    _pausedSub = _playbackService.onPaused(
-      [this]
-      {
-        auto const& state = _playbackService.state();
-        _interpolator.updateState(state.positionMs, state.durationMs, false);
-      });
-
-    _idleSub = _playbackService.onIdle(resetCallback);
-    _stoppedSub = _playbackService.onStopped(resetCallback);
-    _preparingSub = _playbackService.onPreparing(resetCallback);
-
-    _seekUpdateSub = _playbackService.onSeekUpdate(
-      [this](rt::PlaybackService::SeekUpdate const& ev)
-      {
-        bool const isPreview = ev.mode == rt::PlaybackService::SeekMode::Preview;
-        _isPreviewing = isPreview;
-
-        if (!isPreview)
-        {
-          auto const& state = _playbackService.state();
-          bool const isPlaying =
-            (state.transport == audio::Transport::Playing || state.transport == audio::Transport::Buffering ||
-             state.transport == audio::Transport::Seeking);
-
-          _interpolator.updateState(ev.positionMs, state.durationMs, isPlaying);
-          updateLabel(ev.positionMs, state.durationMs);
-        }
-        else
-        {
-          updateLabel(ev.positionMs, _interpolator.lastDurationMs());
-        }
-      });
+    _controller = std::make_unique<ao::uimodel::playback::PlaybackTimeViewModel>(
+      playbackService, [this](ao::uimodel::playback::PlaybackTimeViewState const& view) { applyState(view); });
 
     _label.add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
@@ -106,15 +55,32 @@ namespace ao::gtk
     reset();
   }
 
+  TimeLabel::~TimeLabel() = default;
+
+  void TimeLabel::applyState(ao::uimodel::playback::PlaybackTimeViewState const& view)
+  {
+    if (view.durationMs == 0)
+    {
+      reset();
+      return;
+    }
+
+    _isPreviewing = view.isPreviewing;
+
+    if (!_isPreviewing)
+    {
+      _interpolator.updateState(view.positionMs, view.durationMs, view.isPlaying);
+      updateLabel(view.positionMs, view.durationMs);
+    }
+    else
+    {
+      updateLabel(view.positionMs, _interpolator.lastDurationMs());
+    }
+  }
+
   void TimeLabel::reset()
   {
-    switch (_mode)
-    {
-      case TimeLabelMode::Elapsed:
-      case TimeLabelMode::Duration: _label.set_text("00:00"); break;
-      case TimeLabelMode::Default:
-      default: _label.set_text("00:00 / 00:00"); break;
-    }
+    _label.set_text(ao::uimodel::playback::PlaybackTimeViewModel::describeTimeTemplate(_mode));
 
     _interpolator.reset();
     _isPreviewing = false;
@@ -131,21 +97,21 @@ namespace ao::gtk
 
     switch (_mode)
     {
-      case TimeLabelMode::Elapsed:
+      case Mode::Elapsed:
         if (!_dirty && posSec == _lastPosSec)
         {
           return;
         }
 
         break;
-      case TimeLabelMode::Duration:
+      case Mode::Duration:
         if (!_dirty && durSec == _lastDurSec)
         {
           return;
         }
 
         break;
-      case TimeLabelMode::Default:
+      case Mode::Default:
       default:
         if (!_dirty && posSec == _lastPosSec && durSec == _lastDurSec)
         {
@@ -159,21 +125,6 @@ namespace ao::gtk
     _lastDurSec = durSec;
     _dirty = false;
 
-    switch (int const secInMin = 60; _mode)
-    {
-      case TimeLabelMode::Elapsed:
-        _label.set_text(std::format("{:d}:{:02d}", posSec / secInMin, posSec % secInMin));
-        break;
-
-      case TimeLabelMode::Duration:
-        _label.set_text(std::format("{:d}:{:02d}", durSec / secInMin, durSec % secInMin));
-        break;
-
-      case TimeLabelMode::Default:
-      default:
-        _label.set_text(std::format(
-          "{:d}:{:02d} / {:d}:{:02d}", posSec / secInMin, posSec % secInMin, durSec / secInMin, durSec % secInMin));
-        break;
-    }
+    _label.set_text(ao::uimodel::playback::PlaybackTimeViewModel::formatPlaybackTime(_mode, posMs, durMs));
   }
 } // namespace ao::gtk

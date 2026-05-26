@@ -12,9 +12,8 @@
 #include "app/MainWindow.h"
 #include "app/UIState.h"
 #include "image/ImageCache.h"
-#include "list/ListSidebarController.h"
+#include "list/ListNavigationController.h"
 #include "platform/AudioBackendBootstrap.h"
-#include "playback/PlaybackSequenceController.h"
 #include "portal/ImportExportCoordinator.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
@@ -29,6 +28,7 @@
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/playback/PlaybackQueueModel.h>
 
 #include <filesystem>
 #include <memory>
@@ -54,10 +54,10 @@ namespace ao::gtk
       std::make_unique<TagEditController>(window, _runtime, TagEditController::Callbacks{.onTagsMutated = [] {}});
 
     // Initialize list sidebar controller (must exist before TrackPageHost)
-    _listSidebarController = std::make_unique<ListSidebarController>(
+    _listSidebarController = std::make_unique<ListNavigationController>(
       window,
       _runtime,
-      ListSidebarController::Callbacks{
+      ListNavigationController::Callbacks{
         .onListSelected = [this](ListId listId) { _runtime.workspace().navigateTo(listId); },
         .getListMembership = [this](ListId listId) { return &_runtime.sources().sourceFor(listId); }});
 
@@ -116,8 +116,9 @@ namespace ao::gtk
 
     registerPlatformAudioBackends(_runtime);
 
-    _playbackSequenceController = std::make_unique<PlaybackSequenceController>(_runtime.playback(), *_trackRowCache);
-    _trackPageHost->setPlaybackSequenceController(*_playbackSequenceController);
+    _playbackSequenceController = std::make_unique<ao::uimodel::playback::PlaybackQueueModel>(
+      _runtime.playback(), [this](TrackId id) { return _trackRowCache->getPlaybackDescriptor(id); });
+    _trackPageHost->setPlaybackQueueModel(*_playbackSequenceController);
 
     _libraryTaskCompletedSubscription = _runtime.mutation().onLibraryTaskCompleted(
       [this](auto)
@@ -236,7 +237,7 @@ namespace ao::gtk
   {
     return GtkUiServices{.trackRowCache = _trackRowCache.get(),
                          .imageCache = _imageCache.get(),
-                         .playbackSequenceController = _playbackSequenceController.get(),
+                         .playbackQueueModel = _playbackSequenceController.get(),
                          .tagEditController = _tagEditController.get(),
                          .importExportCoordinator = _importExportCoordinator.get(),
                          .trackPageHost = _trackPageHost.get(),

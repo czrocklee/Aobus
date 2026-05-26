@@ -40,6 +40,8 @@ namespace ao::gtk
     Gtk::Entry const& entry() const { return _entry; }
 
   private:
+    friend class QueryExpressionBoxTestPeer;
+
     void setupCompletion();
     void updateCompletion();
     void hideCompletion();
@@ -57,6 +59,7 @@ namespace ao::gtk
     std::vector<std::string> _availableCustomKeys;
     std::int32_t _completionTokenStart = -1;
     bool _suppressNextCompletionUpdate = false;
+    bool _suppressPopup = false;
 
     // Layout constants
     static constexpr int kCompletionWidth = 260;

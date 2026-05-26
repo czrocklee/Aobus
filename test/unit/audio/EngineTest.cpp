@@ -19,10 +19,11 @@
 #include <chrono>
 #include <cstddef>
 #include <expected>
+#include <future>
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <thread>
+
 #include <utility>
 #include <vector>
 
@@ -759,18 +760,18 @@ namespace ao::audio::test
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "fail.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
+    auto errorPromise = std::promise<void>{};
+    auto errorFuture = errorPromise.get_future();
+    engine.setOnTrackEnded([&errorPromise] { errorPromise.set_value(); });
+
     engine.play(desc);
 
     // The StreamingSource decode loop runs in a background thread.
-    // It should hit the error and call handleSourceError — the error may
-    // propagate before we ever observe the Playing state externally.
-    // Poll with timeout — exits as soon as the error propagates.
-    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    // It should hit the error and call handleSourceError, which now
+    // fires onTrackEnded so we can synchronize without polling.
+    auto const status = errorFuture.wait_for(std::chrono::seconds{5});
 
-    while (engine.status().transport != Transport::Error && std::chrono::steady_clock::now() < deadline)
-    {
-      std::this_thread::yield();
-    }
+    REQUIRE(status == std::future_status::ready);
 
     auto const snap = engine.status();
     REQUIRE(snap.transport == Transport::Error);

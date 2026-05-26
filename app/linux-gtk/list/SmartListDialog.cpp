@@ -19,6 +19,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackSource.h>
+#include <ao/uimodel/list/SmartListEditorModel.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -38,7 +39,6 @@
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -53,32 +53,52 @@ namespace ao::gtk
 {
   namespace
   {
-    std::string composeEffectiveExpression(std::string_view parent, std::string_view local)
-    {
-      if (parent.empty())
-      {
-        return std::string{local};
-      }
-
-      if (local.empty())
-      {
-        return std::string{parent};
-      }
-
-      return std::format("({}) and ({})", parent, local);
-    }
-
     std::string displayExpression(std::string_view expression)
     {
-      if (expression.empty())
-      {
-        return "(none)";
-      }
-
-      return std::string{expression};
+      return expression.empty() ? "(none)" : std::string{expression};
     }
 
-    constexpr std::size_t kMaxPreview = 10;
+    std::string formatPreviewStatus(uimodel::list::SmartListStatus status,
+                                    std::size_t count,
+                                    bool isAllTracks,
+                                    bool localEmpty)
+    {
+      using Status = uimodel::list::SmartListStatus;
+
+      if (localEmpty)
+      {
+        if (count == 0)
+        {
+          return isAllTracks ? "<i>No tracks in library</i>" : "<i>No tracks in source</i>";
+        }
+
+        return std::format("<i>Showing all {} {}</i>", count, isAllTracks ? "tracks" : "source tracks");
+      }
+
+      switch (status)
+      {
+        case Status::InvalidExpression: return "<i>Invalid filter</i>";
+        case Status::EmptySource: return "<i>No tracks in source</i>";
+        case Status::Valid:
+        {
+          if (count == 0)
+          {
+            return "<i>No matches</i>";
+          }
+
+          constexpr std::size_t kMaxPreview = 10;
+
+          if (count <= kMaxPreview)
+          {
+            return std::format("<i>Showing all {} matches</i>", count);
+          }
+
+          return std::format("<i>Showing {} of {} matches</i>", kMaxPreview, count);
+        }
+      }
+
+      return "";
+    }
   }
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
@@ -98,6 +118,7 @@ namespace ao::gtk
   SmartListDialog::~SmartListDialog()
   {
     _exprTimeoutConnection.disconnect();
+    _rebuildConnection.disconnect();
   }
 
   void SmartListDialog::populate(ListId id, library::ListView const& view)
@@ -133,75 +154,66 @@ namespace ao::gtk
 
     set_default_size(kDialogWidth, kDialogHeight);
 
-    // Main container: horizontal box (left: inputs, right: preview)
-    auto mainBox = Gtk::Box{Gtk::Orientation::HORIZONTAL, kBoxSpacing * 2};
-    mainBox.add_css_class("ao-dialog-content");
+    auto* const mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing * 2);
+    mainBox->add_css_class("ao-dialog-content");
 
-    // Left panel: input fields
     _leftPanel.set_orientation(Gtk::Orientation::VERTICAL);
     _leftPanel.set_spacing(kBoxSpacing);
 
-    // Name field
-    auto nameLabel = Gtk::Label{"Name:"};
-    nameLabel.set_halign(Gtk::Align::START);
+    auto* const nameLabel = Gtk::make_managed<Gtk::Label>("Name:");
+    nameLabel->set_halign(Gtk::Align::START);
     _nameEntry.set_placeholder_text("List name");
-    _leftPanel.append(nameLabel);
+    _leftPanel.append(*nameLabel);
     _leftPanel.append(_nameEntry);
 
-    // Description field
-    auto descLabel = Gtk::Label{"Description:"};
-    descLabel.set_halign(Gtk::Align::START);
+    auto* const descLabel = Gtk::make_managed<Gtk::Label>("Description:");
+    descLabel->set_halign(Gtk::Align::START);
     _descEntry.set_placeholder_text("Optional description");
-    _leftPanel.append(descLabel);
+    _leftPanel.append(*descLabel);
     _leftPanel.append(_descEntry);
 
-    auto inheritedLabel = Gtk::Label{"Inherited Filter:"};
-    inheritedLabel.set_halign(Gtk::Align::START);
+    auto* const inheritedLabel = Gtk::make_managed<Gtk::Label>("Inherited Filter:");
+    inheritedLabel->set_halign(Gtk::Align::START);
     _inheritedExprLabel.set_halign(Gtk::Align::START);
     _inheritedExprLabel.set_wrap(true);
     _inheritedExprLabel.set_lines(kLabelMinLines);
-    _leftPanel.append(inheritedLabel);
+    _leftPanel.append(*inheritedLabel);
     _leftPanel.append(_inheritedExprLabel);
 
-    // Filter field
-    auto exprLabel = Gtk::Label{"Local Filter:"};
-    exprLabel.set_halign(Gtk::Align::START);
+    auto* const exprLabel = Gtk::make_managed<Gtk::Label>("Local Filter:");
+    exprLabel->set_halign(Gtk::Align::START);
     _exprBox.entry().set_placeholder_text("Filter expression (type $, @, #, or %)");
     _exprBox.entry().signal_changed().connect(
       [this]
       {
-        // Cancel any pending update
         _exprTimeoutConnection.disconnect();
-        // Debounce: update preview after 100ms of inactivity
         _exprTimeoutConnection = Glib::signal_timeout().connect(
           [this]
           {
             updatePreview();
-            return false; // one-shot
+            return false;
           },
           100);
       });
-    _leftPanel.append(exprLabel);
+    _leftPanel.append(*exprLabel);
     _leftPanel.append(_exprBox);
 
-    auto effectiveLabel = Gtk::Label{"Effective Filter:"};
-    effectiveLabel.set_halign(Gtk::Align::START);
+    auto* const effectiveLabel = Gtk::make_managed<Gtk::Label>("Effective Filter:");
+    effectiveLabel->set_halign(Gtk::Align::START);
     _effectiveExprLabel.set_halign(Gtk::Align::START);
     _effectiveExprLabel.set_wrap(true);
     _effectiveExprLabel.set_lines(kLabelMinLines);
-    _leftPanel.append(effectiveLabel);
+    _leftPanel.append(*effectiveLabel);
     _leftPanel.append(_effectiveExprLabel);
 
-    // Error label (shown below expression when invalid)
     _errorLabel.set_visible(false);
     _errorLabel.set_wrap(true);
     _errorLabel.set_halign(Gtk::Align::START);
     _leftPanel.append(_errorLabel);
 
-    // Buttons
-    auto buttonBox = Gtk::Box{Gtk::Orientation::HORIZONTAL, kButtonBoxSpacing};
-    buttonBox.set_halign(Gtk::Align::END);
-    buttonBox.add_css_class("ao-dialog-actions");
+    auto* const buttonBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kButtonBoxSpacing);
+    buttonBox->set_halign(Gtk::Align::END);
+    buttonBox->add_css_class("ao-dialog-actions");
 
     _cancelButton.set_label("Cancel");
     _cancelButton.signal_clicked().connect([this] { response(Gtk::ResponseType::CANCEL); });
@@ -212,19 +224,18 @@ namespace ao::gtk
 
     _nameEntry.signal_changed().connect([this] { updateDialogState(); });
 
-    buttonBox.append(_cancelButton);
-    buttonBox.append(_okButton);
-    _leftPanel.append(buttonBox);
+    buttonBox->append(_cancelButton);
+    buttonBox->append(_okButton);
+    _leftPanel.append(*buttonBox);
 
-    // Right panel: preview area
     _rightPanel.set_orientation(Gtk::Orientation::VERTICAL);
     _rightPanel.set_spacing(kBoxSpacing);
     _rightPanel.set_hexpand(true);
     _rightPanel.set_vexpand(true);
 
-    auto previewLabel = Gtk::Label{"Preview:"};
-    previewLabel.set_halign(Gtk::Align::START);
-    _rightPanel.append(previewLabel);
+    auto* const previewLabel = Gtk::make_managed<Gtk::Label>("Preview:");
+    previewLabel->set_halign(Gtk::Align::START);
+    _rightPanel.append(*previewLabel);
 
     _matchCountLabel.set_halign(Gtk::Align::START);
     _matchCountLabel.set_markup("<i>Enter an expression to see matches</i>");
@@ -236,28 +247,24 @@ namespace ao::gtk
     _previewScrolledWindow.set_child(_previewColumnView);
     _rightPanel.append(_previewScrolledWindow);
 
-    // Set proportional sizes (60% inputs, 40% preview)
     _leftPanel.set_hexpand(true);
     _rightPanel.set_hexpand(true);
 
-    mainBox.append(_leftPanel);
-    mainBox.append(_rightPanel);
+    mainBox->append(_leftPanel);
+    mainBox->append(_rightPanel);
 
-    set_child(mainBox);
+    set_child(*mainBox);
   }
 
   void SmartListDialog::setupPreview()
   {
-    // Create preview engine for expression evaluation
     _previewEngine = std::make_unique<rt::SmartListEvaluator>(_runtime.musicLibrary());
-
     setupPreviewColumns();
     rebuildPreviewSource();
   }
 
   void SmartListDialog::setupPreviewColumns()
   {
-    // Single column factory that formats "Title - Artist (Album)"
     auto factory = Gtk::SignalListItemFactory::create();
 
     factory->signal_setup().connect(
@@ -318,23 +325,18 @@ namespace ao::gtk
 
   void SmartListDialog::rebuildPreviewSource()
   {
-    // Use deferred execution to avoid GTK accessing freed model during event processing
-    // Schedule model replacement to happen after current GTK event is processed
-    Glib::signal_idle().connect_once(
+    _rebuildConnection.disconnect();
+    _rebuildConnection = Glib::signal_idle().connect(
       [this]
       {
-        // First clear the GTK model to release any held references
         auto emptySelection = Glib::RefPtr<Gtk::SelectionModel>{};
         _previewColumnView.set_model(emptySelection);
 
-        // Now safe to reset projection and filtered list
         _previewFilteredList.reset();
         _previewModel.reset();
 
         auto& parentSource = _runtime.sources().sourceFor(_parentListId);
 
-        // Use the parent's membership list as source - this already has the inherited filter applied
-        // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList =
           std::make_unique<rt::SmartListSource>(parentSource, _runtime.musicLibrary(), *_previewEngine);
 
@@ -349,14 +351,14 @@ namespace ao::gtk
 
         updateSourceLabels();
         updateDialogState();
+
+        return false;
       });
   }
 
   void SmartListDialog::updateSourceLabels()
   {
     auto inheritedExpr = std::string_view{};
-
-    // Check if parent is All Tracks
     auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
 
     if (!isAllTracks)
@@ -379,20 +381,37 @@ namespace ao::gtk
     _inheritedExprLabel.set_text(displayExpression(inheritedExpr));
 
     auto const localExpr = std::string{_exprBox.entry().get_text()};
-    auto const effectiveExpression = composeEffectiveExpression(inheritedExpr, localExpr);
+    auto const effectiveExpression =
+      ao::uimodel::list::SmartListEditorModel::composeEffectiveExpression(inheritedExpr, localExpr);
     _effectiveExprLabel.set_text(displayExpression(effectiveExpression));
   }
 
   void SmartListDialog::updateDialogState()
   {
-    _okButton.set_sensitive(!_nameEntry.get_text().empty() && _expressionValid);
+    using ao::uimodel::list::SmartListStatus;
+
+    auto const status = [this]
+    {
+      if (!_expressionValid)
+      {
+        return SmartListStatus::InvalidExpression;
+      }
+
+      if (!_previewFilteredList)
+      {
+        return SmartListStatus::EmptySource;
+      }
+
+      return SmartListStatus::Valid;
+    }();
+
+    _okButton.set_sensitive(ao::uimodel::list::SmartListEditorModel::canSubmit(_nameEntry.get_text().raw(), status));
   }
 
   void SmartListDialog::updatePreview()
   {
     updateSourceLabels();
 
-    // For other lists, use FilteredTrackIdList
     if (!_previewFilteredList)
     {
       _expressionValid = false;
@@ -401,67 +420,36 @@ namespace ao::gtk
       return;
     }
 
-    auto const& expr = _exprBox.entry().get_text();
+    auto const expr = std::string{_exprBox.entry().get_text()};
     auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
-
-    if (expr.empty())
-    {
-      _exprBox.entry().remove_css_class("error");
-      _errorLabel.set_visible(false);
-      _previewScrolledWindow.set_visible(true);
-      _previewFilteredList->setExpression("");
-      _previewFilteredList->reload();
-      _expressionValid = true;
-
-      if (auto const total = _previewFilteredList->size(); total == 0)
-      {
-        _matchCountLabel.set_markup(isAllTracks ? "<i>No tracks in library</i>" : "<i>No tracks in source</i>");
-      }
-      else
-      {
-        _matchCountLabel.set_markup(
-          Glib::ustring::format("<i>Showing all ", total, isAllTracks ? " tracks</i>" : " source tracks</i>"));
-      }
-
-      updateDialogState();
-      return;
-    }
 
     _previewFilteredList->setExpression(expr);
     _previewFilteredList->reload();
 
-    if (_previewFilteredList->hasError())
+    auto const hasError = _previewFilteredList->hasError();
+    auto const optError = _previewFilteredList->error();
+    auto const errorMessage = optError ? optError->message : std::string{};
+    auto const matchCount = _previewFilteredList->size();
+
+    auto const status =
+      hasError ? ao::uimodel::list::SmartListStatus::InvalidExpression : ao::uimodel::list::SmartListStatus::Valid;
+
+    _matchCountLabel.set_markup(formatPreviewStatus(status, matchCount, isAllTracks, expr.empty()));
+
+    if (hasError && !expr.empty())
     {
-      // Show error state
       _exprBox.entry().add_css_class("error");
       _errorLabel.set_visible(true);
-      // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-      _errorLabel.set_text("Filter error: " + _previewFilteredList->error()->message);
+      _errorLabel.set_text("Filter error: " + errorMessage);
       _previewScrolledWindow.set_visible(false);
-      _matchCountLabel.set_markup("<i>Invalid filter</i>");
       _expressionValid = false;
     }
     else
     {
-      // Show valid state
       _exprBox.entry().remove_css_class("error");
       _errorLabel.set_visible(false);
       _previewScrolledWindow.set_visible(true);
       _expressionValid = true;
-
-      if (auto const total = _previewFilteredList->size(); total == 0)
-      {
-        _matchCountLabel.set_markup("<i>No matches</i>");
-      }
-      else if (total <= kMaxPreview)
-      {
-        _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing all ", total, " matches</i>"));
-      }
-      else
-      {
-        auto const shown = std::min(total, kMaxPreview);
-        _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing ", shown, " of ", total, " matches</i>"));
-      }
     }
 
     updateDialogState();
@@ -469,14 +457,7 @@ namespace ao::gtk
 
   rt::LibraryMutationService::ListDraft SmartListDialog::draft() const
   {
-    auto draftData = rt::LibraryMutationService::ListDraft{};
-    draftData.kind = rt::LibraryMutationService::ListKind::Smart;
-    draftData.parentId = _parentListId;
-    draftData.listId = editListId();
-    draftData.name = _nameEntry.get_text();
-    draftData.description = _descEntry.get_text();
-    draftData.expression = _exprBox.entry().get_text();
-    // trackIds remain empty for smart lists
-    return draftData;
+    return ao::uimodel::list::SmartListEditorModel::createDraft(
+      _parentListId, _editListId, _nameEntry.get_text(), _descEntry.get_text(), _exprBox.entry().get_text());
   }
 } // namespace ao::gtk

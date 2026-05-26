@@ -9,8 +9,7 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/lmdb/Transaction.h"
 #include "ao/utility/Log.h"
-#include "list/ListSidebarController.h"
-#include "playback/PlaybackSequenceController.h"
+#include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "track/TrackListModel.h"
 #include "track/TrackPresentationStore.h"
@@ -24,6 +23,8 @@
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/playback/PlaybackQueueModel.h>
+#include <ao/uimodel/track/TrackPageRoute.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
@@ -42,14 +43,14 @@ namespace ao::gtk
 {
   TrackPageHost::TrackPageHost(Gtk::Stack& stack,
                                rt::AppRuntime& runtime,
-                               PlaybackSequenceController* sequenceController,
+                               ao::uimodel::playback::PlaybackQueueModel* queueModel,
                                TagEditController& tagEditController,
-                               ListSidebarController& listSidebar,
+                               ListNavigationController& listSidebar,
                                TrackPresentationStore& presentationStore,
                                ImageCache* imageCache)
     : _stack{stack}
     , _runtime{runtime}
-    , _playbackSequenceController{sequenceController}
+    , _playbackQueueModel{queueModel}
     , _tagEditController{tagEditController}
     , _listSidebar{listSidebar}
     , _presentationStore{presentationStore}
@@ -353,12 +354,13 @@ namespace ao::gtk
     page->signalSelectionChanged().connect(
       [this, page, viewId]
       {
-        auto const ids = page->selectionController().getSelectedTrackIds();
+        auto const route =
+          ao::uimodel::track::describeSelectionRoute(viewId, page->selectionController().getSelectedTrackIds());
 
-        if (viewId != rt::kInvalidViewId)
+        if (route.shouldUpdateRuntimeSelection)
         {
-          _runtime.views().setSelection(viewId, ids);
-          _runtime.workspace().setFocusedView(viewId);
+          _runtime.views().setSelection(route.focusedViewId, route.selectedIds);
+          _runtime.workspace().setFocusedView(route.focusedViewId);
         }
       });
 
@@ -385,22 +387,16 @@ namespace ao::gtk
     page->signalTrackActivated().connect(
       [this, page](TrackId id)
       {
-        if (_playbackSequenceController)
+        if (_playbackQueueModel)
         {
-          _playbackSequenceController->playFromPage(*page, id);
+          _playbackQueueModel->playQueue(page->selectionController().getVisibleTrackIds(), id, page->getListId());
         }
       });
 
     page->signalCreateSmartListRequested().connect(
       [this, page](std::string const& expression)
       {
-        auto parentId = page->getListId();
-
-        if (parentId == rt::kAllTracksListId)
-        {
-          parentId = kInvalidListId;
-        }
-
+        auto const parentId = ao::uimodel::track::smartListParentIdFromPage(page->getListId());
         _listSidebar.createSmartListFromExpression(parentId, expression);
       });
 

@@ -3,13 +3,13 @@
 
 #include "playback/OutputSelector.h"
 
-#include "ao/audio/Backend.h"
 #include "layout/LayoutConstants.h"
-#include "playback/AobusSoulBinding.h"
 #include "playback/AobusSoulWindow.h"
 #include "playback/OutputListItems.h"
+#include <ao/audio/Backend.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/uimodel/playback/AudioOutputViewModel.h>
 
 #include <gdk/gdk.h>
 #include <giomm/liststore.h>
@@ -31,9 +31,7 @@
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
-#include <format>
 #include <memory>
-#include <string>
 #include <utility>
 
 namespace ao::gtk
@@ -52,7 +50,41 @@ namespace ao::gtk
     _button.set_valign(Gtk::Align::CENTER);
     _button.set_child(_soul);
 
-    _soulBinding = std::make_unique<AobusSoulBinding>(_soul, _playback);
+    _outputController = std::make_unique<ao::uimodel::playback::AudioOutputViewModel>(
+      _playback,
+      [this](ao::uimodel::playback::AudioOutputViewState const& view)
+      {
+        _store->remove_all();
+
+        for (auto const& row : view.rows)
+        {
+          if (row.kind == ao::uimodel::playback::AudioOutputRow::Kind::BackendHeader)
+          {
+            _store->append(BackendItem::create(row.backendId, row.title));
+          }
+          else if (row.kind == ao::uimodel::playback::AudioOutputRow::Kind::DeviceProfile)
+          {
+            auto audioDevice = audio::Device{
+              .id = row.deviceId,
+              .displayName = row.title,
+              .description = row.description,
+              .backendId = row.backendId,
+            };
+
+            auto const item = DeviceItem::create(row.backendId, audioDevice, row.profileId, row.title);
+            item->setActive(row.isActive);
+            _store->append(item);
+          }
+        }
+      });
+
+    _soulController = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
+      _playback,
+      [this](ao::uimodel::playback::AobusSoulViewState const& view)
+      {
+        _soul.breathe(view.isBreathing);
+        _soul.setAura(Gdk::RGBA{view.auraColor});
+      });
 
     _popover.set_parent(_button);
     _popover.set_autohide(true);
@@ -72,7 +104,7 @@ namespace ao::gtk
     _button.signal_clicked().connect(
       [this]
       {
-        rebuildModel();
+        _outputController->refresh();
         _popover.popup();
       });
 
@@ -119,7 +151,7 @@ namespace ao::gtk
 
           if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
           {
-            _playback.setOutput(deviceItem->backendId(), deviceItem->id(), deviceItem->profileId());
+            _outputController->selectOutput(deviceItem->backendId(), deviceItem->id(), deviceItem->profileId());
             _popover.popdown();
           }
         }
@@ -185,41 +217,5 @@ namespace ao::gtk
     }
 
     return nullptr;
-  }
-
-  void OutputSelector::rebuildModel()
-  {
-    auto const& state = _playback.state();
-    _store->remove_all();
-
-    for (auto const& backend : state.availableOutputs)
-    {
-      _store->append(BackendItem::create(backend.id, backend.name));
-
-      for (auto const& device : backend.devices)
-      {
-        for (auto const& profileMeta : backend.supportedProfiles)
-        {
-          auto const profile = profileMeta.id;
-          auto const displayName =
-            (profile == audio::kProfileExclusive) ? std::format("{} [E]", device.displayName) : device.displayName;
-
-          auto audioDevice = audio::Device{
-            .id = device.id,
-            .displayName = device.displayName,
-            .description = device.description,
-            .isDefault = device.isDefault,
-            .backendId = device.backendId,
-            .capabilities = device.capabilities,
-          };
-
-          auto const item = DeviceItem::create(backend.id, audioDevice, profile, displayName);
-
-          item->setActive(backend.id == state.selectedOutput.backendId && profile == state.selectedOutput.profileId &&
-                          device.id == state.selectedOutput.deviceId);
-          _store->append(item);
-        }
-      }
-    }
   }
 } // namespace ao::gtk

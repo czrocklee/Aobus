@@ -185,6 +185,12 @@ namespace ao::audio
 
     void handleSourceError(Error const& error)
     {
+      auto const endedCallback = [this]
+      {
+        auto const lock = std::scoped_lock{stateMutex};
+        return onTrackEnded;
+      }();
+
       {
         auto const lock = std::scoped_lock{stateMutex};
 
@@ -200,6 +206,11 @@ namespace ao::audio
       }
 
       backend->stop();
+
+      if (endedCallback)
+      {
+        endedCallback();
+      }
     }
 
     void notifyRouteChanged()

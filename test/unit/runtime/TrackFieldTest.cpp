@@ -20,10 +20,8 @@ namespace
   }
 }
 
-
-  namespace ao::rt::test
+namespace ao::rt::test
 {
-
   using namespace ao::rt;
 
   TEST_CASE("TrackField registry contains exactly kTrackFieldCount definitions", "[runtime][unit][trackfield]")
@@ -103,8 +101,10 @@ namespace
 
     auto const metadataCount = countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Metadata; });
     auto const tagCount = countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Tag; });
-    auto const technicalCount = countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Technical; });
-    auto const syntheticCount = countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Synthetic; });
+    auto const technicalCount =
+      countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Technical; });
+    auto const syntheticCount =
+      countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Synthetic; });
 
     CHECK(metadataCount == 12);
     CHECK(tagCount == 1);
@@ -182,7 +182,8 @@ namespace
     }
   }
 
-  TEST_CASE("TrackField synthetic fields are DisplayTrackNumber, TechnicalSummary, Quality", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField synthetic fields are DisplayTrackNumber, TechnicalSummary, Quality",
+            "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -295,5 +296,4 @@ namespace
     CHECK(trackFieldId(invalidField).empty());
     CHECK(trackFieldFilterExpressionVariable(invalidField).empty());
   }
-
 } // namespace ao::rt::test

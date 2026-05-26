@@ -3,10 +3,12 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
+
+#include <memory>
 
 namespace ao::rt
 {
@@ -34,14 +36,11 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _label; }
 
   private:
-    void updateState();
+    void applyState(uimodel::playback::NowPlayingViewState const& view);
 
     rt::PlaybackService& _playbackService;
     Gtk::Label _label;
 
-    rt::Subscription _startedSub;
-    rt::Subscription _pausedSub;
-    rt::Subscription _idleSub;
-    rt::Subscription _stoppedSub;
+    std::unique_ptr<uimodel::playback::NowPlayingViewModel> _controller;
   };
 } // namespace ao::gtk

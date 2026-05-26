@@ -4,17 +4,21 @@
 #include "playback/VolumeControl.h"
 
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/uimodel/playback/VolumeViewModel.h>
 
 #include <gtkmm/enums.h>
+
+#include <memory>
 
 namespace ao::gtk
 {
   VolumeControl::VolumeControl(rt::PlaybackService& playbackService)
-    : _playbackService{playbackService}
   {
     _volumeBar.set_valign(Gtk::Align::CENTER);
     _volumeBar.set_tooltip_text("Volume");
+
+    _controller = std::make_unique<ao::uimodel::playback::VolumeViewModel>(
+      playbackService, [this](ao::uimodel::playback::VolumeViewState const& state) { applyState(state); });
 
     _volumeBar.signalVolumeChanged().connect(
       [this](float volume)
@@ -24,25 +28,20 @@ namespace ao::gtk
           return;
         }
 
-        _playbackService.setVolume(volume);
+        _controller->handleVolumeChanged(volume);
       });
-
-    auto const refreshCallback = [this] { refresh(); };
-    _outputSub = _playbackService.onOutputChanged([refreshCallback](auto const&) { refreshCallback(); });
-    _startedSub = _playbackService.onStarted(refreshCallback);
-
-    refresh();
   }
 
-  void VolumeControl::refresh()
-  {
-    auto const& state = _playbackService.state();
-    _volumeBar.set_visible(state.volumeAvailable);
+  VolumeControl::~VolumeControl() = default;
 
-    if (state.volumeAvailable)
+  void VolumeControl::applyState(ao::uimodel::playback::VolumeViewState const& view)
+  {
+    _volumeBar.set_visible(view.visible);
+
+    if (view.visible)
     {
       _updating = true;
-      _volumeBar.setVolume(state.volume);
+      _volumeBar.setVolume(view.volume);
       _updating = false;
     }
   }

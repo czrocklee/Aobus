@@ -84,8 +84,11 @@ namespace ao::gtk::portal
 
   void PlaylistExporter::writeFile()
   {
-    _timeoutConnection->disconnect();
-    _timeoutConnection.reset();
+    if (_timeoutConnection)
+    {
+      _timeoutConnection->disconnect();
+      _timeoutConnection.reset();
+    }
 
     auto ofs = std::ofstream{_path};
 
@@ -116,6 +119,6 @@ namespace ao::gtk::portal
 
   void PlaylistExporter::triggerWrite()
   {
-    scheduleForWrite();
+    writeFile();
   }
 } // namespace ao::gtk::portal

@@ -618,7 +618,8 @@ namespace ao::rt::test
     REQUIRE_NOTHROW(runtime.workspace().restoreSession(*badConfigStore));
   }
 
-  TEST_CASE("WorkspaceService - invalid navigation targets and presentations are handled gracefully", "[workspace][unit]")
+  TEST_CASE("WorkspaceService - invalid navigation targets and presentations are handled gracefully",
+            "[workspace][unit]")
   {
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);

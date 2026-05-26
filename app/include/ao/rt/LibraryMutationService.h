@@ -53,7 +53,7 @@ namespace ao::rt
       ListId listId = kInvalidListId; // 0 = create, non-zero = update
       std::string name{};
       std::string description{};
-      std::string expression{};      // Only used for Smart lists
+      std::string expression{};        // Only used for Smart lists
       std::vector<TrackId> trackIds{}; // Only used for Manual lists
     };
 

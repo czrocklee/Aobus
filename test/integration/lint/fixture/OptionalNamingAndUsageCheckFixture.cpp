@@ -9,7 +9,7 @@ class TestClass
   // NEGATIVE
   std::optional<int> _optValidMemberName;
 
-  // NEGATIVE
+  // POSITIVE
   std::optional<int> _fieldWithOptInMiddle;
 };
 
@@ -21,6 +21,6 @@ void testOptionalUsage()
   // NEGATIVE
   [[maybe_unused]] auto optValidName = std::optional<int>{42};
 
-  // NEGATIVE
+  // POSITIVE
   [[maybe_unused]] auto hasOptSuffix = std::optional<int>{42};
 }

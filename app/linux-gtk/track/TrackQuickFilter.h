@@ -3,15 +3,13 @@
 
 #pragma once
 
-#include "ao/Error.h"
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/uimodel/track/TrackFilterViewModel.h>
 
 #include <gtkmm/entry.h>
 #include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
-#include <optional>
+#include <memory>
 #include <string>
 
 namespace ao::rt
@@ -41,23 +39,15 @@ namespace ao::gtk
 
   private:
     void onFilterTextChanged();
-    void onFilterDebounced();
-    void onFilterStatusChanged(rt::FilterStatusChanged const& status);
-    void onFocusedViewChanged(rt::ViewId viewId);
-    void updateUi();
+    void applyState(uimodel::track::TrackFilterViewState const& view);
 
     rt::AppRuntime& _runtime;
-    rt::ViewId _viewId{};
-
-    std::string _filterExpression;
-    bool _filterPending = false;
-    std::optional<Error> _optFilterError;
+    std::string _resolvedExpression;
 
     sigc::scoped_connection _textChangedConn;
     sigc::scoped_connection _debounceTimer;
-    rt::Subscription _filterStatusSub;
-    rt::Subscription _focusSub;
 
+    std::unique_ptr<uimodel::track::TrackFilterViewModel> _controller;
     CreateSmartListSignal _signalCreateSmartListRequested;
   };
 } // namespace ao::gtk

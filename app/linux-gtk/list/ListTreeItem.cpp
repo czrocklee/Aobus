@@ -12,7 +12,7 @@
 namespace ao::gtk
 {
   ListTreeItem::ListTreeItem()
-    : _children{Gio::ListStore<ListTreeItem>::create()}
+    : Glib::ObjectBase{"ListTreeItem"}, _children{Gio::ListStore<ListTreeItem>::create()}
   {
   }
 

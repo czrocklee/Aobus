@@ -20,10 +20,13 @@ namespace ao::lmdb
   class ReadTransaction;
 }
 
+namespace ao::uimodel::playback
+{
+  class PlaybackQueueModel;
+}
 namespace ao::gtk
 {
-  class ListSidebarController;
-  class PlaybackSequenceController;
+  class ListNavigationController;
   class TagEditController;
   class TrackRowCache;
   class TrackListModel;
@@ -55,9 +58,9 @@ namespace ao::gtk
   public:
     TrackPageHost(Gtk::Stack& stack,
                   rt::AppRuntime& runtime,
-                  PlaybackSequenceController* sequenceController,
+                  uimodel::playback::PlaybackQueueModel* queueModel,
                   TagEditController& tagEditController,
-                  ListSidebarController& listSidebar,
+                  ListNavigationController& listSidebar,
                   TrackPresentationStore& presentationStore,
                   ImageCache* imageCache);
     ~TrackPageHost();
@@ -68,9 +71,9 @@ namespace ao::gtk
     TrackPageHost(TrackPageHost&&) = delete;
     TrackPageHost& operator=(TrackPageHost&&) = delete;
 
-    void setPlaybackSequenceController(PlaybackSequenceController& controller)
+    void setPlaybackQueueModel(uimodel::playback::PlaybackQueueModel& controller)
     {
-      _playbackSequenceController = &controller;
+      _playbackQueueModel = &controller;
     }
 
     Gtk::Stack& stack() { return _stack; }
@@ -101,9 +104,9 @@ namespace ao::gtk
     void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
     rt::AppRuntime& _runtime;
-    PlaybackSequenceController* _playbackSequenceController;
+    uimodel::playback::PlaybackQueueModel* _playbackQueueModel;
     TagEditController& _tagEditController;
-    ListSidebarController& _listSidebar;
+    ListNavigationController& _listSidebar;
     TrackPresentationStore& _presentationStore;
     ImageCache* _imageCache = nullptr;
     rt::Subscription _revealSub;

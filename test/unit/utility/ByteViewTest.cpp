@@ -13,10 +13,9 @@
 #include <string_view>
 #include <vector>
 
-
 namespace ao::utility::test
 {
-    using namespace ao::utility;
+  using namespace ao::utility;
 
   namespace
   {
@@ -158,5 +157,4 @@ namespace ao::utility::test
       CHECK(dvPtr == &d);
     }
   }
-
 } // namespace ao::utility::test

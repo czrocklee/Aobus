@@ -3,11 +3,14 @@
 
 #pragma once
 
+namespace ao::uimodel::playback
+{
+  class PlaybackQueueModel;
+}
 namespace ao::gtk
 {
   class TrackRowCache;
   class ImageCache;
-  class PlaybackSequenceController;
   class TagEditController;
   namespace portal
   {
@@ -15,7 +18,7 @@ namespace ao::gtk
   }
   class TrackPageHost;
   class TrackPresentationStore;
-  class ListSidebarController;
+  class ListNavigationController;
 
   /**
    * A bag of services provided by the GTK application layer to be consumed by
@@ -25,11 +28,11 @@ namespace ao::gtk
   {
     TrackRowCache* trackRowCache = nullptr;
     ImageCache* imageCache = nullptr;
-    PlaybackSequenceController* playbackSequenceController = nullptr;
+    uimodel::playback::PlaybackQueueModel* playbackQueueModel = nullptr;
     TagEditController* tagEditController = nullptr;
     portal::ImportExportCoordinator* importExportCoordinator = nullptr;
     TrackPageHost* trackPageHost = nullptr;
     TrackPresentationStore* trackPresentationStore = nullptr;
-    ListSidebarController* listSidebarController = nullptr;
+    ListNavigationController* listSidebarController = nullptr;
   };
 } // namespace ao::gtk
