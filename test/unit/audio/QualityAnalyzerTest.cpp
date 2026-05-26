@@ -136,4 +136,50 @@ namespace ao::audio::test
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::Unknown);
   }
+
+  TEST_CASE("QualityAnalyzer - Float Conversions", "[audio][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+
+    SECTION("16-bit to 32-bit float is lossless")
+    {
+      graph.nodes[1].optFormat->bitDepth = 32;
+      graph.nodes[1].optFormat->isFloat = true;
+      graph.nodes[2].optFormat->bitDepth = 32;
+      graph.nodes[2].optFormat->isFloat = true;
+      graph.nodes[3].optFormat->bitDepth = 32;
+      graph.nodes[3].optFormat->isFloat = true;
+
+      auto const result = analyzeAudioQuality(graph);
+      REQUIRE(result.quality == Quality::LosslessFloat);
+    }
+
+    SECTION("32-bit integer to 32-bit float is lossy (mantissa truncation)")
+    {
+      graph.nodes[0].optFormat->bitDepth = 32;
+      graph.nodes[1].optFormat->bitDepth = 32;
+      graph.nodes[1].optFormat->isFloat = true;
+      graph.nodes[2].optFormat->bitDepth = 32;
+      graph.nodes[2].optFormat->isFloat = true;
+      graph.nodes[3].optFormat->bitDepth = 32;
+      graph.nodes[3].optFormat->isFloat = true;
+
+      auto const result = analyzeAudioQuality(graph);
+      REQUIRE(result.quality == Quality::LinearIntervention);
+    }
+
+    SECTION("32-bit integer to 64-bit float is lossless")
+    {
+      graph.nodes[0].optFormat->bitDepth = 32;
+      graph.nodes[1].optFormat->bitDepth = 64;
+      graph.nodes[1].optFormat->isFloat = true;
+      graph.nodes[2].optFormat->bitDepth = 64;
+      graph.nodes[2].optFormat->isFloat = true;
+      graph.nodes[3].optFormat->bitDepth = 64;
+      graph.nodes[3].optFormat->isFloat = true;
+
+      auto const result = analyzeAudioQuality(graph);
+      REQUIRE(result.quality == Quality::LosslessFloat);
+    }
+  }
 } // namespace ao::audio::test

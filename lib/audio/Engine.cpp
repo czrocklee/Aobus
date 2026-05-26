@@ -431,14 +431,18 @@ namespace ao::audio
       _impl->status.transport = Transport::Opening;
       _impl->optCurrentTrack = descriptor;
       _impl->syncBackendIdentity();
+    }
 
-      if (!_impl->openTrack(descriptor, source, backendFormat))
-      {
-        _impl->status.transport = Transport::Error;
-        _impl->optCurrentTrack.reset();
-        return;
-      }
+    if (!_impl->openTrack(descriptor, source, backendFormat))
+    {
+      auto const lock = std::scoped_lock{_impl->stateMutex};
+      _impl->status.transport = Transport::Error;
+      _impl->optCurrentTrack.reset();
+      return;
+    }
 
+    {
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->status.transport = Transport::Buffering;
     }
 
@@ -538,9 +542,13 @@ namespace ao::audio
     AUDIO_LOG_INFO("Playback stopped");
     _impl->backend->stop();
     _impl->backend->close();
+
+    {
+      auto const lock = std::scoped_lock{_impl->stateMutex};
+      _impl->resetEngine();
+    }
+
     _impl->source.store({}, std::memory_order_release);
-    auto const lock = std::scoped_lock{_impl->stateMutex};
-    _impl->resetEngine();
   }
 
   void Engine::seek(std::uint32_t positionMs)

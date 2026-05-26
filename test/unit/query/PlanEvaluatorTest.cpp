@@ -48,6 +48,7 @@ namespace ao::query::test
       std::string albumArtist = {};
       std::string composer = {};
       std::string work = {};
+      std::string genre = {};
       std::string uri = "/path/to/track.flac";
       std::uint16_t year = 2020;
       std::uint16_t trackNumber = 1;
@@ -152,6 +153,7 @@ namespace ao::query::test
         builder.metadata().albumArtist(spec.albumArtist);
         builder.metadata().composer(spec.composer);
         builder.metadata().work(spec.work);
+        builder.metadata().genre(spec.genre);
         builder.metadata().year(spec.year);
         builder.metadata().trackNumber(spec.trackNumber);
         builder.metadata().totalTracks(spec.totalTracks);
@@ -638,6 +640,162 @@ namespace ao::query::test
     auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 1900};
     result = evaluator.matches(plan, track2.view());
     CHECK(result == true);
+  }
+
+  TEST_CASE("PlanEvaluator - String Constant Out Of Bounds")
+  {
+    auto plan = ExecutionPlan{};
+    plan.instructions.push_back(
+      {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Title), .operand = 0});
+    plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 999});
+    plan.instructions.push_back({.op = OpCode::Eq, .operand = 1}); // out of bounds string index
+    plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = -1LL});
+    plan.instructions.push_back({.op = OpCode::Eq, .operand = 1}); // < 0
+
+    auto evaluator = PlanEvaluator{};
+    auto track = TestTrack{"Title"};
+    auto result = evaluator.evaluateFull(plan, track.view());
+    CHECK(result == false);
+  }
+
+  TEST_CASE("PlanEvaluator - Other Dictionary Fields")
+  {
+    auto spec = TrackSpec{};
+    spec.rating = 5;
+    spec.codecId = 2;
+    spec.trackNumber = 3;
+    spec.totalTracks = 12;
+    spec.discNumber = 1;
+    spec.totalDiscs = 2;
+    spec.coverArtId = 99;
+    spec.album = "Test Album";
+    spec.genre = "Test Genre";
+    spec.albumArtist = "Test Album Artist";
+    auto track = TestTrack{spec};
+
+    auto& dict = track.dictionary();
+    auto compiler = QueryCompiler{&dict};
+    auto evaluator = PlanEvaluator{};
+
+    SECTION("Album")
+    {
+      auto plan = compiler.compile(parse("$album = 'Test Album'"));
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+
+      auto planLike = compiler.compile(parse("$album ~ 'Test'"));
+      CHECK(evaluator.evaluateFull(planLike, track.view()) == true);
+    }
+
+    SECTION("Genre")
+    {
+      auto plan = compiler.compile(parse("$genre = 'Test Genre'"));
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+
+      auto planLike = compiler.compile(parse("$genre ~ 'Genre'"));
+      CHECK(evaluator.evaluateFull(planLike, track.view()) == true);
+    }
+
+    SECTION("AlbumArtist")
+    {
+      auto plan = compiler.compile(parse("$albumArtist = 'Test Album Artist'"));
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+
+      auto planLike = compiler.compile(parse("$albumArtist ~ 'Album Artist'"));
+      CHECK(evaluator.evaluateFull(planLike, track.view()) == true);
+    }
+
+    SECTION("Uri")
+    {
+      auto plan = ExecutionPlan{};
+      plan.stringConstants.emplace_back("/path/to/track.flac");
+      plan.instructions.push_back(
+        {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 0});
+      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
+      plan.instructions.push_back({.op = OpCode::Eq, .operand = 1});
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+    }
+
+    SECTION("Channels")
+    {
+      auto plan = compiler.compile(parse("@channels = 2"));
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+    }
+
+    SECTION("BitDepth")
+    {
+      auto plan = compiler.compile(parse("@bitDepth = 16"));
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+    }
+
+    SECTION("CodecId")
+    {
+      auto plan = compiler.compile(parse("@codecId = 2"));
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+    }
+
+    SECTION("Rating")
+    {
+      auto plan = compiler.compile(parse("@rating = 5"));
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+    }
+
+    SECTION("Numeric Metadata Fields")
+    {
+      CHECK(evaluator.evaluateFull(compiler.compile(parse("$trackNumber = 3")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compiler.compile(parse("$totalTracks = 12")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compiler.compile(parse("$discNumber = 1")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compiler.compile(parse("$totalDiscs = 2")), track.view()) == true);
+    }
+
+    SECTION("CoverArtId")
+    {
+      auto plan = ExecutionPlan{};
+      plan.instructions.push_back(
+        {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::CoverArtId), .operand = 0});
+      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 99});
+      plan.instructions.push_back({.op = OpCode::Eq, .operand = 1});
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+    }
+
+    SECTION("TagCount")
+    {
+      auto plan = ExecutionPlan{};
+      plan.instructions.push_back(
+        {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::TagCount), .operand = 0});
+      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
+      plan.instructions.push_back({.op = OpCode::Eq, .operand = 1});
+      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+    }
+
+    SECTION("Custom Property")
+    {
+      auto spec2 = TrackSpec{};
+      spec2.customPairs.emplace_back("customName", "customValue");
+      auto track2 = TestTrack{spec2};
+
+      auto plan = QueryCompiler{&track2.dictionary()}.compile(parse("%customName = 'customValue'"));
+      CHECK(PlanEvaluator{}.evaluateFull(plan, track2.view()) == true);
+
+      // Hit the fallback return {} for Custom when instruction is invalid
+      auto planManual = ExecutionPlan{};
+      planManual.instructions.push_back(
+        {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Custom), .operand = 0, .constValue = 0});
+      planManual.stringConstants.emplace_back("");
+      planManual.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
+      planManual.instructions.push_back({.op = OpCode::Eq, .operand = 1});
+      CHECK(PlanEvaluator{}.evaluateFull(planManual, track2.view()) == true);
+    }
+
+    SECTION("Invalid Field")
+    {
+      auto plan = ExecutionPlan{};
+      plan.stringConstants.emplace_back("pattern");
+      // 255 is an invalid field
+      plan.instructions.push_back({.op = OpCode::LoadField, .field = 255, .operand = 0});
+      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
+      plan.instructions.push_back({.op = OpCode::Like, .operand = 1});
+      CHECK(evaluator.evaluateFull(plan, track.view()) == false);
+    }
   }
 
   TEST_CASE("PlanEvaluator - Invalid Track View")

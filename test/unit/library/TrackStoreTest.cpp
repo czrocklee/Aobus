@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <vector>
 
 namespace ao::library::test
@@ -672,5 +673,31 @@ namespace ao::library::test
     REQUIRE(reader.end() != coldBegin);
     REQUIRE(reader.end() != hotBegin);
     REQUIRE(reader.end() != bothBegin);
+  }
+
+  TEST_CASE("TrackStore - read with missing cold data returns nullopt", "[core][track]")
+  {
+    auto temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = WriteTransaction{env};
+
+    auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
+    auto writer = store.writer(wtxn);
+
+    auto hotData = createStringData("hot_");
+    auto coldData = createStringData("cold");
+    auto [id, view] = writer.createHotCold(hotData, coldData);
+
+    // Corrupt the DB by deleting cold data only
+    auto coldDb = Database{wtxn, "tracks_cold"};
+    coldDb.writer(wtxn).del(id.raw());
+    wtxn.commit();
+
+    auto rtxn = ReadTransaction{env};
+    auto reader = store.reader(rtxn);
+
+    // Should return nullopt because cold data is missing
+    auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
+    CHECK(optView == std::nullopt);
   }
 } // namespace ao::library::test

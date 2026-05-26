@@ -146,10 +146,7 @@ namespace ao::query
       return plan->dictionary->get(dictionaryId);
     }
 
-    std::string_view loadStringFieldValue(library::TrackView const& track,
-                                          Field field,
-                                          Instruction const* instr,
-                                          ExecutionPlan const* plan = nullptr)
+    std::string_view loadStringFieldValue(library::TrackView const& track, Field field, Instruction const* instr)
     {
       switch (field)
       {
@@ -164,13 +161,6 @@ namespace ao::query
           }
 
           return {};
-
-        case Field::ArtistId:
-        case Field::AlbumId:
-        case Field::GenreId:
-        case Field::AlbumArtistId:
-        case Field::ComposerId:
-        case Field::WorkId: return loadDictionaryFieldValue(track, field, plan);
 
         default: return {};
       }
@@ -230,7 +220,7 @@ namespace ao::query
           prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
       {
         auto field = static_cast<Field>(prevLoadField->field);
-        auto const fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
+        auto const fieldStr = loadStringFieldValue(track, field, prevLoadField);
         auto const constantStr = getStringConstant(plan, stringIdx);
         registers[instr.operand - 1] = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
@@ -266,7 +256,7 @@ namespace ao::query
             prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
         {
           auto field = static_cast<Field>(prevLoadField->field);
-          auto const fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
+          auto const fieldStr = loadStringFieldValue(track, field, prevLoadField);
           auto const constantStr = getStringConstant(plan, stringIdx);
           registers[instr.operand - 1] = (fieldStr == constantStr) ? 1 : 0;
         }
@@ -295,7 +285,7 @@ namespace ao::query
 
       if (isStringField(field))
       {
-        fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
+        fieldStr = loadStringFieldValue(track, field, prevLoadField);
       }
       else if (isDictionaryField(field))
       {

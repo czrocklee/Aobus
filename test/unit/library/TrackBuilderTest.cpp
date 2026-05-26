@@ -377,4 +377,66 @@ namespace ao::library::test
     CHECK(view.property().durationMs() == 240000);
     CHECK(view.metadata().trackNumber() == 3);
   }
+
+  TEST_CASE("TrackBuilder - fromTrackView")
+  {
+    auto temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = WriteTransaction{env};
+    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
+    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
+
+    auto original = TrackBuilder::createNew();
+    original.metadata().title("Title").albumArtist("Test Album Artist").composer("Test Composer");
+    original.property().uri("/path.flac");
+
+    auto const [hotData, coldData] = original.serialize(wtxn, dict, resources);
+    auto view = TrackView{hotData, coldData};
+
+    auto reconstructed = TrackBuilder::fromView(view, dict);
+    CHECK(reconstructed.metadata().title() == "Title");
+    CHECK(reconstructed.metadata().albumArtist() == "Test Album Artist");
+    CHECK(reconstructed.metadata().composer() == "Test Composer");
+    CHECK(reconstructed.property().uri() == "/path.flac");
+
+    // test const getters
+    auto const& constBuilder = reconstructed;
+    CHECK(constBuilder.property().uri() == "/path.flac");
+    CHECK(constBuilder.tags().names().empty());
+  }
+
+  TEST_CASE("TrackBuilder - TrackView property and metadata getters")
+  {
+    auto temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = WriteTransaction{env};
+    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
+    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
+
+    auto builder = TrackBuilder::createNew();
+    builder.metadata()
+      .trackNumber(1)
+      .totalTracks(10)
+      .discNumber(2)
+      .totalDiscs(3)
+      .rating(4)
+      .coverArtId(42)
+      .album("Album")
+      .genre("Genre")
+      .albumArtist("Album Artist");
+    builder.tags().add("tag1").add("tag2");
+
+    auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+    auto view = TrackView{hotData, coldData};
+
+    CHECK(view.metadata().trackNumber() == 1);
+    CHECK(view.metadata().totalTracks() == 10);
+    CHECK(view.metadata().discNumber() == 2);
+    CHECK(view.metadata().totalDiscs() == 3);
+    CHECK(view.metadata().rating() == 4);
+    CHECK(view.metadata().coverArtId() == 42);
+    CHECK(view.metadata().albumId() == dict.getId("Album"));
+    CHECK(view.metadata().genreId() == dict.getId("Genre"));
+    CHECK(view.metadata().albumArtistId() == dict.getId("Album Artist"));
+  }
 } // namespace ao::library::test

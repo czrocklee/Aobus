@@ -39,7 +39,13 @@ namespace clang::tidy::readability
         return;
       }
 
-      if (StringRef const name = decl->getName(); !name.empty() && !name.contains_insensitive("opt"))
+      StringRef name = decl->getName();
+
+      while (name.consume_front("_"))
+      {
+      }
+
+      if (!name.empty() && !name.starts_with_insensitive("opt"))
       {
         diag(decl->getLocation(), "std::optional %0 %1 should contain 'opt' in its name to indicate it is optional")
           << (llvm::isa<FieldDecl>(decl) ? "member" : "variable") << decl;

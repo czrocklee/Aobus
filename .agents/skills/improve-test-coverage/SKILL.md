@@ -27,6 +27,15 @@ This script will automatically:
 
 The output will clearly state the coverage percentage. The project goal is `> 95%`.
 
+## 2. Core Philosophy: Test the Interface, Not the Implementation
+
+Our ultimate goal is to **find bugs in the code**, not just to pass tests for the sake of a >95% KPI. Always design your test cases based on the public interface shape, rather than the current internal implementation.
+
+- **Do not blindly delete failing or "unreachable" tests:** If an interface conceptually allows malformed input, test that input. Do not delete a test case just because you know the current internal implementation guards against it or skips it.
+- **Test boundaries and invalid inputs:** Feed the public interface with intentionally corrupted data, invalid enums, out-of-bounds IDs, or malformed structures. Verify that it gracefully handles or rejects them without crashing (e.g., preventing buffer underflows or memory corruption).
+- **Avoid Default/Zero Verification:** Never verify logic using default initializers (e.g., testing against `0`, `false`, or empty strings) unless you are explicitly testing empty/boundary behavior. If a getter always returns `0` due to a bug, testing it against `0` will falsely pass. Always populate your mock/spec objects with unique, non-trivial values (e.g., `rating = 5`, `codecId = 3`) to prove the code is actually routing the correct data.
+- **Avoid over-mocking:** Do not mock or bypass components based on internal implementation details if you can test the real public interface interactions instead.
+
 ## 3. Common Coverage Gaps in Aobus & How to Fix Them
 
 When you see `#####`, analyze the C++ source file context. Here are common Aobus-specific patterns that often lack coverage:
@@ -54,7 +63,7 @@ When you see `#####`, analyze the C++ source file context. Here are common Aobus
 - Ensure tests inject edge-case data (e.g. missing string fields, `0` integers, or binary data like `cover_art`).
 - Use YAML anchors/references in the test payload to hit reference resolution logic if applicable.
 
-## 3. Execution Workflow
+## 4. Execution Workflow
 
 When tasked to reach 95% coverage for a file or module:
 1. **Locate & Inspect:** Run `./script/run-coverage.sh <test_filter>` to get a report of all low-coverage files and their exact missing lines + context.

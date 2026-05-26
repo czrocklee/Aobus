@@ -2,6 +2,9 @@
 add_executable(ao_test
     # utility tests
     unit/utility/Base64Test.cpp
+    unit/utility/MappedFileTest.cpp
+    unit/utility/LogTest.cpp
+    unit/utility/ByteViewTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
 
@@ -12,6 +15,14 @@ add_executable(ao_test
     unit/query/ExpressionTest.cpp
     unit/query/SerializerTest.cpp
 
+    # tag tests
+    unit/tag/MpegFrameTest.cpp
+    unit/tag/MpegFileTest.cpp
+    unit/tag/Mp4FileTest.cpp
+    unit/tag/id3v2/ReaderTest.cpp
+    unit/tag/FlacFileTest.cpp
+    unit/tag/TagFileTest.cpp
+
     # media tests
     unit/media/mp4/DemuxerTest.cpp
 
@@ -19,8 +30,10 @@ add_executable(ao_test
     unit/library/TrackLayoutTest.cpp
     unit/library/TrackViewTest.cpp
     unit/library/FileManifestViewTest.cpp
+    unit/library/FileManifestStoreTest.cpp
     unit/library/FileManifestBuilderTest.cpp
     unit/library/TrackBuilderTest.cpp
+    unit/library/MetaStoreTest.cpp
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
     unit/library/DictionaryStoreTest.cpp
@@ -40,6 +53,7 @@ add_executable(ao_test
 
     # audio unit tests
     unit/audio/DecoderFactoryTest.cpp
+    unit/audio/FlacDecoderSessionTest.cpp
     unit/audio/AlacDecoderSessionTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatNegotiatorTest.cpp

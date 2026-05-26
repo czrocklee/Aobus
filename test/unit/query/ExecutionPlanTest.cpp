@@ -7,6 +7,7 @@
 #include "ao/lmdb/Database.h"
 #include "ao/lmdb/Environment.h"
 #include "ao/lmdb/Transaction.h"
+#include "ao/query/Expression.h"
 #include "ao/query/Parser.h"
 #include "test/unit/lmdb/TestUtils.h"
 
@@ -15,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <utility>
 
 namespace ao::query::test
@@ -798,6 +800,47 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
+  TEST_CASE("ExecutionPlan - Invalid AST Nodes Throw")
+  {
+    auto compiler = QueryCompiler{};
+
+    SECTION("Unsupported variable type")
+    {
+      auto var = VariableExpression{.type = static_cast<VariableType>(99), .name = "invalid"};
+      REQUIRE_THROWS(compiler.compile(var));
+    }
+
+    SECTION("Unsupported operator in BinaryExpression")
+    {
+      auto compiler = QueryCompiler{};
+
+      auto binary = std::make_unique<BinaryExpression>();
+      binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
+      binary->optOperation =
+        BinaryExpression::Operation{.op = Operator::Add, .operand = ConstantExpression{std::int64_t(100)}};
+
+      REQUIRE_THROWS(compiler.compile(std::move(binary)));
+
+      auto binaryInvalid = std::make_unique<BinaryExpression>();
+      binaryInvalid->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
+      binaryInvalid->optOperation =
+        BinaryExpression::Operation{.op = static_cast<Operator>(99), .operand = ConstantExpression{std::int64_t(100)}};
+
+      REQUIRE_THROWS(compiler.compile(std::move(binaryInvalid)));
+    }
+
+    SECTION("Compiler rejects unsupported unary operators")
+    {
+      auto compiler = QueryCompiler{};
+
+      auto unary = std::make_unique<UnaryExpression>();
+      unary->op = Operator::Add; // Unsupported unary operator
+      unary->operand = VariableExpression{.type = VariableType::Tag, .name = "rock"};
+
+      REQUIRE_THROWS(compiler.compile(std::move(unary)));
+    }
+  }
+
   TEST_CASE("ExecutionPlan - String Constant Deduplication")
   {
     SECTION("Reuses Identical String Constants")
@@ -873,6 +916,37 @@ namespace ao::query::test
     {
       REQUIRE_THROWS(compiler.compile(parse("@duration >= 10k")));
       REQUIRE_THROWS(compiler.compile(parse("@bitrate >= 3h")));
+      REQUIRE_THROWS(compiler.compile(parse("@sampleRate >= 44h")));
+      REQUIRE_THROWS(compiler.compile(parse("@channels = 2h")));
+      REQUIRE_THROWS(compiler.compile(parse("@bitDepth = 16h")));
+      REQUIRE_THROWS(compiler.compile(parse("$year = 2020h")));
+      REQUIRE_THROWS(compiler.compile(parse("$trackNumber = 1h")));
+      REQUIRE_THROWS(compiler.compile(parse("$totalTracks = 10h")));
+      REQUIRE_THROWS(compiler.compile(parse("$discNumber = 1h")));
+      REQUIRE_THROWS(compiler.compile(parse("$totalDiscs = 2h")));
+      REQUIRE_THROWS(compiler.compile(parse("%custom = 1h")));
+    }
+
+    SECTION("Rejects OutOfRangeIntegerParsing")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("@bitrate >= 9999999999999999999999k")));
+
+      // checkedMul overflow (value * 1000 overflows)
+      REQUIRE_THROWS(compiler.compile(parse("@duration >= 1844674407370955161s")));
+
+      // checkedAdd overflow (value * 10 + fraction overflows)
+      REQUIRE_THROWS(compiler.compile(parse("@duration >= 1844674407370955161.6ms")));
+    }
+
+    SECTION("Rejects NonIntegerResolution")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("@duration >= 1.5ms")));
+    }
+
+    SECTION("Accepts Zero")
+    {
+      auto plan = compiler.compile(parse("@duration >= 0s"));
+      CHECK(plan.instructions[1].constValue == 0);
     }
 
     SECTION("Rejects MissingNumericFieldContext")

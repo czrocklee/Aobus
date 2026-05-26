@@ -480,13 +480,13 @@ namespace ao::rt::test
       int const expectedFlags = static_cast<std::int32_t>(Flags::Read) | static_cast<std::int32_t>(Flags::Execute);
       CHECK(static_cast<int>(loadedEnums.bitmask) == expectedFlags);
 
-      auto loadedOpt = AllOptional{};
-      REQUIRE(reloaded.load("opt", loadedOpt));
-      REQUIRE(loadedOpt.optInt);
-      CHECK(*loadedOpt.optInt == -5);
-      REQUIRE(loadedOpt.optString);
-      CHECK(*loadedOpt.optString == "partial");
-      CHECK_FALSE(loadedOpt.optDouble);
+      auto optLoaded = AllOptional{};
+      REQUIRE(reloaded.load("opt", optLoaded));
+      REQUIRE(optLoaded.optInt);
+      CHECK(*optLoaded.optInt == -5);
+      REQUIRE(optLoaded.optString);
+      CHECK(*optLoaded.optString == "partial");
+      CHECK_FALSE(optLoaded.optDouble);
     }
 
     SECTION("String with special characters")

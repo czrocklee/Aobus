@@ -11,6 +11,7 @@
 #include "ao/audio/Property.h"
 
 #include <expected>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -63,6 +64,11 @@ namespace ao::audio::test
 
     Result<PropertyValue> getProperty(PropertyId id) const override
     {
+      if (_optPropError)
+      {
+        return std::unexpected(Error{.code = *_optPropError});
+      }
+
       if (id == PropertyId::Volume)
       {
         return _volume;
@@ -88,6 +94,7 @@ namespace ao::audio::test
 
     // Helpers for tests
     void setOpenResult(Result<> res) { _openResult = res; }
+    void setPropertyError(std::optional<Error::Code> optErr) { _optPropError = optErr; }
     std::vector<Event> const& events() const { return _events; }
     void clearEvents() { _events.clear(); }
     IRenderTarget* target() const { return _target; }
@@ -141,6 +148,7 @@ namespace ao::audio::test
     IRenderTarget* _target = nullptr;
     Format _format{};
     Result<> _openResult{};
+    std::optional<Error::Code> _optPropError{};
     float _volume = 1.0F;
     bool _muted = false;
   };

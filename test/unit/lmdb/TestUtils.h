@@ -26,12 +26,15 @@ namespace ao::lmdb::test
     TempDir()
     {
       std::string tmpl = (std::filesystem::temp_directory_path() / "rs_lmdb_test_XXXXXX").string();
+      // NOLINTNEXTLINE(aobus-readability-use-if-init-statement)
       char const* const result = ::mkdtemp(tmpl.data());
 
       if (result == nullptr)
       {
         throw std::runtime_error{"mkdtemp failed"};
       }
+
+      _path = result;
 
       _path = result;
     }

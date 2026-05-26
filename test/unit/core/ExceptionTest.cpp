@@ -27,5 +27,19 @@ namespace ao::test
         CHECK(e.line() > 0);
       }
     }
+
+    SECTION("throwException with formatting")
+    {
+      try
+      {
+        throwException<Exception>("Test formatting: {} + {} = {}", 1, 2, 3);
+      }
+      catch (Exception const& e)
+      {
+        CHECK(std::string{e.what()} == "Test formatting: 1 + 2 = 3");
+        CHECK_THAT(e.file(), Catch::Matchers::ContainsSubstring("ExceptionTest.cpp"));
+        CHECK(e.line() > 0);
+      }
+    }
   }
 } // namespace ao::test

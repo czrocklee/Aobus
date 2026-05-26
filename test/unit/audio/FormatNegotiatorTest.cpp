@@ -174,6 +174,21 @@ namespace ao::audio::test
       CHECK_THAT(plan.reason, Catch::Matchers::ContainsSubstring("channel remapping required"));
     }
 
+    SECTION("requireBitDepthConversion with existing reason")
+    {
+      sourceFormat.bitDepth = 24;
+      sourceFormat.validBits = 24;
+      caps.sampleRates = {48000}; // resampling required
+      caps.bitDepths = {24, 32};  // 24 is supported, so negotiate(bitDepth) does nothing
+      caps.sampleFormats = {{.bitDepth = 32, .validBits = 24, .isFloat = false}}; // but 24/24 is NOT in sampleFormats
+
+      auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
+      REQUIRE(plan.requiresResample == true);
+      REQUIRE(plan.requiresBitDepthConversion == true);
+      CHECK_THAT(plan.reason,
+                 Catch::Matchers::ContainsSubstring("sample rate resampling required; bit depth conversion required"));
+    }
+
     SECTION("Empty sampleFormats still chooses a safe 24-bit fallback")
     {
       sourceFormat.sampleRate = 96000;

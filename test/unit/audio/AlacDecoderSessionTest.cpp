@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <ios>
 
 namespace ao::audio::test
 {
@@ -50,5 +52,49 @@ namespace ao::audio::test
 
     REQUIRE(resetBlock);
     CHECK(resetBlock->firstFrameIndex == 0);
+
+    decoder.flush();
+    CHECK(decoder.readNextBlock());
+  }
+
+  TEST_CASE("AlacDecoderSession - 32-bit", "[audio][alac]")
+  {
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.m4a";
+
+    if (!std::filesystem::exists(testFile))
+    {
+      return;
+    }
+
+    auto decoder = AlacDecoderSession{Format{.bitDepth = 32, .isInterleaved = true}};
+    REQUIRE(decoder.open(testFile));
+    REQUIRE(decoder.readNextBlock());
+  }
+
+  TEST_CASE("AlacDecoderSession - Error Paths", "[audio][alac][error]")
+  {
+    auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+
+    SECTION("Seek on unopened file")
+    {
+      CHECK(!decoder.seek(100));
+    }
+
+    SECTION("Non-existent file")
+    {
+      CHECK(!decoder.open("/path/to/nowhere/nonexistent.m4a"));
+    }
+
+    SECTION("Invalid file content")
+    {
+      auto const tempFile = std::filesystem::temp_directory_path() / "invalid_alac.m4a";
+      {
+        auto ofs = std::ofstream{tempFile, std::ios::binary};
+        ofs << "NOT AN ALAC FILE! Random garbage data...";
+      }
+
+      CHECK(!decoder.open(tempFile));
+      std::filesystem::remove(tempFile);
+    }
   }
 } // namespace ao::audio::test

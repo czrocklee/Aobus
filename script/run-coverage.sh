@@ -89,35 +89,40 @@ fi
 
 for gcda in "${GCDA_FILES[@]}"; do
     # Run gcov on the .gcda file
-    # This generates a .gcov file in the current directory
-    gcov_output=$(gcov "$gcda" 2>/dev/null)
+    gcov "$gcda" >/dev/null 2>&1
     
-    # Extract the original source file path and the percentage
-    src_file=$(echo "$gcov_output" | grep -oP "(?<=File ').*(?=')" | head -n 1)
-    
-    # Skip non-project files (e.g., standard library headers)
-    if [[ "$src_file" != "$PROJECT_ROOT"* ]]; then
-        continue
-    fi
-    
-    percent_line=$(echo "$gcov_output" | grep -oP "(?<=Lines executed:)[0-9.]+" | head -n 1)
-    total_lines=$(echo "$gcov_output" | grep -oP "(?<=of )[0-9]+" | head -n 1)
-    
-    if [[ -z "$percent_line" || -z "$total_lines" ]]; then
-        continue
-    fi
-
-    # Determine filename
-    base_name=$(basename "$src_file")
-    gcov_file="${base_name}.gcov"
-    
-    rel_src_file="${src_file#$PROJECT_ROOT/}"
-    
-    # Check if missing lines exist
-    if [[ -f "$gcov_file" ]]; then
+    for gcov_file in *.gcov; do
+        [[ -f "$gcov_file" ]] || continue
+        
+        src_file=$(head -n 1 "$gcov_file" | grep -oP "(?<=Source:).*")
+        
+        # Skip non-project files or files not in app/lib/include
+        if [[ "$src_file" != "$PROJECT_ROOT"* ]]; then
+            rm -f "$gcov_file"
+            continue
+        fi
+        
+        rel_src_file="${src_file#$PROJECT_ROOT/}"
+        
+        # Only process files in app/, lib/, or include/
+        if [[ ! "$rel_src_file" =~ ^(app|lib|include)/ ]]; then
+            rm -f "$gcov_file"
+            continue
+        fi
+        
+        executed_lines=$(grep -c "^ *[0-9]\+:" "$gcov_file" || true)
         missing_count=$(grep -c "^ *#####:" "$gcov_file" || true)
+        total_executable=$((executed_lines + missing_count))
+        
+        if [[ "$total_executable" -eq 0 ]]; then
+            rm -f "$gcov_file"
+            continue
+        fi
+        
+        percent=$(awk "BEGIN { printf \"%.2f\", ($executed_lines / $total_executable) * 100 }")
+        
         if [[ "$missing_count" -gt 0 ]]; then
-            echo -e "\033[33m$rel_src_file: ${percent_line}% ($total_lines lines) -> $missing_count missing lines\033[0m"
+            echo -e "\033[33m$rel_src_file: ${percent}% ($total_executable lines) -> $missing_count missing lines\033[0m"
             # Print the first few missing lines with context
             grep -C 6 "^ *#####:" "$gcov_file" | head -n 40 | while IFS= read -r line; do
                 echo "    $line"
@@ -126,14 +131,11 @@ for gcda in "${GCDA_FILES[@]}"; do
                 echo "    ..."
             fi
         else
-            echo -e "\033[32m$rel_src_file: ${percent_line}% ($total_lines lines) -> OK\033[0m"
+            echo -e "\033[32m$rel_src_file: ${percent}% ($total_executable lines) -> OK\033[0m"
         fi
         rm -f "$gcov_file"
-    fi
+    done
 done
-
-# Cleanup remaining gcov files (std headers etc)
-rm -f *.gcov
 
 echo ""
 echo "Coverage check completed."

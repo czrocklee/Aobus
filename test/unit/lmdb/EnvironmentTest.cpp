@@ -59,4 +59,14 @@ namespace ao::lmdb::test
     auto txn = ReadTransaction{env};
     auto wtxn = WriteTransaction{env};
   }
+
+  TEST_CASE("Environment - default options constructor", "[lmdb][environment]")
+  {
+    auto temp = TempDir{};
+    // Use the single-argument constructor
+    auto env = Environment{temp.path()};
+
+    // Verify it created correctly by trying to open it
+    auto rtxn = ReadTransaction{env};
+  }
 } // namespace ao::lmdb::test
