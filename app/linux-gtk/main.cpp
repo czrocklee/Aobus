@@ -19,7 +19,6 @@
 #include <glibmm/miscutils.h>
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
-#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/aboutdialog.h>
 #include <gtkmm/application.h>
 
@@ -170,10 +169,97 @@ namespace
         createWindow(*app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}, appConfig));
     }
   }
+
+  void setupUnixSignalHandlers(Glib::RefPtr<Gtk::Application>& app)
+  {
+    auto const handler = [](void* data) -> ::gboolean
+    {
+      auto* appPtr = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
+      APP_LOG_INFO("Received termination signal, shutting down...");
+      (*appPtr)->quit();
+      return FALSE;
+    };
+    ::g_unix_signal_add(SIGINT, handler, &app);
+    ::g_unix_signal_add(SIGTERM, handler, &app);
+  }
+
+  void addAppActions(Glib::RefPtr<Gtk::Application>& app)
+  {
+    auto const aboutAction = Gio::SimpleAction::create("about");
+    aboutAction->signal_activate().connect(
+      [&app](Glib::VariantBase const& /*variant*/)
+      {
+        auto dialog = Gtk::AboutDialog{};
+        dialog.set_program_name("Aobus");
+        dialog.set_version(kAppVersion);
+        dialog.set_copyright("Copyright 2024-2026 Aobus Contributors");
+        dialog.set_license_type(Gtk::License::LGPL_3_0);
+
+        if (auto const windows = app->get_windows(); !windows.empty())
+        {
+          dialog.set_transient_for(*windows[0]);
+        }
+
+        dialog.present();
+      });
+    app->add_action(aboutAction);
+
+    auto const quitAction = Gio::SimpleAction::create("quit");
+    quitAction->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
+    app->add_action(quitAction);
+  }
+
+  void onAppActivate(Glib::RefPtr<Gtk::Application>& app, std::vector<Glib::RefPtr<MainWindow>>& windows)
+  {
+    StyleManager::instance().initialize();
+
+    auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
+    auto appConfig = std::make_shared<AppConfig>(globalConfigPath);
+
+    auto paths = resolveLibraryPaths(*appConfig);
+
+    auto window = createWindow(*app, std::move(paths), appConfig);
+
+    window->importExportCoordinator().callbacks().onOpenNewLibrary =
+      [&app, &windows, appConfig](std::filesystem::path const& path)
+    { handleOpenNewLibrary(path, app, windows, appConfig); };
+
+    windows.push_back(std::move(window));
+  }
+
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+  std::vector<char*> buildGtkArgv(std::int32_t argc, char* argv[])
+  {
+    auto cliApp = CLI::App{};
+    cliApp.allow_extras();
+
+    try
+    {
+      cliApp.parse(argc, argv);
+    }
+    catch (CLI::ParseError const& e)
+    {
+      APP_LOG_DEBUG("Internal CLI parse for GTK passthrough: {}", e.what());
+    }
+
+    auto remaining = cliApp.remaining_for_passthrough();
+    remaining.insert(remaining.begin(), argv[0]);
+    auto gtkArgv = std::vector<char*>{};
+    gtkArgv.reserve(remaining.size());
+
+    for (auto& arg : remaining)
+    {
+      gtkArgv.push_back(arg.data());
+    }
+
+    return gtkArgv;
+  }
 }
 
 int main(int argc, char* argv[])
 {
+  auto exitCode = 0;
+
   try
   {
     auto const options = parseCommandLine({argv, static_cast<std::size_t>(argc)});
@@ -185,7 +271,6 @@ int main(int argc, char* argv[])
 
     auto const logDir = std::filesystem::path{Glib::get_user_cache_dir()} / "aobus" / "logs";
     log::Log::init(options.logLevel, logDir);
-    auto const logGuard = gsl_lite::finally([] { log::Log::shutdown(); });
 
     APP_LOG_INFO("Aobus {} starting...", kAppVersion);
 
@@ -193,114 +278,40 @@ int main(int argc, char* argv[])
 
     auto app = Gtk::Application::create("org.aobus.app");
 
-    // Handle Ctrl-C and SIGTERM gracefully via GLib main loop
-    auto const signalHandler = [](void* data) -> ::gboolean
-    {
-      auto* appPtr = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
-      APP_LOG_INFO("Received termination signal, shutting down...");
-      (*appPtr)->quit();
-      return FALSE; // Remove source
-    };
-    ::g_unix_signal_add(SIGINT, signalHandler, &app);
-    ::g_unix_signal_add(SIGTERM, signalHandler, &app);
+    setupUnixSignalHandlers(app);
 
-    // Add about action to application
-    auto const aboutAction = Gio::SimpleAction::create("about");
-    aboutAction->signal_activate().connect(
-      [&app](Glib::VariantBase const& /*variant*/)
-      {
-        auto dialog = Gtk::AboutDialog{};
-        dialog.set_program_name("Aobus");
-        dialog.set_version(kAppVersion);
-        dialog.set_copyright("Copyright 2024-2026 Aobus Contributors");
-        dialog.set_license_type(Gtk::License::LGPL_3_0);
+    addAppActions(app);
 
-        // Get active window to set as transient parent
-        if (auto const windows = app->get_windows(); !windows.empty())
-        {
-          dialog.set_transient_for(*windows[0]);
-        }
-
-        dialog.present();
-      });
-    app->add_action(aboutAction);
-
-    // Add quit action
-    auto const quitAction = Gio::SimpleAction::create("quit");
-    quitAction->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
-    app->add_action(quitAction);
-
-    // Store open windows
     auto windows = std::vector<Glib::RefPtr<MainWindow>>{};
 
-    // Connect to activate signal to create initial window after startup
     app->signal_activate().connect(
-      [&app, &windows]
-      {
-        // Initialize the unified style system before any window is created.
-        // Idempotent — safe to call across multiple activate signals.
-        StyleManager::instance().initialize();
+      [&app, &windows] { onAppActivate(app, windows); });
 
-        auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-        auto appConfig = std::make_shared<AppConfig>(globalConfigPath);
-
-        auto paths = resolveLibraryPaths(*appConfig);
-
-        auto window = createWindow(*app, std::move(paths), appConfig);
-
-        // Wire up the "Open Library" → new window callback
-        window->importExportCoordinator().callbacks().onOpenNewLibrary =
-          [&app, &windows, appConfig](std::filesystem::path const& path)
-        { handleOpenNewLibrary(path, app, windows, appConfig); };
-
-        windows.push_back(std::move(window));
-      });
-
-    // Consuming CLI arguments for GTK passthrough
-    auto cliAppInternal = CLI::App{};
-    cliAppInternal.allow_extras();
-
-    try
-    {
-      cliAppInternal.parse(argc, argv);
-    }
-    catch (CLI::ParseError const& e)
-    {
-      APP_LOG_DEBUG("Internal CLI parse for GTK passthrough: {}", e.what());
-      // Note: Error reporting is primarily handled by the first pass in parseCommandLine
-    }
-
-    auto remainingArgs = cliAppInternal.remaining_for_passthrough();
-    remainingArgs.insert(remainingArgs.begin(), argv[0]);
-    auto gtkArgv = std::vector<char*>{};
-    gtkArgv.reserve(remainingArgs.size());
-
-    for (auto& arg : remainingArgs)
-    {
-      gtkArgv.push_back(arg.data());
-    }
-
+    auto gtkArgv = buildGtkArgv(argc, argv);
     std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArgv.size());
 
     APP_LOG_INFO("Entering GTK main loop");
-    return app->run(gtkArgc, gtkArgv.data());
+    exitCode = app->run(gtkArgc, gtkArgv.data());
   }
   catch (ao::Exception const& e)
   {
     APP_LOG_CRITICAL("Internal error: {} (at {}:{})", e.what(), e.file(), e.line());
     std::cerr << "Internal error: " << e.what() << "\n(at " << e.file() << ":" << e.line() << ")\n"
               << "Please report this bug.\n";
-    return 1;
+    exitCode = 1;
   }
   catch (std::exception const& ex)
   {
     APP_LOG_CRITICAL("Unhandled exception: {}", ex.what());
     std::cerr << "Unhandled exception: " << ex.what() << '\n';
-    return 1;
+    exitCode = 1;
   }
   catch (...)
   {
     std::cerr << "Unknown unhandled exception" << '\n';
-    return 1;
+    exitCode = 1;
   }
+
+  log::Log::shutdown();
+  return exitCode;
 }

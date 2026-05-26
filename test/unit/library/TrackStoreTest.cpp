@@ -23,7 +23,7 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("TrackStore - create and read", "[core][track]")
+  TEST_CASE("TrackStore - create and read", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -54,7 +54,7 @@ namespace ao::library::test
     REQUIRE((*it).first == id);
   }
 
-  TEST_CASE("TrackStore - read by id", "[core][track]")
+  TEST_CASE("TrackStore - read by id", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -81,7 +81,7 @@ namespace ao::library::test
     REQUIRE(optFound.has_value());
   }
 
-  TEST_CASE("TrackStore - update", "[core][track]")
+  TEST_CASE("TrackStore - update", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -113,7 +113,7 @@ namespace ao::library::test
     wtxn3.commit();
   }
 
-  TEST_CASE("TrackStore - delete", "[core][track]")
+  TEST_CASE("TrackStore - delete", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -147,7 +147,7 @@ namespace ao::library::test
     REQUIRE(it == reader.end());
   }
 
-  TEST_CASE("TrackStore - create multiple tracks unique IDs", "[core][track]")
+  TEST_CASE("TrackStore - create multiple tracks unique IDs", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -176,7 +176,7 @@ namespace ao::library::test
     REQUIRE(id1 != id3);
   }
 
-  TEST_CASE("TrackStore - hot/cold createHotCold", "[core][track]")
+  TEST_CASE("TrackStore - hot/cold createHotCold", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -215,7 +215,7 @@ namespace ao::library::test
     REQUIRE(optView->metadata().totalTracks() == 10);
   }
 
-  TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
+  TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -269,7 +269,7 @@ namespace ao::library::test
     REQUIRE(optView->metadata().trackNumber() == 2);
   }
 
-  TEST_CASE("TrackStore - hot/cold remove", "[core][track]")
+  TEST_CASE("TrackStore - hot/cold remove", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -303,7 +303,7 @@ namespace ao::library::test
     REQUIRE(!optView.has_value());
   }
 
-  TEST_CASE("TrackStore - Writer get with LoadMode", "[core][track]")
+  TEST_CASE("TrackStore - Writer get with LoadMode", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -344,7 +344,7 @@ namespace ao::library::test
     REQUIRE(optCold->metadata().coverArtId() == 42);
   }
 
-  TEST_CASE("TrackStore - unified TrackView iteration", "[core][track]")
+  TEST_CASE("TrackStore - unified TrackView iteration", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -383,7 +383,7 @@ namespace ao::library::test
     REQUIRE(count == 3);
   }
 
-  TEST_CASE("TrackStore - LoadMode::Hot iteration", "[core][track]")
+  TEST_CASE("TrackStore - LoadMode::Hot iteration", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -420,7 +420,7 @@ namespace ao::library::test
     REQUIRE(!trackView.isColdValid());
   }
 
-  TEST_CASE("TrackStore - LoadMode::Cold iteration", "[core][track]")
+  TEST_CASE("TrackStore - LoadMode::Cold iteration", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -455,7 +455,7 @@ namespace ao::library::test
     REQUIRE(trackView.isColdValid());
   }
 
-  TEST_CASE("TrackStore - LoadMode::Both iteration", "[core][track]")
+  TEST_CASE("TrackStore - LoadMode::Both iteration", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -492,7 +492,7 @@ namespace ao::library::test
     REQUIRE(trackView.metadata().trackNumber() == 0); // default
   }
 
-  TEST_CASE("TrackStore - LoadMode::Hot get by id", "[core][track]")
+  TEST_CASE("TrackStore - LoadMode::Hot get by id", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -524,7 +524,7 @@ namespace ao::library::test
     REQUIRE(optView->metadata().artistId() == DictionaryId{42});
   }
 
-  TEST_CASE("TrackStore - LoadMode::Cold get by id", "[core][track]")
+  TEST_CASE("TrackStore - LoadMode::Cold get by id", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -557,7 +557,7 @@ namespace ao::library::test
     REQUIRE(optView->property().durationMs() == 360000);
   }
 
-  TEST_CASE("TrackStore - LoadMode::Cold multi-record iteration", "[core][track]")
+  TEST_CASE("TrackStore - LoadMode::Cold multi-record iteration", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -617,7 +617,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackStore - LoadMode::Cold empty iteration", "[core][track]")
+  TEST_CASE("TrackStore - LoadMode::Cold empty iteration", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -635,7 +635,7 @@ namespace ao::library::test
     REQUIRE(it == endIt);
   }
 
-  TEST_CASE("TrackStore - iterator equality across modes", "[core][track]")
+  TEST_CASE("TrackStore - iterator equality across modes", "[library][unit][track]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -675,7 +675,7 @@ namespace ao::library::test
     REQUIRE(reader.end() != bothBegin);
   }
 
-  TEST_CASE("TrackStore - read with missing cold data returns nullopt", "[core][track]")
+  TEST_CASE("TrackStore - read with missing cold data returns nullopt", "[library][unit][track]")
   {
     auto temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};

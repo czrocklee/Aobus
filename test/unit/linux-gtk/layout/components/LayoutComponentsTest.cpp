@@ -51,7 +51,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("Playback component instantiation", "[layout][components]")
+  TEST_CASE("Playback component instantiation", "[layout][unit][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -259,7 +259,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Semantic components — error states
   // ---------------------------------------------------------------------------
-  TEST_CASE("Semantic component error states", "[layout][components]")
+  TEST_CASE("Semantic component error states", "[layout][unit][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -368,7 +368,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Semantic components — success states
   // ---------------------------------------------------------------------------
-  TEST_CASE("Semantic component success states", "[layout][components]")
+  TEST_CASE("Semantic component success states", "[layout][unit][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -470,7 +470,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // All types registration
   // ---------------------------------------------------------------------------
-  TEST_CASE("All component types register and instantiate", "[layout][components]")
+  TEST_CASE("All component types register and instantiate", "[layout][unit][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -517,7 +517,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // YAML round-trip with semantic components
   // ---------------------------------------------------------------------------
-  TEST_CASE("YAML layout with semantic components", "[layout][components]")
+  TEST_CASE("YAML layout with semantic components", "[layout][unit][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 

@@ -37,7 +37,7 @@ namespace ao::gtk::layout::test
     };
   } // namespace
 
-  TEST_CASE("Status bar components", "[gtk][shell]")
+  TEST_CASE("Status bar components", "[gtk][unit][shell]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.status_test");
 

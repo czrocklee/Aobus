@@ -104,7 +104,7 @@ namespace ao::tag::flac::test
     }
   }
 
-  TEST_CASE("FLAC File - loadTrack", "[tag][flac][file]")
+  TEST_CASE("FLAC File - loadTrack", "[tag][unit][flac][file]")
   {
     auto const data = createMinimalFlac();
     auto const temp = TempFile{data};
@@ -131,7 +131,7 @@ namespace ao::tag::flac::test
     CHECK(prop.durationMs() == 1000);
   }
 
-  TEST_CASE("FLAC File - Malformed Data", "[tag][flac][file]")
+  TEST_CASE("FLAC File - Malformed Data", "[tag][unit][flac][file]")
   {
     SECTION("Missing StreamInfo Block")
     {

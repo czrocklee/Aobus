@@ -13,7 +13,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("PcmConverter: pad (Linear)", "[audio][pcm]")
+  TEST_CASE("PcmConverter -pad (Linear)", "[audio][unit][pcm]")
   {
     SECTION("16-bit to 32-bit padding")
     {
@@ -58,7 +58,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmConverter: interleaveAndPad", "[audio][pcm]")
+  TEST_CASE("PcmConverter -interleaveAndPad", "[audio][unit][pcm]")
   {
     SECTION("Stereo 16-bit to 32-bit interleaved")
     {
@@ -101,7 +101,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmConverter: unpackS24", "[audio][pcm]")
+  TEST_CASE("PcmConverter -unpackS24", "[audio][unit][pcm]")
   {
     SECTION("Unpack S24_LE to S32_LE (with 8-bit shift)")
     {

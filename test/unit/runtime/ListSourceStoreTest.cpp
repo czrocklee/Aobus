@@ -29,7 +29,7 @@ namespace ao::rt::test
     void defer(std::move_only_function<void()> task) override { task(); }
   };
 
-  TEST_CASE("ListSourceStore - Basic Operations", "[runtime][ListSourceStore]")
+  TEST_CASE("ListSourceStore - Basic Operations", "[runtime][unit][ListSourceStore]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};
@@ -141,7 +141,7 @@ namespace ao::rt::test
       REQUIRE(source.size() == 0);
 
       testLib.addTrack("B");
-      auto t1 = testLib.addTrack("A");
+      testLib.addTrack("A");
 
       store.reloadAllTracks();
 
@@ -166,7 +166,7 @@ namespace ao::rt::test
         txn.commit();
       }
 
-      auto& source = store.sourceFor(listId);
+      store.sourceFor(listId);
 
       {
         auto txn = testLib.library().writeTransaction();

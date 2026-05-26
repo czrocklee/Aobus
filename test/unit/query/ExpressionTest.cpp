@@ -90,7 +90,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Expression - Normalize Collapses Binary Node Without Operation")
+  TEST_CASE("Expression - Normalize Collapses Binary Node Without Operation", "[query][unit][expression]")
   {
     // Input: (a) where (a) is a BinaryExpression with no optOperation
     auto binary = std::make_unique<BinaryExpression>();
@@ -104,21 +104,21 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "a");
   }
 
-  TEST_CASE("Expression - Normalize Leaves Constant Unchanged")
+  TEST_CASE("Expression - Normalize Leaves Constant Unchanged", "[query][unit][expression]")
   {
     auto expr = Expression{ConstantExpression{true}};
     normalize(expr);
     CHECK(canonicalize(expr) == "true");
   }
 
-  TEST_CASE("Expression - Normalize Leaves Variable Unchanged")
+  TEST_CASE("Expression - Normalize Leaves Variable Unchanged", "[query][unit][expression]")
   {
     auto expr = Expression{VariableExpression{.type = VariableType::Metadata, .name = "artist"}};
     normalize(expr);
     CHECK(canonicalize(expr) == "artist");
   }
 
-  TEST_CASE("Expression - Normalize Reassociates Right Nested Add Chain")
+  TEST_CASE("Expression - Normalize Reassociates Right Nested Add Chain", "[query][unit][expression]")
   {
     // Input: a + (b + c)
     auto inner = std::make_unique<BinaryExpression>();
@@ -137,7 +137,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "((a + b) + c)");
   }
 
-  TEST_CASE("Expression - Normalize Reassociates Four Term Add Chain")
+  TEST_CASE("Expression - Normalize Reassociates Four Term Add Chain", "[query][unit][expression]")
   {
     // Input: a + (b + (c + d))
     auto innermost = std::make_unique<BinaryExpression>();
@@ -160,7 +160,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "(((a + b) + c) + d)");
   }
 
-  TEST_CASE("Expression - Normalize Does Not Touch NonAdd Binary")
+  TEST_CASE("Expression - Normalize Does Not Touch NonAdd Binary", "[query][unit][expression]")
   {
     // Input: a and (b and c)
     auto inner = std::make_unique<BinaryExpression>();
@@ -178,7 +178,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "(a and (b and c))");
   }
 
-  TEST_CASE("Expression - Normalize Stops When Right Operand Is Not Binary")
+  TEST_CASE("Expression - Normalize Stops When Right Operand Is Not Binary", "[query][unit][expression]")
   {
     // Input: a + 1
     auto root = std::make_unique<BinaryExpression>();
@@ -192,7 +192,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "(a + 1)");
   }
 
-  TEST_CASE("Expression - Normalize Stops When Right Binary Is Not Add")
+  TEST_CASE("Expression - Normalize Stops When Right Binary Is Not Add", "[query][unit][expression]")
   {
     // Input: a + (b and c)
     auto inner = std::make_unique<BinaryExpression>();
@@ -210,7 +210,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "(a + (b and c))");
   }
 
-  TEST_CASE("Expression - Normalize Unary Recurses Into Operand")
+  TEST_CASE("Expression - Normalize Unary Recurses Into Operand", "[query][unit][expression]")
   {
     // Input: not (a + (b + c))
     auto inner = std::make_unique<BinaryExpression>();
@@ -232,14 +232,14 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "not ((a + b) + c)");
   }
 
-  TEST_CASE("Expression - Normalize Null Unary Pointer Is Safe")
+  TEST_CASE("Expression - Normalize Null Unary Pointer Is Safe", "[query][unit][expression]")
   {
     auto expr = Expression{std::unique_ptr<UnaryExpression>{}};
     normalize(expr);
     CHECK(canonicalize(expr) == "null");
   }
 
-  TEST_CASE("Expression - Normalize Null Binary Pointer Is Safe")
+  TEST_CASE("Expression - Normalize Null Binary Pointer Is Safe", "[query][unit][expression]")
   {
     auto expr = Expression{std::unique_ptr<BinaryExpression>{}};
     normalize(expr);

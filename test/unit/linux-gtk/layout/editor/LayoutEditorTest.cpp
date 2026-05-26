@@ -44,7 +44,7 @@ namespace ao::gtk::layout::editor::test
 
   using namespace ao::lmdb::test;
 
-  TEST_CASE("Component descriptor validation", "[layout][editor]")
+  TEST_CASE("Component descriptor validation", "[layout][unit][editor]")
   {
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -225,7 +225,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // LayoutEditorDialog
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutEditorDialog", "[layout][editor]")
+  TEST_CASE("LayoutEditorDialog", "[layout][unit][editor]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_editor_test");
 
@@ -284,7 +284,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // Template system
   // ---------------------------------------------------------------------------
-  TEST_CASE("Template system", "[layout][editor]")
+  TEST_CASE("Template system", "[layout][unit][editor]")
   {
     SECTION("getBuiltInTemplates returns all 8 built-ins")
     {
@@ -440,7 +440,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // absoluteCanvas
   // ---------------------------------------------------------------------------
-  TEST_CASE("absoluteCanvas component", "[layout][editor]")
+  TEST_CASE("absoluteCanvas component", "[layout][unit][editor]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.canvas_test");
 

@@ -6,6 +6,7 @@
 #include "ao/library/FileManifestBuilder.h"
 #include "ao/library/FileManifestStore.h"
 #include "ao/library/MusicLibrary.h"
+#include "test/unit/lmdb/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,25 +16,10 @@
 
 namespace ao::library::test
 {
+  using namespace ao::lmdb::test;
+
   namespace
   {
-    struct TempDir final
-    {
-      std::filesystem::path path;
-      TempDir()
-      {
-        path = std::filesystem::temp_directory_path() / "aobus_scanner_test";
-        std::filesystem::remove_all(path);
-        std::filesystem::create_directories(path);
-      }
-      ~TempDir() { std::filesystem::remove_all(path); }
-
-      TempDir(TempDir const&) = delete;
-      TempDir& operator=(TempDir const&) = delete;
-      TempDir(TempDir&&) = delete;
-      TempDir& operator=(TempDir&&) = delete;
-    };
-
     void createFile(std::filesystem::path const& path)
     {
       auto f = std::ofstream{path};
@@ -41,11 +27,11 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryScanner Classification", "[core][library][scan]")
+  TEST_CASE("LibraryScanner Classification", "[library][unit][scan]")
   {
     auto const temp = TempDir{};
-    auto const root = temp.path;
-    auto const musicRoot = root / "music";
+    auto const root = temp.path();
+    auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot);
 
     createFile(musicRoot / "new.flac");
@@ -53,7 +39,7 @@ namespace ao::library::test
     createFile(musicRoot / "changed.wav");
     createFile(musicRoot / "unsupported.txt");
 
-    auto ml = MusicLibrary{musicRoot, root / "db"};
+    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
 
     // Setup manifest for existing files
     {
@@ -110,22 +96,27 @@ namespace ao::library::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("LibraryScanner IO Error Handling", "[core][library][scan][error]")
+  TEST_CASE("LibraryScanner IO Error Handling", "[library][unit][scan][error]")
   {
     auto const temp = TempDir{};
-    auto const root = temp.path;
-    auto const musicRoot = root / "music";
+    auto const root = temp.path();
+    auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot / "ok_dir");
     std::filesystem::create_directories(musicRoot / "restricted_dir");
 
     createFile(musicRoot / "ok_dir" / "song1.flac");
     createFile(musicRoot / "another.mp3");
 
-    // Make restricted_dir inaccessible
-    // Note: This might not work if running as root, but should work for normal users.
+    // Make restricted_dir inaccessible.
+    // permissions() is a no-op when running as root, so skip in that case.
     std::filesystem::permissions(musicRoot / "restricted_dir", std::filesystem::perms::none);
 
-    auto ml = MusicLibrary{musicRoot, root / "db"};
+    if (::geteuid() == 0)
+    {
+      SKIP("permissions test is meaningless when running as root");
+    }
+
+    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     auto scanner = LibraryScanner{ml};
     auto const plan = scanner.buildPlan();
 
@@ -165,29 +156,29 @@ namespace ao::library::test
     CHECK(foundRestricted);
   }
 
-  TEST_CASE("LibraryScanner Empty Root Boundary", "[core][library][scan]")
+  TEST_CASE("LibraryScanner Empty Root Boundary", "[library][unit][scan]")
   {
     auto const temp = TempDir{};
-    auto const musicRoot = temp.path / "empty_music";
+    auto const musicRoot = std::filesystem::path{temp.path()} / "empty_music";
     std::filesystem::create_directories(musicRoot);
 
-    auto ml = MusicLibrary{musicRoot, temp.path / "db"};
+    auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
     auto scanner = LibraryScanner{ml};
     auto const plan = scanner.buildPlan();
 
     CHECK(plan.items.empty());
   }
 
-  TEST_CASE("LibraryScanner URI Canonization Edge Cases", "[core][library][scan][uri]")
+  TEST_CASE("LibraryScanner URI Canonization Edge Cases", "[library][unit][scan][uri]")
   {
     auto const temp = TempDir{};
-    auto const root = temp.path;
-    auto const musicRoot = root / "music";
+    auto const root = temp.path();
+    auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot / "nested" / "dir");
 
     createFile(musicRoot / "nested" / "dir" / "song.flac");
 
-    auto ml = MusicLibrary{musicRoot, root / "db"};
+    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     auto scanner = LibraryScanner{ml};
     auto const plan = scanner.buildPlan();
 

@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
@@ -29,7 +30,7 @@ namespace ao::audio::test
 {
   using namespace fakeit;
 
-  TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
+  TEST_CASE("Engine - Basic Orchestration", "[playback][unit][engine]")
   {
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
@@ -82,7 +83,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
+  TEST_CASE("Engine - Backend Swapping", "[playback][unit][engine][hot-swap]")
   {
     auto spy1 = SpyBackend<>{};
     auto spy2 = SpyBackend<>{};
@@ -120,14 +121,13 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
+  TEST_CASE("Engine - Graph Initialization", "[playback][unit][engine][graph]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
     if (!std::filesystem::exists(testFile))
     {
-      WARN("Test file not found, skipping Graph Integrity test");
-      return;
+      SKIP("Test file not found: " << testFile);
     }
 
     auto spy = SpyBackend<>{};
@@ -167,7 +167,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][engine][pipewire]")
+  TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][unit][engine][pipewire]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
@@ -216,7 +216,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[playback][engine][format]")
+  TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[playback][unit][engine][format]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
 
@@ -263,7 +263,7 @@ namespace ao::audio::test
     REQUIRE(openedFormats.empty());
   }
 
-  TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
+  TEST_CASE("Engine - Play failure matrix", "[playback][unit][engine][error]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -333,7 +333,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
+  TEST_CASE("Engine - Pause and resume matrix", "[playback][unit][engine][transport]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -380,7 +380,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
+  TEST_CASE("Engine - Seek matrix", "[playback][unit][engine][seek]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -419,7 +419,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
+  TEST_CASE("Engine - Drain and callback matrix", "[playback][unit][engine][drain]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -480,7 +480,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Property API", "[playback][engine][property]")
+  TEST_CASE("Engine - Property API", "[playback][unit][engine][property]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -616,7 +616,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Backend callback simulation", "[playback][engine][callback]")
+  TEST_CASE("Engine - Backend callback simulation", "[playback][unit][engine][callback]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -732,7 +732,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Source Error Propagation", "[playback][engine][error]")
+  TEST_CASE("Engine - Source Error Propagation", "[playback][unit][engine][error]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -760,11 +760,17 @@ namespace ao::audio::test
       .filePath = "fail.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
     engine.play(desc);
-    REQUIRE(engine.status().transport == Transport::Playing);
 
     // The StreamingSource decode loop runs in a background thread.
-    // It should hit the error and call handleSourceError.
-    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    // It should hit the error and call handleSourceError — the error may
+    // propagate before we ever observe the Playing state externally.
+    // Poll with timeout — exits as soon as the error propagates.
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+
+    while (engine.status().transport != Transport::Error && std::chrono::steady_clock::now() < deadline)
+    {
+      std::this_thread::yield();
+    }
 
     auto const snap = engine.status();
     REQUIRE(snap.transport == Transport::Error);

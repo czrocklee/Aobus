@@ -39,7 +39,7 @@ namespace ao::rt::test
     };
   }
 
-  TEST_CASE("PlaybackService - Basic Flow", "[app][runtime][playback]")
+  TEST_CASE("PlaybackService - Basic Flow", "[app][unit][runtime][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};

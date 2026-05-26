@@ -8,7 +8,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
 #include <stdexcept>
 #include <thread>
 
@@ -21,8 +20,7 @@ namespace ao::rt::test
     Task<std::thread::id> pingPongTask(Runtime* runtime, AsyncTestState<int> counter)
     {
       co_await runtime->resumeOnWorker();
-      // Now on worker thread
-      std::this_thread::sleep_for(std::chrono::milliseconds{10});
+      // Now on worker thread — the thread switch is the behavior under test.
       (*counter)++;
 
       co_await runtime->resumeOnControl();
@@ -39,7 +37,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Async runtime - Basic spawn and wait", "[async][runtime]")
+  TEST_CASE("Async runtime - Basic spawn and wait", "[async][unit][runtime]")
   {
     auto executor = ImmediateControlExecutor{};
     auto runtime = Runtime{executor};
@@ -55,7 +53,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("Async runtime - Exception handling", "[async][runtime]")
+  TEST_CASE("Async runtime - Exception handling", "[async][unit][runtime]")
   {
     auto executor = ImmediateControlExecutor{};
     auto runtime = Runtime{executor};

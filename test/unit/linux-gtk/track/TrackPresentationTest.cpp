@@ -19,7 +19,7 @@ namespace ao::gtk::test
   {
   }
 
-  TEST_CASE("TrackPresentation - field UI definitions exist for all presentable fields", "[app][presentation]")
+  TEST_CASE("TrackPresentation - field UI definitions exist for all presentable fields", "[app][unit][presentation]")
   {
     for (auto const& rtDef : rt::trackFieldDefinitions())
     {
@@ -31,7 +31,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackPresentation - default width for fields", "[app][presentation]")
+  TEST_CASE("TrackPresentation - default width for fields", "[app][unit][presentation]")
   {
     CHECK(defaultWidthForField(rt::TrackField::Artist) == 150);
     CHECK(defaultWidthForField(rt::TrackField::Album) == 200);
@@ -41,7 +41,7 @@ namespace ao::gtk::test
     CHECK(defaultWidthForField(rt::TrackField::AlbumArtist) == 180);
   }
 
-  TEST_CASE("TrackPresentation - field visible by default", "[app][presentation]")
+  TEST_CASE("TrackPresentation - field visible by default", "[app][unit][presentation]")
   {
     CHECK(fieldIsVisibleByDefault(rt::TrackField::Title));
     CHECK(fieldIsVisibleByDefault(rt::TrackField::Artist));
@@ -54,14 +54,14 @@ namespace ao::gtk::test
     CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::Year));
   }
 
-  TEST_CASE("TrackPresentation - field column title", "[app][presentation]")
+  TEST_CASE("TrackPresentation - field column title", "[app][unit][presentation]")
   {
     CHECK(fieldColumnTitle(rt::TrackField::Title) == "Title");
     CHECK(fieldColumnTitle(rt::TrackField::Artist) == "Artist");
     CHECK(fieldColumnTitle(rt::TrackField::Duration) == "Duration");
   }
 
-  TEST_CASE("TrackPresentation - redundantFieldToColumn maps sort fields to TrackField", "[app][presentation]")
+  TEST_CASE("TrackPresentation - redundantFieldToColumn maps sort fields to TrackField", "[app][unit][presentation]")
   {
     CHECK(redundantFieldToColumn(rt::TrackSortField::Artist) == rt::TrackField::Artist);
     CHECK(redundantFieldToColumn(rt::TrackSortField::Album) == rt::TrackField::Album);
@@ -77,7 +77,7 @@ namespace ao::gtk::test
     CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::TrackNumber).has_value());
   }
 
-  TEST_CASE("GtkLayoutConfig persists column layouts to gtk_layout.yaml", "[app][presentation]")
+  TEST_CASE("GtkLayoutConfig persists column layouts to gtk_layout.yaml", "[app][unit][presentation]")
   {
     auto const tempDir = lmdb::test::TempDir{};
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";

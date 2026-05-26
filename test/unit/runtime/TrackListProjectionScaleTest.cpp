@@ -56,7 +56,7 @@ namespace ao::rt::test
     };
   }
 
-  TEST_CASE("TrackListProjection - 10k Scale Performance", "[app][runtime][projection][scale]")
+  TEST_CASE("TrackListProjection - 10k Scale Performance", "[app][unit][runtime][projection][scale]")
   {
     auto env = TestMusicLibrary{};
     auto& lib = env.library();

@@ -13,7 +13,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <memory>
 #include <thread>
@@ -115,13 +114,12 @@ namespace ao::audio::test
       auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 50, 500);
       REQUIRE(source->initialize());
 
-      // Wait for async failure
-      std::int32_t retries = 0;
+      // Wait for async failure — polling with timeout, exits as soon as error fires
+      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
 
-      while (errorCount.load() == 0 && retries < 100)
+      while (errorCount.load() == 0 && std::chrono::steady_clock::now() < deadline)
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds{10});
-        retries++;
+        std::this_thread::yield();
       }
 
       REQUIRE(errorCount.load() == 1);
@@ -140,13 +138,12 @@ namespace ao::audio::test
       auto out = std::vector<std::byte>(20);
       REQUIRE(source->read(out) == 20);
 
-      // Wait for EOF to be processed if not already
-      std::int32_t retries = 0;
+      // Wait for EOF to be processed — polling with timeout
+      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
 
-      while (!source->isDrained() && retries < 100)
+      while (!source->isDrained() && std::chrono::steady_clock::now() < deadline)
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds{10});
-        retries++;
+        std::this_thread::yield();
       }
 
       REQUIRE(source->isDrained());

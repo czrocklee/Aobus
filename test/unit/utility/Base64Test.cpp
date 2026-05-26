@@ -10,7 +10,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("Base64 Utility - Encoding and Decoding", "[utility][base64]")
+  TEST_CASE("Base64 Utility - Encoding and Decoding", "[utility][unit][base64]")
   {
     SECTION("Empty input")
     {

@@ -244,7 +244,7 @@ namespace ao::rt::test
 
   using namespace ao::lmdb::test;
 
-  TEST_CASE("rt::SmartListEvaluator", "[app][smartlist]")
+  TEST_CASE("rt::SmartListEvaluator", "[app][unit][smartlist]")
   {
     SECTION("empty expression matches all tracks and maintains ID order")
     {

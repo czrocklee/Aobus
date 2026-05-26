@@ -9,7 +9,7 @@
 
 namespace ao::test
 {
-  TEST_CASE("Recoverable Error Infrastructure", "[core][error]")
+  TEST_CASE("Error - Recoverable error infrastructure", "[core][unit][error]")
   {
     SECTION("makeError produces correct Error payload")
     {

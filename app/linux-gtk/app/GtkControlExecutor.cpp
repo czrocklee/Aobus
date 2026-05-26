@@ -60,6 +60,27 @@ namespace ao::gtk
       });
   }
 
+  void GtkControlExecutor::executeTask(std::move_only_function<void()>& task)
+  {
+    try
+    {
+      task();
+    }
+    catch (ao::Exception const& e)
+    {
+      APP_LOG_CRITICAL(
+        "GtkControlExecutor: Task threw an internal exception: {} (at {}:{})", e.what(), e.file(), e.line());
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("GtkControlExecutor: Task threw an exception: {}", e.what());
+    }
+    catch (...)
+    {
+      APP_LOG_ERROR("GtkControlExecutor: Task threw an unknown exception");
+    }
+  }
+
   void GtkControlExecutor::onDispatched()
   {
     auto tasksToRun = std::vector<std::move_only_function<void()>>{};
@@ -72,23 +93,7 @@ namespace ao::gtk
     {
       if (task)
       {
-        try
-        {
-          task();
-        }
-        catch (ao::Exception const& e)
-        {
-          APP_LOG_CRITICAL(
-            "GtkControlExecutor: Task threw an internal exception: {} (at {}:{})", e.what(), e.file(), e.line());
-        }
-        catch (std::exception const& e)
-        {
-          APP_LOG_ERROR("GtkControlExecutor: Task threw an exception: {}", e.what());
-        }
-        catch (...)
-        {
-          APP_LOG_ERROR("GtkControlExecutor: Task threw an unknown exception");
-        }
+        executeTask(task);
       }
     }
   }

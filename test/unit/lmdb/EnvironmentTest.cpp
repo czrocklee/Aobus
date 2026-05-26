@@ -14,7 +14,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("Environment - create", "[lmdb][environment]")
+  TEST_CASE("Environment - create", "[lmdb][unit][environment]")
   {
     auto temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -23,7 +23,7 @@ namespace ao::lmdb::test
     auto txn = WriteTransaction{env};
   }
 
-  TEST_CASE("Environment - move constructor", "[lmdb][environment]")
+  TEST_CASE("Environment - move constructor", "[lmdb][unit][environment]")
   {
     auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_test";
     std::filesystem::create_directory(path);
@@ -37,7 +37,7 @@ namespace ao::lmdb::test
     std::filesystem::remove_all(path);
   }
 
-  TEST_CASE("Environment - move assignment", "[lmdb][environment]")
+  TEST_CASE("Environment - move assignment", "[lmdb][unit][environment]")
   {
     auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_assign_test";
     std::filesystem::create_directory(path);
@@ -50,7 +50,7 @@ namespace ao::lmdb::test
     std::filesystem::remove_all(path);
   }
 
-  TEST_CASE("Environment - constructor with path", "[lmdb][environment]")
+  TEST_CASE("Environment - constructor with path", "[lmdb][unit][environment]")
   {
     auto temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -60,7 +60,7 @@ namespace ao::lmdb::test
     auto wtxn = WriteTransaction{env};
   }
 
-  TEST_CASE("Environment - default options constructor", "[lmdb][environment]")
+  TEST_CASE("Environment - default options constructor", "[lmdb][unit][environment]")
   {
     auto temp = TempDir{};
     // Use the single-argument constructor

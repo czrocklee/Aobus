@@ -9,7 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
+#include <cstdint>
 #include <thread>
 #include <utility>
 
@@ -48,7 +48,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LifetimeScope - Completion without cancellation", "[async][runtime]")
+  TEST_CASE("LifetimeScope - Completion without cancellation", "[async][unit][runtime]")
   {
     auto executor = ImmediateControlExecutor{};
     auto runtime = Runtime{executor};
@@ -70,7 +70,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("LifetimeScope - Automatic cancellation", "[async][runtime]")
+  TEST_CASE("LifetimeScope - Automatic cancellation", "[async][unit][runtime]")
   {
     auto executor = ImmediateControlExecutor{};
     auto runtime = Runtime{executor};
@@ -84,18 +84,22 @@ namespace ao::rt::test
       // Destroy scope while task is blocked at the barrier
     }
 
-    // Now release the barrier - task should resume but be cancelled at resumeOnControl
+// Now release the barrier - task should resume but be cancelled at resumeOnControl
     barrier.release();
 
-    // Give it a tiny bit of time to resume and hit the cancellation point
-    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    // Yield a bounded number of times to let the worker thread process the cancellation.
+    // The barrier already guarantees ordering; yield merely assists thread scheduling.
+    for (std::int32_t i = 0; i < 32; ++i)
+    {
+      std::this_thread::yield();
+    }
 
     REQUIRE_FALSE(completed.get());
     runtime.requestStop();
     runtime.join();
   }
 
-  TEST_CASE("LifetimeScope - Member task lifecycle", "[async][runtime]")
+  TEST_CASE("LifetimeScope - Member task lifecycle", "[async][unit][runtime]")
   {
     auto executor = ImmediateControlExecutor{};
     auto runtime = Runtime{executor};

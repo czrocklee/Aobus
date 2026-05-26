@@ -186,7 +186,7 @@ namespace ao::rt::test
   // =============================================================================
   // Construction
   // =============================================================================
-  TEST_CASE("ManualListSource - default construction", "[app][manuallist]")
+  TEST_CASE("ManualListSource - default construction", "[app][unit][manuallist]")
   {
     auto mls = ManualListSource{};
 
@@ -195,7 +195,7 @@ namespace ao::rt::test
     CHECK(mls.source() == nullptr);
   }
 
-  TEST_CASE("ManualListSource - construction from ListView", "[app][manuallist]")
+  TEST_CASE("ManualListSource - construction from ListView", "[app][unit][manuallist]")
   {
     SECTION("copies all track IDs")
     {
@@ -247,7 +247,7 @@ namespace ao::rt::test
   // =============================================================================
   // TrackSource interface
   // =============================================================================
-  TEST_CASE("ManualListSource - TrackSource interface", "[app][manuallist]")
+  TEST_CASE("ManualListSource - TrackSource interface", "[app][unit][manuallist]")
   {
     SECTION("size returns number of tracks")
     {
@@ -309,7 +309,7 @@ namespace ao::rt::test
   // =============================================================================
   // reloadFromListView
   // =============================================================================
-  TEST_CASE("ManualListSource - reloadFromListView", "[app][manuallist]")
+  TEST_CASE("ManualListSource - reloadFromListView", "[app][unit][manuallist]")
   {
     SECTION("replaces all tracks when no source")
     {
@@ -417,7 +417,7 @@ namespace ao::rt::test
   // =============================================================================
   // onReset observer
   // =============================================================================
-  TEST_CASE("ManualListSource - onReset observer", "[app][manuallist]")
+  TEST_CASE("ManualListSource - onReset observer", "[app][unit][manuallist]")
   {
     SECTION("no-ops when _source is null")
     {
@@ -511,7 +511,7 @@ namespace ao::rt::test
   }
 
   // =============================================================================
-  TEST_CASE("ManualListSource - onInserted is no-op", "[app][manuallist]")
+  TEST_CASE("ManualListSource - onInserted is no-op", "[app][unit][manuallist]")
   {
     SECTION("single item")
     {
@@ -551,7 +551,7 @@ namespace ao::rt::test
   // =============================================================================
   // onUpdated observer
   // =============================================================================
-  TEST_CASE("ManualListSource - onUpdated observer", "[app][manuallist]")
+  TEST_CASE("ManualListSource - onUpdated observer", "[app][unit][manuallist]")
   {
     SECTION("single re-emits for member track with correct local index")
     {
@@ -697,7 +697,7 @@ namespace ao::rt::test
   // =============================================================================
   // onRemoved observer
   // =============================================================================
-  TEST_CASE("ManualListSource - onRemoved observer", "[app][manuallist]")
+  TEST_CASE("ManualListSource - onRemoved observer", "[app][unit][manuallist]")
   {
     SECTION("single removes member and emits notification with correct index")
     {
@@ -869,7 +869,7 @@ namespace ao::rt::test
   // =============================================================================
   // Sequential removals
   // =============================================================================
-  TEST_CASE("ManualListSource - sequential removals maintain correct indices", "[app][manuallist]")
+  TEST_CASE("ManualListSource - sequential removals maintain correct indices", "[app][unit][manuallist]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -917,7 +917,7 @@ namespace ao::rt::test
   // =============================================================================
   // Batch then single operations
   // =============================================================================
-  TEST_CASE("ManualListSource - batch then single operations", "[app][manuallist]")
+  TEST_CASE("ManualListSource - batch then single operations", "[app][unit][manuallist]")
   {
     SECTION("batch removal followed by single removal")
     {
@@ -987,7 +987,7 @@ namespace ao::rt::test
   // =============================================================================
   // Destruction
   // =============================================================================
-  TEST_CASE("ManualListSource - destructor detaches from source", "[app][manuallist]")
+  TEST_CASE("ManualListSource - destructor detaches from source", "[app][unit][manuallist]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -1009,7 +1009,7 @@ namespace ao::rt::test
   // =============================================================================
   // Multiple observers
   // =============================================================================
-  TEST_CASE("ManualListSource - multiple observers", "[app][manuallist]")
+  TEST_CASE("ManualListSource - multiple observers", "[app][unit][manuallist]")
   {
     SECTION("all attached observers receive relayed events")
     {
@@ -1065,7 +1065,7 @@ namespace ao::rt::test
   // =============================================================================
   // Chained ManualListSources
   // =============================================================================
-  TEST_CASE("ManualListSource - chained lists", "[app][manuallist]")
+  TEST_CASE("ManualListSource - chained lists", "[app][unit][manuallist]")
   {
     SECTION("removal propagates through chain")
     {
@@ -1130,7 +1130,7 @@ namespace ao::rt::test
   // =============================================================================
   // Destructor with null source
   // =============================================================================
-  TEST_CASE("ManualListSource - destructor with null source does not crash", "[app][manuallist]")
+  TEST_CASE("ManualListSource - destructor with null source does not crash", "[app][unit][manuallist]")
   {
     {
       auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};

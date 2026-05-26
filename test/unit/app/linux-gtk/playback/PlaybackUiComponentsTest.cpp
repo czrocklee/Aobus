@@ -60,7 +60,7 @@ namespace ao::gtk::test
     static void flushPendingSeeks(SeekControl& control) { control.executeDebouncedFinalSeek(); }
   };
 
-  TEST_CASE("Playback UI Components - Integration Behavior", "[playback][ui]")
+  TEST_CASE("Playback UI Components - Integration Behavior", "[playback][unit][ui]")
   {
     // GTK initialization for widget creation
     [[maybe_unused]] auto const app = Gtk::Application::create("io.github.aobus.ui_test");

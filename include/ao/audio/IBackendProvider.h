@@ -28,9 +28,9 @@ namespace ao::audio
      */
     struct ProfileMetadata final
     {
-      ProfileId id;
-      std::string name;
-      std::string description;
+      ProfileId id{};
+      std::string name{};
+      std::string description{};
 
       bool operator==(ProfileMetadata const&) const = default;
     };
@@ -40,19 +40,19 @@ namespace ao::audio
      */
     struct BackendMetadata final
     {
-      BackendId id;
-      std::string name;
-      std::string description;
-      std::string iconName;
-      std::vector<ProfileMetadata> supportedProfiles;
+      BackendId id{};
+      std::string name{};
+      std::string description{};
+      std::string iconName{};
+      std::vector<ProfileMetadata> supportedProfiles{};
 
       bool operator==(BackendMetadata const&) const = default;
     };
 
     struct Status final
     {
-      BackendMetadata metadata;
-      std::vector<Device> devices;
+      BackendMetadata metadata{};
+      std::vector<Device> devices{};
 
       bool operator==(Status const&) const = default;
     };

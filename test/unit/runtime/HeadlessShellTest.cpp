@@ -31,7 +31,7 @@ namespace ao::rt::test
     void defer(std::move_only_function<void()> task) override { task(); }
   };
 
-  TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][runtime][headless]")
+  TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][unit][runtime][headless]")
   {
     auto tempDir = TempDir{};
     auto workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");

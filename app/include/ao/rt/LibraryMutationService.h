@@ -54,7 +54,7 @@ namespace ao::rt
       std::string name{};
       std::string description{};
       std::string expression{};      // Only used for Smart lists
-      std::vector<TrackId> trackIds; // Only used for Manual lists
+      std::vector<TrackId> trackIds{}; // Only used for Manual lists
     };
 
     LibraryMutationService(async::Runtime& asyncRuntime, library::MusicLibrary& library);

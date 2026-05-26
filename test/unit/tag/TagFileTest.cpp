@@ -39,7 +39,7 @@ namespace ao::tag::test
     };
   }
 
-  TEST_CASE("TagFile - Factory", "[tag][factory]")
+  TEST_CASE("TagFile - Factory", "[tag][unit][factory]")
   {
     SECTION("MP3 extension")
     {

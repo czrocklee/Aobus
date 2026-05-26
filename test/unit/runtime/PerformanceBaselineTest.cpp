@@ -139,7 +139,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Phase 0 — 10k Baseline", "[baseline]")
+  TEST_CASE("Phase 0 — 10k Baseline", "[baseline][unit]")
   {
     log::Log::init(log::LogLevel::Info);
     constexpr int kN = 10000;
@@ -159,9 +159,15 @@ namespace ao::rt::test
     APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSort.count());
     APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembers.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookup.count());
+
+    // Regression thresholds — deliberately generous to avoid flakes
+    CHECK(t.createProjection.count() < 5000);
+    CHECK(t.setTitleSort.count() < 5000);
+    CHECK(t.evaluateMembers.count() < 10000);
+    CHECK(t.indexOfLookup.count() < 500000);
   }
 
-  TEST_CASE("Phase 0 — 100k Baseline", "[baseline]")
+  TEST_CASE("Phase 0 — 100k Baseline", "[baseline][unit]")
   {
     log::Log::init(log::LogLevel::Info);
     constexpr int kN = 100000;
@@ -181,9 +187,15 @@ namespace ao::rt::test
     APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSort.count());
     APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembers.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookup.count());
+
+    // Regression thresholds — deliberately generous to avoid flakes
+    CHECK(t.createProjection.count() < 30000);
+    CHECK(t.setTitleSort.count() < 30000);
+    CHECK(t.evaluateMembers.count() < 60000);
+    CHECK(t.indexOfLookup.count() < 500000);
   }
 
-  TEST_CASE("Phase 0 — 1M Baseline", "[baseline]")
+  TEST_CASE("Phase 0 — 1M Baseline", "[baseline][unit]")
   {
     log::Log::init(log::LogLevel::Info);
     constexpr int kN = 1000000;
@@ -203,5 +215,11 @@ namespace ao::rt::test
     APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSort.count());
     APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembers.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookup.count());
+
+    // Regression thresholds — deliberately generous to avoid flakes
+    CHECK(t.createProjection.count() < 300000);
+    CHECK(t.setTitleSort.count() < 300000);
+    CHECK(t.evaluateMembers.count() < 600000);
+    CHECK(t.indexOfLookup.count() < 500000);
   }
 }

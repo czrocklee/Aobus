@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <source_location>
 
 namespace ao::log
@@ -27,15 +28,20 @@ namespace ao::log
   class Log final
   {
   public:
+    // Logging threads must be stopped before shutdown; init/shutdown do not synchronize with log calls.
     static void init(LogLevel level = LogLevel::Info, std::filesystem::path logDir = {});
     static void shutdown();
 
-    static std::shared_ptr<spdlog::logger>& getAppLogger() { return _appLogger; }
-    static std::shared_ptr<spdlog::logger>& getAudioLogger() { return _audioLogger; }
+    static bool isInitialized();
+
+    static std::shared_ptr<spdlog::logger> const& getAppLogger() noexcept { return _appLogger; }
+    static std::shared_ptr<spdlog::logger> const& getAudioLogger() noexcept { return _audioLogger; }
 
   private:
     static std::shared_ptr<spdlog::logger> _appLogger;
     static std::shared_ptr<spdlog::logger> _audioLogger;
+    static bool _initialized;
+    static std::mutex _lifecycleMutex;
   };
 
   /**
@@ -48,8 +54,16 @@ namespace ao::log
 } // namespace ao::log
 
 // Core log macros
-#define AO_LOG_CALL(logger, level, loc, ...)                                                                           \
-  if (logger->should_log(level)) logger->log(ao::log::toSpdlog(loc), level, __VA_ARGS__)
+#define AO_LOG_CALL(loggerExpr, level, loc, ...)                                                                       \
+  do  /* NOLINT(cppcoreguidelines-avoid-do-while) */                                                                           \
+  {                                                                                                                    \
+    auto const& logger = (loggerExpr);                                                                                 \
+    if (logger != nullptr && logger->should_log(level))                                                                \
+    {                                                                                                                  \
+      logger->log(ao::log::toSpdlog(loc), level, __VA_ARGS__);                                                         \
+    }                                                                                                                  \
+  }                                                                                                                    \
+  while (false)
 
 #define APP_LOG_TRACE(...)                                                                                             \
   AO_LOG_CALL(ao::log::Log::getAppLogger(), spdlog::level::trace, std::source_location::current(), __VA_ARGS__)

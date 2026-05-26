@@ -53,7 +53,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("QualityAnalyzer - Bitwise Perfect", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - Bitwise Perfect", "[audio][unit][quality]")
   {
     auto const graph = buildBaseMergedGraph();
     auto const result = analyzeAudioQuality(graph);
@@ -62,7 +62,7 @@ namespace ao::audio::test
     REQUIRE(result.tooltip.find("Byte-perfect") != std::string::npos);
   }
 
-  TEST_CASE("QualityAnalyzer - Lossy Source", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - Lossy Source", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[0].isLossySource = true;
@@ -72,7 +72,7 @@ namespace ao::audio::test
     REQUIRE(result.tooltip.find("Lossy format") != std::string::npos);
   }
 
-  TEST_CASE("QualityAnalyzer - Resampling", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - Resampling", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     // Modify Engine output format to trigger resampling at Decoder -> Engine
@@ -83,7 +83,7 @@ namespace ao::audio::test
     REQUIRE(result.tooltip.find("Resampling") != std::string::npos);
   }
 
-  TEST_CASE("QualityAnalyzer - Volume Modification", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - Volume Modification", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[1].volumeNotUnity = true;
@@ -93,7 +93,7 @@ namespace ao::audio::test
     REQUIRE(result.tooltip.find("Volume") != std::string::npos);
   }
 
-  TEST_CASE("QualityAnalyzer - Mute Detected", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - Mute Detected", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[2].isMuted = true;
@@ -103,7 +103,7 @@ namespace ao::audio::test
     REQUIRE(result.tooltip.find("MUTED") != std::string::npos);
   }
 
-  TEST_CASE("QualityAnalyzer - External Mixing", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - External Mixing", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
 
@@ -117,7 +117,7 @@ namespace ao::audio::test
     REQUIRE(result.tooltip.find("shared with Firefox") != std::string::npos);
   }
 
-  TEST_CASE("QualityAnalyzer - Lossless Bit-Depth Extension", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - Lossless Bit-Depth Extension", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     // decoder 16b -> engine 24b -> stream 24b -> sink 24b
@@ -130,14 +130,14 @@ namespace ao::audio::test
     REQUIRE(result.tooltip.find("Integer padding") != std::string::npos);
   }
 
-  TEST_CASE("QualityAnalyzer - Empty Graph", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - Empty Graph", "[audio][unit][quality]")
   {
     auto const graph = flow::Graph{};
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::Unknown);
   }
 
-  TEST_CASE("QualityAnalyzer - Float Conversions", "[audio][quality]")
+  TEST_CASE("QualityAnalyzer - Float Conversions", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
 

@@ -42,6 +42,8 @@ namespace ao::gtk
     void reloadGtkUserCss();
 
     void setupFileMonitors();
+    void setupGtkConfigMonitor();
+    void setupAobusConfigMonitor();
     void setupDBusMonitor();
     void setupSignalHandler();
 

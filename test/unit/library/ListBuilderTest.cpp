@@ -18,7 +18,7 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("ListBuilder - smart list")
+  TEST_CASE("ListBuilder - smart list", "[library][unit][list]")
   {
     auto const payload = ListBuilder::createNew()
                            .name("My Smart List")
@@ -34,7 +34,7 @@ namespace ao::library::test
     CHECK(view.parentId() == ListId{17});
   }
 
-  TEST_CASE("ListBuilder - manual list")
+  TEST_CASE("ListBuilder - manual list", "[library][unit][list]")
   {
     auto builder = ListBuilder::createNew().name("My Manual List").description("A manual list");
     builder.tracks().add(TrackId{100});
@@ -51,7 +51,7 @@ namespace ao::library::test
     CHECK(view.tracks()[2] == TrackId{300});
   }
 
-  TEST_CASE("ListBuilder - manual list empty trackIds")
+  TEST_CASE("ListBuilder - manual list empty trackIds", "[library][unit][list]")
   {
     auto const payload = ListBuilder::createNew().name("Empty List").description("No tracks").serialize();
     auto const view = ListView{payload};
@@ -61,7 +61,7 @@ namespace ao::library::test
     CHECK(view.parentId() == kInvalidListId);
   }
 
-  TEST_CASE("ListBuilder - parentId round-trip through View")
+  TEST_CASE("ListBuilder - parentId round-trip through View", "[library][unit][list]")
   {
     auto builder = ListBuilder::createNew()
                      .name("Nested Smart List")
@@ -81,7 +81,7 @@ namespace ao::library::test
     CHECK(rebuiltView.filter() == "$year >= 2021");
   }
 
-  TEST_CASE("ListBuilder - manual list round-trip through ListStore")
+  TEST_CASE("ListBuilder - manual list round-trip through ListStore", "[library][unit][list]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -111,7 +111,7 @@ namespace ao::library::test
     CHECK(found.tracks()[1] == TrackId{99});
   }
 
-  TEST_CASE("ListBuilder - smart list round-trip through ListStore")
+  TEST_CASE("ListBuilder - smart list round-trip through ListStore", "[library][unit][list]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -141,7 +141,7 @@ namespace ao::library::test
     CHECK(found.tracks().empty());
   }
 
-  TEST_CASE("ListBuilder - name and description offsets")
+  TEST_CASE("ListBuilder - name and description offsets", "[library][unit][list]")
   {
     auto const payload = ListBuilder::createNew().name("Offset Test").description("Desc Here").serialize();
     auto const view = ListView{payload};

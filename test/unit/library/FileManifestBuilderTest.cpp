@@ -8,40 +8,43 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace ao::library;
-
-TEST_CASE("FileManifestBuilder constructs valid payload", "[library][manifest]")
+namespace ao::library::test
 {
-  auto builder = FileManifestBuilder::createNew();
-  builder.trackId(ao::TrackId{100}).fileSize(999999).mtime(888888).status(FileStatus::Error);
+  using namespace ao::library;
 
-  auto payload = builder.serialize();
+  TEST_CASE("FileManifestBuilder - constructs valid payload", "[library][unit][manifest]")
+  {
+    auto builder = FileManifestBuilder::createNew();
+    builder.trackId(TrackId{100}).fileSize(999999).mtime(888888).status(FileStatus::Error);
 
-  // Validate via view
-  auto view = FileManifestView{payload};
+    auto payload = builder.serialize();
 
-  REQUIRE(view.trackId() == ao::TrackId{100});
-  REQUIRE(view.fileSize() == 999999);
-  REQUIRE(view.mtime() == 888888);
-  REQUIRE(view.status() == FileStatus::Error);
-}
+    // Validate via view
+    auto view = FileManifestView{payload};
 
-TEST_CASE("FileManifestBuilder constructs from view", "[library][manifest]")
-{
-  auto builder1 = FileManifestBuilder::createNew();
-  builder1.trackId(ao::TrackId{123}).fileSize(111).mtime(222).status(FileStatus::Missing);
+    CHECK(view.trackId() == ao::TrackId{100});
+    CHECK(view.fileSize() == 999999);
+    CHECK(view.mtime() == 888888);
+    CHECK(view.status() == FileStatus::Error);
+  }
 
-  auto payload1 = builder1.serialize();
-  auto view = FileManifestView{payload1};
+  TEST_CASE("FileManifestBuilder - constructs from view", "[library][unit][manifest]")
+  {
+    auto builder1 = FileManifestBuilder::createNew();
+    builder1.trackId(TrackId{123}).fileSize(111).mtime(222).status(FileStatus::Missing);
 
-  auto builder2 = FileManifestBuilder::fromView(view);
-  builder2.fileSize(333); // Modify one field
+    auto payload1 = builder1.serialize();
+    auto view = FileManifestView{payload1};
 
-  auto payload2 = builder2.serialize();
-  auto view2 = FileManifestView{payload2};
+    auto builder2 = FileManifestBuilder::fromView(view);
+    builder2.fileSize(333); // Modify one field
 
-  REQUIRE(view2.trackId() == ao::TrackId{123});
-  REQUIRE(view2.fileSize() == 333);
-  REQUIRE(view2.mtime() == 222);
-  REQUIRE(view2.status() == FileStatus::Missing);
-}
+    auto payload2 = builder2.serialize();
+    auto view2 = FileManifestView{payload2};
+
+    CHECK(view2.trackId() == ao::TrackId{123});
+    CHECK(view2.fileSize() == 333);
+    CHECK(view2.mtime() == 222);
+    CHECK(view2.status() == FileStatus::Missing);
+  }
+} // namespace ao::library::test

@@ -22,70 +22,76 @@
 #include <utility>
 
 using namespace ao;
-using namespace ao::rt;
-using namespace ao::lmdb::test;
 
-namespace
+  namespace ao::rt::test
 {
-  class MockExecutor final : public IControlExecutor
+
+  using namespace ao::rt;
+  using namespace ao::lmdb::test;
+
+  namespace
   {
-  public:
-    bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
-    void defer(std::move_only_function<void()> task) override { task(); }
-  };
+    class MockExecutor final : public IControlExecutor
+    {
+    public:
+      bool isCurrent() const noexcept override { return true; }
+      void dispatch(std::move_only_function<void()> task) override { task(); }
+      void defer(std::move_only_function<void()> task) override { task(); }
+    };
 
-  class DummyAudioProvider final : public audio::IBackendProvider
+    class DummyAudioProvider final : public audio::IBackendProvider
+    {
+    public:
+      audio::Subscription subscribeDevices(OnDevicesChangedCallback /*callback*/) override { return {}; }
+      Status status() const override { return Status{.metadata = {.id = audio::BackendId{"dummy"}}}; }
+      std::unique_ptr<audio::IBackend> createBackend(audio::Device const& /*device*/,
+                                                     audio::ProfileId const& /*profile*/) override
+      {
+        return nullptr;
+      }
+      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      {
+        return {};
+      }
+    };
+  }
+
+  TEST_CASE("AppRuntime - Coverage", "[runtime][unit]")
   {
-  public:
-    audio::Subscription subscribeDevices(OnDevicesChangedCallback /*callback*/) override { return {}; }
-    Status status() const override { return Status{.metadata = {.id = audio::BackendId{"dummy"}}}; }
-    std::unique_ptr<audio::IBackend> createBackend(audio::Device const& /*device*/,
-                                                   audio::ProfileId const& /*profile*/) override
-    {
-      return nullptr;
-    }
-    audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
-    {
-      return {};
-    }
-  };
-}
+    auto tempDir = TempDir{};
+    auto workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
 
-TEST_CASE("AppRuntime - Coverage", "[runtime]")
-{
-  auto tempDir = TempDir{};
-  auto workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
+    auto app = std::make_unique<AppRuntime>(AppRuntimeDependencies{
+      .executor = std::make_unique<MockExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .workspaceConfigStore = std::move(workspaceConfigStore),
+    });
 
-  auto app = std::make_unique<AppRuntime>(AppRuntimeDependencies{
-    .executor = std::make_unique<MockExecutor>(),
-    .musicRoot = tempDir.path(),
-    .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-    .workspaceConfigStore = std::move(workspaceConfigStore),
-  });
+    CHECK(app->musicRoot() == std::filesystem::path{tempDir.path()});
+    CHECK(app->databasePath() == std::filesystem::path{tempDir.path()} / ".aobus" / "library");
 
-  CHECK(app->musicRoot() == std::filesystem::path{tempDir.path()});
-  CHECK(app->databasePath() == std::filesystem::path{tempDir.path()} / ".aobus" / "library");
+    // Verify accessors
+    [[maybe_unused]] auto& commands = app->trackCommands();
+    [[maybe_unused]] auto& notifications = app->notifications();
 
-  // Verify accessors
-  [[maybe_unused]] auto& commands = app->trackCommands();
-  [[maybe_unused]] auto& notifications = app->notifications();
+    // addAudioProvider
+    app->addAudioProvider(std::make_unique<DummyAudioProvider>());
 
-  // addAudioProvider
-  app->addAudioProvider(std::make_unique<DummyAudioProvider>());
+    // reloadAllTracks
+    REQUIRE_NOTHROW(app->reloadAllTracks());
 
-  // reloadAllTracks
-  REQUIRE_NOTHROW(app->reloadAllTracks());
+    // playSelectionInFocusedView (with no focused view)
+    CHECK(app->playSelectionInFocusedView() == kInvalidTrackId);
 
-  // playSelectionInFocusedView (with no focused view)
-  CHECK(app->playSelectionInFocusedView() == kInvalidTrackId);
+    // Add a view and focus it
+    app->workspace().navigateTo(GlobalViewKind::AllTracks);
 
-  // Add a view and focus it
-  app->workspace().navigateTo(GlobalViewKind::AllTracks);
+    // playSelectionInFocusedView (with focused view but no selection)
+    CHECK(app->playSelectionInFocusedView() == kInvalidTrackId);
 
-  // playSelectionInFocusedView (with focused view but no selection)
-  CHECK(app->playSelectionInFocusedView() == kInvalidTrackId);
+    // Cover polymorphic destruction of CoreRuntime
+    auto const core = std::unique_ptr<CoreRuntime>{std::move(app)};
+  }
 
-  // Cover polymorphic destruction of CoreRuntime
-  auto const core = std::unique_ptr<CoreRuntime>{std::move(app)};
-}
+} // namespace ao::rt::test

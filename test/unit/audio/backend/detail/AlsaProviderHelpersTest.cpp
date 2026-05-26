@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/audio/backend/detail/AlsaProviderHelpers.h"
 
 #include "ao/audio/Backend.h"
 #include "ao/audio/backend/detail/AudioBackendShared.h"
@@ -10,7 +9,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("AlsaProviderHelpers - Logic", "[audio][alsa][monitor]")
+  TEST_CASE("AlsaProviderHelpers - Logic", "[audio][unit][alsa][monitor]")
   {
     SECTION("addSampleFormatCapability - Unique")
     {
@@ -30,16 +29,7 @@ namespace ao::audio::backend::detail::test
       CHECK(caps.sampleFormats.size() == 2);
     }
 
-    SECTION("Enumerate - Basic Sanity")
-    {
-      // This will hit real ALSA, so we just check it doesn't crash
-      auto devices = doAlsaEnumerate();
-
-      for (auto const& dev : devices)
-      {
-        CHECK_FALSE(dev.id.empty());
-        CHECK(dev.backendId == kBackendAlsa);
-      }
-    }
+    // NOTE: doAlsaEnumerate() hits real ALSA hardware and is tested in
+    // test/integration/audio/backend/ instead.
   }
 } // namespace ao::audio::backend::detail::test

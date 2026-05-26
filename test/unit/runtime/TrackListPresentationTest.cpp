@@ -29,7 +29,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("TrackListPresentation: None mapping", "[app][runtime][presentation]")
+  TEST_CASE("TrackListPresentation - None mapping", "[app][unit][runtime][presentation]")
   {
     auto const* const preset = presetForGroup(TrackGroupKey::None);
     REQUIRE(preset != nullptr);
@@ -51,7 +51,7 @@ namespace ao::rt::test
     REQUIRE(preset->spec.redundantFields.empty());
   }
 
-  TEST_CASE("TrackListPresentation: Artist mapping", "[app][runtime][presentation]")
+  TEST_CASE("TrackListPresentation - Artist mapping", "[app][unit][runtime][presentation]")
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Artist);
     REQUIRE(preset != nullptr);
@@ -74,7 +74,7 @@ namespace ao::rt::test
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListPresentation: Album mapping", "[app][runtime][presentation]")
+  TEST_CASE("TrackListPresentation - Album mapping", "[app][unit][runtime][presentation]")
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Album);
     REQUIRE(preset != nullptr);
@@ -96,7 +96,7 @@ namespace ao::rt::test
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListPresentation: AlbumArtist mapping", "[app][runtime][presentation]")
+  TEST_CASE("TrackListPresentation - AlbumArtist mapping", "[app][unit][runtime][presentation]")
   {
     auto const* const preset = presetForGroup(TrackGroupKey::AlbumArtist);
     REQUIRE(preset != nullptr);
@@ -118,7 +118,7 @@ namespace ao::rt::test
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListPresentation: Genre mapping", "[app][runtime][presentation]")
+  TEST_CASE("TrackListPresentation - Genre mapping", "[app][unit][runtime][presentation]")
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Genre);
     REQUIRE(preset != nullptr);
@@ -141,7 +141,7 @@ namespace ao::rt::test
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListPresentation: Composer mapping", "[app][runtime][presentation]")
+  TEST_CASE("TrackListPresentation - Composer mapping", "[app][unit][runtime][presentation]")
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Composer);
     REQUIRE(preset != nullptr);
@@ -164,7 +164,7 @@ namespace ao::rt::test
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListPresentation: Work mapping", "[app][runtime][presentation]")
+  TEST_CASE("TrackListPresentation - Work mapping", "[app][unit][runtime][presentation]")
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Work);
     REQUIRE(preset != nullptr);
@@ -187,7 +187,7 @@ namespace ao::rt::test
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListPresentation: Year mapping", "[app][runtime][presentation]")
+  TEST_CASE("TrackListPresentation - Year mapping", "[app][unit][runtime][presentation]")
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Year);
     REQUIRE(preset != nullptr);

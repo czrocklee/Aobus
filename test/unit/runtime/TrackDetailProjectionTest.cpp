@@ -61,7 +61,7 @@ namespace ao::rt::test
     };
   }
 
-  TEST_CASE("TrackDetailProjection refreshes on TracksMutated", "[projection]")
+  TEST_CASE("TrackDetailProjection refreshes on TracksMutated", "[projection][unit]")
   {
     auto env = Env{};
 
@@ -90,7 +90,7 @@ namespace ao::rt::test
     CHECK(snap.title.optValue.value() == "After");
   }
 
-  TEST_CASE("TrackDetailProjection ignores non-intersecting TracksMutated", "[projection]")
+  TEST_CASE("TrackDetailProjection ignores non-intersecting TracksMutated", "[projection][unit]")
   {
     auto env = Env{};
 
@@ -112,7 +112,7 @@ namespace ao::rt::test
     CHECK(proj->snapshot().revision == revBefore);
   }
 
-  TEST_CASE("TrackDetailProjection aggregates metadata for multi-select", "[projection]")
+  TEST_CASE("TrackDetailProjection aggregates metadata for multi-select", "[projection][unit]")
   {
     auto env = Env{};
 
@@ -139,7 +139,7 @@ namespace ao::rt::test
     CHECK(snap.album.mixed);
   }
 
-  TEST_CASE("TrackDetailProjection with ExplicitSelectionTarget", "[projection]")
+  TEST_CASE("TrackDetailProjection with ExplicitSelectionTarget", "[projection][unit]")
   {
     auto env = Env{};
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
@@ -150,7 +150,7 @@ namespace ao::rt::test
     CHECK(snap.title.optValue.value() == "Song A");
   }
 
-  TEST_CASE("TrackDetailProjection with FocusedViewTarget", "[projection]")
+  TEST_CASE("TrackDetailProjection with FocusedViewTarget", "[projection][unit]")
   {
     auto env = Env{};
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
@@ -184,7 +184,7 @@ namespace ao::rt::test
     CHECK(proj->snapshot().title.optValue.value() == "Song B");
   }
 
-  TEST_CASE("TrackDetailProjection with non-existent track", "[projection]")
+  TEST_CASE("TrackDetailProjection with non-existent track", "[projection][unit]")
   {
     auto env = Env{};
     auto const proj = env.views.detailProjection(
@@ -194,7 +194,7 @@ namespace ao::rt::test
     CHECK_FALSE(snap.title.optValue.has_value());
   }
 
-  TEST_CASE("TrackDetailProjection with tags", "[projection]")
+  TEST_CASE("TrackDetailProjection with tags", "[projection][unit]")
   {
     auto env = Env{};
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});

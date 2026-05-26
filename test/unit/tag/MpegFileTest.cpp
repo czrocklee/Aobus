@@ -149,7 +149,7 @@ namespace ao::tag::mpeg::test
     }
   }
 
-  TEST_CASE("MPEG File - loadTrack with tags", "[tag][mpeg][file]")
+  TEST_CASE("MPEG File - loadTrack with tags", "[tag][unit][mpeg][file]")
   {
     auto const data = createMp3WithTags();
     auto const temp = TempFile{data};
@@ -186,7 +186,7 @@ namespace ao::tag::mpeg::test
     CHECK(static_cast<std::uint8_t>(meta.coverArtData()[0]) == 0xAA);
   }
 
-  TEST_CASE("MPEG File - CBR Duration", "[tag][mpeg][file]")
+  TEST_CASE("MPEG File - CBR Duration", "[tag][unit][mpeg][file]")
   {
     auto data = std::vector<std::uint8_t>{};
     auto const mpegHdr = std::array<std::uint8_t, 4>{0xFF, 0xFB, 0x90, 0x44};
@@ -197,11 +197,11 @@ namespace ao::tag::mpeg::test
     auto const file = File{temp.path, TagFile::Mode::ReadOnly};
     auto builder = file.loadTrack();
 
-    CHECK(builder.property().durationMs() >= 1000);
+    REQUIRE(builder.property().durationMs() >= 1000);
     CHECK(builder.property().durationMs() <= 1010);
   }
 
-  TEST_CASE("MPEG File - ID3v2.2 (Unsupported)", "[tag][mpeg][file]")
+  TEST_CASE("MPEG File - ID3v2.2 (Unsupported)", "[tag][unit][mpeg][file]")
   {
     auto data = std::vector<std::uint8_t>{};
     auto header = id3v2::HeaderLayout{};
@@ -217,7 +217,7 @@ namespace ao::tag::mpeg::test
     CHECK(builder.metadata().title().empty());
   }
 
-  TEST_CASE("MPEG File - Malformed Data", "[tag][mpeg][file]")
+  TEST_CASE("MPEG File - Malformed Data", "[tag][unit][mpeg][file]")
   {
     SECTION("Truncated ID3v2 Header")
     {

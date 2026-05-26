@@ -12,7 +12,7 @@
 
 namespace ao::media::mp4::test
 {
-  TEST_CASE("MP4 Demuxer Resilience", "[media][mp4][error]")
+  TEST_CASE("MP4 Demuxer Resilience", "[media][unit][mp4][error]")
   {
     SECTION("Empty data returns FormatRejected")
     {

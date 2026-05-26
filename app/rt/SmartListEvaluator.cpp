@@ -147,6 +147,11 @@ namespace ao::rt
 
     for (auto& [source, bucket] : _buckets)
     {
+      for (auto* list : bucket->lists)
+      {
+        list->_evaluator = nullptr;
+      }
+
       if (bucket->observer)
       {
         utility::unsafeDowncast<SourceObserver>(bucket->observer.get())->invalidate();

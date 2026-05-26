@@ -16,9 +16,10 @@
 
 namespace ao::library::test
 {
+  using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("MusicLibrary initializes metadata header", "[core][library]")
+  TEST_CASE("MusicLibrary initializes metadata header", "[library][unit]")
   {
     auto const temp = TempDir{};
 
@@ -33,7 +34,7 @@ namespace ao::library::test
     REQUIRE(reopened.metaHeader().createdAtUnixMs == firstHeader.createdAtUnixMs);
   }
 
-  TEST_CASE("MusicLibrary rejects unsupported library versions", "[core][library]")
+  TEST_CASE("MusicLibrary rejects unsupported library versions", "[library][unit]")
   {
     auto const temp = TempDir{};
     auto env = lmdb::Environment{temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8}};
@@ -49,5 +50,30 @@ namespace ao::library::test
     txn.commit();
 
     REQUIRE_THROWS_AS((MusicLibrary{temp.path(), temp.path()}), Exception);
+  }
+
+  TEST_CASE("MusicLibrary - accessors return valid references", "[library][unit]")
+  {
+    auto const temp = TempDir{};
+    auto const ml = MusicLibrary{temp.path(), temp.path()};
+
+    // All store accessors should be callable without crashing
+    CHECK_NOTHROW(ml.tracks());
+    CHECK_NOTHROW(ml.lists());
+    CHECK_NOTHROW(ml.resources());
+    CHECK_NOTHROW(ml.dictionary());
+    CHECK_NOTHROW(ml.manifest());
+    CHECK(ml.rootPath() == temp.path());
+  }
+
+  TEST_CASE("MusicLibrary - read and write transactions work", "[library][unit]")
+  {
+    auto const temp = TempDir{};
+    auto ml = MusicLibrary{temp.path(), temp.path()};
+
+    auto wtxn = ml.writeTransaction();
+    CHECK_NOTHROW(wtxn.commit());
+
+    auto rtxn = ml.readTransaction(); // validates read access to the database
   }
 } // namespace ao::library::test

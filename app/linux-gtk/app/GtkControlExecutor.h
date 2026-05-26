@@ -32,6 +32,7 @@ namespace ao::gtk
 
   private:
     void onDispatched();
+    void executeTask(std::move_only_function<void()>& task);
 
     Glib::Dispatcher _dispatcher;
     std::mutex _mutex;

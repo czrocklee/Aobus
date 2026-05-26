@@ -9,13 +9,13 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackHotHeader - Size and Alignment")
+  TEST_CASE("TrackHotHeader - Size and Alignment", "[library][unit][track]")
   {
     CHECK(sizeof(TrackHotHeader) == 36);
     CHECK(alignof(TrackHotHeader) == 4);
   }
 
-  TEST_CASE("TrackHotHeader - Field Offsets")
+  TEST_CASE("TrackHotHeader - Field Offsets", "[library][unit][track]")
   {
     // Check 4-byte section
     CHECK(offsetof(TrackHotHeader, tagBloom) == 0);
@@ -36,13 +36,13 @@ namespace ao::library::test
     CHECK(offsetof(TrackHotHeader, rating) == 34);
   }
 
-  TEST_CASE("TrackColdHeader - Size and Alignment")
+  TEST_CASE("TrackColdHeader - Size and Alignment", "[library][unit][track]")
   {
     CHECK(sizeof(TrackColdHeader) == 36);
     CHECK(alignof(TrackColdHeader) == 4);
   }
 
-  TEST_CASE("TrackColdHeader - Field Offsets")
+  TEST_CASE("TrackColdHeader - Field Offsets", "[library][unit][track]")
   {
     // 4-byte section
     CHECK(offsetof(TrackColdHeader, durationMs) == 0);

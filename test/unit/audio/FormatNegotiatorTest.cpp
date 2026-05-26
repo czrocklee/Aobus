@@ -9,7 +9,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("FormatNegotiator - Build Plan", "[playback][format_negotiator]")
+  TEST_CASE("FormatNegotiator - Build Plan", "[playback][unit][format_negotiator]")
   {
     auto sourceFormat =
       Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};

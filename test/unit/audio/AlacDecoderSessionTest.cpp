@@ -15,7 +15,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("AlacDecoderSession - Seek", "[audio][alac][seek]")
+  TEST_CASE("AlacDecoderSession - Seek", "[audio][unit][alac][seek]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.m4a";
 
@@ -57,13 +57,13 @@ namespace ao::audio::test
     CHECK(decoder.readNextBlock());
   }
 
-  TEST_CASE("AlacDecoderSession - 32-bit", "[audio][alac]")
+  TEST_CASE("AlacDecoderSession - 32-bit", "[audio][unit][alac]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.m4a";
 
     if (!std::filesystem::exists(testFile))
     {
-      return;
+      SKIP("Test file 'hires.m4a' missing");
     }
 
     auto decoder = AlacDecoderSession{Format{.bitDepth = 32, .isInterleaved = true}};
@@ -71,7 +71,7 @@ namespace ao::audio::test
     REQUIRE(decoder.readNextBlock());
   }
 
-  TEST_CASE("AlacDecoderSession - Error Paths", "[audio][alac][error]")
+  TEST_CASE("AlacDecoderSession - Error Paths", "[audio][unit][alac][error]")
   {
     auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
 

@@ -118,6 +118,25 @@ namespace ao::library
 
       plan.items.push_back(std::move(item));
     }
+    void addMissingEntries(ScanPlan& plan,
+                           FileManifestStore::Reader const& manifestReader,
+                           std::unordered_set<std::string> const& seenUris)
+    {
+      for (auto const& [uriView, view] : manifestReader)
+      {
+        if (auto const uri = std::string{uriView}; !seenUris.contains(uri))
+        {
+          auto item = ScanItem{.uri = uri,
+                               .fullPath = {},
+                               .classification = ScanClassification::Missing,
+                               .fileSize = view.fileSize(),
+                               .mtime = view.mtime(),
+                               .trackId = view.trackId(),
+                               .errorMessage = {}};
+          plan.items.push_back(std::move(item));
+        }
+      }
+    }
   }
 
   LibraryScanner::LibraryScanner(MusicLibrary& ml)
@@ -204,20 +223,7 @@ namespace ao::library
     }
 
     // 2. Identify MISSING (In manifest but not on disk)
-    for (auto const& [uriView, view] : manifestReader)
-    {
-      if (auto const uri = std::string{uriView}; !seenUris.contains(uri))
-      {
-        auto item = ScanItem{.uri = uri,
-                             .fullPath = {},
-                             .classification = ScanClassification::Missing,
-                             .fileSize = view.fileSize(),
-                             .mtime = view.mtime(),
-                             .trackId = view.trackId(),
-                             .errorMessage = {}};
-        plan.items.push_back(std::move(item));
-      }
-    }
+    addMissingEntries(plan, manifestReader, seenUris);
 
     return plan;
   }

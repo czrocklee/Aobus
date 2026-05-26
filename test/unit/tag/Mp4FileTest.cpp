@@ -234,7 +234,7 @@ namespace ao::tag::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - loadTrack", "[tag][mp4][file]")
+  TEST_CASE("MP4 File - loadTrack", "[tag][unit][mp4][file]")
   {
     auto const data = createMinimalM4a();
     auto const temp = TempFile{data};
@@ -281,7 +281,7 @@ namespace ao::tag::mp4::test
     CHECK(builder.property().bitDepth() == 16);
   }
 
-  TEST_CASE("MP4 File - Malformed Data", "[tag][mp4][file]")
+  TEST_CASE("MP4 File - Malformed Data", "[tag][unit][mp4][file]")
   {
     SECTION("Truncated Atom")
     {

@@ -57,12 +57,25 @@ namespace ao::audio
     // before the callbacks and state it accesses are destroyed.
     std::unique_ptr<IBackend> backend;
 
-    // ── Construction ──────────────────────────────────────────────
+    // ── Construction & Destruction ────────────────────────────────
     Impl(std::unique_ptr<IBackend> backend, Device device, DecoderFactoryFn decoderFactory)
       : currentDevice{std::move(device)}, decoderFactory{std::move(decoderFactory)}, backend{std::move(backend)}
     {
       syncBackendIdentity();
     }
+
+    ~Impl() override
+    {
+      // Stop the source and its background thread first. This prevents the
+      // decode thread from firing error callbacks (which access `backend`)
+      // after `backend` has been destroyed.
+      source.store(nullptr, std::memory_order_release);
+    }
+
+    Impl(Impl const&) = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
 
     // ── Helpers ────────────────────────────────────────────────────
     void syncBackendIdentity()

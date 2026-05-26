@@ -33,7 +33,7 @@ namespace ao::rt::test
     void onReset() override { resets++; }
   };
 
-  TEST_CASE("AllTracksSource - Operations", "[runtime][AllTracksSource]")
+  TEST_CASE("AllTracksSource - Operations", "[runtime][unit][AllTracksSource]")
   {
     auto testLib = TestMusicLibrary{};
     auto& store = testLib.library().tracks();

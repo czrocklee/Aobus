@@ -131,7 +131,7 @@ namespace ao::rt::test
     };
   }
 
-  TEST_CASE("TrackListProjection - basic lifecycle with data", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - basic lifecycle with data", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto const id1 = env.lib.addTrack(makeSpec("Track A", 2020));
@@ -170,7 +170,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - normalizeTitle behavior", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - normalizeTitle behavior", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "The Best"});
@@ -208,7 +208,7 @@ namespace ao::rt::test
     CHECK(proj.trackIdAt(6) == id4); // Zeppelin
   }
 
-  TEST_CASE("TrackListProjection - subscribe reset-on-subscribe", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - subscribe reset-on-subscribe", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto const id1 = env.lib.addTrack(makeSpec("Track", 2020));
@@ -227,7 +227,7 @@ namespace ao::rt::test
     CHECK(receivedReset);
   }
 
-  TEST_CASE("TrackListProjection - multiple subscribers", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - multiple subscribers", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto const id1 = env.lib.addTrack(makeSpec("Track", 2020));
@@ -240,7 +240,7 @@ namespace ao::rt::test
     CHECK(count == 2);
   }
 
-  TEST_CASE("TrackListProjection - unsubscribed handler not called", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - unsubscribed handler not called", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto const id1 = env.lib.addTrack(makeSpec("Track", 2020));
@@ -254,7 +254,7 @@ namespace ao::rt::test
     CHECK(count == initial);
   }
 
-  TEST_CASE("TrackListProjection - empty projection", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - empty projection", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     env.setupFiltered({});
@@ -265,7 +265,7 @@ namespace ao::rt::test
     CHECK(proj.trackIdAt(999) == kInvalidTrackId);
   }
 
-  TEST_CASE("TrackListProjection - sort 20 tracks by year then title", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - sort 20 tracks by year then title", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto ids = std::vector<TrackId>{};
@@ -329,7 +329,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sort 15 tracks by album disc track", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - sort 15 tracks by album disc track", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto ids = std::vector<TrackId>{};
@@ -415,7 +415,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sort 10 identical tracks preserves stability", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - sort 10 identical tracks preserves stability", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto ids = std::vector<TrackId>{};
@@ -442,7 +442,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sort reversal 10 tracks avoids IO", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - sort reversal 10 tracks avoids IO", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto ids = std::vector<TrackId>{};
@@ -496,7 +496,7 @@ namespace ao::rt::test
     checkMonotonic(true);
   }
 
-  TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto ids = std::vector<TrackId>{};
@@ -544,7 +544,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - group sections for Artist grouping", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - group sections for Artist grouping", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
 
@@ -593,7 +593,7 @@ namespace ao::rt::test
     CHECK(proj.groupIndexAt(4) == 2);
   }
 
-  TEST_CASE("TrackListProjection - large artist groups keep compound sort order", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - large artist groups keep compound sort order", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
 
@@ -717,7 +717,7 @@ namespace ao::rt::test
     CHECK_FALSE(proj.groupIndexAt(expectedOrder.size()).has_value());
   }
 
-  TEST_CASE("TrackListProjection - group sections empty for None grouping", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - group sections empty for None grouping", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto id1 = env.lib.addTrack(makeSpec("T1", 2020));
@@ -738,7 +738,7 @@ namespace ao::rt::test
     CHECK_FALSE(proj.groupIndexAt(0).has_value());
   }
 
-  TEST_CASE("TrackListProjection - empty projection group metadata", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - empty projection group metadata", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     env.setupFiltered({});
@@ -755,7 +755,7 @@ namespace ao::rt::test
     CHECK(proj.groupCount() == 0);
   }
 
-  TEST_CASE("TrackListProjection - group label for unknown artist", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - group label for unknown artist", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
 
@@ -775,7 +775,7 @@ namespace ao::rt::test
     CHECK(proj.groupAt(0).label == "Unknown Artist");
   }
 
-  TEST_CASE("TrackListProjection - group label for unknown year", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - group label for unknown year", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
 
@@ -795,7 +795,7 @@ namespace ao::rt::test
     CHECK(proj.groupAt(0).label == "Unknown Year");
   }
 
-  TEST_CASE("TrackListProjection - album groups split by album artist", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - album groups split by album artist", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
 
@@ -821,7 +821,7 @@ namespace ao::rt::test
     CHECK(proj.groupAt(1).label == "Greatest Hits - Artist Two");
   }
 
-  TEST_CASE("TrackListProjection - presentation() returns correct snapshot", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - presentation() returns correct snapshot", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     env.setupFiltered({});
@@ -845,7 +845,7 @@ namespace ao::rt::test
     CHECK(snap.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListProjection - group label for album without album artist", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - group label for album without album artist", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
 
@@ -866,7 +866,7 @@ namespace ao::rt::test
     CHECK(proj.groupAt(0).label == "Solo Album");
   }
 
-  TEST_CASE("TrackListProjection - unknown album label", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - unknown album label", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
 
@@ -887,7 +887,7 @@ namespace ao::rt::test
     CHECK(proj.groupAt(0).label == "Unknown Album");
   }
 
-  TEST_CASE("TrackListProjection - incremental batch insertion", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - incremental batch insertion", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto id1 = env.lib.addTrack(makeSpec("B", 2020));
@@ -930,7 +930,7 @@ namespace ao::rt::test
     CHECK(proj.indexOf(id5) == 4);
   }
 
-  TEST_CASE("TrackListProjection - incremental batch removal", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - incremental batch removal", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto id1 = env.lib.addTrack(makeSpec("A", 2020));
@@ -962,7 +962,7 @@ namespace ao::rt::test
     CHECK_FALSE(proj.indexOf(id4).has_value());
   }
 
-  TEST_CASE("TrackListProjection - single and batch mutations without grouping", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - single and batch mutations without grouping", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
     auto id1 = env.lib.addTrack(makeSpec("A", 2020));
@@ -1203,7 +1203,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sorting and grouping by specific fields", "[app][runtime][projection]")
+  TEST_CASE("TrackListProjection - sorting and grouping by specific fields", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};
 

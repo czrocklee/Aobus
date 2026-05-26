@@ -290,6 +290,31 @@ namespace ao::gtk::portal
                      { onLibraryImportSelected(result, fileDialog); });
   }
 
+  rt::async::Task<void> ImportExportCoordinator::importLibraryTask(std::filesystem::path importPath)
+  {
+    try
+    {
+      co_await _runtime.mutation().importLibraryAsync(std::move(importPath));
+
+      if (_callbacks.onLibraryDataMutated)
+      {
+        _callbacks.onLibraryDataMutated();
+      }
+
+      _runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
+    }
+    catch (ao::Exception const& e)
+    {
+      APP_LOG_CRITICAL("Import failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
+      _runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: Internal error");
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Import failed: {}", e.what());
+      _runtime.notifications().post(rt::NotificationSeverity::Error, std::format("Import failed: {}", e.what()));
+    }
+  }
+
   void ImportExportCoordinator::onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result,
                                                         Glib::RefPtr<Gtk::FileDialog> const& dialog)
   {
@@ -298,34 +323,10 @@ namespace ao::gtk::portal
       if (auto const file = dialog->open_finish(result); file)
       {
         auto const path = std::filesystem::path{file->get_path()};
-
         _runtime.async().spawnWithLifetime(
           &_tasks,
           [](ImportExportCoordinator* self, std::filesystem::path importPath) -> rt::async::Task<void>
-          {
-            try
-            {
-              co_await self->_runtime.mutation().importLibraryAsync(std::move(importPath));
-
-              if (self->_callbacks.onLibraryDataMutated)
-              {
-                self->_callbacks.onLibraryDataMutated();
-              }
-
-              self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
-            }
-            catch (ao::Exception const& e)
-            {
-              APP_LOG_CRITICAL("Import failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
-              self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: Internal error");
-            }
-            catch (std::exception const& e)
-            {
-              APP_LOG_ERROR("Import failed: {}", e.what());
-              self->_runtime.notifications().post(
-                rt::NotificationSeverity::Error, std::format("Import failed: {}", e.what()));
-            }
-          }(this, path));
+          { co_await self->importLibraryTask(std::move(importPath)); }(this, path));
       }
     }
     catch (Glib::Error const& e)

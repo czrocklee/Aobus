@@ -53,7 +53,7 @@ namespace ao::rt::test
     };
   }
 
-  TEST_CASE("ViewService - listViews starts empty", "[app][runtime][view]")
+  TEST_CASE("ViewService - listViews starts empty", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -61,7 +61,7 @@ namespace ao::rt::test
     CHECK(service.listViews().empty());
   }
 
-  TEST_CASE("ViewService - create view via direct API", "[app][runtime][view]")
+  TEST_CASE("ViewService - create view via direct API", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -98,7 +98,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - destroy view", "[app][runtime][view]")
+  TEST_CASE("ViewService - destroy view", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -147,7 +147,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - trackListState access", "[app][runtime][view]")
+  TEST_CASE("ViewService - trackListState access", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -174,7 +174,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - trackListProjection access", "[app][runtime][view]")
+  TEST_CASE("ViewService - trackListProjection access", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -186,7 +186,7 @@ namespace ao::rt::test
     CHECK(projection->size() == 0);
   }
 
-  TEST_CASE("ViewService - projection subscription", "[app][runtime][view]")
+  TEST_CASE("ViewService - projection subscription", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -206,7 +206,7 @@ namespace ao::rt::test
     CHECK(received);
   }
 
-  TEST_CASE("ViewService - createView with groupBy applies effective sort", "[app][runtime][view]")
+  TEST_CASE("ViewService - createView with groupBy applies effective sort", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -230,7 +230,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - createView with Album groupBy", "[app][runtime][view]")
+  TEST_CASE("ViewService - createView with Album groupBy", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -253,7 +253,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - setPresentation updates state and projection", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation updates state and projection", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -270,7 +270,7 @@ namespace ao::rt::test
     CHECK(snap.presentation.id == "genres");
   }
 
-  TEST_CASE("ViewService - setPresentation no-ops on same value", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation no-ops on same value", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -289,7 +289,7 @@ namespace ao::rt::test
     CHECK(snapAfter.groupBy == TrackGroupKey::Year);
   }
 
-  TEST_CASE("ViewService - setPresentation publishes PresentationChanged", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation publishes PresentationChanged", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -307,7 +307,7 @@ namespace ao::rt::test
     CHECK(received.groupBy == TrackGroupKey::Album);
   }
 
-  TEST_CASE("ViewService - setPresentation no-ops does not publish event", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation no-ops does not publish event", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -334,7 +334,7 @@ namespace ao::rt::test
     CHECK(callCount == 2);
   }
 
-  TEST_CASE("ViewService - setPresentation with preset string", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation with preset string", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -351,7 +351,7 @@ namespace ao::rt::test
     CHECK(specInv.id.empty());
   }
 
-  TEST_CASE("ViewService - openListInView", "[app][runtime][view]")
+  TEST_CASE("ViewService - openListInView", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -386,7 +386,7 @@ namespace ao::rt::test
     REQUIRE_NOTHROW(service.openListInView(ViewId{999}, listId));
   }
 
-  TEST_CASE("ViewService - setFilter", "[app][runtime][view]")
+  TEST_CASE("ViewService - setFilter", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto const oldTrackId = env.library.addTrack(TrackSpec{.title = "Old", .year = 1999});
@@ -464,7 +464,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - openListInView with active filter", "[app][runtime][view]")
+  TEST_CASE("ViewService - openListInView with active filter", "[app][unit][runtime][view]")
   {
     auto env = TestEnv{};
     auto const oldTrackId = env.library.addTrack(TrackSpec{.title = "Old", .year = 1999});

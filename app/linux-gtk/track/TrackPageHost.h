@@ -97,6 +97,8 @@ namespace ao::gtk
     void bindTrackPage(TrackPageContext& ctx);
     void syncLayout();
     void handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev);
+    rt::ViewId tryFindViewByPreferredList(ListId preferredListId);
+    void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
     rt::AppRuntime& _runtime;
     PlaybackSequenceController* _playbackSequenceController;

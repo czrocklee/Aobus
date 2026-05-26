@@ -100,49 +100,50 @@ namespace ao::gtk
         }
       });
   }
+  rt::ViewId TrackPageHost::tryFindViewByPreferredList(ListId preferredListId)
+  {
+    for (auto const& [id, ctx] : _trackPages)
+    {
+      if (ctx.page && ctx.page->getListId() == preferredListId)
+      {
+        return id;
+      }
+    }
+
+    return rt::kInvalidViewId;
+  }
+
+  void TrackPageHost::tryRevealTrackInView(rt::ViewId viewId, TrackId trackId)
+  {
+    APP_LOG_DEBUG("TrackPageHost: Revealing in viewId: {}", viewId.raw());
+    _runtime.workspace().setFocusedView(viewId);
+
+    if (trackId != kInvalidTrackId)
+    {
+      if (auto* ctx = find(viewId))
+      {
+        APP_LOG_DEBUG("TrackPageHost: Calling selectTrack on page for trackId: {}", trackId.raw());
+        ctx->page->selectionController().selectTrack(trackId);
+      }
+      else
+      {
+        APP_LOG_DEBUG("TrackPageHost: Could not find page context for viewId: {}", viewId.raw());
+      }
+    }
+  }
+
   void TrackPageHost::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
   {
     auto viewId = rt::ViewId{ev.preferredViewId};
 
-    APP_LOG_DEBUG("TrackPageHost: handleRevealTrack received, trackId: {}, preferredViewId: {}, preferredListId: {}",
-                  ev.trackId.raw(),
-                  ev.preferredViewId.raw(),
-                  ev.preferredListId.raw());
-
-    // Fallback: If no view ID specified, try to find a view currently displaying the requested list
     if (viewId == rt::kInvalidViewId && ev.preferredListId != kInvalidListId)
     {
-      for (auto const& [id, ctx] : _trackPages)
-      {
-        if (ctx.page && ctx.page->getListId() == ev.preferredListId)
-        {
-          viewId = id;
-          break;
-        }
-      }
+      viewId = tryFindViewByPreferredList(ev.preferredListId);
     }
 
     if (viewId != rt::kInvalidViewId)
     {
-      APP_LOG_DEBUG("TrackPageHost: Revealing in viewId: {}", viewId.raw());
-      _runtime.workspace().setFocusedView(viewId);
-
-      if (ev.trackId != kInvalidTrackId)
-      {
-        if (auto* ctx = find(viewId))
-        {
-          APP_LOG_DEBUG("TrackPageHost: Calling selectTrack on page for trackId: {}", ev.trackId.raw());
-          ctx->page->selectionController().selectTrack(ev.trackId);
-        }
-        else
-        {
-          APP_LOG_DEBUG("TrackPageHost: Could not find page context for viewId: {}", viewId.raw());
-        }
-      }
-    }
-    else
-    {
-      APP_LOG_DEBUG("TrackPageHost: No valid viewId found for reveal");
+      tryRevealTrackInView(viewId, ev.trackId);
     }
   }
 

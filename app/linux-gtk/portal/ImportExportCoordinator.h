@@ -66,6 +66,7 @@ namespace ao::gtk::portal
     void onImportFinished() const;
 
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
+    rt::async::Task<void> importLibraryTask(std::filesystem::path importPath);
 
     void onExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,

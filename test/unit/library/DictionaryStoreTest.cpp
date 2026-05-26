@@ -24,7 +24,7 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("Dictionary - store and get", "[core][dictionary]")
+  TEST_CASE("Dictionary - store and get", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -44,7 +44,7 @@ namespace ao::library::test
     REQUIRE(result == "test value");
   }
 
-  TEST_CASE("Dictionary - getId", "[core][dictionary]")
+  TEST_CASE("Dictionary - getId", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -59,7 +59,7 @@ namespace ao::library::test
     // If getId() failed, it would throw
   }
 
-  TEST_CASE("Dictionary - contains by string", "[core][dictionary]")
+  TEST_CASE("Dictionary - contains by string", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -73,7 +73,7 @@ namespace ao::library::test
     REQUIRE(!dict.contains("not exists"));
   }
 
-  TEST_CASE("Dictionary - put duplicate string returns existing ID", "[core][dictionary]")
+  TEST_CASE("Dictionary - put duplicate string returns existing ID", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -98,7 +98,7 @@ namespace ao::library::test
     REQUIRE(result == "first");
   }
 
-  TEST_CASE("Dictionary - get throws on invalid ID", "[core][dictionary]")
+  TEST_CASE("Dictionary - get throws on invalid ID", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -112,7 +112,7 @@ namespace ao::library::test
     CHECK_THROWS(dict.get(DictionaryId{999}));
   }
 
-  TEST_CASE("Dictionary - getId throws on non-existent string", "[core][dictionary]")
+  TEST_CASE("Dictionary - getId throws on non-existent string", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -126,7 +126,7 @@ namespace ao::library::test
     CHECK_THROWS(dict.getId("not exists"));
   }
 
-  TEST_CASE("Dictionary - get with first valid ID (0)", "[core][dictionary]")
+  TEST_CASE("Dictionary - get with first valid ID (0)", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -141,7 +141,7 @@ namespace ao::library::test
     REQUIRE(result == "first");
   }
 
-  TEST_CASE("Dictionary - get throws on out-of-bounds ID", "[core][dictionary]")
+  TEST_CASE("Dictionary - get throws on out-of-bounds ID", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -155,7 +155,7 @@ namespace ao::library::test
     CHECK_THROWS(dict.get(DictionaryId{2}));
   }
 
-  TEST_CASE("Dictionary - getOrIntern returns new ID for non-existent string", "[core][dictionary]")
+  TEST_CASE("Dictionary - getOrIntern returns new ID for non-existent string", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -172,7 +172,7 @@ namespace ao::library::test
     REQUIRE(dict.contains("new artist"));
   }
 
-  TEST_CASE("Dictionary - getOrIntern returns existing ID for existent string", "[core][dictionary]")
+  TEST_CASE("Dictionary - getOrIntern returns existing ID for existent string", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -189,7 +189,7 @@ namespace ao::library::test
     REQUIRE(dict.contains("existing"));
   }
 
-  TEST_CASE("Dictionary - getOrIntern then put returns same ID", "[core][dictionary]")
+  TEST_CASE("Dictionary - getOrIntern then put returns same ID", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -207,7 +207,7 @@ namespace ao::library::test
     REQUIRE(putId == getOrInterndId);
   }
 
-  TEST_CASE("Dictionary - getOrIntern multiple strings", "[core][dictionary]")
+  TEST_CASE("Dictionary - getOrIntern multiple strings", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -229,7 +229,7 @@ namespace ao::library::test
     REQUIRE(dict.contains("artist3"));
   }
 
-  TEST_CASE("Dictionary - put different string after getOrIntern does not collide", "[core][dictionary]")
+  TEST_CASE("Dictionary - put different string after getOrIntern does not collide", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -263,7 +263,7 @@ namespace ao::library::test
     REQUIRE(dict.getId("#fav").raw() == 4);
   }
 
-  TEST_CASE("Dictionary - put same string as getOrIntern returns reserved ID and persists", "[core][dictionary]")
+  TEST_CASE("Dictionary - put same string as getOrIntern returns reserved ID and persists", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -290,7 +290,7 @@ namespace ao::library::test
     REQUIRE(dict2.get(putId) == "fav");
   }
 
-  TEST_CASE("Dictionary - getOrDefault returns value for valid ID", "[core][dictionary]")
+  TEST_CASE("Dictionary - getOrDefault returns value for valid ID", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -304,7 +304,7 @@ namespace ao::library::test
     CHECK(dict.getOrDefault(id, "fallback") == "hello");
   }
 
-  TEST_CASE("Dictionary - getOrDefault returns default for invalid ID", "[core][dictionary]")
+  TEST_CASE("Dictionary - getOrDefault returns default for invalid ID", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -318,7 +318,7 @@ namespace ao::library::test
     CHECK(dict.getOrDefault(DictionaryId{999}).empty());
   }
 
-  TEST_CASE("Dictionary - handles gaps in database IDs correctly", "[core][dictionary]")
+  TEST_CASE("Dictionary - handles gaps in database IDs correctly", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -358,7 +358,7 @@ namespace ao::library::test
     CHECK(dict.getId("fifth").raw() == 5);
   }
 
-  TEST_CASE("Dictionary - recycles gap IDs across restarts", "[core][dictionary]")
+  TEST_CASE("Dictionary - recycles gap IDs across restarts", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -395,7 +395,7 @@ namespace ao::library::test
     wtxn2.commit();
   }
 
-  TEST_CASE("Dictionary - prevents dangling pointers upon heavy reallocation", "[core][dictionary]")
+  TEST_CASE("Dictionary - prevents dangling pointers upon heavy reallocation", "[library][unit][dictionary]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};

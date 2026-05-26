@@ -19,7 +19,7 @@ namespace ao::gtk::layout::test
 {
   namespace yaml = ao::rt::yaml;
 
-  TEST_CASE("Layout model serialization", "[layout][model]")
+  TEST_CASE("Layout model serialization", "[layout][unit][model]")
   {
     SECTION("LayoutValue serialization")
     {
@@ -189,7 +189,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // LayoutValue cross-type coercion
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutValue coercion", "[layout][model]")
+  TEST_CASE("LayoutValue coercion", "[layout][unit][model]")
   {
     SECTION("asString coerces bool")
     {
@@ -290,7 +290,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // LayoutNode helpers
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutNode getProp/getLayout", "[layout][model]")
+  TEST_CASE("LayoutNode getProp/getLayout", "[layout][unit][model]")
   {
     auto node = LayoutNode{};
     node.props["label"] = LayoutValue{std::string{"hello"}};

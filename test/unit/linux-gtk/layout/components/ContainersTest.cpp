@@ -44,7 +44,7 @@ namespace ao::gtk::layout::test
     };
   } // namespace
 
-  TEST_CASE("LayoutRuntime building", "[layout][containers]")
+  TEST_CASE("LayoutRuntime building", "[layout][unit][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -182,7 +182,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Container error states
   // ---------------------------------------------------------------------------
-  TEST_CASE("Container error states", "[layout][containers]")
+  TEST_CASE("Container error states", "[layout][unit][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -269,7 +269,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Container success states
   // ---------------------------------------------------------------------------
-  TEST_CASE("Container success states", "[layout][containers]")
+  TEST_CASE("Container success states", "[layout][unit][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -466,7 +466,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // applyCommonProps
   // ---------------------------------------------------------------------------
-  TEST_CASE("applyCommonProps coverage", "[layout][containers]")
+  TEST_CASE("applyCommonProps coverage", "[layout][unit][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -605,7 +605,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // LayoutHost
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutHost rebuild", "[layout][containers]")
+  TEST_CASE("LayoutHost rebuild", "[layout][unit][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
 

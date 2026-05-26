@@ -395,7 +395,7 @@ namespace ao::gtk::test
 
   using namespace ao::lmdb::test;
 
-  TEST_CASE("app::uigtk::TrackListModel", "[app][adapter]")
+  TEST_CASE("app::uigtk::TrackListModel", "[app][unit][adapter]")
   {
     SECTION("TestTrackRowProvider loads row data for filtering")
     {

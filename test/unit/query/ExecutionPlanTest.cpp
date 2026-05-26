@@ -23,7 +23,7 @@ namespace ao::query::test
 {
   using namespace ao::lmdb::test;
 
-  TEST_CASE("ExecutionPlan - Compile Simple Expression")
+  TEST_CASE("ExecutionPlan - Compile Simple Expression", "[query][unit][execution_plan]")
   {
     auto expr = parse("$artist = Bach");
     auto compiler = QueryCompiler{};
@@ -33,7 +33,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - Compile Empty Expression")
+  TEST_CASE("ExecutionPlan - Compile Empty Expression", "[query][unit][execution_plan]")
   {
     // Note: matchesAll is not automatically set - it's a hint for optimization
     // The plan should still compile a constant true expression
@@ -45,7 +45,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.instructions.empty());
   }
 
-  TEST_CASE("ExecutionPlan - Compile Metadata Field")
+  TEST_CASE("ExecutionPlan - Compile Metadata Field", "[query][unit][execution_plan]")
   {
     auto expr = parse("$title = 'Test'");
     auto compiler = QueryCompiler{};
@@ -68,7 +68,7 @@ namespace ao::query::test
     CHECK(hasEq == true);
   }
 
-  TEST_CASE("ExecutionPlan - Compile Property Field")
+  TEST_CASE("ExecutionPlan - Compile Property Field", "[query][unit][execution_plan]")
   {
     auto expr = parse("@duration > 180000");
     auto compiler = QueryCompiler{};
@@ -91,7 +91,7 @@ namespace ao::query::test
     CHECK(hasGt == true);
   }
 
-  TEST_CASE("ExecutionPlan - Property Alias Maps To Bitrate Field")
+  TEST_CASE("ExecutionPlan - Property Alias Maps To Bitrate Field", "[query][unit][execution_plan]")
   {
     auto expr = parse("@br >= 320k");
     auto compiler = QueryCompiler{};
@@ -102,7 +102,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Bitrate));
   }
 
-  TEST_CASE("ExecutionPlan - Metadata Alias Maps To AlbumArtist Field")
+  TEST_CASE("ExecutionPlan - Metadata Alias Maps To AlbumArtist Field", "[query][unit][execution_plan]")
   {
     auto expr = parse("$aa = Bach");
     auto compiler = QueryCompiler{};
@@ -113,7 +113,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::AlbumArtistId));
   }
 
-  TEST_CASE("ExecutionPlan - Duration Unit Constant")
+  TEST_CASE("ExecutionPlan - Duration Unit Constant", "[query][unit][execution_plan]")
   {
     auto expr = parse("@duration >= 3m");
     auto compiler = QueryCompiler{};
@@ -125,7 +125,7 @@ namespace ao::query::test
     CHECK(it->constValue == 180000);
   }
 
-  TEST_CASE("ExecutionPlan - Bitrate Unit Constant")
+  TEST_CASE("ExecutionPlan - Bitrate Unit Constant", "[query][unit][execution_plan]")
   {
     auto expr = parse("@bitrate >= 2m");
     auto compiler = QueryCompiler{};
@@ -137,7 +137,7 @@ namespace ao::query::test
     CHECK(it->constValue == 2000000);
   }
 
-  TEST_CASE("ExecutionPlan - SampleRate Unit Constant")
+  TEST_CASE("ExecutionPlan - SampleRate Unit Constant", "[query][unit][execution_plan]")
   {
     auto expr = parse("@sampleRate = 44.1k");
     auto compiler = QueryCompiler{};
@@ -149,7 +149,7 @@ namespace ao::query::test
     CHECK(it->constValue == 44100);
   }
 
-  TEST_CASE("ExecutionPlan - Unit Constant Rejects Unsupported Field")
+  TEST_CASE("ExecutionPlan - Unit Constant Rejects Unsupported Field", "[query][unit][execution_plan]")
   {
     auto expr = parse("$year >= 3m");
     auto compiler = QueryCompiler{};
@@ -157,7 +157,7 @@ namespace ao::query::test
     REQUIRE_THROWS(compiler.compile(expr));
   }
 
-  TEST_CASE("ExecutionPlan - Compile Logical And")
+  TEST_CASE("ExecutionPlan - Compile Logical And", "[query][unit][execution_plan]")
   {
     // Use && for logical and to ensure it's parsed correctly
     auto expr = parse("$artist = Bach && $genre = Classical");
@@ -178,7 +178,7 @@ namespace ao::query::test
     CHECK(hasAnd == true);
   }
 
-  TEST_CASE("ExecutionPlan - Compile Logical Or")
+  TEST_CASE("ExecutionPlan - Compile Logical Or", "[query][unit][execution_plan]")
   {
     // Use || for logical or to ensure it's parsed correctly
     auto expr = parse("$artist = Bach || $artist = Mozart");
@@ -199,7 +199,7 @@ namespace ao::query::test
     CHECK(hasOr == true);
   }
 
-  TEST_CASE("ExecutionPlan - Compile Logical Not")
+  TEST_CASE("ExecutionPlan - Compile Logical Not", "[query][unit][execution_plan]")
   {
     auto expr = parse("not $artist");
     auto compiler = QueryCompiler{};
@@ -219,7 +219,7 @@ namespace ao::query::test
     CHECK(hasNot == true);
   }
 
-  TEST_CASE("ExecutionPlan - Compile Relational Operators")
+  TEST_CASE("ExecutionPlan - Compile Relational Operators", "[query][unit][execution_plan]")
   {
     auto expr = parse("$year < 2000");
     auto compiler = QueryCompiler{};
@@ -256,7 +256,7 @@ namespace ao::query::test
     CHECK(hasLe == true);
   }
 
-  TEST_CASE("ExecutionPlan - Compile Like")
+  TEST_CASE("ExecutionPlan - Compile Like", "[query][unit][execution_plan]")
   {
     auto expr = parse("$title ~ Love");
     auto compiler = QueryCompiler{};
@@ -276,7 +276,7 @@ namespace ao::query::test
     CHECK(hasLike == true);
   }
 
-  TEST_CASE("ExecutionPlan - Compile String Constant")
+  TEST_CASE("ExecutionPlan - Compile String Constant", "[query][unit][execution_plan]")
   {
     auto expr = parse("$title = 'Hello World'");
     auto compiler = QueryCompiler{};
@@ -286,7 +286,7 @@ namespace ao::query::test
     CHECK(plan.stringConstants[0] == "Hello World");
   }
 
-  TEST_CASE("ExecutionPlan - Field Enum Values")
+  TEST_CASE("ExecutionPlan - Field Enum Values", "[query][unit][execution_plan]")
   {
     // String fields
     CHECK(static_cast<std::uint8_t>(Field::Title) == 0);
@@ -312,7 +312,7 @@ namespace ao::query::test
     CHECK(static_cast<std::uint8_t>(Field::TagCount) == 22);
   }
 
-  TEST_CASE("ExecutionPlan - OpCode Enum Values")
+  TEST_CASE("ExecutionPlan - OpCode Enum Values", "[query][unit][execution_plan]")
   {
     CHECK(static_cast<std::uint8_t>(OpCode::Nop) == 0);
     CHECK(static_cast<std::uint8_t>(OpCode::LoadField) == 1);
@@ -321,7 +321,7 @@ namespace ao::query::test
     CHECK(static_cast<std::uint8_t>(OpCode::Ne) == 4);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile HotOnly")
+  TEST_CASE("ExecutionPlan - AccessProfile HotOnly", "[query][unit][execution_plan]")
   {
     // Metadata variable -> HotOnly
     auto expr = parse("$artist = Bach");
@@ -331,7 +331,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile ColdOnly")
+  TEST_CASE("ExecutionPlan - AccessProfile ColdOnly", "[query][unit][execution_plan]")
   {
     // Custom variable -> ColdOnly
     auto expr = parse("%customkey = value");
@@ -341,7 +341,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile HotAndCold")
+  TEST_CASE("ExecutionPlan - AccessProfile HotAndCold", "[query][unit][execution_plan]")
   {
     // Mix of hot and cold -> HotAndCold
     auto expr = parse("$artist = Bach && %customkey = value");
@@ -351,7 +351,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile Property Field")
+  TEST_CASE("ExecutionPlan - AccessProfile Property Field", "[query][unit][execution_plan]")
   {
     // Property variable -> ColdOnly (stored in TrackColdHeader)
     auto expr = parse("@duration > 180000");
@@ -361,7 +361,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile Tag Field")
+  TEST_CASE("ExecutionPlan - AccessProfile Tag Field", "[query][unit][execution_plan]")
   {
     // Tag variable -> HotOnly
     auto expr = parse("#rock");
@@ -371,7 +371,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile Cold Field")
+  TEST_CASE("ExecutionPlan - AccessProfile Cold Field", "[query][unit][execution_plan]")
   {
     // TrackNumber field is in cold storage -> ColdOnly
     auto expr = parse("$trackNumber > 5");
@@ -381,7 +381,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile DurationMs is ColdOnly")
+  TEST_CASE("ExecutionPlan - AccessProfile DurationMs is ColdOnly", "[query][unit][execution_plan]")
   {
     auto expr = parse("@duration > 180000");
     auto compiler = QueryCompiler{};
@@ -389,7 +389,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile Bitrate is ColdOnly")
+  TEST_CASE("ExecutionPlan - AccessProfile Bitrate is ColdOnly", "[query][unit][execution_plan]")
   {
     auto expr = parse("@bitrate > 320");
     auto compiler = QueryCompiler{};
@@ -397,7 +397,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile SampleRate is ColdOnly")
+  TEST_CASE("ExecutionPlan - AccessProfile SampleRate is ColdOnly", "[query][unit][execution_plan]")
   {
     auto expr = parse("@sampleRate = 44100");
     auto compiler = QueryCompiler{};
@@ -405,7 +405,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile Channels is ColdOnly")
+  TEST_CASE("ExecutionPlan - AccessProfile Channels is ColdOnly", "[query][unit][execution_plan]")
   {
     auto expr = parse("@channels = 2");
     auto compiler = QueryCompiler{};
@@ -413,7 +413,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile Mixed HotAndCold")
+  TEST_CASE("ExecutionPlan - AccessProfile Mixed HotAndCold", "[query][unit][execution_plan]")
   {
     // Mix of hot ($year) and cold ($trackNumber) -> HotAndCold
     auto expr = parse("$year > 2020 && $trackNumber > 5");
@@ -423,7 +423,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile Custom Field")
+  TEST_CASE("ExecutionPlan - AccessProfile Custom Field", "[query][unit][execution_plan]")
   {
     // Custom variable -> ColdOnly
     auto expr = parse("%customkey = value");
@@ -433,7 +433,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - LIKE operator works for ArtistId")
+  TEST_CASE("ExecutionPlan - LIKE operator works for ArtistId", "[query][unit][execution_plan]")
   {
     auto temp = TempDir{};
     auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -454,7 +454,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - LIKE operator works for AlbumId")
+  TEST_CASE("ExecutionPlan - LIKE operator works for AlbumId", "[query][unit][execution_plan]")
   {
     auto expr = parse(R"($album ~ "Greatest Hits")");
     auto compiler = QueryCompiler{};
@@ -463,7 +463,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.instructions.empty());
   }
 
-  TEST_CASE("ExecutionPlan - LIKE operator works for GenreId")
+  TEST_CASE("ExecutionPlan - LIKE operator works for GenreId", "[query][unit][execution_plan]")
   {
     auto expr = parse(R"($genre ~ "Rock")");
     auto compiler = QueryCompiler{};
@@ -472,7 +472,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.instructions.empty());
   }
 
-  TEST_CASE("ExecutionPlan - LIKE operator works for AlbumArtistId")
+  TEST_CASE("ExecutionPlan - LIKE operator works for AlbumArtistId", "[query][unit][execution_plan]")
   {
     auto expr = parse(R"($albumArtist ~ "Bach")");
     auto compiler = QueryCompiler{};
@@ -481,21 +481,21 @@ namespace ao::query::test
     CHECK_FALSE(plan.instructions.empty());
   }
 
-  TEST_CASE("ExecutionPlan - LIKE operator not supported for CoverArtId")
+  TEST_CASE("ExecutionPlan - LIKE operator not supported for CoverArtId", "[query][unit][execution_plan]")
   {
     auto expr = parse(R"($coverArt ~ "front")");
     auto compiler = QueryCompiler{};
     REQUIRE_THROWS(compiler.compile(expr));
   }
 
-  TEST_CASE("ExecutionPlan - LIKE operator not supported for Tags")
+  TEST_CASE("ExecutionPlan - LIKE operator not supported for Tags", "[query][unit][execution_plan]")
   {
     auto expr = parse(R"(#rock ~ "progressive")");
     auto compiler = QueryCompiler{};
     REQUIRE_THROWS(compiler.compile(expr));
   }
 
-  TEST_CASE("ExecutionPlan - LIKE operator works for Title")
+  TEST_CASE("ExecutionPlan - LIKE operator works for Title", "[query][unit][execution_plan]")
   {
     auto expr = parse(R"($title ~ "Bach")");
     auto compiler = QueryCompiler{};
@@ -505,28 +505,28 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - Unknown Metadata Field Throws")
+  TEST_CASE("ExecutionPlan - Unknown Metadata Field Throws", "[query][unit][execution_plan]")
   {
     auto expr = parse("$uri = 'x'");
     auto compiler = QueryCompiler{};
     REQUIRE_THROWS(compiler.compile(expr));
   }
 
-  TEST_CASE("ExecutionPlan - Unknown Property Field Throws")
+  TEST_CASE("ExecutionPlan - Unknown Property Field Throws", "[query][unit][execution_plan]")
   {
     auto expr = parse("@tagCount > 0");
     auto compiler = QueryCompiler{};
     REQUIRE_THROWS(compiler.compile(expr));
   }
 
-  TEST_CASE("ExecutionPlan - Add Operator Is Rejected")
+  TEST_CASE("ExecutionPlan - Add Operator Is Rejected", "[query][unit][execution_plan]")
   {
     auto expr = parse("$title + $artist");
     auto compiler = QueryCompiler{};
     REQUIRE_THROWS(compiler.compile(expr));
   }
 
-  TEST_CASE("ExecutionPlan - Mixed LIKE and EQUAL in OR expression")
+  TEST_CASE("ExecutionPlan - Mixed LIKE and EQUAL in OR expression", "[query][unit][execution_plan]")
   {
     // This tests that leftField is correctly saved before compiling right operand
     // $title ~ "Bach" should NOT check if ArtistId is used with LIKE
@@ -538,7 +538,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - Parenthesized LIKE and EQUAL in OR expression")
+  TEST_CASE("ExecutionPlan - Parenthesized LIKE and EQUAL in OR expression", "[query][unit][execution_plan]")
   {
     // Explicit grouping with parentheses should also work
     auto expr = parse(R"(($title ~ "Bach") or ($artist = "Bach"))");
@@ -549,7 +549,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - Multiple OR with ID field equality")
+  TEST_CASE("ExecutionPlan - Multiple OR with ID field equality", "[query][unit][execution_plan]")
   {
     // Multiple ID field equalities in OR should compile without throwing
     auto expr = parse(R"($artist = "Bach" or $artist = "Mozart" or $album = "交响乐")");
@@ -560,7 +560,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - Title LIKE chained with AND")
+  TEST_CASE("ExecutionPlan - Title LIKE chained with AND", "[query][unit][execution_plan]")
   {
     // Title LIKE should work with AND
     auto expr = parse(R"($title ~ "Bach" and $year > 2000)");
@@ -571,7 +571,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - Future matching for tags not yet in dictionary")
+  TEST_CASE("ExecutionPlan - Future matching for tags not yet in dictionary", "[query][unit][execution_plan]")
   {
     auto temp = TempDir{};
     auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -614,7 +614,7 @@ namespace ao::query::test
     CHECK((plan.tagBloomMask & expectedBit) == expectedBit);
   }
 
-  TEST_CASE("ExecutionPlan - Future matching for custom fields not yet in dictionary")
+  TEST_CASE("ExecutionPlan - Future matching for custom fields not yet in dictionary", "[query][unit][execution_plan]")
   {
     auto temp = TempDir{};
     auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -646,7 +646,7 @@ namespace ao::query::test
     CHECK(foundLoadField);
   }
 
-  TEST_CASE("ExecutionPlan - Metadata Dispatch Maps Every Supported Name")
+  TEST_CASE("ExecutionPlan - Metadata Dispatch Maps Every Supported Name", "[query][unit][execution_plan]")
   {
     struct Case final
     {
@@ -694,7 +694,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - Property Dispatch Maps Every Supported Name")
+  TEST_CASE("ExecutionPlan - Property Dispatch Maps Every Supported Name", "[query][unit][execution_plan]")
   {
     struct Case final
     {
@@ -725,7 +725,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile Exhaustive Classification")
+  TEST_CASE("ExecutionPlan - AccessProfile Exhaustive Classification", "[query][unit][execution_plan]")
   {
     auto compiler = QueryCompiler{};
 
@@ -789,7 +789,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - Boolean False Compiles To ConstantZero")
+  TEST_CASE("ExecutionPlan - Boolean False Compiles To ConstantZero", "[query][unit][execution_plan]")
   {
     auto expr = parse("false");
     auto compiler = QueryCompiler{};
@@ -800,7 +800,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - Invalid AST Nodes Throw")
+  TEST_CASE("ExecutionPlan - Invalid AST Nodes Throw", "[query][unit][execution_plan]")
   {
     auto compiler = QueryCompiler{};
 
@@ -841,7 +841,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - String Constant Deduplication")
+  TEST_CASE("ExecutionPlan - String Constant Deduplication", "[query][unit][execution_plan]")
   {
     SECTION("Reuses Identical String Constants")
     {
@@ -861,7 +861,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - Unit Literal Scaling")
+  TEST_CASE("ExecutionPlan - Unit Literal Scaling", "[query][unit][execution_plan]")
   {
     auto compiler = QueryCompiler{};
 
@@ -908,7 +908,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - Unit Literal Error Paths")
+  TEST_CASE("ExecutionPlan - Unit Literal Error Paths", "[query][unit][execution_plan]")
   {
     auto compiler = QueryCompiler{};
 
@@ -956,7 +956,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - Tag Bloom Mask Compilation")
+  TEST_CASE("ExecutionPlan - Tag Bloom Mask Compilation", "[query][unit][execution_plan]")
   {
     auto temp = TempDir{};
     auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -995,7 +995,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - Dictionary-Backed Field Resolution")
+  TEST_CASE("ExecutionPlan - Dictionary-Backed Field Resolution", "[query][unit][execution_plan]")
   {
     auto temp = TempDir{};
     auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};

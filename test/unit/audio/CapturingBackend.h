@@ -11,6 +11,7 @@
 #include "ao/audio/Property.h"
 
 #include <expected>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -29,24 +30,51 @@ namespace ao::audio::test
 
     Result<> open(Format const& format, IRenderTarget* target) override
     {
+      auto const lock = std::scoped_lock{_mutex};
       _events.push_back({"open", format});
       _target = target;
       _format = format;
       return _openResult;
     }
 
-    void start() override { _events.push_back({"start", {}}); }
-    void pause() override { _events.push_back({"pause", {}}); }
-    void resume() override { _events.push_back({"resume", {}}); }
-    void flush() override { _events.push_back({"flush", {}}); }
-    void stop() override { _events.push_back({"stop", {}}); }
-    void close() override { _events.push_back({"close", {}}); }
+    void start() override
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _events.push_back({"start", {}});
+    }
+    void pause() override
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _events.push_back({"pause", {}});
+    }
+    void resume() override
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _events.push_back({"resume", {}});
+    }
+    void flush() override
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _events.push_back({"flush", {}});
+    }
+    void stop() override
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _events.push_back({"stop", {}});
+    }
+    void close() override
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _events.push_back({"close", {}});
+    }
 
     BackendId backendId() const noexcept override { return BackendId{"capturing"}; }
     ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
 
     Result<> setProperty(PropertyId id, PropertyValue const& value) override
     {
+      auto const lock = std::scoped_lock{_mutex};
+
       if (id == PropertyId::Volume)
       {
         _volume = std::get<float>(value);
@@ -64,6 +92,8 @@ namespace ao::audio::test
 
     Result<PropertyValue> getProperty(PropertyId id) const override
     {
+      auto const lock = std::scoped_lock{_mutex};
+
       if (_optPropError)
       {
         return std::unexpected(Error{.code = *_optPropError});
@@ -93,57 +123,111 @@ namespace ao::audio::test
     }
 
     // Helpers for tests
-    void setOpenResult(Result<> res) { _openResult = res; }
-    void setPropertyError(std::optional<Error::Code> optErr) { _optPropError = optErr; }
-    std::vector<Event> const& events() const { return _events; }
-    void clearEvents() { _events.clear(); }
-    IRenderTarget* target() const { return _target; }
-    Format currentFormat() const { return _format; }
+    void setOpenResult(Result<> res)
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _openResult = res;
+    }
+    void setPropertyError(std::optional<Error::Code> optErr)
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _optPropError = optErr;
+    }
+    std::vector<Event> events() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      return _events;
+    }
+    void clearEvents()
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _events.clear();
+    }
+    IRenderTarget* target() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      return _target;
+    }
+    Format currentFormat() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      return _format;
+    }
 
     // Trigger callbacks
     void fireRouteReady(std::string_view anchor)
     {
-      if (_target != nullptr)
+      auto* t = (IRenderTarget*)nullptr;
       {
-        _target->onRouteReady(anchor);
+        auto const lock = std::scoped_lock{_mutex};
+        t = _target;
+      }
+
+      if (t != nullptr)
+      {
+        t->onRouteReady(anchor);
       }
     }
 
     void fireFormatChanged(Format const& fmt)
     {
-      _format = fmt;
-
-      if (_target != nullptr)
+      auto* t = (IRenderTarget*)nullptr;
       {
-        _target->onFormatChanged(fmt);
+        auto const lock = std::scoped_lock{_mutex};
+        _format = fmt;
+        t = _target;
+      }
+
+      if (t != nullptr)
+      {
+        t->onFormatChanged(fmt);
       }
     }
 
     void fireBackendError(std::string_view msg)
     {
-      if (_target != nullptr)
+      auto* t = (IRenderTarget*)nullptr;
       {
-        _target->onBackendError(msg);
+        auto const lock = std::scoped_lock{_mutex};
+        t = _target;
+      }
+
+      if (t != nullptr)
+      {
+        t->onBackendError(msg);
       }
     }
 
     void fireDrainComplete()
     {
-      if (_target != nullptr)
+      auto* t = (IRenderTarget*)nullptr;
       {
-        _target->onDrainComplete();
+        auto const lock = std::scoped_lock{_mutex};
+        t = _target;
+      }
+
+      if (t != nullptr)
+      {
+        t->onDrainComplete();
       }
     }
 
     void firePropertyChanged(PropertyId id)
     {
-      if (_target != nullptr)
+      auto* t = (IRenderTarget*)nullptr;
       {
-        _target->onPropertyChanged(id);
+        auto const lock = std::scoped_lock{_mutex};
+        t = _target;
+      }
+
+      if (t != nullptr)
+      {
+        t->onPropertyChanged(id);
       }
     }
 
   private:
+    mutable std::mutex _mutex;
     std::vector<Event> _events;
     IRenderTarget* _target = nullptr;
     Format _format{};

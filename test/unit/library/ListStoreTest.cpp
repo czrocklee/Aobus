@@ -22,7 +22,7 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("ListStore - create and read", "[core][list]")
+  TEST_CASE("ListStore - create and read", "[library][unit][list]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -50,7 +50,7 @@ namespace ao::library::test
     REQUIRE((*it).first == id);
   }
 
-  TEST_CASE("ListStore - read by id", "[core][list]")
+  TEST_CASE("ListStore - read by id", "[library][unit][list]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -78,7 +78,7 @@ namespace ao::library::test
     REQUIRE(found.tracks().size() == 10);
   }
 
-  TEST_CASE("ListStore - delete", "[core][list]")
+  TEST_CASE("ListStore - delete", "[library][unit][list]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};

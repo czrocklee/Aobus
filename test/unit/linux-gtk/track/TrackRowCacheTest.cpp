@@ -234,7 +234,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("TrackRowCache loads track data correctly", "[app][model]")
+  TEST_CASE("TrackRowCache loads track data correctly", "[app][unit][model]")
   {
     auto testLibrary = TestMusicLibrary{};
 

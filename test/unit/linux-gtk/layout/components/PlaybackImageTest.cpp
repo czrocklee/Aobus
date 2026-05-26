@@ -34,7 +34,7 @@ namespace ao::gtk::layout::test
     };
   } // namespace
 
-  TEST_CASE("playback.image variant support", "[layout][components]")
+  TEST_CASE("playback.image variant support", "[layout][unit][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.playback_image_test");
 

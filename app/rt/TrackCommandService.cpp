@@ -109,7 +109,8 @@ namespace ao::rt
     auto txn = _library.writeTransaction();
     auto writer = _library.tracks().writer(txn);
     auto builder = optTagFile->loadTrack();
-    builder.property().uri(path.string());
+    auto const uriStr = path.string();
+    builder.property().uri(uriStr);
 
     auto const [preparedHot, preparedCold] = builder.prepare(txn, _library.dictionary(), _library.resources());
     auto const [id, trackView] =

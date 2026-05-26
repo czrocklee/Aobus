@@ -104,14 +104,14 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Parser - String Literal")
+  TEST_CASE("Parser - String Literal", "[query][unit][parser]")
   {
     CHECK("[c{s}Artist]" == canonicalize(parse("Artist")));
     CHECK("[c{s}Artist]" == canonicalize(parse("\"Artist\"")));
     CHECK("[c{s}Artist]" == canonicalize(parse("'Artist'")));
   }
 
-  TEST_CASE("Parser - Variable")
+  TEST_CASE("Parser - Variable", "[query][unit][parser]")
   {
     CHECK("[v{m}title]" == canonicalize(parse("$title")));
     CHECK("[v{m}artist]" == canonicalize(parse("$artist")));
@@ -124,7 +124,7 @@ namespace ao::query::test
     CHECK("[v{c}replaygaintrackgaindb]" == canonicalize(parse("%replaygaintrackgaindb")));
   }
 
-  TEST_CASE("Parser - Variable Shortcuts")
+  TEST_CASE("Parser - Variable Shortcuts", "[query][unit][parser]")
   {
     CHECK("[v{m}t]" == canonicalize(parse("$t")));
     CHECK("[v{m}a]" == canonicalize(parse("$a")));
@@ -139,27 +139,27 @@ namespace ao::query::test
     CHECK("[v{p}bd]" == canonicalize(parse("@bd")));
   }
 
-  TEST_CASE("Parser - String Cat")
+  TEST_CASE("Parser - String Cat", "[query][unit][parser]")
   {
     CHECK("[b{add}[c{s}Artist],[c{s}Album]]" == canonicalize(parse("Artist + Album")));
     CHECK("[b{add}[c{s}Artist],[v{m}Album]]" == canonicalize(parse("Artist + $Album")));
     CHECK("[b{add}[c{s}Artist],[v{m}Album]]" == canonicalize(parse("Artist$Album")));
   }
 
-  TEST_CASE("Parser - Equal")
+  TEST_CASE("Parser - Equal", "[query][unit][parser]")
   {
     CHECK("[b{eq}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist=Bach")));
     CHECK("[b{eq}[v{m}trackNumber],[c{i}12]]" == canonicalize(parse("$trackNumber=12")));
     CHECK("[b{eq}[v{m}year],[c{i}2020]]" == canonicalize(parse("$year=2020")));
   }
 
-  TEST_CASE("Parser - NotEqual")
+  TEST_CASE("Parser - NotEqual", "[query][unit][parser]")
   {
     CHECK("[b{ne}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist!=Bach")));
     CHECK("[b{ne}[v{m}year],[c{i}2020]]" == canonicalize(parse("$year!=2020")));
   }
 
-  TEST_CASE("Parser - Relational")
+  TEST_CASE("Parser - Relational", "[query][unit][parser]")
   {
     CHECK("[b{lt}[v{m}year],[c{i}2000]]" == canonicalize(parse("$year<2000")));
     CHECK("[b{le}[v{m}year],[c{i}2000]]" == canonicalize(parse("$year<=2000")));
@@ -167,13 +167,13 @@ namespace ao::query::test
     CHECK("[b{ge}[v{p}bitrate],[c{i}320]]" == canonicalize(parse("@bitrate>=320")));
   }
 
-  TEST_CASE("Parser - Like")
+  TEST_CASE("Parser - Like", "[query][unit][parser]")
   {
     CHECK("[b{like}[v{m}title],[c{s}Love]]" == canonicalize(parse("$title~Love")));
     CHECK("[b{like}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist~Bach")));
   }
 
-  TEST_CASE("Parser - Logical Operators")
+  TEST_CASE("Parser - Logical Operators", "[query][unit][parser]")
   {
     CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach && true")));
     CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach and true")));
@@ -183,7 +183,7 @@ namespace ao::query::test
     CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("!$artist")));
   }
 
-  TEST_CASE("Parser - Precedence And Grouping")
+  TEST_CASE("Parser - Precedence And Grouping", "[query][unit][parser]")
   {
     SECTION("And Binds Tighter Than Or")
     {
@@ -208,7 +208,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Parser - Keyword Boundaries And Token Rules")
+  TEST_CASE("Parser - Keyword Boundaries And Token Rules", "[query][unit][parser]")
   {
     SECTION("Bareword CanContainKeywordSubstring")
     {
@@ -223,27 +223,27 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Parser - Arithmetic")
+  TEST_CASE("Parser - Arithmetic", "[query][unit][parser]")
   {
     CHECK("[b{add}[c{s}hello],[v{m}artist]]" == canonicalize(parse("hello + $artist")));
     CHECK("[b{add}[v{m}trackNumber],[c{i}12]]" == canonicalize(parse("$trackNumber + 12")));
     CHECK("[b{add}[v{p}duration],[c{i}1000]]" == canonicalize(parse("@duration+1000")));
   }
 
-  TEST_CASE("Parser - Boolean Constants")
+  TEST_CASE("Parser - Boolean Constants", "[query][unit][parser]")
   {
     CHECK("[c{b}true]" == canonicalize(parse("true")));
     CHECK("[c{b}false]" == canonicalize(parse("false")));
   }
 
-  TEST_CASE("Parser - Integer Constants")
+  TEST_CASE("Parser - Integer Constants", "[query][unit][parser]")
   {
     CHECK("[c{i}0]" == canonicalize(parse("0")));
     CHECK("[c{i}123]" == canonicalize(parse("123")));
     CHECK("[c{i}-456]" == canonicalize(parse("-456")));
   }
 
-  TEST_CASE("Parser - Unit Constants")
+  TEST_CASE("Parser - Unit Constants", "[query][unit][parser]")
   {
     CHECK("[c{u}3m]" == canonicalize(parse("3m")));
     CHECK("[b{ge}[v{p}duration],[c{u}120s]]" == canonicalize(parse("@duration>=120s")));
@@ -251,13 +251,13 @@ namespace ao::query::test
     CHECK("[b{eq}[v{p}sampleRate],[c{u}44.1k]]" == canonicalize(parse("@sampleRate=44.1k")));
   }
 
-  TEST_CASE("Parser - Empty String")
+  TEST_CASE("Parser - Empty String", "[query][unit][parser]")
   {
     CHECK("[c{s}]" == canonicalize(parse("''")));
     CHECK("[c{s}]" == canonicalize(parse("\"\"")));
   }
 
-  TEST_CASE("Parser - Invalid Input Matrix")
+  TEST_CASE("Parser - Invalid Input Matrix", "[query][unit][parser]")
   {
     SECTION("Empty and Whitespace")
     {

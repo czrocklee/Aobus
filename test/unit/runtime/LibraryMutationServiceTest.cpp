@@ -30,7 +30,7 @@ namespace ao::rt::test
     };
   }
 
-  TEST_CASE("LibraryMutationService - updateMetadata publishes TracksMutated", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - updateMetadata publishes TracksMutated", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Original Title");
@@ -50,7 +50,7 @@ namespace ao::rt::test
     CHECK(mutated[0] == trackId);
   }
 
-  TEST_CASE("LibraryMutationService - updateMetadata full patch", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - updateMetadata full patch", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Original Title");
@@ -76,7 +76,7 @@ namespace ao::rt::test
     REQUIRE(result.has_value());
   }
 
-  TEST_CASE("LibraryMutationService - editTags full operation", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - editTags full operation", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Track");
@@ -92,7 +92,7 @@ namespace ao::rt::test
     REQUIRE(result.has_value());
   }
 
-  TEST_CASE("LibraryMutationService - editTags missing track continues", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - editTags missing track continues", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};
@@ -105,7 +105,7 @@ namespace ao::rt::test
     REQUIRE(result.has_value());
   }
 
-  TEST_CASE("LibraryMutationService - create/update Manual list", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - create/update Manual list", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto const t1 = testLib.addTrack("A");
@@ -129,7 +129,7 @@ namespace ao::rt::test
     service.updateList(updateDraft);
   }
 
-  TEST_CASE("LibraryMutationService - updateList publishes ListsMutated", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - updateList publishes ListsMutated", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};
@@ -152,7 +152,7 @@ namespace ao::rt::test
     CHECK(upserted[0] == listId);
   }
 
-  TEST_CASE("LibraryMutationService - deleteList publishes ListsMutated", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - deleteList publishes ListsMutated", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};
@@ -172,7 +172,7 @@ namespace ao::rt::test
     CHECK(deleted[0] == listId);
   }
 
-  TEST_CASE("LibraryMutationService - direct notifications", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - direct notifications", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};
@@ -205,7 +205,7 @@ namespace ao::rt::test
     REQUIRE(taskCount == 42);
   }
 
-  TEST_CASE("LibraryMutationService - Async tasks (dummy execution)", "[app][runtime][mutation]")
+  TEST_CASE("LibraryMutationService - Async tasks (dummy execution)", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};

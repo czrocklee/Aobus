@@ -121,21 +121,21 @@ namespace ao::library::test
   } // namespace
 
   // === Metadata Tests ===
-  TEST_CASE("TrackView - Hot Title")
+  TEST_CASE("TrackView - Hot Title", "[library][unit][track]")
   {
     auto const data = createTrackWithStrings("Test Title");
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title() == "Test Title");
   }
 
-  TEST_CASE("TrackView - Hot Title Empty")
+  TEST_CASE("TrackView - Hot Title Empty", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title().empty());
   }
 
-  TEST_CASE("TrackView - Hot Dictionary IDs")
+  TEST_CASE("TrackView - Hot Dictionary IDs", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -147,14 +147,14 @@ namespace ao::library::test
     CHECK(view.metadata().composerId() == kInvalidDictionaryId);
   }
 
-  TEST_CASE("TrackView - Hot Year")
+  TEST_CASE("TrackView - Hot Year", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().year() == 2020);
   }
 
-  TEST_CASE("TrackView - Cold Track Info")
+  TEST_CASE("TrackView - Cold Track Info", "[library][unit][track]")
   {
     auto header = TrackColdHeader{};
     header.trackNumber = 5;
@@ -171,7 +171,7 @@ namespace ao::library::test
     CHECK(view.metadata().totalDiscs() == 2);
   }
 
-  TEST_CASE("TrackView - Cold Cover Art")
+  TEST_CASE("TrackView - Cold Cover Art", "[library][unit][track]")
   {
     auto header = TrackColdHeader{};
     header.coverArtId = 42;
@@ -182,7 +182,7 @@ namespace ao::library::test
     CHECK(view.metadata().coverArtId() == 42);
   }
 
-  TEST_CASE("TrackView - Cold Uri")
+  TEST_CASE("TrackView - Cold Uri", "[library][unit][track]")
   {
     auto const data = createColdData({}, {}, "/path/to/file.flac");
     auto const view = makeColdView(data);
@@ -191,7 +191,7 @@ namespace ao::library::test
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackView - Cold Uri Empty")
+  TEST_CASE("TrackView - Cold Uri Empty", "[library][unit][track]")
   {
     auto const data = createColdData({}, {}, "");
     auto const view = makeColdView(data);
@@ -200,7 +200,7 @@ namespace ao::library::test
   }
 
   // === Property Tests ===
-  TEST_CASE("TrackView - Hot Codec and BitDepth")
+  TEST_CASE("TrackView - Hot Codec and BitDepth", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.codecId = 3; // FLAC
@@ -213,7 +213,7 @@ namespace ao::library::test
     CHECK(view.property().bitDepth() == 24);
   }
 
-  TEST_CASE("TrackView - Hot Rating")
+  TEST_CASE("TrackView - Hot Rating", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -221,7 +221,7 @@ namespace ao::library::test
     CHECK(view.metadata().rating() == 3);
   }
 
-  TEST_CASE("TrackView - Hot Rating Boundary")
+  TEST_CASE("TrackView - Hot Rating Boundary", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.rating = 0;
@@ -233,13 +233,13 @@ namespace ao::library::test
     CHECK(TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 255);
   }
 
-  TEST_CASE("TrackView - Cold File Size and Mtime")
+  TEST_CASE("TrackView - Cold File Size and Mtime", "[library][unit][track]")
   {
     auto const data = createColdData({}, {}, "");
     auto const view = makeColdView(data);
   }
 
-  TEST_CASE("TrackView - Cold Audio Format")
+  TEST_CASE("TrackView - Cold Audio Format", "[library][unit][track]")
   {
     auto header = TrackColdHeader{};
     header.durationMs = 180000;
@@ -257,7 +257,7 @@ namespace ao::library::test
   }
 
   // === Tag Tests ===
-  TEST_CASE("TrackView - Bloom Filter")
+  TEST_CASE("TrackView - Bloom Filter", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0xCAFE;
@@ -267,7 +267,7 @@ namespace ao::library::test
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
-  TEST_CASE("TrackView - Tag Count Zero")
+  TEST_CASE("TrackView - Tag Count Zero", "[library][unit][track]")
   {
     auto const data = createTrackWithStrings("Test");
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -275,7 +275,7 @@ namespace ao::library::test
     CHECK(view.tags().count() == 0);
   }
 
-  TEST_CASE("TrackView - Tag Iterator Empty")
+  TEST_CASE("TrackView - Tag Iterator Empty", "[library][unit][track]")
   {
     auto const data = createTrackWithStrings("Test");
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -283,7 +283,7 @@ namespace ao::library::test
     CHECK(view.tags().begin() == view.tags().end());
   }
 
-  TEST_CASE("TrackView - Tag Count With Tags")
+  TEST_CASE("TrackView - Tag Count With Tags", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -314,7 +314,7 @@ namespace ao::library::test
     CHECK(view.tags().count() == 2);
   }
 
-  TEST_CASE("TrackView - Tag Iterator")
+  TEST_CASE("TrackView - Tag Iterator", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -349,7 +349,7 @@ namespace ao::library::test
     CHECK(ids[1] == DictionaryId{20});
   }
 
-  TEST_CASE("TrackView - Tag Has")
+  TEST_CASE("TrackView - Tag Has", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -377,7 +377,7 @@ namespace ao::library::test
     CHECK(view.tags().has(DictionaryId{30}) == false);
   }
 
-  TEST_CASE("TrackView - Tag Id Accessor")
+  TEST_CASE("TrackView - Tag Id Accessor", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -405,7 +405,7 @@ namespace ao::library::test
   }
 
   // === Custom Tests ===
-  TEST_CASE("TrackView - Custom Roundtrip Empty")
+  TEST_CASE("TrackView - Custom Roundtrip Empty", "[library][unit][track]")
   {
     auto const data = createColdData();
     auto const view = makeColdView(data);
@@ -420,7 +420,7 @@ namespace ao::library::test
     CHECK(count == 0);
   }
 
-  TEST_CASE("TrackView - Custom Roundtrip Single Pair")
+  TEST_CASE("TrackView - Custom Roundtrip Single Pair", "[library][unit][track]")
   {
     auto const pairs = std::vector<std::pair<std::string, std::string>>{{"key1", "value1"}};
     auto const data = createColdData({}, pairs, "/path/to/file.flac");
@@ -439,7 +439,7 @@ namespace ao::library::test
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackView - Custom Roundtrip Multiple Pairs")
+  TEST_CASE("TrackView - Custom Roundtrip Multiple Pairs", "[library][unit][track]")
   {
     auto const key1 = std::string{"replaygain_track_gain_db"};
     auto const key2 = std::string{"isrc"};
@@ -471,7 +471,7 @@ namespace ao::library::test
     CHECK(result[2].second == "remaster");
   }
 
-  TEST_CASE("TrackView - Custom Iterator Empty")
+  TEST_CASE("TrackView - Custom Iterator Empty", "[library][unit][track]")
   {
     auto const data = createColdData({}, {}, "");
     auto const view = makeColdView(data);
@@ -486,7 +486,7 @@ namespace ao::library::test
     CHECK(count == 0);
   }
 
-  TEST_CASE("TrackView - Custom Iterator Single Pair")
+  TEST_CASE("TrackView - Custom Iterator Single Pair", "[library][unit][track]")
   {
     auto const pairs = std::vector<std::pair<std::string, std::string>>{{"key1", "value1"}};
 
@@ -505,7 +505,7 @@ namespace ao::library::test
     CHECK(count == 1);
   }
 
-  TEST_CASE("TrackView - Custom Iterator Special Characters")
+  TEST_CASE("TrackView - Custom Iterator Special Characters", "[library][unit][track]")
   {
     auto const pairs = std::vector<std::pair<std::string, std::string>>{{"comment", "Hello, World! 你好"}};
 
@@ -519,7 +519,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackView - Custom Iterator Multiple Pairs")
+  TEST_CASE("TrackView - Custom Iterator Multiple Pairs", "[library][unit][track]")
   {
     auto const key1 = std::string{"replaygain_track_gain_db"};
     auto const key2 = std::string{"isrc"};
@@ -546,7 +546,7 @@ namespace ao::library::test
     CHECK(result[2].second == "remaster");
   }
 
-  TEST_CASE("TrackView - Custom Get Found")
+  TEST_CASE("TrackView - Custom Get Found", "[library][unit][track]")
   {
     auto const pairs =
       std::vector<std::pair<std::string, std::string>>{{"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}};
@@ -560,7 +560,7 @@ namespace ao::library::test
     CHECK(*optValue == "USSM19999999");
   }
 
-  TEST_CASE("TrackView - Custom Get Not Found")
+  TEST_CASE("TrackView - Custom Get Not Found", "[library][unit][track]")
   {
     auto const pairs = std::vector<std::pair<std::string, std::string>>{{"replaygain_track_gain_db", "-6.5"}};
 
@@ -572,7 +572,7 @@ namespace ao::library::test
     CHECK(optValue.has_value() == false);
   }
 
-  TEST_CASE("TrackView - Custom Get Case Sensitive")
+  TEST_CASE("TrackView - Custom Get Case Sensitive", "[library][unit][track]")
   {
     auto const pairs = std::vector<std::pair<std::string, std::string>>{{"ISRC", "USSM19999999"}};
 
@@ -585,7 +585,7 @@ namespace ao::library::test
     CHECK(*optValue == "USSM19999999");
   }
 
-  TEST_CASE("TrackView - Custom Get Binary Search Path (64+ entries)")
+  TEST_CASE("TrackView - Custom Get Binary Search Path (64+ entries)", "[library][unit][track]")
   {
     // Create 100 entries to force binary search path
     auto pairs = std::vector<std::pair<std::string, std::string>>{};
@@ -610,7 +610,7 @@ namespace ao::library::test
     CHECK(view.custom().get(kInvalidDictionaryId).has_value() == false);
   }
 
-  TEST_CASE("TrackView - Custom Empty Key And Value")
+  TEST_CASE("TrackView - Custom Empty Key And Value", "[library][unit][track]")
   {
     auto const pairs = std::vector<std::pair<std::string, std::string>>{{"", ""}};
 
@@ -629,7 +629,7 @@ namespace ao::library::test
     CHECK(count == 1);
   }
 
-  TEST_CASE("TrackView - Custom Special Characters In Value")
+  TEST_CASE("TrackView - Custom Special Characters In Value", "[library][unit][track]")
   {
     auto const pairs = std::vector<std::pair<std::string, std::string>>{{"comment", "Hello, World! 你好"}};
 
@@ -644,42 +644,42 @@ namespace ao::library::test
   }
 
   // === View Validity Tests ===
-  TEST_CASE("TrackView - Hot Valid")
+  TEST_CASE("TrackView - Hot Valid", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == true);
   }
 
-  TEST_CASE("TrackView - Hot Invalid Null Data")
+  TEST_CASE("TrackView - Hot Invalid Null Data", "[library][unit][track]")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
     auto const nullView = TrackView{nullSpan, std::span<std::byte const>{}};
     CHECK(nullView.isHotValid() == false);
   }
 
-  TEST_CASE("TrackView - Hot Invalid Too Small")
+  TEST_CASE("TrackView - Hot Invalid Too Small", "[library][unit][track]")
   {
     auto const smallData = std::array<char, 10>{};
     auto const smallView = TrackView{utility::bytes::view(smallData), std::span<std::byte const>{}};
     CHECK(smallView.isHotValid() == false);
   }
 
-  TEST_CASE("TrackView - Cold Valid")
+  TEST_CASE("TrackView - Cold Valid", "[library][unit][track]")
   {
     auto const data = createColdData();
     auto const view = TrackView{std::span<std::byte const>{}, data};
     CHECK(view.isColdValid() == true);
   }
 
-  TEST_CASE("TrackView - Cold Invalid Null Data")
+  TEST_CASE("TrackView - Cold Invalid Null Data", "[library][unit][track]")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
     auto const nullView = TrackView{std::span<std::byte const>{}, nullSpan};
     CHECK(nullView.isColdValid() == false);
   }
 
-  TEST_CASE("TrackView - Cold Invalid Too Small")
+  TEST_CASE("TrackView - Cold Invalid Too Small", "[library][unit][track]")
   {
     auto const smallData = std::array<char, 10>{};
     auto const smallView = TrackView{std::span<std::byte const>{}, utility::bytes::view(smallData)};

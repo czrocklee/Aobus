@@ -17,6 +17,8 @@
 #include <cstddef>
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <string>
 #include <vector>
 
 namespace ao::log
@@ -27,13 +29,29 @@ namespace ao::log
     constexpr std::size_t kAsyncThreadCount = 1;
     constexpr std::size_t kRotatingLogMaxSize = std::size_t{5} * 1024 * 1024;
     constexpr std::size_t kRotatingLogMaxFiles = 3;
+
+    std::shared_ptr<spdlog::logger> makeNullLogger(std::string const& name)
+    {
+      auto logger = std::make_shared<spdlog::logger>(name, std::make_shared<spdlog::sinks::null_sink_mt>());
+      logger->set_level(spdlog::level::off);
+      return logger;
+    }
   }
 
-  std::shared_ptr<spdlog::logger> Log::_appLogger = spdlog::null_logger_mt("app");
-  std::shared_ptr<spdlog::logger> Log::_audioLogger = spdlog::null_logger_mt("audio");
+  std::shared_ptr<spdlog::logger> Log::_appLogger = makeNullLogger("app");
+  std::shared_ptr<spdlog::logger> Log::_audioLogger = makeNullLogger("audio");
+  bool Log::_initialized = false;
+  std::mutex Log::_lifecycleMutex;
 
   void Log::init(LogLevel level, std::filesystem::path logDir)
   {
+    auto const lock = std::scoped_lock{_lifecycleMutex};
+
+    if (_initialized)
+    {
+      return;
+    }
+
     if (logDir.empty())
     {
       logDir = std::filesystem::current_path() / "logs";
@@ -63,17 +81,21 @@ namespace ao::log
     spdlog::drop("audio");
 
     // Create loggers
-    _appLogger = std::make_shared<spdlog::async_logger>(
+    auto appLogger = std::make_shared<spdlog::async_logger>(
       "app", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
-    _appLogger->set_level(spdlog::level::trace); // Keep internal level at trace, sinks will filter
-    spdlog::register_logger(_appLogger);
+    appLogger->set_level(spdlog::level::trace); // Keep internal level at trace, sinks will filter
+    spdlog::register_logger(appLogger);
 
-    _audioLogger = std::make_shared<spdlog::async_logger>(
+    auto audioLogger = std::make_shared<spdlog::async_logger>(
       "audio", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::overrun_oldest);
-    _audioLogger->set_level(spdlog::level::trace);
-    spdlog::register_logger(_audioLogger);
+    audioLogger->set_level(spdlog::level::trace);
+    spdlog::register_logger(audioLogger);
 
-    spdlog::set_default_logger(_appLogger);
+    _appLogger = appLogger;
+    _audioLogger = audioLogger;
+
+    spdlog::set_default_logger(appLogger);
+    _initialized = true;
 
     audio::initializeDecoders();
 
@@ -83,18 +105,38 @@ namespace ao::log
 
   void Log::shutdown()
   {
+    auto const lock = std::scoped_lock{_lifecycleMutex};
+
+    if (!_initialized)
+    {
+      return;
+    }
+
     APP_LOG_INFO("Shutting down logging...");
 
-    if (_appLogger)
+    auto const app = _appLogger;
+    auto const audio = _audioLogger;
+
+    if (app)
     {
-      _appLogger->flush();
+      app->flush();
     }
 
-    if (_audioLogger)
+    if (audio)
     {
-      _audioLogger->flush();
+      audio->flush();
     }
+
+    _appLogger = makeNullLogger("app");
+    _audioLogger = makeNullLogger("audio");
+    _initialized = false;
 
     spdlog::shutdown();
+  }
+
+  bool Log::isInitialized()
+  {
+    auto const lock = std::scoped_lock{_lifecycleMutex};
+    return _initialized;
   }
 } // namespace ao::log

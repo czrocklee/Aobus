@@ -56,7 +56,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("PipeWireMonitorHelpers - Property Parsing", "[audio][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorHelpers - Property Parsing", "[audio][unit][pipewire][monitor]")
   {
     SECTION("isSinkMediaClass")
     {
@@ -97,7 +97,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorHelpers - Format Capabilities", "[audio][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorHelpers - Format Capabilities", "[audio][unit][pipewire][monitor]")
   {
     SECTION("sampleFormatCapabilityFromSpaFormat")
     {
@@ -130,7 +130,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][unit][pipewire][monitor]")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);

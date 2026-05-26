@@ -110,7 +110,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("ConfigStore - simple aggregate round-trip", "[app][runtime][config]")
+  TEST_CASE("ConfigStore - simple aggregate round-trip", "[app][unit][runtime][config]")
   {
     auto const tempDir = TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -181,7 +181,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - enum types", "[app][runtime][config]")
+  TEST_CASE("ConfigStore - enum types", "[app][unit][runtime][config]")
   {
     auto tempDir = TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -217,7 +217,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - optional fields", "[app][runtime][config]")
+  TEST_CASE("ConfigStore - optional fields", "[app][unit][runtime][config]")
   {
     auto tempDir = TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -281,7 +281,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - HasValueMethod types", "[app][runtime][config]")
+  TEST_CASE("ConfigStore - HasValueMethod types", "[app][unit][runtime][config]")
   {
     auto tempDir = TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -345,7 +345,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - container types", "[app][runtime][config]")
+  TEST_CASE("ConfigStore - container types", "[app][unit][runtime][config]")
   {
     auto const tempDir = TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -396,7 +396,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - edge cases", "[app][runtime][config]")
+  TEST_CASE("ConfigStore - edge cases", "[app][unit][runtime][config]")
   {
     auto tempDir = TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -537,7 +537,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - string lifetime (save-before-flush)", "[app][runtime][config]")
+  TEST_CASE("ConfigStore - string lifetime (save-before-flush)", "[app][unit][runtime][config]")
   {
     auto const tempDir = TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
@@ -559,7 +559,7 @@ namespace ao::rt::test
     CHECK(loaded.name == "temporary string that will go out of scope");
   }
 
-  TEST_CASE("ConfigStore - ReadOnly mode", "[app][runtime][config]")
+  TEST_CASE("ConfigStore - ReadOnly mode", "[app][unit][runtime][config]")
   {
     auto const tempDir = TempDir{};
     auto configStore =

@@ -15,53 +15,53 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("Serializer - Serializes Metadata Variable Prefix")
+  TEST_CASE("Serializer - Serializes Metadata Variable Prefix", "[query][unit][serializer]")
   {
     auto const var = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
     CHECK(serialize(var) == "$artist");
   }
 
-  TEST_CASE("Serializer - Serializes Property Variable Prefix")
+  TEST_CASE("Serializer - Serializes Property Variable Prefix", "[query][unit][serializer]")
   {
     auto const var = VariableExpression{.type = VariableType::Property, .name = "duration"};
     CHECK(serialize(var) == "@duration");
   }
 
-  TEST_CASE("Serializer - Serializes Tag Variable Prefix")
+  TEST_CASE("Serializer - Serializes Tag Variable Prefix", "[query][unit][serializer]")
   {
     auto const var = VariableExpression{.type = VariableType::Tag, .name = "rock"};
     CHECK(serialize(var) == "#rock");
   }
 
-  TEST_CASE("Serializer - Serializes Custom Variable Prefix")
+  TEST_CASE("Serializer - Serializes Custom Variable Prefix", "[query][unit][serializer]")
   {
     auto const var = VariableExpression{.type = VariableType::Custom, .name = "isrc"};
     CHECK(serialize(var) == "%isrc");
   }
 
-  TEST_CASE("Serializer - Serializes Boolean Constant")
+  TEST_CASE("Serializer - Serializes Boolean Constant", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{true}) == "true");
     CHECK(serialize(ConstantExpression{false}) == "false");
   }
 
-  TEST_CASE("Serializer - Serializes Integer Constant")
+  TEST_CASE("Serializer - Serializes Integer Constant", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{std::int64_t{123}}) == "123");
     CHECK(serialize(ConstantExpression{std::int64_t{-7}}) == "-7");
   }
 
-  TEST_CASE("Serializer - Serializes Unit Constant")
+  TEST_CASE("Serializer - Serializes Unit Constant", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{UnitConstantExpression{"44.1k"}}) == "44.1k");
   }
 
-  TEST_CASE("Serializer - Serializes String Constant With Quotes")
+  TEST_CASE("Serializer - Serializes String Constant With Quotes", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{std::string{"Bach"}}) == "\"Bach\"");
   }
 
-  TEST_CASE("Serializer - Serializes Unary Not")
+  TEST_CASE("Serializer - Serializes Unary Not", "[query][unit][serializer]")
   {
     auto unary = std::make_unique<UnaryExpression>();
     unary->op = Operator::Not;
@@ -69,7 +69,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(unary)}) == "not $artist");
   }
 
-  TEST_CASE("Serializer - Serializes Each Binary Operator Token")
+  TEST_CASE("Serializer - Serializes Each Binary Operator Token", "[query][unit][serializer]")
   {
     struct Case final
     {
@@ -98,7 +98,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - Parenthesizes Nested Binary Expressions")
+  TEST_CASE("Serializer - Parenthesizes Nested Binary Expressions", "[query][unit][serializer]")
   {
     // ($artist = "Bach") and ($year >= 2020)
     auto lhs = std::make_unique<BinaryExpression>();
@@ -117,7 +117,7 @@ namespace ao::query::test
     CHECK(result == "($artist = \"Bach\") and ($year >= 2020)");
   }
 
-  TEST_CASE("Serializer - Does Not Parenthesize Root Binary Expression")
+  TEST_CASE("Serializer - Does Not Parenthesize Root Binary Expression", "[query][unit][serializer]")
   {
     auto bin = std::make_unique<BinaryExpression>();
     bin->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
@@ -125,7 +125,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(bin)}) == "$a = 1");
   }
 
-  TEST_CASE("Serializer - RoundTrip ParseSerializeParse Preserves Canonical Shape")
+  TEST_CASE("Serializer - RoundTrip ParseSerializeParse Preserves Canonical Shape", "[query][unit][serializer]")
   {
     auto queries = {R"($artist = "Bach" and $year >= 2020)",
                     "not ($year = 2020)",
@@ -143,7 +143,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - Handles Empty Or Incomplete Expressions Defensively")
+  TEST_CASE("Serializer - Handles Empty Or Incomplete Expressions Defensively", "[query][unit][serializer]")
   {
     SECTION("Empty Expression")
     {

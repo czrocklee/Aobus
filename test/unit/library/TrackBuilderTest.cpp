@@ -37,7 +37,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackBuilder - Default Constructor via createNew")
+  TEST_CASE("TrackBuilder - Default Constructor via createNew", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -54,7 +54,7 @@ namespace ao::library::test
     CHECK(builder.custom().pairs().empty());
   }
 
-  TEST_CASE("TrackBuilder - MetadataBuilder fluent setters")
+  TEST_CASE("TrackBuilder - MetadataBuilder fluent setters", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata()
@@ -87,7 +87,7 @@ namespace ao::library::test
     CHECK(builder.metadata().rating() == 4);
   }
 
-  TEST_CASE("TrackBuilder - PropertyBuilder fluent setters")
+  TEST_CASE("TrackBuilder - PropertyBuilder fluent setters", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.property()
@@ -108,7 +108,7 @@ namespace ao::library::test
     CHECK(builder.property().bitDepth() == 16);
   }
 
-  TEST_CASE("TrackBuilder - TagsBuilder add/remove/clear")
+  TEST_CASE("TrackBuilder - TagsBuilder add/remove/clear", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -132,7 +132,7 @@ namespace ao::library::test
     CHECK(builder.tags().names().empty());
   }
 
-  TEST_CASE("TrackBuilder - CustomBuilder add/remove/clear")
+  TEST_CASE("TrackBuilder - CustomBuilder add/remove/clear", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -153,7 +153,7 @@ namespace ao::library::test
     CHECK(builder.custom().pairs().empty());
   }
 
-  TEST_CASE("TrackBuilder - Chained API")
+  TEST_CASE("TrackBuilder - Chained API", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -170,7 +170,7 @@ namespace ao::library::test
     CHECK(builder.custom().pairs().size() == 1);
   }
 
-  TEST_CASE("TrackBuilder - Serialize Empty Builder")
+  TEST_CASE("TrackBuilder - Serialize Empty Builder", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     auto const [hotData, coldData] = serializeTestTrack(builder);
@@ -179,7 +179,7 @@ namespace ao::library::test
     CHECK(!hotData.empty());
   }
 
-  TEST_CASE("TrackBuilder - Serialize With Strings")
+  TEST_CASE("TrackBuilder - Serialize With Strings", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Hello World").year(2021);
@@ -201,7 +201,7 @@ namespace ao::library::test
     CHECK(std::strncmp(payloadStart, "Hello World", 11) == 0);
   }
 
-  TEST_CASE("TrackBuilder - buildHotHeader Method")
+  TEST_CASE("TrackBuilder - buildHotHeader Method", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().year(1999).rating(5);
@@ -221,7 +221,7 @@ namespace ao::library::test
     CHECK(header->rating == 5);
   }
 
-  TEST_CASE("TrackBuilder - Serialize With Special Characters")
+  TEST_CASE("TrackBuilder - Serialize With Special Characters", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     auto const* title = "Test: \"Quotes\" & 'Apostrophes'";
@@ -233,7 +233,7 @@ namespace ao::library::test
     CHECK(header->titleLen == std::strlen(title));
   }
 
-  TEST_CASE("TrackBuilder - Serialize Preserves Data")
+  TEST_CASE("TrackBuilder - Serialize Preserves Data", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -247,7 +247,7 @@ namespace ao::library::test
     CHECK(hotData1 == hotData2);
   }
 
-  TEST_CASE("TrackBuilder - Tag Serialization - Empty Tags")
+  TEST_CASE("TrackBuilder - Tag Serialization - Empty Tags", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -260,7 +260,7 @@ namespace ao::library::test
     CHECK(header->tagBloom == 0);
   }
 
-  TEST_CASE("TrackBuilder - Tag Serialization - With Tags")
+  TEST_CASE("TrackBuilder - Tag Serialization - With Tags", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -279,7 +279,7 @@ namespace ao::library::test
     CHECK(header->tagBloom != 0); // Bloom should be computed from tag IDs
   }
 
-  TEST_CASE("TrackBuilder - Tag Serialization - Single Tag")
+  TEST_CASE("TrackBuilder - Tag Serialization - Single Tag", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -297,7 +297,7 @@ namespace ao::library::test
     CHECK(header->tagLen == 4); // 1 tag * 4 bytes
   }
 
-  TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags")
+  TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -316,7 +316,7 @@ namespace ao::library::test
     CHECK(header->tagBloom != 0);
   }
 
-  TEST_CASE("TrackBuilder - buildColdHeader")
+  TEST_CASE("TrackBuilder - buildColdHeader", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(5).totalTracks(10).discNumber(1).totalDiscs(2);
@@ -337,7 +337,7 @@ namespace ao::library::test
     CHECK(header->totalDiscs == 2);
   }
 
-  TEST_CASE("TrackBuilder - serializeHot")
+  TEST_CASE("TrackBuilder - serializeHot", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test Title");
@@ -358,7 +358,7 @@ namespace ao::library::test
     CHECK(header->tagBloom != 0);
   }
 
-  TEST_CASE("TrackBuilder - serializeCold")
+  TEST_CASE("TrackBuilder - serializeCold", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(3);
@@ -378,7 +378,7 @@ namespace ao::library::test
     CHECK(view.metadata().trackNumber() == 3);
   }
 
-  TEST_CASE("TrackBuilder - fromTrackView")
+  TEST_CASE("TrackBuilder - fromTrackView", "[library][unit][track]")
   {
     auto temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -405,7 +405,7 @@ namespace ao::library::test
     CHECK(constBuilder.tags().names().empty());
   }
 
-  TEST_CASE("TrackBuilder - TrackView property and metadata getters")
+  TEST_CASE("TrackBuilder - TrackView property and metadata getters", "[library][unit][track]")
   {
     auto temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};

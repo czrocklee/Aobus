@@ -10,30 +10,33 @@
 #include <array>
 #include <cstddef>
 
-using namespace ao::library;
-
-TEST_CASE("FileManifestView properties", "[library][manifest]")
+namespace ao::library::test
 {
-  // 24 bytes buffer
-  auto buffer = std::array<std::byte, 24>{};
-  auto* header = reinterpret_cast<FileManifestHeader*>(buffer.data());
+  using namespace ao::library;
 
-  header->trackId = ao::TrackId{42};
-  header->status = FileStatus::Missing;
-  header->fileSize(123456789012345ULL);
-  header->mtime(987654321098765ULL);
+  TEST_CASE("FileManifestView - properties", "[library][unit][manifest]")
+  {
+    // 24 bytes buffer
+    auto buffer = std::array<std::byte, 24>{};
+    auto* header = reinterpret_cast<FileManifestHeader*>(buffer.data());
 
-  auto view = FileManifestView{buffer};
+    header->trackId = TrackId{42};
+    header->status = FileStatus::Missing;
+    header->fileSize(123456789012345ULL);
+    header->mtime(987654321098765ULL);
 
-  REQUIRE(view.trackId() == ao::TrackId{42});
-  REQUIRE(view.status() == FileStatus::Missing);
-  REQUIRE(view.fileSize() == 123456789012345ULL);
-  REQUIRE(view.mtime() == 987654321098765ULL);
-}
+    auto view = FileManifestView{buffer};
 
-TEST_CASE("FileManifestView throws on small buffer", "[library][manifest]")
-{
-  auto buffer = std::array<std::byte, 10>{};
+    CHECK(view.trackId() == ao::TrackId{42});
+    CHECK(view.status() == FileStatus::Missing);
+    CHECK(view.fileSize() == 123456789012345ULL);
+    CHECK(view.mtime() == 987654321098765ULL);
+  }
 
-  REQUIRE_THROWS(FileManifestView{buffer});
-}
+  TEST_CASE("FileManifestView - throws on small buffer", "[library][unit][manifest]")
+  {
+    auto buffer = std::array<std::byte, 10>{};
+
+    REQUIRE_THROWS(FileManifestView{buffer});
+  }
+} // namespace ao::library::test

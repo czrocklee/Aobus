@@ -14,7 +14,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("FlacDecoderSession - Happy Path", "[audio][flac]")
+  TEST_CASE("FlacDecoderSession - Happy Path", "[audio][unit][flac]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.flac";
 
@@ -43,13 +43,13 @@ namespace ao::audio::test
     CHECK(decoder.readNextBlock()); // Should read again from where we were, or next block
   }
 
-  TEST_CASE("FlacDecoderSession - 24-bit", "[audio][flac]")
+  TEST_CASE("FlacDecoderSession - 24-bit", "[audio][unit][flac]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.flac";
 
     if (!std::filesystem::exists(testFile))
     {
-      return;
+      SKIP("Test file 'hires.flac' missing");
     }
 
     auto decoder = FlacDecoderSession{Format{.bitDepth = 24, .isInterleaved = true}};
@@ -57,7 +57,7 @@ namespace ao::audio::test
     REQUIRE(decoder.readNextBlock());
   }
 
-  TEST_CASE("FlacDecoderSession - Error Paths", "[audio][flac][error]")
+  TEST_CASE("FlacDecoderSession - Error Paths", "[audio][unit][flac][error]")
   {
     auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
 

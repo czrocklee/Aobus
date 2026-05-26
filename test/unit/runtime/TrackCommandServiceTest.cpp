@@ -27,7 +27,7 @@ namespace ao::rt::test
     };
   }
 
-  TEST_CASE("TrackCommandService - addTag and removeTag", "[app][runtime][track_command]")
+  TEST_CASE("TrackCommandService - addTag and removeTag", "[app][unit][runtime][track_command]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
@@ -98,7 +98,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackCommandService - deleteTrack", "[app][runtime][track_command]")
+  TEST_CASE("TrackCommandService - deleteTrack", "[app][unit][runtime][track_command]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
@@ -133,7 +133,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackCommandService - createTrackFromFile", "[app][runtime][track_command]")
+  TEST_CASE("TrackCommandService - createTrackFromFile", "[app][unit][runtime][track_command]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};

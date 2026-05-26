@@ -12,7 +12,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("NotificationService - post publishes NotificationPosted", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - post publishes NotificationPosted", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -23,7 +23,7 @@ namespace ao::rt::test
     CHECK(receivedId == id);
   }
 
-  TEST_CASE("NotificationService - dismiss publishes NotificationDismissed", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - dismiss publishes NotificationDismissed", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -36,7 +36,7 @@ namespace ao::rt::test
     CHECK(dismissedId == id);
   }
 
-  TEST_CASE("NotificationService - dismiss non-existent does not publish", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - dismiss non-existent does not publish", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -47,7 +47,7 @@ namespace ao::rt::test
     CHECK_FALSE(published);
   }
 
-  TEST_CASE("NotificationService - multiple posts assign distinct IDs", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - multiple posts assign distinct IDs", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -56,7 +56,7 @@ namespace ao::rt::test
     CHECK(id1 != id2);
   }
 
-  TEST_CASE("NotificationService - rich post stores content state", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - rich post stores content state", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -97,7 +97,7 @@ namespace ao::rt::test
     CHECK(entry.content.optProgress->label == "25%");
   }
 
-  TEST_CASE("NotificationService - updateProgress publishes NotificationUpdated", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - updateProgress publishes NotificationUpdated", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -123,7 +123,7 @@ namespace ao::rt::test
     CHECK(entry.content.optProgress->label == "Halfway");
   }
 
-  TEST_CASE("NotificationService - clearProgress publishes only when progress exists", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - clearProgress publishes only when progress exists", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -144,7 +144,7 @@ namespace ao::rt::test
     CHECK(updatedCount == 2);
   }
 
-  TEST_CASE("NotificationService - dismissAll does not emit per-item events", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - dismissAll does not emit per-item events", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -158,7 +158,7 @@ namespace ao::rt::test
     CHECK(dismissedCount == 0);
   }
 
-  TEST_CASE("NotificationService - dismissAll publishes feed change", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - dismissAll publishes feed change", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -174,7 +174,7 @@ namespace ao::rt::test
     CHECK(changedCount == 1);
   }
 
-  TEST_CASE("NotificationService - feed revision changes on mutations", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - feed revision changes on mutations", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
 
@@ -192,7 +192,7 @@ namespace ao::rt::test
     CHECK(service.feed().revision > updatedRevision);
   }
 
-  TEST_CASE("NotificationService - updateContent modifies content and emits signals", "[app][runtime][notification]")
+  TEST_CASE("NotificationService - updateContent modifies content and emits signals", "[app][unit][runtime][notification]")
   {
     auto service = NotificationService{};
     auto id = service.post(NotificationSeverity::Info, "old");

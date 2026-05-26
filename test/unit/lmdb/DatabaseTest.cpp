@@ -19,7 +19,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("Database - constructor opens database", "[lmdb][database]")
+  TEST_CASE("Database - constructor opens database", "[lmdb][unit][database]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -36,7 +36,7 @@ namespace ao::lmdb::test
   // ============================================================================
   // Database::Reader Tests
   // ============================================================================
-  TEST_CASE("Database::Reader - begin and end", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader - begin and end", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -64,7 +64,7 @@ namespace ao::lmdb::test
     REQUIRE(it == reader.end());
   }
 
-  TEST_CASE("Database::Reader - empty database", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader - empty database", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -78,7 +78,7 @@ namespace ao::lmdb::test
     REQUIRE(reader.begin() == reader.end());
   }
 
-  TEST_CASE("Database::Reader - get", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader - get", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -106,13 +106,13 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Database::Reader::Iterator - default constructor", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader::Iterator - default constructor", "[lmdb][unit][database][reader]")
   {
     auto const it = Database::Reader::Iterator{};
     // Default constructed iterator should equal end
   }
 
-  TEST_CASE("Database::Reader::Iterator - copy constructor", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader::Iterator - copy constructor", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -131,7 +131,7 @@ namespace ao::lmdb::test
     REQUIRE(it1 == it2);
   }
 
-  TEST_CASE("Database::Reader::Iterator - move constructor", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader::Iterator - move constructor", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -149,7 +149,7 @@ namespace ao::lmdb::test
     // it2 should be valid
   }
 
-  TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -169,7 +169,7 @@ namespace ao::lmdb::test
   // ============================================================================
   // Database::Writer Tests
   // ============================================================================
-  TEST_CASE("Database::Writer - create with id and data", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - create with id and data", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -188,7 +188,7 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData) == "hello");
   }
 
-  TEST_CASE("Database::Writer - create with id and size", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - create with id and size", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -214,7 +214,7 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData) == std::string(10, 'x'));
   }
 
-  TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - append with data", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -242,7 +242,7 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData2) == "second");
   }
 
-  TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - append with size", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -276,7 +276,7 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
   }
 
-  TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - update existing record", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -304,7 +304,7 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData) == "updated");
   }
 
-  TEST_CASE("Database::Writer - delete record", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - delete record", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -341,7 +341,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Database::Writer - get within write transaction", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - get within write transaction", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -357,7 +357,7 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData) == "answer");
   }
 
-  TEST_CASE("Database::Writer - move constructor", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - move constructor", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -375,7 +375,7 @@ namespace ao::lmdb::test
     wtxn.commit();
   }
 
-  TEST_CASE("Database::Writer - create throws on duplicate id with data", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - create throws on duplicate id with data", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -390,7 +390,7 @@ namespace ao::lmdb::test
     wtxn.commit();
   }
 
-  TEST_CASE("Database::Writer - create throws on duplicate id with size", "[lmdb][database][writer]")
+  TEST_CASE("Database::Writer - create throws on duplicate id with size", "[lmdb][unit][database][writer]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -405,7 +405,7 @@ namespace ao::lmdb::test
     wtxn.commit();
   }
 
-  TEST_CASE("Database::Reader - maxKey on empty database", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader - maxKey on empty database", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -419,7 +419,7 @@ namespace ao::lmdb::test
     REQUIRE(reader.maxKey() == 0);
   }
 
-  TEST_CASE("Database::Reader - maxKey after append", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader - maxKey after append", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -437,7 +437,7 @@ namespace ao::lmdb::test
     REQUIRE(reader.maxKey() == id2);
   }
 
-  TEST_CASE("Database::Reader - maxKey after create", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader - maxKey after create", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -456,7 +456,7 @@ namespace ao::lmdb::test
     REQUIRE(reader.maxKey() == 10);
   }
 
-  TEST_CASE("Database::Reader - maxKey after delete", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader - maxKey after delete", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -483,7 +483,7 @@ namespace ao::lmdb::test
     REQUIRE(reader.maxKey() == 2);
   }
 
-  TEST_CASE("Database::Reader - maxKey after deleting middle element", "[lmdb][database][reader]")
+  TEST_CASE("Database::Reader - maxKey after deleting middle element", "[lmdb][unit][database][reader]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -511,7 +511,7 @@ namespace ao::lmdb::test
     REQUIRE(reader.maxKey() == 3);
   }
 
-  TEST_CASE("Database - Blob keys", "[lmdb][database][blob]")
+  TEST_CASE("Database - Blob keys", "[lmdb][unit][database][blob]")
   {
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};

@@ -7,7 +7,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackFilterResolver: Quick Search Terms", "[gtk][filter]")
+  TEST_CASE("TrackFilterResolver - Quick Search Terms", "[gtk][unit][filter]")
   {
     SECTION("Empty filter")
     {
@@ -39,7 +39,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackFilterResolver: Complex Expressions", "[gtk][filter]")
+  TEST_CASE("TrackFilterResolver - Complex Expressions", "[gtk][unit][filter]")
   {
     SECTION("Expression starting with $")
     {

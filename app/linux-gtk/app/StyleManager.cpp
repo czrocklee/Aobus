@@ -305,58 +305,63 @@ namespace ao::gtk
     }
   }
 
+  void StyleManager::setupGtkConfigMonitor()
+  {
+    auto const configDir = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0";
+    auto const configFile = Gio::File::create_for_path(configDir.string());
+
+    _gtkConfigMonitor = configFile->monitor_directory();
+    _gtkConfigMonitor->signal_changed().connect(
+      [this](Glib::RefPtr<Gio::File> const& file,
+             Glib::RefPtr<Gio::File> const& /*otherFile*/,
+             Gio::FileMonitor::Event event)
+      {
+        using Event = Gio::FileMonitor::Event;
+
+        if (event == Event::CHANGED || event == Event::CREATED || event == Event::DELETED ||
+            event == Event::CHANGES_DONE_HINT)
+        {
+          if (auto const name = file->get_basename(); name == "settings.ini" || name == "gtk.css")
+          {
+            APP_LOG_DEBUG("StyleManager: gtk-4.0 change detected ({}), scheduling reload...", name);
+            reload();
+          }
+        }
+      });
+  }
+
+  void StyleManager::setupAobusConfigMonitor()
+  {
+    auto const aobusDir = std::filesystem::path{Glib::get_user_config_dir()} / "aobus";
+
+    std::filesystem::create_directories(aobusDir);
+
+    auto const aobusFile = Gio::File::create_for_path(aobusDir.string());
+
+    _aobusConfigMonitor = aobusFile->monitor_directory();
+    _aobusConfigMonitor->signal_changed().connect(
+      [this](Glib::RefPtr<Gio::File> const& file,
+             Glib::RefPtr<Gio::File> const& /*otherFile*/,
+             Gio::FileMonitor::Event event)
+      {
+        using Event = Gio::FileMonitor::Event;
+
+        if (event == Event::CHANGED || event == Event::CREATED || event == Event::CHANGES_DONE_HINT)
+        {
+          if (file->get_basename() == "user.css")
+          {
+            APP_LOG_DEBUG("StyleManager: user.css change detected, reloading...");
+            reloadUserCss();
+            _refreshedSignal.emit();
+          }
+        }
+      });
+  }
+
   void StyleManager::setupFileMonitors()
   {
-    {
-      auto const configDir = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0";
-      auto const configFile = Gio::File::create_for_path(configDir.string());
-
-      _gtkConfigMonitor = configFile->monitor_directory();
-      _gtkConfigMonitor->signal_changed().connect(
-        [this](Glib::RefPtr<Gio::File> const& file,
-               Glib::RefPtr<Gio::File> const& /*otherFile*/,
-               Gio::FileMonitor::Event event)
-        {
-          using Event = Gio::FileMonitor::Event;
-
-          if (event == Event::CHANGED || event == Event::CREATED || event == Event::DELETED ||
-              event == Event::CHANGES_DONE_HINT)
-          {
-            if (auto const name = file->get_basename(); name == "settings.ini" || name == "gtk.css")
-            {
-              APP_LOG_DEBUG("StyleManager: gtk-4.0 change detected ({}), scheduling reload...", name);
-              reload();
-            }
-          }
-        });
-    }
-
-    {
-      auto const aobusDir = std::filesystem::path{Glib::get_user_config_dir()} / "aobus";
-
-      std::filesystem::create_directories(aobusDir);
-
-      auto const aobusFile = Gio::File::create_for_path(aobusDir.string());
-
-      _aobusConfigMonitor = aobusFile->monitor_directory();
-      _aobusConfigMonitor->signal_changed().connect(
-        [this](Glib::RefPtr<Gio::File> const& file,
-               Glib::RefPtr<Gio::File> const& /*otherFile*/,
-               Gio::FileMonitor::Event event)
-        {
-          using Event = Gio::FileMonitor::Event;
-
-          if (event == Event::CHANGED || event == Event::CREATED || event == Event::CHANGES_DONE_HINT)
-          {
-            if (file->get_basename() == "user.css")
-            {
-              APP_LOG_DEBUG("StyleManager: user.css change detected, reloading...");
-              reloadUserCss();
-              _refreshedSignal.emit();
-            }
-          }
-        });
-    }
+    setupGtkConfigMonitor();
+    setupAobusConfigMonitor();
   }
 
   void StyleManager::setupDBusMonitor()

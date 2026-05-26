@@ -307,7 +307,7 @@ namespace ao::rt
               auto const anchorName = "cover_" + std::to_string(rid);
 
               auto child = node.append_child();
-              child << ryml::key("coverArtBase64") << node.tree()->to_arena(b64);
+              child << ryml::key("coverArtBase64") << b64;
               child.set_val_anchor(yaml::copyToArena(child, anchorName));
               exportedCovers[resId] = anchorName;
             }

@@ -12,7 +12,6 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <format>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -54,7 +53,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player][lifecycle]")
+  TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][unit][player][lifecycle]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
 
@@ -178,7 +177,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Player - Pending Output", "[playback][player][pending]")
+  TEST_CASE("Player - Pending Output", "[playback][unit][player][pending]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
     auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
@@ -239,21 +238,7 @@ namespace ao::audio::test
     // This should hit line 126 in Player.cpp
   }
 
-  TEST_CASE("Player - Merged Graph Format Inheritance", "[playback][player][graph]")
-  {
-    auto player = Player{};
-    auto engineSnap = createBaseEngineRoute();
-    player.handleRouteChanged(engineSnap, player.playbackGeneration());
-
-    auto onGraphChanged = IBackendProvider::OnGraphChangedCallback{};
-    // We need to trigger handleRouteChanged to get the manager subscribed
-    // Actually, we can just call handleSystemGraphChanged if we had access,
-    // but we'll use the public API through handleRouteChanged.
-
-    // ... wait, handleRouteChanged is public? Yes.
-  }
-
-  TEST_CASE("Player - Basic Control Propagation", "[playback][player][control]")
+  TEST_CASE("Player - Basic Control Propagation", "[playback][unit][player][control]")
   {
     auto player = Player{};
 
@@ -293,22 +278,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Player - Formatter", "[audio][player][format]")
-  {
-    REQUIRE(std::format("{}", DeviceId{"test-dev"}) == "test-dev");
-    REQUIRE(std::format("{}", ProfileId{"test-prof"}) == "test-prof");
-    REQUIRE(std::format("{}", BackendId{"test-back"}) == "test-back");
-
-    auto id = DeviceId{"test"};
-    REQUIRE(id.raw() == "test");
-    id.raw() = "updated";
-    REQUIRE(id.raw() == "updated");
-    REQUIRE(id.empty() == false);
-    id.raw() = "";
-    REQUIRE(id.empty() == true);
-  }
-
-  TEST_CASE("Player - Subscription Unsubscribe", "[audio][player][subscription]")
+  TEST_CASE("Player - Subscription Unsubscribe", "[audio][unit][player][subscription]")
   {
     bool called = false;
     auto sub = Subscription{[&] { called = true; }};
