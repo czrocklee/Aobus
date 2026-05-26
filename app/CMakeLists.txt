@@ -12,6 +12,7 @@ add_library(app_runtime STATIC
     rt/LibraryMutationService.cpp
     rt/ListSourceStore.cpp
     rt/ManualListSource.cpp
+    rt/NavigationHistory.cpp
     rt/WorkspaceService.cpp
     rt/NotificationService.cpp
     rt/TrackCommandService.cpp

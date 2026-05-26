@@ -67,6 +67,8 @@ add_executable(ao_test
     unit/runtime/ViewServiceTest.cpp
     unit/runtime/ConfigStoreTest.cpp
     unit/runtime/ManualListSourceTest.cpp
+    unit/runtime/NavigationHistoryTest.cpp
+    unit/runtime/WorkspaceNavigationTest.cpp
     unit/runtime/HeadlessShellTest.cpp
     unit/runtime/LibraryExportImportTest.cpp
 )

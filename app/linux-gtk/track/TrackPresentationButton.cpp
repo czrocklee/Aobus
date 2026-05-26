@@ -188,14 +188,8 @@ namespace ao::gtk
     _button.set_label(label);
 
     auto spec = rt::TrackPresentationSpec{*optSpec};
-    Glib::signal_idle().connect_once(
-      [this, viewId = _activeViewId, spec = std::move(spec)]
-      {
-        if (viewId != rt::kInvalidViewId)
-        {
-          _runtime.views().setPresentation(viewId, spec);
-        }
-      });
+    Glib::signal_idle().connect_once([this, spec = std::move(spec)]
+                                     { _runtime.workspace().setActivePresentation(spec); });
   }
 
   void TrackPresentationButton::onCreateCustomViewClicked()

@@ -8,7 +8,6 @@
 #include "StateTypes.h"
 #include "TrackPresentation.h"
 #include "ao/Type.h"
-#include <ao/rt/TrackField.h>
 
 #include <functional>
 #include <memory>
@@ -34,18 +33,6 @@ namespace ao::rt
     {
       ViewId viewId{};
       std::string filterExpression{};
-    };
-
-    struct SortChanged final
-    {
-      ViewId viewId{};
-      std::vector<TrackSortTerm> sortBy{};
-    };
-
-    struct GroupingChanged final
-    {
-      ViewId viewId{};
-      TrackGroupKey groupBy = TrackGroupKey::None;
     };
 
     struct SelectionChanged final
@@ -77,8 +64,6 @@ namespace ao::rt
     CreateTrackListViewReply createView(TrackListViewConfig const& initial, bool attached = true);
     void destroyView(ViewId viewId);
     void setFilter(ViewId viewId, std::string filterExpression);
-    void setSort(ViewId viewId, std::vector<TrackSortTerm> sortBy);
-    void setGrouping(ViewId viewId, TrackGroupKey groupBy);
     void setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
     TrackPresentationSpec setPresentation(ViewId viewId, std::string_view presentationId);
     void setSelection(ViewId viewId, std::vector<TrackId> selection);
@@ -88,8 +73,6 @@ namespace ao::rt
     Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);
     Subscription onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler);
     Subscription onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler);
-    Subscription onSortChanged(std::move_only_function<void(SortChanged const&)> handler);
-    Subscription onGroupingChanged(std::move_only_function<void(GroupingChanged const&)> handler);
     Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
     Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
     Subscription onListChanged(std::move_only_function<void(ListChanged const&)> handler);

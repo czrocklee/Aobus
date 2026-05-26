@@ -8,6 +8,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 
@@ -128,7 +129,9 @@ namespace ao::rt::test
       // Setup grouped view in first runtime
       runtime.workspace().navigateTo(ListId{10});
       auto const viewId = runtime.workspace().layoutState().activeViewId;
-      runtime.views().setGrouping(viewId, TrackGroupKey::Artist);
+      auto const* artistPreset = builtinTrackPresentationPreset("artists");
+      REQUIRE(artistPreset != nullptr);
+      runtime.views().setPresentation(viewId, artistPreset->spec);
 
       auto const savedState = runtime.views().trackListState(viewId);
       CHECK(savedState.groupBy == TrackGroupKey::Artist);

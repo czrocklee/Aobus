@@ -10,9 +10,12 @@
 #include "app/UIState.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/WorkspaceService.h>
 
 #include <gtkmm/applicationwindow.h>
+#include <gtkmm/gestureclick.h>
 
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <utility>
@@ -36,6 +39,26 @@ namespace ao::gtk
     _shellLayout.context().shell.menuModel = _menuController->menuModel();
 
     _shellLayout.attachToWindow();
+
+    // Mouse back/forward navigation (buttons 8/9).
+    auto mouseNavGesture = Gtk::GestureClick::create();
+    mouseNavGesture->set_button(0); // listen to all buttons
+    constexpr int kMouseBackButton = 8;
+    constexpr int kMouseForwardButton = 9;
+
+    mouseNavGesture->signal_pressed().connect(
+      [this, mouseNavGesture](std::int32_t /*nPress*/, double /*x*/, double /*y*/)
+      {
+        if (auto const button = mouseNavGesture->get_current_button(); button == kMouseBackButton)
+        {
+          _runtime.workspace().goBack();
+        }
+        else if (button == kMouseForwardButton)
+        {
+          _runtime.workspace().goForward();
+        }
+      });
+    add_controller(mouseNavGesture);
   }
 
   MainWindow::~MainWindow()

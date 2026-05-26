@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/NavigationHistory.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -25,6 +27,30 @@
 
 namespace ao::rt
 {
+  namespace
+  {
+    class ReplayScope final
+    {
+    public:
+      explicit ReplayScope(bool& replaying)
+        : _replaying{replaying}, _previous{replaying}
+      {
+        _replaying = true;
+      }
+
+      ReplayScope(ReplayScope const&) = delete;
+      ReplayScope& operator=(ReplayScope const&) = delete;
+      ReplayScope(ReplayScope&&) = delete;
+      ReplayScope& operator=(ReplayScope&&) = delete;
+
+      ~ReplayScope() { _replaying = _previous; }
+
+    private:
+      bool& _replaying;
+      bool _previous;
+    };
+  }
+
   struct WorkspaceService::Impl final
   {
     ViewService& views;
@@ -32,10 +58,13 @@ namespace ao::rt
     LibraryMutationService& mutation;
     library::MusicLibrary& library;
     LayoutState layoutState;
+    NavigationHistory navigationHistory;
+    bool replayingNavigation = false;
     Subscription listsMutatedSub;
 
     Signal<ViewId> focusedViewChangedSignal;
     Signal<> customPresetsChangedSignal;
+    Signal<WorkspaceService::NavigationHistoryChanged const&> navigationHistoryChangedSignal;
     std::vector<CustomTrackPresentationPreset> customPresets;
 
     Impl(WorkspaceService* self,
@@ -67,6 +96,167 @@ namespace ao::rt
           }
         });
     }
+
+    std::optional<NavigationPoint> snapshotActiveView() const
+    {
+      auto const viewId = layoutState.activeViewId;
+
+      if (viewId == kInvalidViewId)
+      {
+        return std::nullopt;
+      }
+
+      auto const state = views.trackListState(viewId);
+
+      if (state.lifecycle == ViewLifecycleState::Destroyed)
+      {
+        return std::nullopt;
+      }
+
+      return NavigationPoint{
+        .listId = state.listId, .filterExpression = state.filterExpression, .presentation = state.presentation};
+    }
+
+    void commitActiveViewIfRequested(NavigationOptions const& options)
+    {
+      if (!options.recordHistory || replayingNavigation)
+      {
+        return;
+      }
+
+      if (auto optPoint = snapshotActiveView())
+      {
+        auto const beforeBack = navigationHistory.canGoBack();
+        auto const beforeForward = navigationHistory.canGoForward();
+
+        navigationHistory.commit(std::move(*optPoint));
+
+        if (beforeBack != navigationHistory.canGoBack() || beforeForward != navigationHistory.canGoForward())
+        {
+          emitNavigationHistoryChanged();
+        }
+      }
+    }
+
+    void emitNavigationHistoryChanged()
+    {
+      navigationHistoryChangedSignal.emit(NavigationHistoryChanged{
+        .canGoBack = navigationHistory.canGoBack(), .canGoForward = navigationHistory.canGoForward()});
+    }
+
+    ViewId resolveOrCreateTargetView(NavigationTarget const& target, ViewService& viewsSvc)
+    {
+      if (std::holds_alternative<ListId>(target))
+      {
+        auto const listId = std::get<ListId>(target);
+
+        for (auto const& record : viewsSvc.listViews())
+        {
+          if (record.kind == ViewKind::TrackList)
+          {
+            if (auto const& state = viewsSvc.trackListState(record.id);
+                state.listId == listId && state.filterExpression.empty())
+            {
+              return record.id;
+            }
+          }
+        }
+
+        auto const res = viewsSvc.createView(TrackListViewConfig{.listId = listId}, true);
+        return res.viewId;
+      }
+
+      if (std::holds_alternative<std::string>(target))
+      {
+        auto const query = std::get<std::string>(target);
+        auto const res = viewsSvc.createView(TrackListViewConfig{.filterExpression = query}, true);
+        return res.viewId;
+      }
+
+      if (std::holds_alternative<GlobalViewKind>(target))
+      {
+        if (std::get<GlobalViewKind>(target) == GlobalViewKind::AllTracks)
+        {
+          return resolveOrCreateTargetView(ListId{kAllTracksListId}, viewsSvc);
+        }
+      }
+
+      return kInvalidViewId;
+    }
+
+    void focusView(ViewId viewId)
+    {
+      if (!std::ranges::contains(layoutState.openViews, viewId))
+      {
+        layoutState.openViews.push_back(viewId);
+      }
+
+      layoutState.activeViewId = viewId;
+      layoutState.revision++;
+      focusedViewChangedSignal.emit(viewId);
+    }
+
+    std::optional<TrackPresentationSpec> presentationForId(std::string_view id) const
+    {
+      if (auto const* preset = builtinTrackPresentationPreset(id))
+      {
+        return preset->spec;
+      }
+
+      for (auto const& custom : customPresets)
+      {
+        if (custom.spec.id == id)
+        {
+          return custom.spec;
+        }
+      }
+
+      return std::nullopt;
+    }
+
+    void restoreNavigationPoint(NavigationPoint const& point)
+    {
+      // Find an existing non-destroyed view matching listId and filterExpression.
+      auto matchingViewId = kInvalidViewId;
+
+      for (auto const& record : views.listViews())
+      {
+        if (record.kind != ViewKind::TrackList)
+        {
+          continue;
+        }
+
+        if (record.lifecycle == ViewLifecycleState::Destroyed)
+        {
+          continue;
+        }
+
+        if (auto const& state = views.trackListState(record.id);
+            state.listId == point.listId && state.filterExpression == point.filterExpression)
+        {
+          matchingViewId = record.id;
+          break;
+        }
+      }
+
+      if (matchingViewId == kInvalidViewId)
+      {
+        auto config = TrackListViewConfig{.listId = point.listId, .filterExpression = point.filterExpression};
+        auto const res = views.createView(config, true);
+        matchingViewId = res.viewId;
+      }
+
+      if (!std::ranges::contains(layoutState.openViews, matchingViewId))
+      {
+        layoutState.openViews.push_back(matchingViewId);
+      }
+
+      layoutState.activeViewId = matchingViewId;
+      layoutState.revision++;
+      focusedViewChangedSignal.emit(matchingViewId);
+
+      views.setPresentation(matchingViewId, point.presentation);
+    }
   };
 
   WorkspaceService::WorkspaceService(ViewService& views,
@@ -82,6 +272,12 @@ namespace ao::rt
   Subscription WorkspaceService::onFocusedViewChanged(std::move_only_function<void(ViewId)> handler)
   {
     return _impl->focusedViewChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription WorkspaceService::onNavigationHistoryChanged(
+    std::move_only_function<void(NavigationHistoryChanged const&)> handler)
+  {
+    return _impl->navigationHistoryChangedSignal.connect(std::move(handler));
   }
 
   LayoutState WorkspaceService::layoutState() const
@@ -105,65 +301,127 @@ namespace ao::rt
     }
   }
 
-  void WorkspaceService::navigateTo(std::variant<ListId, std::string, GlobalViewKind> const& target)
+  void WorkspaceService::navigateTo(NavigationTarget const& target, NavigationOptions const options)
   {
-    auto targetViewId = rt::kInvalidViewId;
+    auto const targetViewId = _impl->resolveOrCreateTargetView(target, _impl->views);
 
-    if (std::holds_alternative<ListId>(target))
-    {
-      auto const listId = ListId{std::get<ListId>(target)};
-
-      for (auto const& record : _impl->views.listViews())
-      {
-        if (record.kind == ViewKind::TrackList)
-        {
-          if (auto const& state = _impl->views.trackListState(record.id);
-              state.listId == listId && state.filterExpression.empty())
-          {
-            targetViewId = record.id;
-            break;
-          }
-        }
-      }
-
-      if (targetViewId == rt::kInvalidViewId)
-      {
-        auto const res = _impl->views.createView(TrackListViewConfig{.listId = listId}, true);
-        targetViewId = res.viewId;
-      }
-    }
-    else if (std::holds_alternative<std::string>(target))
-    {
-      auto const query = std::get<std::string>(target);
-      auto const res = _impl->views.createView(TrackListViewConfig{.filterExpression = query}, true);
-      targetViewId = res.viewId;
-    }
-    else if (std::holds_alternative<GlobalViewKind>(target))
-    {
-      if (auto const kind = std::get<GlobalViewKind>(target); kind == GlobalViewKind::AllTracks)
-      {
-        navigateTo(rt::kAllTracksListId);
-        return;
-      }
-    }
-
-    if (targetViewId != rt::kInvalidViewId)
-    {
-      APP_LOG_DEBUG("WorkspaceService: Navigating to existing viewId: {}", targetViewId.raw());
-
-      if (!std::ranges::contains(_impl->layoutState.openViews, targetViewId))
-      {
-        _impl->layoutState.openViews.push_back(targetViewId);
-      }
-
-      _impl->layoutState.activeViewId = targetViewId;
-      _impl->layoutState.revision++;
-      _impl->focusedViewChangedSignal.emit(targetViewId);
-    }
-    else
+    if (targetViewId == kInvalidViewId)
     {
       APP_LOG_DEBUG("WorkspaceService: Navigation failed to find or create target view");
+      return;
     }
+
+    APP_LOG_DEBUG("WorkspaceService: Navigating to viewId: {}", targetViewId.raw());
+    _impl->focusView(targetViewId);
+    _impl->commitActiveViewIfRequested(options);
+  }
+
+  void WorkspaceService::setActivePresentation(TrackPresentationSpec const& presentation,
+                                               NavigationOptions const options)
+  {
+    auto const viewId = _impl->layoutState.activeViewId;
+
+    if (viewId == kInvalidViewId)
+    {
+      return;
+    }
+
+    _impl->views.setPresentation(viewId, presentation);
+    _impl->commitActiveViewIfRequested(options);
+  }
+
+  TrackPresentationSpec WorkspaceService::setActivePresentation(std::string_view const presentationId,
+                                                                NavigationOptions const options)
+  {
+    auto const viewId = _impl->layoutState.activeViewId;
+
+    if (viewId == kInvalidViewId)
+    {
+      return {};
+    }
+
+    auto const optSpec = _impl->presentationForId(presentationId);
+
+    if (!optSpec)
+    {
+      return {};
+    }
+
+    auto const spec = normalizeTrackPresentationSpec(*optSpec);
+    _impl->views.setPresentation(viewId, spec);
+    _impl->commitActiveViewIfRequested(options);
+    return spec;
+  }
+
+  void WorkspaceService::jumpToAlbum(TrackId const trackId)
+  {
+    if (trackId == kInvalidTrackId)
+    {
+      return;
+    }
+
+    // Navigate to AllTracks without recording.
+    auto const allTracksTarget = NavigationTarget{ListId{kAllTracksListId}};
+    auto const targetViewId = _impl->resolveOrCreateTargetView(allTracksTarget, _impl->views);
+
+    if (targetViewId == kInvalidViewId)
+    {
+      return;
+    }
+
+    _impl->focusView(targetViewId);
+
+    // Apply album presentation without recording.
+    if (auto const* preset = builtinTrackPresentationPreset("albums"))
+    {
+      _impl->views.setPresentation(targetViewId, preset->spec);
+    }
+
+    // Reveal the track.
+    _impl->playback.revealTrack(trackId, targetViewId);
+
+    // Commit the final state once.
+    _impl->commitActiveViewIfRequested({.recordHistory = true});
+  }
+
+  bool WorkspaceService::goBack()
+  {
+    auto optPoint = _impl->navigationHistory.back();
+
+    if (!optPoint)
+    {
+      return false;
+    }
+
+    auto replay = ReplayScope{_impl->replayingNavigation};
+    _impl->restoreNavigationPoint(*optPoint);
+    _impl->emitNavigationHistoryChanged();
+    return true;
+  }
+
+  bool WorkspaceService::goForward()
+  {
+    auto optPoint = _impl->navigationHistory.forward();
+
+    if (!optPoint)
+    {
+      return false;
+    }
+
+    auto replay = ReplayScope{_impl->replayingNavigation};
+    _impl->restoreNavigationPoint(*optPoint);
+    _impl->emitNavigationHistoryChanged();
+    return true;
+  }
+
+  bool WorkspaceService::canGoBack() const noexcept
+  {
+    return _impl->navigationHistory.canGoBack();
+  }
+
+  bool WorkspaceService::canGoForward() const noexcept
+  {
+    return _impl->navigationHistory.canGoForward();
   }
 
   void WorkspaceService::closeView(ViewId const viewId)
@@ -301,5 +559,10 @@ namespace ao::rt
     {
       setFocusedView(_impl->layoutState.openViews.front());
     }
+
+    // Commit the restored view as the initial navigation point so the user
+    // can navigate back to it after moving elsewhere.  canGoBack remains
+    // false until a subsequent navigateTo commits a second point.
+    _impl->commitActiveViewIfRequested({.recordHistory = true});
   }
 } // namespace ao::rt

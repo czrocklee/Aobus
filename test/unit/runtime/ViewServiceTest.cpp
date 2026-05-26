@@ -242,7 +242,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - setGrouping updates state and projection", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation updates state and projection", "[app][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -250,56 +250,35 @@ namespace ao::rt::test
     auto const result = service.createView({}, true);
     auto const viewId = ViewId{result.viewId};
 
-    service.setGrouping(viewId, TrackGroupKey::Genre);
+    auto const* preset = builtinTrackPresentationPreset("genres");
+    REQUIRE(preset != nullptr);
+    service.setPresentation(viewId, preset->spec);
     auto const snap = service.trackListState(viewId);
 
     CHECK(snap.groupBy == TrackGroupKey::Genre);
-
-    auto const expected = std::vector{TrackSortField::Genre,
-                                      TrackSortField::Artist,
-                                      TrackSortField::Album,
-                                      TrackSortField::DiscNumber,
-                                      TrackSortField::TrackNumber,
-                                      TrackSortField::Title};
-    REQUIRE(snap.sortBy.size() == expected.size());
-
-    for (std::size_t i = 0; i < expected.size(); ++i)
-    {
-      CHECK(snap.sortBy[i].field == expected[i]);
-    }
+    CHECK(snap.presentation.id == "genres");
   }
 
-  TEST_CASE("ViewService - setGrouping no-ops on same value", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation no-ops on same value", "[app][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
 
-    auto const result = service.createView({.groupBy = TrackGroupKey::Year}, true);
+    auto const* preset = builtinTrackPresentationPreset("years");
+    REQUIRE(preset != nullptr);
+    auto const result = service.createView({}, true);
+    service.setPresentation(result.viewId, preset->spec);
     auto const snap = service.trackListState(result.viewId);
     auto const revBefore = snap.revision;
 
-    service.setGrouping(result.viewId, TrackGroupKey::Year);
+    service.setPresentation(result.viewId, preset->spec);
     auto const snapAfter = service.trackListState(result.viewId);
 
     CHECK(snapAfter.revision == revBefore);
     CHECK(snapAfter.groupBy == TrackGroupKey::Year);
   }
 
-  TEST_CASE("ViewService - setGrouping publishes ViewGroupingChanged", "[app][runtime][view]")
-  {
-    auto env = TestEnv{};
-    auto service = env.makeService();
-
-    auto const result = service.createView({}, true);
-
-    auto received = TrackGroupKey::None;
-    auto const sub = service.onGroupingChanged([&](auto const& ev) { received = ev.groupBy; });
-
-    service.setGrouping(result.viewId, TrackGroupKey::Composer);
-    CHECK(received == TrackGroupKey::Composer);
-  }
-
-  TEST_CASE("ViewService - setGrouping publishes PresentationChanged", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation publishes PresentationChanged", "[app][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -309,13 +288,15 @@ namespace ao::rt::test
     auto received = TrackPresentationSpec{};
     auto const sub = service.onPresentationChanged([&](auto const& ev) { received = ev.presentation; });
 
-    service.setGrouping(result.viewId, TrackGroupKey::Album);
+    auto const* preset = builtinTrackPresentationPreset("albums");
+    REQUIRE(preset != nullptr);
+    service.setPresentation(result.viewId, preset->spec);
 
     CHECK(received.id == "albums");
     CHECK(received.groupBy == TrackGroupKey::Album);
   }
 
-  TEST_CASE("ViewService - setGrouping no-ops does not publish event", "[app][runtime][view]")
+  TEST_CASE("ViewService - setPresentation no-ops does not publish event", "[app][runtime][view]")
   {
     auto env = TestEnv{};
     auto service = env.makeService();
@@ -323,18 +304,22 @@ namespace ao::rt::test
     auto const result = service.createView({}, true);
 
     std::int32_t callCount = 0;
-    auto const sub = service.onGroupingChanged([&](auto const&) { ++callCount; });
+    auto const sub = service.onPresentationChanged([&](auto const&) { ++callCount; });
 
     // First change should publish
-    service.setGrouping(result.viewId, TrackGroupKey::Artist);
+    auto const* artistPreset = builtinTrackPresentationPreset("artists");
+    REQUIRE(artistPreset != nullptr);
+    service.setPresentation(result.viewId, artistPreset->spec);
     CHECK(callCount == 1);
 
     // No-op should not publish again
-    service.setGrouping(result.viewId, TrackGroupKey::Artist);
+    service.setPresentation(result.viewId, artistPreset->spec);
     CHECK(callCount == 1);
 
     // Different change should publish
-    service.setGrouping(result.viewId, TrackGroupKey::Album);
+    auto const* albumPreset = builtinTrackPresentationPreset("albums");
+    REQUIRE(albumPreset != nullptr);
+    service.setPresentation(result.viewId, albumPreset->spec);
     CHECK(callCount == 2);
   }
 }

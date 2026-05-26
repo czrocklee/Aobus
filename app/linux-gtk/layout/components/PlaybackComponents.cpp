@@ -24,7 +24,6 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 
 #include <gdkmm/cursor.h>
@@ -220,25 +219,7 @@ namespace ao::gtk::layout
 
         switch (_action)
         {
-          case Action::JumpToAlbum:
-            _runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks);
-
-            if (auto const viewId = _runtime.workspace().layoutState().activeViewId; viewId != rt::kInvalidViewId)
-            {
-              APP_LOG_DEBUG("[PID {}] PlaybackImage: Navigated to AllTracks, activeViewId: {}. Setting grouping to "
-                            "Album and revealing track {}",
-                            getpid(),
-                            viewId.raw(),
-                            _currentTrackId.raw());
-              _runtime.views().setGrouping(viewId, rt::TrackGroupKey::Album);
-              _runtime.playback().revealTrack(_currentTrackId, viewId);
-            }
-            else
-            {
-              APP_LOG_DEBUG("[PID {}] PlaybackImage: Navigation failed to yield an active view ID", getpid());
-            }
-
-            break;
+          case Action::JumpToAlbum: _runtime.workspace().jumpToAlbum(_currentTrackId); break;
 
           case Action::None:
           default: break;

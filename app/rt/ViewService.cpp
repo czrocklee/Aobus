@@ -10,7 +10,6 @@
 #include <ao/rt/SmartListSource.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackDetailProjection.h>
-#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackSource.h>
@@ -41,8 +40,7 @@ namespace ao::rt
     void applyPresentation(ViewEntry& entry)
     {
       // Derive sort and redundant fields from the built-in preset whose group-by
-      // matches the entry.  The presentation id on the state may not have been
-      // updated yet (e.g. when setGrouping is called directly).
+      // matches the entry.
       auto const& presets = builtinTrackPresentationPresets();
       auto const* preset = builtinTrackPresentationPreset(kDefaultTrackPresentationId);
 
@@ -101,8 +99,6 @@ namespace ao::rt
     Signal<TrackListProjectionChanged const&> projectionChangedSignal;
     Signal<ViewService::FilterChanged const&> filterChangedSignal;
     Signal<FilterStatusChanged const&> filterStatusChangedSignal;
-    Signal<ViewService::SortChanged const&> sortChangedSignal;
-    Signal<ViewService::GroupingChanged const&> groupingChangedSignal;
     Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
     Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
     Signal<ViewService::ListChanged const&> listChangedSignal;
@@ -134,16 +130,6 @@ namespace ao::rt
   Subscription ViewService::onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler)
   {
     return _impl->filterStatusChangedSignal.connect(std::move(handler));
-  }
-
-  Subscription ViewService::onSortChanged(std::move_only_function<void(SortChanged const&)> handler)
-  {
-    return _impl->sortChangedSignal.connect(std::move(handler));
-  }
-
-  Subscription ViewService::onGroupingChanged(std::move_only_function<void(GroupingChanged const&)> handler)
-  {
-    return _impl->groupingChangedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler)
@@ -270,54 +256,6 @@ namespace ao::rt
     }
 
     _impl->filterStatusChangedSignal.emit(status);
-  }
-
-  void ViewService::setSort(ViewId viewId, std::vector<TrackSortTerm> sortBy)
-  {
-    auto it = _impl->views.find(viewId);
-
-    if (it == _impl->views.end())
-    {
-      return;
-    }
-
-    it->second.state.sortBy = sortBy;
-    it->second.state.revision++;
-    _impl->sortChangedSignal.post(_impl->executor, ViewService::SortChanged{.viewId = viewId, .sortBy = sortBy});
-
-    if (it->second.projection)
-    {
-      if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(it->second.projection.get()))
-      {
-        auto spec = it->second.state.presentation;
-        spec.sortBy = std::move(sortBy);
-        trackListProj->setPresentation(spec);
-      }
-    }
-  }
-
-  void ViewService::setGrouping(ViewId viewId, TrackGroupKey groupBy)
-  {
-    auto it = _impl->views.find(viewId);
-
-    if (it == _impl->views.end())
-    {
-      return;
-    }
-
-    if (it->second.state.groupBy == groupBy)
-    {
-      return;
-    }
-
-    it->second.state.groupBy = groupBy;
-    it->second.state.revision++;
-    applyPresentation(it->second);
-    _impl->groupingChangedSignal.post(
-      _impl->executor, ViewService::GroupingChanged{.viewId = viewId, .groupBy = groupBy});
-    _impl->presentationChangedSignal.post(
-      _impl->executor,
-      ViewService::PresentationChanged{.viewId = viewId, .presentation = it->second.state.presentation});
   }
 
   void ViewService::setPresentation(ViewId viewId, TrackPresentationSpec const& presentation)

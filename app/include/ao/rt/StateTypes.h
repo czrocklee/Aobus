@@ -105,7 +105,6 @@ namespace ao::rt
   {
     ViewId activeViewId = kInvalidViewId;
     std::vector<ViewId> openViews{};
-    std::vector<ViewId> navigationStack{};
     std::uint64_t revision = 0;
   };
 
