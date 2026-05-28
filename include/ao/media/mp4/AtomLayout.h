@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "ao/utility/ByteView.h"
+
 #include <boost/endian/buffers.hpp>
 
 #include <array>
@@ -25,7 +27,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(AtomLayout) == 8);
   static_assert(alignof(AtomLayout) == 1);
-  static_assert(std::is_trivial_v<AtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<AtomLayout>);
 
   struct DataAtomLayout
   {
@@ -46,7 +48,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(DataAtomLayout) == 24);
   static_assert(alignof(DataAtomLayout) == 1);
-  static_assert(std::is_trivial_v<DataAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<DataAtomLayout>);
 
   struct TrknAtomLayout
   {
@@ -64,7 +66,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(TrknAtomLayout) == TrknAtomLayout::kByteCount);
   static_assert(alignof(TrknAtomLayout) == 1);
-  static_assert(std::is_trivial_v<TrknAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<TrknAtomLayout>);
 
   struct DiskAtomLayout
   {
@@ -81,7 +83,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(DiskAtomLayout) == DiskAtomLayout::kByteCount);
   static_assert(alignof(DiskAtomLayout) == 1);
-  static_assert(std::is_trivial_v<DiskAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<DiskAtomLayout>);
 
   // mdhd (Media Header) - timescale and duration
   // Version 0 layout (most common):
@@ -109,7 +111,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(MdhdAtomLayout) == MdhdAtomLayout::kByteCount);
   static_assert(alignof(MdhdAtomLayout) == 1);
-  static_assert(std::is_trivial_v<MdhdAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<MdhdAtomLayout>);
 
   // stsd (Sample Description Box)
   // Fixed header: length + type + version/flags + entryCount (16 bytes)
@@ -126,7 +128,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(StsdAtomLayout) == StsdAtomLayout::kByteCount);
   static_assert(alignof(StsdAtomLayout) == 1);
-  static_assert(std::is_trivial_v<StsdAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<StsdAtomLayout>);
 
   // stts (Time To Sample Box)
   // Fixed header: length + type + version/flags + entryCount (16 bytes)
@@ -149,7 +151,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(SttsAtomLayout) == SttsAtomLayout::kByteCount);
   static_assert(alignof(SttsAtomLayout) == 1);
-  static_assert(std::is_trivial_v<SttsAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<SttsAtomLayout>);
 
   // stsz (Sample Size Box)  // Fixed header: length + type + version/flags + sampleSize + sampleCount (20 bytes)
   // Followed by sampleCount entries of 4 bytes each (when sampleSize == 0)
@@ -171,7 +173,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(StszAtomLayout) == StszAtomLayout::kByteCount);
   static_assert(alignof(StszAtomLayout) == 1);
-  static_assert(std::is_trivial_v<StszAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<StszAtomLayout>);
 
   // stsc (Sample To Chunk Box)
   // Fixed header: length + type + version/flags + entryCount (16 bytes)
@@ -195,7 +197,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(StscAtomLayout) == StscAtomLayout::kByteCount);
   static_assert(alignof(StscAtomLayout) == 1);
-  static_assert(std::is_trivial_v<StscAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<StscAtomLayout>);
 
   // stco (Chunk Offset Box - 32-bit)
   // Fixed header: length + type + version/flags + entryCount (16 bytes)
@@ -217,7 +219,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(StcoAtomLayout) == StcoAtomLayout::kByteCount);
   static_assert(alignof(StcoAtomLayout) == 1);
-  static_assert(std::is_trivial_v<StcoAtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<StcoAtomLayout>);
 
   // co64 (Chunk Offset Box - 64-bit)
   // Fixed header: length + type + version/flags + entryCount (16 bytes)
@@ -239,7 +241,7 @@ namespace ao::media::mp4
 
   static_assert(sizeof(Co64AtomLayout) == Co64AtomLayout::kByteCount);
   static_assert(alignof(Co64AtomLayout) == 1);
-  static_assert(std::is_trivial_v<Co64AtomLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<Co64AtomLayout>);
 
   // AudioSampleEntry for stsd - contains audio codec info
   // Full AudioSampleEntry with header is 28 bytes:
@@ -272,5 +274,5 @@ namespace ao::media::mp4
 
   static_assert(sizeof(AudioSampleEntryLayout) == AudioSampleEntryLayout::kByteCount);
   static_assert(alignof(AudioSampleEntryLayout) == 1);
-  static_assert(std::is_trivial_v<AudioSampleEntryLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<AudioSampleEntryLayout>);
 } // namespace ao::media::mp4

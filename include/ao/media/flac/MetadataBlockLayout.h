@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "ao/utility/ByteView.h"
+
 #include <boost/endian/buffers.hpp>
 
 #include <array>
@@ -35,7 +37,7 @@ namespace ao::media::flac
 
   static_assert(sizeof(MetadataBlockLayout) == 4);
   static_assert(alignof(MetadataBlockLayout) == 1);
-  static_assert(std::is_trivial_v<MetadataBlockLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<MetadataBlockLayout>);
 
   struct StreamInfoLayout
   {
@@ -53,5 +55,5 @@ namespace ao::media::flac
 
   static_assert(sizeof(StreamInfoLayout) == StreamInfoLayout::kSize, "StreamInfoDataLayout should be 34 bytes");
   static_assert(alignof(StreamInfoLayout) == 1);
-  static_assert(std::is_trivial_v<StreamInfoLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<StreamInfoLayout>);
 } // namespace ao::media::flac

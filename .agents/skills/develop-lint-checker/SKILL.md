@@ -5,7 +5,7 @@ description: Guides the development of custom Clang-Tidy lint checkers for Aobus
 
 # Developing Lint Checkers in Aobus
 
-This guide provides the mandatory workflow and debugging strategies for developing custom Clang-Tidy lint checks in the Aobus codebase. Aobus relies heavily on custom AST matchers to enforce C++23 standards and Modern C++ paradigms.
+This guide provides the mandatory workflow and debugging strategies for developing custom Clang-Tidy lint checks in the Aobus codebase. Aobus relies heavily on custom AST matchers to enforce C++26 standards and Modern C++ paradigms.
 
 ## 1. Test-Driven Development (TDD) Workflow
 
@@ -44,7 +44,7 @@ Always prioritize integration tests. You must define the expected behavior befor
 ### Raw AST Dump (supplement)
 
 ```bash
-nix-shell -p clang-tools --run "clang++ -std=c++23 -fsyntax-only -Xclang -ast-dump scratch.cpp" 2>&1 > /tmp/ast.txt
+nix-shell -p clang-tools --run "clang++ -std=c++26 -fsyntax-only -Xclang -ast-dump scratch.cpp" 2>&1 > /tmp/ast.txt
 ```
 
 ### ⚠️ Common Pitfalls

@@ -135,7 +135,7 @@ run_fix() {
             return 1
         fi
 
-        if ! g++ -std=c++23 -fsyntax-only -I"${PROJECT_ROOT}/include" -I"${PROJECT_ROOT}/lib" -I"$TEST_TMP" "$FIXED_FILE"; then
+        if ! g++ -std=c++26 -fsyntax-only -I"${PROJECT_ROOT}/include" -I"${PROJECT_ROOT}/lib" -I"$TEST_TMP" "$FIXED_FILE"; then
             echo "ERROR: Auto-Fix Compilation FAILED for $FNAME"
             return 1
         fi

@@ -4,7 +4,7 @@
 # Compiler and linker configuration for the Aobus project.
 
 # ── C++ Standard ────────────────────────────────────────────────────────────
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 
 # ── Sanitizers ──────────────────────────────────────────────────────────────
 if(AOBUS_ENABLE_ASAN)

@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include "ao/utility/ByteView.h"
+
 #include <boost/endian/buffers.hpp>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
 
 namespace ao::tag::mpeg::id3v2
 {
@@ -22,7 +23,7 @@ namespace ao::tag::mpeg::id3v2
 
   static_assert(sizeof(EncodedSize) == 4);
   static_assert(alignof(EncodedSize) == 1);
-  static_assert(std::is_trivial_v<EncodedSize>);
+  static_assert(utility::layout::kIsBinaryLayoutType<EncodedSize>);
 
   inline std::size_t decodeSize(EncodedSize size)
   {
@@ -69,7 +70,7 @@ namespace ao::tag::mpeg::id3v2
 
   static_assert(sizeof(HeaderLayout) == HeaderLayout::kSize);
   static_assert(alignof(HeaderLayout) == 1);
-  static_assert(std::is_trivial_v<HeaderLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<HeaderLayout>);
 
   struct V22CommonFrameLayout
   {
@@ -81,7 +82,7 @@ namespace ao::tag::mpeg::id3v2
 
   static_assert(sizeof(V22CommonFrameLayout) == V22CommonFrameLayout::kSize);
   static_assert(alignof(V22CommonFrameLayout) == 1);
-  static_assert(std::is_trivial_v<V22CommonFrameLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<V22CommonFrameLayout>);
 
   enum class Encoding : std::uint8_t
   {
@@ -89,39 +90,45 @@ namespace ao::tag::mpeg::id3v2
     Ucs2 = 1U
   };
 
-  struct V22TextFrameLayout : V22CommonFrameLayout
+  struct V22TextFrameLayout
   {
     static constexpr std::size_t kSize = 7;
     using CommonLayout = V22CommonFrameLayout;
+
+    V22CommonFrameLayout common;
     Encoding encoding;
     // text
   };
 
   static_assert(sizeof(V22TextFrameLayout) == V22TextFrameLayout::kSize);
   static_assert(alignof(V22TextFrameLayout) == 1);
-  static_assert(std::is_trivial_v<V22TextFrameLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<V22TextFrameLayout>);
 
-  struct V22CommentFrameLayout : V22CommonFrameLayout
+  struct V22CommentFrameLayout
   {
     static constexpr std::size_t kSize = 10;
     using CommonLayout = V22CommonFrameLayout;
+
+    V22CommonFrameLayout common;
     Encoding encoding;
     std::array<char, kId22Size> language;
   };
 
   static_assert(sizeof(V22CommentFrameLayout) == V22CommentFrameLayout::kSize);
   static_assert(alignof(V22CommentFrameLayout) == 1);
-  static_assert(std::is_trivial_v<V22CommentFrameLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<V22CommentFrameLayout>);
 
   enum class PictureType : std::uint8_t
   {
     FrontCover = 3
   };
 
-  struct V22PictureFrameLayout : V22CommonFrameLayout
+  struct V22PictureFrameLayout
   {
     static constexpr std::size_t kSize = 11;
     using CommonLayout = V22CommonFrameLayout;
+
+    V22CommonFrameLayout common;
     Encoding encoding;
     std::array<char, kId22Size> format;
     PictureType type;
@@ -131,7 +138,7 @@ namespace ao::tag::mpeg::id3v2
 
   static_assert(sizeof(V22PictureFrameLayout) == V22PictureFrameLayout::kSize);
   static_assert(alignof(V22PictureFrameLayout) == 1);
-  static_assert(std::is_trivial_v<V22PictureFrameLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<V22PictureFrameLayout>);
 
   inline std::size_t frameSize(V22CommonFrameLayout const& layout)
   {
@@ -149,19 +156,21 @@ namespace ao::tag::mpeg::id3v2
 
   static_assert(sizeof(V23CommonFrameLayout) == V23CommonFrameLayout::kSize);
   static_assert(alignof(V23CommonFrameLayout) == 1);
-  static_assert(std::is_trivial_v<V23CommonFrameLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<V23CommonFrameLayout>);
 
-  struct V23TextFrameLayout : V23CommonFrameLayout
+  struct V23TextFrameLayout
   {
     static constexpr std::size_t kSize = 11;
     using CommonLayout = V23CommonFrameLayout;
+
+    V23CommonFrameLayout common;
     Encoding encoding;
     // text
   };
 
   static_assert(sizeof(V23TextFrameLayout) == V23TextFrameLayout::kSize);
   static_assert(alignof(V23TextFrameLayout) == 1);
-  static_assert(std::is_trivial_v<V23TextFrameLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<V23TextFrameLayout>);
 
   inline std::size_t frameSize(V23CommonFrameLayout const& layout)
   {
@@ -179,7 +188,7 @@ namespace ao::tag::mpeg::id3v2
 
   static_assert(sizeof(V24CommonFrameLayout) == V24CommonFrameLayout::kSize);
   static_assert(alignof(V24CommonFrameLayout) == 1);
-  static_assert(std::is_trivial_v<V24CommonFrameLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<V24CommonFrameLayout>);
 
   inline std::size_t frameSize(V24CommonFrameLayout const& layout)
   {

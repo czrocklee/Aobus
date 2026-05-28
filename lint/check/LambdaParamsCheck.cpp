@@ -1,7 +1,9 @@
 #include "check/LambdaParamsCheck.h"
+
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Lex/Lexer.h"
+
 #include <clang/AST/ExprCXX.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
@@ -32,7 +34,7 @@ namespace clang::tidy::readability
     {
       // We found a lambda with explicit but empty parameters.
       // We need to check if they can be safely removed.
-      // In C++23, nearly all empty parameter lists can be omitted even with
+      // In C++26, nearly all empty parameter lists can be omitted even with
       // mutable, noexcept, etc.
 
       // We'll use the lexer to find the parentheses.

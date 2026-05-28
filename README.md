@@ -7,18 +7,18 @@
 <h1 align="center">Aobus</h1>
 
 <p align="center">
-  <strong>A high-performance, Bit-Perfect audio engine and music library built with C++23.</strong>
+  <strong>A high-performance, Bit-Perfect audio engine and music library built with C++26.</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/C%2B%2B-23-blue.svg" alt="C++23">
+  <img src="https://img.shields.io/badge/C%2B%2B-26-blue.svg" alt="C++26">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/Status-Active-brightgreen.svg" alt="Status">
 </p>
 
 ---
 
-Aobus (pronounced /'eɪ.oʊ.bʌs/) is a modern music application designed for audiophiles who demand uncompromising sound quality and architectural elegance. Combining the robustness of **LMDB** storage with the power of **C++23**, Aobus bridges the gap between low-level audio engineering and high-level library management.
+Aobus (pronounced /'eɪ.oʊ.bʌs/) is a modern music application designed for audiophiles who demand uncompromising sound quality and architectural elegance. Combining the robustness of **LMDB** storage with the power of **C++26**, Aobus bridges the gap between low-level audio engineering and high-level library management.
 
 ## 🌟 Key Features
 

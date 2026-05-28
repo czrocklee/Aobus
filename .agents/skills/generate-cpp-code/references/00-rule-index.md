@@ -4,7 +4,7 @@ Use this index to choose focused examples before writing or editing Aobus C++ co
 
 | Rule(s) | Topic | Snippet file |
 | --- | --- | --- |
-| 1.1 | C++23 target, no modules | `01-style-and-structure.md` |
+| 1.1 | C++26 target, no modules | `01-style-and-structure.md` |
 | 2.1 | Formatting, blank lines around control blocks and test macros | `01-style-and-structure.md` |
 | 2.2 | Naming conventions | `01-style-and-structure.md` |
 | 2.3 | Header guard policy | `01-style-and-structure.md` |
@@ -16,7 +16,7 @@ Use this index to choose focused examples before writing or editing Aobus C++ co
 | 2.9 | Output and runtime diagnostics | `02-types-and-modern-cpp.md` |
 | 3.1 | C++20 concepts, format, span, ranges, no-unique-address, prefix/suffix, designated init, `jthread` | `02-types-and-modern-cpp.md` |
 | 3.2 | C++17 optional, variant, string_view, if constexpr, structured binding, init-statement, unused handling | `02-types-and-modern-cpp.md` |
-| 3.3 | C++23 `std::expected` via `ao::Result` | `03-design-threading-and-errors.md` |
+| 3.3 | Modern C++ `std::expected` via `ao::Result` | `03-design-threading-and-errors.md` |
 | 3.4 | RAII, `override`, member init, `noexcept`, initialization, return syntax, lambdas | `02-types-and-modern-cpp.md`, `03-design-threading-and-errors.md` |
 | 4.1 | Trivial getters/setters inline in headers | `03-design-threading-and-errors.md` |
 | 4.2 | Class design, `final`, type exposure, Pimpl | `03-design-threading-and-errors.md` |
@@ -35,7 +35,7 @@ truth for choosing between `ao::Result<T>`, `std::optional<T>`, and exceptions.
 
 Use this checklist when auditing generated code against `CONTRIBUTING.md`:
 
-- 1.1: C++23 without modules.
+- 1.1: C++26 without modules.
 - 2.1.1-2.1.2: clang-format style; blank lines around control blocks and top-level test macros; no leading/trailing blank lines inside blocks; comment-specific `if` exception.
 - 2.2.1-2.2.6: `PascalCase` types, `camelCase` functions/variables, `_camelCase` class data members, plain struct members, `kCamelCase` constants, enum-value casing by enum kind.
 - 2.3.1: `#pragma once` headers.

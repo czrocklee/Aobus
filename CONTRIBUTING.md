@@ -4,7 +4,7 @@ This guide defines Aobus's C++ coding conventions.
 Rules are numbered for easy reference in reviews and tooling.
 
 - 1\. C++ Standard
-  - 1.1. Target `C++23` without modules
+  - 1.1. Target `C++26` without modules
 - 2\. Code Style
   - 2.1. Indentation & Formatting
     - 2.1.1. Use `clang-format`
@@ -78,7 +78,7 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.2.8. Do not use casts to suppress unused warnings.
       - 3.2.8.1. Never-used function parameters: use `Type /*name*/` (anonymous parameter).
       - 3.2.8.2. Conditionally-used parameters, local variables, and structured bindings: use `[[maybe_unused]]`.
-  - 3.3. C++23 Features
+  - 3.3. Modern C++ Features (C++23/26)
     - 3.3.1. Use `std::expected<T, E>` for operations that can fail recoverably
       - Use the project alias `ao::Result<T>` (defaults to `ao::Result<>` for `void`), defined in `include/ao/Error.h`
       - The error type is `ao::Error`, a struct with an error `Code` enum and a `message` string

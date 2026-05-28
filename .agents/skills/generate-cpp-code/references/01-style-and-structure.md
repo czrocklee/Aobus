@@ -4,8 +4,8 @@ Covers `CONTRIBUTING.md` rules 1.1 and 2.1-2.6.
 
 ## C++ target (1.1)
 
-- Write C++23 code without modules.
-- Prefer standard-library C++23 facilities already used by the project over custom replacements.
+- Write C++26 code without modules.
+- Prefer standard-library C++26 facilities already used by the project over custom replacements.
 
 ## Formatting and control-block spacing (2.1)
 

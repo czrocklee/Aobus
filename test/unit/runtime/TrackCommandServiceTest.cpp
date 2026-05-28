@@ -54,7 +54,7 @@ namespace ao::rt::test
         testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optTrackView.has_value());
       auto builder = library::TrackBuilder::fromView(*optTrackView, testLib.library().dictionary());
-      CHECK(std::ranges::contains(builder.tags().names(), "Favorite"));
+      CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"Favorite"}));
     }
 
     SECTION("Adding an existing tag fails")

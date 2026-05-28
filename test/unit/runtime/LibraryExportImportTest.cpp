@@ -159,8 +159,8 @@ namespace ao::rt::test
         tagNames.emplace_back(dict.get(tid));
       }
 
-      REQUIRE(std::ranges::contains(tagNames, "rock"));
-      REQUIRE(std::ranges::contains(tagNames, "favorite"));
+      REQUIRE(std::ranges::contains(tagNames, std::string_view{"rock"}));
+      REQUIRE(std::ranges::contains(tagNames, std::string_view{"favorite"}));
 
       // Check custom
       auto const custom = view.custom();

@@ -106,11 +106,16 @@ namespace clang::tidy::readability
     }
 
     auto const rangeStr = getSourceText(range);
-    auto const valStr = getSourceText(val);
+    auto valStr = getSourceText(val);
 
     if (rangeStr.empty() || valStr.empty())
     {
       return;
+    }
+
+    if (isa<StringLiteral>(val->IgnoreParenImpCasts()))
+    {
+      valStr = "std::string_view{" + valStr + "}";
     }
 
     auto const replacementBase = "std::ranges::contains(" + rangeStr + ", " + valStr + ")";

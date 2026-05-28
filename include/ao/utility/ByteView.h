@@ -94,6 +94,10 @@ namespace ao::utility
   namespace layout
   {
     template<typename T>
+    inline constexpr bool kIsBinaryLayoutType =
+      std::is_trivially_copyable_v<T> && std::is_trivially_default_constructible_v<T> && std::is_standard_layout_v<T>;
+
+    template<typename T>
     inline T const* view(std::span<std::byte const> span) noexcept
     {
       detail::requireTrivialLayout<T>();

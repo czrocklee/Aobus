@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include "ao/utility/ByteView.h"
+
 #include <boost/endian/buffers.hpp>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
 
 namespace ao::tag::mpeg
 {
@@ -113,7 +114,7 @@ namespace ao::tag::mpeg
 
   static_assert(sizeof(FrameLayout) == 4);
   static_assert(alignof(FrameLayout) == 1);
-  static_assert(std::is_trivial_v<FrameLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<FrameLayout>);
 
   /**
    * @brief Layout of the Xing/Info VBR header.
@@ -136,5 +137,5 @@ namespace ao::tag::mpeg
 
   static_assert(sizeof(XingLayout) == 8);
   static_assert(alignof(XingLayout) == 1);
-  static_assert(std::is_trivial_v<XingLayout>);
+  static_assert(utility::layout::kIsBinaryLayoutType<XingLayout>);
 }

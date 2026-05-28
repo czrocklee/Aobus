@@ -306,7 +306,7 @@ namespace ao::gtk::layout::editor::test
       CHECK(group.getProp<std::int64_t>("spacing", -1) == 0);
 
       auto const classes = group.getLayout<std::vector<std::string>>("cssClasses", {});
-      CHECK(std::ranges::contains(classes, "linked"));
+      CHECK(std::ranges::contains(classes, std::string_view{"linked"}));
       CHECK(group.children.size() == 2);
     }
 

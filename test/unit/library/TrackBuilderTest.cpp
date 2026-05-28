@@ -124,8 +124,8 @@ namespace ao::library::test
     CHECK(builder.tags().names().size() == 2);
 
     // Check remaining tags
-    CHECK(std::ranges::contains(builder.tags().names(), "rock"));
-    CHECK(std::ranges::contains(builder.tags().names(), "blues"));
+    CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"rock"}));
+    CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"blues"}));
 
     // Clear
     builder.tags().clear();

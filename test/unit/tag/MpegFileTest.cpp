@@ -44,8 +44,8 @@ namespace ao::tag::mpeg::test
     void addTextFrame(std::vector<std::uint8_t>& data, char const* id, std::string_view text)
     {
       auto frame = id3v2::V23TextFrameLayout{};
-      std::memcpy(frame.id.data(), id, 4);
-      frame.size = static_cast<std::uint32_t>(text.size() + 1);
+      std::memcpy(frame.common.id.data(), id, 4);
+      frame.common.size = static_cast<std::uint32_t>(text.size() + 1);
       frame.encoding = id3v2::Encoding::Latin1;
       auto const* ptr = reinterpret_cast<std::uint8_t const*>(&frame);
       data.insert(data.end(), ptr, ptr + sizeof(frame));
@@ -55,8 +55,8 @@ namespace ao::tag::mpeg::test
     void addTxxxFrame(std::vector<std::uint8_t>& data, std::string_view description, std::string_view value)
     {
       auto frame = id3v2::V23TextFrameLayout{};
-      std::memcpy(frame.id.data(), "TXXX", 4);
-      frame.size = static_cast<std::uint32_t>(1 + description.size() + 1 + value.size());
+      std::memcpy(frame.common.id.data(), "TXXX", 4);
+      frame.common.size = static_cast<std::uint32_t>(1 + description.size() + 1 + value.size());
       frame.encoding = id3v2::Encoding::Latin1;
       auto const* ptr = reinterpret_cast<std::uint8_t const*>(&frame);
       data.insert(data.end(), ptr, ptr + sizeof(frame));
@@ -248,8 +248,8 @@ namespace ao::tag::mpeg::test
       data.insert(data.end(), hdrPtr, hdrPtr + sizeof(header));
 
       auto titleFrame = id3v2::V23TextFrameLayout{};
-      std::memcpy(titleFrame.id.data(), "TIT2", 4);
-      titleFrame.size = 500; // Claims 500 bytes, but body is only 20
+      std::memcpy(titleFrame.common.id.data(), "TIT2", 4);
+      titleFrame.common.size = 500; // Claims 500 bytes, but body is only 20
       titleFrame.encoding = id3v2::Encoding::Latin1;
       auto const* framePtr = reinterpret_cast<std::uint8_t const*>(&titleFrame);
       data.insert(data.end(), framePtr, framePtr + sizeof(titleFrame));

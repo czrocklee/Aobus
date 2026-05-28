@@ -140,7 +140,8 @@ namespace ao::tag::mpeg::id3v2
 
     std::string_view id() const
     {
-      auto const& id = static_cast<CommonFrameLayout const*>(_data)->id;
+      auto const* const common = static_cast<CommonFrameLayout const*>(_data);
+      auto const& id = common->id;
       return {id.data(), id.size()};
     }
 
@@ -156,7 +157,11 @@ namespace ao::tag::mpeg::id3v2
     }
 
   protected:
-    std::size_t contentSize() const { return frameSize(*static_cast<CommonFrameLayout const*>(_data)); }
+    std::size_t contentSize() const
+    {
+      auto const* const common = static_cast<CommonFrameLayout const*>(_data);
+      return frameSize(*common);
+    }
 
   private:
     void const* _data;

@@ -557,11 +557,11 @@ namespace ao::gtk::layout::editor
         else
         {
           // Revert combo selection without triggering signal again
-          _comboPresets.set_active_id(
-            _document.root.layout.contains("cssClasses") &&
-                std::ranges::contains(_document.root.layout.at("cssClasses").asStringList(), "ao-layout-preset-modern")
-              ? "modern"
-              : "classic");
+          _comboPresets.set_active_id(_document.root.layout.contains("cssClasses") &&
+                                          std::ranges::contains(_document.root.layout.at("cssClasses").asStringList(),
+                                                                std::string_view{"ao-layout-preset-modern"})
+                                        ? "modern"
+                                        : "classic");
         }
 
         confirmation->close();
