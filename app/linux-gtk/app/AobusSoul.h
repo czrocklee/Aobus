@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/uimodel/playback/AobusSoulViewModel.h>
+
 #include <gdkmm/rgba.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
@@ -27,6 +29,8 @@ namespace ao::gtk
     void breathe(bool breathing);
     void setAura(Gdk::RGBA const& aura);
     void setShowFullLogo(bool show);
+
+    static Gdk::RGBA mapAuraColor(uimodel::playback::AuraColor color);
 
     static constexpr double kGoldenRatio = std::numbers::phi;
 

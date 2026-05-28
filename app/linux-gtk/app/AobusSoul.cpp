@@ -3,6 +3,8 @@
 
 #include "app/AobusSoul.h"
 
+#include <ao/uimodel/playback/AobusSoulViewModel.h>
+
 #include <gdkmm/frameclock.h>
 #include <gdkmm/graphene_point.h>
 #include <gdkmm/graphene_rect.h>
@@ -177,6 +179,23 @@ namespace ao::gtk
 
     _impl->showFullLogo = show;
     queue_draw();
+  }
+
+  Gdk::RGBA AobusSoul::mapAuraColor(ao::uimodel::playback::AuraColor color)
+  {
+    using Color = ao::uimodel::playback::AuraColor;
+
+    switch (color)
+    {
+      case Color::Idle: return Gdk::RGBA{"#00E5FF"};
+      case Color::Unknown: return Gdk::RGBA{"#6B7280"};
+      case Color::Perfect: return Gdk::RGBA{"#A855F7"};
+      case Color::Lossless: return Gdk::RGBA{"#10B981"};
+      case Color::Intervention: return Gdk::RGBA{"#F59E0B"};
+      case Color::Clipped: return Gdk::RGBA{"#EF4444"};
+    }
+
+    return Gdk::RGBA{"#6B7280"};
   }
 
   Gtk::SizeRequestMode AobusSoul::get_request_mode_vfunc() const

@@ -29,6 +29,7 @@ namespace ao::uimodel::playback
     std::string title;
     std::string description;
     bool isActive = false;
+    bool isExclusive = false;
   };
 
   struct AudioOutputViewState final

@@ -12,10 +12,10 @@
 
 #include <filesystem>
 
-using namespace ao::lmdb::test;
-
 namespace ao::gtk::test
 {
+  using namespace ao::lmdb::test;
+
   TEST_CASE("GtkLayoutConfig - persistence", "[gtk][app][config]")
   {
     auto const tempDir = TempDir{};

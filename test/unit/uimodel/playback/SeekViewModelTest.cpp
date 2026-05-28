@@ -14,10 +14,9 @@
 #include <functional>
 #include <vector>
 
-using namespace ao::rt::test;
-
 namespace ao::uimodel::playback::test
 {
+  using namespace ao::rt::test;
   using namespace ao::rt;
   namespace
   {

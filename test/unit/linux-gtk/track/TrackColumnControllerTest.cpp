@@ -16,42 +16,41 @@
 #include <memory>
 #include <vector>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TrackColumnController - column management", "[gtk][track][column]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& runtime = fixture.runtime();
-  auto presentationStore = TrackPresentationStore{runtime.workspace()};
-
-  auto columnView = Gtk::ColumnView{};
-  auto controller = TrackColumnController{columnView, presentationStore, rt::kAllTracksListId};
-
-  SECTION("setupColumns creates all supported columns")
+  TEST_CASE("TrackColumnController - column management", "[gtk][track][column]")
   {
-    controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto presentationStore = TrackPresentationStore{runtime.workspace()};
 
-    auto const columns = columnView.get_columns();
-    CHECK(columns->get_n_items() > 0);
-  }
+    auto columnView = Gtk::ColumnView{};
+    auto controller = TrackColumnController{columnView, presentationStore, rt::kAllTracksListId};
 
-  SECTION("applyColumnLayout updates visibility")
-  {
-    controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
-
-    auto visible = std::vector<rt::TrackField>{rt::TrackField::Title, rt::TrackField::Artist};
-    controller.applyColumnLayout(visible);
-
-    // Verify only these columns are visible
-    auto const columns = columnView.get_columns();
-
-    for (guint i = 0; i < columns->get_n_items(); ++i)
+    SECTION("setupColumns creates all supported columns")
     {
-      auto col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(i));
-      // We can't easily map column back to field without peering or checking title
+      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+      auto const columns = columnView.get_columns();
+      CHECK(columns->get_n_items() > 0);
+    }
+
+    SECTION("applyColumnLayout updates visibility")
+    {
+      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+      auto visible = std::vector<rt::TrackField>{rt::TrackField::Title, rt::TrackField::Artist};
+      controller.applyColumnLayout(visible);
+
+      // Verify only these columns are visible
+      auto const columns = columnView.get_columns();
+
+      for (guint i = 0; i < columns->get_n_items(); ++i)
+      {
+        auto col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(i));
+        // We can't easily map column back to field without peering or checking title
+      }
     }
   }
-}
+} // namespace ao::gtk::test

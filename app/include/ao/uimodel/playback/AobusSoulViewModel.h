@@ -6,14 +6,24 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 
+#include <cstdint>
 #include <functional>
-#include <string>
 
 namespace ao::uimodel::playback
 {
+  enum class AuraColor : std::uint8_t
+  {
+    Idle,
+    Unknown,
+    Perfect,
+    Lossless,
+    Intervention,
+    Clipped,
+  };
+
   struct AobusSoulViewState final
   {
-    std::string auraColor;
+    AuraColor auraColor = AuraColor::Idle;
     bool isBreathing = false;
   };
 

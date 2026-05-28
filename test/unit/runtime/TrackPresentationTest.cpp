@@ -11,8 +11,6 @@
 
 namespace ao::rt::test
 {
-  using namespace ao::rt;
-
   TEST_CASE("builtinTrackPresentationPresets contains all expected ids", "[runtime][unit][presentation]")
   {
     auto presets = builtinTrackPresentationPresets();

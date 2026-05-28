@@ -19,6 +19,24 @@ namespace ao::gtk
 {
   namespace
   {
+    char const* mapIconName(uimodel::playback::TransportIcon icon)
+    {
+      using Icon = uimodel::playback::TransportIcon;
+
+      switch (icon)
+      {
+        case Icon::Play: return "media-playback-start-symbolic";
+        case Icon::Pause: return "media-playback-pause-symbolic";
+        case Icon::Stop: return "media-playback-stop-symbolic";
+        case Icon::Next: return "media-skip-forward-symbolic";
+        case Icon::Previous: return "media-skip-backward-symbolic";
+        case Icon::Shuffle: return "media-playlist-shuffle-symbolic";
+        case Icon::Repeat: return "media-playlist-repeat-symbolic";
+        case Icon::RepeatOne: return "media-playlist-repeat-song-symbolic";
+        default: return "";
+      }
+    }
+
     void applySizeClass(Gtk::Button& button, std::string const& size)
     {
       if (size == "small")
@@ -59,7 +77,7 @@ namespace ao::gtk
 
   void TransportButton::applyState(ao::uimodel::playback::TransportViewState const& view)
   {
-    _button.set_icon_name(view.transportGlyph);
+    _button.set_icon_name(mapIconName(view.icon));
     _button.set_tooltip_text(view.tooltip);
     _button.set_sensitive(view.enabled);
 

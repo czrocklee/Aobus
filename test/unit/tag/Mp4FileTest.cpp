@@ -16,10 +16,10 @@
 #include <vector>
 
 namespace fs = std::filesystem;
-using namespace ao::media::mp4;
-
 namespace ao::tag::mp4::test
 {
+  using namespace ao::media::mp4;
+
   namespace
   {
     struct TempFile final

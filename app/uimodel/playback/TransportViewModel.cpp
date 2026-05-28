@@ -13,21 +13,21 @@ namespace ao::uimodel::playback
 {
   namespace
   {
-    char const* iconForAction(TransportAction action)
+    TransportIcon iconForAction(TransportAction action)
     {
       switch (action)
       {
-        case TransportAction::Play: return "media-playback-start-symbolic";
-        case TransportAction::Pause: return "media-playback-pause-symbolic";
-        case TransportAction::Stop: return "media-playback-stop-symbolic";
-        case TransportAction::PlayPause: return "media-playback-start-symbolic";
-        case TransportAction::Next: return "media-skip-forward-symbolic";
-        case TransportAction::Previous: return "media-skip-backward-symbolic";
-        case TransportAction::Shuffle: return "media-playlist-shuffle-symbolic";
-        case TransportAction::Repeat: return "media-playlist-repeat-symbolic";
+        case TransportAction::Play: return TransportIcon::Play;
+        case TransportAction::Pause: return TransportIcon::Pause;
+        case TransportAction::Stop: return TransportIcon::Stop;
+        case TransportAction::PlayPause: return TransportIcon::Play;
+        case TransportAction::Next: return TransportIcon::Next;
+        case TransportAction::Previous: return TransportIcon::Previous;
+        case TransportAction::Shuffle: return TransportIcon::Shuffle;
+        case TransportAction::Repeat: return TransportIcon::Repeat;
       }
 
-      return "media-playback-start-symbolic";
+      return TransportIcon::None;
     }
 
     char const* labelForAction(TransportAction action)
@@ -55,7 +55,7 @@ namespace ao::uimodel::playback
       auto view = TransportViewState{};
       bool const isPlaying = (state.transport == audio::Transport::Playing);
 
-      view.transportGlyph = iconForAction(action);
+      view.icon = iconForAction(action);
       view.tooltip = labelForAction(action);
 
       if (showLabel)
@@ -72,7 +72,7 @@ namespace ao::uimodel::playback
         case TransportAction::Stop: view.enabled = (state.transport != audio::Transport::Idle); break;
 
         case TransportAction::PlayPause:
-          view.transportGlyph = isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic";
+          view.icon = isPlaying ? TransportIcon::Pause : TransportIcon::Play;
           view.tooltip = isPlaying ? "Pause" : "Play";
           view.playing = isPlaying;
 
@@ -95,17 +95,17 @@ namespace ao::uimodel::playback
         case TransportAction::Repeat:
           if (state.repeatMode == rt::RepeatMode::All)
           {
-            view.transportGlyph = "media-playlist-repeat-symbolic";
+            view.icon = TransportIcon::Repeat;
             view.engaged = true;
           }
           else if (state.repeatMode == rt::RepeatMode::One)
           {
-            view.transportGlyph = "media-playlist-repeat-song-symbolic";
+            view.icon = TransportIcon::RepeatOne;
             view.engaged = true;
           }
           else
           {
-            view.transportGlyph = "media-playlist-repeat-symbolic";
+            view.icon = TransportIcon::Repeat;
             view.engaged = false;
           }
 

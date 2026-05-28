@@ -71,10 +71,7 @@ namespace ao::gtk
     TrackPageHost(TrackPageHost&&) = delete;
     TrackPageHost& operator=(TrackPageHost&&) = delete;
 
-    void setPlaybackQueueModel(uimodel::playback::PlaybackQueueModel& controller)
-    {
-      _playbackQueueModel = &controller;
-    }
+    void setPlaybackQueueModel(uimodel::playback::PlaybackQueueModel& controller) { _playbackQueueModel = &controller; }
 
     Gtk::Stack& stack() { return _stack; }
     TrackPresentationStore& presentationStore() { return _presentationStore; }

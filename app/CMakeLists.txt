@@ -1,5 +1,5 @@
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
-add_library(app_runtime STATIC
+add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
     runtime/async/Runtime.cpp
     runtime/async/LifetimeScope.cpp
@@ -25,10 +25,10 @@ add_library(app_runtime STATIC
     runtime/TrackSource.cpp
     runtime/ViewService.cpp
 )
-target_include_directories(app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_include_directories(app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(app_runtime PUBLIC PkgRapidYaml)
-target_link_libraries(app_runtime PRIVATE ao Boost::headers)
+target_include_directories(ao_app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(ao_app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_app_runtime PUBLIC ao PkgRapidYaml)
+target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
 
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
 add_library(ao_app_uimodel STATIC
@@ -45,12 +45,13 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/VolumeViewModel.cpp
     uimodel/track/TrackPageRoute.cpp
     uimodel/track/TrackFilterViewModel.cpp
+    uimodel/track/TrackFilterResolver.cpp
     uimodel/tag/TagEditWorkflow.cpp
 )
 target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_uimodel PRIVATE "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_app_uimodel PUBLIC app_runtime)
-target_link_libraries(ao_app_uimodel PRIVATE ao)
+target_link_libraries(ao_app_uimodel PUBLIC ao ao_app_runtime)
+target_link_libraries(ao_app_uimodel PRIVATE)
 
 # Frontends
 add_subdirectory(linux-gtk)

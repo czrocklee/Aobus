@@ -21,11 +21,8 @@
 #include <string_view>
 #include <utility>
 
-using namespace ao;
-
 namespace ao::rt::test
 {
-  using namespace ao::rt;
   using namespace ao::lmdb::test;
 
   namespace

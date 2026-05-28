@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/TestUtils.h"
+#include <ao/Type.h>
+#include <ao/audio/Types.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
@@ -15,10 +17,9 @@
 #include <functional>
 #include <vector>
 
-using namespace ao::rt::test;
-
 namespace ao::uimodel::playback::test
 {
+  using namespace ao::rt::test;
   using namespace ao::rt;
   namespace
   {
@@ -82,7 +83,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("onSeekUpdate triggers refresh with Preview and Final modes")
     {
-      auto const trackId = testLib.addTrack({"Seek Test", "Artist", "Album"});
+      auto const trackId = testLib.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
       auto desc = audio::TrackPlaybackDescriptor{.trackId = trackId, .filePath = "test.flac", .durationMs = 30000};
       playback.play(desc, kInvalidListId);
 

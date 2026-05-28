@@ -10,27 +10,26 @@
 
 #include <vector>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TagPopover - lifecycle", "[gtk][tag][popover]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& library = fixture.runtime().musicLibrary();
-  auto window = Gtk::Window{};
-
-  SECTION("initialization")
+  TEST_CASE("TagPopover - lifecycle", "[gtk][tag][popover]")
   {
-    auto popover = TagPopover{library, {}};
-    popover.set_parent(window);
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& library = fixture.runtime().musicLibrary();
+    auto window = Gtk::Window{};
 
-    // Test signal accessor
-    auto connected = false;
-    popover.signalTagsChanged().connect([&](auto, auto) { connected = true; });
+    SECTION("initialization")
+    {
+      auto popover = TagPopover{library, {}};
+      popover.set_parent(window);
 
-    // Try popup but we don't really want it to block or anything, just ensure it doesn't crash.
-    // However, it's safer not to actually popup during test to avoid Wayland issues unless suppressed.
+      // Test signal accessor
+      auto connected = false;
+      popover.signalTagsChanged().connect([&](auto, auto) { connected = true; });
+
+      // Try popup but we don't really want it to block or anything, just ensure it doesn't crash.
+      // However, it's safer not to actually popup during test to avoid Wayland issues unless suppressed.
+    }
   }
-}
+} // namespace ao::gtk::test

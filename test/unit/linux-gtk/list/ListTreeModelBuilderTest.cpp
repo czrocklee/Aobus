@@ -8,90 +8,88 @@
 #include "ao/library/MusicLibrary.h"
 #include "ao/lmdb/Transaction.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/Type.h>
+#include <ao/rt/CorePrimitives.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/liststore.h>
 #include <glibmm/refptr.h>
 
-#include <ao/Type.h>
-#include <ao/rt/CorePrimitives.h>
-
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("ListTreeModelBuilder - building tree", "[gtk][list][builder]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& library = fixture.runtime().musicLibrary();
-
-  // 1. Add some lists to the library
-  auto idA = ListId{kInvalidListId};
-  auto idB = ListId{kInvalidListId};
-
+  TEST_CASE("ListTreeModelBuilder - building tree", "[gtk][list][builder]")
   {
-    auto txn = library.writeTransaction();
-    auto writer = library.lists().writer(txn);
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& library = fixture.runtime().musicLibrary();
 
-    // List A (Manual)
-    auto builderA = library::ListBuilder::createNew();
-    builderA.name("Manual List A");
-    auto [id, _] = writer.create(builderA.serialize());
-    idA = id;
+    // 1. Add some lists to the library
+    auto idA = ListId{kInvalidListId};
+    auto idB = ListId{kInvalidListId};
 
-    // List B (Smart, child of A)
-    auto builderB = library::ListBuilder::createNew();
-    builderB.name("Smart Child B").parentId(idA).filter("genre:rock");
-    builderB.tracks().isSmart(true);
-    auto [id2, _] = writer.create(builderB.serialize());
-    idB = id2;
+    {
+      auto txn = library.writeTransaction();
+      auto writer = library.lists().writer(txn);
 
-    txn.commit();
+      // List A (Manual)
+      auto builderA = library::ListBuilder::createNew();
+      builderA.name("Manual List A");
+      auto [id, _] = writer.create(builderA.serialize());
+      idA = id;
+
+      // List B (Smart, child of A)
+      auto builderB = library::ListBuilder::createNew();
+      builderB.name("Smart Child B").parentId(idA).filter("genre:rock");
+      builderB.tracks().isSmart(true);
+      auto [id2, _] = writer.create(builderB.serialize());
+      idB = id2;
+
+      txn.commit();
+    }
+
+    // 2. Build the model
+    auto txn = library.readTransaction();
+    auto const result = ListTreeModelBuilder::build(fixture.runtime(), txn);
+
+    SECTION("Basic structure")
+    {
+      // Root store should contain exactly 1 item: "All Tracks"
+      REQUIRE(result.store->get_n_items() == 1);
+      auto const allTracks = result.store->get_item(0);
+      CHECK(allTracks->getRow()->getName() == "All Tracks");
+      CHECK(allTracks->getListId() == rt::kAllTracksListId);
+
+      // "All Tracks" should have "Manual List A" as child
+      REQUIRE(allTracks->getNChildren() == 1);
+      auto const itemA = allTracks->getChild(0);
+      CHECK(itemA->getRow()->getName() == "Manual List A");
+      CHECK(itemA->getListId() == idA);
+      CHECK(itemA->getParent() == allTracks.get());
+
+      // "Manual List A" should have "Smart Child B" as child
+      REQUIRE(itemA->getNChildren() == 1);
+      auto const itemB = itemA->getChild(0);
+      CHECK(itemB->getRow()->getName() == "Smart Child B");
+      CHECK(itemB->getListId() == idB);
+      CHECK(itemB->getParent() == itemA.get());
+      CHECK(itemB->getRow()->isSmart() == true);
+      CHECK(itemB->getRow()->getFilter() == "genre:rock");
+    }
+
+    SECTION("Models are created")
+    {
+      CHECK(result.treeModel);
+      CHECK(result.selectionModel);
+      CHECK(result.selectionModel->get_model() == result.treeModel);
+      CHECK(result.treeModel->get_model() == result.store);
+    }
+
+    SECTION("NodesById mapping")
+    {
+      CHECK(result.nodesById.contains(rt::kAllTracksListId));
+      CHECK(result.nodesById.contains(idA));
+      CHECK(result.nodesById.contains(idB));
+      CHECK(result.nodesById.at(idA)->getListId() == idA);
+    }
   }
-
-  // 2. Build the model
-  auto txn = library.readTransaction();
-  auto const result = ListTreeModelBuilder::build(fixture.runtime(), txn);
-
-  SECTION("Basic structure")
-  {
-    // Root store should contain exactly 1 item: "All Tracks"
-    REQUIRE(result.store->get_n_items() == 1);
-    auto const allTracks = result.store->get_item(0);
-    CHECK(allTracks->getRow()->getName() == "All Tracks");
-    CHECK(allTracks->getListId() == rt::kAllTracksListId);
-
-    // "All Tracks" should have "Manual List A" as child
-    REQUIRE(allTracks->getNChildren() == 1);
-    auto const itemA = allTracks->getChild(0);
-    CHECK(itemA->getRow()->getName() == "Manual List A");
-    CHECK(itemA->getListId() == idA);
-    CHECK(itemA->getParent() == allTracks.get());
-
-    // "Manual List A" should have "Smart Child B" as child
-    REQUIRE(itemA->getNChildren() == 1);
-    auto const itemB = itemA->getChild(0);
-    CHECK(itemB->getRow()->getName() == "Smart Child B");
-    CHECK(itemB->getListId() == idB);
-    CHECK(itemB->getParent() == itemA.get());
-    CHECK(itemB->getRow()->isSmart() == true);
-    CHECK(itemB->getRow()->getFilter() == "genre:rock");
-  }
-
-  SECTION("Models are created")
-  {
-    CHECK(result.treeModel);
-    CHECK(result.selectionModel);
-    CHECK(result.selectionModel->get_model() == result.treeModel);
-    CHECK(result.treeModel->get_model() == result.store);
-  }
-
-  SECTION("NodesById mapping")
-  {
-    CHECK(result.nodesById.contains(rt::kAllTracksListId));
-    CHECK(result.nodesById.contains(idA));
-    CHECK(result.nodesById.contains(idB));
-    CHECK(result.nodesById.at(idA)->getListId() == idA);
-  }
-}
+} // namespace ao::gtk::test

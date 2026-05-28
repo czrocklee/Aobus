@@ -41,6 +41,12 @@ namespace ao::uimodel::playback
     }
 
     auto const it = std::ranges::find(trackIds, startTrackId);
+
+    if (it == trackIds.end())
+    {
+      return false;
+    }
+
     auto const startIndex = static_cast<std::size_t>(std::distance(trackIds.begin(), it));
 
     auto const optDesc = _descriptorProvider(startTrackId);

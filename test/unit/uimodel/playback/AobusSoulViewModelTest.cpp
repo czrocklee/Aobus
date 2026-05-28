@@ -14,10 +14,9 @@
 #include <functional>
 #include <vector>
 
-using namespace ao::rt::test;
-
 namespace ao::uimodel::playback::test
 {
+  using namespace ao::rt::test;
   using namespace ao::rt;
   namespace
   {
@@ -56,7 +55,7 @@ namespace ao::uimodel::playback::test
     {
       REQUIRE(!log.empty());
       CHECK(log.last().isBreathing == false);
-      CHECK(log.last().auraColor == "#00E5FF");
+      CHECK(log.last().auraColor == AuraColor::Idle);
     }
   }
 } // namespace ao::uimodel::playback::test

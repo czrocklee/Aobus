@@ -10,8 +10,6 @@
 
 namespace ao::library::test
 {
-  using namespace ao::library;
-
   TEST_CASE("FileManifestBuilder - constructs valid payload", "[library][unit][manifest]")
   {
     auto builder = FileManifestBuilder::createNew();

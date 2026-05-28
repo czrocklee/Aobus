@@ -12,8 +12,6 @@
 
 namespace ao::utility::test
 {
-  using namespace ao::utility;
-
   TEST_CASE("MappedFile - mapping and unmapping", "[utility][unit][mapped_file]")
   {
     auto const tempDir = std::filesystem::temp_directory_path() / "ao_mapped_file_test";

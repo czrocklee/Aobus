@@ -36,10 +36,8 @@ add_library(aobus-gtk-lib STATIC
     track/TrackColumnController.cpp
     track/TrackColumnViewHost.cpp
     track/TrackQuickFilter.cpp
-    track/TrackPageRoute.cpp
     track/TrackPresentationButton.cpp
     track/TrackSelectionController.cpp
-    track/TrackFilterResolver.cpp
     track/TrackListModel.cpp
     track/TrackPresentationStore.cpp
     track/TrackCustomViewDialog.cpp
@@ -59,12 +57,10 @@ add_library(aobus-gtk-lib STATIC
     playback/AobusSoulWindow.cpp
     playback/NowPlayingFieldLabel.cpp
     playback/NowPlayingStatusLabel.cpp
-    playback/PlaybackBindingSource.cpp
     playback/PlaybackDetailsWidget.cpp
     playback/TransportButton.cpp
     playback/TimeLabel.cpp
     playback/OutputSelector.cpp
-    playback/OutputSelectorState.cpp
     playback/VolumeControl.cpp
     playback/SeekControl.cpp
     playback/VolumeBar.cpp
@@ -74,7 +70,6 @@ add_library(aobus-gtk-lib STATIC
     image/ImageWidget.cpp
 
     tag/TagEditController.cpp
-    tag/TagEditWorkflow.cpp
     tag/TagPopover.cpp
     tag/TagEditor.cpp
     tag/TrackPropertiesDialog.cpp
@@ -96,7 +91,7 @@ add_library(aobus-gtk-lib STATIC
     layout/editor/LayoutEditorDialog.cpp
 )
 
-target_link_libraries(aobus-gtk-lib PUBLIC ao_app_uimodel app_runtime)
+target_link_libraries(aobus-gtk-lib PUBLIC ao_app_uimodel ao_app_runtime)
 target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 

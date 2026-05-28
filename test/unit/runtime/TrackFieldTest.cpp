@@ -22,8 +22,6 @@ namespace
 
 namespace ao::rt::test
 {
-  using namespace ao::rt;
-
   TEST_CASE("TrackField registry contains exactly kTrackFieldCount definitions", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();

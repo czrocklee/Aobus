@@ -11,6 +11,7 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>

@@ -9,70 +9,69 @@
 #include "ao/lmdb/Transaction.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
+#include <ao/rt/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
 
-#include <ao/rt/TrackSource.h>
 #include <utility>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("ListNavigationController - basic interactions", "[gtk][list][controller]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto window = Gtk::Window{};
-  auto cache = TrackRowCache{fixture.runtime().musicLibrary()};
-
-  auto selectedId = ListId{999};
-  auto callbacks = ListNavigationController::Callbacks{.onListSelected = [&](ListId id) { selectedId = id; },
-                                                       .getListMembership = [&](ListId) -> rt::TrackSource*
-                                                       { return nullptr; }};
-
-  auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks)};
-  window.set_child(controller.widget());
-
-  SECTION("rebuildTree populates the sidebar")
+  TEST_CASE("ListNavigationController - basic interactions", "[gtk][list][controller]")
   {
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().musicLibrary()};
+
+    auto selectedId = ListId{999};
+    auto callbacks =
+      ListNavigationController::Callbacks{.onListSelected = [&](ListId id) { selectedId = id; },
+                                          .getListMembership = [&](ListId) -> rt::TrackSource* { return nullptr; }};
+
+    auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks)};
+    window.set_child(controller.widget());
+
+    SECTION("rebuildTree populates the sidebar")
     {
-      auto txn = fixture.runtime().musicLibrary().writeTransaction();
-      auto writer = fixture.runtime().musicLibrary().lists().writer(txn);
-      auto builder = library::ListBuilder::createNew();
-      builder.name("Test List");
-      writer.create(builder.serialize());
-      txn.commit();
+      {
+        auto txn = fixture.runtime().musicLibrary().writeTransaction();
+        auto writer = fixture.runtime().musicLibrary().lists().writer(txn);
+        auto builder = library::ListBuilder::createNew();
+        builder.name("Test List");
+        writer.create(builder.serialize());
+        txn.commit();
+      }
+
+      auto txn = fixture.runtime().musicLibrary().readTransaction();
+      controller.rebuildTree(cache, txn);
+      drainGtkEvents();
+
+      // Sidebar should contain "All Tracks" and "Test List"
     }
 
-    auto txn = fixture.runtime().musicLibrary().readTransaction();
-    controller.rebuildTree(cache, txn);
-    drainGtkEvents();
-
-    // Sidebar should contain "All Tracks" and "Test List"
-  }
-
-  SECTION("select triggers callback")
-  {
-    auto testListId = ListId{0};
+    SECTION("select triggers callback")
     {
-      auto txn = fixture.runtime().musicLibrary().writeTransaction();
-      auto writer = fixture.runtime().musicLibrary().lists().writer(txn);
-      auto builder = library::ListBuilder::createNew();
-      builder.name("Select Target");
-      auto [id, _] = writer.create(builder.serialize());
-      testListId = id;
-      txn.commit();
+      auto testListId = ListId{0};
+      {
+        auto txn = fixture.runtime().musicLibrary().writeTransaction();
+        auto writer = fixture.runtime().musicLibrary().lists().writer(txn);
+        auto builder = library::ListBuilder::createNew();
+        builder.name("Select Target");
+        auto [id, _] = writer.create(builder.serialize());
+        testListId = id;
+        txn.commit();
+      }
+
+      auto txn = fixture.runtime().musicLibrary().readTransaction();
+      controller.rebuildTree(cache, txn);
+      drainGtkEvents();
+
+      controller.select(testListId);
+      drainGtkEvents();
+
+      CHECK(selectedId == testListId);
     }
-
-    auto txn = fixture.runtime().musicLibrary().readTransaction();
-    controller.rebuildTree(cache, txn);
-    drainGtkEvents();
-
-    controller.select(testListId);
-    drainGtkEvents();
-
-    CHECK(selectedId == testListId);
   }
-}
+} // namespace ao::gtk::test

@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace ao::gtk
+namespace ao::uimodel::track
 {
   enum class TrackFilterMode : std::uint8_t
   {
@@ -31,4 +31,4 @@ namespace ao::gtk
    * - Complex expressions starting with $ or @ (Expression)
    */
   ResolvedTrackFilter resolveTrackFilterExpression(std::string_view rawFilter);
-} // namespace ao::gtk
+} // namespace ao::uimodel::track

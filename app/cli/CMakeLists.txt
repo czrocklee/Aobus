@@ -7,4 +7,4 @@ add_executable(aobus
     TagCommand.cpp
     TrackCommand.cpp
 )
-target_link_libraries(aobus PRIVATE app_runtime ao CLI11::CLI11 mimalloc)
+target_link_libraries(aobus PRIVATE ao_app_runtime ao CLI11::CLI11 mimalloc)

@@ -6,59 +6,62 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
-#include <cstdint>
 #include <gtk/gtkstyleprovider.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/label.h>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
+#include <cstdint>
 
-TEST_CASE("StyleManager - initialization and reloading", "[gtk][app][style]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-
-  auto& manager = StyleManager::instance();
-
-  SECTION("singleton instance exists")
+  TEST_CASE("StyleManager - initialization and reloading", "[gtk][app][style]")
   {
-    CHECK(&manager == &StyleManager::instance());
-  }
+    [[maybe_unused]] auto const app = ensureGtkApplication();
 
-  SECTION("initialize is idempotent")
-  {
-    manager.initialize();
-    manager.initialize();
-  }
+    auto& manager = StyleManager::instance();
 
-  SECTION("reload triggers signal after debounce")
-  {
-    auto refreshed = false;
-    auto conn = manager.signalRefreshed().connect([&] { refreshed = true; });
-
-    manager.reload();
-
-    // Debounce is 150ms. We wait a bit more.
-    for (std::int32_t i = 0; i < 20; ++i)
+    SECTION("singleton instance exists")
     {
-      drainGtkEvents();
-
-      if (refreshed) { break; }
-
-      ::g_usleep(10000); // 10ms
+      CHECK(&manager == &StyleManager::instance());
     }
 
-    CHECK(refreshed == true);
-    conn.disconnect();
-  }
+    SECTION("initialize is idempotent")
+    {
+      manager.initialize();
+      manager.initialize();
+    }
 
-  SECTION("register/unregister widget provider")
-  {
-    auto label = Gtk::Label{"Styled Label"};
-    auto provider = Gtk::CssProvider::create();
+    SECTION("reload triggers signal after debounce")
+    {
+      auto refreshed = false;
+      auto conn = manager.signalRefreshed().connect([&] { refreshed = true; });
 
-    manager.registerWidgetProvider(label, provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-    manager.unregisterWidgetProvider(label, provider);
+      manager.reload();
+
+      // Debounce is 150ms. We wait a bit more.
+      for (std::int32_t i = 0; i < 20; ++i)
+      {
+        drainGtkEvents();
+
+        if (refreshed)
+        {
+          break;
+        }
+
+        ::g_usleep(10000); // 10ms
+      }
+
+      CHECK(refreshed == true);
+      conn.disconnect();
+    }
+
+    SECTION("register/unregister widget provider")
+    {
+      auto label = Gtk::Label{"Styled Label"};
+      auto provider = Gtk::CssProvider::create();
+
+      manager.registerWidgetProvider(label, provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+      manager.unregisterWidgetProvider(label, provider);
+    }
   }
-}
+} // namespace ao::gtk::test

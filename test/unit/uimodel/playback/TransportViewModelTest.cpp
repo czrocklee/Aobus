@@ -2,9 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/TestUtils.h"
+#include <ao/Type.h>
+#include <ao/audio/Types.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/async/Runtime.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
@@ -13,12 +16,12 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <functional>
+#include <optional>
 #include <vector>
-
-using namespace ao::rt::test;
 
 namespace ao::uimodel::playback::test
 {
+  using namespace ao::rt::test;
   using namespace ao::rt;
   namespace
   {
@@ -58,7 +61,7 @@ namespace ao::uimodel::playback::test
 
       REQUIRE(!log.empty());
       CHECK(log.last().enabled == false);
-      CHECK(log.last().transportGlyph == "media-playback-start-symbolic");
+      CHECK(log.last().icon == TransportIcon::Play);
     }
 
     SECTION("Pause action - disabled when not playing")
@@ -68,7 +71,7 @@ namespace ao::uimodel::playback::test
         playback, nullptr, TransportAction::Pause, {}, false, [&log](auto const& v) { log.render(v); }};
 
       CHECK(log.last().enabled == false);
-      CHECK(log.last().transportGlyph == "media-playback-pause-symbolic");
+      CHECK(log.last().icon == TransportIcon::Pause);
     }
 
     SECTION("Stop action - disabled when idle")
@@ -78,7 +81,7 @@ namespace ao::uimodel::playback::test
         playback, nullptr, TransportAction::Stop, {}, false, [&log](auto const& v) { log.render(v); }};
 
       CHECK(log.last().enabled == false);
-      CHECK(log.last().transportGlyph == "media-playback-stop-symbolic");
+      CHECK(log.last().icon == TransportIcon::Stop);
     }
 
     SECTION("PlayPause action - shows play glyph when idle, disabled when not ready")
@@ -87,7 +90,7 @@ namespace ao::uimodel::playback::test
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::PlayPause, {}, false, [&log](auto const& v) { log.render(v); }};
 
-      CHECK(log.last().transportGlyph == "media-playback-start-symbolic");
+      CHECK(log.last().icon == TransportIcon::Play);
       CHECK(log.last().tooltip == "Play");
       CHECK(log.last().playing == false);
       CHECK(log.last().enabled == false);
@@ -132,7 +135,7 @@ namespace ao::uimodel::playback::test
         playback, nullptr, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
 
       CHECK(log.last().engaged == false);
-      CHECK(log.last().transportGlyph == "media-playlist-repeat-symbolic");
+      CHECK(log.last().icon == TransportIcon::Repeat);
       CHECK(log.last().enabled == false);
     }
 
@@ -144,7 +147,7 @@ namespace ao::uimodel::playback::test
         playback, nullptr, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
 
       CHECK(log.last().engaged == true);
-      CHECK(log.last().transportGlyph == "media-playlist-repeat-symbolic");
+      CHECK(log.last().icon == TransportIcon::Repeat);
     }
 
     SECTION("Repeat action - One mode")
@@ -155,7 +158,7 @@ namespace ao::uimodel::playback::test
         playback, nullptr, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
 
       CHECK(log.last().engaged == true);
-      CHECK(log.last().transportGlyph == "media-playlist-repeat-song-symbolic");
+      CHECK(log.last().icon == TransportIcon::RepeatOne);
     }
 
     SECTION("Shuffle action with shuffle On")
@@ -272,7 +275,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("Next/Previous/Shuffle/CycleRepeat with queue")
     {
-      auto const trackId = testLib.addTrack({"Q Test", "Artist", "Album"});
+      auto const trackId = testLib.addTrack({.title = "Q Test", .artist = "Artist", .album = "Album"});
       auto queueModel = PlaybackQueueModel{
         playback,
         [&](TrackId) -> std::optional<audio::TrackPlaybackDescriptor>
@@ -329,7 +332,7 @@ namespace ao::uimodel::playback::test
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
 
-    auto const trackId = testLib.addTrack({"Sub Test", "Sub Artist", "Sub Album"});
+    auto const trackId = testLib.addTrack({.title = "Sub Test", .artist = "Sub Artist", .album = "Sub Album"});
 
     auto log = RenderLog<TransportViewState>{};
     auto vm = TransportViewModel{

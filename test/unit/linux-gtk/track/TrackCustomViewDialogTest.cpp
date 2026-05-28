@@ -10,21 +10,20 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TrackCustomViewDialog - lifecycle", "[gtk][track][dialog]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto window = Gtk::Window{};
-
-  auto spec = rt::TrackPresentationSpec{};
-  spec.visibleFields = {rt::TrackField::Title};
-
-  SECTION("dialog creation")
+  TEST_CASE("TrackCustomViewDialog - lifecycle", "[gtk][track][dialog]")
   {
-    auto const dialog = TrackCustomViewDialog{window, spec, "Initial Label"};
-    drainGtkEvents();
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto window = Gtk::Window{};
+
+    auto spec = rt::TrackPresentationSpec{};
+    spec.visibleFields = {rt::TrackField::Title};
+
+    SECTION("dialog creation")
+    {
+      auto const dialog = TrackCustomViewDialog{window, spec, "Initial Label"};
+      drainGtkEvents();
+    }
   }
-}
+} // namespace ao::gtk::test

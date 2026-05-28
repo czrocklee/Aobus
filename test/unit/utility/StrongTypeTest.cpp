@@ -14,8 +14,6 @@
 
 namespace ao::utility::test
 {
-  using namespace ao::utility;
-
   namespace
   {
     using StringId = StrongType<std::string, struct StringIdTag>;

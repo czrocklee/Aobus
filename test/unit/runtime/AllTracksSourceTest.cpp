@@ -15,12 +15,10 @@
 #include <utility>
 #include <vector>
 
-using namespace ao;
-using namespace ao::rt;
-using namespace ao::library;
-
 namespace ao::rt::test
 {
+  using namespace ao::library;
+
   struct MockTrackSourceObserver : TrackSourceObserver
   {
     std::vector<std::pair<TrackId, std::size_t>> inserted;

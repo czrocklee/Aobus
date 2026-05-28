@@ -9,20 +9,19 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TrackInspectorPanel - smoke test", "[gtk][inspector]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& runtime = fixture.runtime();
-  auto imageCache = ImageCache{200};
+  TEST_CASE("TrackInspectorPanel - smoke test", "[gtk][inspector]")
+  {
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto imageCache = ImageCache{200};
 
-  auto window = Gtk::Window{};
-  auto panel = TrackInspectorPanel{runtime.musicLibrary(), runtime.mutation(), runtime.sources(), imageCache};
-  window.set_child(panel);
+    auto window = Gtk::Window{};
+    auto panel = TrackInspectorPanel{runtime.musicLibrary(), runtime.mutation(), runtime.sources(), imageCache};
+    window.set_child(panel);
 
-  drainGtkEvents();
-}
+    drainGtkEvents();
+  }
+} // namespace ao::gtk::test

@@ -21,48 +21,48 @@
 
 #include <utility>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TrackPageHost - lifecycle", "[gtk][track][host]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& runtime = fixture.runtime();
-  auto& library = runtime.musicLibrary();
-  auto cache = TrackRowCache{library};
-  auto imageCache = ImageCache{200};
-  auto window = Gtk::Window{};
-
-  auto stack = Gtk::Stack{};
-  auto tagEditCallbacks = TagEditController::Callbacks{};
-  auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks)};
-
-  auto sidebarCallbacks = ListNavigationController::Callbacks{};
-  auto listSidebar = ListNavigationController{window, runtime, std::move(sidebarCallbacks)};
-
-  auto presentationStore = TrackPresentationStore{runtime.workspace()};
-  auto queueModel = ao::uimodel::playback::PlaybackQueueModel{
-    runtime.playback(), [&cache](TrackId id) { return cache.getPlaybackDescriptor(id); }};
-
-  auto host = TrackPageHost{stack, runtime, &queueModel, tagEditController, listSidebar, presentationStore, &imageCache};
-
-  SECTION("initial state")
+  TEST_CASE("TrackPageHost - lifecycle", "[gtk][track][host]")
   {
-    CHECK(host.currentVisible() == nullptr);
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& library = runtime.musicLibrary();
+    auto cache = TrackRowCache{library};
+    auto imageCache = ImageCache{200};
+    auto window = Gtk::Window{};
+
+    auto stack = Gtk::Stack{};
+    auto tagEditCallbacks = TagEditController::Callbacks{};
+    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks)};
+
+    auto sidebarCallbacks = ListNavigationController::Callbacks{};
+    auto listSidebar = ListNavigationController{window, runtime, std::move(sidebarCallbacks)};
+
+    auto presentationStore = TrackPresentationStore{runtime.workspace()};
+    auto queueModel = uimodel::playback::PlaybackQueueModel{
+      runtime.playback(), [&cache](TrackId id) { return cache.getPlaybackDescriptor(id); }};
+
+    auto host =
+      TrackPageHost{stack, runtime, &queueModel, tagEditController, listSidebar, presentationStore, &imageCache};
+
+    SECTION("initial state")
+    {
+      CHECK(host.currentVisible() == nullptr);
+    }
+
+    SECTION("rebuild creating pages")
+    {
+      runtime.workspace().navigateTo(rt::kAllTracksListId);
+      drainGtkEvents();
+
+      auto txn = library.readTransaction();
+      host.rebuild(cache, txn);
+      drainGtkEvents();
+
+      // Should have created a page for All Tracks
+      CHECK(host.activeListId() == rt::kAllTracksListId);
+    }
   }
-
-  SECTION("rebuild creating pages")
-  {
-    runtime.workspace().navigateTo(rt::kAllTracksListId);
-    drainGtkEvents();
-
-    auto txn = library.readTransaction();
-    host.rebuild(cache, txn);
-    drainGtkEvents();
-
-    // Should have created a page for All Tracks
-    CHECK(host.activeListId() == rt::kAllTracksListId);
-  }
-}
+} // namespace ao::gtk::test

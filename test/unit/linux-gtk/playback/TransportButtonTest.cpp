@@ -8,49 +8,49 @@
 #include <ao/uimodel/playback/TransportViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
+
 #include <memory>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TransportViewModel - wiring and lifetime", "[gtk][playback][viewmodel]")
+namespace ao::gtk::test
 {
-  auto fixture = GtkRuntimeFixture{};
-  auto log = RenderLog<ao::uimodel::playback::TransportViewState>{};
-
-  SECTION("Subscriptions and refresh")
+  TEST_CASE("TransportViewModel - wiring and lifetime", "[gtk][playback][viewmodel]")
   {
-    auto controller =
-      std::make_unique<ao::uimodel::playback::TransportViewModel>(fixture.runtime().playback(),
-                                                                  nullptr,
-                                                                  ao::uimodel::playback::TransportAction::Shuffle,
-                                                                  nullptr,
-                                                                  false,
-                                                                  [&](auto const& view) { log.render(view); });
+    auto fixture = GtkRuntimeFixture{};
+    auto log = RenderLog<uimodel::playback::TransportViewState>{};
 
-    // Initial render on construction
-    CHECK(!log.empty());
-    log.clear();
+    SECTION("Subscriptions and refresh")
+    {
+      auto controller =
+        std::make_unique<uimodel::playback::TransportViewModel>(fixture.runtime().playback(),
+                                                                nullptr,
+                                                                uimodel::playback::TransportAction::Shuffle,
+                                                                nullptr,
+                                                                false,
+                                                                [&](auto const& view) { log.render(view); });
 
-    // Event triggers render (can use PlaybackService directly)
-    fixture.runtime().playback().setShuffleMode(rt::ShuffleMode::On);
-    CHECK(log.states.size() == 1);
+      // Initial render on construction
+      CHECK(!log.empty());
+      log.clear();
 
-    log.clear();
+      // Event triggers render (can use PlaybackService directly)
+      fixture.runtime().playback().setShuffleMode(rt::ShuffleMode::On);
+      CHECK(log.states.size() == 1);
 
-    // Destroying controller disconnects events
-    controller.reset();
-    fixture.runtime().playback().setShuffleMode(rt::ShuffleMode::Off);
-    CHECK(log.empty());
+      log.clear();
+
+      // Destroying controller disconnects events
+      controller.reset();
+      fixture.runtime().playback().setShuffleMode(rt::ShuffleMode::Off);
+      CHECK(log.empty());
+    }
   }
-}
 
-TEST_CASE("TransportButton - GTK smoke test", "[gtk][playback][viewmodel]")
-{
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
+  TEST_CASE("TransportButton - GTK smoke test", "[gtk][playback][viewmodel]")
+  {
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
 
-  // Verify it instantiates and doesn't crash on applying state
-  auto const button = TransportButton{fixture.runtime().playback(), nullptr, TransportButton::Action::PlayPause};
-}
+    // Verify it instantiates and doesn't crash on applying state
+    auto const button = TransportButton{fixture.runtime().playback(), nullptr, TransportButton::Action::PlayPause};
+  }
+} // namespace ao::gtk::test

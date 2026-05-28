@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "playback/PlaybackBindingSource.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
@@ -62,7 +61,8 @@ namespace ao::gtk::test
               }
               else
               {
-                msg = std::string_view{static_cast<char const*>(fields[i].value), static_cast<std::size_t>(fields[i].length)};
+                msg = std::string_view{
+                  static_cast<char const*>(fields[i].value), static_cast<std::size_t>(fields[i].length)};
               }
 
               if (msg.find("Finalizing ") != std::string_view::npos &&
@@ -253,28 +253,6 @@ namespace ao::gtk::test
     {
       _volumeChanged = std::move(handler);
       return rt::Subscription{[this] { _volumeChanged = nullptr; }};
-    }
-
-    PlaybackBindingSource asSource()
-    {
-      return PlaybackBindingSource{
-        .state = [this] -> rt::PlaybackState const& { return _state; },
-        .onStarted = [this](auto h) { return onStarted(std::move(h)); },
-        .onPaused = [this](auto h) { return onPaused(std::move(h)); },
-        .onStopped = [this](auto h) { return onStopped(std::move(h)); },
-        .onIdle = [this](auto h) { return onIdle(std::move(h)); },
-        .onPreparing = [this](auto h) { return onPreparing(std::move(h)); },
-        .onSeekUpdate = [this](auto h) { return onSeekUpdate(std::move(h)); },
-        .onOutputChanged = [this](auto h) { return onOutputChanged(std::move(h)); },
-        .onQualityChanged = [this](auto h) { return onQualityChanged(std::move(h)); },
-        .onShuffleModeChanged = [this](auto h) { return onShuffleModeChanged(std::move(h)); },
-        .onRepeatModeChanged = [this](auto h) { return onRepeatModeChanged(std::move(h)); },
-        .onVolumeChanged = [this](auto h) { return onVolumeChanged(std::move(h)); },
-        .pause = [] {},
-        .resume = [] {},
-        .stop = [] {},
-        .seek = [](auto, auto) {},
-        .setVolume = [](auto) {}};
     }
 
     void emitStarted()

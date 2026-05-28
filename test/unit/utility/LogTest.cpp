@@ -13,8 +13,6 @@
 
 namespace ao::log::test
 {
-  using namespace ao::log;
-
   TEST_CASE("Log - initialization and shutdown", "[utility][unit][log]")
   {
     auto const tempDir = std::filesystem::temp_directory_path() / "ao_log_test";

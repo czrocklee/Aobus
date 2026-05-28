@@ -12,30 +12,29 @@
 #include <memory>
 #include <utility>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TagEditController - smoke test", "[gtk][tag][controller]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto window = Gtk::Window{};
-
-  auto callbacks = TagEditController::Callbacks{.onTagsMutated = [] {}};
-
-  auto controller = TagEditController{window, fixture.runtime(), std::move(callbacks)};
-
-  SECTION("setup and addActionsTo does not crash")
+  TEST_CASE("TagEditController - smoke test", "[gtk][tag][controller]")
   {
-    auto group = Gio::SimpleActionGroup::create();
-    controller.addActionsTo(*group);
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
 
-    auto addAction = std::dynamic_pointer_cast<Gio::SimpleAction>(group->lookup_action("track-tag-add"));
-    REQUIRE(addAction);
+    auto callbacks = TagEditController::Callbacks{.onTagsMutated = [] {}};
 
-    // We don't have an active selection here, so it will return early without crashing.
-    addAction->activate(Glib::Variant<Glib::ustring>::create("ActionTag"));
-    drainGtkEvents();
+    auto controller = TagEditController{window, fixture.runtime(), std::move(callbacks)};
+
+    SECTION("setup and addActionsTo does not crash")
+    {
+      auto group = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*group);
+
+      auto addAction = std::dynamic_pointer_cast<Gio::SimpleAction>(group->lookup_action("track-tag-add"));
+      REQUIRE(addAction);
+
+      // We don't have an active selection here, so it will return early without crashing.
+      addAction->activate(Glib::Variant<Glib::ustring>::create("ActionTag"));
+      drainGtkEvents();
+    }
   }
-}
+} // namespace ao::gtk::test

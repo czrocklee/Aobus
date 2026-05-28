@@ -15,8 +15,6 @@
 
 namespace ao::utility::test
 {
-  using namespace ao::utility;
-
   namespace
   {
     struct Dummy final

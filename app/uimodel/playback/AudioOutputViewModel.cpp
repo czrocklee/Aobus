@@ -5,7 +5,6 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/AudioOutputViewModel.h>
 
-#include <format>
 #include <functional>
 #include <utility>
 #include <vector>
@@ -48,8 +47,7 @@ namespace ao::uimodel::playback
         for (auto const& profileMeta : backend.supportedProfiles)
         {
           auto const profile = profileMeta.id;
-          auto const displayName =
-            (profile == audio::kProfileExclusive) ? std::format("{} [E]", device.displayName) : device.displayName;
+          bool const isExclusive = (profile == audio::kProfileExclusive);
 
           bool const isActive =
             (backend.id == state.selectedOutput.backendId && profile == state.selectedOutput.profileId &&
@@ -60,9 +58,10 @@ namespace ao::uimodel::playback
             .backendId = backend.id,
             .deviceId = device.id,
             .profileId = profile,
-            .title = displayName,
+            .title = device.displayName,
             .description = device.description,
             .isActive = isActive,
+            .isExclusive = isExclusive,
           });
         }
       }

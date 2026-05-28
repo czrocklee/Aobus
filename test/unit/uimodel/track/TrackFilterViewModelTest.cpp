@@ -18,10 +18,9 @@
 #include <functional>
 #include <vector>
 
-using namespace ao::rt::test;
-
 namespace ao::uimodel::track::test
 {
+  using namespace ao::rt::test;
   namespace
   {
     using namespace ao::rt;
@@ -78,10 +77,23 @@ namespace ao::uimodel::track::test
       SUCCEED("updateFilter handles expression syntax");
     }
 
-    SECTION("updateFilter with plain text")
+    SECTION("updateFilter with plain text uses Quick search resolver")
     {
+      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+      workspaceService.setFocusedView(reply.viewId);
+
       viewModel.updateFilter("Beatles");
-      SUCCEED("updateFilter handles plain text");
+      CHECK(renderLog.last().resolvedExpression.contains("$title ~ \"Beatles\""));
+      CHECK(renderLog.last().resolvedExpression.contains("$artist ~ \"Beatles\""));
+    }
+
+    SECTION("updateFilter with multiple terms creates AND expression")
+    {
+      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+      workspaceService.setFocusedView(reply.viewId);
+
+      viewModel.updateFilter("Beatles help");
+      CHECK(renderLog.last().resolvedExpression.contains(") and ("));
     }
 
     SECTION("Focus on a view enables filter")
@@ -103,6 +115,16 @@ namespace ao::uimodel::track::test
       viewModel.updateFilter("$artist ~ 'Beatles'");
       CHECK(renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
       CHECK(renderLog.last().canCreateSmartList == true);
+    }
+
+    SECTION("updateFilter with quotes handles escaping")
+    {
+      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+      workspaceService.setFocusedView(reply.viewId);
+
+      viewModel.updateFilter("\"A Song Name\"");
+      // It should use the TrackFilterResolver which handles quoting
+      CHECK(renderLog.last().resolvedExpression.contains("\"A Song Name\""));
     }
 
     SECTION("Focus lost clears filter state")

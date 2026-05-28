@@ -7,46 +7,38 @@
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
 
 #include <functional>
-#include <string>
 #include <utility>
 
 namespace ao::uimodel::playback
 {
   namespace
   {
-    std::string const kColorCyan{"#00E5FF"};
-    std::string const kColorGray{"#6B7280"};
-    std::string const kColorPurple{"#A855F7"};
-    std::string const kColorGreen{"#10B981"};
-    std::string const kColorOrange{"#F59E0B"};
-    std::string const kColorRed{"#EF4444"};
-
-    std::string colorForQuality(audio::Quality const quality)
+    AuraColor colorForQuality(audio::Quality const quality)
     {
       switch (quality)
       {
         case audio::Quality::BitwisePerfect:
-        case audio::Quality::LosslessPadded: return kColorPurple;
-        case audio::Quality::LosslessFloat: return kColorGreen;
-        case audio::Quality::LinearIntervention: return kColorOrange;
-        case audio::Quality::Clipped: return kColorRed;
+        case audio::Quality::LosslessPadded: return AuraColor::Perfect;
+        case audio::Quality::LosslessFloat: return AuraColor::Lossless;
+        case audio::Quality::LinearIntervention: return AuraColor::Intervention;
+        case audio::Quality::Clipped: return AuraColor::Clipped;
         case audio::Quality::LossySource:
-        case audio::Quality::Unknown: return kColorGray;
+        case audio::Quality::Unknown: return AuraColor::Unknown;
       }
 
-      return kColorGray;
+      return AuraColor::Unknown;
     }
 
-    std::string computeColor(bool const playing, bool const ready, audio::Quality const quality)
+    AuraColor computeColor(bool const playing, bool const ready, audio::Quality const quality)
     {
       if (!playing)
       {
-        return kColorCyan;
+        return AuraColor::Idle;
       }
 
       if (!ready)
       {
-        return kColorGray;
+        return AuraColor::Unknown;
       }
 
       return colorForQuality(quality);

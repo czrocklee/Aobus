@@ -123,7 +123,7 @@ namespace ao::gtk
         [this](ao::uimodel::playback::AobusSoulViewState const& view)
         {
           _bigSoul.breathe(view.isBreathing);
-          _bigSoul.setAura(Gdk::RGBA{view.auraColor});
+          _bigSoul.setAura(AobusSoul::mapAuraColor(view.auraColor));
         });
     }
   }
@@ -139,7 +139,7 @@ namespace ao::gtk
         [this](ao::uimodel::playback::AobusSoulViewState const& view)
         {
           _bigSoul.breathe(view.isBreathing);
-          _bigSoul.setAura(Gdk::RGBA{view.auraColor});
+          _bigSoul.setAura(AobusSoul::mapAuraColor(view.auraColor));
         });
     }
   }

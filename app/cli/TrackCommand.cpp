@@ -31,8 +31,6 @@ namespace ao::cli
 {
   namespace
   {
-    using namespace ao;
-
     constexpr int kPlainTrackIdWidth = 5;
 
     std::vector<std::pair<TrackId, library::TrackView>> collectTracks(library::MusicLibrary& ml,

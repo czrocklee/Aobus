@@ -12,43 +12,42 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TagEditor - smoke test", "[gtk][tag]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& library = fixture.runtime().musicLibrary();
-
-  auto trackId = TrackId{kInvalidTrackId};
-
-  // 1. Add a track with tags
+  TEST_CASE("TagEditor - smoke test", "[gtk][tag]")
   {
-    auto txn = library.writeTransaction();
-    auto writer = library.tracks().writer(txn);
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& library = fixture.runtime().musicLibrary();
 
-    auto builder = library::TrackBuilder::createNew();
-    builder.metadata().title("Tagged Track");
-    builder.tags().add("Rock");
-    builder.tags().add("90s");
+    auto trackId = TrackId{kInvalidTrackId};
 
-    auto const [hot, cold] = builder.serialize(txn, library.dictionary(), library.resources());
-    auto [id, _] = writer.createHotCold(hot, cold);
-    trackId = id;
+    // 1. Add a track with tags
+    {
+      auto txn = library.writeTransaction();
+      auto writer = library.tracks().writer(txn);
 
-    // Add another track with a different tag to show up in "available"
-    auto builder2 = library::TrackBuilder::createNew();
-    builder2.metadata().title("Other Track");
-    builder2.tags().add("Jazz");
-    auto const [hot2, cold2] = builder2.serialize(txn, library.dictionary(), library.resources());
-    writer.createHotCold(hot2, cold2);
+      auto builder = library::TrackBuilder::createNew();
+      builder.metadata().title("Tagged Track");
+      builder.tags().add("Rock");
+      builder.tags().add("90s");
 
-    txn.commit();
+      auto const [hot, cold] = builder.serialize(txn, library.dictionary(), library.resources());
+      auto [id, _] = writer.createHotCold(hot, cold);
+      trackId = id;
+
+      // Add another track with a different tag to show up in "available"
+      auto builder2 = library::TrackBuilder::createNew();
+      builder2.metadata().title("Other Track");
+      builder2.tags().add("Jazz");
+      auto const [hot2, cold2] = builder2.serialize(txn, library.dictionary(), library.resources());
+      writer.createHotCold(hot2, cold2);
+
+      txn.commit();
+    }
+
+    auto editor = TagEditor{};
+    editor.setup(library, {trackId});
+    drainGtkEvents();
   }
-
-  auto editor = TagEditor{};
-  editor.setup(library, {trackId});
-  drainGtkEvents();
-}
+} // namespace ao::gtk::test

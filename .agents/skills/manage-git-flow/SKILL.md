@@ -46,7 +46,7 @@ For C++ changes:
 
 For any code change, run the narrowest meaningful build or test. Use `./build.sh debug` when there is no safer focused check.
 
-If the user asks whether a change is ready, safe, or worth merging, load `reviewing-code` and keep the review focused on correctness and regressions.
+If the user asks whether a change is ready, safe, or worth merging, load `code-review` and keep the review focused on correctness and regressions.
 
 ## 3. Commit Procedure
 1. Review the repo state with `git status`, `git diff HEAD`, and `git log -n 3`.

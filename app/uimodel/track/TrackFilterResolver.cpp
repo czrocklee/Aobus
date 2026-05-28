@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "track/TrackFilterResolver.h"
+#include <ao/uimodel/track/TrackFilterResolver.h>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/trim.hpp>
@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::gtk
+namespace ao::uimodel::track
 {
   namespace
   {
@@ -183,4 +183,4 @@ namespace ao::gtk
 
     return ResolvedTrackFilter{.mode = TrackFilterMode::Quick, .expression = optExpression.value_or("")};
   }
-} // namespace ao::gtk
+} // namespace ao::uimodel::track

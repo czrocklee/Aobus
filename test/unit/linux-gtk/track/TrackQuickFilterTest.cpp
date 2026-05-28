@@ -11,23 +11,22 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/entry.h>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TrackQuickFilter - smoke test", "[gtk][track][viewmodel]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& runtime = fixture.runtime();
+  TEST_CASE("TrackQuickFilter - smoke test", "[gtk][track][viewmodel]")
+  {
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
 
-  auto filter = TrackQuickFilter{runtime};
-  auto* const gtkEntry = dynamic_cast<Gtk::Entry*>(&filter);
-  REQUIRE(gtkEntry);
+    auto filter = TrackQuickFilter{runtime};
+    auto* const gtkEntry = dynamic_cast<Gtk::Entry*>(&filter);
+    REQUIRE(gtkEntry);
 
-  // Just verify it wires up and doesn't crash
-  auto const reply = runtime.views().createView({.listId = ListId{1}});
-  runtime.workspace().setFocusedView(reply.viewId);
+    // Just verify it wires up and doesn't crash
+    auto const reply = runtime.views().createView({.listId = ListId{1}});
+    runtime.workspace().setFocusedView(reply.viewId);
 
-  drainGtkEvents();
-}
+    drainGtkEvents();
+  }
+} // namespace ao::gtk::test

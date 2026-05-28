@@ -26,9 +26,22 @@ namespace ao::uimodel::playback
     Repeat,
   };
 
+  enum class TransportIcon : std::uint8_t
+  {
+    None,
+    Play,
+    Pause,
+    Stop,
+    Next,
+    Previous,
+    Shuffle,
+    Repeat,
+    RepeatOne,
+  };
+
   struct TransportViewState final
   {
-    std::string transportGlyph;
+    TransportIcon icon = TransportIcon::None;
     std::string tooltip;
     std::string label;
     bool enabled = false;

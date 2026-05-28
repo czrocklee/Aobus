@@ -7,29 +7,28 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("AobusSoulWindow - basic lifecycle", "[gtk][playback]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& playback = fixture.runtime().playback();
-
-  auto window = AobusSoulWindow{};
-
-  SECTION("initial state")
+  TEST_CASE("AobusSoulWindow - basic lifecycle", "[gtk][playback]")
   {
-    CHECK(window.get_title() == "Aobus Soul");
-  }
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& playback = fixture.runtime().playback();
 
-  SECTION("bind and show")
-  {
-    window.bind(playback);
+    auto window = AobusSoulWindow{};
 
-    drainGtkEvents();
-    window.hide();
-    drainGtkEvents();
+    SECTION("initial state")
+    {
+      CHECK(window.get_title() == "Aobus Soul");
+    }
+
+    SECTION("bind and show")
+    {
+      window.bind(playback);
+
+      drainGtkEvents();
+      window.hide();
+      drainGtkEvents();
+    }
   }
-}
+} // namespace ao::gtk::test

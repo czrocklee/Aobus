@@ -3,8 +3,10 @@
 
 #include "test/unit/runtime/TestUtils.h"
 #include <ao/audio/Backend.h>
+#include <ao/audio/IBackend.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
+#include <ao/audio/Subscription.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
@@ -15,15 +17,16 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string_view>
+#include <utility>
 #include <vector>
-
-using namespace ao::rt::test;
 
 namespace ao::uimodel::playback::test
 {
+  using namespace ao::rt::test;
   using namespace ao::rt;
   namespace
   {
@@ -54,16 +57,16 @@ namespace ao::uimodel::playback::test
 
     struct TestBackend final : audio::NullBackend
     {
-      audio::BackendId _backendId;
-      audio::ProfileId _profileId;
+      audio::BackendId backendIdValue;
+      audio::ProfileId profileIdValue;
 
       TestBackend(audio::BackendId backendId, audio::ProfileId profileId)
-        : _backendId{std::move(backendId)}, _profileId{std::move(profileId)}
+        : backendIdValue{std::move(backendId)}, profileIdValue{std::move(profileId)}
       {
       }
 
-      audio::BackendId backendId() const noexcept override { return _backendId; }
-      audio::ProfileId profileId() const noexcept override { return _profileId; }
+      audio::BackendId backendId() const noexcept override { return backendIdValue; }
+      audio::ProfileId profileId() const noexcept override { return profileIdValue; }
     };
 
     struct FakeOutputProvider final : audio::IBackendProvider
@@ -81,6 +84,7 @@ namespace ao::uimodel::playback::test
         {
           callback(provStatus.devices);
         }
+
         return audio::Subscription{};
       }
 
@@ -190,7 +194,9 @@ namespace ao::uimodel::playback::test
       }
 
       CHECK(rows[1].profileId == audio::kProfileShared);
+      CHECK(rows[1].isExclusive == false);
       CHECK(rows[2].profileId == audio::kProfileExclusive);
+      CHECK(rows[2].isExclusive == true);
     }
 
     SECTION("active device is highlighted after setOutput")

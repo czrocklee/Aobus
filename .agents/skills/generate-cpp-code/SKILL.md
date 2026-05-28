@@ -32,4 +32,4 @@ When editing tests, always read `references/04-test-snippets.md` in addition to 
 - **Full Standards**: [CONTRIBUTING.md](../../../CONTRIBUTING.md) (Read this if unsure about general C++ standards)
 - **Error Handling Design**: [doc/design/error-handling.md](../../../doc/design/error-handling.md) (Read this when adding or changing fallible APIs)
 - **Build & Test**: [README.md](../../../README.md)
-- **Type-to-Header Map**: [handling-clang-tidy-warnings/references/type-to-header-map.md](../handling-clang-tidy-warnings/references/type-to-header-map.md) — exact header for every type used in Aobus
+- **Type-to-Header Map**: [use-clang-tidy/references/type-to-header-map.md](../use-clang-tidy/references/type-to-header-map.md) — exact header for every type used in Aobus

@@ -5,9 +5,9 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/track/TrackFilterResolver.h>
 #include <ao/uimodel/track/TrackFilterViewModel.h>
 
-#include <cstdint>
 #include <format>
 #include <functional>
 #include <string>
@@ -15,37 +15,6 @@
 
 namespace ao::uimodel::track
 {
-  namespace
-  {
-    enum class TrackFilterMode : std::uint8_t
-    {
-      None,
-      PlainText,
-      Expression
-    };
-
-    struct ResolvedFilter final
-    {
-      TrackFilterMode mode = TrackFilterMode::None;
-      std::string expression;
-    };
-
-    ResolvedFilter resolveTrackFilterExpression(std::string const& raw)
-    {
-      if (raw.empty())
-      {
-        return {.mode = TrackFilterMode::None, .expression = ""};
-      }
-
-      if (raw.starts_with('$'))
-      {
-        return {.mode = TrackFilterMode::Expression, .expression = raw};
-      }
-
-      return {.mode = TrackFilterMode::PlainText, .expression = std::format("$text ~ \"{}\"", raw)};
-    }
-  } // namespace
-
   TrackFilterViewModel::TrackFilterViewModel(rt::ViewService& viewService,
                                              rt::WorkspaceService& workspaceService,
                                              std::function<void(TrackFilterViewState const&)> onRender)

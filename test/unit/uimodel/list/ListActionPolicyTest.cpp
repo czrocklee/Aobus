@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/CorePrimitives.h>
 #include <ao/Type.h>
+#include <ao/rt/CorePrimitives.h>
 #include <ao/uimodel/list/ListActionPolicy.h>
 
 #include <catch2/catch_test_macros.hpp>

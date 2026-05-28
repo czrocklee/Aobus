@@ -19,6 +19,7 @@
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
+#include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -26,7 +27,6 @@
 #include <iterator>
 #include <memory>
 #include <optional>
-#include <sigc++/functors/mem_fun.h>
 #include <string>
 #include <string_view>
 #include <vector>

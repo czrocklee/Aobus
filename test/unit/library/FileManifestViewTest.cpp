@@ -12,8 +12,6 @@
 
 namespace ao::library::test
 {
-  using namespace ao::library;
-
   TEST_CASE("FileManifestView - properties", "[library][unit][manifest]")
   {
     // 24 bytes buffer

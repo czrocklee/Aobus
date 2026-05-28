@@ -45,7 +45,9 @@ namespace ao::uimodel::playback
     static std::string formatPlaybackTime(PlaybackTimeMode mode, std::uint32_t posMs, std::uint32_t durMs);
 
   private:
-    void refresh(bool immediateUpdate, bool isPreviewing, std::optional<std::uint32_t> optOverridePosition = std::nullopt);
+    void refresh(bool immediateUpdate,
+                 bool isPreviewing,
+                 std::optional<std::uint32_t> optOverridePosition = std::nullopt);
 
     rt::PlaybackService& _playback;
     std::function<void(PlaybackTimeViewState const&)> _onRender;

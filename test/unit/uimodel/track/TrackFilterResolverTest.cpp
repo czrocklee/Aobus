@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "track/TrackFilterResolver.h"
+#include <ao/uimodel/track/TrackFilterResolver.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace ao::gtk::test
+using namespace ao::uimodel::track;
+
+namespace ao::uimodel::track::test
 {
-  TEST_CASE("TrackFilterResolver - Quick Search Terms", "[gtk][unit][filter]")
+  TEST_CASE("TrackFilterResolver - Quick Search Terms", "[unit][uimodel][filter]")
   {
     SECTION("Empty filter")
     {
@@ -39,7 +41,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackFilterResolver - Complex Expressions", "[gtk][unit][filter]")
+  TEST_CASE("TrackFilterResolver - Complex Expressions", "[unit][uimodel][filter]")
   {
     SECTION("Expression starting with $")
     {
@@ -55,4 +57,4 @@ namespace ao::gtk::test
       CHECK(resolved.expression == "@jazz");
     }
   }
-} // namespace ao::gtk::test
+} // namespace ao::uimodel::track::test

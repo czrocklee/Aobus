@@ -1,6 +1,9 @@
 ---
 name: diagnose-issue
-description: Diagnose and fix Aobus failures such as compile errors, failing tests, crashes, sanitizer reports, deadlocks, races, hangs, and threading bugs while staying focused on root-cause problem solving and avoiding distracting cleanup, documentation, formatting, linting, or broad refactors unless required to resolve the issue.
+description: >-
+  Diagnose and fix Aobus failures (compile errors, test failures, crashes, sanitizer reports,
+  deadlocks, races, hangs, threading bugs). Stay focused on root cause — avoid cleanup,
+  formatting, or refactors unless required to resolve the issue.
 ---
 
 # diagnose-issue

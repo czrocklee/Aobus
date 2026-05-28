@@ -18,10 +18,9 @@
 #include <optional>
 #include <vector>
 
-using namespace ao::rt::test;
-
 namespace ao::uimodel::playback::test
 {
+  using namespace ao::rt::test;
   using namespace ao::rt;
 
   namespace
@@ -80,6 +79,14 @@ namespace ao::uimodel::playback::test
       queueModel.next();
       queueModel.previous();
       // Should not crash or activate
+      CHECK(queueModel.isActive() == false);
+    }
+
+    SECTION("playQueue fails if startTrackId is not in the list")
+    {
+      auto const tracks = std::vector{TrackId{1}, TrackId{2}};
+      auto const result = queueModel.playQueue(tracks, TrackId{3}, ListId{10});
+      CHECK(result == false);
       CHECK(queueModel.isActive() == false);
     }
 

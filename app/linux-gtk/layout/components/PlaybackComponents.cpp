@@ -354,7 +354,7 @@ namespace ao::gtk::layout
             [this](uimodel::playback::AobusSoulViewState const& view)
             {
               _soul.breathe(view.isBreathing);
-              _soul.setAura(Gdk::RGBA{view.auraColor});
+              _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
             })}
       {
       }

@@ -19,7 +19,6 @@
 
 namespace ao::gtk::test
 {
-  using namespace ao::gtk;
   using namespace ao::rt;
 
   namespace

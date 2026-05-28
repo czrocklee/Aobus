@@ -31,6 +31,7 @@
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
+#include <format>
 #include <memory>
 #include <utility>
 
@@ -71,7 +72,8 @@ namespace ao::gtk
               .backendId = row.backendId,
             };
 
-            auto const item = DeviceItem::create(row.backendId, audioDevice, row.profileId, row.title);
+            auto const displayName = row.isExclusive ? std::format("{} [E]", row.title) : row.title;
+            auto const item = DeviceItem::create(row.backendId, audioDevice, row.profileId, displayName);
             item->setActive(row.isActive);
             _store->append(item);
           }
@@ -83,7 +85,7 @@ namespace ao::gtk
       [this](ao::uimodel::playback::AobusSoulViewState const& view)
       {
         _soul.breathe(view.isBreathing);
-        _soul.setAura(Gdk::RGBA{view.auraColor});
+        _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
       });
 
     _popover.set_parent(_button);

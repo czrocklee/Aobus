@@ -9,19 +9,18 @@
 #include <giomm/listmodel.h>
 #include <gtkmm/window.h>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("QueryExpressionBox - smoke test", "[gtk][list][query]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& library = fixture.runtime().musicLibrary();
+  TEST_CASE("QueryExpressionBox - smoke test", "[gtk][list][query]")
+  {
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& library = fixture.runtime().musicLibrary();
 
-  auto window = Gtk::Window{};
-  auto box = QueryExpressionBox{library};
-  window.set_child(box);
+    auto window = Gtk::Window{};
+    auto box = QueryExpressionBox{library};
+    window.set_child(box);
 
-  drainGtkEvents();
-}
+    drainGtkEvents();
+  }
+} // namespace ao::gtk::test

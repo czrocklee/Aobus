@@ -124,8 +124,6 @@ Common acceptable cases: GTKmm `make_refptr_for_instance(new T)`, GLib/GTK macro
 
 Use `--fix` only for mechanical, reviewable diagnostics in a focused file set. After `--fix`, inspect the changed code before continuing, because generated edits can alter formatting or choose a less idiomatic local pattern. Do not use `--fix --all` unless the user explicitly asked for broad automatic cleanup.
 
-## Verification
-
 After fixing warnings, run the narrowest clang-tidy check that covers the modified C++ files:
 
 ```bash

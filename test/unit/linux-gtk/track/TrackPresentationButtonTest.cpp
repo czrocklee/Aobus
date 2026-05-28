@@ -12,30 +12,29 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
 
-using namespace ao;
-using namespace ao::gtk;
-using namespace ao::gtk::test;
-
-TEST_CASE("TrackPresentationButton - menu population", "[gtk][track][presentation]")
+namespace ao::gtk::test
 {
-  [[maybe_unused]] auto const app = ensureGtkApplication();
-  auto fixture = GtkRuntimeFixture{};
-  auto& runtime = fixture.runtime();
-  auto presentationStore = TrackPresentationStore{runtime.workspace()};
-
-  auto window = Gtk::Window{};
-  auto button = TrackPresentationButton{runtime};
-  button.setPresentationStore(&presentationStore);
-  window.set_child(button);
-
-  SECTION("initial state")
+  TEST_CASE("TrackPresentationButton - menu population", "[gtk][track][presentation]")
   {
-    // Verify it doesn't crash
-  }
+    [[maybe_unused]] auto const app = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto presentationStore = TrackPresentationStore{runtime.workspace()};
 
-  SECTION("populates on focus change")
-  {
-    runtime.workspace().navigateTo(rt::kAllTracksListId);
-    drainGtkEvents();
+    auto window = Gtk::Window{};
+    auto button = TrackPresentationButton{runtime};
+    button.setPresentationStore(&presentationStore);
+    window.set_child(button);
+
+    SECTION("initial state")
+    {
+      // Verify it doesn't crash
+    }
+
+    SECTION("populates on focus change")
+    {
+      runtime.workspace().navigateTo(rt::kAllTracksListId);
+      drainGtkEvents();
+    }
   }
-}
+} // namespace ao::gtk::test
