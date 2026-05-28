@@ -7,7 +7,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/window.h>
+#include <gtkmm/applicationwindow.h>
 
 #include <memory>
 #include <vector>
@@ -19,9 +19,10 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const app = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto window = Gtk::Window{};
+    auto window = Gtk::ApplicationWindow{};
+    window.set_application(app);
 
-    auto controller = ShellLayoutController{runtime, window};
+    auto controller = ShellLayoutController{runtime, window, nullptr};
 
     SECTION("initial state")
     {
@@ -44,6 +45,21 @@ namespace ao::gtk::test
 
       controller.loadLayout(*keepAlive.back());
       drainGtkEvents();
+    }
+
+    SECTION("attachToWindow exports actions and refreshExportedActions works")
+    {
+      controller.attachToWindow();
+      
+      auto* actionMap = dynamic_cast<Gio::ActionMap*>(&window);
+      REQUIRE(actionMap != nullptr);
+      
+      auto gioAction = actionMap->lookup_action("playback.stop");
+      REQUIRE(gioAction != nullptr);
+      
+      // Queue model is not bound, so hasActiveQueue is false, thus stop should be disabled
+      controller.refreshExportedActions();
+      CHECK(gioAction->property_enabled() == false);
     }
   }
 } // namespace ao::gtk::test

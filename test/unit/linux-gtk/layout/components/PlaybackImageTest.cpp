@@ -5,6 +5,7 @@
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
+#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
@@ -45,8 +46,9 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto imageCache = std::make_unique<ImageCache>(10);
+    auto const actionRegistry = ActionRegistry{};
     auto ctx = LayoutContext{
-      .registry = registry, .runtime = runtime, .parentWindow = window, .inspector = {.imageCache = imageCache.get()}};
+      .registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window, .inspector = {.imageCache = imageCache.get()}};
 
     SECTION("default variant has no extra styling")
     {

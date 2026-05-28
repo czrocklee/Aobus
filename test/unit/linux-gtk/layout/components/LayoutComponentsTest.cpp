@@ -6,6 +6,7 @@
 #include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
+#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
 #include "layout/document/LayoutDocument.h"
@@ -24,6 +25,7 @@
 #include <gtkmm/scale.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -37,9 +39,9 @@ namespace ao::gtk::layout::test
 
   namespace
   {
-    LayoutContext makeContext(ComponentRegistry& registry, rt::AppRuntime& runtime, Gtk::Window& window)
+    LayoutContext makeContext(ComponentRegistry& registry, ActionRegistry& actionRegistry, rt::AppRuntime& runtime, Gtk::Window& window)
     {
-      return LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
+      return LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
     }
   } // namespace
 
@@ -60,7 +62,8 @@ namespace ao::gtk::layout::test
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = makeContext(registry, runtime, window);
+    auto actionRegistry = ActionRegistry{};
+    auto ctx = makeContext(registry, actionRegistry, runtime, window);
 
     SECTION("playPauseButton creates Gtk::Button")
     {
@@ -268,7 +271,8 @@ namespace ao::gtk::layout::test
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = makeContext(registry, runtime, window);
+    auto actionRegistry = ActionRegistry{};
+    auto ctx = makeContext(registry, actionRegistry, runtime, window);
 
     SECTION("library.listTree shows error when rowDataProvider missing")
     {
@@ -383,7 +387,9 @@ namespace ao::gtk::layout::test
     auto menuModel = Gio::Menu::create();
     menuModel->append_submenu("Test Menu", Gio::Menu::create());
 
+    auto actionRegistry = ActionRegistry{};
     auto ctx = LayoutContext{.registry = registry,
+                             .actionRegistry = actionRegistry,
                              .runtime = runtime,
                              .parentWindow = window,
                              .inspector = {.imageCache = imageCache.get()},
@@ -427,7 +433,8 @@ namespace ao::gtk::layout::test
 
     SECTION("app.menuBar tolerates absent menu model")
     {
-      auto ctx2 = makeContext(registry, runtime, window);
+      auto actionRegistry2 = ActionRegistry{};
+      auto ctx2 = makeContext(registry, actionRegistry2, runtime, window);
       auto const node = LayoutNode{.type = "app.menuBar"};
       auto const comp = registry.create(ctx2, node);
 
@@ -479,7 +486,8 @@ namespace ao::gtk::layout::test
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = makeContext(registry, runtime, window);
+    auto actionRegistry = ActionRegistry{};
+    auto ctx = makeContext(registry, actionRegistry, runtime, window);
 
     SECTION("all 13 status and semantic types")
     {
@@ -526,7 +534,67 @@ namespace ao::gtk::layout::test
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = makeContext(registry, runtime, window);
+    auto actionRegistry = ActionRegistry{};
+    auto ctx = makeContext(registry, actionRegistry, runtime, window);
+
+    SECTION("app.actionButton builds from YAML and binds actions")
+    {
+      auto const* const yaml = R"(
+      type: app.actionButton
+      props:
+        label: "Settings"
+        icon: "emblem-system-symbolic"
+        style: "circular"
+        primaryAction: "shell.showSystemMenu"
+        primaryLongPressAction: "shell.showSoul"
+      )";
+      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
+      auto layoutNode = LayoutNode{};
+      REQUIRE(rt::yaml::read(tree.rootref(), layoutNode));
+
+      std::int32_t primaryFired = 0;
+      std::int32_t longPressFired = 0;
+      
+      actionRegistry.registerAction(ActionDescriptor{.id = "shell.showSystemMenu",
+                                                           .label = "System Menu",
+                                                           .category = "Shell",
+                                                           .capabilities = ActionCapability::None},
+                                    [&](ActionActivationContext&) { primaryFired++; });
+
+      actionRegistry.registerAction(ActionDescriptor{.id = "shell.showSoul",
+                                                           .label = "Show Soul",
+                                                           .category = "Shell",
+                                                           .capabilities = ActionCapability::None},
+                                    [&](ActionActivationContext&) { longPressFired++; });
+
+      auto const comp = registry.create(ctx, layoutNode);
+      REQUIRE(comp != nullptr);
+
+      auto* const button = dynamic_cast<Gtk::Button*>(&comp->widget());
+      REQUIRE(button != nullptr);
+      CHECK(button->get_icon_name() == "emblem-system-symbolic");
+      CHECK(button->has_css_class("circular"));
+
+      // Verify that clicking the button routes primary action through the registry
+      ::g_signal_emit_by_name(button->gobj(), "clicked");
+      CHECK(primaryFired == 1);
+      CHECK(longPressFired == 0);
+    }
+
+    SECTION("app.actionButton exposes enum properties for editor")
+    {
+      auto const optDesc = registry.descriptor("app.actionButton");
+      REQUIRE(optDesc.has_value());
+
+      auto const it = std::find_if(optDesc->props.begin(), optDesc->props.end(),
+                                   [](auto const& p) { return p.name == "primaryAction"; });
+      REQUIRE(it != optDesc->props.end());
+      CHECK(it->kind == PropertyKind::Enum);
+      CHECK(it->enumValues.empty());
+      REQUIRE(it->optActionBinding.has_value());
+      CHECK(it->optActionBinding.value().slot == ActionSlot::PrimaryClick);
+    }
 
     SECTION("custom playback row YAML builds without errors")
     {

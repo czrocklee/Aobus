@@ -170,6 +170,20 @@ namespace
     }
   }
 
+  void releaseWindows(Gtk::Application& app, std::vector<Glib::RefPtr<MainWindow>>& windows)
+  {
+    for (auto& window : windows)
+    {
+      if (window)
+      {
+        app.remove_window(*window);
+        window.reset();
+      }
+    }
+
+    windows.clear();
+  }
+
   void setupUnixSignalHandlers(Glib::RefPtr<Gtk::Application>& app)
   {
     auto const handler = [](void* data) -> ::gboolean
@@ -207,6 +221,15 @@ namespace
     auto const quitAction = Gio::SimpleAction::create("quit");
     quitAction->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
     app->add_action(quitAction);
+
+    // Global layout action shortcuts (exported to the window ActionMap, so they use the 'win.' prefix)
+    app->set_accels_for_action("win.playback.playPause", {"<Primary>p", "space", "AudioPlay", "AudioPause"});
+    app->set_accels_for_action("win.playback.stop", {"AudioStop"});
+    app->set_accels_for_action("win.playback.next", {"<Primary>Right", "AudioNext"});
+    app->set_accels_for_action("win.playback.previous", {"<Primary>Left", "AudioPrev"});
+    app->set_accels_for_action("win.playback.toggleShuffle", {"<Primary>u"});
+    app->set_accels_for_action("win.playback.cycleRepeat", {"<Primary>r"});
+    app->set_accels_for_action("win.workspace.revealCurrentTrack", {"<Primary>l"});
   }
 
   void onAppActivate(Glib::RefPtr<Gtk::Application>& app, std::vector<Glib::RefPtr<MainWindow>>& windows)
@@ -291,6 +314,8 @@ int main(int argc, char* argv[])
 
     APP_LOG_INFO("Entering GTK main loop");
     exitCode = app->run(gtkArgc, gtkArgv.data());
+
+    releaseWindows(*app, windows);
   }
   catch (ao::Exception const& e)
   {

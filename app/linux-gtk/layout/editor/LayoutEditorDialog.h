@@ -6,6 +6,7 @@
 #include "app/AppDialog.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
+#include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 
 #include <giomm/simpleactiongroup.h>
@@ -37,7 +38,8 @@ namespace ao::gtk::layout::editor
   public:
     LayoutEditorDialog(Gtk::Window& parent,
                        ComponentRegistry const& registry,
-                       LayoutDocument initialDoc,
+                       ActionRegistry const& actionRegistry,
+                       LayoutDocument initialLayout,
                        std::string initialPresetId);
     ~LayoutEditorDialog() override;
 
@@ -50,6 +52,7 @@ namespace ao::gtk::layout::editor
     std::string selectedPresetId() const { return _comboPresets.get_active_id(); }
 
     sigc::signal<void(LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
+    sigc::signal<void(LayoutDocument const&)>& signalSaveRequest() { return _signalSaveRequest; }
 
     void updateNodePosition(std::string_view nodeId, std::int32_t posX, std::int32_t posY);
 
@@ -91,6 +94,7 @@ namespace ao::gtk::layout::editor
                           PropertyDescriptor const& prop,
                           LayoutValue const& currentVal,
                           bool isLayoutProp);
+    void populateActionComboBox(Gtk::ComboBoxText* combo, LayoutNode* node, PropertyDescriptor const& prop);
     void renderStringEditor(LayoutNode* node,
                             PropertyDescriptor const& prop,
                             LayoutValue const& currentVal,
@@ -109,9 +113,12 @@ namespace ao::gtk::layout::editor
     void onResetDefault();
     void onPresetChanged();
 
+    bool validateDocument();
+
     LayoutNode* findParentOf(LayoutNode* root, LayoutNode* target);
 
     ComponentRegistry const& _registry;
+    ActionRegistry const& _actionRegistry;
     LayoutDocument _document;
 
     ModelColumns _columns;
@@ -142,5 +149,6 @@ namespace ao::gtk::layout::editor
     Gtk::Paned _paned{Gtk::Orientation::HORIZONTAL};
 
     sigc::signal<void(LayoutDocument const&)> _signalApplyPreview;
+    sigc::signal<void(LayoutDocument const&)> _signalSaveRequest;
   };
 } // namespace ao::gtk::layout::editor

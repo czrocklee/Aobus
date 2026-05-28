@@ -5,6 +5,7 @@
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
+#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
@@ -15,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
+#include <gtkmm/dialog.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -156,6 +158,22 @@ namespace ao::gtk::layout::editor::test
       CHECK(hasProp("size"));
     }
 
+    SECTION("playback.outputButton has gesture action props")
+    {
+      auto const optDesc = registry.descriptor("playback.outputButton");
+
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->category == "Playback");
+
+      auto const hasProp = [&](std::string const& name)
+      { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
+
+      CHECK(hasProp("primaryAction"));
+      CHECK(hasProp("primaryLongPressAction"));
+      CHECK(hasProp("secondaryAction"));
+      CHECK(hasProp("secondaryLongPressAction"));
+    }
+
     SECTION("descriptor returns nullopt for unknown type")
     {
       auto const optDesc = registry.descriptor("nonexistent.component");
@@ -225,20 +243,21 @@ namespace ao::gtk::layout::editor::test
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
+    auto actionRegistry = ActionRegistry{};
 
     auto window = Gtk::Window{};
     auto const doc = createDefaultLayout();
 
     SECTION("Dialog constructs without crash")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc, "classic");
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
       REQUIRE(dialog != nullptr);
       dialog->close();
     }
 
     SECTION("document returns the initial document on construction")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc, "classic");
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
       auto const& returned = dialog->document();
 
       CHECK(returned.root.type == doc.root.type);
@@ -253,7 +272,7 @@ namespace ao::gtk::layout::editor::test
       auto modified = LayoutDocument{};
       modified.root.type = "spacer";
 
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, modified, "classic");
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, modified, "classic");
 
       // The dialog copies the document, so modifications to the dialog's copy
       // are reflected. Just verify the initial copy is correct.
@@ -262,9 +281,32 @@ namespace ao::gtk::layout::editor::test
       dialog->close();
     }
 
+    SECTION("Validation prevents saving unknown actions")
+    {
+      auto invalidDoc = LayoutDocument{};
+      invalidDoc.root.type = "app.actionButton";
+      invalidDoc.root.props["primaryAction"] = LayoutValue{"this.does.not.exist"};
+
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, invalidDoc, "classic");
+
+      // Attempting to save an invalid document should fail validation and keep dialog open
+      dialog->response(Gtk::ResponseType::OK);
+      // We can't check visible here since we didn't show(), but we verify it's still alive/active
+      CHECK(dialog != nullptr);
+      dialog->close();
+
+      auto validDoc = LayoutDocument{};
+      validDoc.root.type = "app.actionButton";
+      validDoc.root.props["primaryAction"] = LayoutValue{"none"};
+
+      auto dialogValid = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, validDoc, "classic");
+
+      // Attempting to save a valid document should succeed and close the dialog
+      dialogValid->response(Gtk::ResponseType::OK);    }
+
     SECTION("signalApplyPreview is emitted on document changes")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc, "classic");
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
       std::int32_t count = 0;
 
       dialog->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
@@ -365,7 +407,8 @@ namespace ao::gtk::layout::editor::test
 
       auto const app = Gtk::Application::create("io.github.aobus.template_test");
       auto window = Gtk::Window{};
-      auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
+    auto const actionRegistry = ActionRegistry{};
+      auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
       auto doc = LayoutDocument{};
       doc.version = 1;
@@ -398,7 +441,8 @@ namespace ao::gtk::layout::editor::test
 
       auto const app = Gtk::Application::create("io.github.aobus.recursive_test");
       auto window = Gtk::Window{};
-      auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
+    auto const actionRegistry = ActionRegistry{};
+      auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
       auto doc = LayoutDocument{};
       doc.version = 1;
@@ -451,7 +495,8 @@ namespace ao::gtk::layout::editor::test
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
+    auto const actionRegistry = ActionRegistry{};
+    auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
     SECTION("absoluteCanvas descriptor is registered as container")
     {

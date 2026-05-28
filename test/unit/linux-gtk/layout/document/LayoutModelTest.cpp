@@ -138,6 +138,24 @@ namespace ao::gtk::layout::test
       CHECK(decoded.root.children[1].props.at("hscrollPolicy").asString() == "never");
     }
 
+    SECTION("LayoutDocument round-trip preserves action-id props")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "playback.outputButton";
+      doc.root.props["primaryAction"] = LayoutValue{std::string{"playback.playPause"}};
+      doc.root.props["secondaryAction"] = LayoutValue{std::string{"shell.showSystemMenu"}};
+
+      auto tree = ryml::Tree{};
+      rt::yaml::write(tree.rootref(), doc);
+
+      auto decoded = LayoutDocument{};
+      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+
+      CHECK(decoded.root.type == "playback.outputButton");
+      CHECK(decoded.root.props.at("primaryAction").asString() == "playback.playPause");
+      CHECK(decoded.root.props.at("secondaryAction").asString() == "shell.showSystemMenu");
+    }
+
     SECTION("YAML decode tolerates missing optional fields")
     {
       auto const* yaml = R"(

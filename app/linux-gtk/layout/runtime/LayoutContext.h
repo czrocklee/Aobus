@@ -35,6 +35,7 @@ namespace ao::gtk
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
+  class ActionRegistry;
 
   struct TrackUiContext final
   {
@@ -76,6 +77,7 @@ namespace ao::gtk::layout
   struct LayoutContext final
   {
     ComponentRegistry const& registry;
+    ActionRegistry const& actionRegistry;
     rt::AppRuntime& runtime;
     Gtk::Window& parentWindow;
 

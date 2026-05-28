@@ -171,3 +171,7 @@ templates:
             children:
               - type: playback.volumeControl
               - type: playback.outputButton
+                props:
+                  primaryAction: playback.showAudioDeviceSelector
+                  secondaryAction: shell.showSystemMenu
+                  secondaryLongPressAction: shell.showSoul

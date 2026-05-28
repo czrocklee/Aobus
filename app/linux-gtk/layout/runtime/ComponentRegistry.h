@@ -7,6 +7,8 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 
+#include "ActionRegistry.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -38,6 +40,7 @@ namespace ao::gtk::layout
     std::string label;
     LayoutValue defaultValue = {};
     std::vector<std::string> enumValues = {};
+    std::optional<ActionBindingProperty> optActionBinding = {};
   };
 
   struct ComponentDescriptor final

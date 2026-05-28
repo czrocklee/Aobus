@@ -47,6 +47,8 @@ namespace ao::uimodel::playback
     bool playQueue(std::vector<TrackId> trackIds, TrackId startTrackId, ListId sourceListId);
 
     // Transport controls
+    bool hasNext() const;
+    bool hasPrevious() const;
     void next();
     void previous();
     void resume();

@@ -98,6 +98,10 @@ templates:
           cssClasses: ao-grouping-region
         children:
           - type: playback.outputButton
+            props:
+              primaryAction: playback.showAudioDeviceSelector
+              secondaryAction: shell.showSystemMenu
+              secondaryLongPressAction: shell.showSoul
             layout:
               halign: start
               valign: center

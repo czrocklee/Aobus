@@ -70,6 +70,55 @@ namespace ao::uimodel::playback
     return true;
   }
 
+  bool PlaybackQueueModel::hasNext() const
+  {
+    if (!_queueState)
+    {
+      return false;
+    }
+
+    auto const& state = _playback.state();
+
+    if (state.repeatMode == rt::RepeatMode::One || state.repeatMode == rt::RepeatMode::All)
+    {
+      return !_queueState->trackIds.empty();
+    }
+
+    if (state.shuffleMode == rt::ShuffleMode::On)
+    {
+      return _queueState->trackIds.size() > 1;
+    }
+
+    return _queueState->currentIndex + 1 < _queueState->trackIds.size();
+  }
+
+  bool PlaybackQueueModel::hasPrevious() const
+  {
+    if (!_queueState)
+    {
+      return false;
+    }
+
+    auto const& state = _playback.state();
+
+    if (state.positionMs > kRestartThresholdMs)
+    {
+      return true;
+    }
+
+    if (_queueState->currentIndex > 0)
+    {
+      return true;
+    }
+
+    if (state.repeatMode == rt::RepeatMode::All)
+    {
+      return !_queueState->trackIds.empty();
+    }
+
+    return false;
+  }
+
   void PlaybackQueueModel::next()
   {
     advanceToNext();

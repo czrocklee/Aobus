@@ -70,6 +70,11 @@ namespace ao::gtk::test
               {
                 return G_LOG_WRITER_HANDLED;
               }
+
+              if (msg.find("New application windows must be added after the GApplication::startup signal has been emitted") != std::string_view::npos)
+              {
+                return G_LOG_WRITER_HANDLED;
+              }
             }
           }
 

@@ -63,6 +63,7 @@ add_library(aobus-gtk-lib STATIC
     playback/TransportButton.cpp
     playback/TimeLabel.cpp
     playback/OutputSelector.cpp
+    playback/AudioDeviceSelector.cpp
     playback/VolumeControl.cpp
     playback/SeekControl.cpp
     playback/VolumeBar.cpp
@@ -84,6 +85,10 @@ add_library(aobus-gtk-lib STATIC
     layout/document/LayoutNode.cpp
     layout/runtime/LayoutRuntime.cpp
     layout/runtime/ComponentRegistry.cpp
+    layout/runtime/ActionRegistry.cpp
+    layout/runtime/GioActionBridge.cpp
+    layout/runtime/ActionValidator.cpp
+    layout/runtime/ActionBinder.cpp
     layout/runtime/LayoutHost.cpp
     layout/components/Containers.cpp
     layout/components/PlaybackComponents.cpp

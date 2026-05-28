@@ -186,13 +186,17 @@ add_executable(ao_test_gtk
     unit/linux-gtk/track/TrackPresentationTest.cpp
     unit/linux-gtk/track/TrackFieldUiTest.cpp
     unit/linux-gtk/track/TrackRowCacheTest.cpp
-    unit/linux-gtk/layout/document/LayoutModelTest.cpp
-    unit/linux-gtk/layout/components/ContainersTest.cpp
-    unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
-    unit/linux-gtk/layout/components/PlaybackImageTest.cpp
-    unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
-    unit/linux-gtk/layout/components/StatusComponentsTest.cpp
-    unit/linux-gtk/app/AppConfigTest.cpp
+      unit/linux-gtk/layout/document/LayoutModelTest.cpp
+      unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
+      unit/linux-gtk/layout/runtime/ActionBinderTest.cpp
+      unit/linux-gtk/layout/runtime/ActionValidatorTest.cpp
+      unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp
+      unit/linux-gtk/layout/components/ContainersTest.cpp
+      unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
+      unit/linux-gtk/layout/components/PlaybackImageTest.cpp
+      unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
+      unit/linux-gtk/layout/components/StatusComponentsTest.cpp
+      unit/linux-gtk/app/AppConfigTest.cpp
     unit/linux-gtk/playback/PlaybackUiComponentsTest.cpp
     unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
     unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp

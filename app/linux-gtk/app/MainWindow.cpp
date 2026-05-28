@@ -26,7 +26,7 @@ namespace ao::gtk
     : _runtime{runtime}
     , _config{std::move(config)}
     , _mainWindowCoordinator{std::make_unique<MainWindowCoordinator>(*this, _runtime, _config)}
-    , _shellLayout{_runtime, *this}
+    , _shellLayout{_runtime, *this, _config}
   {
     set_title("Aobus");
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
@@ -95,6 +95,7 @@ namespace ao::gtk
     _mainWindowCoordinator->initializeSession();
 
     _shellLayout.context().bind(_mainWindowCoordinator->uiServices());
+    _shellLayout.refreshExportedActions();
 
     _shellLayout.loadLayout(*_config);
   }
