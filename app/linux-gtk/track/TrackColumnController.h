@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "ao/Type.h"
 #include "track/TrackPresentationStore.h"
+#include <ao/Type.h>
 #include <ao/rt/TrackField.h>
 
 #include <giomm/listmodel.h>

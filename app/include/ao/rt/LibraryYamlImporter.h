@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "ao/Error.h"
-#include "ao/library/MusicLibrary.h"
+#include <ao/Error.h>
+#include <ao/library/MusicLibrary.h>
 
 #include <cstdint>
 #include <filesystem>

@@ -3,16 +3,16 @@
 
 #include "track/TrackSelectionController.h"
 
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackBuilder.h"
-#include "ao/library/TrackStore.h"
-#include "ao/lmdb/Transaction.h"
-#include "ao/rt/TrackListProjection.h"
-#include "ao/rt/TrackSource.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/rt/TrackListProjection.h>
+#include <ao/rt/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/columnview.h>

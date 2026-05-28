@@ -3,8 +3,8 @@
 
 #include "track/TrackPresentationStore.h"
 
-#include "ao/Type.h"
 #include "app/UIState.h"
+#include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>

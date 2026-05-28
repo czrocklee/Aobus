@@ -2,13 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
-#include "clang-tidy/ClangTidyCheck.h"
-#include "clang-tidy/ClangTidyOptions.h"
-#include "clang-tidy/utils/IncludeInserter.h"
-#include "clang/Basic/LLVM.h"
-#include "clang/Basic/SourceLocation.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/StringSet.h"
+#include <clang-tidy/ClangTidyCheck.h>
+#include <clang-tidy/ClangTidyOptions.h>
+#include <clang-tidy/utils/IncludeInserter.h>
+#include <clang/Basic/LLVM.h>
+#include <clang/Basic/SourceLocation.h>
+#include <llvm/ADT/DenseMap.h>
+#include <llvm/ADT/StringSet.h>
 
 namespace clang
 {

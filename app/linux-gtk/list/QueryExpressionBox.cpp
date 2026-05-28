@@ -3,9 +3,9 @@
 
 #include "list/QueryExpressionBox.h"
 
-#include "ao/library/DictionaryStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackStore.h"
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>

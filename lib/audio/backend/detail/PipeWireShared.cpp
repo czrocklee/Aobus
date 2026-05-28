@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/audio/backend/detail/PipeWireShared.h"
-
-#include "ao/audio/Format.h"
+#include <ao/audio/Format.h>
+#include <ao/audio/backend/detail/PipeWireShared.h>
 
 extern "C"
 {

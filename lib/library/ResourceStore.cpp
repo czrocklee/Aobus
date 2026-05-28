@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/library/ResourceStore.h"
-
-#include "ao/Exception.h"
-#include "ao/Type.h"
-#include "ao/lmdb/Transaction.h"
+#include <ao/Exception.h>
+#include <ao/Type.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/lmdb/Transaction.h>
 
 #include <algorithm>
 #include <cstddef>

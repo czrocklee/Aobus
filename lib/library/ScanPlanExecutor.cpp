@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ao/library/ScanPlanExecutor.h"
-
-#include "ao/Type.h"
-#include "ao/library/FileManifestBuilder.h"
-#include "ao/library/FileManifestLayout.h"
-#include "ao/library/FileManifestStore.h"
-#include "ao/library/LibraryScanner.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackBuilder.h"
-#include "ao/library/TrackStore.h"
-#include "ao/tag/TagFile.h"
-#include "ao/utility/Log.h"
+#include <ao/Type.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryScanner.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ScanPlanExecutor.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/tag/TagFile.h>
+#include <ao/utility/Log.h>
 
 #include <cstddef>
 #include <cstdint>

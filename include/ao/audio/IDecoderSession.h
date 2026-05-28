@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "ao/Error.h"
-#include "ao/audio/DecoderTypes.h"
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
 
 #include <cstdint>
 #include <filesystem>

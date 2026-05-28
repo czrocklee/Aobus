@@ -7,8 +7,8 @@
 #include "CorePrimitives.h"
 #include "SmartListEvaluator.h"
 #include "TrackSource.h"
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
 
 #include <memory>
 #include <unordered_map>

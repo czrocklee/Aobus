@@ -3,12 +3,12 @@
 
 #include "list/ListNavigationController.h"
 
-#include "ao/library/ListBuilder.h"
-#include "ao/library/ListStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/lmdb/Transaction.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>

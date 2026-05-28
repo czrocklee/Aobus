@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "ao/Type.h"
 #include "app/AppDialog.h"
 #include "list/QueryExpressionBox.h"
+#include <ao/Type.h>
 #include <ao/rt/LibraryMutationService.h>
 
 #include <gtkmm/box.h>

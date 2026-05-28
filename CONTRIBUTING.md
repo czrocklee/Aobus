@@ -25,9 +25,10 @@ Rules are numbered for easy reference in reviews and tooling.
   - 2.4. Includes
     - 2.4.1. Group includes with blank lines in this order:
       - the paired header for this file
-      - project headers (`<ao/...>`, `<runtime/...>`, or `"..."`)
-      - third-party headers
+      - ordinary local headers (`"..."`) and project public headers (`<ao/...>`, `<runtime/...>`, `<cli/...>`, `<app/...>`, `<fixture/...>`, `<test/...>`)
+      - third-party and platform headers
       - standard library headers
+    - 2.4.2. Within the ordinary local/project group, keep quoted local headers before angle-bracket project headers.
   - 2.5. Member Order
     - 2.5.1. Keep `.cpp` member definitions in the same order as the header
     - 2.5.2. Order header access sections as `public` → `protected` → `private`

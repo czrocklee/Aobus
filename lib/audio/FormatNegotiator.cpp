@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/audio/FormatNegotiator.h"
-
-#include "ao/audio/Backend.h"
-#include "ao/audio/Format.h"
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/FormatNegotiator.h>
 
 #include <algorithm>
 #include <cstdint>

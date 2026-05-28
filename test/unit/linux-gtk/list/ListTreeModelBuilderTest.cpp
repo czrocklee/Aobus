@@ -3,12 +3,12 @@
 
 #include "list/ListTreeModelBuilder.h"
 
-#include "ao/library/ListBuilder.h"
-#include "ao/library/ListStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/lmdb/Transaction.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/Type.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/CorePrimitives.h>
 
 #include <catch2/catch_test_macros.hpp>

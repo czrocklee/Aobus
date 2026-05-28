@@ -3,20 +3,20 @@
 
 #include "list/ListNavigationController.h"
 
-#include "ao/Type.h"
-#include "ao/library/ListStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/lmdb/Transaction.h"
-#include "ao/utility/Log.h"
 #include "list/ListSidebarPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/list/ListActionPolicy.h>
+#include <ao/utility/Log.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>

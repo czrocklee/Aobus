@@ -3,13 +3,12 @@
 
 #include "portal/ImportExportCoordinator.h"
 
-#include "ao/Exception.h"
-#include "ao/library/LibraryScanner.h"
-#include "ao/utility/Log.h"
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
 #include "layout/LayoutConstants.h"
 #include "portal/LibraryTaskProgressDialog.h"
+#include <ao/Exception.h>
+#include <ao/library/LibraryScanner.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/LibraryYamlExporter.h>
@@ -18,6 +17,7 @@
 #include <ao/rt/async/LifetimeScope.h>
 #include <ao/rt/async/Runtime.h>
 #include <ao/rt/async/Task.h>
+#include <ao/utility/Log.h>
 
 #include <giomm/asyncresult.h>
 #include <giomm/liststore.h>

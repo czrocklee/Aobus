@@ -3,10 +3,10 @@
 
 #include "track/TrackSelectionController.h"
 
-#include "ao/Type.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
+#include <ao/Type.h>
 
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>

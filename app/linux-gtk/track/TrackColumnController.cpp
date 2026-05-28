@@ -3,10 +3,10 @@
 
 #include "track/TrackColumnController.h"
 
-#include "ao/Type.h"
 #include "app/UIState.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackPresentationStore.h"
+#include <ao/Type.h>
 #include <ao/rt/TrackField.h>
 
 #include <giomm/listmodel.h>

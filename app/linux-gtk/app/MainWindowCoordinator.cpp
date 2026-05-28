@@ -3,9 +3,6 @@
 
 #include "app/MainWindowCoordinator.h"
 
-#include "ao/Type.h"
-#include "ao/lmdb/Transaction.h"
-#include "ao/utility/Log.h"
 #include "app/AppConfig.h"
 #include "app/GtkLayoutConfig.h"
 #include "app/GtkUiServices.h"
@@ -19,6 +16,8 @@
 #include "track/TrackPageHost.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
@@ -29,6 +28,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
+#include <ao/utility/Log.h>
 
 #include <filesystem>
 #include <memory>

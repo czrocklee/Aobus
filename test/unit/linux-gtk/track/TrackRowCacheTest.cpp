@@ -3,14 +3,14 @@
 
 #include "track/TrackRowCache.h"
 
-#include "ao/Type.h"
-#include "ao/audio/Types.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackBuilder.h"
-#include "ao/library/TrackStore.h"
-#include "ao/lmdb/Transaction.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include "track/TrackRowObject.h"
+#include <ao/Type.h>
+#include <ao/audio/Types.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_test_macros.hpp>

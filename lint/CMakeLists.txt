@@ -8,12 +8,13 @@ include(AddLLVM)
 find_package(Clang REQUIRED CONFIG)
 
 add_definitions(${LLVM_DEFINITIONS})
-include_directories(${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
 
 add_library(AobusLintPlugin MODULE
   check/CApiGlobalQualificationCheck.cpp
   check/ConcreteFinalCheck.cpp
   check/ControlBlockSpacingCheck.cpp
+  check/IncludeConventionCheck.cpp
   check/ForbidNodiscardCheck.cpp
   check/ForbidTrailingReturnCheck.cpp
   check/IdentifierNamingExtensionsCheck.cpp

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/utility/Log.h"
-
-#include "ao/audio/DecoderFactory.h"
+#include <ao/audio/DecoderFactory.h>
+#include <ao/utility/Log.h>
 
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>

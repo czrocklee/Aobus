@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "ao/Type.h"
-#include "ao/library/DictionaryStore.h"
+#include <ao/Type.h>
+#include <ao/library/DictionaryStore.h>
 
 #include <algorithm>
 #include <cctype>

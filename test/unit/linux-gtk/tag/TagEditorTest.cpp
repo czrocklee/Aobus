@@ -3,12 +3,12 @@
 
 #include "tag/TagEditor.h"
 
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackBuilder.h"
-#include "ao/library/TrackStore.h"
-#include "ao/lmdb/Transaction.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
 

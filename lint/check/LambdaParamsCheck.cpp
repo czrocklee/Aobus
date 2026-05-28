@@ -3,14 +3,13 @@
 
 #include "check/LambdaParamsCheck.h"
 
-#include "clang/AST/ASTContext.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Lex/Lexer.h"
-
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/ExprCXX.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/TokenKinds.h>
+#include <clang/Lex/Lexer.h>
 #include <clang/Lex/Token.h>
 
 using namespace clang::ast_matchers;

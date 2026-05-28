@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/audio/PcmRingBuffer.h"
+#include <ao/audio/PcmRingBuffer.h>
 
 #include <atomic>
 #include <cstddef>

@@ -3,8 +3,8 @@
 
 #include "app/GtkControlExecutor.h"
 
-#include "ao/Exception.h"
-#include "ao/utility/Log.h"
+#include <ao/Exception.h>
+#include <ao/utility/Log.h>
 
 #include <glibmm/main.h>
 #include <sigc++/functors/mem_fun.h>

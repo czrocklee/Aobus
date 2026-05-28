@@ -3,7 +3,6 @@
 
 #include "tag/TagEditController.h"
 
-#include "ao/utility/Log.h"
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"
@@ -12,6 +11,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/uimodel/tag/TagEditWorkflow.h>
+#include <ao/utility/Log.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>

@@ -3,10 +3,10 @@
 
 #include "image/ImageWidget.h"
 
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/ResourceStore.h"
 #include "image/ImageCache.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
 #include <ao/rt/ProjectionTypes.h>
 
 #include <gdkmm/pixbuf.h>

@@ -3,14 +3,14 @@
 
 #include "InitCommand.h"
 
-#include "ao/Type.h"
-#include "ao/library/FileManifestBuilder.h"
-#include "ao/library/FileManifestStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackStore.h"
-#include "ao/tag/TagFile.h"
-#include "ao/utility/Finder.h"
+#include <ao/Type.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/tag/TagFile.h>
+#include <ao/utility/Finder.h>
 
 #include <CLI/App.hpp>
 

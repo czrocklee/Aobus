@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "ao/audio/Format.h"
-#include "ao/audio/Property.h"
+#include <ao/audio/Format.h>
+#include <ao/audio/Property.h>
 
 #include <cstddef>
 #include <cstdint>

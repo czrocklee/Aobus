@@ -3,8 +3,8 @@
 
 #include "tag/TagPopover.h"
 
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
 
 #include <utility>
 #include <vector>

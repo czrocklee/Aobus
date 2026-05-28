@@ -3,14 +3,14 @@
 
 #include "track/TrackPageHost.h"
 
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
 #include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>

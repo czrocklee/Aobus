@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ao/Type.h"
+#include <ao/Type.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>

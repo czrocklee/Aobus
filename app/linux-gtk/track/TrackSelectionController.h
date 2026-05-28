@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "ao/Type.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
+#include <ao/Type.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>

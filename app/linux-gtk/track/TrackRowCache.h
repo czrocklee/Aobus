@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include "ao/Type.h"
-#include "ao/audio/Types.h"
-#include "ao/library/DictionaryStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackStore.h"
-#include "ao/library/TrackView.h"
+#include <ao/Type.h>
+#include <ao/audio/Types.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>

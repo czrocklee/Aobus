@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/AppVersion.h"
-#include "ao/Exception.h"
-#include "ao/utility/Log.h"
 #include "app/AppConfig.h"
 #include "app/GtkControlExecutor.h"
 #include "app/MainWindow.h"
 #include "app/StyleManager.h"
 #include "portal/ImportExportCoordinator.h"
+#include <ao/AppVersion.h>
+#include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/utility/Log.h>
 
 #include <CLI/CLI.hpp>
 #include <giomm/simpleaction.h>

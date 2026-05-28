@@ -8,10 +8,10 @@
 #include <memory>
 
 #ifdef ALSA_FOUND
-#include "ao/audio/backend/AlsaProvider.h"
+#include <ao/audio/backend/AlsaProvider.h>
 #endif
 #ifdef PIPEWIRE_FOUND
-#include "ao/audio/backend/PipeWireProvider.h"
+#include <ao/audio/backend/PipeWireProvider.h>
 #endif
 
 namespace ao::gtk

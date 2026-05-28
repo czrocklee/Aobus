@@ -3,26 +3,26 @@
 
 #include "check/UseStdNumbersCheck.h"
 
-#include "clang-tidy/ClangTidyCheck.h"
-#include "clang-tidy/ClangTidyOptions.h"
-#include "clang-tidy/utils/IncludeSorter.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/AST/Decl.h"
-#include "clang/AST/DeclCXX.h"
-#include "clang/AST/Expr.h"
-#include "clang/AST/ExprCXX.h"
-#include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/AST/Type.h"
-#include "clang/AST/TypeLoc.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/ASTMatchers/ASTMatchers.h"
-#include "clang/Basic/Diagnostic.h"
-#include "clang/Basic/LLVM.h"
-#include "clang/Basic/SourceLocation.h"
-#include "clang/Basic/SourceManager.h"
-#include "clang/Lex/Lexer.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Casting.h"
+#include <clang-tidy/ClangTidyCheck.h>
+#include <clang-tidy/ClangTidyOptions.h>
+#include <clang-tidy/utils/IncludeSorter.h>
+#include <clang/AST/ASTContext.h>
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclCXX.h>
+#include <clang/AST/Expr.h>
+#include <clang/AST/ExprCXX.h>
+#include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/Type.h>
+#include <clang/AST/TypeLoc.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/LLVM.h>
+#include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
+#include <llvm/ADT/StringRef.h>
+#include <llvm/Support/Casting.h>
 
 #include <optional>
 
@@ -31,8 +31,7 @@ using namespace clang::ast_matchers;
 namespace clang::tidy::readability
 {
   UseStdNumbersCheck::UseStdNumbersCheck(StringRef name, ClangTidyContext* context)
-    : ClangTidyCheck{name, context}
-    , _includeInserter{utils::IncludeSorter::IS_LLVM, true}
+    : ClangTidyCheck{name, context}, _includeInserter{utils::IncludeSorter::IS_LLVM, true}
   {
   }
 
@@ -183,8 +182,7 @@ namespace clang::tidy::readability
     {
       if (auto const* var = llvm::dyn_cast<VarDecl>(decl))
       {
-        if (auto const* declCtx = var->getDeclContext();
-            declCtx != nullptr && declCtx->isFunctionOrMethod())
+        if (auto const* declCtx = var->getDeclContext(); declCtx != nullptr && declCtx->isFunctionOrMethod())
         {
           if (auto const* func = llvm::dyn_cast<FunctionDecl>(declCtx))
           {
@@ -392,4 +390,3 @@ namespace clang::tidy::readability
     }
   }
 } // namespace clang::tidy::readability
-

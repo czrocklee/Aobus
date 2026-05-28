@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ao/utility/StrongType.h"
+#include <ao/utility/StrongType.h>
 
 #include <cstdint>
 #include <string>

@@ -150,15 +150,17 @@ IfMacros:
   - KJ_IF_MAYBE
 IncludeBlocks:   Regroup
 IncludeCategories:
+  - Regex:           '^"'
+    Priority:        1
+    SortPriority:    1
+  - Regex:           '^<(ao|runtime|cli|app|fixture|test)/'
+    Priority:        1
+    SortPriority:    2
+    CaseSensitive:   true
   - Regex:           '^<[a-z0-9_]+>$'
     Priority:        4
   - Regex:           '^<(sys|arpa|netinet|linux|machine|pwd|grp|termios|dirent|fnmatch|dlfcn|fcntl|poll|glob)/'
     Priority:        4
-  - Regex:           '^"'
-    Priority:        2
-  - Regex:           '^<(ao|runtime|cli|app|fixture|test)/'
-    Priority:        2
-    CaseSensitive:   true
   - Regex:           '.*'
     Priority:        3
 IncludeIsMainRegex: '(Test)?$'

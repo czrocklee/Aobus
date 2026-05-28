@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ao/Exception.h"
+#include <ao/Exception.h>
 
 #include <lmdb.h>
 

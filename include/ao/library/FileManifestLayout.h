@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ao/Type.h"
+#include <ao/Type.h>
 
 #include <array>
 #include <cstddef>

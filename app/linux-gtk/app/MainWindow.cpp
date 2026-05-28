@@ -3,7 +3,6 @@
 
 #include "app/MainWindow.h"
 
-#include "ao/utility/Log.h"
 #include "app/AppConfig.h"
 #include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
@@ -11,6 +10,7 @@
 #include "portal/ImportExportCoordinator.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/utility/Log.h>
 
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/gestureclick.h>

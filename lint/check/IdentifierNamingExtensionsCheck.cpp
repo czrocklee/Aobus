@@ -3,12 +3,11 @@
 
 #include "check/IdentifierNamingExtensionsCheck.h"
 
-#include "clang/AST/ASTContext.h"
-#include "clang/AST/DeclCXX.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/DeclCXX.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/CharInfo.h>
 #include <clang/Basic/LLVM.h>

@@ -3,7 +3,7 @@
 
 #include "list/ListRowObject.h"
 
-#include "ao/Type.h"
+#include <ao/Type.h>
 
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>

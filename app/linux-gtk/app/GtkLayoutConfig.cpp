@@ -4,8 +4,8 @@
 #include "GtkLayoutConfig.h"
 
 #include "UIState.h"
-#include "ao/utility/Log.h"
 #include <ao/rt/ConfigStore.h>
+#include <ao/utility/Log.h>
 
 #include <filesystem>
 #include <memory>

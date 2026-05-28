@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/audio/QualityAnalyzer.h"
-
-#include "ao/audio/Backend.h"
-#include "ao/audio/Format.h"
-#include "ao/audio/flow/Graph.h"
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/flow/Graph.h>
 
 #include <algorithm>
 #include <cstddef>

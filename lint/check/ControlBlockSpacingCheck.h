@@ -3,17 +3,18 @@
 
 #pragma once
 
-#include "clang-tidy/ClangTidyCheck.h"
-#include "clang/Lex/Lexer.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
+#include <clang-tidy/ClangTidyCheck.h>
 #include <clang-tidy/ClangTidyDiagnosticConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Stmt.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
+#include <clang/Lex/Lexer.h>
 #include <clang/Lex/Token.h>
+#include <llvm/ADT/DenseMap.h>
+#include <llvm/ADT/DenseSet.h>
+
 #include <cstddef>
 #include <vector>
 

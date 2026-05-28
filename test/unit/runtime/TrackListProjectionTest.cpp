@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TestUtils.h"
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackStore.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/SmartListEvaluator.h>

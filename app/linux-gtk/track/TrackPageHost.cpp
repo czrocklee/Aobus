@@ -3,18 +3,17 @@
 
 #include "track/TrackPageHost.h"
 
-#include "ao/Type.h"
-#include "ao/library/ListStore.h"
-#include "ao/library/ListView.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/lmdb/Transaction.h"
-#include "ao/utility/Log.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "track/TrackListModel.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
+#include <ao/Type.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ManualListSource.h>
@@ -25,6 +24,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/uimodel/track/TrackPageRoute.h>
+#include <ao/utility/Log.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>

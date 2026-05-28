@@ -4,8 +4,6 @@
 #include "ShellLayoutController.h"
 
 #include "AppConfig.h"
-#include "ao/rt/async/Runtime.h"
-#include "ao/rt/async/Task.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -14,6 +12,8 @@
 #include "layout/runtime/LayoutRuntime.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/async/Runtime.h>
+#include <ao/rt/async/Task.h>
 #include <ao/utility/Log.h>
 
 #include <gtkmm/dialog.h>

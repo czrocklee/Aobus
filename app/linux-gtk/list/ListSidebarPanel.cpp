@@ -3,10 +3,10 @@
 
 #include "list/ListSidebarPanel.h"
 
-#include "ao/Type.h"
-#include "ao/lmdb/Transaction.h"
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
+#include <ao/Type.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 
 #include <gdk/gdk.h>

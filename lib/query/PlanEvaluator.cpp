@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/query/PlanEvaluator.h"
-
-#include "ao/Type.h"
-#include "ao/library/TrackView.h"
-#include "ao/query/ExecutionPlan.h"
+#include <ao/Type.h>
+#include <ao/library/TrackView.h>
+#include <ao/query/ExecutionPlan.h>
+#include <ao/query/PlanEvaluator.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 

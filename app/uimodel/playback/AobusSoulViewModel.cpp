@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ao/audio/Backend.h"
-#include "ao/audio/Types.h"
-#include "ao/rt/PlaybackService.h"
+#include <ao/audio/Backend.h>
+#include <ao/audio/Types.h>
+#include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
 
 #include <functional>

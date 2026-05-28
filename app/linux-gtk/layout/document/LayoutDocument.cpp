@@ -3,13 +3,13 @@
 
 #include "layout/document/LayoutDocument.h"
 
-#include "ao/Error.h"
-#include "ao/utility/Log.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/document/LayoutYaml.h"
+#include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/yaml/ConfigTraits.h> // NOLINT(misc-include-cleaner)
 #include <ao/rt/yaml/Utils.h>
+#include <ao/utility/Log.h>
 
 #include <giomm/resource.h>
 #include <glib.h>

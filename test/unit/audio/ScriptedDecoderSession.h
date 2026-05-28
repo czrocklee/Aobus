@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "ao/Error.h"
-#include "ao/audio/DecoderTypes.h"
-#include "ao/audio/IDecoderSession.h"
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/IDecoderSession.h>
 
 #include <cstddef>
 #include <cstdint>

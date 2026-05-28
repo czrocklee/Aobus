@@ -3,14 +3,14 @@
 
 #include "tag/TrackPropertiesDialog.h"
 
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackStore.h"
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
 #include "layout/LayoutConstants.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>

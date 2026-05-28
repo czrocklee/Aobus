@@ -4,6 +4,8 @@
 %compare-lengths
 %struct-type
 %{
+#include <cstdint>
+#include <cstring>
 namespace unit_dispatch {
 %}
 %define class-name Table

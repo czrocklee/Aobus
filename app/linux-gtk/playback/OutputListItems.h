@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ao/audio/Backend.h"
+#include <ao/audio/Backend.h>
 
 #include <glibmm/object.h>
 #include <glibmm/objectbase.h>

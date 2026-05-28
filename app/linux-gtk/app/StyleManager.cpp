@@ -3,7 +3,7 @@
 
 #include "app/StyleManager.h"
 
-#include "ao/utility/Log.h"
+#include <ao/utility/Log.h>
 
 #include <gdkmm/display.h>
 #include <gio/gsettingsschema.h>

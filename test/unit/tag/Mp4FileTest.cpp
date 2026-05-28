@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/media/mp4/AtomLayout.h"
-#include "ao/tag/TagFile.h"
 #include "lib/tag/mp4/File.h"
+#include <ao/media/mp4/AtomLayout.h>
+#include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
 

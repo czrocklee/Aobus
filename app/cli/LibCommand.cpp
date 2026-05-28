@@ -4,15 +4,15 @@
 #include "LibCommand.h"
 
 #include "DumpUtils.h"
-#include "ao/library/DictionaryStore.h"
-#include "ao/library/FileManifestLayout.h"
-#include "ao/library/FileManifestStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/ResourceStore.h"
-#include "ao/utility/ByteView.h"
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/LibraryYamlImporter.h>
+#include <ao/utility/ByteView.h>
 
 #include <CLI/App.hpp>
 

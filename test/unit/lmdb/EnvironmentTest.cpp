@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/lmdb/Environment.h"
-
-#include "ao/lmdb/Transaction.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>

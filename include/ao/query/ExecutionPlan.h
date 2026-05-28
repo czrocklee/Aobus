@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "ao/library/DictionaryStore.h"
-#include "ao/query/Expression.h"
+#include <ao/library/DictionaryStore.h>
+#include <ao/query/Expression.h>
 
 #include <cstdint>
 #include <string>

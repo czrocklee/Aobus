@@ -1,3 +1,6 @@
+%{
+#include <cstring>
+%}
 %language=C++
 %readonly-tables
 %compare-strncmp

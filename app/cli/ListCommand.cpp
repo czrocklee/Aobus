@@ -4,10 +4,10 @@
 #include "ListCommand.h"
 
 #include "DumpUtils.h"
-#include "ao/Type.h"
-#include "ao/library/ListBuilder.h"
-#include "ao/library/ListStore.h"
-#include "ao/library/MusicLibrary.h"
+#include <ao/Type.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/CoreRuntime.h>
 
 #include <CLI/App.hpp>

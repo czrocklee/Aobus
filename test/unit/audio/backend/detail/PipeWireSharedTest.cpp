@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/audio/backend/detail/PipeWireShared.h"
+#include <ao/audio/backend/detail/PipeWireShared.h>
 
 #include <catch2/catch_test_macros.hpp>
 

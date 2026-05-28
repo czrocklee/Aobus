@@ -3,10 +3,6 @@
 
 #include "PlaybackComponents.h"
 
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackStore.h"
-#include "ao/utility/Log.h"
 #include "app/AobusSoul.h"
 #include "image/ImageWidget.h"
 #include "layout/document/LayoutNode.h"
@@ -19,12 +15,16 @@
 #include "playback/TimeLabel.h"
 #include "playback/TransportButton.h"
 #include "playback/VolumeControl.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/utility/Log.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/label.h>

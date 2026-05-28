@@ -3,7 +3,6 @@
 
 #include "SemanticComponents.h"
 
-#include "ao/Type.h"
 #include "image/ImageWidget.h"
 #include "inspector/TrackInspectorPanel.h"
 #include "layout/document/LayoutNode.h"
@@ -14,6 +13,7 @@
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackViewPage.h"
+#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>

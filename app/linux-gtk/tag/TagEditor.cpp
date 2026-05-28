@@ -3,11 +3,11 @@
 
 #include "tag/TagEditor.h"
 
-#include "ao/Type.h"
-#include "ao/library/DictionaryStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/library/TrackStore.h"
 #include "layout/LayoutConstants.h"
+#include <ao/Type.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 
 #include <glibmm/regex.h>
 #include <gtkmm/box.h>

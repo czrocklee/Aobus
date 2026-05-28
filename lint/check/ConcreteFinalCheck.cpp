@@ -3,12 +3,11 @@
 
 #include "check/ConcreteFinalCheck.h"
 
-#include "clang/AST/ASTContext.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/Attrs.inc>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/CharInfo.h>
 #include <clang/Basic/Diagnostic.h>

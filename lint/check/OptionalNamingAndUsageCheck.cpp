@@ -3,12 +3,11 @@
 
 #include "check/OptionalNamingAndUsageCheck.h"
 
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Lex/Lexer.h"
-
 #include <clang/AST/Decl.h>
 #include <clang/AST/ExprCXX.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Lex/Lexer.h>
 #include <llvm/Support/Casting.h>
 
 using namespace clang::ast_matchers;

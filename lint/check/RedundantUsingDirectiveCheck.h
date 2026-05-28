@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "clang-tidy/ClangTidyCheck.h"
-
+#include <clang-tidy/ClangTidyCheck.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 
 namespace clang::tidy::readability

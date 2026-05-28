@@ -3,12 +3,12 @@
 
 #include "track/TrackListModel.h"
 
-#include "ao/Type.h"
-#include "ao/utility/ScopedTimer.h"
-#include "ao/utility/VariantVisitor.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
+#include <ao/Type.h>
 #include <ao/rt/ProjectionTypes.h>
+#include <ao/utility/ScopedTimer.h>
+#include <ao/utility/VariantVisitor.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/private/listmodel_p.h>

@@ -45,6 +45,7 @@ get_check_alias() {
         UseRangesMinMaxCheckFixture.cpp) echo "aobus-modernize-use-ranges-min-max" ;;
         UseStartsWithCheckFixture.cpp) echo "aobus-modernize-use-starts-with" ;;
         UseStdNumbersCheckFixture.cpp) echo "aobus-modernize-use-std-numbers" ;;
+        IncludeConventionCheckFixture.cpp) echo "aobus-include-convention" ;;
         SpdxLicenseHeaderCheckFixture.cpp) echo "aobus-license-header" ;;
         SpdxLicenseHeaderCheckMissingFixture.cpp) echo "aobus-license-header" ;;
         UseCtadCheckFixture.cpp) echo "aobus-modernize-use-ctad" ;;     

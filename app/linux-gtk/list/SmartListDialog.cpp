@@ -3,15 +3,15 @@
 
 #include "list/SmartListDialog.h"
 
-#include "ao/Type.h"
-#include "ao/library/ListStore.h"
-#include "ao/library/ListView.h"
-#include "ao/library/MusicLibrary.h"
 #include "app/FormBuilder.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackViewPage.h"
+#include <ao/Type.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListSourceStore.h>

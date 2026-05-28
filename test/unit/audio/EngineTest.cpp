@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ao/audio/Engine.h"
-
 #include "CapturingBackend.h"
 #include "ScriptedDecoderSession.h"
 #include "TestUtility.h"
-#include "ao/Error.h"
-#include "ao/audio/Backend.h"
-#include "ao/audio/DecoderTypes.h"
-#include "ao/audio/IRenderTarget.h"
-#include "ao/audio/Property.h"
-#include "ao/audio/Types.h"
-#include "fakeit.hpp"
+#include <ao/Error.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Engine.h>
+#include <ao/audio/IRenderTarget.h>
+#include <ao/audio/Property.h>
+#include <ao/audio/Types.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <fakeit.hpp>
 
 #include <array>
 #include <chrono>

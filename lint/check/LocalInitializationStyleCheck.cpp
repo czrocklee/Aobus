@@ -3,10 +3,7 @@
 
 #include "check/LocalInitializationStyleCheck.h"
 
-#include "clang/AST/ASTContext.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Lex/Lexer.h"
-
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
@@ -14,9 +11,11 @@
 #include <clang/AST/Stmt.h>
 #include <clang/AST/StmtCXX.h>
 #include <clang/AST/Type.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
+#include <clang/Lex/Lexer.h>
 #include <llvm/ADT/StringSwitch.h>
 
 using namespace clang::ast_matchers;

@@ -7,10 +7,9 @@
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 
-#include "ao/query/Parser.h"
-
-#include "ao/Exception.h"
-#include "ao/query/Expression.h"
+#include <ao/Exception.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Parser.h>
 
 #include <lexy/action/parse.hpp>
 #include <lexy/callback/adapter.hpp>

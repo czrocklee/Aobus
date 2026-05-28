@@ -4,6 +4,7 @@
 %compare-lengths
 %struct-type
 %{
+#include <cstring>
 namespace metadata_dispatch {
 %}
 %define class-name Table

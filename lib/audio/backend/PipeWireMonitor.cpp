@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/audio/backend/PipeWireMonitor.h"
-
-#include "ao/audio/backend/detail/PipeWireShared.h"
-#include "ao/utility/ByteView.h"
-#include "ao/utility/Log.h"
+#include <ao/audio/backend/PipeWireMonitor.h>
+#include <ao/audio/backend/detail/PipeWireShared.h>
+#include <ao/utility/ByteView.h>
+#include <ao/utility/Log.h>
 
 extern "C"
 {
@@ -18,11 +17,11 @@ extern "C"
 #include <spa/utils/dict.h>
 }
 
-#include "ao/audio/Backend.h"
-#include "ao/audio/Format.h"
-#include "ao/audio/Subscription.h"
-#include "ao/audio/backend/detail/PipeWireMonitorHelpers.h"
-#include "ao/audio/flow/Graph.h"
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/Subscription.h>
+#include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
+#include <ao/audio/flow/Graph.h>
 
 #include <algorithm>
 #include <array>

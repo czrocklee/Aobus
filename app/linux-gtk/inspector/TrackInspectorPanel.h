@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "ao/Type.h"
 #include "image/ImageCache.h"
 #include "tag/TagEditor.h"
+#include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
 

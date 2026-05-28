@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "ao/Type.h"
-#include "ao/library/FileManifestStore.h"
 #include "app/AppDialog.h"
 #include "track/TrackFieldUi.h"
+#include <ao/Type.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/rt/TrackField.h>
 
 #include <gtkmm/box.h>

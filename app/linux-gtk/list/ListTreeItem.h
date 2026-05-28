@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "ao/Type.h"
 #include "list/ListRowObject.h"
+#include <ao/Type.h>
 
 #include <giomm/liststore.h>
 #include <glib.h>

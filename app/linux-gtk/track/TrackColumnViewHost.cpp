@@ -3,11 +3,11 @@
 
 #include "track/TrackColumnViewHost.h"
 
-#include "ao/Type.h"
 #include "track/TrackColumnController.h"
 #include "track/TrackListModel.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackSelectionController.h"
+#include <ao/Type.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>

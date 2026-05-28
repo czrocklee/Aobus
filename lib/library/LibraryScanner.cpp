@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ao/library/LibraryScanner.h"
-
-#include "ao/library/FileManifestStore.h"
-#include "ao/library/MusicLibrary.h"
-#include "ao/utility/Log.h"
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryScanner.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/utility/Log.h>
 
 #include <algorithm>
 #include <cctype>

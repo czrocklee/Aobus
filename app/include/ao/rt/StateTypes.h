@@ -6,10 +6,10 @@
 #include "CorePrimitives.h"
 #include "TrackField.h"
 #include "TrackPresentation.h"
-#include "ao/Type.h"
-#include "ao/audio/Backend.h"
-#include "ao/audio/Types.h"
-#include "ao/audio/flow/Graph.h"
+#include <ao/Type.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/Types.h>
+#include <ao/audio/flow/Graph.h>
 
 #include <chrono>
 #include <cstdint>

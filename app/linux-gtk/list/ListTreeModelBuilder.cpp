@@ -3,11 +3,11 @@
 
 #include "list/ListTreeModelBuilder.h"
 
-#include "ao/Type.h"
-#include "ao/library/ListStore.h"
-#include "ao/library/MusicLibrary.h"
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
+#include <ao/Type.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 

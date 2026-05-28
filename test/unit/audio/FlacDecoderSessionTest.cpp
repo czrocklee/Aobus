@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ao/audio/FlacDecoderSession.h"
-
-#include "ao/audio/DecoderTypes.h"
-#include "ao/audio/Format.h"
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/FlacDecoderSession.h>
+#include <ao/audio/Format.h>
 
 #include <catch2/catch_test_macros.hpp>
 

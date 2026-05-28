@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ao/rt/CorePrimitives.h"
+#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>

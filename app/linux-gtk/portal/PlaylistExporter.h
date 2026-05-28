@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "ao/Type.h"
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
 #include <ao/rt/TrackSource.h>
 
 #include <sigc++/connection.h>

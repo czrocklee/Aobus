@@ -2,22 +2,24 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "check/UseIfInitStatementCheck.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Lex/Lexer.h"
-#include <algorithm>
-#include <iterator>
+
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Basic/TokenKinds.h>
+#include <clang/Lex/Lexer.h>
+
+#include <algorithm>
+#include <iterator>
 #include <string>
 
 using namespace clang::ast_matchers;

@@ -3,20 +3,20 @@
 
 #include "check/UseCtadCheck.h"
 
-#include "clang/AST/Decl.h"
-#include "clang/AST/DeclCXX.h"
-#include "clang/AST/DeclTemplate.h"
-#include "clang/AST/Expr.h"
-#include "clang/AST/ExprCXX.h"
-#include "clang/AST/Type.h"
-#include "clang/AST/TypeLoc.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/ASTMatchers/ASTMatchers.h"
-#include "clang/Basic/Diagnostic.h"
-#include "clang/Basic/LLVM.h"
-#include "clang/Basic/SourceLocation.h"
-#include "clang/Basic/SourceManager.h"
-#include "llvm/ADT/StringRef.h"
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclCXX.h>
+#include <clang/AST/DeclTemplate.h>
+#include <clang/AST/Expr.h>
+#include <clang/AST/ExprCXX.h>
+#include <clang/AST/Type.h>
+#include <clang/AST/TypeLoc.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/LLVM.h>
+#include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/SourceManager.h>
+#include <llvm/ADT/StringRef.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -101,8 +101,8 @@ namespace clang::tidy::readability
 
     bool isSequenceTemplateName(std::string const& name)
     {
-      return name == "std::vector" || name == "std::deque" || name == "std::list" ||
-             name == "std::forward_list" || name == "std::basic_string";
+      return name == "std::vector" || name == "std::deque" || name == "std::list" || name == "std::forward_list" ||
+             name == "std::basic_string";
     }
 
     bool isAlwaysUnsafeTemplateName(std::string const& name)
@@ -267,9 +267,7 @@ namespace clang::tidy::readability
 
       return std::ranges::any_of(initList->inits(),
                                  [valueType](auto const* init)
-                                 {
-                                   return init == nullptr || isTypeChangingInitializerElement(init, valueType);
-                                 });
+                                 { return init == nullptr || isTypeChangingInitializerElement(init, valueType); });
     }
 
     bool isPointerSizeConstructor(CXXConstructExpr const* construct)
@@ -424,12 +422,11 @@ namespace clang::tidy::readability
   {
     auto explicitTemplateTypeLoc = elaboratedTypeLoc(hasNamedTypeLoc(templateSpecializationTypeLoc()));
 
-    finder->addMatcher(
-      cxxTemporaryObjectExpr(unless(isExpansionInSystemHeader()),
-                              hasTypeLoc(explicitTemplateTypeLoc),
-                              hasAnyArgument(unless(cxxDefaultArgExpr())))
-        .bind("temp_obj"),
-      this);
+    finder->addMatcher(cxxTemporaryObjectExpr(unless(isExpansionInSystemHeader()),
+                                              hasTypeLoc(explicitTemplateTypeLoc),
+                                              hasAnyArgument(unless(cxxDefaultArgExpr())))
+                         .bind("temp_obj"),
+                       this);
 
     finder->addMatcher(
       varDecl(unless(isExpansionInSystemHeader()),
@@ -476,7 +473,8 @@ namespace clang::tidy::readability
 
       auto const templateName = getTemplateName(tsLoc);
 
-      diag(loc, "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
+      diag(
+        loc, "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
         << templateName;
     }
     else if (auto const* varDecl = result.Nodes.getNodeAs<VarDecl>("var_decl"))
@@ -512,7 +510,8 @@ namespace clang::tidy::readability
 
       auto const templateName = getTemplateName(tsLoc);
 
-      diag(loc, "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
+      diag(
+        loc, "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
         << templateName;
     }
   }

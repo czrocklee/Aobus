@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ao/query/ExecutionPlan.h"
-
-#include "ao/Exception.h"
-#include "ao/library/DictionaryStore.h"
-#include "ao/query/Expression.h"
-#include "ao/utility/VariantVisitor.h"
+#include <ao/Exception.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/query/ExecutionPlan.h>
+#include <ao/query/Expression.h>
+#include <ao/utility/VariantVisitor.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 

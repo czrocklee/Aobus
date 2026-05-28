@@ -8,6 +8,7 @@
 #include "check/ForbidNodiscardCheck.h"
 #include "check/ForbidTrailingReturnCheck.h"
 #include "check/IdentifierNamingExtensionsCheck.h"
+#include "check/IncludeConventionCheck.h"
 #include "check/LambdaParamsCheck.h"
 #include "check/LocalInitializationStyleCheck.h"
 #include "check/MemberOrderCheck.h"
@@ -18,6 +19,7 @@
 #include "check/StdCLibraryQualificationCheck.h"
 #include "check/ThreadingPolicyCheck.h"
 #include "check/UnusedSuppressionStyleCheck.h"
+#include "check/UseCtadCheck.h"
 #include "check/UseEraseIfCheck.h"
 #include "check/UseIfInitStatementCheck.h"
 #include "check/UseRangesAnyOfCheck.h"
@@ -26,9 +28,9 @@
 #include "check/UseRangesProjectionCheck.h"
 #include "check/UseStartsWithCheck.h"
 #include "check/UseStdNumbersCheck.h"
-#include "check/UseCtadCheck.h"
-#include "clang-tidy/ClangTidyModule.h"
-#include "clang-tidy/ClangTidyModuleRegistry.h"
+
+#include <clang-tidy/ClangTidyModule.h>
+#include <clang-tidy/ClangTidyModuleRegistry.h>
 
 namespace clang::tidy::readability
 {
@@ -63,6 +65,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<UseStartsWithCheck>("aobus-modernize-use-starts-with");
       checkFactories.registerCheck<UseStdNumbersCheck>("aobus-modernize-use-std-numbers");
       checkFactories.registerCheck<UseCtadCheck>("aobus-modernize-use-ctad");
+      checkFactories.registerCheck<IncludeConventionCheck>("aobus-include-convention");
       checkFactories.registerCheck<SpdxLicenseHeaderCheck>("aobus-license-header");
     }
   };

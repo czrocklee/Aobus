@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "ao/Type.h"
-#include "ao/library/MusicLibrary.h"
 #include "tag/TagEditor.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
 
 #include <gtkmm/popover.h>
 

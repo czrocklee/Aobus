@@ -4,11 +4,11 @@
 #include "AppConfig.h"
 
 #include "UIState.h"
-#include "ao/utility/Log.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/utility/Log.h>
 
 #include <filesystem>
 #include <format>

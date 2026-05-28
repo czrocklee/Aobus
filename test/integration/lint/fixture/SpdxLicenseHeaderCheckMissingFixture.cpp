@@ -1,1 +1,3 @@
-int main() {} // POSITIVE: aobus-license-header
+int main()
+{
+} // POSITIVE: aobus-license-header

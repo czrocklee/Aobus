@@ -3,14 +3,12 @@
 
 #include "check/SpdxLicenseHeaderCheck.h"
 
-#include <clang/AST/ASTContext.h>
+#include <clang/AST/Decl.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
-
-
 
 using namespace clang::ast_matchers;
 
@@ -40,9 +38,8 @@ namespace clang::tidy::readability
     }
 
     auto const firstNewline = buf.find('\n');
-    auto const firstLine = buf.substr(0, firstNewline);
 
-    if (!firstLine.starts_with("// SPDX-License-Identifier: MIT"))
+    if (auto const firstLine = buf.substr(0, firstNewline); !firstLine.starts_with("// SPDX-License-Identifier: MIT"))
     {
       auto const loc = sm.getLocForStartOfFile(fid);
 

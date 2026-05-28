@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "check/UnusedSuppressionStyleCheck.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
+
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/Attrs.inc>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>

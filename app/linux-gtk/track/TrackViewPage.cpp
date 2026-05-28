@@ -3,8 +3,6 @@
 
 #include "track/TrackViewPage.h"
 
-#include "ao/Type.h"
-#include "ao/utility/Log.h"
 #include "app/StyleManager.h"
 #include "image/ImageCache.h"
 #include "image/ImageWidget.h"
@@ -16,6 +14,7 @@
 #include "track/TrackListModel.h"
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
+#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
@@ -24,6 +23,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/utility/Log.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>

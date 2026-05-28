@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ao/Exception.h"
-#include "ao/utility/StrongType.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/Exception.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/utility/StrongType.h>
 
 #include <catch2/catch_test_macros.hpp>
 
