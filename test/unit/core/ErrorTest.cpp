@@ -13,7 +13,7 @@ namespace ao::test
   {
     SECTION("makeError produces correct Error payload")
     {
-      auto const result = Result<>{makeError(Error::Code::NotFound, "Item not in database")};
+      auto const result = Result{makeError(Error::Code::NotFound, "Item not in database")};
 
       REQUIRE_FALSE(result.has_value());
       CHECK(result.error().code == Error::Code::NotFound);

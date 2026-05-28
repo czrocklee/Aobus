@@ -35,7 +35,7 @@ namespace ao::gtk::test
     SECTION("list layout persistence")
     {
       auto const listId = ListId{1};
-      auto const layout = std::vector<ColumnState>{{rt::TrackField::Title, 200}};
+      auto const layout = std::vector{ColumnState{.field = rt::TrackField::Title, .width = 200}};
 
       store.updateLayout(listId, layout);
 

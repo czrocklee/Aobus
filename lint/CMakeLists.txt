@@ -35,6 +35,7 @@ add_library(AobusLintPlugin MODULE
   check/UseRangesAnyOfCheck.cpp
   check/UseRangesMinMaxCheck.cpp
   check/UseStartsWithCheck.cpp
+  check/UseCtadCheck.cpp
   AobusLintModule.cpp
 )
 

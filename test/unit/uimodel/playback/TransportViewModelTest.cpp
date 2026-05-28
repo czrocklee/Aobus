@@ -281,7 +281,7 @@ namespace ao::uimodel::playback::test
         [&](TrackId) -> std::optional<audio::TrackPlaybackDescriptor>
         { return audio::TrackPlaybackDescriptor{.trackId = trackId, .filePath = "test.flac", .durationMs = 5000}; }};
 
-      auto const trackIds = std::vector<TrackId>{trackId, TrackId{999}, TrackId{1000}};
+      auto const trackIds = std::vector{trackId, TrackId{999}, TrackId{1000}};
       queueModel.playQueue(trackIds, trackId, kInvalidListId);
 
       SECTION("Next with queue")

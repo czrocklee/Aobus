@@ -128,7 +128,7 @@ namespace ao::tag::mp4::test
         trkn.totalTracks = 10;
 
         auto const* ptr = reinterpret_cast<std::uint8_t const*>(&trkn);
-        auto atom = std::vector<std::uint8_t>(ptr, ptr + sizeof(trkn));
+        auto atom = std::vector(ptr, ptr + sizeof(trkn));
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       }
 
@@ -143,7 +143,7 @@ namespace ao::tag::mp4::test
         disk.totalDiscs = 5;
 
         auto const* ptr = reinterpret_cast<std::uint8_t const*>(&disk);
-        auto atom = std::vector<std::uint8_t>(ptr, ptr + sizeof(disk));
+        auto atom = std::vector(ptr, ptr + sizeof(disk));
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       }
 

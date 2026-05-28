@@ -649,7 +649,7 @@ namespace ao::rt::test
                                                  TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                                                }});
 
-    auto const expectedOrder = std::vector<TrackId>{
+    auto const expectedOrder = std::vector{
       abbaGoldTrack1,
       abbaGoldTrack2,
       abbaGoldTrack5,
@@ -841,7 +841,7 @@ namespace ao::rt::test
     CHECK(snap.sortBy[0].field == TrackSortField::Genre);
     CHECK(snap.sortBy[1].field == TrackSortField::Title);
 
-    auto expectedRedundant = std::vector<TrackField>{TrackField::Genre};
+    auto expectedRedundant = std::vector{TrackField::Genre};
     CHECK(snap.redundantFields == expectedRedundant);
   }
 

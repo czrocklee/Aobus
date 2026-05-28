@@ -39,7 +39,7 @@ namespace ao::media::mp4::test
       // Construct a very basic 'ftyp' + 'moov' structure but missing 'stbl'
       // ftyp atom (8 bytes header + payload)
       // moov atom (8 bytes header + no children)
-      auto const data = std::vector<std::byte>{
+      auto const data = std::vector{
         std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x10}, // size 16
         std::byte{'f'},  std::byte{'t'},  std::byte{'y'},  std::byte{'p'},  // type
         std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, // dummy

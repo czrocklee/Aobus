@@ -489,7 +489,7 @@ namespace ao::rt
     auto state = SessionState{};
 
     auto const presets = _impl->customPresets;
-    state.customPresets = std::vector<CustomTrackPresentationPreset>(presets.begin(), presets.end());
+    state.customPresets = std::vector(presets.begin(), presets.end());
 
     for (auto const viewId : layout.openViews)
     {

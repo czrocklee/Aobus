@@ -40,7 +40,7 @@ namespace ao::gtk::test
     {
       controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
-      auto visible = std::vector<rt::TrackField>{rt::TrackField::Title, rt::TrackField::Artist};
+      auto visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
       controller.applyColumnLayout(visible);
 
       // Verify only these columns are visible

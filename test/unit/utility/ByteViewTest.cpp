@@ -46,8 +46,8 @@ namespace ao::utility::test
       auto const sView = std::string_view{str};
       auto const dummy = Dummy{.a = 1, .b = 2};
       auto arr = std::array<Dummy, 2>{{{.a = 1, .b = 2}, {.a = 3, .b = 4}}};
-      auto vec = std::vector<std::byte>{std::byte{1}, std::byte{2}};
-      auto const vecConst = std::vector<std::byte>{std::byte{1}, std::byte{2}};
+      auto vec = std::vector{std::byte{1}, std::byte{2}};
+      auto const vecConst = std::vector{std::byte{1}, std::byte{2}};
 
       auto v1 = bytes::view(static_cast<void const*>(str.data()), str.size());
       CHECK(v1.size() == 5);

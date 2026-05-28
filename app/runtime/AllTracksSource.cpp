@@ -36,7 +36,7 @@ namespace ao::rt
     // flat_set constructor from sorted vector is efficient.
     std::ranges::sort(ids);
     // NOLINTNEXTLINE(misc-include-cleaner)
-    _trackIds = std::flat_set<TrackId>{std::sorted_unique, std::move(ids)};
+    _trackIds = std::flat_set{std::sorted_unique, std::move(ids)};
 
     TrackSource::notifyReset();
   }

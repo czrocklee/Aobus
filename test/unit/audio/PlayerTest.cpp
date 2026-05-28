@@ -63,7 +63,7 @@ namespace ao::audio::test
         {
           if (cb)
           {
-            cb(std::vector<Device>{Device{.id = DeviceId{"mock-sink"},
+            cb(std::vector{Device{.id = DeviceId{"mock-sink"},
                                           .displayName = "Mock Sink",
                                           .description = "Mock",
                                           .isDefault = true,

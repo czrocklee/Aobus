@@ -20,7 +20,7 @@ namespace ao::rt
     {
       static auto const
         presets =
-          std::vector<TrackPresentationPreset>{
+          std::vector{
             TrackPresentationPreset{
               .spec =
                 TrackPresentationSpec{

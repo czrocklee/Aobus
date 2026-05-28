@@ -84,10 +84,8 @@ namespace ao::gtk::test
     auto const configPath = configDir / "gtk_layout.yaml";
 
     auto state = ColumnLayoutState{};
-    auto layout = std::vector<ColumnState>{
-      {.field = rt::TrackField::Title, .width = 321},
-      {.field = rt::TrackField::Artist, .width = 222},
-    };
+    auto layout = std::vector{ColumnState{.field = rt::TrackField::Title, .width = 321},
+                              ColumnState{.field = rt::TrackField::Artist, .width = 222}};
     state.listLayouts.emplace(ListId{42}, layout);
 
     {

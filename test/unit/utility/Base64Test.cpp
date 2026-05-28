@@ -38,7 +38,7 @@ namespace ao::utility::test
     SECTION("Binary data round-trip (non-multiple of 3)")
     {
       auto const data =
-        std::vector<std::byte>{std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}, std::byte{0x42}};
+        std::vector{std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}, std::byte{0x42}};
 
       auto const encoded = base64Encode(data);
       auto const decoded = base64Decode(encoded);
@@ -77,12 +77,12 @@ namespace ao::utility::test
     SECTION("Padding handling")
     {
       // 1 byte -> 2 chars + 2 padding
-      auto const d1 = std::vector<std::byte>{std::byte{'A'}};
+      auto const d1 = std::vector{std::byte{'A'}};
       CHECK(base64Encode(d1) == "QQ==");
       CHECK(base64Decode("QQ==") == d1);
 
       // 2 bytes -> 3 chars + 1 padding
-      auto const d2 = std::vector<std::byte>{std::byte{'A'}, std::byte{'B'}};
+      auto const d2 = std::vector{std::byte{'A'}, std::byte{'B'}};
       CHECK(base64Encode(d2) == "QUI=");
       CHECK(base64Decode("QUI=") == d2);
     }
@@ -98,7 +98,7 @@ namespace ao::utility::test
       CHECK(base64Decode("QR==").empty());
 
       // Unpadded base64 should still work if valid
-      auto const d1 = std::vector<std::byte>{std::byte{'A'}};
+      auto const d1 = std::vector{std::byte{'A'}};
       CHECK(base64Decode("QQ") == d1);
     }
   }

@@ -27,7 +27,7 @@ namespace ao::audio::test
       Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
     auto const info = DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .durationMs = 1000};
 
-    auto errorCount = std::atomic<int>{0};
+    auto errorCount = std::atomic{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
 
     // NOTE: StreamingSource contains a ~2MB inline ring buffer. Under ASAN, the

@@ -42,7 +42,6 @@
 #include <lexy/dsl/symbol.hpp>
 #include <lexy/dsl/token.hpp>
 #include <lexy/dsl/until.hpp>
-#include <lexy/encoding.hpp>
 #include <lexy/grammar.hpp>
 #include <lexy/input/string_input.hpp>
 
@@ -249,7 +248,7 @@ namespace ao::query
 {
   Expression parse(std::string_view expr)
   {
-    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
+    auto const input = lexy::string_input{expr};
 
     if (auto optResult = lexy::parse<Stmt>(input, lexy::noop); optResult)
     {

@@ -110,7 +110,7 @@ namespace ao::audio::test
   {
     auto buffer = PcmRingBuffer{};
     int const iterations = 10000;
-    auto done = std::atomic<bool>{false};
+    auto done = std::atomic{false};
 
     auto producer = std::jthread{[&]
                                  {

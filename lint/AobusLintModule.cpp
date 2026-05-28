@@ -22,6 +22,7 @@
 #include "check/UseRangesProjectionCheck.h"
 #include "check/UseStartsWithCheck.h"
 #include "check/UseStdNumbersCheck.h"
+#include "check/UseCtadCheck.h"
 #include "clang-tidy/ClangTidyModule.h"
 #include "clang-tidy/ClangTidyModuleRegistry.h"
 
@@ -57,6 +58,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<UseRangesMinMaxCheck>("aobus-modernize-use-ranges-min-max");
       checkFactories.registerCheck<UseStartsWithCheck>("aobus-modernize-use-starts-with");
       checkFactories.registerCheck<UseStdNumbersCheck>("aobus-modernize-use-std-numbers");
+      checkFactories.registerCheck<UseCtadCheck>("aobus-modernize-use-ctad");
     }
   };
 

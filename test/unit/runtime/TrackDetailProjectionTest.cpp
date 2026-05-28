@@ -144,7 +144,7 @@ namespace ao::rt::test
     auto env = Env{};
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
     auto const proj =
-      env.views.detailProjection(ExplicitSelectionTarget{std::vector<TrackId>{id1}}, env.workspace, env.mutation);
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.mutation);
     auto const snap = proj->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
     CHECK(snap.title.optValue.value() == "Song A");
@@ -188,7 +188,7 @@ namespace ao::rt::test
   {
     auto env = Env{};
     auto const proj = env.views.detailProjection(
-      ExplicitSelectionTarget{std::vector<TrackId>{TrackId{9999}}}, env.workspace, env.mutation);
+      ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.mutation);
     auto const snap = proj->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
     CHECK_FALSE(snap.title.optValue.has_value());
@@ -200,12 +200,12 @@ namespace ao::rt::test
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
 
     // Add tag
-    auto const targetIds = std::vector<TrackId>{id1};
+    auto const targetIds = std::vector{id1};
     auto const tagsToAdd = std::vector<std::string>{"MyTag"};
     env.mutation.editTags(targetIds, tagsToAdd, {});
 
     auto const proj =
-      env.views.detailProjection(ExplicitSelectionTarget{std::vector<TrackId>{id1}}, env.workspace, env.mutation);
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.mutation);
     auto const snap = proj->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
     CHECK(snap.commonTagIds.size() == 1);

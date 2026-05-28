@@ -42,7 +42,7 @@ namespace ao::log::test
 
       // Verify content (flush should have happened during shutdown)
       auto ifs = std::ifstream{logFile};
-      auto content = std::string{(std::istreambuf_iterator<char>{ifs}), std::istreambuf_iterator<char>{}};
+      auto content = std::string{(std::istreambuf_iterator{ifs}), std::istreambuf_iterator<char>{}};
 
       // We expect the initialized message and the test log to be present
       CHECK(content.find("Logging initialized") != std::string::npos);

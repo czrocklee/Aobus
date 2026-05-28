@@ -331,7 +331,7 @@ namespace ao::rt::test
     // 3. Verify YAML contains anchor and alias (textual check)
     {
       auto ifs = std::ifstream{yamlPath};
-      auto const content = std::string((std::istreambuf_iterator<char>{ifs}), std::istreambuf_iterator<char>{});
+      auto const content = std::string((std::istreambuf_iterator{ifs}), std::istreambuf_iterator<char>{});
       // Should contain at least one anchor &cover_ and one alias *cover_
       CHECK(content.find("&cover_") != std::string::npos);
       CHECK(content.find("*cover_") != std::string::npos);
@@ -853,7 +853,7 @@ library:
       trackBuilder3.property().uri("cover.flac");
       trackBuilder3.metadata().title("Different Title");
       trackBuilder3.metadata().rating(5);
-      auto coverData = std::vector<std::byte>{std::byte{1}, std::byte{2}, std::byte{3}};
+      auto coverData = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
       trackBuilder3.metadata().coverArtData(coverData);
       auto const [p3h, p3c] = trackBuilder3.prepare(txn, dict, ml.resources());
       std::tie(trackId3, std::ignore) = ml.tracks().writer(txn).createHotCold(p3h.size(),

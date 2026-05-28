@@ -33,7 +33,7 @@ namespace ao::library::test
 
     // Write an invalid sized struct (e.g. 1 byte) directly to the DB to simulate corruption or older version
     auto writer = db.writer(wtxn);
-    auto invalidData = std::vector<std::byte>{std::byte{0x42}};
+    auto invalidData = std::vector{std::byte{0x42}};
     writer.create(static_cast<std::uint32_t>(MetaRecordId::Header), std::span<std::byte const>{invalidData});
     wtxn.commit();
 
