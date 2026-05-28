@@ -16,22 +16,22 @@ namespace ao::gtk
   class ListRowObject final : public Glib::Object
   {
   public:
-    ListId getListId() const { return _listId; }
+    ListId listId() const { return _listId; }
     void setListId(ListId id) { _listId = id; }
 
-    ListId getParentId() const { return _parentId; }
+    ListId parentId() const { return _parentId; }
     void setParentId(ListId id) { _parentId = id; }
 
-    std::int32_t getDepth() const { return _depth; }
+    std::int32_t depth() const { return _depth; }
     void setDepth(std::int32_t depth) { _depth = depth; }
 
     bool isSmart() const { return _isSmart; }
     void setSmart(bool smart) { _isSmart = smart; }
 
-    Glib::ustring getName() const { return _name; }
+    Glib::ustring name() const { return _name; }
     void setName(Glib::ustring const& name) { _name = name; }
 
-    Glib::ustring getFilter() const { return _filter; }
+    Glib::ustring filter() const { return _filter; }
 
     static Glib::RefPtr<ListRowObject> create(ListId id,
                                               ListId parentId,

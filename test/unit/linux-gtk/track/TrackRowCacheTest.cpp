@@ -111,20 +111,20 @@ namespace ao::gtk::test
 
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const row1 = provider.getTrackRow(id1);
+      auto const row1 = provider.trackRow(id1);
       REQUIRE(row1);
-      CHECK(row1->getFieldText(rt::TrackField::Artist) == "Artist 1");
-      CHECK(row1->getFieldText(rt::TrackField::Album) == "Album 1");
-      CHECK(row1->getFieldText(rt::TrackField::Title) == "Track 1");
-      CHECK(row1->getFieldText(rt::TrackField::Genre) == "Genre 1");
-      CHECK(row1->getYear() == 2021);
-      CHECK(row1->getTrackNumber() == 1);
-      CHECK(row1->getDuration().count() == 180000);
+      CHECK(row1->fieldText(rt::TrackField::Artist) == "Artist 1");
+      CHECK(row1->fieldText(rt::TrackField::Album) == "Album 1");
+      CHECK(row1->fieldText(rt::TrackField::Title) == "Track 1");
+      CHECK(row1->fieldText(rt::TrackField::Genre) == "Genre 1");
+      CHECK(row1->year() == 2021);
+      CHECK(row1->trackNumber() == 1);
+      CHECK(row1->duration().count() == 180000);
 
-      auto const row2 = provider.getTrackRow(id2);
+      auto const row2 = provider.trackRow(id2);
       REQUIRE(row2);
-      CHECK(row2->getFieldText(rt::TrackField::Title) == "Track 2");
-      CHECK(row2->getDuration().count() == 240000);
+      CHECK(row2->fieldText(rt::TrackField::Title) == "Track 2");
+      CHECK(row2->duration().count() == 240000);
 
       // Verify playing properties and setters/getters
       CHECK_FALSE(row1->isPlaying());
@@ -135,7 +135,7 @@ namespace ao::gtk::test
 
       // Verify custom string fields and failure paths
       CHECK(row1->setStringField(rt::TrackField::Artist, "New Artist"));
-      CHECK(row1->getFieldText(rt::TrackField::Artist) == "New Artist");
+      CHECK(row1->fieldText(rt::TrackField::Artist) == "New Artist");
       CHECK_FALSE(row1->setStringField(rt::TrackField::Duration, "Failed"));
 
       // Verify other metadata and resource/playback properties
@@ -144,14 +144,14 @@ namespace ao::gtk::test
       row1->setTotalDiscs(3);
       row1->setTrackNumber(4);
       row1->setTotalTracks(10);
-      CHECK(row1->getYear() == 2025);
-      CHECK(row1->getDiscNumber() == 2);
-      CHECK(row1->getTotalDiscs() == 3);
-      CHECK(row1->getTrackNumber() == 4);
-      CHECK(row1->getTotalTracks() == 10);
-      CHECK(row1->getSampleRate() == 44100);
-      CHECK(row1->getChannels() == 2);
-      CHECK(row1->getBitDepth() == 16);
+      CHECK(row1->year() == 2025);
+      CHECK(row1->discNumber() == 2);
+      CHECK(row1->totalDiscs() == 3);
+      CHECK(row1->trackNumber() == 4);
+      CHECK(row1->totalTracks() == 10);
+      CHECK(row1->sampleRate() == 44100);
+      CHECK(row1->channels() == 2);
+      CHECK(row1->bitDepth() == 16);
     }
 
     SECTION("Cache helper methods")
@@ -162,15 +162,15 @@ namespace ao::gtk::test
 
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const optUri = provider.getUriPath(id);
+      auto const optUri = provider.uriPath(id);
       REQUIRE(optUri.has_value());
       CHECK(optUri->string() == "/tmp/test.flac");
 
-      auto const optDesc = provider.getPlaybackDescriptor(id);
+      auto const optDesc = provider.playbackDescriptor(id);
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->durationMs == 120000);
 
-      auto const optCover = provider.getCoverArtId(id);
+      auto const optCover = provider.coverArtId(id);
       CHECK_FALSE(optCover.has_value());
 
       provider.clearCache();
@@ -182,8 +182,8 @@ namespace ao::gtk::test
       auto const id1 = testLibrary.addTrack({});
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const row1A = provider.getTrackRow(id1);
-      auto const row1B = provider.getTrackRow(id1);
+      auto const row1A = provider.trackRow(id1);
+      auto const row1B = provider.trackRow(id1);
 
       REQUIRE(row1A);
       REQUIRE(row1B);
@@ -195,11 +195,11 @@ namespace ao::gtk::test
       auto const id1 = testLibrary.addTrack({});
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const row1 = provider.getTrackRow(id1);
+      auto const row1 = provider.trackRow(id1);
       REQUIRE(row1);
       provider.invalidate(id1);
 
-      auto const row1New = provider.getTrackRow(id1);
+      auto const row1New = provider.trackRow(id1);
       CHECK(row1 != row1New);
     }
 
@@ -218,7 +218,7 @@ namespace ao::gtk::test
     SECTION("Non-existent track")
     {
       auto provider = TrackRowCache{testLibrary.library()};
-      auto const row = provider.getTrackRow(TrackId{999});
+      auto const row = provider.trackRow(TrackId{999});
       CHECK_FALSE(row);
     }
   }

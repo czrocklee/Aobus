@@ -135,7 +135,7 @@ namespace ao::gtk
     return row;
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::getTrackRow(TrackId id) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id) const
   {
     if (auto const it = _rowCache.find(id); it != _rowCache.end())
     {
@@ -157,7 +157,7 @@ namespace ao::gtk
     return row;
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::getTrackRow(TrackId id, library::TrackStore::Reader const& reader) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id, library::TrackStore::Reader const& reader) const
   {
     if (auto const it = _rowCache.find(id); it != _rowCache.end())
     {
@@ -176,7 +176,7 @@ namespace ao::gtk
     return row;
   }
 
-  std::optional<std::uint32_t> TrackRowCache::getCoverArtId(TrackId id) const
+  std::optional<std::uint32_t> TrackRowCache::coverArtId(TrackId id) const
   {
     // Need cold data for coverArtId
     auto const txn = _ml.readTransaction();
@@ -198,7 +198,7 @@ namespace ao::gtk
     return coverArtId;
   }
 
-  std::optional<std::filesystem::path> TrackRowCache::getUriPath(TrackId id) const
+  std::optional<std::filesystem::path> TrackRowCache::uriPath(TrackId id) const
   {
     // Need cold data for URI
     auto const txn = _ml.readTransaction();
@@ -214,7 +214,7 @@ namespace ao::gtk
     return resolveLibraryPath(_ml.rootPath(), optView->property().uri());
   }
 
-  std::optional<audio::TrackPlaybackDescriptor> TrackRowCache::getPlaybackDescriptor(TrackId id) const
+  std::optional<audio::TrackPlaybackDescriptor> TrackRowCache::playbackDescriptor(TrackId id) const
   {
     // Need cold data for URI and property info
     auto const txn = _ml.readTransaction();

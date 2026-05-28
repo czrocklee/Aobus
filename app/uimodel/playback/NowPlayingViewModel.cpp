@@ -242,7 +242,7 @@ namespace ao::uimodel::playback
     return cmd;
   }
 
-  std::string NowPlayingViewModel::getFieldText(NowPlayingViewState const& view, rt::TrackField field)
+  std::string NowPlayingViewModel::fieldText(NowPlayingViewState const& view, rt::TrackField field)
   {
     switch (field)
     {

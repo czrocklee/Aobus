@@ -35,16 +35,16 @@ namespace ao::gtk
 
     void setupActivation();
 
-    std::vector<TrackId> getSelectedTrackIds() const noexcept;
-    std::vector<Glib::RefPtr<TrackRowObject>> getSelectedRows() const noexcept;
-    std::chrono::milliseconds getSelectedTracksDuration() const noexcept;
-    TrackId getPrimarySelectedTrackId() const noexcept;
+    std::vector<TrackId> selectedTrackIds() const noexcept;
+    std::vector<Glib::RefPtr<TrackRowObject>> selectedRows() const noexcept;
+    std::chrono::milliseconds selectedTracksDuration() const noexcept;
+    TrackId primarySelectedTrackId() const noexcept;
     std::size_t selectedTrackCount() const noexcept;
 
     void selectTrack(TrackId trackId);
     void scrollToTrack(TrackId trackId);
     void setPlayingTrackId(TrackId trackId);
-    std::vector<TrackId> getVisibleTrackIds() const noexcept;
+    std::vector<TrackId> visibleTrackIds() const noexcept;
 
     // Exposed signals for TrackViewPage to wire to external handlers
     SelectionChangedSignal& signalSelectionChanged() noexcept { return _selectionChanged; }

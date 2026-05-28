@@ -129,10 +129,10 @@ namespace ao::media::mp4
     out.resize(count);
     auto const entries = utility::layout::viewArray<SttsAtomLayout::Entry>(bytes.subspan(sizeof(SttsAtomLayout)));
 
-    for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
+    for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
     {
-      out[index].sampleCount = entry.sampleCount.value();
-      out[index].sampleDelta = entry.sampleDelta.value();
+      out[idx].sampleCount = entry.sampleCount.value();
+      out[idx].sampleDelta = entry.sampleDelta.value();
     }
   }
 
@@ -148,9 +148,9 @@ namespace ao::media::mp4
     {
       auto const entries = utility::layout::viewArray<StszAtomLayout::Entry>(bytes.subspan(sizeof(StszAtomLayout)));
 
-      for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
+      for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
       {
-        _samples[index].size = entry.size.value();
+        _samples[idx].size = entry.size.value();
       }
     }
     else
@@ -170,10 +170,10 @@ namespace ao::media::mp4
     out.resize(count);
     auto const entries = utility::layout::viewArray<StscAtomLayout::Entry>(bytes.subspan(sizeof(StscAtomLayout)));
 
-    for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
+    for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
     {
-      out[index].firstChunk = entry.firstChunk.value();
-      out[index].samplesPerChunk = entry.samplesPerChunk.value();
+      out[idx].firstChunk = entry.firstChunk.value();
+      out[idx].samplesPerChunk = entry.samplesPerChunk.value();
     }
   }
 
@@ -185,9 +185,9 @@ namespace ao::media::mp4
     out.resize(count);
     auto const entries = utility::layout::viewArray<StcoAtomLayout::Entry>(bytes.subspan(sizeof(StcoAtomLayout)));
 
-    for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
+    for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
     {
-      out[index] = entry.chunkOffset.value();
+      out[idx] = entry.chunkOffset.value();
     }
   }
 
@@ -199,9 +199,9 @@ namespace ao::media::mp4
     out.resize(count);
     auto const entries = utility::layout::viewArray<Co64AtomLayout::Entry>(bytes.subspan(sizeof(Co64AtomLayout)));
 
-    for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
+    for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
     {
-      out[index] = entry.chunkOffset.value();
+      out[idx] = entry.chunkOffset.value();
     }
   }
 
@@ -329,7 +329,7 @@ namespace ao::media::mp4
     return static_cast<std::uint32_t>(_samples.size());
   }
 
-  Demuxer::SampleEntry Demuxer::getSampleInfo(std::uint32_t index) const
+  Demuxer::SampleEntry Demuxer::sampleInfo(std::uint32_t index) const
   {
     if (index >= _samples.size())
     {
@@ -339,7 +339,7 @@ namespace ao::media::mp4
     return _samples[index];
   }
 
-  std::span<std::byte const> Demuxer::getSamplePayload(std::uint32_t index) const
+  std::span<std::byte const> Demuxer::samplePayload(std::uint32_t index) const
   {
     if (index >= _samples.size())
     {
@@ -382,11 +382,11 @@ namespace ao::media::mp4
         std::min<std::uint64_t>(static_cast<std::uint64_t>(scaledIndex), _samples.size()));
     }
 
-    for (auto const& [index, sample] : std::ranges::views::enumerate(_samples))
+    for (auto const& [idx, sample] : std::ranges::views::enumerate(_samples))
     {
       if (time < sample.startTime + sample.duration)
       {
-        return static_cast<std::uint32_t>(index);
+        return static_cast<std::uint32_t>(idx);
       }
     }
 

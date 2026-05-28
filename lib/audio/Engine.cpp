@@ -649,7 +649,7 @@ namespace ao::audio
     _impl->status.volume = volume;
   }
 
-  float Engine::getVolume() const
+  float Engine::volume() const
   {
     auto const lock = std::scoped_lock{_impl->stateMutex};
     return _impl->status.volume;

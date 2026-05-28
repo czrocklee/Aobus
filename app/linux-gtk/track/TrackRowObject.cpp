@@ -144,7 +144,7 @@ namespace ao::gtk
     _status = status;
   }
 
-  Glib::ustring TrackRowObject::getFieldText(rt::TrackField field) const
+  Glib::ustring TrackRowObject::fieldText(rt::TrackField field) const
   {
     if (auto const* text = stringField(field))
     {

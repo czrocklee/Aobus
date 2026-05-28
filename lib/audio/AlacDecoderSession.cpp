@@ -78,7 +78,7 @@ namespace ao::audio
         return 0;
       }
 
-      if (auto const sampleInfo = demuxer->getSampleInfo(sampleIndex);
+      if (auto const sampleInfo = demuxer->sampleInfo(sampleIndex);
           timescale > 0 && (sampleInfo.startTime > 0 || sampleInfo.duration > 0))
       {
         return (sampleInfo.startTime * info.sourceFormat.sampleRate) / timescale;
@@ -201,7 +201,7 @@ namespace ao::audio
     }
 
     auto const firstFrameIndex = _impl->firstFrameIndex(_impl->currentSampleIndex);
-    auto const packet = _impl->demuxer->getSamplePayload(_impl->currentSampleIndex);
+    auto const packet = _impl->demuxer->samplePayload(_impl->currentSampleIndex);
 
     if (packet.empty())
     {

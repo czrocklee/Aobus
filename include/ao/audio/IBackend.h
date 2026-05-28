@@ -41,7 +41,7 @@ namespace ao::audio
 
     // Runtime control surface
     virtual Result<> setProperty(PropertyId id, PropertyValue const& value) = 0;
-    virtual Result<PropertyValue> getProperty(PropertyId id) const = 0;
+    virtual Result<PropertyValue> property(PropertyId id) const = 0;
     virtual PropertyInfo queryProperty(PropertyId id) const noexcept = 0;
 
     template<typename T, PropertyId Id>
@@ -55,7 +55,7 @@ namespace ao::audio
       requires std::constructible_from<PropertyValue, T>
     Result<T> get(TypedProperty<T, Id> /*tag*/) const
     {
-      auto const result = getProperty(Id);
+      auto const result = property(Id);
 
       if (!result)
       {

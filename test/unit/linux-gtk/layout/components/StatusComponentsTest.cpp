@@ -79,7 +79,7 @@ namespace ao::gtk::layout::test
       registerStatusComponents(registry);
 
       {
-        auto const optDesc = registry.getDescriptor("status.statusSlot");
+        auto const optDesc = registry.descriptor("status.statusSlot");
         REQUIRE(optDesc.has_value());
         CHECK(optDesc->displayName == "Status Slot");
       }

@@ -103,7 +103,7 @@ namespace ao::gtk::portal
     {
       auto const id = _list.trackIdAt(i);
 
-      if (auto const optUri = _provider.getUriPath(id); optUri)
+      if (auto const optUri = _provider.uriPath(id); optUri)
       {
         // Write path relative to playlist location
         auto const relativePath = std::filesystem::relative(*optUri, _path.parent_path());

@@ -550,7 +550,7 @@ namespace ao::audio::backend
     return std::unexpected(Error{.code = Error::Code::NotSupported});
   }
 
-  Result<PropertyValue> PipeWireBackend::getProperty(PropertyId id) const
+  Result<PropertyValue> PipeWireBackend::property(PropertyId id) const
   {
     if (id == PropertyId::Volume)
     {

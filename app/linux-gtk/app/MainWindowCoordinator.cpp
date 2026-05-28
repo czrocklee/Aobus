@@ -117,7 +117,7 @@ namespace ao::gtk
     registerPlatformAudioBackends(_runtime);
 
     _playbackSequenceController = std::make_unique<ao::uimodel::playback::PlaybackQueueModel>(
-      _runtime.playback(), [this](TrackId id) { return _trackRowCache->getPlaybackDescriptor(id); });
+      _runtime.playback(), [this](TrackId id) { return _trackRowCache->playbackDescriptor(id); });
     _trackPageHost->setPlaybackQueueModel(*_playbackSequenceController);
 
     _libraryTaskCompletedSubscription = _runtime.mutation().onLibraryTaskCompleted(

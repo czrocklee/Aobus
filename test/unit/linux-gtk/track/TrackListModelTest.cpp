@@ -205,8 +205,8 @@ namespace ao::gtk::test
       REQUIRE(item != nullptr);
       auto const castRow = std::dynamic_pointer_cast<TrackRowObject>(item);
       REQUIRE(castRow);
-      CHECK(castRow->getTrackId() == id1);
-      CHECK(castRow->getFieldText(rt::TrackField::Artist) == "Artist A");
+      CHECK(castRow->trackId() == id1);
+      CHECK(castRow->fieldText(rt::TrackField::Artist) == "Artist A");
     }
 
     SECTION("Playing state updates refresh model items")

@@ -121,7 +121,7 @@ namespace ao::gtk
         {
           if (static_cast<bool>(modifiers & Gdk::ModifierType::CONTROL_MASK))
           {
-            if (auto const selectedIds = getSelectedTrackIds(); !selectedIds.empty())
+            if (auto const selectedIds = selectedTrackIds(); !selectedIds.empty())
             {
               _tagEditRequested.emit(selectedIds, nullptr);
             }
@@ -155,7 +155,7 @@ namespace ao::gtk
           return;
         }
 
-        auto const selectedIds = getSelectedTrackIds();
+        auto const selectedIds = selectedTrackIds();
 
         if (selectedIds.empty())
         {
@@ -221,7 +221,7 @@ namespace ao::gtk
       return;
     }
 
-    if (auto const trackId = getPrimarySelectedTrackId(); trackId != kInvalidTrackId)
+    if (auto const trackId = primarySelectedTrackId(); trackId != kInvalidTrackId)
     {
       _trackActivated.emit(trackId);
     }
@@ -253,7 +253,7 @@ namespace ao::gtk
       return kInvalidTrackId;
     }
 
-    return row->getTrackId();
+    return row->trackId();
   }
 
   std::size_t TrackSelectionController::selectedTrackCount() const noexcept
@@ -266,7 +266,7 @@ namespace ao::gtk
     return 0;
   }
 
-  std::vector<TrackId> TrackSelectionController::getSelectedTrackIds() const noexcept
+  std::vector<TrackId> TrackSelectionController::selectedTrackIds() const noexcept
   {
     auto const model = _selectionModel->get_model();
 
@@ -281,7 +281,7 @@ namespace ao::gtk
            std::views::filter([](auto const& id) { return id != kInvalidTrackId; }) | std::ranges::to<std::vector>();
   }
 
-  std::vector<Glib::RefPtr<TrackRowObject>> TrackSelectionController::getSelectedRows() const noexcept
+  std::vector<Glib::RefPtr<TrackRowObject>> TrackSelectionController::selectedRows() const noexcept
   {
     auto const model = _selectionModel->get_model();
 
@@ -297,7 +297,7 @@ namespace ao::gtk
            std::views::filter([](auto const& row) { return static_cast<bool>(row); }) | std::ranges::to<std::vector>();
   }
 
-  std::chrono::milliseconds TrackSelectionController::getSelectedTracksDuration() const noexcept
+  std::chrono::milliseconds TrackSelectionController::selectedTracksDuration() const noexcept
   {
     auto const model = _selectionModel->get_model();
 
@@ -312,12 +312,12 @@ namespace ao::gtk
         std::views::transform([model](auto idx)
                               { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(idx)); }) |
         std::views::filter([](auto const& row) { return static_cast<bool>(row); }) |
-        std::views::transform([](auto const& row) { return row->getDuration(); }),
+        std::views::transform([](auto const& row) { return row->duration(); }),
       std::chrono::milliseconds{0},
       std::plus<>{});
   }
 
-  TrackId TrackSelectionController::getPrimarySelectedTrackId() const noexcept
+  TrackId TrackSelectionController::primarySelectedTrackId() const noexcept
   {
     auto const bitset = _selectionModel->get_selection();
 
@@ -363,7 +363,7 @@ namespace ao::gtk
     _model->setPlayingTrackId(trackId);
   }
 
-  std::vector<TrackId> TrackSelectionController::getVisibleTrackIds() const noexcept
+  std::vector<TrackId> TrackSelectionController::visibleTrackIds() const noexcept
   {
     auto* const proj = _model->projection();
 

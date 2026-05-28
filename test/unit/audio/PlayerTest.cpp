@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
 #include "ao/audio/Player.h"
 
 #include "TestUtility.h"
@@ -64,11 +67,11 @@ namespace ao::audio::test
           if (cb)
           {
             cb(std::vector{Device{.id = DeviceId{"mock-sink"},
-                                          .displayName = "Mock Sink",
-                                          .description = "Mock",
-                                          .isDefault = true,
-                                          .backendId = kBackendNone,
-                                          .capabilities = {}}});
+                                  .displayName = "Mock Sink",
+                                  .description = "Mock",
+                                  .isDefault = true,
+                                  .backendId = kBackendNone,
+                                  .capabilities = {}}});
           }
 
           return Subscription{};

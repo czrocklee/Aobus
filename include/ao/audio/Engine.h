@@ -81,7 +81,7 @@ namespace ao::audio
     void seek(std::uint32_t positionMs);
 
     void setVolume(float volume);
-    float getVolume() const;
+    float volume() const;
     void setMuted(bool muted);
     bool isMuted() const;
     bool isVolumeAvailable() const;

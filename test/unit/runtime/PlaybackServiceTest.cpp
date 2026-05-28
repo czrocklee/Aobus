@@ -83,7 +83,7 @@ namespace ao::rt::test
     fakeit::When(Method(mockProvider, status)).AlwaysReturn(status);
 
     auto spyBackend = std::make_shared<audio::test::SpyBackend<>>();
-    fakeit::When(Method(spyBackend->mock(), getProperty))
+    fakeit::When(Method(spyBackend->mock(), property))
       .AlwaysDo(
         [](audio::PropertyId id) -> Result<audio::PropertyValue>
         {
@@ -364,7 +364,7 @@ namespace ao::rt::test
       fakeit::When(Method(freshMockProvider, status)).AlwaysReturn(status);
 
       auto freshSpyBackend = std::make_shared<audio::test::SpyBackend<>>();
-      fakeit::When(Method(freshSpyBackend->mock(), getProperty))
+      fakeit::When(Method(freshSpyBackend->mock(), property))
         .AlwaysDo(
           [](audio::PropertyId id) -> Result<audio::PropertyValue>
           {

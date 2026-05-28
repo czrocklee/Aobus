@@ -22,8 +22,8 @@ namespace ao::log::test
     {
       Log::init(LogLevel::Debug, tempDir);
 
-      auto const& appLogger = Log::getAppLogger();
-      auto const& audioLogger = Log::getAudioLogger();
+      auto const& appLogger = Log::appLogger();
+      auto const& audioLogger = Log::audioLogger();
 
       REQUIRE(Log::isInitialized());
       REQUIRE(appLogger != nullptr);

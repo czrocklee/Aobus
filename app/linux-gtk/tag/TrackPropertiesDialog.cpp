@@ -6,6 +6,8 @@
 #include "ao/Type.h"
 #include "ao/library/MusicLibrary.h"
 #include "ao/library/TrackStore.h"
+#include "app/AppDialog.h"
+#include "app/FormBuilder.h"
 #include "layout/LayoutConstants.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
@@ -38,8 +40,6 @@ namespace ao::gtk
 {
   namespace
   {
-    constexpr int kDialogDefaultWidth = 520;
-    constexpr int kDialogDefaultHeight = 580;
     constexpr int kBoxSpacing = layout::kSpacingMedium;
     constexpr int kSectionSpacing = layout::kSpacingLarge;
     constexpr int kFieldRowSpacing = layout::kSpacingSmall;
@@ -71,7 +71,7 @@ namespace ao::gtk
                                                rt::LibraryMutationService& mutation,
                                                TrackRowCache& rowCache,
                                                std::vector<TrackId> trackIds)
-    : Gtk::Dialog{}
+    : AppDialog{}
     , _library{library}
     , _mutation{mutation}
     , _rowCache{rowCache}
@@ -83,8 +83,7 @@ namespace ao::gtk
 
     set_title(title);
     set_transient_for(parent);
-    set_modal(true);
-    set_default_size(kDialogDefaultWidth, kDialogDefaultHeight);
+    set_default_size(520, 580);
 
     setupUi();
     loadData();
@@ -96,22 +95,16 @@ namespace ao::gtk
 
   void TrackPropertiesDialog::setupUi()
   {
-    auto* const contentArea = get_content_area();
-    contentArea->add_css_class("ao-dialog-content");
+    addCancelAction("Close", Gtk::ResponseType::CLOSE);
+    addPrimaryAction("Save", Gtk::ResponseType::OK)->signal_clicked().connect([this] { onSave(); });
 
     _notebook.add_css_class("ao-properties-notebook");
+    _notebook.set_vexpand(true);
+
     setupMetadataTab();
     setupPropertiesTab();
 
-    contentArea->append(_notebook);
-
-    auto* const saveButton = Gtk::make_managed<Gtk::Button>("Save");
-    saveButton->add_css_class("suggested-action");
-    saveButton->signal_clicked().connect([this] { onSave(); });
-    add_action_widget(*saveButton, Gtk::ResponseType::OK);
-
-    auto* const closeButton = Gtk::make_managed<Gtk::Button>("Close");
-    add_action_widget(*closeButton, Gtk::ResponseType::CLOSE);
+    setContentWidget(_notebook);
   }
 
   void TrackPropertiesDialog::setupMetadataTab()
@@ -120,12 +113,11 @@ namespace ao::gtk
     _metadataScroll.set_vexpand(true);
     _metadataScroll.set_child(_metadataBox);
 
-    _metadataBox.set_spacing(kBoxSpacing);
+    _metadataBox.set_orientation(Gtk::Orientation::VERTICAL);
+    _metadataBox.set_spacing(kSectionSpacing);
     _metadataBox.set_valign(Gtk::Align::START);
-    _metadataBox.set_margin_start(kSectionSpacing);
-    _metadataBox.set_margin_end(kSectionSpacing);
-    _metadataBox.set_margin_top(kSectionSpacing);
-    _metadataBox.set_margin_bottom(kSectionSpacing);
+
+    auto* const list = Gtk::make_managed<FormBoxedList>();
 
     for (auto const& def : trackFieldUiDefinitions())
     {
@@ -137,28 +129,12 @@ namespace ao::gtk
       }
 
       auto* const widget = createEditorWidget(def.field);
-
-      auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kFieldRowSpacing);
-      auto* const label = Gtk::make_managed<Gtk::Label>(std::string{rtDef->label});
-
-      label->set_halign(Gtk::Align::START);
-      label->set_valign(Gtk::Align::CENTER);
-      label->set_width_chars(kLabelWidthChars);
-      label->set_xalign(0.0F);
-      label->set_opacity(kLabelOpacity);
-      label->add_css_class("ao-property-label");
-
-      widget->set_halign(Gtk::Align::FILL);
-      widget->set_hexpand(true);
-      widget->set_valign(Gtk::Align::CENTER);
-
-      row->append(*label);
-      row->append(*widget);
-      _metadataBox.append(*row);
+      list->addRow(std::string{rtDef->label}, *widget);
 
       _editors.push_back(FieldEditor{.field = def.field, .widget = widget});
     }
 
+    _metadataBox.append(*list);
     _notebook.append_page(_metadataScroll, "Metadata");
   }
 
@@ -168,12 +144,11 @@ namespace ao::gtk
     _propertiesScroll.set_vexpand(true);
     _propertiesScroll.set_child(_propertiesBox);
 
-    _propertiesBox.set_spacing(kBoxSpacing);
+    _propertiesBox.set_orientation(Gtk::Orientation::VERTICAL);
+    _propertiesBox.set_spacing(kSectionSpacing);
     _propertiesBox.set_valign(Gtk::Align::START);
-    _propertiesBox.set_margin_start(kSectionSpacing);
-    _propertiesBox.set_margin_end(kSectionSpacing);
-    _propertiesBox.set_margin_top(kSectionSpacing);
-    _propertiesBox.set_margin_bottom(kSectionSpacing);
+
+    auto* const list = Gtk::make_managed<FormBoxedList>();
 
     for (auto const& def : trackFieldUiDefinitions())
     {
@@ -185,28 +160,12 @@ namespace ao::gtk
       }
 
       auto* const widget = createReadonlyWidget(def.field);
-
-      auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kFieldRowSpacing);
-      auto* const label = Gtk::make_managed<Gtk::Label>(std::string{rtDef->label});
-
-      label->set_halign(Gtk::Align::START);
-      label->set_valign(Gtk::Align::CENTER);
-      label->set_width_chars(kLabelWidthChars);
-      label->set_xalign(0.0F);
-      label->set_opacity(kLabelOpacity);
-      label->add_css_class("ao-property-label");
-
-      widget->set_halign(Gtk::Align::START);
-      widget->set_hexpand(true);
-      widget->set_valign(Gtk::Align::CENTER);
-
-      row->append(*label);
-      row->append(*widget);
-      _propertiesBox.append(*row);
+      list->addRow(std::string{rtDef->label}, *widget);
 
       _readonlyRows.push_back(FieldEditor{.field = def.field, .widget = widget});
     }
 
+    _propertiesBox.append(*list);
     _notebook.append_page(_propertiesScroll, "Properties");
   }
 

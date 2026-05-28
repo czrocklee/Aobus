@@ -89,9 +89,9 @@ namespace ao::gtk
 
     auto const itemCount = _treeListModel->get_n_items();
 
-    for (guint index = 0; index < itemCount; ++index)
+    for (guint idx = 0; idx < itemCount; ++idx)
     {
-      auto item = _treeListModel->get_object(index);
+      auto item = _treeListModel->get_object(idx);
       auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(item);
 
       if (!treeListRow)
@@ -101,9 +101,9 @@ namespace ao::gtk
 
       auto node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
 
-      if (node && node->getListId() == listId)
+      if (node && node->listId() == listId)
       {
-        _listSelectionModel->set_selected(index);
+        _listSelectionModel->set_selected(idx);
         break;
       }
     }
@@ -147,7 +147,7 @@ namespace ao::gtk
       return kInvalidListId;
     }
 
-    return node->getListId();
+    return node->listId();
   }
 
   void ListSidebarPanel::showContextMenu(Gdk::Rectangle const& rect)
@@ -240,21 +240,21 @@ namespace ao::gtk
       return;
     }
 
-    auto row = node->getRow();
+    auto row = node->row();
 
     if (!row)
     {
       return;
     }
 
-    label->set_text(row->getName());
+    label->set_text(row->name());
 
     if (filterLabel == nullptr)
     {
       return;
     }
 
-    if (auto const filter = row->getFilter(); !filter.empty())
+    if (auto const filter = row->filter(); !filter.empty())
     {
       filterLabel->set_text(std::format("[{}]", filter.raw()));
       filterLabel->set_visible(true);

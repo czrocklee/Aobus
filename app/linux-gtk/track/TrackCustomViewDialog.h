@@ -3,11 +3,10 @@
 
 #pragma once
 
+#include "app/AppDialog.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 
-#include <gtkmm/button.h>
-#include <gtkmm/dialog.h>
 #include <gtkmm/dropdown.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/listbox.h>
@@ -19,7 +18,7 @@
 
 namespace ao::gtk
 {
-  class TrackCustomViewDialog final : public Gtk::Dialog
+  class TrackCustomViewDialog final : public AppDialog
   {
   public:
     struct Result final
@@ -46,8 +45,6 @@ namespace ao::gtk
     Gtk::DropDown _groupDropdown;
     Gtk::ListBox _sortTermsList;
     Gtk::ListBox _visibleFieldsList;
-
-    Gtk::Button _saveButton{"Save"};
 
     std::vector<rt::TrackSortTerm> _sortState;
     std::vector<rt::TrackField> _visibleFieldsState;

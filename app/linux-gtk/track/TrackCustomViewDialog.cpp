@@ -3,11 +3,14 @@
 
 #include "track/TrackCustomViewDialog.h"
 
+#include "app/AppDialog.h"
+#include "app/FormBuilder.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
@@ -35,8 +38,6 @@ namespace ao::gtk
 {
   namespace
   {
-    constexpr int kDefaultWidth = 500;
-    constexpr int kDefaultHeight = 600;
     constexpr int kBoxSpacing = 6;
 
     std::string generateId()
@@ -109,11 +110,11 @@ namespace ao::gtk
   TrackCustomViewDialog::TrackCustomViewDialog(Gtk::Window& parent,
                                                rt::TrackPresentationSpec const& initialSpec,
                                                std::string_view initialLabel)
+    : AppDialog{}
   {
     set_title("Edit Custom View");
     set_transient_for(parent);
-    set_modal(true);
-    set_default_size(kDefaultWidth, kDefaultHeight);
+    set_default_size(500, 600);
 
     setupUi();
     populateFromSpec(initialSpec, initialLabel);
@@ -121,28 +122,15 @@ namespace ao::gtk
 
   void TrackCustomViewDialog::setupUi()
   {
-    auto* const contentArea = get_content_area();
-    contentArea->add_css_class("ao-custom-view-editor");
+    addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
+    addPrimaryAction("Save", Gtk::ResponseType::OK);
 
-    auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
-    mainBox->add_css_class("ao-custom-view-main-box");
+    auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kBoxSpacing * 2);
 
-    // Name
-    auto* nameBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    nameBox->add_css_class("ao-custom-view-row");
-    auto* nameLabel = Gtk::make_managed<Gtk::Label>("Name");
-    nameLabel->set_halign(Gtk::Align::START);
-    nameBox->append(*nameLabel);
-    _nameEntry.set_hexpand(true);
-    nameBox->append(_nameEntry);
-    mainBox->append(*nameBox);
-
-    // Group By
-    auto* groupBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    groupBox->add_css_class("ao-custom-view-row");
-    auto* groupLabel = Gtk::make_managed<Gtk::Label>("Group By");
-    groupLabel->set_halign(Gtk::Align::START);
-    groupBox->append(*groupLabel);
+    // Section 1: Metadata Card
+    auto* metaList = Gtk::make_managed<FormBoxedList>();
+    _nameEntry.set_placeholder_text("View label");
+    metaList->addEntryRow("Name", _nameEntry);
 
     auto groupModel = Gtk::StringList::create({});
     _availableGroupKeys = {
@@ -162,18 +150,16 @@ namespace ao::gtk
     }
 
     _groupDropdown.set_model(groupModel);
-    _groupDropdown.set_hexpand(true);
-    groupBox->append(_groupDropdown);
-    mainBox->append(*groupBox);
+    metaList->addRow("Group By", _groupDropdown);
+    mainBox->append(*metaList);
 
-    // Sort Terms (using boxed list style)
+    // Sort Terms
     auto* sortLabel = Gtk::make_managed<Gtk::Label>("Sort Order");
     sortLabel->set_halign(Gtk::Align::START);
-    sortLabel->add_css_class("ao-custom-view-section-title");
+    sortLabel->add_css_class("ao-section-header");
     mainBox->append(*sortLabel);
 
-    _sortTermsList.add_css_class("boxed-list");
-    _sortTermsList.add_css_class("ao-custom-view-list");
+    _sortTermsList.add_css_class("ao-boxed-list");
     _sortTermsList.set_selection_mode(Gtk::SelectionMode::NONE);
     mainBox->append(_sortTermsList);
 
@@ -190,11 +176,10 @@ namespace ao::gtk
     // Visible Fields
     auto* fieldsLabel = Gtk::make_managed<Gtk::Label>("Visible Columns");
     fieldsLabel->set_halign(Gtk::Align::START);
-    fieldsLabel->add_css_class("ao-custom-view-section-title");
+    fieldsLabel->add_css_class("ao-section-header");
     mainBox->append(*fieldsLabel);
 
-    _visibleFieldsList.add_css_class("boxed-list");
-    _visibleFieldsList.add_css_class("ao-custom-view-list");
+    _visibleFieldsList.add_css_class("ao-boxed-list");
     _visibleFieldsList.set_selection_mode(Gtk::SelectionMode::NONE);
     mainBox->append(_visibleFieldsList);
 
@@ -210,16 +195,10 @@ namespace ao::gtk
 
     auto* scroll = Gtk::make_managed<Gtk::ScrolledWindow>();
     scroll->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
-    scroll->set_vexpand(true);
     scroll->set_child(*mainBox);
-    contentArea->append(*scroll);
+    scroll->set_vexpand(true);
 
-    // Buttons
-    _saveButton.add_css_class("suggested-action");
-    add_action_widget(_saveButton, Gtk::ResponseType::OK);
-
-    auto* cancelButton = Gtk::make_managed<Gtk::Button>("Cancel");
-    add_action_widget(*cancelButton, Gtk::ResponseType::CANCEL);
+    setContentWidget(*scroll);
   }
 
   void TrackCustomViewDialog::rebuildSortList()

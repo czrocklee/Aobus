@@ -71,7 +71,7 @@ namespace ao::uimodel::playback
 
     NowPlayingActionCommand resolveAction(NowPlayingFieldAction action, rt::TrackField field) const;
 
-    static std::string getFieldText(NowPlayingViewState const& view, rt::TrackField field);
+    static std::string fieldText(NowPlayingViewState const& view, rt::TrackField field);
 
   private:
     void refresh();

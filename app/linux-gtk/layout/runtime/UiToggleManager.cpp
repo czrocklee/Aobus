@@ -28,7 +28,7 @@ namespace ao::gtk::layout
     }
   }
 
-  bool UiToggleManager::getToggleState(std::string_view const key) const
+  bool UiToggleManager::toggleState(std::string_view const key) const
   {
     auto const it = _states.find(key);
 

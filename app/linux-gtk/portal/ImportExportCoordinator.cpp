@@ -6,6 +6,8 @@
 #include "ao/Exception.h"
 #include "ao/library/LibraryScanner.h"
 #include "ao/utility/Log.h"
+#include "app/AppDialog.h"
+#include "app/FormBuilder.h"
 #include "layout/LayoutConstants.h"
 #include "portal/LibraryTaskProgressDialog.h"
 #include <ao/rt/AppRuntime.h>
@@ -152,14 +154,11 @@ namespace ao::gtk::portal
 
   void ImportExportCoordinator::exportLibrary()
   {
-    auto* const dialog = Gtk::make_managed<Gtk::Dialog>();
+    auto* const dialog = Gtk::make_managed<AppDialog>();
     dialog->set_title("Select Export Mode");
     dialog->set_transient_for(_parent);
-    dialog->set_modal(true);
 
-    auto* const contentArea = dialog->get_content_area();
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kSpacingMedium);
-    box->add_css_class("ao-dialog-content");
 
     auto* const label = Gtk::make_managed<Gtk::Label>("Choose what to include in the backup:");
     label->set_halign(Gtk::Align::START);
@@ -172,11 +171,14 @@ namespace ao::gtk::portal
                                                 "List Only (Sync playlists without touching tracks)"});
     modeCombo->set_model(modeStrings);
     modeCombo->set_selected(2); // Default to Full
-    box->append(*modeCombo);
 
-    contentArea->append(*box);
-    dialog->add_button("Cancel", Gtk::ResponseType::CANCEL);
-    dialog->add_button("Next", Gtk::ResponseType::OK);
+    auto* list = Gtk::make_managed<FormBoxedList>();
+    list->addRow("Include", *modeCombo);
+    box->append(*list);
+
+    dialog->setContentWidget(*box);
+    dialog->addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
+    dialog->addPrimaryAction("Next", Gtk::ResponseType::OK);
 
     dialog->signal_response().connect([this, modeCombo, dialog](std::int32_t responseId)
                                       { onExportModeConfirmed(responseId, modeCombo, dialog); });
@@ -185,7 +187,7 @@ namespace ao::gtk::portal
 
   void ImportExportCoordinator::onExportModeConfirmed(std::int32_t responseId,
                                                       Gtk::DropDown* modeCombo,
-                                                      Gtk::Dialog* dialog)
+                                                      AppDialog* dialog)
   {
     if (responseId != Gtk::ResponseType::OK)
     {

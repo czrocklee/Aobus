@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/AppDialog.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -13,7 +14,6 @@
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/comboboxtext.h>
-#include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/paned.h>
@@ -32,7 +32,7 @@
 
 namespace ao::gtk::layout::editor
 {
-  class LayoutEditorDialog final : public Gtk::Dialog
+  class LayoutEditorDialog final : public AppDialog
   {
   public:
     LayoutEditorDialog(Gtk::Window& parent,
@@ -47,7 +47,7 @@ namespace ao::gtk::layout::editor
     LayoutEditorDialog& operator=(LayoutEditorDialog&&) = delete;
 
     LayoutDocument const& document() const { return _document; }
-    std::string getSelectedPresetId() const { return _comboPresets.get_active_id(); }
+    std::string selectedPresetId() const { return _comboPresets.get_active_id(); }
 
     sigc::signal<void(LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
 

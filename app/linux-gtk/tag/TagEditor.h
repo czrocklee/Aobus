@@ -57,7 +57,7 @@ namespace ao::gtk
     void onTagChipToggled(Gtk::ToggleButton* button, std::string const& tag, bool isCurrentSection);
     void onEntryActivated();
 
-    std::string getTagNameFromChild(Gtk::FlowBoxChild* child);
+    std::string tagNameFromChild(Gtk::FlowBoxChild* child);
     void setChipStyle(Gtk::ToggleButton& chip, bool isHighlighted);
 
     library::MusicLibrary* _musicLibrary = nullptr;

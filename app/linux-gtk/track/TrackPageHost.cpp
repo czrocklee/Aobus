@@ -105,7 +105,7 @@ namespace ao::gtk
   {
     for (auto const& [id, ctx] : _trackPages)
     {
-      if (ctx.page && ctx.page->getListId() == preferredListId)
+      if (ctx.page && ctx.page->listId() == preferredListId)
       {
         return id;
       }
@@ -355,7 +355,7 @@ namespace ao::gtk
       [this, page, viewId]
       {
         auto const route =
-          ao::uimodel::track::describeSelectionRoute(viewId, page->selectionController().getSelectedTrackIds());
+          ao::uimodel::track::describeSelectionRoute(viewId, page->selectionController().selectedTrackIds());
 
         if (route.shouldUpdateRuntimeSelection)
         {
@@ -368,7 +368,7 @@ namespace ao::gtk
       [this, page](double posX, double posY)
       {
         auto const sel = TrackSelectionContext{
-          .listId = page->getListId(), .selectedIds = page->selectionController().getSelectedTrackIds()};
+          .listId = page->listId(), .selectedIds = page->selectionController().selectedTrackIds()};
         _tagEditController.showTrackContextMenu(*page, sel, posX, posY);
       });
 
@@ -380,7 +380,7 @@ namespace ao::gtk
           return;
         }
 
-        auto const sel = TrackSelectionContext{.listId = page->getListId(), .selectedIds = ids};
+        auto const sel = TrackSelectionContext{.listId = page->listId(), .selectedIds = ids};
         _tagEditController.showTagEditor(sel, *relativeTo);
       });
 
@@ -389,14 +389,14 @@ namespace ao::gtk
       {
         if (_playbackQueueModel)
         {
-          _playbackQueueModel->playQueue(page->selectionController().getVisibleTrackIds(), id, page->getListId());
+          _playbackQueueModel->playQueue(page->selectionController().visibleTrackIds(), id, page->listId());
         }
       });
 
     page->signalCreateSmartListRequested().connect(
       [this, page](std::string const& expression)
       {
-        auto const parentId = ao::uimodel::track::smartListParentIdFromPage(page->getListId());
+        auto const parentId = ao::uimodel::track::smartListParentIdFromPage(page->listId());
         _listSidebar.createSmartListFromExpression(parentId, expression);
       });
 
@@ -411,7 +411,7 @@ namespace ao::gtk
   {
     if (auto const* ctx = currentVisible())
     {
-      return ctx->page->getListId();
+      return ctx->page->listId();
     }
 
     return rt::kAllTracksListId;

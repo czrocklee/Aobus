@@ -18,6 +18,8 @@ set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/resources.c PROPERTIES C
 add_library(aobus-gtk-lib STATIC
     ${CMAKE_CURRENT_BINARY_DIR}/resources.c
     app/AobusSoul.cpp
+    app/AppDialog.cpp
+    app/FormBuilder.cpp
     app/GtkControlExecutor.cpp
     app/MainWindow.cpp
     app/MenuController.cpp

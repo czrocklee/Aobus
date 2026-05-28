@@ -4,13 +4,13 @@
 #pragma once
 
 #include "ao/Type.h"
+#include "app/AppDialog.h"
 #include "list/QueryExpressionBox.h"
 #include <ao/rt/LibraryMutationService.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/columnview.h>
-#include <gtkmm/dialog.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/label.h>
 #include <gtkmm/scrolledwindow.h>
@@ -40,7 +40,7 @@ namespace ao::gtk
   class TrackListModel;
   class TrackRowCache;
 
-  class SmartListDialog final : public Gtk::Dialog
+  class SmartListDialog final : public AppDialog
   {
   public:
     SmartListDialog(Gtk::Window& parent, rt::AppRuntime& runtime, ListId parentListId, TrackRowCache const& provider);
@@ -76,8 +76,8 @@ namespace ao::gtk
     Gtk::Entry _nameEntry;
     Gtk::Entry _descEntry;
     QueryExpressionBox _exprBox;
-    Gtk::Button _okButton;
-    Gtk::Button _cancelButton;
+    Gtk::Button* _okButton = nullptr;
+    Gtk::Button* _cancelButton = nullptr;
     Gtk::Box _leftPanel;
     Gtk::Box _rightPanel;
     Gtk::Label _inheritedExprLabel;

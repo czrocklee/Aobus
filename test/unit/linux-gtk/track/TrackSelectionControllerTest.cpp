@@ -107,8 +107,8 @@ namespace ao::gtk::test
         drainGtkEvents();
 
         CHECK(controller.selectedTrackCount() == 1);
-        CHECK(controller.getPrimarySelectedTrackId() == trackId1);
-        auto const ids = controller.getSelectedTrackIds();
+        CHECK(controller.primarySelectedTrackId() == trackId1);
+        auto const ids = controller.selectedTrackIds();
         REQUIRE(ids.size() == 1);
         CHECK(ids[0] == trackId1);
       }
@@ -119,7 +119,7 @@ namespace ao::gtk::test
         drainGtkEvents();
 
         CHECK(controller.selectedTrackCount() == 1);
-        CHECK(controller.getPrimarySelectedTrackId() == trackId2);
+        CHECK(controller.primarySelectedTrackId() == trackId2);
       }
 
       SECTION("signal propagation")

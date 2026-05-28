@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
 #include "check/BracedInitializationCheck.h"
 #include "check/CApiGlobalQualificationCheck.h"
 #include "check/ConcreteFinalCheck.h"
@@ -11,6 +14,7 @@
 #include "check/OptionalNamingAndUsageCheck.h"
 #include "check/RedundantNamespaceQualificationCheck.h"
 #include "check/RedundantUsingDirectiveCheck.h"
+#include "check/SpdxLicenseHeaderCheck.h"
 #include "check/StdCLibraryQualificationCheck.h"
 #include "check/ThreadingPolicyCheck.h"
 #include "check/UnusedSuppressionStyleCheck.h"
@@ -59,6 +63,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<UseStartsWithCheck>("aobus-modernize-use-starts-with");
       checkFactories.registerCheck<UseStdNumbersCheck>("aobus-modernize-use-std-numbers");
       checkFactories.registerCheck<UseCtadCheck>("aobus-modernize-use-ctad");
+      checkFactories.registerCheck<SpdxLicenseHeaderCheck>("aobus-license-header");
     }
   };
 

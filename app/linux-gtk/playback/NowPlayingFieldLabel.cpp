@@ -98,6 +98,6 @@ namespace ao::gtk
 
   void NowPlayingFieldLabel::applyState(ao::uimodel::playback::NowPlayingViewState const& view)
   {
-    _label.set_text(uimodel::playback::NowPlayingViewModel::getFieldText(view, _field));
+    _label.set_text(uimodel::playback::NowPlayingViewModel::fieldText(view, _field));
   }
 } // namespace ao::gtk

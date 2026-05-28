@@ -27,44 +27,44 @@ namespace ao::gtk
   public:
     static Glib::RefPtr<TrackRowObject> create(TrackId id, TrackRowCache const& provider);
 
-    TrackId getTrackId() const { return _id; }
+    TrackId trackId() const { return _id; }
 
     Glib::ustring const* stringField(rt::TrackField field) const noexcept;
     bool setStringField(rt::TrackField field, Glib::ustring const& value);
 
-    Glib::ustring getFieldText(rt::TrackField field) const;
+    Glib::ustring fieldText(rt::TrackField field) const;
 
-    Glib::ustring const& getTags() const { return _tags; }
+    Glib::ustring const& tags() const { return _tags; }
     void setTags(Glib::ustring const& tags) { _tags = tags; }
 
-    std::chrono::milliseconds getDuration() const { return _duration; }
+    std::chrono::milliseconds duration() const { return _duration; }
 
-    std::uint64_t getResourceId() const { return _optResourceId.value_or(0); }
+    std::uint64_t resourceId() const { return _optResourceId.value_or(0); }
 
-    std::uint32_t getSampleRate() const { return _sampleRate; }
-    std::uint8_t getChannels() const { return _channels; }
-    std::uint8_t getBitDepth() const { return _bitDepth; }
-    std::uint16_t getCodecId() const { return _codecId; }
+    std::uint32_t sampleRate() const { return _sampleRate; }
+    std::uint8_t channels() const { return _channels; }
+    std::uint8_t bitDepth() const { return _bitDepth; }
+    std::uint16_t codecId() const { return _codecId; }
 
-    std::uint16_t getYear() const { return _year; }
+    std::uint16_t year() const { return _year; }
     void setYear(std::uint16_t year);
 
-    std::uint16_t getDiscNumber() const { return _discNumber; }
+    std::uint16_t discNumber() const { return _discNumber; }
     void setDiscNumber(std::uint16_t discNumber);
 
-    std::uint16_t getTotalDiscs() const { return _totalDiscs; }
+    std::uint16_t totalDiscs() const { return _totalDiscs; }
     void setTotalDiscs(std::uint16_t totalDiscs);
 
-    std::uint16_t getTrackNumber() const { return _trackNumber; }
+    std::uint16_t trackNumber() const { return _trackNumber; }
     void setTrackNumber(std::uint16_t trackNumber);
 
-    std::uint16_t getTotalTracks() const { return _totalTracks; }
+    std::uint16_t totalTracks() const { return _totalTracks; }
     void setTotalTracks(std::uint16_t totalTracks);
 
-    std::uint32_t getBitrate() const { return _bitrate; }
-    std::uint64_t getFileSize() const { return _fileSize; }
-    std::uint64_t getModifiedTime() const { return _modifiedTime; }
-    library::FileStatus getStatus() const { return _status; }
+    std::uint32_t bitrate() const { return _bitrate; }
+    std::uint64_t fileSize() const { return _fileSize; }
+    std::uint64_t modifiedTime() const { return _modifiedTime; }
+    library::FileStatus status() const { return _status; }
 
     Glib::PropertyProxy<bool> property_playing();
 

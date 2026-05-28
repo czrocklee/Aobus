@@ -11,7 +11,6 @@
 
 #include <giomm/asyncresult.h>
 #include <glibmm/refptr.h>
-#include <gtkmm/dialog.h>
 #include <gtkmm/dropdown.h>
 #include <gtkmm/filedialog.h>
 #include <gtkmm/window.h>
@@ -25,6 +24,11 @@
 namespace ao::rt
 {
   class AppRuntime;
+}
+
+namespace ao::gtk
+{
+  class AppDialog;
 }
 
 namespace ao::gtk::portal
@@ -69,7 +73,7 @@ namespace ao::gtk::portal
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
     rt::async::Task<void> importLibraryTask(std::filesystem::path importPath);
 
-    void onExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
+    void onExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, AppDialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
                               rt::ExportMode mode,
                               Glib::RefPtr<Gtk::FileDialog> const& fileDialog);

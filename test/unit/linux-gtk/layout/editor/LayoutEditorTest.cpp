@@ -43,7 +43,7 @@ namespace ao::gtk::layout::editor::test
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
-    auto const& descriptors = registry.getDescriptors();
+    auto const& descriptors = registry.descriptors();
 
     SECTION("all 21 component types have descriptors")
     {
@@ -100,7 +100,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("split requires exactly 2 children")
     {
-      auto const optDesc = registry.getDescriptor("split");
+      auto const optDesc = registry.descriptor("split");
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->minChildren == 2);
@@ -110,7 +110,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("scroll requires exactly 1 child")
     {
-      auto const optDesc = registry.getDescriptor("scroll");
+      auto const optDesc = registry.descriptor("scroll");
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->minChildren == 1);
@@ -120,7 +120,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("tabs requires at least 1 child")
     {
-      auto const optDesc = registry.getDescriptor("tabs");
+      auto const optDesc = registry.descriptor("tabs");
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->minChildren == 1);
@@ -129,7 +129,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("box has orientation, spacing, homogeneous props")
     {
-      auto const optDesc = registry.getDescriptor("box");
+      auto const optDesc = registry.descriptor("box");
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->container == true);
@@ -144,7 +144,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("playPauseButton has showLabel and size props")
     {
-      auto const optDesc = registry.getDescriptor("playback.playPauseButton");
+      auto const optDesc = registry.descriptor("playback.playPauseButton");
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->category == "Playback");
@@ -156,9 +156,9 @@ namespace ao::gtk::layout::editor::test
       CHECK(hasProp("size"));
     }
 
-    SECTION("getDescriptor returns nullopt for unknown type")
+    SECTION("descriptor returns nullopt for unknown type")
     {
-      auto const optDesc = registry.getDescriptor("nonexistent.component");
+      auto const optDesc = registry.descriptor("nonexistent.component");
       CHECK(!optDesc.has_value());
     }
 
@@ -210,7 +210,7 @@ namespace ao::gtk::layout::editor::test
 
       for (auto const& type : types)
       {
-        auto const optDesc = registry.getDescriptor(std::string{type});
+        auto const optDesc = registry.descriptor(std::string{type});
         CHECK(optDesc.has_value());
       }
     }
@@ -455,7 +455,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("absoluteCanvas descriptor is registered as container")
     {
-      auto const optDesc = registry.getDescriptor("absoluteCanvas");
+      auto const optDesc = registry.descriptor("absoluteCanvas");
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->container == true);

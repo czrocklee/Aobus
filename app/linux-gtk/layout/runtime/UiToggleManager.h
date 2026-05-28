@@ -40,7 +40,7 @@ namespace ao::gtk::layout
      *
      * Returns false if the key is unknown.
      */
-    bool getToggleState(std::string_view key) const;
+    bool toggleState(std::string_view key) const;
 
     /**
      * @brief Get a signal that is emitted when a specific toggle changes.

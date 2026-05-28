@@ -40,7 +40,7 @@ namespace ao::audio::backend
     ProfileId profileId() const noexcept override;
 
     Result<> setProperty(PropertyId id, PropertyValue const& value) override;
-    Result<PropertyValue> getProperty(PropertyId id) const override;
+    Result<PropertyValue> property(PropertyId id) const override;
     PropertyInfo queryProperty(PropertyId id) const noexcept override;
 
   private:

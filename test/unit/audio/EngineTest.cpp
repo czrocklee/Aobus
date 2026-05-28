@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
 #include "ao/audio/Engine.h"
 
 #include "CapturingBackend.h"
@@ -69,7 +72,7 @@ namespace ao::audio::test
       engine.setVolume(0.75F);
       REQUIRE(lastSetPropertyId == PropertyId::Volume);
       REQUIRE(std::get<float>(lastSetPropertyValue) == Catch::Approx{0.75F});
-      REQUIRE(engine.getVolume() == Catch::Approx{0.75F});
+      REQUIRE(engine.volume() == Catch::Approx{0.75F});
       REQUIRE(engine.status().volume == Catch::Approx{0.75F});
 
       engine.setMuted(true);
@@ -532,10 +535,10 @@ namespace ao::audio::test
       REQUIRE(result.error().code == Error::Code::NotSupported);
     }
 
-    SECTION("getProperty returns error for unknown PropertyId")
+    SECTION("property returns error for unknown PropertyId")
     {
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const result = backendPtr->getProperty(kUnknownId);
+      auto const result = backendPtr->property(kUnknownId);
 
       REQUIRE(!result);
       REQUIRE(result.error().code == Error::Code::NotSupported);
@@ -546,7 +549,7 @@ namespace ao::audio::test
       backendPtr->firePropertyChanged(PropertyId::Volume);
 
       REQUIRE(engine.status().volume == Catch::Approx{1.0F});
-      REQUIRE(engine.getVolume() == Catch::Approx{1.0F});
+      REQUIRE(engine.volume() == Catch::Approx{1.0F});
       REQUIRE(engine.status().volumeAvailable == true);
     }
 
@@ -594,10 +597,10 @@ namespace ao::audio::test
     SECTION("setVolume round-trips through engine and backend")
     {
       engine.setVolume(0.42F);
-      REQUIRE(engine.getVolume() == Catch::Approx{0.42F});
+      REQUIRE(engine.volume() == Catch::Approx{0.42F});
       REQUIRE(engine.status().volume == Catch::Approx{0.42F});
 
-      auto const backendVol = backendPtr->getProperty(PropertyId::Volume);
+      auto const backendVol = backendPtr->property(PropertyId::Volume);
 
       REQUIRE(backendVol);
       REQUIRE(std::get<float>(*backendVol) == Catch::Approx{0.42F});
@@ -609,7 +612,7 @@ namespace ao::audio::test
       REQUIRE(engine.isMuted() == true);
       REQUIRE(engine.status().muted == true);
 
-      auto const backendMuted = backendPtr->getProperty(PropertyId::Muted);
+      auto const backendMuted = backendPtr->property(PropertyId::Muted);
 
       REQUIRE(backendMuted);
       REQUIRE(std::get<bool>(*backendMuted) == true);

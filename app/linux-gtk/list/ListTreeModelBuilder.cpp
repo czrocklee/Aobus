@@ -83,12 +83,12 @@ namespace ao::gtk
 
       if (auto parentIt = result.nodesById.find(parentId); parentIt != result.nodesById.end())
       {
-        parentIt->second->getChildren()->append(childNode);
+        parentIt->second->children()->append(childNode);
         childNode->setParent(parentIt->second.get());
       }
       else
       {
-        allTracksNode->getChildren()->append(childNode);
+        allTracksNode->children()->append(childNode);
         childNode->setParent(allTracksNode.get());
       }
     }
@@ -106,7 +106,7 @@ namespace ao::gtk
           return nullptr;
         }
 
-        return node->getChildren();
+        return node->children();
       },
       false,
       true);

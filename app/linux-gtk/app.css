@@ -17,6 +17,7 @@
   --ao-spacing-md: 6px;
   --ao-spacing-lg: 8px;
   --ao-spacing-xl: 12px;
+  --ao-spacing-xxl: 24px;
 
   /* 圆角 */
   --ao-radius-sm: 4px;
@@ -191,11 +192,35 @@
 
 /* Dialogs */
 .ao-dialog-content {
-  padding: var(--ao-spacing-lg);
+  padding: 16px;
 }
 
 .ao-dialog-actions {
   margin-top: var(--ao-spacing-xl);
+}
+
+/* Boxed Lists (Modern Scheme) */
+listbox.ao-boxed-list {
+  background-color: @theme_base_color;
+  border: 1px solid alpha(currentColor, 0.1);
+  border-radius: var(--ao-radius-md, 8px);
+  box-shadow: 0 2px 8px alpha(black, 0.05);
+  margin-bottom: 16px;
+}
+
+listbox.ao-boxed-list > row {
+  padding: 12px 14px;
+}
+
+/* Flat Entries inside Boxed Lists */
+listbox.ao-boxed-list > row entry.flat-entry {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+listbox.ao-boxed-list > row entry.flat-entry:focus {
+  background: alpha(@theme_selected_bg_color, 0.1);
 }
 
 /* Layout Editor */

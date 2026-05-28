@@ -205,14 +205,14 @@ namespace ao::gtk
   }
 
   void TrackColumnController::ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columns,
-                                                   std::size_t idx,
+                                                   std::size_t index,
                                                    Glib::RefPtr<Gtk::ColumnViewColumn> const& column)
   {
     bool needsMove = true;
 
-    if (columns->get_n_items() > idx)
+    if (columns->get_n_items() > index)
     {
-      if (auto currentObj = columns->get_object(static_cast<::guint>(idx)))
+      if (auto currentObj = columns->get_object(static_cast<::guint>(index)))
       {
         if (currentObj == column)
         {
@@ -232,7 +232,7 @@ namespace ao::gtk
         }
       }
 
-      _columnView.insert_column(static_cast<::guint>(idx), column);
+      _columnView.insert_column(static_cast<::guint>(index), column);
     }
   }
 

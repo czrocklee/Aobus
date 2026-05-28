@@ -65,7 +65,7 @@ namespace ao::gtk
     TrackViewPage(TrackViewPage&&) = delete;
     TrackViewPage& operator=(TrackViewPage&&) = delete;
 
-    ListId getListId() const noexcept { return _listId; }
+    ListId listId() const noexcept { return _listId; }
 
     TrackSelectionController& selectionController() noexcept { return _viewHost->selectionController(); }
 

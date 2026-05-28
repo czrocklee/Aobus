@@ -5,16 +5,15 @@
 
 #include "ao/Type.h"
 #include "ao/library/FileManifestStore.h"
+#include "app/AppDialog.h"
 #include "track/TrackFieldUi.h"
 #include <ao/rt/TrackField.h>
 
 #include <gtkmm/box.h>
-#include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/notebook.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
-#include <gtkmm/window.h>
 
 #include <string_view>
 #include <vector>
@@ -33,7 +32,7 @@ namespace ao::gtk
 {
   class TrackRowCache;
 
-  class TrackPropertiesDialog final : public Gtk::Dialog
+  class TrackPropertiesDialog final : public AppDialog
   {
   public:
     TrackPropertiesDialog(Gtk::Window& parent,

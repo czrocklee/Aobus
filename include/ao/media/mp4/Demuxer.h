@@ -57,13 +57,13 @@ namespace ao::media::mp4
     /**
      * @brief Gets the offset and size information for a given sample index.
      */
-    SampleEntry getSampleInfo(std::uint32_t index) const;
+    SampleEntry sampleInfo(std::uint32_t index) const;
 
     /**
      * @brief Retrieves the payload bytes for a given sample index directly from the file buffer.
      * @return A span of bytes, or an empty span if index is out of range or bytes are missing.
      */
-    std::span<std::byte const> getSamplePayload(std::uint32_t index) const;
+    std::span<std::byte const> samplePayload(std::uint32_t index) const;
 
     /**
      * @brief Maps a media timestamp in mdhd timescale units to the sample packet containing it.

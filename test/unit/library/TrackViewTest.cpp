@@ -444,8 +444,9 @@ namespace ao::library::test
     auto const key1 = std::string{"replaygain_track_gain_db"};
     auto const key2 = std::string{"isrc"};
     auto const key3 = std::string{"edition"};
-    auto const pairs =
-      std::vector{std::pair{key1, std::string{"-6.5"}}, std::pair{key2, std::string{"USSM19999999"}}, std::pair{key3, std::string{"remaster"}}};
+    auto const pairs = std::vector{std::pair{key1, std::string{"-6.5"}},
+                                   std::pair{key2, std::string{"USSM19999999"}},
+                                   std::pair{key3, std::string{"remaster"}}};
 
     auto const data = createColdData({}, pairs, "/path/to/file.flac");
     auto const view = makeColdView(data);
@@ -524,8 +525,9 @@ namespace ao::library::test
     auto const key1 = std::string{"replaygain_track_gain_db"};
     auto const key2 = std::string{"isrc"};
     auto const key3 = std::string{"edition"};
-    auto const pairs =
-      std::vector{std::pair{key1, std::string{"-6.5"}}, std::pair{key2, std::string{"USSM19999999"}}, std::pair{key3, std::string{"remaster"}}};
+    auto const pairs = std::vector{std::pair{key1, std::string{"-6.5"}},
+                                   std::pair{key2, std::string{"USSM19999999"}},
+                                   std::pair{key3, std::string{"remaster"}}};
 
     auto const data = createColdData({}, pairs, "");
     auto const view = makeColdView(data);
@@ -548,8 +550,8 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - Custom Get Found", "[library][unit][track]")
   {
-    auto const pairs =
-      std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"}, std::pair<std::string, std::string>{"isrc", "USSM19999999"}};
+    auto const pairs = std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"},
+                                   std::pair<std::string, std::string>{"isrc", "USSM19999999"}};
 
     auto const data = createColdData({}, pairs, "");
     auto const view = makeColdView(data);

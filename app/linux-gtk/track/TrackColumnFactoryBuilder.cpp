@@ -103,7 +103,7 @@ namespace ao::gtk
           return;
         }
 
-        if (row->getStatus() == library::FileStatus::Missing)
+        if (row->status() == library::FileStatus::Missing)
         {
           rowWidget->add_css_class("ao-missing-row");
         }
@@ -122,7 +122,7 @@ namespace ao::gtk
 
       if (label != nullptr)
       {
-        label->set_text(row->getFieldText(field));
+        label->set_text(row->fieldText(field));
       }
     }
 
@@ -163,7 +163,7 @@ namespace ao::gtk
 
           if (label != nullptr && entry != nullptr && bindData != nullptr)
           {
-            auto const text = row->getFieldText(field);
+            auto const text = row->fieldText(field);
             label->set_text(text);
             entry->set_text(text);
 
@@ -172,7 +172,7 @@ namespace ao::gtk
               auto const newValue = entry->get_text().raw();
               commitFn(row, field, newValue);
               // Read back from row after commit — reflects new value on success, rolled-back value on failure
-              auto const synced = row->getFieldText(field);
+              auto const synced = row->fieldText(field);
               label->set_text(synced);
               entry->set_text(synced);
               stack->set_visible_child("display");

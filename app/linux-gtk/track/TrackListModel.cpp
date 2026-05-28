@@ -114,7 +114,7 @@ namespace ao::gtk
     {
       auto const id = _projection->trackIdAt(0);
 
-      if (auto const row = _provider->getTrackRow(id))
+      if (auto const row = _provider->trackRow(id))
       {
         _cachedItemType = G_OBJECT_TYPE(row->gobj()); // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
         return _cachedItemType;
@@ -142,7 +142,7 @@ namespace ao::gtk
     }
 
     auto const trackId = _projection->trackIdAt(position);
-    auto const row = _provider->getTrackRow(trackId);
+    auto const row = _provider->trackRow(trackId);
 
     if (!row)
     {

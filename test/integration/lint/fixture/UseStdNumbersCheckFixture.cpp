@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
 #include "TestHelpers.h"
 
 class MyWidget : public gtkmm_mock::Widget

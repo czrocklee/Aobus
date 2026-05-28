@@ -678,10 +678,10 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == expectedOrder.size());
 
-    for (std::size_t index = 0; index < expectedOrder.size(); ++index)
+    for (std::size_t idx = 0; idx < expectedOrder.size(); ++idx)
     {
-      CHECK(proj.trackIdAt(index) == expectedOrder[index]);
-      CHECK(proj.indexOf(expectedOrder[index]) == index);
+      CHECK(proj.trackIdAt(idx) == expectedOrder[idx]);
+      CHECK(proj.indexOf(expectedOrder[idx]) == idx);
     }
 
     struct ExpectedGroup final

@@ -26,12 +26,12 @@ namespace ao::gtk::test
 
     SECTION("initial values are correct")
     {
-      CHECK(row->getListId() == id);
-      CHECK(row->getParentId() == parentId);
-      CHECK(row->getDepth() == depth);
+      CHECK(row->listId() == id);
+      CHECK(row->parentId() == parentId);
+      CHECK(row->depth() == depth);
       CHECK(row->isSmart() == isSmart);
-      CHECK(row->getName() == name);
-      CHECK(row->getFilter() == filter);
+      CHECK(row->name() == name);
+      CHECK(row->filter() == filter);
     }
 
     SECTION("setters work correctly")
@@ -48,11 +48,11 @@ namespace ao::gtk::test
       row->setSmart(newSmart);
       row->setName(newName);
 
-      CHECK(row->getListId() == newId);
-      CHECK(row->getParentId() == newParentId);
-      CHECK(row->getDepth() == newDepth);
+      CHECK(row->listId() == newId);
+      CHECK(row->parentId() == newParentId);
+      CHECK(row->depth() == newDepth);
       CHECK(row->isSmart() == newSmart);
-      CHECK(row->getName() == newName);
+      CHECK(row->name() == newName);
     }
   }
 
@@ -65,12 +65,12 @@ namespace ao::gtk::test
 
     SECTION("initial state")
     {
-      CHECK(item1->getRow() == row1);
-      CHECK(item1->getListId() == ListId{1});
-      CHECK(item1->getParent() == nullptr);
-      CHECK(item1->getNChildren() == 0);
+      CHECK(item1->row() == row1);
+      CHECK(item1->listId() == ListId{1});
+      CHECK(item1->parent() == nullptr);
+      CHECK(item1->nChildren() == 0);
       CHECK(item1->hasChildren() == false);
-      CHECK(item1->getChild(0) == nullptr);
+      CHECK(item1->child(0) == nullptr);
     }
 
     SECTION("adding children")
@@ -79,14 +79,14 @@ namespace ao::gtk::test
       auto const item2 = ListTreeItem::create(row2);
       item2->setParent(item1.get());
 
-      auto const children = item1->getChildren();
+      auto const children = item1->children();
       children->append(item2);
 
-      CHECK(item1->getNChildren() == 1);
+      CHECK(item1->nChildren() == 1);
       CHECK(item1->hasChildren() == true);
-      CHECK(item1->getChild(0) == item2);
-      CHECK(item2->getParent() == item1.get());
-      CHECK(item2->getRow() == row2);
+      CHECK(item1->child(0) == item2);
+      CHECK(item2->parent() == item1.get());
+      CHECK(item2->row() == row2);
     }
   }
 } // namespace ao::gtk::test

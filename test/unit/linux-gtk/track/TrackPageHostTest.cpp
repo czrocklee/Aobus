@@ -42,7 +42,7 @@ namespace ao::gtk::test
 
     auto presentationStore = TrackPresentationStore{runtime.workspace()};
     auto queueModel = uimodel::playback::PlaybackQueueModel{
-      runtime.playback(), [&cache](TrackId id) { return cache.getPlaybackDescriptor(id); }};
+      runtime.playback(), [&cache](TrackId id) { return cache.playbackDescriptor(id); }};
 
     auto host =
       TrackPageHost{stack, runtime, &queueModel, tagEditController, listSidebar, presentationStore, &imageCache};

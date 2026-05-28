@@ -187,8 +187,8 @@ namespace ao::rt::test
   TEST_CASE("TrackDetailProjection with non-existent track", "[projection][unit]")
   {
     auto env = Env{};
-    auto const proj = env.views.detailProjection(
-      ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.mutation);
+    auto const proj =
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.mutation);
     auto const snap = proj->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
     CHECK_FALSE(snap.title.optValue.has_value());

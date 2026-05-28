@@ -77,12 +77,12 @@ namespace ao::gtk::layout
     /**
      * @brief Get all registered component descriptors.
      */
-    std::vector<ComponentDescriptor> const& getDescriptors() const;
+    std::vector<ComponentDescriptor> const& descriptors() const;
 
     /**
      * @brief Get a descriptor by component type.
      */
-    std::optional<ComponentDescriptor> getDescriptor(std::string_view type) const;
+    std::optional<ComponentDescriptor> descriptor(std::string_view type) const;
 
   private:
     std::map<std::string, ComponentFactory, std::less<>> _factories;

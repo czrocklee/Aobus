@@ -71,8 +71,8 @@ namespace ao::uimodel::playback::test
       CHECK(log.last().artist == "Artist");
       CHECK(log.last().combinedStatus == "Artist - Song");
 
-      CHECK(NowPlayingViewModel::getFieldText(log.last(), rt::TrackField::Title) == "Song");
-      CHECK(NowPlayingViewModel::getFieldText(log.last(), rt::TrackField::Artist) == "Artist");
+      CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Title) == "Song");
+      CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Artist) == "Artist");
     }
 
     SECTION("Metadata with empty artist shows Unknown Artist")
@@ -84,11 +84,11 @@ namespace ao::uimodel::playback::test
       CHECK(log.last().combinedStatus == "Instrumental");
     }
 
-    SECTION("getFieldText returns empty for unrelated field")
+    SECTION("fieldText returns empty for unrelated field")
     {
       auto desc = audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .title = "Song", .durationMs = 1000};
       playback.play(desc, ListId{1});
-      CHECK(NowPlayingViewModel::getFieldText(log.last(), rt::TrackField::Year).empty());
+      CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Year).empty());
     }
 
     SECTION("Reveal action")

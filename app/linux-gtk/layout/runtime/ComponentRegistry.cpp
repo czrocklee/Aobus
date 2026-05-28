@@ -69,12 +69,12 @@ namespace ao::gtk::layout
     return std::make_unique<ErrorComponent>("Unknown component type: " + node.type);
   }
 
-  std::vector<ComponentDescriptor> const& ComponentRegistry::getDescriptors() const
+  std::vector<ComponentDescriptor> const& ComponentRegistry::descriptors() const
   {
     return _descriptors;
   }
 
-  std::optional<ComponentDescriptor> ComponentRegistry::getDescriptor(std::string_view type) const
+  std::optional<ComponentDescriptor> ComponentRegistry::descriptor(std::string_view type) const
   {
     if (auto const it = _descriptorIndexMap.find(type); it != _descriptorIndexMap.end())
     {

@@ -55,7 +55,7 @@ namespace ao::audio
       return std::unexpected(Error{.code = Error::Code::NotSupported});
     }
 
-    Result<PropertyValue> getProperty(PropertyId id) const override
+    Result<PropertyValue> property(PropertyId id) const override
     {
       if (id == PropertyId::Volume)
       {

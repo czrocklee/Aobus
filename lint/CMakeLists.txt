@@ -22,6 +22,7 @@ add_library(AobusLintPlugin MODULE
   check/OptionalNamingAndUsageCheck.cpp
   check/RedundantNamespaceQualificationCheck.cpp
   check/RedundantUsingDirectiveCheck.cpp
+  check/SpdxLicenseHeaderCheck.cpp
   check/StdCLibraryQualificationCheck.cpp
   check/ThreadingPolicyCheck.cpp
   check/UnusedSuppressionStyleCheck.cpp

@@ -90,7 +90,7 @@ namespace ao::audio::test
       return std::unexpected(Error{.code = Error::Code::NotSupported});
     }
 
-    Result<PropertyValue> getProperty(PropertyId id) const override
+    Result<PropertyValue> property(PropertyId id) const override
     {
       auto const lock = std::scoped_lock{_mutex};
 

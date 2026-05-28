@@ -99,8 +99,8 @@ namespace ao::gtk
           return Gtk::Ordering::EQUAL;
         }
 
-        auto const optLhsGroup = _model->groupIndexForTrack(lhs->getTrackId());
-        auto const optRhsGroup = _model->groupIndexForTrack(rhs->getTrackId());
+        auto const optLhsGroup = _model->groupIndexForTrack(lhs->trackId());
+        auto const optRhsGroup = _model->groupIndexForTrack(rhs->trackId());
 
         if (!optLhsGroup || !optRhsGroup || *optLhsGroup == *optRhsGroup)
         {
@@ -365,7 +365,7 @@ namespace ao::gtk
     Glib::signal_idle().connect_once(
       [this]
       {
-        if (auto const primaryId = _viewHost->selectionController().getPrimarySelectedTrackId();
+        if (auto const primaryId = _viewHost->selectionController().primarySelectedTrackId();
             primaryId != kInvalidTrackId)
         {
           _viewHost->selectionController().scrollToTrack(primaryId);
@@ -415,7 +415,7 @@ namespace ao::gtk
                                            rt::TrackField field,
                                            std::string newValue)
   {
-    if (auto const oldValue = row->getFieldText(field); newValue == oldValue)
+    if (auto const oldValue = row->fieldText(field); newValue == oldValue)
     {
       return;
     }
@@ -444,7 +444,7 @@ namespace ao::gtk
     auto const oldEditValue = uiDef->readRowEditValue(*row, field);
     uiDef->applyRowEditValue(*row, editValue, field);
 
-    auto const trackIds = std::array{row->getTrackId()};
+    auto const trackIds = std::array{row->trackId()};
     auto const result = _runtime.mutation().updateMetadata(trackIds, patch);
 
     if (!result)

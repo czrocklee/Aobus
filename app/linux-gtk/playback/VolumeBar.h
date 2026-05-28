@@ -28,7 +28,7 @@ namespace ao::gtk
     VolumeBar& operator=(VolumeBar&&) = delete;
 
     void setVolume(float volume);
-    float getVolume() const;
+    float volume() const;
 
     VolumeChangedSignal& signalVolumeChanged();
 

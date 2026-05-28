@@ -56,24 +56,24 @@ namespace ao::gtk::test
       // Root store should contain exactly 1 item: "All Tracks"
       REQUIRE(result.store->get_n_items() == 1);
       auto const allTracks = result.store->get_item(0);
-      CHECK(allTracks->getRow()->getName() == "All Tracks");
-      CHECK(allTracks->getListId() == rt::kAllTracksListId);
+      CHECK(allTracks->row()->name() == "All Tracks");
+      CHECK(allTracks->listId() == rt::kAllTracksListId);
 
       // "All Tracks" should have "Manual List A" as child
-      REQUIRE(allTracks->getNChildren() == 1);
-      auto const itemA = allTracks->getChild(0);
-      CHECK(itemA->getRow()->getName() == "Manual List A");
-      CHECK(itemA->getListId() == idA);
-      CHECK(itemA->getParent() == allTracks.get());
+      REQUIRE(allTracks->nChildren() == 1);
+      auto const itemA = allTracks->child(0);
+      CHECK(itemA->row()->name() == "Manual List A");
+      CHECK(itemA->listId() == idA);
+      CHECK(itemA->parent() == allTracks.get());
 
       // "Manual List A" should have "Smart Child B" as child
-      REQUIRE(itemA->getNChildren() == 1);
-      auto const itemB = itemA->getChild(0);
-      CHECK(itemB->getRow()->getName() == "Smart Child B");
-      CHECK(itemB->getListId() == idB);
-      CHECK(itemB->getParent() == itemA.get());
-      CHECK(itemB->getRow()->isSmart() == true);
-      CHECK(itemB->getRow()->getFilter() == "genre:rock");
+      REQUIRE(itemA->nChildren() == 1);
+      auto const itemB = itemA->child(0);
+      CHECK(itemB->row()->name() == "Smart Child B");
+      CHECK(itemB->listId() == idB);
+      CHECK(itemB->parent() == itemA.get());
+      CHECK(itemB->row()->isSmart() == true);
+      CHECK(itemB->row()->filter() == "genre:rock");
     }
 
     SECTION("Models are created")
@@ -89,7 +89,7 @@ namespace ao::gtk::test
       CHECK(result.nodesById.contains(rt::kAllTracksListId));
       CHECK(result.nodesById.contains(idA));
       CHECK(result.nodesById.contains(idB));
-      CHECK(result.nodesById.at(idA)->getListId() == idA);
+      CHECK(result.nodesById.at(idA)->listId() == idA);
     }
   }
 } // namespace ao::gtk::test

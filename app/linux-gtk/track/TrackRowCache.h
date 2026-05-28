@@ -45,12 +45,12 @@ namespace ao::gtk
      * Get the shared TrackRowObject for a given ID.
      * @return TrackRowObject if it was loaded, nullptr otherwise.
      */
-    Glib::RefPtr<TrackRowObject> getTrackRow(TrackId id) const;
+    Glib::RefPtr<TrackRowObject> trackRow(TrackId id) const;
 
     /**
      * Get the shared TrackRowObject for a given ID, reusing a caller-provided reader.
      */
-    Glib::RefPtr<TrackRowObject> getTrackRow(TrackId id, library::TrackStore::Reader const& reader) const;
+    Glib::RefPtr<TrackRowObject> trackRow(TrackId id, library::TrackStore::Reader const& reader) const;
 
     /**
      * Resolve a dictionary string and cache it.
@@ -60,17 +60,17 @@ namespace ao::gtk
     /**
      * Get cover art resource ID for a track (direct from DB).
      */
-    std::optional<std::uint32_t> getCoverArtId(TrackId id) const;
+    std::optional<std::uint32_t> coverArtId(TrackId id) const;
 
     /**
      * Get URI path for a track (direct from DB).
      */
-    std::optional<std::filesystem::path> getUriPath(TrackId id) const;
+    std::optional<std::filesystem::path> uriPath(TrackId id) const;
 
     /**
      * Get playback descriptor for a track (direct from DB).
      */
-    std::optional<audio::TrackPlaybackDescriptor> getPlaybackDescriptor(TrackId id) const;
+    std::optional<audio::TrackPlaybackDescriptor> playbackDescriptor(TrackId id) const;
 
     /**
      * Invalidate entry for a track (after updates).
@@ -84,7 +84,7 @@ namespace ao::gtk
 
     /**
      * Clear all cached rows and strings without reloading.
-     * Subsequent getTrackRow() calls will lazily reload from the database.
+     * Subsequent trackRow() calls will lazily reload from the database.
      */
     void clearCache();
 

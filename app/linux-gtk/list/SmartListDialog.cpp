@@ -7,6 +7,7 @@
 #include "ao/library/ListStore.h"
 #include "ao/library/ListView.h"
 #include "ao/library/MusicLibrary.h"
+#include "app/FormBuilder.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
@@ -109,7 +110,6 @@ namespace ao::gtk
   {
     set_title("New List");
     set_transient_for(parent);
-    set_modal(true);
     setupUi();
     setupPreview();
     updatePreview();
@@ -128,7 +128,7 @@ namespace ao::gtk
     _descEntry.set_text(std::string{view.description()});
     _exprBox.entry().set_text(std::string{view.filter()});
     set_title("Edit List");
-    _okButton.set_label("Save");
+    _okButton->set_label("Save");
     updateDialogState();
   }
 
@@ -146,42 +146,40 @@ namespace ao::gtk
 
   void SmartListDialog::setupUi()
   {
-    constexpr std::int32_t kDialogWidth = 800;
-    constexpr std::int32_t kDialogHeight = 500;
-    constexpr std::int32_t kBoxSpacing = 8;
-    constexpr std::int32_t kButtonBoxSpacing = 6;
-    constexpr std::int32_t kLabelMinLines = 2;
+    constexpr std::int32_t kBoxSpacing = 12;
 
-    set_default_size(kDialogWidth, kDialogHeight);
+    set_default_size(850, 600);
+
+    // Setup Actions in HeaderBar
+    _cancelButton = addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
+    _okButton = addPrimaryAction("Create", Gtk::ResponseType::OK);
+    _okButton->set_sensitive(false);
 
     auto* const mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing * 2);
-    mainBox->add_css_class("ao-dialog-content");
 
+    // Left Panel: Configuration Form
     _leftPanel.set_orientation(Gtk::Orientation::VERTICAL);
-    _leftPanel.set_spacing(kBoxSpacing);
+    _leftPanel.set_spacing(kBoxSpacing * 2);
 
-    auto* const nameLabel = Gtk::make_managed<Gtk::Label>("Name:");
-    nameLabel->set_halign(Gtk::Align::START);
+    // Section 1: Metadata Card
+    auto* const metaList = Gtk::make_managed<FormBoxedList>();
     _nameEntry.set_placeholder_text("List name");
-    _leftPanel.append(*nameLabel);
-    _leftPanel.append(_nameEntry);
+    _nameEntry.signal_changed().connect([this] { updateDialogState(); });
+    metaList->addEntryRow("Name", _nameEntry);
 
-    auto* const descLabel = Gtk::make_managed<Gtk::Label>("Description:");
-    descLabel->set_halign(Gtk::Align::START);
     _descEntry.set_placeholder_text("Optional description");
-    _leftPanel.append(*descLabel);
-    _leftPanel.append(_descEntry);
+    metaList->addEntryRow("Description", _descEntry);
+    _leftPanel.append(*metaList);
 
-    auto* const inheritedLabel = Gtk::make_managed<Gtk::Label>("Inherited Filter:");
-    inheritedLabel->set_halign(Gtk::Align::START);
-    _inheritedExprLabel.set_halign(Gtk::Align::START);
-    _inheritedExprLabel.set_wrap(true);
-    _inheritedExprLabel.set_lines(kLabelMinLines);
-    _leftPanel.append(*inheritedLabel);
-    _leftPanel.append(_inheritedExprLabel);
+    // Section 2: Filter Card
+    auto* const filterList = Gtk::make_managed<FormBoxedList>();
 
-    auto* const exprLabel = Gtk::make_managed<Gtk::Label>("Local Filter:");
-    exprLabel->set_halign(Gtk::Align::START);
+    // Inherited Filter
+    _inheritedExprLabel.set_halign(Gtk::Align::END);
+    _inheritedExprLabel.set_ellipsize(Pango::EllipsizeMode::END);
+    filterList->addRow("Inherited Filter", _inheritedExprLabel);
+
+    // Local Filter
     _exprBox.entry().set_placeholder_text("Filter expression (type $, @, #, or %)");
     _exprBox.entry().signal_changed().connect(
       [this]
@@ -195,65 +193,53 @@ namespace ao::gtk
           },
           100);
       });
-    _leftPanel.append(*exprLabel);
-    _leftPanel.append(_exprBox);
+    filterList->addRow("Local Filter", _exprBox);
 
-    auto* const effectiveLabel = Gtk::make_managed<Gtk::Label>("Effective Filter:");
-    effectiveLabel->set_halign(Gtk::Align::START);
-    _effectiveExprLabel.set_halign(Gtk::Align::START);
-    _effectiveExprLabel.set_wrap(true);
-    _effectiveExprLabel.set_lines(kLabelMinLines);
-    _leftPanel.append(*effectiveLabel);
-    _leftPanel.append(_effectiveExprLabel);
+    // Effective Filter
+    _effectiveExprLabel.set_halign(Gtk::Align::END);
+    _effectiveExprLabel.set_ellipsize(Pango::EllipsizeMode::END);
+    filterList->addRow("Effective Filter", _effectiveExprLabel);
 
+    _leftPanel.append(*filterList);
+
+    // Error Label (Global for the left panel)
     _errorLabel.set_visible(false);
     _errorLabel.set_wrap(true);
     _errorLabel.set_halign(Gtk::Align::START);
+    _errorLabel.add_css_class("ao-layout-error"); // Reuse existing error style if appropriate
     _leftPanel.append(_errorLabel);
 
-    auto* const buttonBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kButtonBoxSpacing);
-    buttonBox->set_halign(Gtk::Align::END);
-    buttonBox->add_css_class("ao-dialog-actions");
-
-    _cancelButton.set_label("Cancel");
-    _cancelButton.signal_clicked().connect([this] { response(Gtk::ResponseType::CANCEL); });
-
-    _okButton.set_label("Create");
-    _okButton.set_sensitive(false);
-    _okButton.signal_clicked().connect([this] { response(Gtk::ResponseType::OK); });
-
-    _nameEntry.signal_changed().connect([this] { updateDialogState(); });
-
-    buttonBox->append(_cancelButton);
-    buttonBox->append(_okButton);
-    _leftPanel.append(*buttonBox);
-
+    // Right Panel: Preview
     _rightPanel.set_orientation(Gtk::Orientation::VERTICAL);
     _rightPanel.set_spacing(kBoxSpacing);
     _rightPanel.set_hexpand(true);
     _rightPanel.set_vexpand(true);
 
-    auto* const previewLabel = Gtk::make_managed<Gtk::Label>("Preview:");
+    // Wrap Preview in a Card-like structure if needed, or just standard spacing
+    auto* const previewHeaderBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
+    auto* const previewLabel = Gtk::make_managed<Gtk::Label>("Preview");
+    previewLabel->add_css_class("ao-section-header");
     previewLabel->set_halign(Gtk::Align::START);
-    _rightPanel.append(*previewLabel);
+    previewHeaderBox->append(*previewLabel);
 
-    _matchCountLabel.set_halign(Gtk::Align::START);
-    _matchCountLabel.set_markup("<i>Enter an expression to see matches</i>");
-    _rightPanel.append(_matchCountLabel);
+    _matchCountLabel.set_halign(Gtk::Align::END);
+    _matchCountLabel.set_hexpand(true);
+    _matchCountLabel.set_markup("<span alpha='50%'><i>Waiting for filter...</i></span>");
+    previewHeaderBox->append(_matchCountLabel);
+    _rightPanel.append(*previewHeaderBox);
 
     _previewScrolledWindow.set_vexpand(true);
     _previewScrolledWindow.set_hexpand(true);
+    _previewScrolledWindow.add_css_class("ao-modern-content-shell"); // Reuse shell styling
     _previewColumnView.set_show_row_separators(true);
     _previewScrolledWindow.set_child(_previewColumnView);
     _rightPanel.append(_previewScrolledWindow);
 
-    _leftPanel.set_hexpand(true);
-    _rightPanel.set_hexpand(true);
-
     mainBox->append(_leftPanel);
     mainBox->append(_rightPanel);
+    _leftPanel.set_hexpand(true);
 
-    set_child(*mainBox);
+    setContentWidget(*mainBox);
   }
 
   void SmartListDialog::setupPreview()
@@ -405,7 +391,7 @@ namespace ao::gtk
       return SmartListStatus::Valid;
     }();
 
-    _okButton.set_sensitive(ao::uimodel::list::SmartListEditorModel::canSubmit(_nameEntry.get_text().raw(), status));
+    _okButton->set_sensitive(ao::uimodel::list::SmartListEditorModel::canSubmit(_nameEntry.get_text().raw(), status));
   }
 
   void SmartListDialog::updatePreview()

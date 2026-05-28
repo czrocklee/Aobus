@@ -4,6 +4,7 @@
 #include "LayoutEditorDialog.h"
 
 #include "../LayoutConstants.h"
+#include "app/AppDialog.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -51,17 +52,30 @@ namespace ao::gtk::layout::editor
                                          ComponentRegistry const& registry,
                                          LayoutDocument initialDoc,
                                          std::string initialPresetId)
-    : Gtk::Dialog{"Layout Editor", parent, true}, _registry{registry}, _document{std::move(initialDoc)}
+    : AppDialog{}, _registry{registry}, _document{std::move(initialDoc)}
   {
-    int const defaultWidth = 800;
-    int const defaultHeight = 600;
-    set_default_size(defaultWidth, defaultHeight);
+    set_title("Layout Editor");
+    set_transient_for(parent);
+    set_default_size(850, 650);
 
-    add_button("Cancel", Gtk::ResponseType::CANCEL);
-    add_button("Apply", Gtk::ResponseType::APPLY);
-    add_button("Save", Gtk::ResponseType::OK);
+    addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
+    addPrimaryAction("Apply", Gtk::ResponseType::APPLY);
+    addPrimaryAction("Save", Gtk::ResponseType::OK);
 
     setupUi();
+
+    signal_response().connect(
+      [this](std::int32_t responseId)
+      {
+        if (responseId == Gtk::ResponseType::APPLY)
+        {
+          notifyPreview();
+        }
+        else
+        {
+          close();
+        }
+      });
 
     if (!initialPresetId.empty())
     {
@@ -112,7 +126,7 @@ namespace ao::gtk::layout::editor
     auto const wrapMenu = Gio::Menu::create();
     auto categoryMenus = std::map<std::string, Glib::RefPtr<Gio::Menu>>{};
 
-    for (auto const& descriptor : _registry.getDescriptors())
+    for (auto const& descriptor : _registry.descriptors())
     {
       if (!categoryMenus.contains(descriptor.category))
       {
@@ -166,8 +180,8 @@ namespace ao::gtk::layout::editor
     int const panedPosition = 300;
     _paned.set_position(panedPosition);
 
-    get_content_area()->append(_paned);
     _paned.set_vexpand(true);
+    setContentWidget(_paned);
   }
 
   void LayoutEditorDialog::populateTree()
@@ -175,7 +189,7 @@ namespace ao::gtk::layout::editor
     _treeStore->clear();
 
     auto row = *(_treeStore->append());
-    auto const optDescriptor = _registry.getDescriptor(_document.root.type);
+    auto const optDescriptor = _registry.descriptor(_document.root.type);
 
     row[_columns.displayName] = optDescriptor ? optDescriptor->displayName : _document.root.id;
     row[_columns.type] = _document.root.type;
@@ -192,7 +206,7 @@ namespace ao::gtk::layout::editor
   void LayoutEditorDialog::appendNodeToTree(Gtk::TreeModel::Row parentRow, LayoutNode* node)
   {
     auto row = *(_treeStore->append(parentRow.children()));
-    auto const optDescriptor = _registry.getDescriptor(node->type);
+    auto const optDescriptor = _registry.descriptor(node->type);
     auto displayName = node->id;
 
     if (displayName.empty())
@@ -345,7 +359,7 @@ namespace ao::gtk::layout::editor
       return;
     }
 
-    auto const optDescriptor = _registry.getDescriptor(parentNode->type);
+    auto const optDescriptor = _registry.descriptor(parentNode->type);
 
     if (optDescriptor && optDescriptor->optMaxChildren && parentNode->children.size() >= *optDescriptor->optMaxChildren)
     {
@@ -664,7 +678,7 @@ namespace ao::gtk::layout::editor
 
             if (auto const row = _treeView.get_selection()->get_selected())
             {
-              auto const optDescriptor = _registry.getDescriptor(node->type);
+              auto const optDescriptor = _registry.descriptor(node->type);
               auto displayName = Glib::ustring{node->id};
 
               if (displayName.empty())
@@ -811,7 +825,7 @@ namespace ao::gtk::layout::editor
 
     _propertiesBox.append(*Gtk::make_managed<Gtk::Separator>());
 
-    auto const optDescriptorOption = _registry.getDescriptor(node->type);
+    auto const optDescriptorOption = _registry.descriptor(node->type);
 
     // 1. ID editor
     renderIdSection(node);

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
 #include "check/UseCtadCheck.h"
 
 #include "clang/AST/Decl.h"

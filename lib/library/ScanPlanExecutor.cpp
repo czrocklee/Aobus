@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
 #include "ao/library/ScanPlanExecutor.h"
 
 #include "ao/Type.h"

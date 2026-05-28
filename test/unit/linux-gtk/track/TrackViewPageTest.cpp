@@ -33,7 +33,7 @@ namespace ao::gtk::test
 
     SECTION("initial state")
     {
-      CHECK(page.getListId() == rt::kAllTracksListId);
+      CHECK(page.listId() == rt::kAllTracksListId);
       CHECK(page.projection() == nullptr);
     }
 

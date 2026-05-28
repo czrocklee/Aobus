@@ -119,7 +119,7 @@ namespace ao::gtk
           return true;
         }
 
-        auto const tagName = getTagNameFromChild(child);
+        auto const tagName = tagNameFromChild(child);
         auto lowerTag = std::string{tagName};
         auto lowerSearch = std::string{text};
 
@@ -346,7 +346,7 @@ namespace ao::gtk
     _tagsChanged.emit(toAdd, {});
   }
 
-  std::string TagEditor::getTagNameFromChild(Gtk::FlowBoxChild* child)
+  std::string TagEditor::tagNameFromChild(Gtk::FlowBoxChild* child)
   {
     if (child == nullptr)
     {

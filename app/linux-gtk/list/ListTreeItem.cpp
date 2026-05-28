@@ -23,7 +23,7 @@ namespace ao::gtk
     return obj;
   }
 
-  Glib::RefPtr<ListTreeItem> ListTreeItem::getChild(guint index) const
+  Glib::RefPtr<ListTreeItem> ListTreeItem::child(guint index) const
   {
     if (index >= _children->get_n_items())
     {

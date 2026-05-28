@@ -113,7 +113,7 @@ namespace ao::gtk::test
 
         drainGtkEvents();
 
-        auto row = cache.getTrackRow(trackId);
+        auto row = cache.trackRow(trackId);
         REQUIRE(row);
 
         row->setPlaying(true);

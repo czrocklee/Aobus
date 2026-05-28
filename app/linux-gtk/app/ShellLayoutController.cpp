@@ -119,7 +119,7 @@ namespace ao::gtk
           _activeLayout = sharedDialog->document();
           _isCustomized = true;
 
-          if (auto const presetIdDialog = sharedDialog->getSelectedPresetId(); !presetIdDialog.empty())
+          if (auto const presetIdDialog = sharedDialog->selectedPresetId(); !presetIdDialog.empty())
           {
             _activePresetId = presetIdDialog;
 

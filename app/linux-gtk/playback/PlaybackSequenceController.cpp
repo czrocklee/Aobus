@@ -39,7 +39,7 @@ namespace ao::gtk
 
   bool PlaybackSequenceController::playFromPage(TrackViewPage& page, TrackId startTrackId)
   {
-    auto trackIds = page.selectionController().getVisibleTrackIds();
+    auto trackIds = page.selectionController().visibleTrackIds();
 
     if (trackIds.empty())
     {
@@ -49,7 +49,7 @@ namespace ao::gtk
     auto const it = std::ranges::find(trackIds, startTrackId);
     auto const startIndex = static_cast<std::size_t>(std::distance(trackIds.begin(), it));
 
-    auto const optDesc = _dataProvider.getPlaybackDescriptor(startTrackId);
+    auto const optDesc = _dataProvider.playbackDescriptor(startTrackId);
 
     if (!optDesc)
     {
@@ -61,10 +61,10 @@ namespace ao::gtk
     _sequence = std::make_unique<ActivePlaybackSequence>(ActivePlaybackSequence{
       .trackIds = std::move(trackIds),
       .currentIndex = startIndex,
-      .sourceListId = page.getListId(),
+      .sourceListId = page.listId(),
     });
 
-    _playback.play(*optDesc, page.getListId());
+    _playback.play(*optDesc, page.listId());
 
     subscribeEvents();
     return true;
@@ -87,7 +87,7 @@ namespace ao::gtk
     // If we are more than 3 seconds into the song, just restart it
     if (state.positionMs > kRestartThresholdMs)
     {
-      auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[_sequence->currentIndex]);
+      auto const optDesc = _dataProvider.playbackDescriptor(_sequence->trackIds[_sequence->currentIndex]);
 
       if (optDesc)
       {
@@ -102,7 +102,7 @@ namespace ao::gtk
 
       for (std::int32_t idx = static_cast<std::int32_t>(prevIndex); idx >= 0; --idx)
       {
-        auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[idx]);
+        auto const optDesc = _dataProvider.playbackDescriptor(_sequence->trackIds[idx]);
 
         if (optDesc)
         {
@@ -116,7 +116,7 @@ namespace ao::gtk
     {
       for (std::int32_t idx = static_cast<std::int32_t>(_sequence->trackIds.size() - 1); idx >= 0; --idx)
       {
-        auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[idx]);
+        auto const optDesc = _dataProvider.playbackDescriptor(_sequence->trackIds[idx]);
 
         if (optDesc)
         {
@@ -186,7 +186,7 @@ namespace ao::gtk
 
     if (state.repeatMode == rt::RepeatMode::One)
     {
-      auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[_sequence->currentIndex]);
+      auto const optDesc = _dataProvider.playbackDescriptor(_sequence->trackIds[_sequence->currentIndex]);
 
       if (optDesc)
       {
@@ -208,7 +208,7 @@ namespace ao::gtk
         nextIdx = (nextIdx + 1) % _sequence->trackIds.size();
       }
 
-      auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[nextIdx]);
+      auto const optDesc = _dataProvider.playbackDescriptor(_sequence->trackIds[nextIdx]);
 
       if (optDesc)
       {
@@ -222,7 +222,7 @@ namespace ao::gtk
 
     for (auto idx = nextIndex; idx < _sequence->trackIds.size(); ++idx)
     {
-      auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[idx]);
+      auto const optDesc = _dataProvider.playbackDescriptor(_sequence->trackIds[idx]);
 
       if (optDesc)
       {
@@ -236,7 +236,7 @@ namespace ao::gtk
     {
       for (std::size_t idx = 0; idx < _sequence->trackIds.size(); ++idx)
       {
-        auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[idx]);
+        auto const optDesc = _dataProvider.playbackDescriptor(_sequence->trackIds[idx]);
 
         if (optDesc)
         {

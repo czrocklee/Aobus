@@ -695,7 +695,7 @@ namespace ao::audio::backend
     return std::unexpected(Error{.code = Error::Code::NotSupported});
   }
 
-  Result<PropertyValue> AlsaExclusiveBackend::getProperty(PropertyId id) const
+  Result<PropertyValue> AlsaExclusiveBackend::property(PropertyId id) const
   {
     if (id == PropertyId::Volume)
     {

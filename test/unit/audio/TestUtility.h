@@ -42,7 +42,7 @@ namespace ao::audio::test
     ProfileId profileId() const noexcept override { return _real.profileId(); }
     Result<> setProperty(PropertyId id, PropertyValue const& value) override { return _real.setProperty(id, value); }
 
-    Result<PropertyValue> getProperty(PropertyId id) const override { return _real.getProperty(id); }
+    Result<PropertyValue> property(PropertyId id) const override { return _real.property(id); }
     PropertyInfo queryProperty(PropertyId id) const noexcept override { return _real.queryProperty(id); }
 
   private:
@@ -109,8 +109,8 @@ namespace ao::audio::test
       fakeit::When(Method(_mock, backendId)).AlwaysReturn(kBackendNone);
       fakeit::When(Method(_mock, profileId)).AlwaysReturn(kProfileShared);
 
-      fakeit::When(Method(_mock, getProperty))
-        .AlwaysDo([this](PropertyId id) -> Result<PropertyValue> { return _base.getProperty(id); });
+      fakeit::When(Method(_mock, property))
+        .AlwaysDo([this](PropertyId id) -> Result<PropertyValue> { return _base.property(id); });
 
       fakeit::When(Method(_mock, queryProperty))
         .AlwaysDo([this](PropertyId id) -> PropertyInfo { return _base.queryProperty(id); });

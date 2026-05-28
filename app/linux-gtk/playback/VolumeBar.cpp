@@ -84,7 +84,7 @@ namespace ao::gtk
     }
   }
 
-  float VolumeBar::getVolume() const
+  float VolumeBar::volume() const
   {
     return _volume;
   }
