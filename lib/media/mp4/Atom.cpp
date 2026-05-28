@@ -5,14 +5,12 @@
 
 #include "ao/media/mp4/AtomLayout.h"
 #include "ao/utility/ByteView.h"
+#include "media/mp4/AtomDispatch.h"
 
 #include <cassert>
 #include <cstddef>
-#include <functional>
-#include <map>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 
 namespace ao::media::mp4
@@ -42,20 +40,8 @@ namespace ao::media::mp4
 
   namespace
   {
-    constexpr std::size_t kMetaHeaderSkip = 4;
-    constexpr std::size_t kStsdHeaderSkip = 8;
     constexpr std::size_t kAudioSampleEntryHeaderSkip = 28;
     constexpr std::size_t kAtomHeaderSize = 8;
-
-    std::map<std::string, std::size_t, std::less<>> const ContainerAtomInterested = {{"moov", 0},
-                                                                                     {"udta", 0},
-                                                                                     {"meta", kMetaHeaderSkip},
-                                                                                     {"ilst", 0},
-                                                                                     {"trak", 0},
-                                                                                     {"mdia", 0},
-                                                                                     {"minf", 0},
-                                                                                     {"stbl", 0},
-                                                                                     {"stsd", kStsdHeaderSkip}};
 
     template<typename ContainerAtom>
     void parseAtoms(ContainerAtom& parent, std::span<std::byte const> data)
@@ -73,9 +59,10 @@ namespace ao::media::mp4
         auto const type = utility::bytes::stringView(utility::bytes::view(layout->type));
         auto optSkip = std::optional<std::size_t>{};
 
-        if (auto const it = ContainerAtomInterested.find(type); it != ContainerAtomInterested.end())
+        if (auto const* entry = ContainerAtomDispatchTable::lookupContainerAtom(type.data(), type.size());
+            entry != nullptr)
         {
-          optSkip = it->second;
+          optSkip = entry->skipSize;
         }
         else if (parent.type() == "stsd" && (type == "alac" || type == "mp4a"))
         {

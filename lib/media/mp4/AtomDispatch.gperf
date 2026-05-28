@@ -1,0 +1,22 @@
+%language=C++
+%readonly-tables
+%compare-strncmp
+%compare-lengths
+%struct-type
+%define class-name ContainerAtomDispatchTable
+%define lookup-function-name lookupContainerAtom
+struct ContainerAtomEntry
+{
+  char const* name;
+  std::size_t skipSize;
+};
+%%
+moov, 0
+udta, 0
+meta, 4
+ilst, 0
+trak, 0
+mdia, 0
+minf, 0
+stbl, 0
+stsd, 8
