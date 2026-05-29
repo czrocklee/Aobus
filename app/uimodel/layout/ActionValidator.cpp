@@ -69,7 +69,7 @@ namespace ao::uimodel::layout
                       ActionBindingContextResolver const& resolveBindingContext,
                       std::vector<LayoutDiagnostic>& diagnostics)
     {
-      if (auto const optCompDesc = components.descriptor(node.type))
+      if (auto const optCompDesc = components.descriptor(node.type); optCompDesc)
       {
         for (auto const& propDesc : optCompDesc->props)
         {

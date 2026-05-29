@@ -17,7 +17,7 @@ namespace ao::gtk
     _volumeBar.set_valign(Gtk::Align::CENTER);
     _volumeBar.set_tooltip_text("Volume");
 
-    _controller = std::make_unique<ao::uimodel::playback::VolumeViewModel>(
+    _controllerPtr = std::make_unique<ao::uimodel::playback::VolumeViewModel>(
       playbackService, [this](ao::uimodel::playback::VolumeViewState const& state) { applyState(state); });
 
     _volumeBar.signalVolumeChanged().connect(
@@ -28,7 +28,7 @@ namespace ao::gtk
           return;
         }
 
-        _controller->handleVolumeChanged(volume);
+        _controllerPtr->handleVolumeChanged(volume);
       });
   }
 

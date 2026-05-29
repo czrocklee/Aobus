@@ -34,7 +34,7 @@ namespace clang::tidy::readability
 
       type = type.getNonReferenceType().getUnqualifiedType().getCanonicalType();
 
-      if (auto const* record = type->getAsCXXRecordDecl())
+      if (auto const* record = type->getAsCXXRecordDecl(); record != nullptr)
       {
         if (auto const* ii = record->getIdentifier(); ii != nullptr)
         {
@@ -71,7 +71,7 @@ namespace clang::tidy::readability
 
       init = init->IgnoreUnlessSpelledInSource();
 
-      if (auto const* ctorExpr = dyn_cast<CXXConstructExpr>(init))
+      if (auto const* ctorExpr = dyn_cast<CXXConstructExpr>(init); ctorExpr != nullptr)
       {
         return hasLockTagArgument(ctorExpr);
       }
@@ -86,7 +86,7 @@ namespace clang::tidy::readability
 
       bool VisitCXXMemberCallExpr(CXXMemberCallExpr* call)
       {
-        if (auto const* method = call->getMethodDecl())
+        if (auto const* method = call->getMethodDecl(); method != nullptr)
         {
           if (auto const* ii = method->getIdentifier(); ii != nullptr)
           {
@@ -97,7 +97,7 @@ namespace clang::tidy::readability
               {
                 obj = obj->IgnoreParenImpCasts();
 
-                if (auto const* dre = dyn_cast<DeclRefExpr>(obj))
+                if (auto const* dre = dyn_cast<DeclRefExpr>(obj); dre != nullptr)
                 {
                   if (dre->getDecl() == target || dre->getDecl()->getCanonicalDecl() == target->getCanonicalDecl())
                   {
@@ -160,7 +160,7 @@ namespace clang::tidy::readability
         auto const* param = func->getParamDecl(argIndex);
         QualType const type = param->getType().getNonReferenceType().getUnqualifiedType().getCanonicalType();
 
-        if (auto const* record = type->getAsCXXRecordDecl())
+        if (auto const* record = type->getAsCXXRecordDecl(); record != nullptr)
         {
           if (auto const* ii = record->getIdentifier(); ii != nullptr)
           {
@@ -208,9 +208,9 @@ namespace clang::tidy::readability
         return false;
       }
 
-      if (auto const* decl = dyn_cast<Decl>(dc))
+      if (auto const* decl = dyn_cast<Decl>(dc); decl != nullptr)
       {
-        if (auto const* body = decl->getBody())
+        if (auto const* body = decl->getBody(); body != nullptr)
         {
           if (hasLockTagInit(lockVar))
           {
@@ -251,7 +251,7 @@ namespace clang::tidy::readability
 
   void ThreadingPolicyCheck::check(MatchFinder::MatchResult const& result)
   {
-    if (auto const* threadVar = result.Nodes.getNodeAs<VarDecl>("threadVar"))
+    if (auto const* threadVar = result.Nodes.getNodeAs<VarDecl>("threadVar"); threadVar != nullptr)
     {
       diag(threadVar->getLocation(),
            "prefer std::jthread over std::thread (Rule 4.4.2); std::jthread provides automatic joining and stop_token "
@@ -263,7 +263,7 @@ namespace clang::tidy::readability
         << threadVar;
     }
 
-    if (auto const* lockVar = result.Nodes.getNodeAs<VarDecl>("uniqueLock"))
+    if (auto const* lockVar = result.Nodes.getNodeAs<VarDecl>("uniqueLock"); lockVar != nullptr)
     {
       if (!needsUniqueLock(lockVar, *result.Context))
       {
@@ -274,7 +274,7 @@ namespace clang::tidy::readability
       }
     }
 
-    if (auto const* volatileVar = result.Nodes.getNodeAs<VarDecl>("volatileVar"))
+    if (auto const* volatileVar = result.Nodes.getNodeAs<VarDecl>("volatileVar"); volatileVar != nullptr)
     {
       diag(volatileVar->getLocation(),
            "%0 is volatile; use std::atomic<> for inter-thread communication instead (Rule 4.4.4)")

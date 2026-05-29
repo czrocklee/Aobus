@@ -11,7 +11,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("AobusSoulWindow - basic lifecycle", "[gtk][playback]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
 

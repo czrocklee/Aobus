@@ -19,7 +19,7 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("ActionBinder - unit", "[layout][unit][runtime]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto window = Gtk::Window{};

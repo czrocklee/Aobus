@@ -59,7 +59,7 @@ namespace ao::gtk
     TagEditRequestedSignal& signalTagEditRequested() { return _tagEditRequested; }
 
     /// Bind to a runtime detail projection for cover art + audio property auto-updates.
-    void bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection);
+    void bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr);
 
   private:
     friend class TrackInspectorPanelTestPeer;
@@ -87,7 +87,7 @@ namespace ao::gtk
     ImageCache& _imageCache;
 
     std::vector<TrackId> _currentTrackIds;
-    std::shared_ptr<rt::ITrackDetailProjection> _detailProjection;
+    std::unique_ptr<rt::ITrackDetailProjection> _detailProjectionPtr;
     rt::Subscription _detailSub;
 
     // UI Components

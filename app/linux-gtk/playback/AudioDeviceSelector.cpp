@@ -34,17 +34,17 @@ namespace ao::gtk
     set_autohide(true);
     set_position(Gtk::PositionType::BOTTOM);
 
-    _outputController = std::make_unique<ao::uimodel::playback::AudioOutputViewModel>(
+    _outputControllerPtr = std::make_unique<ao::uimodel::playback::AudioOutputViewModel>(
       _playback,
       [this](ao::uimodel::playback::AudioOutputViewState const& view)
       {
-        _store->remove_all();
+        _storePtr->remove_all();
 
         for (auto const& row : view.rows)
         {
           if (row.kind == ao::uimodel::playback::AudioOutputRow::Kind::BackendHeader)
           {
-            _store->append(BackendItem::create(row.backendId, row.title));
+            _storePtr->append(BackendItem::create(row.backendId, row.title));
           }
           else if (row.kind == ao::uimodel::playback::AudioOutputRow::Kind::DeviceProfile)
           {
@@ -56,9 +56,9 @@ namespace ao::gtk
             };
 
             auto const displayName = row.isExclusive ? std::format("{} [E]", row.title) : row.title;
-            auto const item = DeviceItem::create(row.backendId, audioDevice, row.profileId, displayName);
-            item->setActive(row.isActive);
-            _store->append(item);
+            auto const itemPtr = DeviceItem::create(row.backendId, audioDevice, row.profileId, displayName);
+            itemPtr->setActive(row.isActive);
+            _storePtr->append(itemPtr);
           }
         }
       });
@@ -78,34 +78,35 @@ namespace ao::gtk
     _listBox.set_show_separators(true);
     _listBox.add_css_class("ao-rich-list");
 
-    _store = Gio::ListStore<Glib::Object>::create();
-    _listBox.bind_model(_store, [this](auto const& item) { return createRow(item); });
+    _storePtr = Gio::ListStore<Glib::Object>::create();
+    _listBox.bind_model(_storePtr, [this](auto const& item) { return createRow(item); });
 
     _listBox.signal_row_activated().connect(
       [this](Gtk::ListBoxRow* row)
       {
-        if (auto const index = row->get_index(); index >= 0 && std::cmp_less(index, _store->get_n_items()))
+        if (auto const index = row->get_index(); index >= 0 && std::cmp_less(index, _storePtr->get_n_items()))
         {
-          auto const item = _store->get_item(index);
+          auto const itemPtr = _storePtr->get_item(index);
 
-          if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+          if (auto const deviceItemPtr = std::dynamic_pointer_cast<DeviceItem>(itemPtr); deviceItemPtr)
           {
-            _outputController->selectOutput(deviceItem->backendId(), deviceItem->id(), deviceItem->profileId());
+            _outputControllerPtr->selectOutput(
+              deviceItemPtr->backendId(), deviceItemPtr->id(), deviceItemPtr->profileId());
             popdown();
           }
         }
       });
 
-    signal_show().connect([this] { _outputController->refresh(); });
+    signal_show().connect([this] { _outputControllerPtr->refresh(); });
   }
 
   AudioDeviceSelector::~AudioDeviceSelector() = default;
 
   Gtk::Widget* AudioDeviceSelector::createRow(Glib::RefPtr<Glib::Object> const& item)
   {
-    if (auto const backendItem = std::dynamic_pointer_cast<BackendItem>(item))
+    if (auto const backendItemPtr = std::dynamic_pointer_cast<BackendItem>(item); backendItemPtr)
     {
-      auto* const header = Gtk::make_managed<Gtk::Label>(backendItem->name());
+      auto* const header = Gtk::make_managed<Gtk::Label>(backendItemPtr->name());
       header->set_halign(Gtk::Align::FILL);
       header->set_valign(Gtk::Align::CENTER);
       header->set_xalign(0.0);
@@ -114,7 +115,7 @@ namespace ao::gtk
       return header;
     }
 
-    if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+    if (auto const deviceItemPtr = std::dynamic_pointer_cast<DeviceItem>(item); deviceItemPtr)
     {
       auto* const rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       rowBox->set_spacing(layout::kSpacingLarge); // 8
@@ -126,14 +127,14 @@ namespace ao::gtk
       textBox->set_hexpand(true);
       textBox->set_valign(Gtk::Align::CENTER);
 
-      auto* const nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name());
+      auto* const nameLabel = Gtk::make_managed<Gtk::Label>(deviceItemPtr->name());
       nameLabel->set_halign(Gtk::Align::START);
       nameLabel->set_ellipsize(Pango::EllipsizeMode::END);
       textBox->append(*nameLabel);
 
-      if (!deviceItem->description().empty())
+      if (!deviceItemPtr->description().empty())
       {
-        auto* const descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description());
+        auto* const descLabel = Gtk::make_managed<Gtk::Label>(deviceItemPtr->description());
         descLabel->set_halign(Gtk::Align::START);
         descLabel->add_css_class("ao-menu-description");
         descLabel->set_ellipsize(Pango::EllipsizeMode::END);
@@ -142,7 +143,7 @@ namespace ao::gtk
 
       rowBox->append(*textBox);
 
-      if (deviceItem->active())
+      if (deviceItemPtr->active())
       {
         auto* const checkIcon = Gtk::make_managed<Gtk::Image>();
         checkIcon->set_from_icon_name("object-select-symbolic");

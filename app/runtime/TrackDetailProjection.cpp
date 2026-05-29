@@ -99,7 +99,7 @@ namespace ao::rt
                                                library::MusicLibrary& library,
                                                WorkspaceService& workspace,
                                                LibraryMutationService& mutation)
-    : _impl{std::make_unique<Impl>(std::move(target), views, library, workspace, mutation)}
+    : _implPtr{std::make_unique<Impl>(std::move(target), views, library, workspace, mutation)}
   {
     std::visit(
       [this](auto const& target)
@@ -108,51 +108,51 @@ namespace ao::rt
 
         if constexpr (std::is_same_v<T, FocusedViewTarget>)
         {
-          _impl->focusSub = _impl->workspace.onFocusedViewChanged(
+          _implPtr->focusSub = _implPtr->workspace.onFocusedViewChanged(
             [this](ViewId viewId)
             {
-              _impl->trackedViewId = viewId;
+              _implPtr->trackedViewId = viewId;
 
               if (viewId == rt::kInvalidViewId)
               {
                 return;
               }
 
-              auto const state = _impl->views.trackListState(viewId);
-              _impl->cachedSnapshot = buildSnapshot(state.selection);
+              auto const state = _implPtr->views.trackListState(viewId);
+              _implPtr->cachedSnapshot = buildSnapshot(state.selection);
               publishSnapshot();
             });
         }
         else if constexpr (std::is_same_v<T, ExplicitViewTarget>)
         {
-          _impl->trackedViewId = target.viewId;
-          auto const state = _impl->views.trackListState(target.viewId);
-          _impl->cachedSnapshot = buildSnapshot(state.selection);
+          _implPtr->trackedViewId = target.viewId;
+          auto const state = _implPtr->views.trackListState(target.viewId);
+          _implPtr->cachedSnapshot = buildSnapshot(state.selection);
         }
         else if constexpr (std::is_same_v<T, ExplicitSelectionTarget>)
         {
-          _impl->cachedSnapshot = buildSnapshot(target.trackIds);
+          _implPtr->cachedSnapshot = buildSnapshot(target.trackIds);
         }
       },
-      _impl->target);
+      _implPtr->target);
 
     // Shared subscriber: ViewSelectionChanged, filtered by trackedViewId
-    _impl->selectionSub = _impl->views.onSelectionChanged(
+    _implPtr->selectionSub = _implPtr->views.onSelectionChanged(
       [this](ViewService::SelectionChanged const& ev)
       {
-        if (ev.viewId != _impl->trackedViewId)
+        if (ev.viewId != _implPtr->trackedViewId)
         {
           return;
         }
 
-        _impl->cachedSnapshot = buildSnapshot(ev.selection);
+        _implPtr->cachedSnapshot = buildSnapshot(ev.selection);
         publishSnapshot();
       });
 
-    _impl->tracksMutatedSub = _impl->mutation.onTracksMutated(
+    _implPtr->tracksMutatedSub = _implPtr->mutation.onTracksMutated(
       [this](std::vector<TrackId> const& trackIds)
       {
-        if (_impl->cachedSnapshot.trackIds.empty())
+        if (_implPtr->cachedSnapshot.trackIds.empty())
         {
           return;
         }
@@ -161,7 +161,7 @@ namespace ao::rt
 
         for (auto const id : trackIds)
         {
-          if (std::ranges::contains(_impl->cachedSnapshot.trackIds, id))
+          if (std::ranges::contains(_implPtr->cachedSnapshot.trackIds, id))
           {
             intersect = true;
             break;
@@ -170,7 +170,7 @@ namespace ao::rt
 
         if (intersect)
         {
-          _impl->cachedSnapshot = buildSnapshot(_impl->cachedSnapshot.trackIds);
+          _implPtr->cachedSnapshot = buildSnapshot(_implPtr->cachedSnapshot.trackIds);
           publishSnapshot();
         }
       });
@@ -180,28 +180,28 @@ namespace ao::rt
 
   TrackDetailSnapshot TrackDetailProjection::snapshot() const
   {
-    return _impl->cachedSnapshot;
+    return _implPtr->cachedSnapshot;
   }
 
   Subscription TrackDetailProjection::subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler)
   {
-    handler(_impl->cachedSnapshot);
+    handler(_implPtr->cachedSnapshot);
 
-    auto const index = _impl->subscribers.size();
-    _impl->subscribers.push_back(std::move(handler));
+    auto const index = _implPtr->subscribers.size();
+    _implPtr->subscribers.push_back(std::move(handler));
 
-    return Subscription{[this, index] { _impl->subscribers[index] = {}; }};
+    return Subscription{[this, index] { _implPtr->subscribers[index] = {}; }};
   }
 
   void TrackDetailProjection::publishSnapshot()
   {
-    _impl->cachedSnapshot.revision = ++_impl->revision;
+    _implPtr->cachedSnapshot.revision = ++_implPtr->revision;
 
-    for (auto& sub : _impl->subscribers)
+    for (auto& sub : _implPtr->subscribers)
     {
       if (sub)
       {
-        sub(_impl->cachedSnapshot);
+        sub(_implPtr->cachedSnapshot);
       }
     }
   }
@@ -218,8 +218,8 @@ namespace ao::rt
       return snap;
     }
 
-    auto const txn = _impl->library.readTransaction();
-    auto const reader = _impl->library.tracks().reader(txn);
+    auto const txn = _implPtr->library.readTransaction();
+    auto const reader = _implPtr->library.tracks().reader(txn);
     auto codecIds = std::vector<std::uint16_t>{};
     auto sampleRates = std::vector<std::uint32_t>{};
     auto channelss = std::vector<std::uint8_t>{};
@@ -248,11 +248,11 @@ namespace ao::rt
       titles.emplace_back(optView->metadata().title());
 
       auto const artistId = optView->metadata().artistId();
-      artists.push_back(artistId != kInvalidDictionaryId ? std::string{_impl->library.dictionary().get(artistId)}
+      artists.push_back(artistId != kInvalidDictionaryId ? std::string{_implPtr->library.dictionary().get(artistId)}
                                                          : std::string{});
 
       auto const albumId = optView->metadata().albumId();
-      albums.push_back(albumId != kInvalidDictionaryId ? std::string{_impl->library.dictionary().get(albumId)}
+      albums.push_back(albumId != kInvalidDictionaryId ? std::string{_implPtr->library.dictionary().get(albumId)}
                                                        : std::string{});
 
       if (ids.size() == 1)

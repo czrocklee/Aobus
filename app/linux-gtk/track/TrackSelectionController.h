@@ -30,8 +30,8 @@ namespace ao::gtk
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId> const&, Gtk::Widget*)>;
 
     TrackSelectionController(Gtk::ColumnView& columnView,
-                             Glib::RefPtr<TrackListModel> model,
-                             Glib::RefPtr<Gtk::MultiSelection> selectionModel);
+                             Glib::RefPtr<TrackListModel> modelPtr,
+                             Glib::RefPtr<Gtk::MultiSelection> selectionModelPtr);
 
     void setupActivation();
 
@@ -58,8 +58,8 @@ namespace ao::gtk
     TrackId trackIdAtPosition(std::uint32_t position) const noexcept;
 
     Gtk::ColumnView& _columnView;
-    Glib::RefPtr<TrackListModel> _model;
-    Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
+    Glib::RefPtr<TrackListModel> _modelPtr;
+    Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
 
     TrackId _playingTrackId{kInvalidTrackId};
     bool _suppressNextTrackActivation = false;

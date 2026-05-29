@@ -24,13 +24,13 @@ namespace ao::gtk
                                                     Glib::ustring const& name,
                                                     Glib::ustring const& filter)
   {
-    auto obj = Glib::make_refptr_for_instance<ListRowObject>(new ListRowObject{});
-    obj->_listId = id;
-    obj->_parentId = parentId;
-    obj->_depth = depth;
-    obj->_isSmart = smart;
-    obj->_name = name;
-    obj->_filter = filter;
-    return obj;
+    auto objPtr = Glib::make_refptr_for_instance<ListRowObject>(new ListRowObject{});
+    objPtr->_listId = id;
+    objPtr->_parentId = parentId;
+    objPtr->_depth = depth;
+    objPtr->_isSmart = smart;
+    objPtr->_name = name;
+    objPtr->_filter = filter;
+    return objPtr;
   }
 } // namespace ao::gtk

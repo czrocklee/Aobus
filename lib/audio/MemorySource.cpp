@@ -66,8 +66,10 @@ namespace ao::audio
     }
   } // namespace
 
-  MemorySource::MemorySource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo)
-    : _decoder{std::move(decoder)}, _streamInfo{streamInfo}, _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
+  MemorySource::MemorySource(std::unique_ptr<IDecoderSession> decoderPtr, DecodedStreamInfo streamInfo)
+    : _decoderPtr{std::move(decoderPtr)}
+    , _streamInfo{streamInfo}
+    , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
   {
   }
 
@@ -83,7 +85,7 @@ namespace ao::audio
 
     while (true)
     {
-      auto const blockResult = _decoder->readNextBlock();
+      auto const blockResult = _decoderPtr->readNextBlock();
 
       if (!blockResult)
       {
@@ -100,7 +102,7 @@ namespace ao::audio
       _pcmBytes.insert(_pcmBytes.end(), block.bytes.begin(), block.bytes.end());
     }
 
-    _decoder->close();
+    _decoderPtr->close();
     return {};
   }
 

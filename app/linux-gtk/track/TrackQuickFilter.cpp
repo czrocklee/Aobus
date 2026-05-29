@@ -45,8 +45,8 @@ namespace ao::gtk
         }
       });
 
-    auto const dropTarget = Gtk::DropTarget::create(Glib::Value<std::string>::value_type(), Gdk::DragAction::COPY);
-    dropTarget->signal_drop().connect(
+    auto const dropTargetPtr = Gtk::DropTarget::create(Glib::Value<std::string>::value_type(), Gdk::DragAction::COPY);
+    dropTargetPtr->signal_drop().connect(
       [this](Glib::ValueBase const& value, double /*x*/, double /*y*/)
       {
         if (value.gobj()->g_type == G_TYPE_STRING)
@@ -61,9 +61,9 @@ namespace ao::gtk
       },
       false);
 
-    add_controller(dropTarget);
+    add_controller(dropTargetPtr);
 
-    _controller = std::make_unique<ao::uimodel::track::TrackFilterViewModel>(
+    _controllerPtr = std::make_unique<ao::uimodel::track::TrackFilterViewModel>(
       _runtime.views(),
       _runtime.workspace(),
       [this](ao::uimodel::track::TrackFilterViewState const& state) { applyState(state); });
@@ -77,7 +77,7 @@ namespace ao::gtk
     _debounceTimer = Glib::signal_timeout().connect(
       [this]
       {
-        _controller->updateFilter(get_text().raw());
+        _controllerPtr->updateFilter(get_text().raw());
         return false;
       },
       kFilterDebounceMs);

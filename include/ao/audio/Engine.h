@@ -58,7 +58,7 @@ namespace ao::audio
 
     using OnRouteChanged = std::function<void(RouteStatus const&)>;
 
-    Engine(std::unique_ptr<IBackend> backend, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
+    Engine(std::unique_ptr<IBackend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
     ~Engine();
 
     Engine(Engine const&) = delete;
@@ -66,7 +66,7 @@ namespace ao::audio
     Engine(Engine&&) = delete;
     Engine& operator=(Engine&&) = delete;
 
-    void setBackend(std::unique_ptr<IBackend> backend, Device const& device);
+    void setBackend(std::unique_ptr<IBackend> backendPtr, Device const& device);
     void updateDevice(Device const& device);
 
     void setOnTrackEnded(std::function<void()> callback);
@@ -92,6 +92,6 @@ namespace ao::audio
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio

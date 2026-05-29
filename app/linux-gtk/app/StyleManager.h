@@ -24,7 +24,7 @@ namespace ao::gtk
 
     sigc::signal<void()>& signalRefreshed();
 
-    void registerWidgetProvider(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> provider, guint priority);
+    void registerWidgetProvider(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> providerPtr, guint priority);
     void unregisterWidgetProvider(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& provider);
 
     Glib::RefPtr<Gtk::CssProvider> const& appProvider() const;
@@ -49,12 +49,12 @@ namespace ao::gtk
 
     bool _initialized = false;
 
-    Glib::RefPtr<Gtk::CssProvider> _appProvider;
-    Glib::RefPtr<Gtk::CssProvider> _userProvider;
-    Glib::RefPtr<Gtk::CssProvider> _gtkUserCssProvider;
+    Glib::RefPtr<Gtk::CssProvider> _appProviderPtr;
+    Glib::RefPtr<Gtk::CssProvider> _userProviderPtr;
+    Glib::RefPtr<Gtk::CssProvider> _gtkUserCssProviderPtr;
 
-    Glib::RefPtr<Gio::FileMonitor> _gtkConfigMonitor;
-    Glib::RefPtr<Gio::FileMonitor> _aobusConfigMonitor;
+    Glib::RefPtr<Gio::FileMonitor> _gtkConfigMonitorPtr;
+    Glib::RefPtr<Gio::FileMonitor> _aobusConfigMonitorPtr;
 
     guint _dbusSubscriptionId = 0;
     guint _sigusr1SourceId = 0;

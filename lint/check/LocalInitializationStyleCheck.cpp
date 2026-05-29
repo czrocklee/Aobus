@@ -75,7 +75,7 @@ namespace clang::tidy::readability
         return false;
       }
 
-      if (auto const* ctor = dyn_cast<CXXConstructExpr>(init->IgnoreImplicit()))
+      if (auto const* ctor = dyn_cast<CXXConstructExpr>(init->IgnoreImplicit()); ctor != nullptr)
       {
         if (ctor->getNumArgs() > 0)
         {
@@ -159,7 +159,7 @@ namespace clang::tidy::readability
         return false;
       }
 
-      if (TypeSourceInfo const* tsi = var->getTypeSourceInfo())
+      if (TypeSourceInfo const* tsi = var->getTypeSourceInfo(); tsi != nullptr)
       {
         if (tsi->getType()->getContainedAutoType() != nullptr)
         {
@@ -192,7 +192,7 @@ namespace clang::tidy::readability
         return info;
       }
 
-      if (auto const* ctorExpr = dyn_cast<CXXConstructExpr>(init->IgnoreImplicit()))
+      if (auto const* ctorExpr = dyn_cast<CXXConstructExpr>(init->IgnoreImplicit()); ctorExpr != nullptr)
       {
         if (ctorExpr->getNumArgs() == 1 && ctorExpr->getArg(0)->getType()->isNullPtrType())
         {

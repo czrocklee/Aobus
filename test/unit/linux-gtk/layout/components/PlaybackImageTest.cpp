@@ -8,8 +8,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
+
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -22,7 +21,7 @@
 namespace ao::gtk::layout::test
 {
   using namespace ao::lmdb::test;
-  using ao::gtk::test::ImmediateExecutor;
+  using ao::gtk::test::makeRuntime;
 
   namespace
   {
@@ -30,36 +29,30 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("playback.image variant support", "[layout][unit][components]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.playback_image_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.playback_image_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto imageCache = std::make_unique<ImageCache>(10);
+    auto imageCachePtr = std::make_unique<ImageCache>(10);
     auto const actionRegistry = ActionRegistry{};
     auto ctx = LayoutContext{.registry = registry,
                              .actionRegistry = actionRegistry,
                              .runtime = runtime,
                              .parentWindow = window,
-                             .inspector = {.imageCache = imageCache.get()}};
+                             .inspector = {.imageCache = imageCachePtr.get()}};
 
     SECTION("default variant has no extra styling")
     {
       auto const node = LayoutNode{.type = "playback.image"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
-      auto& widget = comp->widget();
+      REQUIRE(compPtr != nullptr);
+      auto& widget = compPtr->widget();
 
       auto* const button = dynamic_cast<Gtk::Button*>(&widget);
       REQUIRE(button != nullptr);
@@ -79,10 +72,10 @@ namespace ao::gtk::layout::test
     {
       auto node = LayoutNode{.type = "playback.image"};
       node.props["variant"] = LayoutValue{"thumbnail"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
-      auto& widget = comp->widget();
+      REQUIRE(compPtr != nullptr);
+      auto& widget = compPtr->widget();
 
       auto* const button = dynamic_cast<Gtk::Button*>(&widget);
       REQUIRE(button != nullptr);

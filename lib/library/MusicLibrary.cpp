@@ -115,101 +115,101 @@ namespace ao::library
   MusicLibrary::MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
   {
     std::filesystem::create_directories(databasePath);
-    _impl = std::make_unique<Impl>(std::move(musicRoot), std::move(databasePath));
+    _implPtr = std::make_unique<Impl>(std::move(musicRoot), std::move(databasePath));
 
-    if (auto const optHeader = _impl->metaStore.load(_impl->setupTxn))
+    if (auto const optHeader = _implPtr->metaStore.load(_implPtr->setupTxn); optHeader)
     {
       validateMetaHeader(*optHeader);
-      _impl->metaHeader = *optHeader;
+      _implPtr->metaHeader = *optHeader;
     }
     else
     {
-      _impl->metaHeader = makeMetaHeader();
-      _impl->metaStore.create(_impl->setupTxn, _impl->metaHeader);
+      _implPtr->metaHeader = makeMetaHeader();
+      _implPtr->metaStore.create(_implPtr->setupTxn, _implPtr->metaHeader);
     }
 
     // Load dictionary entries before first commit
-    _impl->setupTxn.commit();
+    _implPtr->setupTxn.commit();
   }
 
   MusicLibrary::~MusicLibrary() = default;
 
   lmdb::ReadTransaction MusicLibrary::readTransaction() const
   {
-    return lmdb::ReadTransaction{_impl->env};
+    return lmdb::ReadTransaction{_implPtr->env};
   }
 
   lmdb::WriteTransaction MusicLibrary::writeTransaction()
   {
-    return lmdb::WriteTransaction{_impl->env};
+    return lmdb::WriteTransaction{_implPtr->env};
   }
 
   TrackStore& MusicLibrary::tracks()
   {
-    return _impl->tracks;
+    return _implPtr->tracks;
   }
 
   TrackStore const& MusicLibrary::tracks() const
   {
-    return _impl->tracks;
+    return _implPtr->tracks;
   }
 
   ListStore& MusicLibrary::lists()
   {
-    return _impl->lists;
+    return _implPtr->lists;
   }
 
   ListStore const& MusicLibrary::lists() const
   {
-    return _impl->lists;
+    return _implPtr->lists;
   }
 
   ResourceStore& MusicLibrary::resources()
   {
-    return _impl->resources;
+    return _implPtr->resources;
   }
 
   ResourceStore const& MusicLibrary::resources() const
   {
-    return _impl->resources;
+    return _implPtr->resources;
   }
 
   DictionaryStore& MusicLibrary::dictionary()
   {
-    return _impl->dictionary;
+    return _implPtr->dictionary;
   }
 
   DictionaryStore const& MusicLibrary::dictionary() const
   {
-    return _impl->dictionary;
+    return _implPtr->dictionary;
   }
 
   FileManifestStore& MusicLibrary::manifest()
   {
-    return _impl->manifest;
+    return _implPtr->manifest;
   }
 
   FileManifestStore const& MusicLibrary::manifest() const
   {
-    return _impl->manifest;
+    return _implPtr->manifest;
   }
 
   MetaHeader const& MusicLibrary::metaHeader() const
   {
-    return _impl->metaHeader;
+    return _implPtr->metaHeader;
   }
 
   void MusicLibrary::updateMetaHeader(MetaHeader const& header)
   {
     validateMetaHeader(header);
     auto txn = writeTransaction();
-    _impl->metaStore.update(txn, header);
+    _implPtr->metaStore.update(txn, header);
     txn.commit();
-    _impl->metaHeader = header;
+    _implPtr->metaHeader = header;
   }
 
   std::filesystem::path const& MusicLibrary::rootPath() const
   {
-    return _impl->musicRoot;
+    return _implPtr->musicRoot;
   }
 }

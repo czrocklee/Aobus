@@ -79,7 +79,7 @@ namespace ao::library
                      DictionaryStore& dict);
 
     MusicLibrary& _ml;
-    std::unique_ptr<ScanPlan> _plan;
+    std::unique_ptr<ScanPlan> _planPtr;
     ProgressCallback _progressCallback;
     FinishedCallback _finishedCallback;
 

@@ -30,9 +30,9 @@ namespace clang::tidy::readability
   {
     std::string getTemplateName(TemplateSpecializationTypeLoc const& tsLoc)
     {
-      if (auto const* tst = tsLoc.getTypePtr())
+      if (auto const* tst = tsLoc.getTypePtr(); tst != nullptr)
       {
-        if (auto const* tmpl = tst->getTemplateName().getAsTemplateDecl())
+        if (auto const* tmpl = tst->getTemplateName().getAsTemplateDecl(); tmpl != nullptr)
         {
           return tmpl->getQualifiedNameAsString();
         }
@@ -169,16 +169,16 @@ namespace clang::tidy::readability
         return nullptr;
       }
 
-      if (auto const* initList = dyn_cast<InitListExpr>(expr))
+      if (auto const* initList = dyn_cast<InitListExpr>(expr); initList != nullptr)
       {
         return initList;
       }
 
       for (auto const* child : expr->children())
       {
-        if (auto const* childExpr = dyn_cast_or_null<Expr>(child))
+        if (auto const* childExpr = dyn_cast_or_null<Expr>(child); childExpr != nullptr)
         {
-          if (auto const* initList = findInitListExpr(childExpr))
+          if (auto const* initList = findInitListExpr(childExpr); initList != nullptr)
           {
             return initList;
           }
@@ -442,7 +442,7 @@ namespace clang::tidy::readability
   {
     auto const& sm = *result.SourceManager;
 
-    if (auto const* tempObj = result.Nodes.getNodeAs<CXXTemporaryObjectExpr>("temp_obj"))
+    if (auto const* tempObj = result.Nodes.getNodeAs<CXXTemporaryObjectExpr>("temp_obj"); tempObj != nullptr)
     {
       if (isUnsafeForCtad(tempObj))
       {
@@ -477,7 +477,7 @@ namespace clang::tidy::readability
         loc, "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
         << templateName;
     }
-    else if (auto const* varDecl = result.Nodes.getNodeAs<VarDecl>("var_decl"))
+    else if (auto const* varDecl = result.Nodes.getNodeAs<VarDecl>("var_decl"); varDecl != nullptr)
     {
       auto const* init = result.Nodes.getNodeAs<CXXConstructExpr>("var_init");
 

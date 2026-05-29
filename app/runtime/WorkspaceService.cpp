@@ -198,7 +198,7 @@ namespace ao::rt
 
     std::optional<TrackPresentationSpec> presentationForId(std::string_view id) const
     {
-      if (auto const* preset = builtinTrackPresentationPreset(id); preset)
+      if (auto const* preset = builtinTrackPresentationPreset(id); preset != nullptr)
       {
         return preset->spec;
       }
@@ -263,7 +263,7 @@ namespace ao::rt
                                      PlaybackService& playback,
                                      LibraryMutationService& mutation,
                                      library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(this, views, playback, mutation, library)}
+    : _implPtr{std::make_unique<Impl>(this, views, playback, mutation, library)}
   {
   }
 
@@ -271,39 +271,39 @@ namespace ao::rt
 
   Subscription WorkspaceService::onFocusedViewChanged(std::move_only_function<void(ViewId)> handler)
   {
-    return _impl->focusedViewChangedSignal.connect(std::move(handler));
+    return _implPtr->focusedViewChangedSignal.connect(std::move(handler));
   }
 
   Subscription WorkspaceService::onNavigationHistoryChanged(
     std::move_only_function<void(NavigationHistoryChanged const&)> handler)
   {
-    return _impl->navigationHistoryChangedSignal.connect(std::move(handler));
+    return _implPtr->navigationHistoryChangedSignal.connect(std::move(handler));
   }
 
   LayoutState WorkspaceService::layoutState() const
   {
-    return _impl->layoutState;
+    return _implPtr->layoutState;
   }
 
   void WorkspaceService::setFocusedView(ViewId const viewId)
   {
-    _impl->layoutState.activeViewId = viewId;
-    _impl->layoutState.revision++;
-    _impl->focusedViewChangedSignal.emit(viewId);
+    _implPtr->layoutState.activeViewId = viewId;
+    _implPtr->layoutState.revision++;
+    _implPtr->focusedViewChangedSignal.emit(viewId);
   }
 
   void WorkspaceService::addView(ViewId const viewId)
   {
-    if (!std::ranges::contains(_impl->layoutState.openViews, viewId))
+    if (!std::ranges::contains(_implPtr->layoutState.openViews, viewId))
     {
-      _impl->layoutState.openViews.push_back(viewId);
-      _impl->layoutState.revision++;
+      _implPtr->layoutState.openViews.push_back(viewId);
+      _implPtr->layoutState.revision++;
     }
   }
 
   void WorkspaceService::navigateTo(NavigationTarget const& target, NavigationOptions const options)
   {
-    auto const targetViewId = _impl->resolveOrCreateTargetView(target, _impl->views);
+    auto const targetViewId = _implPtr->resolveOrCreateTargetView(target, _implPtr->views);
 
     if (targetViewId == kInvalidViewId)
     {
@@ -312,35 +312,35 @@ namespace ao::rt
     }
 
     APP_LOG_DEBUG("WorkspaceService: Navigating to viewId: {}", targetViewId.raw());
-    _impl->focusView(targetViewId);
-    _impl->commitActiveViewIfRequested(options);
+    _implPtr->focusView(targetViewId);
+    _implPtr->commitActiveViewIfRequested(options);
   }
 
   void WorkspaceService::setActivePresentation(TrackPresentationSpec const& presentation,
                                                NavigationOptions const options)
   {
-    auto const viewId = _impl->layoutState.activeViewId;
+    auto const viewId = _implPtr->layoutState.activeViewId;
 
     if (viewId == kInvalidViewId)
     {
       return;
     }
 
-    _impl->views.setPresentation(viewId, presentation);
-    _impl->commitActiveViewIfRequested(options);
+    _implPtr->views.setPresentation(viewId, presentation);
+    _implPtr->commitActiveViewIfRequested(options);
   }
 
   TrackPresentationSpec WorkspaceService::setActivePresentation(std::string_view const presentationId,
                                                                 NavigationOptions const options)
   {
-    auto const viewId = _impl->layoutState.activeViewId;
+    auto const viewId = _implPtr->layoutState.activeViewId;
 
     if (viewId == kInvalidViewId)
     {
       return {};
     }
 
-    auto const optSpec = _impl->presentationForId(presentationId);
+    auto const optSpec = _implPtr->presentationForId(presentationId);
 
     if (!optSpec)
     {
@@ -348,8 +348,8 @@ namespace ao::rt
     }
 
     auto const spec = normalizeTrackPresentationSpec(*optSpec);
-    _impl->views.setPresentation(viewId, spec);
-    _impl->commitActiveViewIfRequested(options);
+    _implPtr->views.setPresentation(viewId, spec);
+    _implPtr->commitActiveViewIfRequested(options);
     return spec;
   }
 
@@ -362,138 +362,138 @@ namespace ao::rt
 
     // Navigate to AllTracks without recording.
     auto const allTracksTarget = NavigationTarget{ListId{kAllTracksListId}};
-    auto const targetViewId = _impl->resolveOrCreateTargetView(allTracksTarget, _impl->views);
+    auto const targetViewId = _implPtr->resolveOrCreateTargetView(allTracksTarget, _implPtr->views);
 
     if (targetViewId == kInvalidViewId)
     {
       return;
     }
 
-    _impl->focusView(targetViewId);
+    _implPtr->focusView(targetViewId);
 
     // Apply album presentation without recording.
-    if (auto const* preset = builtinTrackPresentationPreset("albums"); preset)
+    if (auto const* preset = builtinTrackPresentationPreset("albums"); preset != nullptr)
     {
-      _impl->views.setPresentation(targetViewId, preset->spec);
+      _implPtr->views.setPresentation(targetViewId, preset->spec);
     }
 
     // Reveal the track.
-    _impl->playback.revealTrack(trackId, targetViewId);
+    _implPtr->playback.revealTrack(trackId, targetViewId);
 
     // Commit the final state once.
-    _impl->commitActiveViewIfRequested({.recordHistory = true});
+    _implPtr->commitActiveViewIfRequested({.recordHistory = true});
   }
 
   bool WorkspaceService::goBack()
   {
-    auto optPoint = _impl->navigationHistory.back();
+    auto optPoint = _implPtr->navigationHistory.back();
 
     if (!optPoint)
     {
       return false;
     }
 
-    auto replay = ReplayScope{_impl->replayingNavigation};
-    _impl->restoreNavigationPoint(*optPoint);
-    _impl->emitNavigationHistoryChanged();
+    auto replay = ReplayScope{_implPtr->replayingNavigation};
+    _implPtr->restoreNavigationPoint(*optPoint);
+    _implPtr->emitNavigationHistoryChanged();
     return true;
   }
 
   bool WorkspaceService::goForward()
   {
-    auto optPoint = _impl->navigationHistory.forward();
+    auto optPoint = _implPtr->navigationHistory.forward();
 
     if (!optPoint)
     {
       return false;
     }
 
-    auto replay = ReplayScope{_impl->replayingNavigation};
-    _impl->restoreNavigationPoint(*optPoint);
-    _impl->emitNavigationHistoryChanged();
+    auto replay = ReplayScope{_implPtr->replayingNavigation};
+    _implPtr->restoreNavigationPoint(*optPoint);
+    _implPtr->emitNavigationHistoryChanged();
     return true;
   }
 
   bool WorkspaceService::canGoBack() const noexcept
   {
-    return _impl->navigationHistory.canGoBack();
+    return _implPtr->navigationHistory.canGoBack();
   }
 
   bool WorkspaceService::canGoForward() const noexcept
   {
-    return _impl->navigationHistory.canGoForward();
+    return _implPtr->navigationHistory.canGoForward();
   }
 
   void WorkspaceService::closeView(ViewId const viewId)
   {
-    if (auto const it = std::ranges::find(_impl->layoutState.openViews, viewId);
-        it != _impl->layoutState.openViews.end())
+    if (auto const it = std::ranges::find(_implPtr->layoutState.openViews, viewId);
+        it != _implPtr->layoutState.openViews.end())
     {
-      _impl->layoutState.openViews.erase(it);
+      _implPtr->layoutState.openViews.erase(it);
     }
 
-    if (_impl->layoutState.activeViewId == viewId)
+    if (_implPtr->layoutState.activeViewId == viewId)
     {
-      _impl->layoutState.activeViewId =
-        _impl->layoutState.openViews.empty() ? rt::kInvalidViewId : _impl->layoutState.openViews.back();
+      _implPtr->layoutState.activeViewId =
+        _implPtr->layoutState.openViews.empty() ? rt::kInvalidViewId : _implPtr->layoutState.openViews.back();
     }
 
-    _impl->layoutState.revision++;
-    _impl->focusedViewChangedSignal.emit(_impl->layoutState.activeViewId);
+    _implPtr->layoutState.revision++;
+    _implPtr->focusedViewChangedSignal.emit(_implPtr->layoutState.activeViewId);
 
-    _impl->views.destroyView(viewId);
+    _implPtr->views.destroyView(viewId);
   }
 
   std::span<CustomTrackPresentationPreset const> WorkspaceService::customPresets() const
   {
-    return _impl->customPresets;
+    return _implPtr->customPresets;
   }
 
   void WorkspaceService::addCustomPreset(CustomTrackPresentationPreset const& preset)
   {
     if (auto it = std::ranges::find_if(
-          _impl->customPresets, [&](auto const& existingPreset) { return existingPreset.label == preset.label; });
-        it != _impl->customPresets.end())
+          _implPtr->customPresets, [&](auto const& existingPreset) { return existingPreset.label == preset.label; });
+        it != _implPtr->customPresets.end())
     {
       *it = preset;
     }
     else
     {
-      _impl->customPresets.push_back(preset);
+      _implPtr->customPresets.push_back(preset);
     }
 
-    _impl->customPresetsChangedSignal.emit();
+    _implPtr->customPresetsChangedSignal.emit();
   }
 
   void WorkspaceService::removeCustomPreset(std::string_view presetId)
   {
     std::erase_if(
-      _impl->customPresets, [presetId](auto const& existingPreset) { return existingPreset.label == presetId; });
-    _impl->customPresetsChangedSignal.emit();
+      _implPtr->customPresets, [presetId](auto const& existingPreset) { return existingPreset.label == presetId; });
+    _implPtr->customPresetsChangedSignal.emit();
   }
 
   void WorkspaceService::setCustomPresets(std::vector<CustomTrackPresentationPreset> presets)
   {
-    _impl->customPresets = std::move(presets);
-    _impl->customPresetsChangedSignal.emit();
+    _implPtr->customPresets = std::move(presets);
+    _implPtr->customPresetsChangedSignal.emit();
   }
 
   Subscription WorkspaceService::onCustomPresetsChanged(std::move_only_function<void()> handler)
   {
-    return _impl->customPresetsChangedSignal.connect(std::move(handler));
+    return _implPtr->customPresetsChangedSignal.connect(std::move(handler));
   }
 
   void WorkspaceService::saveSession(ConfigStore& store) const
   {
-    auto const layout = _impl->layoutState;
+    auto const layout = _implPtr->layoutState;
     auto state = SessionState{};
 
-    auto const presets = _impl->customPresets;
+    auto const presets = _implPtr->customPresets;
     state.customPresets = std::vector(presets.begin(), presets.end());
 
     for (auto const viewId : layout.openViews)
     {
-      auto const& viewState = _impl->views.trackListState(viewId);
+      auto const& viewState = _implPtr->views.trackListState(viewId);
 
       if (viewId == layout.activeViewId)
       {
@@ -530,7 +530,7 @@ namespace ao::rt
 
     for (auto const& viewConfig : state.openViews)
     {
-      auto const res = _impl->views.createView(viewConfig, true);
+      auto const res = _implPtr->views.createView(viewConfig, true);
       addView(res.viewId);
     }
 
@@ -538,9 +538,9 @@ namespace ao::rt
 
     auto focused = kInvalidViewId;
 
-    for (auto const viewId : _impl->layoutState.openViews)
+    for (auto const viewId : _implPtr->layoutState.openViews)
     {
-      if (auto const& vs = _impl->views.trackListState(viewId); vs.listId == state.activeListId)
+      if (auto const& vs = _implPtr->views.trackListState(viewId); vs.listId == state.activeListId)
       {
         focused = viewId;
 
@@ -555,14 +555,14 @@ namespace ao::rt
     {
       setFocusedView(focused);
     }
-    else if (!_impl->layoutState.openViews.empty())
+    else if (!_implPtr->layoutState.openViews.empty())
     {
-      setFocusedView(_impl->layoutState.openViews.front());
+      setFocusedView(_implPtr->layoutState.openViews.front());
     }
 
     // Commit the restored view as the initial navigation point so the user
     // can navigate back to it after moving elsewhere.  canGoBack remains
     // false until a subsequent navigateTo commits a second point.
-    _impl->commitActiveViewIfRequested({.recordHistory = true});
+    _implPtr->commitActiveViewIfRequested({.recordHistory = true});
   }
 } // namespace ao::rt

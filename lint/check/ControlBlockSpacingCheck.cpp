@@ -456,17 +456,17 @@ namespace clang::tidy::readability
   {
     SourceManager& sm = *result.SourceManager;
 
-    if (auto const* ctrl = result.Nodes.getNodeAs<Stmt>("ctrl_stmt"))
+    if (auto const* ctrl = result.Nodes.getNodeAs<Stmt>("ctrl_stmt"); ctrl != nullptr)
     {
       handleControlStatement(ctrl, sm, result);
     }
 
-    if (auto const* block = result.Nodes.getNodeAs<CompoundStmt>("block"))
+    if (auto const* block = result.Nodes.getNodeAs<CompoundStmt>("block"); block != nullptr)
     {
       handleCompoundBlock(block, sm, result);
     }
 
-    if (auto const* ctrlBody = result.Nodes.getNodeAs<CompoundStmt>("ctrl_body"))
+    if (auto const* ctrlBody = result.Nodes.getNodeAs<CompoundStmt>("ctrl_body"); ctrlBody != nullptr)
     {
       handleControlBody(ctrlBody, sm, result);
     }
@@ -555,25 +555,25 @@ namespace clang::tidy::readability
 
     for (auto const& parent : result.Context->getParents(*ctrlBody))
     {
-      if (auto const* parentIf = parent.get<IfStmt>())
+      if (auto const* parentIf = parent.get<IfStmt>(); parentIf != nullptr)
       {
         if (parentIf->getThen() == ctrlBody && parentIf->getElse() != nullptr)
         {
           isIntermediateBranch = true;
         }
       }
-      else if (auto const* parentTry = parent.get<CXXTryStmt>())
+      else if (auto const* parentTry = parent.get<CXXTryStmt>(); parentTry != nullptr)
       {
         if (parentTry->getTryBlock() == ctrlBody && parentTry->getNumHandlers() > 0)
         {
           isIntermediateBranch = true;
         }
       }
-      else if (auto const* parentCatch = parent.get<CXXCatchStmt>())
+      else if (auto const* parentCatch = parent.get<CXXCatchStmt>(); parentCatch != nullptr)
       {
         for (auto const& grandparent : result.Context->getParents(*parentCatch))
         {
-          if (auto const* parentTry = grandparent.get<CXXTryStmt>())
+          if (auto const* parentTry = grandparent.get<CXXTryStmt>(); parentTry != nullptr)
           {
             if (std::uint32_t const numHandlers = parentTry->getNumHandlers();
                 numHandlers > 0 && parentTry->getHandler(numHandlers - 1) != parentCatch)

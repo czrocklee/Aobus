@@ -69,7 +69,7 @@ namespace ao::uimodel::playback
 
     rt::PlaybackService& _playback;
     DescriptorProvider _descriptorProvider;
-    std::unique_ptr<PlaybackQueueState> _queueState;
+    std::unique_ptr<PlaybackQueueState> _queueStatePtr;
     rt::Subscription _idleSub;
     rt::Subscription _stoppedSub;
   };

@@ -15,7 +15,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TrackPresentationStore - preset and layout management", "[gtk][track][presentation]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& workspace = fixture.runtime().workspace();
 

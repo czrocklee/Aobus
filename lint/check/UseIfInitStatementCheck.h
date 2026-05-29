@@ -22,5 +22,9 @@ namespace clang::tidy::readability
 
     void registerMatchers(ast_matchers::MatchFinder* finder) override;
     void check(ast_matchers::MatchFinder::MatchResult const& result) override;
+
+  private:
+    void handleImplicitIf(ast_matchers::MatchFinder::MatchResult const& result);
+    void handleExplicitBlock(ast_matchers::MatchFinder::MatchResult const& result);
   };
 } // namespace clang::tidy::readability

@@ -41,7 +41,7 @@ namespace ao::gtk
                                                ao::ListId listId)
     : _listId{listId}, _columnView{columnView}, _presentationStore{presentationStore}
   {
-    _dynamicCssProvider = Gtk::CssProvider::create();
+    _dynamicCssProviderPtr = Gtk::CssProvider::create();
 
     _layoutChangedConnection = _presentationStore.signalChanged().connect(
       [this](ao::ListId listId, TrackPresentationChangeType type)
@@ -66,17 +66,17 @@ namespace ao::gtk
 
     _columnView.signal_map().connect(sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
 
-    if (auto const adj = _columnView.get_hadjustment(); adj)
+    if (auto const adjPtr = _columnView.get_hadjustment(); adjPtr)
     {
-      adj->property_page_size().signal_changed().connect(
+      adjPtr->property_page_size().signal_changed().connect(
         sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
-      adj->property_upper().signal_changed().connect(
+      adjPtr->property_upper().signal_changed().connect(
         sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
     }
 
-    if (auto const columns = _columnView.get_columns(); columns)
+    if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
-      _columnNotifyConnections.emplace_back(columns->signal_items_changed().connect(
+      _columnNotifyConnections.emplace_back(columnsPtr->signal_items_changed().connect(
         [this](::guint, ::guint, ::guint)
         {
           updateTitlePositionVariable();
@@ -105,15 +105,15 @@ namespace ao::gtk
       }
 
       auto const title = Glib::ustring{rtDef.label.data(), rtDef.label.size()};
-      auto const column = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
+      auto const columnPtr = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
 
-      column->set_id(Glib::ustring{rtDef.id.data(), rtDef.id.size()});
+      columnPtr->set_id(Glib::ustring{rtDef.id.data(), rtDef.id.size()});
 
-      column->set_resizable(true);
+      columnPtr->set_resizable(true);
 
-      column->set_fixed_width(defaultWidthForField(rtDef.field));
+      columnPtr->set_fixed_width(defaultWidthForField(rtDef.field));
 
-      _columnNotifyConnections.emplace_back(column->property_fixed_width().signal_changed().connect(
+      _columnNotifyConnections.emplace_back(columnPtr->property_fixed_width().signal_changed().connect(
         [this]
         {
           if (_syncingColumnLayout)
@@ -124,12 +124,13 @@ namespace ao::gtk
           queueSharedColumnLayoutUpdate();
         }));
 
-      _columnNotifyConnections.emplace_back(column->property_fixed_width().signal_changed().connect(
+      _columnNotifyConnections.emplace_back(columnPtr->property_fixed_width().signal_changed().connect(
         sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable)));
 
-      _columnView.append_column(column);
+      _columnView.append_column(columnPtr);
 
-      _columns.push_back({.field = rtDef.field, .column = column, .defaultWidth = defaultWidthForField(rtDef.field)});
+      _columns.push_back(
+        {.field = rtDef.field, .columnPtr = columnPtr, .defaultWidth = defaultWidthForField(rtDef.field)});
     }
   }
 
@@ -161,7 +162,7 @@ namespace ao::gtk
     _syncingColumnLayout = true;
     _layoutChangedConnection.block();
 
-    if (auto const columns = _columnView.get_columns(); columns)
+    if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
       auto const& storedLayout = _presentationStore.layoutForList(_listId);
 
@@ -175,7 +176,7 @@ namespace ao::gtk
           continue;
         }
 
-        ensureColumnPosition(columns, static_cast<std::size_t>(idx), binding->column);
+        ensureColumnPosition(columnsPtr, static_cast<std::size_t>(idx), binding->columnPtr);
 
         // Find width in stored layout if it exists
         auto width = 0;
@@ -188,9 +189,9 @@ namespace ao::gtk
 
         auto const effectiveWidth = (width <= 0 ? binding->defaultWidth : width);
 
-        if (binding->column->get_fixed_width() != effectiveWidth)
+        if (binding->columnPtr->get_fixed_width() != effectiveWidth)
         {
-          binding->column->set_fixed_width(effectiveWidth);
+          binding->columnPtr->set_fixed_width(effectiveWidth);
         }
       }
     }
@@ -211,9 +212,9 @@ namespace ao::gtk
 
     if (columns->get_n_items() > index)
     {
-      if (auto currentObj = columns->get_object(static_cast<::guint>(index)); currentObj)
+      if (auto currentObjPtr = columns->get_object(static_cast<::guint>(index)); currentObjPtr)
       {
-        if (currentObj == column)
+        if (currentObjPtr == column)
         {
           needsMove = false;
         }
@@ -247,7 +248,7 @@ namespace ao::gtk
 
     for (auto& data : _columns)
     {
-      data.column->set_expand(data.field == expanding);
+      data.columnPtr->set_expand(data.field == expanding);
     }
   }
 
@@ -282,26 +283,26 @@ namespace ao::gtk
 
     auto layout = std::vector<ColumnState>{};
 
-    if (auto const columns = _columnView.get_columns(); columns)
+    if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
-      for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
+      for (std::uint32_t idx = 0; idx < columnsPtr->get_n_items(); ++idx)
       {
-        auto const obj = columns->get_object(idx);
-        auto const gtkColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(obj);
+        auto const objPtr = columnsPtr->get_object(idx);
+        auto const gtkColumnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(objPtr);
 
-        if (!gtkColumn || !gtkColumn->get_visible())
+        if (!gtkColumnPtr || !gtkColumnPtr->get_visible())
         {
           continue;
         }
 
-        auto const optField = rt::trackFieldFromId(gtkColumn->get_id().raw());
+        auto const optField = rt::trackFieldFromId(gtkColumnPtr->get_id().raw());
 
         if (!optField)
         {
           continue;
         }
 
-        layout.push_back({.field = *optField, .width = gtkColumn->get_fixed_width()});
+        layout.push_back({.field = *optField, .width = gtkColumnPtr->get_fixed_width()});
       }
     }
 
@@ -312,26 +313,26 @@ namespace ao::gtk
   std::vector<rt::TrackField> TrackColumnController::captureCurrentFieldOrder() const
   {
     auto fields = std::vector<rt::TrackField>{};
-    auto const columns = _columnView.get_columns();
+    auto const columnsPtr = _columnView.get_columns();
 
-    if (!columns)
+    if (!columnsPtr)
     {
       return fields;
     }
 
-    fields.reserve(columns->get_n_items());
+    fields.reserve(columnsPtr->get_n_items());
 
-    for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
+    for (std::uint32_t idx = 0; idx < columnsPtr->get_n_items(); ++idx)
     {
-      auto const obj = columns->get_object(idx);
-      auto const gtkColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(obj);
+      auto const objPtr = columnsPtr->get_object(idx);
+      auto const gtkColumnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(objPtr);
 
-      if (!gtkColumn)
+      if (!gtkColumnPtr)
       {
         continue;
       }
 
-      if (auto const optField = rt::trackFieldFromId(std::string{gtkColumn->get_id()}); optField)
+      if (auto const optField = rt::trackFieldFromId(std::string{gtkColumnPtr->get_id()}); optField)
       {
         fields.push_back(*optField);
       }
@@ -374,7 +375,7 @@ namespace ao::gtk
     for (auto& binding : _columns)
     {
       auto const visible = std::ranges::contains(visibleFields, binding.field);
-      binding.column->set_visible(visible);
+      binding.columnPtr->set_visible(visible);
     }
   }
 
@@ -388,22 +389,22 @@ namespace ao::gtk
 
   void TrackColumnController::updateTitlePositionVariable()
   {
-    auto const columns = _columnView.get_columns();
+    auto const columnsPtr = _columnView.get_columns();
 
-    if (!columns)
+    if (!columnsPtr)
     {
       return;
     }
 
     std::int32_t totalFixedWidth = 0;
 
-    for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
+    for (std::uint32_t idx = 0; idx < columnsPtr->get_n_items(); ++idx)
     {
-      auto const col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(idx));
+      auto const colPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(idx));
 
-      if (col && col->get_visible())
+      if (colPtr && colPtr->get_visible())
       {
-        totalFixedWidth += std::max(0, col->get_fixed_width());
+        totalFixedWidth += std::max(0, colPtr->get_fixed_width());
       }
     }
 
@@ -414,18 +415,18 @@ namespace ao::gtk
     bool found = false;
     auto const titleFieldId = rt::trackFieldId(rt::TrackField::Title);
 
-    for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
+    for (std::uint32_t idx = 0; idx < columnsPtr->get_n_items(); ++idx)
     {
-      auto const col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(idx));
+      auto const colPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(idx));
 
-      if (!col || !col->get_visible())
+      if (!colPtr || !colPtr->get_visible())
       {
         continue;
       }
 
-      int const actualWidth = std::max(0, col->get_fixed_width()) + (col->get_expand() ? extraSpace : 0);
+      int const actualWidth = std::max(0, colPtr->get_fixed_width()) + (colPtr->get_expand() ? extraSpace : 0);
 
-      if (col->get_id().raw() == titleFieldId)
+      if (colPtr->get_id().raw() == titleFieldId)
       {
         found = true;
         break;
@@ -451,7 +452,7 @@ namespace ao::gtk
       if (css != _lastTitleCss)
       {
         _lastTitleCss = css;
-        _dynamicCssProvider->load_from_data(_lastTitleCss);
+        _dynamicCssProviderPtr->load_from_data(_lastTitleCss);
       }
     }
   }

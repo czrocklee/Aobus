@@ -38,9 +38,9 @@ namespace ao::gtk::portal
   {
     _list.detach(this);
 
-    if (_timeoutConnection)
+    if (_timeoutConnectionPtr)
     {
-      _timeoutConnection->disconnect();
+      _timeoutConnectionPtr->disconnect();
     }
   }
 
@@ -67,13 +67,13 @@ namespace ao::gtk::portal
   void PlaylistExporter::scheduleForWrite()
   {
     // Cancel any existing timeout
-    if (_timeoutConnection)
+    if (_timeoutConnectionPtr)
     {
-      _timeoutConnection->disconnect();
+      _timeoutConnectionPtr->disconnect();
     }
 
     // Schedule write after 3 second delay (Glib::signal_timeout uses milliseconds)
-    _timeoutConnection = std::make_unique<sigc::connection>(Glib::signal_timeout().connect(
+    _timeoutConnectionPtr = std::make_unique<sigc::connection>(Glib::signal_timeout().connect(
       [this]
       {
         writeFile();
@@ -84,10 +84,10 @@ namespace ao::gtk::portal
 
   void PlaylistExporter::writeFile()
   {
-    if (_timeoutConnection)
+    if (_timeoutConnectionPtr)
     {
-      _timeoutConnection->disconnect();
-      _timeoutConnection.reset();
+      _timeoutConnectionPtr->disconnect();
+      _timeoutConnectionPtr.reset();
     }
 
     auto ofs = std::ofstream{_path};

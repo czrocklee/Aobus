@@ -289,11 +289,11 @@ namespace ao::audio::test
     {
       auto const factory = [](auto const&, auto const& fmt)
       {
-        auto dec = std::make_unique<ScriptedDecoderSession>(
+        auto decPtr = std::make_unique<ScriptedDecoderSession>(
           DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
 
-        dec->setOpenResult(std::unexpected(Error{.message = "open failed"}));
-        return dec;
+        decPtr->setOpenResult(std::unexpected(Error{.message = "open failed"}));
+        return decPtr;
       };
 
       auto engine = Engine{std::make_unique<CapturingBackend>(), device, factory};
@@ -308,23 +308,23 @@ namespace ao::audio::test
 
     SECTION("Backend open failure")
     {
-      auto backend = std::make_unique<CapturingBackend>();
+      auto backendPtr = std::make_unique<CapturingBackend>();
 
-      backend->setOpenResult(std::unexpected(Error{.message = "hw init failed"}));
+      backendPtr->setOpenResult(std::unexpected(Error{.message = "hw init failed"}));
 
       auto const factory = [](auto const&, auto const& fmt)
       {
-        auto dec = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
           .sourceFormat = fmt,
           .outputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true},
           .durationMs = 0,
           .isLossy = false});
 
-        dec->setReadScript({{{}, true}});
-        return dec;
+        decPtr->setReadScript({{{}, true}});
+        return decPtr;
       };
 
-      auto engine = Engine{std::move(backend), device, factory};
+      auto engine = Engine{std::move(backendPtr), device, factory};
       auto const desc = TrackPlaybackDescriptor{
         .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -342,23 +342,23 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backend = std::make_unique<CapturingBackend>();
-    auto* const backendPtr = backend.get();
+    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
 
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto dec = std::make_unique<ScriptedDecoderSession>(
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
 
       // provide some data for preroll
       auto data = std::vector(100, std::byte{0});
 
-      dec->setReadScript({{data, false}, {{}, true}});
-      return dec;
+      decPtr->setReadScript({{data, false}, {{}, true}});
+      return decPtr;
     };
 
-    auto engine = Engine{std::move(backend), device, factory};
+    auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -369,16 +369,16 @@ namespace ao::audio::test
     {
       engine.pause();
       REQUIRE(engine.status().transport == Transport::Paused);
-      REQUIRE(backendPtr->events().back().name == "pause");
+      REQUIRE(backendRaw->events().back().name == "pause");
     }
 
     SECTION("Resume from Paused")
     {
       engine.pause();
-      backendPtr->clearEvents();
+      backendRaw->clearEvents();
       engine.resume();
       REQUIRE(engine.status().transport == Transport::Playing);
-      REQUIRE(backendPtr->events().back().name == "resume");
+      REQUIRE(backendRaw->events().back().name == "resume");
     }
   }
 
@@ -389,20 +389,20 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backend = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<CapturingBackend>();
 
     auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true}; // 2 bytes = 1ms
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto dec = std::make_unique<ScriptedDecoderSession>(
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
       auto data = std::vector(200, std::byte{0}); // 100ms
 
-      dec->setReadScript({{data, false}, {data, false}, {{}, true}});
-      return dec;
+      decPtr->setReadScript({{data, false}, {data, false}, {{}, true}});
+      return decPtr;
     };
 
-    auto engine = Engine{std::move(backend), device, factory};
+    auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -428,21 +428,21 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backend = std::make_unique<CapturingBackend>();
-    auto* const backendPtr = backend.get();
+    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
 
     auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto dec = std::make_unique<ScriptedDecoderSession>(
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
       auto data = std::vector(20, std::byte{0}); // 10ms
 
-      dec->setReadScript({{data, false}, {{}, true}});
-      return dec;
+      decPtr->setReadScript({{data, false}, {{}, true}});
+      return decPtr;
     };
 
-    auto engine = Engine{std::move(backend), device, factory};
+    auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -452,7 +452,7 @@ namespace ao::audio::test
     engine.play(desc);
 
     // Simulate playback loop via backend callbacks
-    auto* const target = backendPtr->target();
+    auto* const target = backendRaw->target();
     auto buffer = std::array<std::byte, 100>{};
 
     target->readPcm(buffer); // Read all 20 bytes
@@ -461,7 +461,7 @@ namespace ao::audio::test
 
     SECTION("onDrainComplete resets to idle and fires track ended")
     {
-      backendPtr->fireDrainComplete();
+      backendRaw->fireDrainComplete();
       REQUIRE(engine.status().transport == Transport::Idle);
       REQUIRE(trackEnded == true);
     }
@@ -470,13 +470,13 @@ namespace ao::audio::test
     {
       engine.stop(); // resets everything
       trackEnded = false;
-      backendPtr->fireDrainComplete();
+      backendRaw->fireDrainComplete();
       REQUIRE(trackEnded == false);
     }
 
     SECTION("onBackendError stops playback")
     {
-      backendPtr->fireBackendError("lost device");
+      backendRaw->fireBackendError("lost device");
       REQUIRE(engine.status().transport == Transport::Error);
       CHECK(engine.status().statusText == "lost device");
     }
@@ -489,26 +489,25 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backend = std::make_unique<CapturingBackend>();
-    auto* backendPtr = backend.get();
+    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto* backendRaw = backendPtr.get();
 
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto dec = std::make_unique<ScriptedDecoderSession>(
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 1000, .isLossy = false});
-      dec->setReadScript({{.data = std::vector<std::byte>(88200, std::byte{0}), .endOfStream = false}});
-      return dec;
+      decPtr->setReadScript({{.data = std::vector<std::byte>(88200, std::byte{0}), .endOfStream = false}});
+      return decPtr;
     };
 
-    auto engine = Engine{std::move(backend), device, factory};
+    auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{.filePath = "test.flac", .title = "Test"};
 
     SECTION("queryProperty returns all-false for unknown PropertyId")
     {
-      // Cast to an out-of-range value to simulate an unknown property
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const info = backendPtr->queryProperty(kUnknownId);
+      auto const info = backendRaw->queryProperty(kUnknownId);
 
       REQUIRE(info.canRead == false);
       REQUIRE(info.canWrite == false);
@@ -518,7 +517,7 @@ namespace ao::audio::test
 
     SECTION("queryProperty returns valid info for Volume")
     {
-      auto const info = backendPtr->queryProperty(PropertyId::Volume);
+      auto const info = backendRaw->queryProperty(PropertyId::Volume);
 
       REQUIRE(info.canRead == true);
       REQUIRE(info.canWrite == true);
@@ -528,7 +527,7 @@ namespace ao::audio::test
     SECTION("setProperty returns error for unknown PropertyId")
     {
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const result = backendPtr->setProperty(kUnknownId, PropertyValue{0.5F});
+      auto const result = backendRaw->setProperty(kUnknownId, PropertyValue{0.5F});
 
       REQUIRE(!result);
       REQUIRE(result.error().code == Error::Code::NotSupported);
@@ -537,7 +536,7 @@ namespace ao::audio::test
     SECTION("property returns error for unknown PropertyId")
     {
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const result = backendPtr->property(kUnknownId);
+      auto const result = backendRaw->property(kUnknownId);
 
       REQUIRE(!result);
       REQUIRE(result.error().code == Error::Code::NotSupported);
@@ -545,7 +544,7 @@ namespace ao::audio::test
 
     SECTION("onPropertyChanged callback updates engine volume status")
     {
-      backendPtr->firePropertyChanged(PropertyId::Volume);
+      backendRaw->firePropertyChanged(PropertyId::Volume);
 
       REQUIRE(engine.status().volume == Catch::Approx{1.0F});
       REQUIRE(engine.volume() == Catch::Approx{1.0F});
@@ -554,18 +553,17 @@ namespace ao::audio::test
 
     SECTION("onPropertyChanged handles backend read errors gracefully")
     {
-      backendPtr->setPropertyError(Error::Code::Generic);
-      backendPtr->firePropertyChanged(PropertyId::Volume);
-      backendPtr->firePropertyChanged(PropertyId::Muted);
+      backendRaw->setPropertyError(Error::Code::Generic);
+      backendRaw->firePropertyChanged(PropertyId::Volume);
+      backendRaw->firePropertyChanged(PropertyId::Muted);
 
-      // Status should remain unchanged, no crash
       REQUIRE(engine.status().volume == Catch::Approx{1.0F});
       REQUIRE(engine.status().muted == false);
     }
 
     SECTION("onPropertyChanged callback updates engine mute status")
     {
-      backendPtr->firePropertyChanged(PropertyId::Muted);
+      backendRaw->firePropertyChanged(PropertyId::Muted);
 
       REQUIRE(engine.status().muted == false);
       REQUIRE(engine.isMuted() == false);
@@ -574,22 +572,19 @@ namespace ao::audio::test
     SECTION("onPropertyChanged callback for unknown property is ignored")
     {
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      backendPtr->firePropertyChanged(kUnknownId);
-      // No crash, no change.
+      backendRaw->firePropertyChanged(kUnknownId);
     }
 
     SECTION("Backend callbacks update engine state correctly")
     {
-      // 1. handleBackendError
       engine.play(desc);
-      backendPtr->fireBackendError("hardware failed");
+      backendRaw->fireBackendError("hardware failed");
       CHECK(engine.status().transport == Transport::Error);
 
-      // 2. onRouteChanged
       engine.play(desc);
       bool routeChanged = false;
       engine.setOnRouteChanged([&](auto const&) { routeChanged = true; });
-      backendPtr->fireRouteReady("test-anchor");
+      backendRaw->fireRouteReady("test-anchor");
       CHECK(routeChanged == true);
     }
 
@@ -599,7 +594,7 @@ namespace ao::audio::test
       REQUIRE(engine.volume() == Catch::Approx{0.42F});
       REQUIRE(engine.status().volume == Catch::Approx{0.42F});
 
-      auto const backendVol = backendPtr->property(PropertyId::Volume);
+      auto const backendVol = backendRaw->property(PropertyId::Volume);
 
       REQUIRE(backendVol);
       REQUIRE(std::get<float>(*backendVol) == Catch::Approx{0.42F});
@@ -611,7 +606,7 @@ namespace ao::audio::test
       REQUIRE(engine.isMuted() == true);
       REQUIRE(engine.status().muted == true);
 
-      auto const backendMuted = backendPtr->property(PropertyId::Muted);
+      auto const backendMuted = backendRaw->property(PropertyId::Muted);
 
       REQUIRE(backendMuted);
       REQUIRE(std::get<bool>(*backendMuted) == true);
@@ -625,21 +620,21 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backend = std::make_unique<CapturingBackend>();
-    auto* const backendPtr = backend.get();
+    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
 
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto dec = std::make_unique<ScriptedDecoderSession>(
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
       auto data = std::vector(100, std::byte{0});
 
-      dec->setReadScript({{data, false}, {{}, true}});
-      return dec;
+      decPtr->setReadScript({{data, false}, {{}, true}});
+      return decPtr;
     };
 
-    auto engine = Engine{std::move(backend), device, factory};
+    auto engine = Engine{std::move(backendPtr), device, factory};
 
     SECTION("Backend error transitions to Error state")
     {
@@ -648,7 +643,7 @@ namespace ao::audio::test
 
       engine.play(desc);
 
-      auto* const target = backendPtr->target();
+      auto* const target = backendRaw->target();
 
       target->onBackendError("Hardware failure");
 
@@ -665,7 +660,7 @@ namespace ao::audio::test
 
       engine.play(desc);
 
-      auto* const target = backendPtr->target();
+      auto* const target = backendRaw->target();
 
       target->onRouteReady("anchor-123");
 
@@ -681,22 +676,17 @@ namespace ao::audio::test
         .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .optCoverArtId = std::nullopt};
 
       engine.play(desc);
-      auto* const target = backendPtr->target();
+      auto* const target = backendRaw->target();
 
       target->onUnderrun();
-      // Can't easily assert on underrunCount as it's not exposed, but this covers the line.
 
       target->onPositionAdvanced(100);
-      // It pushes position locally if possible.
 
       target->onFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
-      // The format should be updated internally.
 
       target->onFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
-      // The format should be updated internally.
 
       target->onPropertyChanged(PropertyId::Volume);
-      // Property changes are fired asynchronously to engine UI loop.
     }
 
     SECTION("setBackend with active track resumes playback")
@@ -705,13 +695,13 @@ namespace ao::audio::test
       engine.play(desc);
       REQUIRE(engine.status().transport == Transport::Playing);
 
-      auto newBackend = std::make_unique<CapturingBackend>();
+      auto newBackendPtr = std::make_unique<CapturingBackend>();
       auto const newDevice = Device{.id = DeviceId{"new-device"},
                                     .displayName = "New",
                                     .description = "New",
                                     .isDefault = false,
                                     .backendId = kBackendNone};
-      engine.setBackend(std::move(newBackend), newDevice);
+      engine.setBackend(std::move(newBackendPtr), newDevice);
 
       auto const snap = engine.status();
       REQUIRE(snap.transport == Transport::Playing);
@@ -741,23 +731,23 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backend = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<CapturingBackend>();
 
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto dec = std::make_unique<ScriptedDecoderSession>(
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 1000, .isLossy = false});
 
       // First block succeeds (preroll), second block fails
       // 100,000 bytes at 44.1kHz stereo 16-bit is ~566ms, satisfying the 500ms preroll
-      dec->setReadScript(
+      decPtr->setReadScript(
         {{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false},
          {.data = {}, .endOfStream = false, .result = std::unexpected(Error{.message = "decode failed"})}});
-      return dec;
+      return decPtr;
     };
 
-    auto engine = Engine{std::move(backend), device, factory};
+    auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "fail.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 

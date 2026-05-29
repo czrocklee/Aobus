@@ -40,7 +40,7 @@ namespace ao::gtk
   class MainWindowCoordinator final
   {
   public:
-    MainWindowCoordinator(MainWindow& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfig> config);
+    MainWindowCoordinator(MainWindow& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfig> configPtr);
     ~MainWindowCoordinator();
 
     // Not copyable or movable
@@ -58,33 +58,33 @@ namespace ao::gtk
 
     void rebuildListPages(lmdb::ReadTransaction const& txn);
 
-    TrackRowCache* trackRowCache() { return _trackRowCache.get(); }
-    ImageCache* imageCache() { return _imageCache.get(); }
-    uimodel::playback::PlaybackQueueModel* playbackQueueModel() { return _playbackQueueModel.get(); }
-    TagEditController* tagEditController() { return _tagEditController.get(); }
-    portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinator.get(); }
-    TrackPageHost* trackPageHost() { return _trackPageHost.get(); }
-    ListNavigationController* listSidebarController() { return _listSidebarController.get(); }
-    TrackPresentationStore* trackPresentationStore() { return _trackPresentationStore.get(); }
+    TrackRowCache* trackRowCache() { return _trackRowCachePtr.get(); }
+    ImageCache* imageCache() { return _imageCachePtr.get(); }
+    uimodel::playback::PlaybackQueueModel* playbackQueueModel() { return _playbackQueueModelPtr.get(); }
+    TagEditController* tagEditController() { return _tagEditControllerPtr.get(); }
+    portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinatorPtr.get(); }
+    TrackPageHost* trackPageHost() { return _trackPageHostPtr.get(); }
+    ListNavigationController* listSidebarController() { return _listSidebarControllerPtr.get(); }
+    TrackPresentationStore* trackPresentationStore() { return _trackPresentationStorePtr.get(); }
 
-    portal::ImportExportCoordinator& importExport() { return *_importExportCoordinator; }
+    portal::ImportExportCoordinator& importExport() { return *_importExportCoordinatorPtr; }
 
   private:
     void saveColumnLayout();
 
     MainWindow& _window;
     rt::AppRuntime& _runtime;
-    std::shared_ptr<AppConfig> _config;
-    std::unique_ptr<GtkLayoutConfig> _layoutConfig;
+    std::shared_ptr<AppConfig> _configPtr;
+    std::unique_ptr<GtkLayoutConfig> _layoutConfigPtr;
 
-    std::unique_ptr<TrackRowCache> _trackRowCache;
-    std::unique_ptr<ImageCache> _imageCache;
-    std::unique_ptr<TagEditController> _tagEditController;
-    std::unique_ptr<ListNavigationController> _listSidebarController;
-    std::unique_ptr<TrackPresentationStore> _trackPresentationStore;
-    std::unique_ptr<TrackPageHost> _trackPageHost;
-    std::unique_ptr<uimodel::playback::PlaybackQueueModel> _playbackQueueModel;
-    std::unique_ptr<portal::ImportExportCoordinator> _importExportCoordinator;
+    std::unique_ptr<TrackRowCache> _trackRowCachePtr;
+    std::unique_ptr<ImageCache> _imageCachePtr;
+    std::unique_ptr<TagEditController> _tagEditControllerPtr;
+    std::unique_ptr<ListNavigationController> _listSidebarControllerPtr;
+    std::unique_ptr<TrackPresentationStore> _trackPresentationStorePtr;
+    std::unique_ptr<TrackPageHost> _trackPageHostPtr;
+    std::unique_ptr<uimodel::playback::PlaybackQueueModel> _playbackQueueModelPtr;
+    std::unique_ptr<portal::ImportExportCoordinator> _importExportCoordinatorPtr;
 
     Gtk::Stack _stack;
 

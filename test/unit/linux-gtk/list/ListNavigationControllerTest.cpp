@@ -20,7 +20,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("ListNavigationController - basic interactions", "[gtk][list][controller]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
     auto cache = TrackRowCache{fixture.runtime().musicLibrary()};

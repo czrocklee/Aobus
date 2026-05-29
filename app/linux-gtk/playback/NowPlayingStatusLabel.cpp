@@ -22,14 +22,14 @@ namespace ao::gtk
     _label.add_css_class("ao-clickable");
     _label.set_tooltip_text("Click to show playing list");
 
-    auto const clickGesture = Gtk::GestureClick::create();
-    clickGesture->signal_pressed().connect([this](std::int32_t, double, double)
-                                           { _playbackService.revealPlayingTrack(); });
+    auto const clickGesturePtr = Gtk::GestureClick::create();
+    clickGesturePtr->signal_pressed().connect([this](std::int32_t, double, double)
+                                              { _playbackService.revealPlayingTrack(); });
 
-    _label.add_controller(clickGesture);
+    _label.add_controller(clickGesturePtr);
     _label.set_cursor(Gdk::Cursor::create("pointer"));
 
-    _controller = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
+    _controllerPtr = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
       _playbackService, [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 

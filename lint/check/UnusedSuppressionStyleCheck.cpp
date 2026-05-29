@@ -56,9 +56,9 @@ namespace clang::tidy::readability
 
     // Skip if the sub-expression is already [[maybe_unused]] — the cast is
     // redundant alongside the attribute, but the attribute is the correct fix.
-    if (auto const* declRef = dyn_cast<DeclRefExpr>(subExpr->IgnoreParenImpCasts()))
+    if (auto const* declRef = dyn_cast<DeclRefExpr>(subExpr->IgnoreParenImpCasts()); declRef != nullptr)
     {
-      if (auto const* vd = dyn_cast<VarDecl>(declRef->getDecl()))
+      if (auto const* vd = dyn_cast<VarDecl>(declRef->getDecl()); vd != nullptr)
       {
         if (vd->hasAttr<UnusedAttr>())
         {

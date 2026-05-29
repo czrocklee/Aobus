@@ -15,7 +15,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TrackQuickFilter - smoke test", "[gtk][track][viewmodel]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 

@@ -16,7 +16,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TagEditor - smoke test", "[gtk][tag]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
 

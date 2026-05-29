@@ -7,8 +7,6 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
-
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleactiongroup.h>
 #include <gtkmm/application.h>
@@ -22,7 +20,7 @@
 
 using namespace ao::gtk::layout;
 using namespace ao::lmdb::test;
-using ao::gtk::test::ImmediateExecutor;
+using ao::gtk::test::makeRuntime;
 
 namespace
 {
@@ -54,22 +52,16 @@ namespace
 
 TEST_CASE("GioActionBridge", "[layout][action]")
 {
-  auto const app = Gtk::Application::create("io.github.aobus.layout_test.gio");
+  auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test.gio");
   auto const tempDir = TempDir{};
-  auto const configStore = std::make_shared<ao::rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-  auto runtime = ao::rt::AppRuntime{
-    ao::rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                   .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .workspaceConfigStore = configStore}};
+  auto runtime = makeRuntime(tempDir);
 
   auto window = Gtk::Window{};
   auto widget = Gtk::Box{};
   auto contextProvider = DummyContextProvider{runtime, window, widget};
 
   auto registry = ActionRegistry{};
-  auto actionMap = Gio::SimpleActionGroup::create();
+  auto actionMapPtr = Gio::SimpleActionGroup::create();
 
   SECTION("Exports pure command actions")
   {
@@ -79,13 +71,13 @@ TEST_CASE("GioActionBridge", "[layout][action]")
         .id = "test.action1", .label = "Action 1", .category = "Test", .capabilities = ActionCapability::None},
       [&](ActionActivationContext&) { action1Fired++; });
 
-    GioActionBridge::exportActions(registry, *actionMap, contextProvider);
+    GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
 
-    auto gioAction = actionMap->lookup_action("test.action1");
-    REQUIRE(gioAction != nullptr);
+    auto gioActionPtr = actionMapPtr->lookup_action("test.action1");
+    REQUIRE(gioActionPtr != nullptr);
 
     // Trigger Gio action
-    actionMap->activate_action("test.action1");
+    actionMapPtr->activate_action("test.action1");
     CHECK(action1Fired == 1);
   }
 
@@ -97,10 +89,10 @@ TEST_CASE("GioActionBridge", "[layout][action]")
                                              .capabilities = ActionCapability::RequiresAnchor},
                             [&](ActionActivationContext&) {});
 
-    GioActionBridge::exportActions(registry, *actionMap, contextProvider);
+    GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
 
-    auto gioAction = actionMap->lookup_action("test.action2");
-    CHECK(gioAction == nullptr);
+    auto gioActionPtr = actionMapPtr->lookup_action("test.action2");
+    CHECK(gioActionPtr == nullptr);
   }
 
   SECTION("Does not export menu-presenting actions if no safe anchor")
@@ -110,10 +102,10 @@ TEST_CASE("GioActionBridge", "[layout][action]")
         .id = "test.action3", .label = "Action 3", .category = "Test", .capabilities = ActionCapability::PresentsMenu},
       [&](ActionActivationContext&) {});
 
-    GioActionBridge::exportActions(registry, *actionMap, contextProvider);
+    GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
 
-    auto gioAction = actionMap->lookup_action("test.action3");
-    CHECK(gioAction == nullptr);
+    auto gioActionPtr = actionMapPtr->lookup_action("test.action3");
+    CHECK(gioActionPtr == nullptr);
   }
 
   SECTION("Exports anchored actions if safe anchor is provided")
@@ -126,10 +118,10 @@ TEST_CASE("GioActionBridge", "[layout][action]")
                                              .capabilities = ActionCapability::RequiresAnchor},
                             [&](ActionActivationContext&) {});
 
-    GioActionBridge::exportActions(registry, *actionMap, contextProvider);
+    GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
 
-    auto gioAction = actionMap->lookup_action("test.action_anchored");
-    CHECK(gioAction != nullptr);
+    auto gioActionPtr = actionMapPtr->lookup_action("test.action_anchored");
+    CHECK(gioActionPtr != nullptr);
   }
 
   SECTION("refreshStates updates enabled state of exported actions")
@@ -143,16 +135,16 @@ TEST_CASE("GioActionBridge", "[layout][action]")
       [&](ActionActivationContext&) {},
       [&](ActionActivationContext const&) { return ActionState{.enabled = isEnabled, .disabledReason = ""}; });
 
-    auto session = GioActionBridge::exportActions(registry, *actionMap, contextProvider);
-    REQUIRE(session != nullptr);
+    auto sessionPtr = GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
+    REQUIRE(sessionPtr != nullptr);
 
-    auto gioAction = actionMap->lookup_action("test.action_refresh");
-    REQUIRE(gioAction != nullptr);
-    CHECK(gioAction->property_enabled() == true);
+    auto gioActionPtr = actionMapPtr->lookup_action("test.action_refresh");
+    REQUIRE(gioActionPtr != nullptr);
+    CHECK(gioActionPtr->property_enabled() == true);
 
     // Change state and refresh
     isEnabled = false;
-    session->refreshStates();
-    CHECK(gioAction->property_enabled() == false);
+    sessionPtr->refreshStates();
+    CHECK(gioActionPtr->property_enabled() == false);
   }
 }

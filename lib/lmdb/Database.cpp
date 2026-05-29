@@ -58,7 +58,7 @@ namespace ao::lmdb
       flags |= MDB_INTEGERKEY;
     }
 
-    throwOnError("mdb_dbi_open", ::mdb_dbi_open(txn._handle.get(), name.c_str(), flags, &_dbi));
+    throwOnError("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &_dbi));
   }
 
   Database::Database(ReadTransaction& txn, std::string const& name, KeyKind kind)
@@ -71,12 +71,12 @@ namespace ao::lmdb
       flags |= MDB_INTEGERKEY;
     }
 
-    throwOnError("mdb_dbi_open", ::mdb_dbi_open(txn._handle.get(), name.c_str(), flags, &_dbi));
+    throwOnError("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &_dbi));
   }
 
   Database::Reader Database::reader(ReadTransaction const& txn) const
   {
-    return Reader{_dbi, txn._handle.get(), _kind};
+    return Reader{_dbi, txn._txnPtr.get(), _kind};
   }
 
   Database::Writer Database::writer(WriteTransaction& txn) const
@@ -116,11 +116,11 @@ namespace ao::lmdb
 
   std::uint32_t Database::Reader::maxKey() const
   {
-    auto cursor = create(_txn, _dbi);
+    auto cursorPtr = create(_txn, _dbi);
     auto key = ::MDB_val{0, nullptr};
     auto val = ::MDB_val{0, nullptr};
 
-    int const rc = ::mdb_cursor_get(cursor.get(), &key, &val, MDB_LAST);
+    int const rc = ::mdb_cursor_get(cursorPtr.get(), &key, &val, MDB_LAST);
 
     if (rc == MDB_SUCCESS)
     {
@@ -156,20 +156,20 @@ namespace ao::lmdb
   }
 
   Database::Reader::Iterator::Iterator(::MDB_txn* txn, ::MDB_dbi dbi, bool end)
-    : _cursor{Reader::create(txn, dbi)}
+    : _cursorPtr{Reader::create(txn, dbi)}
   {
     if (end)
     {
-      _cursor.reset();
+      _cursorPtr.reset();
       return;
     }
 
     auto key = ::MDB_val{0, nullptr};
     auto val = ::MDB_val{0, nullptr};
 
-    if (int const rc = ::mdb_cursor_get(_cursor.get(), &key, &val, MDB_FIRST); rc == MDB_NOTFOUND)
+    if (int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, &val, MDB_FIRST); rc == MDB_NOTFOUND)
     {
-      _cursor.reset();
+      _cursorPtr.reset();
     }
     else
     {
@@ -181,26 +181,26 @@ namespace ao::lmdb
 
   Database::Reader::Iterator::reference Database::Reader::Iterator::operator*() const
   {
-    gsl_Expects(_cursor != nullptr);
+    gsl_Expects(_cursorPtr != nullptr);
     return _value;
   }
 
   Database::Reader::Iterator::pointer Database::Reader::Iterator::operator->() const
   {
-    gsl_Expects(_cursor != nullptr);
+    gsl_Expects(_cursorPtr != nullptr);
     return &_value;
   }
 
   Database::Reader::Iterator& Database::Reader::Iterator::operator++()
   {
-    gsl_Expects(_cursor != nullptr);
+    gsl_Expects(_cursorPtr != nullptr);
     next();
     return *this;
   }
 
   bool Database::Reader::Iterator::operator==(Iterator const& other) const
   {
-    return _cursor == other._cursor;
+    return _cursorPtr == other._cursorPtr;
   }
 
   void Database::Reader::Iterator::next()
@@ -208,10 +208,10 @@ namespace ao::lmdb
     auto key = ::MDB_val{0, nullptr};
     auto val = ::MDB_val{0, nullptr};
 
-    if (int const rc = ::mdb_cursor_get(_cursor.get(), &key, &val, MDB_NEXT); rc == MDB_NOTFOUND)
+    if (int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, &val, MDB_NEXT); rc == MDB_NOTFOUND)
     {
       _value = Reader::Value{};
-      _cursor.reset();
+      _cursorPtr.reset();
     }
     else
     {
@@ -222,13 +222,13 @@ namespace ao::lmdb
   }
 
   Database::Writer::Writer(::MDB_dbi dbi, WriteTransaction& txn, Database::KeyKind kind)
-    : _dbi{dbi}, _txn{&txn}, _cursor{Reader::create(txn._handle.get(), _dbi)}, _kind{kind}
+    : _dbi{dbi}, _txn{&txn}, _cursorPtr{Reader::create(txn._txnPtr.get(), _dbi)}, _kind{kind}
   {
     if (_kind == Database::KeyKind::Integer)
     {
       auto key = ::MDB_val{0, nullptr};
 
-      int const rc = ::mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_LAST);
+      int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, nullptr, MDB_LAST);
 
       if (rc == MDB_SUCCESS)
       {
@@ -246,7 +246,7 @@ namespace ao::lmdb
     // When transaction is committed, LMDB automatically closes all cursors - release without closing
     if (_txn->isCommitted())
     {
-      std::ignore = _cursor.release();
+      std::ignore = _cursorPtr.release();
     }
   }
 
@@ -286,7 +286,7 @@ namespace ao::lmdb
 
   void Database::Writer::create(std::span<std::byte const> key, std::span<std::byte const> data)
   {
-    put(_cursor.get(), key, data, MDB_NOOVERWRITE);
+    put(_cursorPtr.get(), key, data, MDB_NOOVERWRITE);
   }
 
   std::span<std::byte> Database::Writer::create(std::uint32_t id, std::size_t size)
@@ -296,7 +296,7 @@ namespace ao::lmdb
 
   std::span<std::byte> Database::Writer::create(std::span<std::byte const> key, std::size_t size)
   {
-    return reserve(_cursor.get(), key, size, MDB_NOOVERWRITE);
+    return reserve(_cursorPtr.get(), key, size, MDB_NOOVERWRITE);
   }
 
   std::uint32_t Database::Writer::append(std::span<std::byte const> data)
@@ -320,7 +320,7 @@ namespace ao::lmdb
 
   void Database::Writer::update(std::span<std::byte const> key, std::span<std::byte const> data)
   {
-    put(_cursor.get(), key, data, 0);
+    put(_cursorPtr.get(), key, data, 0);
   }
 
   std::span<std::byte> Database::Writer::update(std::uint32_t id, std::size_t size)
@@ -330,7 +330,7 @@ namespace ao::lmdb
 
   std::span<std::byte> Database::Writer::update(std::span<std::byte const> key, std::size_t size)
   {
-    return reserve(_cursor.get(), key, size, 0);
+    return reserve(_cursorPtr.get(), key, size, 0);
   }
 
   bool Database::Writer::del(std::uint32_t id)
@@ -341,7 +341,7 @@ namespace ao::lmdb
   bool Database::Writer::del(std::span<std::byte const> keyView)
   {
     auto key = makeVal(keyView.data(), keyView.size());
-    int const rc = ::mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_SET);
+    int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, nullptr, MDB_SET);
 
     if (rc == MDB_NOTFOUND)
     {
@@ -349,7 +349,7 @@ namespace ao::lmdb
     }
 
     throwOnError("mdb_cursor_get", rc);
-    throwOnError("mdb_cursor_del", ::mdb_cursor_del(_cursor.get(), 0));
+    throwOnError("mdb_cursor_del", ::mdb_cursor_del(_cursorPtr.get(), 0));
     return true;
   }
 
@@ -362,7 +362,7 @@ namespace ao::lmdb
   {
     auto key = makeVal(keyView.data(), keyView.size());
     auto val = ::MDB_val{0, nullptr};
-    int const rc = ::mdb_cursor_get(_cursor.get(), &key, &val, MDB_SET);
+    int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, &val, MDB_SET);
 
     if (rc == MDB_NOTFOUND)
     {
@@ -375,6 +375,6 @@ namespace ao::lmdb
 
   void Database::Writer::clear()
   {
-    throwOnError("mdb_drop", ::mdb_drop(_txn->_handle.get(), _dbi, 0));
+    throwOnError("mdb_drop", ::mdb_drop(_txn->_txnPtr.get(), _dbi, 0));
   }
 } // namespace ao::lmdb

@@ -165,11 +165,11 @@ namespace
 
                                         for (auto& item : list | std::views::reverse | std::views::drop(1))
                                         {
-                                          auto bin = std::make_unique<BinaryExpression>();
-                                          bin->operand = std::move(item);
-                                          bin->optOperation = BinaryExpression::Operation{
+                                          auto binPtr = std::make_unique<BinaryExpression>();
+                                          binPtr->operand = std::move(item);
+                                          binPtr->optOperation = BinaryExpression::Operation{
                                             .op = Operator::Add, .operand = std::move(result)};
-                                          result = Expression{std::move(bin)};
+                                          result = Expression{std::move(binPtr)};
                                         }
 
                                         return result;
@@ -217,22 +217,22 @@ namespace
 
     using operation = MathOr;
 
-    static constexpr auto value =
-      lexy::callback<Expression>([](Expression lhs) { return lhs; },
-                                 [](Operator op, Expression expr)
-                                 {
-                                   auto un = std::make_unique<UnaryExpression>();
-                                   un->op = op;
-                                   un->operand = std::move(expr);
-                                   return Expression{std::move(un)};
-                                 },
-                                 [](Expression lhs, Operator op, Expression rhs)
-                                 {
-                                   auto bin = std::make_unique<BinaryExpression>();
-                                   bin->operand = std::move(lhs);
-                                   bin->optOperation = BinaryExpression::Operation{.op = op, .operand = std::move(rhs)};
-                                   return Expression{std::move(bin)};
-                                 });
+    static constexpr auto value = lexy::callback<Expression>([](Expression lhs) { return lhs; },
+                                                             [](Operator op, Expression expr)
+                                                             {
+                                                               auto unPtr = std::make_unique<UnaryExpression>();
+                                                               unPtr->op = op;
+                                                               unPtr->operand = std::move(expr);
+                                                               return Expression{std::move(unPtr)};
+                                                             },
+                                                             [](Expression lhs, Operator op, Expression rhs)
+                                                             {
+                                                               auto binPtr = std::make_unique<BinaryExpression>();
+                                                               binPtr->operand = std::move(lhs);
+                                                               binPtr->optOperation = BinaryExpression::Operation{
+                                                                 .op = op, .operand = std::move(rhs)};
+                                                               return Expression{std::move(binPtr)};
+                                                             });
   };
 
   struct Stmt final

@@ -34,6 +34,6 @@ namespace ao::audio::backend
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio::backend

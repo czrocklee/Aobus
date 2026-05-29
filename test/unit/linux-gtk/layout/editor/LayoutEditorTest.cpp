@@ -2,16 +2,15 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "../../GtkTestSupport.h"
-#include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
+#include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
-#include <ao/rt/yaml/Utils.h> // NOLINT(misc-include-cleaner)
+
+#include <ao/uimodel/layout/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -32,7 +31,7 @@
 
 namespace ao::gtk::layout::editor::test
 {
-  using ao::gtk::test::ImmediateExecutor;
+  using ao::gtk::test::makeRuntime;
 
   namespace
   {
@@ -239,7 +238,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   TEST_CASE("LayoutEditorDialog", "[layout][unit][editor]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_editor_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_test");
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -250,20 +249,20 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("Dialog constructs without crash")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
-      REQUIRE(dialog != nullptr);
-      dialog->close();
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
+      REQUIRE(dialogPtr != nullptr);
+      dialogPtr->close();
     }
 
     SECTION("document returns the initial document on construction")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
-      auto const& returned = dialog->document();
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
+      auto const& returned = dialogPtr->document();
 
       CHECK(returned.root.type == doc.root.type);
       CHECK(returned.root.id == doc.root.id);
 
-      dialog->close();
+      dialogPtr->close();
     }
 
     SECTION("reset default restores to createDefaultLayout shape")
@@ -272,13 +271,13 @@ namespace ao::gtk::layout::editor::test
       auto modified = LayoutDocument{};
       modified.root.type = "spacer";
 
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, modified, "classic");
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, modified, "classic");
 
       // The dialog copies the document, so modifications to the dialog's copy
       // are reflected. Just verify the initial copy is correct.
-      CHECK(dialog->document().root.type == "spacer");
+      CHECK(dialogPtr->document().root.type == "spacer");
 
-      dialog->close();
+      dialogPtr->close();
     }
 
     SECTION("Validation prevents saving unknown actions")
@@ -287,34 +286,34 @@ namespace ao::gtk::layout::editor::test
       invalidDoc.root.type = "app.actionButton";
       invalidDoc.root.props["primaryAction"] = LayoutValue{"this.does.not.exist"};
 
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, invalidDoc, "classic");
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, invalidDoc, "classic");
 
       // Attempting to save an invalid document should fail validation and keep dialog open
-      dialog->response(Gtk::ResponseType::OK);
+      dialogPtr->response(Gtk::ResponseType::OK);
       // We can't check visible here since we didn't show(), but we verify it's still alive/active
-      CHECK(dialog != nullptr);
-      dialog->close();
+      CHECK(dialogPtr != nullptr);
+      dialogPtr->close();
 
       auto validDoc = LayoutDocument{};
       validDoc.root.type = "app.actionButton";
       validDoc.root.props["primaryAction"] = LayoutValue{"none"};
 
-      auto dialogValid = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, validDoc, "classic");
+      auto dialogValidPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, validDoc, "classic");
 
       // Attempting to save a valid document should succeed and close the dialog
-      dialogValid->response(Gtk::ResponseType::OK);
+      dialogValidPtr->response(Gtk::ResponseType::OK);
     }
 
     SECTION("signalApplyPreview is emitted on document changes")
     {
-      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
       std::int32_t count = 0;
 
-      dialog->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
+      dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
 
       CHECK(count == 0);
 
-      dialog->close();
+      dialogPtr->close();
     }
   }
 
@@ -398,15 +397,9 @@ namespace ao::gtk::layout::editor::test
       LayoutRuntime::registerStandardComponents(registry);
 
       auto const tempDir = TempDir{};
-      auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
+      auto runtime = makeRuntime(tempDir);
 
-      auto runtime = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                   .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .workspaceConfigStore = configStore}};
-
-      auto const app = Gtk::Application::create("io.github.aobus.template_test");
+      auto const appPtr = Gtk::Application::create("io.github.aobus.template_test");
       auto window = Gtk::Window{};
       auto const actionRegistry = ActionRegistry{};
       auto ctx = LayoutContext{
@@ -419,11 +412,11 @@ namespace ao::gtk::layout::editor::test
       doc.root.props["templateId"] = LayoutValue{std::string{"playback.compactControls"}};
 
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const comp = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
       REQUIRE(box != nullptr);
     }
 
@@ -433,15 +426,9 @@ namespace ao::gtk::layout::editor::test
       LayoutRuntime::registerStandardComponents(registry);
 
       auto const tempDir = TempDir{};
-      auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
+      auto runtime = makeRuntime(tempDir);
 
-      auto runtime = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                   .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .workspaceConfigStore = configStore}};
-
-      auto const app = Gtk::Application::create("io.github.aobus.recursive_test");
+      auto const appPtr = Gtk::Application::create("io.github.aobus.recursive_test");
       auto window = Gtk::Window{};
       auto const actionRegistry = ActionRegistry{};
       auto ctx = LayoutContext{
@@ -455,10 +442,10 @@ namespace ao::gtk::layout::editor::test
       doc.root.props["templateId"] = LayoutValue{std::string{"selfRef"}};
 
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const comp = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(comp != nullptr);
-      CHECK(dynamic_cast<Gtk::Widget*>(&comp->widget()) != nullptr);
+      REQUIRE(compPtr != nullptr);
+      CHECK(dynamic_cast<Gtk::Widget*>(&compPtr->widget()) != nullptr);
     }
 
     SECTION("template YAML round-trip")
@@ -483,16 +470,10 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   TEST_CASE("absoluteCanvas component", "[layout][unit][editor]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.canvas_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -518,9 +499,9 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "absoluteCanvas";
 
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const comp = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
     }
 
     SECTION("absoluteCanvas with positioned child")
@@ -539,9 +520,9 @@ namespace ao::gtk::layout::editor::test
       doc.root.children.push_back(std::move(child));
 
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const comp = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
     }
   }
 } // namespace ao::gtk::layout::editor::test

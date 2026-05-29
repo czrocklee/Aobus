@@ -82,8 +82,8 @@ namespace ao::rt::test
 
     fakeit::When(Method(mockProvider, status)).AlwaysReturn(status);
 
-    auto spyBackend = std::make_shared<audio::test::SpyBackend<>>();
-    fakeit::When(Method(spyBackend->mock(), property))
+    auto spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
+    fakeit::When(Method(spyBackendPtr->mock(), property))
       .AlwaysDo(
         [](audio::PropertyId id) -> Result<audio::PropertyValue>
         {
@@ -99,12 +99,12 @@ namespace ao::rt::test
 
           return 0.0F;
         });
-    fakeit::When(Method(spyBackend->mock(), queryProperty)).AlwaysReturn(audio::PropertyInfo{});
-    fakeit::When(Method(spyBackend->mock(), backendId)).AlwaysReturn(audio::BackendId{"mock_backend"});
-    fakeit::When(Method(spyBackend->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
+    fakeit::When(Method(spyBackendPtr->mock(), queryProperty)).AlwaysReturn(audio::PropertyInfo{});
+    fakeit::When(Method(spyBackendPtr->mock(), backendId)).AlwaysReturn(audio::BackendId{"mock_backend"});
+    fakeit::When(Method(spyBackendPtr->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
 
     audio::IRenderTarget* renderTarget = nullptr;
-    fakeit::When(Method(spyBackend->mock(), open))
+    fakeit::When(Method(spyBackendPtr->mock(), open))
       .AlwaysDo(
         [&](audio::Format const& /*format*/, audio::IRenderTarget* target) -> Result<>
         {
@@ -114,7 +114,7 @@ namespace ao::rt::test
 
     // We must return a unique_ptr to IBackend from createBackend
     fakeit::When(Method(mockProvider, createBackend))
-      .AlwaysDo([&](audio::Device const&, audio::ProfileId const&) { return spyBackend->makeProxy(); });
+      .AlwaysDo([&](audio::Device const&, audio::ProfileId const&) { return spyBackendPtr->makeProxy(); });
 
     playbackService.addProvider(std::make_unique<audio::test::MockProviderProxy>(mockProvider.get()));
 
@@ -363,8 +363,8 @@ namespace ao::rt::test
 
       fakeit::When(Method(freshMockProvider, status)).AlwaysReturn(status);
 
-      auto freshSpyBackend = std::make_shared<audio::test::SpyBackend<>>();
-      fakeit::When(Method(freshSpyBackend->mock(), property))
+      auto freshSpyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
+      fakeit::When(Method(freshSpyBackendPtr->mock(), property))
         .AlwaysDo(
           [](audio::PropertyId id) -> Result<audio::PropertyValue>
           {
@@ -380,13 +380,13 @@ namespace ao::rt::test
 
             return 0.0F;
           });
-      fakeit::When(Method(freshSpyBackend->mock(), queryProperty)).AlwaysReturn(audio::PropertyInfo{});
-      fakeit::When(Method(freshSpyBackend->mock(), backendId)).AlwaysReturn(audio::BackendId{"mock_backend"});
-      fakeit::When(Method(freshSpyBackend->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
-      fakeit::When(Method(freshSpyBackend->mock(), open))
+      fakeit::When(Method(freshSpyBackendPtr->mock(), queryProperty)).AlwaysReturn(audio::PropertyInfo{});
+      fakeit::When(Method(freshSpyBackendPtr->mock(), backendId)).AlwaysReturn(audio::BackendId{"mock_backend"});
+      fakeit::When(Method(freshSpyBackendPtr->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
+      fakeit::When(Method(freshSpyBackendPtr->mock(), open))
         .AlwaysDo([](audio::Format const&, audio::IRenderTarget*) -> Result<> { return {}; });
       fakeit::When(Method(freshMockProvider, createBackend))
-        .AlwaysDo([&](audio::Device const&, audio::ProfileId const&) { return freshSpyBackend->makeProxy(); });
+        .AlwaysDo([&](audio::Device const&, audio::ProfileId const&) { return freshSpyBackendPtr->makeProxy(); });
 
       freshService.addProvider(std::make_unique<audio::test::MockProviderProxy>(freshMockProvider.get()));
 

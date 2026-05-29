@@ -90,7 +90,7 @@ namespace ao::gtk::portal::test
 
   TEST_CASE("PlaylistExporter exports m3u playlists reactively", "[portal][unit][exporter]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.playlist_exporter_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.playlist_exporter_test");
     auto testLibrary = TestMusicLibrary{};
 
     auto const id1 = testLibrary.addTrack("Track 1", "/music/track1.flac");

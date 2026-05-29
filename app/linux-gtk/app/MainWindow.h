@@ -27,7 +27,7 @@ namespace ao::gtk
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    explicit MainWindow(rt::AppRuntime& runtime, std::shared_ptr<AppConfig> config);
+    explicit MainWindow(rt::AppRuntime& runtime, std::shared_ptr<AppConfig> configPtr);
     ~MainWindow() override;
 
     MainWindow(MainWindow const&) = delete;
@@ -44,10 +44,10 @@ namespace ao::gtk
 
   private:
     rt::AppRuntime& _runtime;
-    std::shared_ptr<AppConfig> _config;
+    std::shared_ptr<AppConfig> _configPtr;
 
-    std::unique_ptr<MainWindowCoordinator> _mainWindowCoordinator;
+    std::unique_ptr<MainWindowCoordinator> _mainWindowCoordinatorPtr;
     ShellLayoutController _shellLayout;
-    std::unique_ptr<MenuController> _menuController;
+    std::unique_ptr<MenuController> _menuControllerPtr;
   };
 } // namespace ao::gtk

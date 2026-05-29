@@ -181,9 +181,9 @@ namespace ao::gtk::layout
           _button.signal_clicked().connect(
             [this, primaryActionCb]
             {
-              if (_longPressHandled)
+              if (_longPressPtrHandled)
               {
-                _longPressHandled = false;
+                _longPressPtrHandled = false;
                 return;
               }
 
@@ -196,14 +196,14 @@ namespace ao::gtk::layout
 
         if (primaryLongPressCb)
         {
-          _longPress = Gtk::GestureLongPress::create();
-          _longPress->signal_pressed().connect(
+          _longPressPtr = Gtk::GestureLongPress::create();
+          _longPressPtr->signal_pressed().connect(
             [this, primaryLongPressCb](double /*x*/, double /*y*/)
             {
-              _longPressHandled = true;
+              _longPressPtrHandled = true;
               primaryLongPressCb();
             });
-          _button.add_controller(_longPress);
+          _button.add_controller(_longPressPtr);
         }
       }
 
@@ -211,8 +211,8 @@ namespace ao::gtk::layout
 
     private:
       Gtk::Button _button;
-      Glib::RefPtr<Gtk::GestureLongPress> _longPress;
-      bool _longPressHandled = false;
+      Glib::RefPtr<Gtk::GestureLongPress> _longPressPtr;
+      bool _longPressPtrHandled = false;
     };
 
     /**
@@ -252,18 +252,18 @@ namespace ao::gtk::layout
           return;
         }
 
-        _widget = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
-        _widget->bindToDetailProjection(ctx.runtime.views().detailProjection(
+        _widgetPtr = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
+        _widgetPtr->bindToDetailProjection(ctx.runtime.views().detailProjection(
           rt::FocusedViewTarget{}, ctx.runtime.workspace(), ctx.runtime.mutation()));
       }
 
       Gtk::Widget& widget() override
       {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widget);
+        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widgetPtr);
       }
 
     private:
-      std::unique_ptr<ImageWidget> _widget;
+      std::unique_ptr<ImageWidget> _widgetPtr;
       Gtk::Label* _error = nullptr;
     };
 
@@ -281,14 +281,14 @@ namespace ao::gtk::layout
           return;
         }
 
-        _widget = std::make_unique<TrackInspectorPanel>(
+        _widgetPtr = std::make_unique<TrackInspectorPanel>(
           ctx.runtime.musicLibrary(), ctx.runtime.mutation(), ctx.runtime.sources(), *ctx.inspector.imageCache);
-        _widget->bindToDetailProjection(ctx.runtime.views().detailProjection(
+        _widgetPtr->bindToDetailProjection(ctx.runtime.views().detailProjection(
           rt::FocusedViewTarget{}, ctx.runtime.workspace(), ctx.runtime.mutation()));
 
         if (ctx.tag.editController != nullptr)
         {
-          _widget->signalTagEditRequested().connect(
+          _widgetPtr->signalTagEditRequested().connect(
             [ctx](std::vector<TrackId> const& ids, Gtk::Widget* relativeTo)
             {
               if (relativeTo != nullptr)
@@ -305,11 +305,11 @@ namespace ao::gtk::layout
 
       Gtk::Widget& widget() override
       {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widget);
+        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widgetPtr);
       }
 
     private:
-      std::unique_ptr<TrackInspectorPanel> _widget;
+      std::unique_ptr<TrackInspectorPanel> _widgetPtr;
       Gtk::Label* _error = nullptr;
     };
 
@@ -321,9 +321,9 @@ namespace ao::gtk::layout
     public:
       MenuBarComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.shell.menuModel != nullptr)
+        if (ctx.shell.menuModelPtr != nullptr)
         {
-          _menuBar.set_menu_model(ctx.shell.menuModel);
+          _menuBar.set_menu_model(ctx.shell.menuModelPtr);
         }
       }
 
@@ -367,10 +367,10 @@ namespace ao::gtk::layout
 
         // Inspector side panel.
         // Matching original MainWindow setupLayout order and properties.
-        _inspector = std::make_unique<InspectorSidebarComponent>(ctx, node);
-        _inspector->widget().set_vexpand(true);
+        _inspectorPtr = std::make_unique<InspectorSidebarComponent>(ctx, node);
+        _inspectorPtr->widget().set_vexpand(true);
         _revealer.set_transition_type(Gtk::RevealerTransitionType::SLIDE_LEFT);
-        _revealer.set_child(_inspector->widget());
+        _revealer.set_child(_inspectorPtr->widget());
         _revealer.set_reveal_child(false);
         _revealer.set_hexpand(false);
         _revealer.set_vexpand(true);
@@ -391,7 +391,7 @@ namespace ao::gtk::layout
       Gtk::Box _container;
       Gtk::ToggleButton _handle;
       Gtk::Revealer _revealer;
-      std::unique_ptr<ILayoutComponent> _inspector;
+      std::unique_ptr<ILayoutComponent> _inspectorPtr;
     };
   } // namespace
 

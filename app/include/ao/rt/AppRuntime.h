@@ -29,10 +29,10 @@ namespace ao::rt
 
   struct AppRuntimeDependencies
   {
-    std::unique_ptr<IControlExecutor> executor{};
+    std::unique_ptr<IControlExecutor> executorPtr{};
     std::filesystem::path musicRoot{};
     std::filesystem::path databasePath{};
-    std::shared_ptr<ConfigStore> workspaceConfigStore{};
+    std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
   };
 
   class AppRuntime final : public CoreRuntime
@@ -56,10 +56,10 @@ namespace ao::rt
 
     TrackId playSelectionInFocusedView();
 
-    void addAudioProvider(std::unique_ptr<audio::IBackendProvider> provider);
+    void addAudioProvider(std::unique_ptr<audio::IBackendProvider> providerPtr);
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

@@ -68,14 +68,14 @@ namespace ao::audio::backend
     struct LinkBinding final
     {
       std::uint32_t id = PW_ID_ANY;
-      detail::PwProxyPtr<::pw_link> proxy;
+      detail::PwProxyPtr<::pw_link> proxyPtr;
       detail::SpaHookGuard listener;
 
       void reset()
       {
         id = PW_ID_ANY;
         listener.reset();
-        proxy.reset();
+        proxyPtr.reset();
       }
     };
 
@@ -84,7 +84,7 @@ namespace ao::audio::backend
       std::uint32_t id = PW_ID_ANY;
       Impl* impl = nullptr;
       NodeBindingRole role = NodeBindingRole::Sink;
-      detail::PwProxyPtr<::pw_node> proxy;
+      detail::PwProxyPtr<::pw_node> proxyPtr;
       detail::SpaHookGuard listener;
 
       void reset()
@@ -93,7 +93,7 @@ namespace ao::audio::backend
         impl = nullptr;
         role = NodeBindingRole::Sink;
         listener.reset();
-        proxy.reset();
+        proxyPtr.reset();
       }
     };
 
@@ -113,29 +113,29 @@ namespace ao::audio::backend
     Impl()
     {
       detail::ensurePipeWireInit();
-      threadLoop.reset(::pw_thread_loop_new("PipeWireMonitor", nullptr));
+      threadLoopPtr.reset(::pw_thread_loop_new("PipeWireMonitor", nullptr));
 
-      if (!threadLoop)
+      if (!threadLoopPtr)
       {
         return;
       }
 
-      context.reset(::pw_context_new(::pw_thread_loop_get_loop(threadLoop.get()), nullptr, 0));
+      contextPtr.reset(::pw_context_new(::pw_thread_loop_get_loop(threadLoopPtr.get()), nullptr, 0));
 
-      if (!context)
+      if (!contextPtr)
       {
         return;
       }
 
-      if (::pw_thread_loop_start(threadLoop.get()) < 0)
+      if (::pw_thread_loop_start(threadLoopPtr.get()) < 0)
       {
         AUDIO_LOG_ERROR("Failed to start PipeWire thread loop");
         return;
       }
 
       {
-        auto guard = PwThreadLoopGuard{threadLoop.get()};
-        core.reset(::pw_context_connect(context.get(), nullptr, 0));
+        auto guard = PwThreadLoopGuard{threadLoopPtr.get()};
+        corePtr.reset(::pw_context_connect(contextPtr.get(), nullptr, 0));
       }
     }
 
@@ -148,28 +148,28 @@ namespace ao::audio::backend
         graphSubscriptions.clear();
       }
 
-      if (threadLoop)
+      if (threadLoopPtr)
       {
-        ::pw_thread_loop_stop(threadLoop.get());
+        ::pw_thread_loop_stop(threadLoopPtr.get());
       }
 
       {
-        auto guard = PwThreadLoopGuard{threadLoop.get()};
-        refreshEvent.reset();
+        auto guard = PwThreadLoopGuard{threadLoopPtr.get()};
+        refreshEventPtr.reset();
         linkBindings.clear();
         streamNodeBindings.clear();
         sinkNodeBindings.clear();
         registryListener.reset();
-        registry.reset();
+        registryPtr.reset();
         coreListener.reset();
         nodeFormatMap.clear();
         sinkCapabilitiesMap.clear();
         sinkPropsMap.clear();
-        core.reset();
-        context.reset();
+        corePtr.reset();
+        contextPtr.reset();
       }
 
-      threadLoop.reset();
+      threadLoopPtr.reset();
     }
 
     Impl(Impl const&) = delete;
@@ -177,12 +177,12 @@ namespace ao::audio::backend
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    detail::PwThreadLoopPtr threadLoop;
-    detail::PwContextPtr context;
-    detail::PwCorePtr core;
+    detail::PwThreadLoopPtr threadLoopPtr;
+    detail::PwContextPtr contextPtr;
+    detail::PwCorePtr corePtr;
 
     mutable std::mutex mutex;
-    detail::PwRegistryPtr registry;
+    detail::PwRegistryPtr registryPtr;
     detail::SpaHookGuard registryListener;
     detail::SpaHookGuard coreListener;
     std::int32_t coreSyncSeq = -1;
@@ -194,7 +194,7 @@ namespace ao::audio::backend
     std::unordered_map<std::uint32_t, Format> nodeFormatMap;
     std::unordered_map<std::uint32_t, DeviceCapabilities> sinkCapabilitiesMap;
     std::unordered_map<std::uint32_t, SinkProps> sinkPropsMap;
-    detail::SpaSourcePtr refreshEvent;
+    detail::SpaSourcePtr refreshEventPtr;
 
     std::atomic<bool> stopping{false};
     std::uint64_t nextSubscriptionId = 1;
@@ -203,9 +203,9 @@ namespace ao::audio::backend
 
     void triggerRefresh()
     {
-      if (refreshEvent)
+      if (refreshEventPtr)
       {
-        ::pw_loop_signal_event(::pw_thread_loop_get_loop(threadLoop.get()), refreshEvent.get());
+        ::pw_loop_signal_event(::pw_thread_loop_get_loop(threadLoopPtr.get()), refreshEventPtr.get());
       }
       else
       {
@@ -302,14 +302,15 @@ namespace ao::audio::backend
         }
         else if (isLink)
         {
-          auto* const proxy = ::pw_registry_bind(impl->registry.get(), id, PW_TYPE_INTERFACE_Link, PW_VERSION_LINK, 0);
+          auto* const proxy =
+            ::pw_registry_bind(impl->registryPtr.get(), id, PW_TYPE_INTERFACE_Link, PW_VERSION_LINK, 0);
 
           if (proxy != nullptr)
           {
             auto& binding = impl->linkBindings[id];
             binding.id = id;
-            binding.proxy.reset(static_cast<::pw_link*>(proxy));
-            ::pw_link_add_listener(binding.proxy.get(), binding.listener.get(), &linkEvents, impl);
+            binding.proxyPtr.reset(static_cast<::pw_link*>(proxy));
+            ::pw_link_add_listener(binding.proxyPtr.get(), binding.listener.get(), &linkEvents, impl);
           }
         }
       }
@@ -480,7 +481,7 @@ namespace ao::audio::backend
   // --- PipeWireMonitor Implementation ---
 
   PipeWireMonitor::PipeWireMonitor()
-    : _impl{std::make_unique<Impl>()}
+    : _implPtr{std::make_unique<Impl>()}
   {
   }
 
@@ -488,14 +489,14 @@ namespace ao::audio::backend
 
   void PipeWireMonitor::start()
   {
-    if (!_impl->threadLoop)
+    if (!_implPtr->threadLoopPtr)
     {
       return;
     }
 
-    _impl->refreshEvent.get_deleter().loop = _impl->threadLoop.get();
-    auto* const event =
-      ::pw_loop_add_event(::pw_thread_loop_get_loop(_impl->threadLoop.get()), &Impl::onRefreshEvent, _impl.get());
+    _implPtr->refreshEventPtr.get_deleter().loop = _implPtr->threadLoopPtr.get();
+    auto* const event = ::pw_loop_add_event(
+      ::pw_thread_loop_get_loop(_implPtr->threadLoopPtr.get()), &Impl::onRefreshEvent, _implPtr.get());
 
     if (event == nullptr)
     {
@@ -503,62 +504,63 @@ namespace ao::audio::backend
       return;
     }
 
-    _impl->refreshEvent.reset(event);
+    _implPtr->refreshEventPtr.reset(event);
 
     {
-      auto guard = PwThreadLoopGuard{_impl->threadLoop.get()};
+      auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
 
-      if (_impl->core)
+      if (_implPtr->corePtr)
       {
-        auto* const registry = ::pw_core_get_registry(_impl->core.get(), PW_VERSION_REGISTRY, 0);
-        _impl->registry.reset(static_cast<::pw_registry*>(registry));
+        auto* const registry = ::pw_core_get_registry(_implPtr->corePtr.get(), PW_VERSION_REGISTRY, 0);
+        _implPtr->registryPtr.reset(static_cast<::pw_registry*>(registry));
 
-        if (_impl->registry)
+        if (_implPtr->registryPtr)
         {
           ::pw_registry_add_listener(
-            _impl->registry.get(), _impl->registryListener.get(), &Impl::registryEvents, _impl.get());
-          ::pw_core_add_listener(_impl->core.get(), _impl->coreListener.get(), &Impl::coreEvents, _impl.get());
-          _impl->coreSyncSeq = ::pw_core_sync(_impl->core.get(), PW_ID_CORE, 0);
+            _implPtr->registryPtr.get(), _implPtr->registryListener.get(), &Impl::registryEvents, _implPtr.get());
+          ::pw_core_add_listener(
+            _implPtr->corePtr.get(), _implPtr->coreListener.get(), &Impl::coreEvents, _implPtr.get());
+          _implPtr->coreSyncSeq = ::pw_core_sync(_implPtr->corePtr.get(), PW_ID_CORE, 0);
         }
       }
     }
 
-    _impl->triggerRefresh();
+    _implPtr->triggerRefresh();
   }
 
   void PipeWireMonitor::stop()
   {
-    auto guard = PwThreadLoopGuard{_impl->threadLoop.get()};
-    auto const lock = std::scoped_lock{_impl->mutex};
-    _impl->refreshEvent.reset();
-    _impl->linkBindings.clear();
-    _impl->streamNodeBindings.clear();
-    _impl->sinkNodeBindings.clear();
-    _impl->registryListener.reset();
-    _impl->registry.reset();
-    _impl->coreListener.reset();
-    _impl->nodes.clear();
-    _impl->links.clear();
-    _impl->nodeFormatMap.clear();
-    _impl->sinkCapabilitiesMap.clear();
-    _impl->sinkPropsMap.clear();
+    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+    auto const lock = std::scoped_lock{_implPtr->mutex};
+    _implPtr->refreshEventPtr.reset();
+    _implPtr->linkBindings.clear();
+    _implPtr->streamNodeBindings.clear();
+    _implPtr->sinkNodeBindings.clear();
+    _implPtr->registryListener.reset();
+    _implPtr->registryPtr.reset();
+    _implPtr->coreListener.reset();
+    _implPtr->nodes.clear();
+    _implPtr->links.clear();
+    _implPtr->nodeFormatMap.clear();
+    _implPtr->sinkCapabilitiesMap.clear();
+    _implPtr->sinkPropsMap.clear();
   }
 
   Subscription PipeWireMonitor::subscribeDevices(DeviceCallback callback)
   {
-    return _impl->subscribeDevices(std::move(callback));
+    return _implPtr->subscribeDevices(std::move(callback));
   }
 
   std::vector<Device> PipeWireMonitor::enumerateSinks() const
   {
-    return _impl->enumerateSinks();
+    return _implPtr->enumerateSinks();
   }
 
   std::optional<std::uint32_t> PipeWireMonitor::findSinkIdByName(std::string_view name) const
   {
-    auto const lock = std::scoped_lock{_impl->mutex};
+    auto const lock = std::scoped_lock{_implPtr->mutex};
 
-    for (auto const& [id, node] : _impl->nodes)
+    for (auto const& [id, node] : _implPtr->nodes)
     {
       if (isSinkMediaClass(node.mediaClass) && node.nodeName == name)
       {
@@ -572,12 +574,12 @@ namespace ao::audio::backend
   Subscription PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
                                                std::function<void(flow::Graph const&)> callback)
   {
-    return _impl->subscribeGraph(routeAnchor, std::move(callback));
+    return _implPtr->subscribeGraph(routeAnchor, std::move(callback));
   }
 
   void PipeWireMonitor::refresh()
   {
-    _impl->refresh();
+    _implPtr->refresh();
   }
 
   // --- Impl Implementations ---
@@ -683,7 +685,7 @@ namespace ao::audio::backend
 
   void PipeWireMonitor::Impl::refresh()
   {
-    auto guard = PwThreadLoopGuard{threadLoop.get()};
+    auto guard = PwThreadLoopGuard{threadLoopPtr.get()};
 
     // Phase 1: sync bindings under mutex
     {
@@ -775,12 +777,12 @@ namespace ao::audio::backend
 
       auto const it = nodes.find(streamId);
 
-      if (!registry || it == nodes.end())
+      if (!registryPtr || it == nodes.end())
       {
         continue;
       }
 
-      auto* node = ::pw_registry_bind(registry.get(),
+      auto* node = ::pw_registry_bind(registryPtr.get(),
                                       streamId,
                                       PW_TYPE_INTERFACE_Node,
                                       std::min(it->second.version, static_cast<std::uint32_t>(PW_VERSION_NODE)),
@@ -791,19 +793,20 @@ namespace ao::audio::backend
         continue;
       }
 
-      auto binding = std::make_unique<NodeBinding>();
-      binding->id = streamId;
-      binding->impl = this;
-      binding->role = NodeBindingRole::Stream;
-      binding->proxy.reset(static_cast<::pw_node*>(node));
+      auto bindingPtr = std::make_unique<NodeBinding>();
+      bindingPtr->id = streamId;
+      bindingPtr->impl = this;
+      bindingPtr->role = NodeBindingRole::Stream;
+      bindingPtr->proxyPtr.reset(static_cast<::pw_node*>(node));
       auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_Props});
       ::pw_node_subscribe_params(
-        binding->proxy.get(), utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
-      ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
-      ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
-      auto* bindingPtr = binding.get();
-      ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &streamNodeEvents, bindingPtr);
-      streamNodeBindings[streamId] = std::move(binding);
+        bindingPtr->proxyPtr.get(), utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
+      ::pw_node_enum_params(bindingPtr->proxyPtr.get(), 1, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
+      ::pw_node_enum_params(bindingPtr->proxyPtr.get(), 2, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
+      auto* rawBindingPtr = bindingPtr.get();
+      ::pw_node_add_listener(
+        rawBindingPtr->proxyPtr.get(), rawBindingPtr->listener.get(), &streamNodeEvents, rawBindingPtr);
+      streamNodeBindings[streamId] = std::move(bindingPtr);
     }
   }
 
@@ -814,30 +817,31 @@ namespace ao::audio::backend
       if (isSinkMediaClass(node.mediaClass) && !sinkNodeBindings.contains(id))
       {
         auto* proxy = ::pw_registry_bind(
-          registry.get(), id, PW_TYPE_INTERFACE_Node, std::min(node.version, (std::uint32_t)PW_VERSION_NODE), 0);
+          registryPtr.get(), id, PW_TYPE_INTERFACE_Node, std::min(node.version, (std::uint32_t)PW_VERSION_NODE), 0);
 
         if (proxy != nullptr)
         {
-          auto binding = std::make_unique<NodeBinding>();
-          binding->id = id;
-          binding->impl = this;
-          binding->role = NodeBindingRole::Sink;
-          binding->proxy.reset(static_cast<::pw_node*>(proxy));
+          auto bindingPtr = std::make_unique<NodeBinding>();
+          bindingPtr->id = id;
+          bindingPtr->impl = this;
+          bindingPtr->role = NodeBindingRole::Sink;
+          bindingPtr->proxyPtr.reset(static_cast<::pw_node*>(proxy));
 
           auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props});
           ::pw_node_subscribe_params(
-            binding->proxy.get(), utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
+            bindingPtr->proxyPtr.get(), utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
           constexpr std::uint32_t kFormatSequence = 1;
           constexpr std::uint32_t kEnumFormatSequence = 2;
           constexpr std::uint32_t kPropsSequence = 3;
-          ::pw_node_enum_params(binding->proxy.get(), kFormatSequence, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
+          ::pw_node_enum_params(bindingPtr->proxyPtr.get(), kFormatSequence, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
           ::pw_node_enum_params(
-            binding->proxy.get(), kEnumFormatSequence, SPA_PARAM_EnumFormat, 0, UINT32_MAX, nullptr);
-          ::pw_node_enum_params(binding->proxy.get(), kPropsSequence, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
+            bindingPtr->proxyPtr.get(), kEnumFormatSequence, SPA_PARAM_EnumFormat, 0, UINT32_MAX, nullptr);
+          ::pw_node_enum_params(bindingPtr->proxyPtr.get(), kPropsSequence, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
 
-          auto* bindingPtr = binding.get();
-          ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &sinkNodeEvents, bindingPtr);
-          sinkNodeBindings[id] = std::move(binding);
+          auto* rawSinkBindingPtr = bindingPtr.get();
+          ::pw_node_add_listener(
+            rawSinkBindingPtr->proxyPtr.get(), rawSinkBindingPtr->listener.get(), &sinkNodeEvents, rawSinkBindingPtr);
+          sinkNodeBindings[id] = std::move(bindingPtr);
         }
       }
     }

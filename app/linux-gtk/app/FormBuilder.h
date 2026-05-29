@@ -30,6 +30,6 @@ namespace ao::gtk
     void addEntryRow(std::string const& labelText, Gtk::Widget& entry);
 
   private:
-    Glib::RefPtr<Gtk::SizeGroup> _labelSizeGroup;
+    Glib::RefPtr<Gtk::SizeGroup> _labelSizeGroupPtr;
   };
 } // namespace ao::gtk

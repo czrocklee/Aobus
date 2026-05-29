@@ -47,7 +47,7 @@ namespace ao::gtk
                              Glib::RefPtr<TrackRowObject> const& row,
                              rt::TrackField field)
     {
-      if (auto* const child = listItem->get_child())
+      if (auto* const child = listItem->get_child(); child != nullptr)
       {
         auto* const cell = child->get_parent();
 
@@ -87,7 +87,7 @@ namespace ao::gtk
 
     void updateStatusStyles(Glib::RefPtr<Gtk::ListItem> const& listItem, Glib::RefPtr<TrackRowObject> const& row)
     {
-      if (auto* const child = listItem->get_child())
+      if (auto* const child = listItem->get_child(); child != nullptr)
       {
         auto* const cell = child->get_parent();
 
@@ -130,17 +130,16 @@ namespace ao::gtk
                           rt::TrackField field,
                           MetadataCommitFn const& commitFn)
     {
-      auto const item = listItem->get_item();
-      auto const row = std::dynamic_pointer_cast<TrackRowObject>(item);
+      auto const itemPtr = listItem->get_item();
+      auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
 
-      if (row == nullptr)
+      if (rowPtr == nullptr)
       {
         return;
       }
 
       auto* const bindData = static_cast<CellBindData*>(listItem->get_data(Glib::Quark{"bind-data"}));
 
-      // Disconnect previous bind's connections before establishing new ones
       if (bindData != nullptr)
       {
         bindData->disconnectAll();
@@ -148,7 +147,7 @@ namespace ao::gtk
 
       if (auto const* uiDef = trackFieldUiDefinition(field); uiDef == nullptr || !canInlineEdit(*uiDef))
       {
-        onTextColumnBindStatic(listItem, field, row);
+        onTextColumnBindStatic(listItem, field, rowPtr);
       }
       else
       {
@@ -163,16 +162,15 @@ namespace ao::gtk
 
           if (label != nullptr && entry != nullptr && bindData != nullptr)
           {
-            auto const text = row->fieldText(field);
+            auto const text = rowPtr->fieldText(field);
             label->set_text(text);
             entry->set_text(text);
 
-            auto const commitChange = [entry, stack, label, row, field, commitFn]
+            auto const commitChange = [entry, stack, label, rowPtr, field, commitFn]
             {
               auto const newValue = entry->get_text().raw();
-              commitFn(row, field, newValue);
-              // Read back from row after commit — reflects new value on success, rolled-back value on failure
-              auto const synced = row->fieldText(field);
+              commitFn(rowPtr, field, newValue);
+              auto const synced = rowPtr->fieldText(field);
               label->set_text(synced);
               entry->set_text(synced);
               stack->set_visible_child("display");
@@ -183,22 +181,22 @@ namespace ao::gtk
         }
       }
 
-      updateStatusStyles(listItem, row);
-      updatePlayingStyles(listItem, row, field);
+      updateStatusStyles(listItem, rowPtr);
+      updatePlayingStyles(listItem, rowPtr, field);
 
       if (bindData != nullptr)
       {
-        bindData->playingConn = row->property_playing().signal_changed().connect(
-          [listItem, row, field] { updatePlayingStyles(listItem, row, field); });
+        bindData->playingConn = rowPtr->property_playing().signal_changed().connect(
+          [listItem, rowPtr, field] { updatePlayingStyles(listItem, rowPtr, field); });
       }
     }
   }
 
   Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field, MetadataCommitFn const& commitFn)
   {
-    auto factory = Gtk::SignalListItemFactory::create();
+    auto factoryPtr = Gtk::SignalListItemFactory::create();
 
-    factory->signal_setup().connect(
+    factoryPtr->signal_setup().connect(
       [field](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
         if (auto const* uiDef = trackFieldUiDefinition(field); uiDef == nullptr || !canInlineEdit(*uiDef))
@@ -238,8 +236,8 @@ namespace ao::gtk
           entry->add_css_class("ao-inline-editor-entry");
 
           // Key controller created once per listItem, not per bind
-          auto const keyController = Gtk::EventControllerKey::create();
-          keyController->signal_key_pressed().connect(
+          auto const keyControllerPtr = Gtk::EventControllerKey::create();
+          keyControllerPtr->signal_key_pressed().connect(
             [stack](std::uint32_t keyval, std::uint32_t /*keycode*/, Gdk::ModifierType /*state*/)
             {
               if (keyval == GDK_KEY_Escape)
@@ -251,11 +249,11 @@ namespace ao::gtk
               return false;
             },
             false);
-          entry->add_controller(keyController);
+          entry->add_controller(keyControllerPtr);
 
-          auto const focusController = Gtk::EventControllerFocus::create();
-          focusController->signal_leave().connect([stack] { stack->set_visible_child("display"); });
-          entry->add_controller(focusController);
+          auto const focusControllerPtr = Gtk::EventControllerFocus::create();
+          focusControllerPtr->signal_leave().connect([stack] { stack->set_visible_child("display"); });
+          entry->add_controller(focusControllerPtr);
 
           stack->add(*entry, "edit");
 
@@ -268,18 +266,19 @@ namespace ao::gtk
           Glib::Quark{"bind-data"}, bindData, [](void* data) { delete static_cast<CellBindData*>(data); });
       });
 
-    factory->signal_bind().connect([field, commitFn](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                   { onTextColumnBind(listItem, field, commitFn); });
+    factoryPtr->signal_bind().connect([field, commitFn](Glib::RefPtr<Gtk::ListItem> const& listItem)
+                                      { onTextColumnBind(listItem, field, commitFn); });
 
-    factory->signal_unbind().connect(
+    factoryPtr->signal_unbind().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
-        if (auto* const bindData = static_cast<CellBindData*>(listItem->get_data(Glib::Quark{"bind-data"})))
+        if (auto* const bindData = static_cast<CellBindData*>(listItem->get_data(Glib::Quark{"bind-data"}));
+            bindData != nullptr)
         {
           bindData->disconnectAll();
         }
       });
 
-    return factory;
+    return factoryPtr;
   }
 } // namespace ao::gtk

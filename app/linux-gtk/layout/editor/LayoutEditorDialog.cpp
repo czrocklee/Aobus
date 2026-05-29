@@ -67,8 +67,8 @@ namespace ao::gtk::layout::editor
     , _registry{registry}
     , _actionRegistry{actionRegistry}
     , _document{std::move(initialLayout)}
-    , _treeStore{Gtk::TreeStore::create(_columns)}
-    , _actionGroup{Gio::SimpleActionGroup::create()}
+    , _treeStorePtr{Gtk::TreeStore::create(_columns)}
+    , _actionGroupPtr{Gio::SimpleActionGroup::create()}
   {
     set_title("Layout Editor");
     set_transient_for(parent);
@@ -115,8 +115,8 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::setupUi()
   {
-    _treeStore = Gtk::TreeStore::create(_columns);
-    _treeView.set_model(_treeStore);
+    _treeStorePtr = Gtk::TreeStore::create(_columns);
+    _treeView.set_model(_treeStorePtr);
 
     _treeView.append_column("Node", _columns.displayName);
     _treeView.append_column("Type", _columns.type);
@@ -143,11 +143,11 @@ namespace ao::gtk::layout::editor
 
     _btnReset.set_tooltip_text("Reset to selected preset's default layout");
 
-    _actionGroup = Gio::SimpleActionGroup::create();
-    insert_action_group("editor", _actionGroup);
+    _actionGroupPtr = Gio::SimpleActionGroup::create();
+    insert_action_group("editor", _actionGroupPtr);
 
-    auto const addMenu = Gio::Menu::create();
-    auto const wrapMenu = Gio::Menu::create();
+    auto const addMenuPtr = Gio::Menu::create();
+    auto const wrapMenuPtr = Gio::Menu::create();
     auto categoryMenus = std::map<std::string, Glib::RefPtr<Gio::Menu>>{};
 
     for (auto const& descriptor : _registry.descriptors())
@@ -155,7 +155,7 @@ namespace ao::gtk::layout::editor
       if (!categoryMenus.contains(descriptor.category))
       {
         categoryMenus[descriptor.category] = Gio::Menu::create();
-        addMenu->append_submenu(descriptor.category, categoryMenus[descriptor.category]);
+        addMenuPtr->append_submenu(descriptor.category, categoryMenus[descriptor.category]);
       }
 
       auto actionName = "add_" + descriptor.type;
@@ -163,22 +163,21 @@ namespace ao::gtk::layout::editor
 
       categoryMenus[descriptor.category]->append(descriptor.displayName, "editor." + actionName);
 
-      _actionGroup->add_action(actionName, [this, type = descriptor.type] { addComponent(type); });
+      _actionGroupPtr->add_action(actionName, [this, type = descriptor.type] { addComponent(type); });
 
       if (descriptor.container)
       {
         auto wrapActionName = "wrap_" + descriptor.type;
         std::ranges::replace(wrapActionName, '.', '_');
-        wrapMenu->append(descriptor.displayName, "editor." + wrapActionName);
-        _actionGroup->add_action(wrapActionName, [this, type = descriptor.type] { wrapNode(type); });
+        wrapMenuPtr->append(descriptor.displayName, "editor." + wrapActionName);
+        _actionGroupPtr->add_action(wrapActionName, [this, type = descriptor.type] { wrapNode(type); });
       }
     }
 
     _btnAdd.set_label("Add Child");
-    _btnAdd.set_menu_model(addMenu);
+    _btnAdd.set_menu_model(addMenuPtr);
 
-    _btnWrap.set_label("Wrap In");
-    _btnWrap.set_menu_model(wrapMenu);
+    _btnWrap.set_menu_model(wrapMenuPtr);
 
     _btnRemove.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onRemoveNode));
     _btnUp.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onMoveUp));
@@ -210,9 +209,9 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::populateTree()
   {
-    _treeStore->clear();
+    _treeStorePtr->clear();
 
-    auto row = *(_treeStore->append());
+    auto row = *(_treeStorePtr->append());
     auto const optDescriptor = _registry.descriptor(_document.root.type);
 
     row[_columns.displayName] = optDescriptor ? optDescriptor->displayName : _document.root.id;
@@ -229,7 +228,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::appendNodeToTree(Gtk::TreeModel::Row parentRow, LayoutNode* node)
   {
-    auto row = *(_treeStore->append(parentRow.children()));
+    auto row = *(_treeStorePtr->append(parentRow.children()));
     auto const optDescriptor = _registry.descriptor(node->type);
     auto displayName = node->id;
 
@@ -294,7 +293,7 @@ namespace ao::gtk::layout::editor
       node->layout["x"] = LayoutValue{static_cast<std::int64_t>(posX)};
       node->layout["y"] = LayoutValue{static_cast<std::int64_t>(posY)};
 
-      if (auto const row = _treeView.get_selection()->get_selected())
+      if (auto const row = _treeView.get_selection()->get_selected(); row)
       {
         if (row->get_value(_columns.nodePtr) == node)
         {
@@ -325,7 +324,7 @@ namespace ao::gtk::layout::editor
     auto const currentZ = node->getLayout<std::int64_t>("zIndex", 0);
     node->layout["zIndex"] = LayoutValue{static_cast<std::int64_t>(currentZ + 1)};
 
-    if (auto const selection = _treeView.get_selection()->get_selected())
+    if (auto const selection = _treeView.get_selection()->get_selected(); selection)
     {
       if (selection->get_value(_columns.nodePtr) == node)
       {
@@ -356,7 +355,7 @@ namespace ao::gtk::layout::editor
     node->layout["zIndex"] =
       LayoutValue{static_cast<std::int64_t>(std::max(static_cast<std::int64_t>(0), currentZ - 1))};
 
-    if (auto const selection = _treeView.get_selection()->get_selected())
+    if (auto const selection = _treeView.get_selection()->get_selected(); selection)
     {
       if (selection->get_value(_columns.nodePtr) == node)
       {
@@ -618,7 +617,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onSelectionChanged()
   {
-    if (auto const row = _treeView.get_selection()->get_selected())
+    if (auto const row = _treeView.get_selection()->get_selected(); row)
     {
       updatePropertiesPanel(row->get_value(_columns.nodePtr));
     }
@@ -712,18 +711,18 @@ namespace ao::gtk::layout::editor
     entry->set_text(node->id);
     entry->set_hexpand(true);
 
-    auto const debounceConn = std::make_shared<sigc::connection>();
+    auto const debounceConnPtr = std::make_shared<sigc::connection>();
     constexpr int kDebounceMs = 500;
 
     entry->signal_changed().connect(
-      [this, node, entry, debounceConn]
+      [this, node, entry, debounceConnPtr]
       {
-        if (*debounceConn)
+        if (*debounceConnPtr)
         {
-          debounceConn->disconnect();
+          debounceConnPtr->disconnect();
         }
 
-        *debounceConn = Glib::signal_timeout().connect(
+        *debounceConnPtr = Glib::signal_timeout().connect(
           [this, node, entry] -> bool
           {
             auto const newId = std::string{entry->get_text().raw()};
@@ -735,7 +734,7 @@ namespace ao::gtk::layout::editor
 
             node->id = newId;
 
-            if (auto const row = _treeView.get_selection()->get_selected())
+            if (auto const row = _treeView.get_selection()->get_selected(); row)
             {
               auto const optDescriptor = _registry.descriptor(node->type);
               auto displayName = Glib::ustring{node->id};
@@ -908,18 +907,18 @@ namespace ao::gtk::layout::editor
     entry->set_text(currentVal.asString());
     entry->set_hexpand(true);
 
-    auto const debounceConn = std::make_shared<sigc::connection>();
+    auto const debounceConnPtr = std::make_shared<sigc::connection>();
     constexpr int kDebounceMs = 500;
 
     entry->signal_changed().connect(
-      [this, node, prop, entry, isLayoutProp, debounceConn]
+      [this, node, prop, entry, isLayoutProp, debounceConnPtr]
       {
-        if (*debounceConn)
+        if (*debounceConnPtr)
         {
-          debounceConn->disconnect();
+          debounceConnPtr->disconnect();
         }
 
-        *debounceConn = Glib::signal_timeout().connect(
+        *debounceConnPtr = Glib::signal_timeout().connect(
           [this, node, prop, entry, isLayoutProp] -> bool
           {
             applyPropertyChange(node, prop.name, LayoutValue{entry->get_text().raw()}, isLayoutProp);

@@ -109,10 +109,10 @@ namespace ao::rt
     void revealPlayingTrack();
     void revealTrack(TrackId trackId, ViewId preferredViewId = kInvalidViewId, ListId preferredListId = kInvalidListId);
 
-    void addProvider(std::unique_ptr<audio::IBackendProvider> provider);
+    void addProvider(std::unique_ptr<audio::IBackendProvider> providerPtr);
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

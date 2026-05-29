@@ -62,7 +62,7 @@ namespace ao::rt
     struct QueryState final
     {
       std::string expression;
-      std::unique_ptr<query::ExecutionPlan> plan;
+      std::unique_ptr<query::ExecutionPlan> planPtr;
       std::optional<Error> optError;
     };
 

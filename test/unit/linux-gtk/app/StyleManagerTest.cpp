@@ -16,7 +16,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("StyleManager - initialization and reloading", "[gtk][app][style]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto& manager = StyleManager::instance();
 
@@ -58,10 +58,10 @@ namespace ao::gtk::test
     SECTION("register/unregister widget provider")
     {
       auto label = Gtk::Label{"Styled Label"};
-      auto provider = Gtk::CssProvider::create();
+      auto providerPtr = Gtk::CssProvider::create();
 
-      manager.registerWidgetProvider(label, provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-      manager.unregisterWidgetProvider(label, provider);
+      manager.registerWidgetProvider(label, providerPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+      manager.unregisterWidgetProvider(label, providerPtr);
     }
   }
 } // namespace ao::gtk::test

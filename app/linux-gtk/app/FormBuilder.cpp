@@ -21,7 +21,7 @@ namespace ao::gtk
   }
 
   FormBoxedList::FormBoxedList()
-    : _labelSizeGroup{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
+    : _labelSizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
   {
     add_css_class("ao-boxed-list");
     set_selection_mode(Gtk::SelectionMode::NONE);
@@ -36,7 +36,7 @@ namespace ao::gtk
 
     auto* const label = Gtk::make_managed<Gtk::Label>(labelText);
     label->set_halign(Gtk::Align::START);
-    _labelSizeGroup->add_widget(*label);
+    _labelSizeGroupPtr->add_widget(*label);
 
     box->append(*label);
 

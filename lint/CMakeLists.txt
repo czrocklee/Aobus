@@ -18,6 +18,7 @@ add_library(AobusLintPlugin MODULE
   check/ForbidNodiscardCheck.cpp
   check/ForbidTrailingReturnCheck.cpp
   check/IdentifierNamingExtensionsCheck.cpp
+  check/ImplicitBoolConversionInInitCheck.cpp
   check/LocalInitializationStyleCheck.cpp
   check/BracedInitializationCheck.cpp
   check/OptionalNamingAndUsageCheck.cpp
@@ -29,6 +30,7 @@ add_library(AobusLintPlugin MODULE
   check/UnusedSuppressionStyleCheck.cpp
   check/UseIfInitStatementCheck.cpp
   check/LambdaParamsCheck.cpp
+  check/ManagedPointerSuffixCheck.cpp
   check/MemberOrderCheck.cpp
   check/UseEraseIfCheck.cpp
   check/UseStdNumbersCheck.cpp

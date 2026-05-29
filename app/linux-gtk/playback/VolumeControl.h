@@ -34,6 +34,6 @@ namespace ao::gtk
 
     VolumeBar _volumeBar;
     bool _updating = false;
-    std::unique_ptr<uimodel::playback::VolumeViewModel> _controller;
+    std::unique_ptr<uimodel::playback::VolumeViewModel> _controllerPtr;
   };
 } // namespace ao::gtk

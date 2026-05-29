@@ -86,6 +86,6 @@ namespace ao::gtk::portal
     rt::Subscription _libraryTaskProgressSub;
     rt::Subscription _libraryTaskCompletedSub;
     rt::async::LifetimeScope _tasks;
-    std::unique_ptr<LibraryTaskProgressDialog> _libraryTaskDialog;
+    std::unique_ptr<LibraryTaskProgressDialog> _libraryTaskDialogPtr;
   };
 } // namespace ao::gtk::portal

@@ -28,14 +28,14 @@ namespace ao::audio::test
       return;
     }
 
-    auto backend = std::make_unique<NullBackend>();
+    auto backendPtr = std::make_unique<NullBackend>();
     auto const device = Device{.id = DeviceId{"null"},
                                .displayName = "Null",
                                .description = "Null",
                                .isDefault = false,
                                .backendId = kBackendNone};
 
-    auto engine = Engine{std::move(backend), device};
+    auto engine = Engine{std::move(backendPtr), device};
 
     auto const descriptor =
       TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Test Title", .artist = "Test Artist"};

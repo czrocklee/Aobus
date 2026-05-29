@@ -59,16 +59,16 @@ namespace ao::audio::backend::detail
     record.nodeDescription = lookupProperty(props, PW_KEY_NODE_DESCRIPTION);
     record.objectPath = lookupProperty(props, PW_KEY_OBJECT_PATH);
 
-    if (auto const optSerial = parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)))
+    if (auto const optSerial = parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)); optSerial)
     {
       record.optObjectSerial = optSerial;
     }
 
-    if (auto const optId = parseUintProperty(::spa_dict_lookup(props, "node.driver-id")))
+    if (auto const optId = parseUintProperty(::spa_dict_lookup(props, "node.driver-id")); optId)
     {
       record.optDriverId = optId;
     }
-    else if (auto const optIdFallback = parseUintProperty(::spa_dict_lookup(props, "node.driver")))
+    else if (auto const optIdFallback = parseUintProperty(::spa_dict_lookup(props, "node.driver")); optIdFallback)
     {
       record.optDriverId = optIdFallback;
     }
@@ -227,7 +227,7 @@ namespace ao::audio::backend::detail
 
         for (auto const format : formats)
         {
-          if (auto const optCapability = sampleFormatCapabilityFromSpaFormat(format))
+          if (auto const optCapability = sampleFormatCapabilityFromSpaFormat(format); optCapability)
           {
             addSampleFormatCapability(caps, *optCapability);
           }
@@ -282,7 +282,7 @@ namespace ao::audio::backend::detail
       return;
     }
 
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume); prop != nullptr)
     {
       if (float val = 0.0F; ::spa_pod_get_float(&prop->value, &val) == 0)
       {
@@ -290,7 +290,7 @@ namespace ao::audio::backend::detail
       }
     }
 
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute); prop != nullptr)
     {
       if (bool val = false; ::spa_pod_get_bool(&prop->value, &val) == 0)
       {
@@ -298,12 +298,12 @@ namespace ao::audio::backend::detail
       }
     }
 
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes); prop != nullptr)
     {
       copyFloatArray(prop->value, sinkProps.channelVolumes);
     }
 
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softMute))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softMute); prop != nullptr)
     {
       if (bool val = false; ::spa_pod_get_bool(&prop->value, &val) == 0)
       {
@@ -311,7 +311,7 @@ namespace ao::audio::backend::detail
       }
     }
 
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes); prop != nullptr)
     {
       copyFloatArray(prop->value, sinkProps.softVolumes);
     }

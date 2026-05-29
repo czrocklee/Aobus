@@ -16,7 +16,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("NowPlayingFieldLabel - smoke test", "[gtk][playback][viewmodel]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();

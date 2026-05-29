@@ -14,7 +14,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TrackCustomViewDialog - lifecycle", "[gtk][track][dialog]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto window = Gtk::Window{};
 
     auto spec = rt::TrackPresentationSpec{};

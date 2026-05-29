@@ -184,7 +184,7 @@ namespace ao::rt
   };
 
   LibraryYamlImporter::LibraryYamlImporter(library::MusicLibrary& ml)
-    : _impl{std::make_unique<Impl>(ml)}
+    : _implPtr{std::make_unique<Impl>(ml)}
   {
   }
 
@@ -192,7 +192,7 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
-    return _impl->importFromYaml(path, mode);
+    return _implPtr->importFromYaml(path, mode);
   }
 
   Result<> LibraryYamlImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
@@ -475,9 +475,9 @@ namespace ao::rt
       }
 
       auto optBuilder = std::optional<library::TrackBuilder>{};
-      auto keepAliveTagFile = std::unique_ptr<tag::TagFile>{};
+      auto keepAliveTagFilePtr = std::unique_ptr<tag::TagFile>{};
 
-      loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, keepAliveTagFile, trackWriter);
+      loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, keepAliveTagFilePtr, trackWriter);
 
       auto builder = optBuilder ? *optBuilder : library::TrackBuilder::createNew();
 
@@ -531,7 +531,7 @@ namespace ao::rt
       auto manifestBuilder = library::FileManifestBuilder::createNew();
       manifestBuilder.trackId(targetTrackId);
 
-      if (auto const optManifestView = manifestReader.get(uriStr))
+      if (auto const optManifestView = manifestReader.get(uriStr); optManifestView)
       {
         manifestBuilder.fileSize(optManifestView->fileSize());
         manifestBuilder.mtime(optManifestView->mtime());

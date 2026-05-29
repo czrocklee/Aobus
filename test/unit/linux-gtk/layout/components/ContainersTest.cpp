@@ -4,14 +4,14 @@
 #include "app/linux-gtk/layout/components/Containers.h"
 
 #include "../../GtkTestSupport.h"
+#include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
+
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -31,7 +31,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using ao::gtk::test::ImmediateExecutor;
+  using ao::gtk::test::makeRuntime;
 
   namespace
   {
@@ -40,16 +40,10 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("LayoutRuntime building", "[layout][unit][containers]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -64,11 +58,11 @@ namespace ao::gtk::layout::test
     SECTION("Build default layout")
     {
       auto const doc = createDefaultLayout();
-      auto const rootComponent = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(rootComponent != nullptr);
+      REQUIRE(rootComponentPtr != nullptr);
 
-      auto& widget = rootComponent->widget();
+      auto& widget = rootComponentPtr->widget();
       CHECK(dynamic_cast<Gtk::Box*>(&widget) != nullptr);
     }
 
@@ -87,11 +81,11 @@ namespace ao::gtk::layout::test
       child2.props["orientation"] = LayoutValue{std::string{"vertical"}};
       doc.root.children.push_back(child2);
 
-      auto const rootComponent = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(rootComponent != nullptr);
+      REQUIRE(rootComponentPtr != nullptr);
 
-      auto& widget = rootComponent->widget();
+      auto& widget = rootComponentPtr->widget();
       auto* const box = dynamic_cast<Gtk::Box*>(&widget);
       REQUIRE(box != nullptr);
       CHECK(box->get_orientation() == Gtk::Orientation::HORIZONTAL);
@@ -102,11 +96,11 @@ namespace ao::gtk::layout::test
       auto doc = LayoutDocument{};
       doc.root.type = "nonexistent.component";
 
-      auto const rootComponent = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(rootComponent != nullptr);
+      REQUIRE(rootComponentPtr != nullptr);
 
-      auto& widget = rootComponent->widget();
+      auto& widget = rootComponentPtr->widget();
       auto* const label = dynamic_cast<Gtk::Label*>(&widget);
       REQUIRE(label != nullptr);
       CHECK(label->get_label().find("[Layout Error]") != std::string::npos);
@@ -119,10 +113,10 @@ namespace ao::gtk::layout::test
       doc.root.type = "box";
       doc.root.layout["cssClasses"] = LayoutValue{std::string{"ao-test-class"}};
 
-      auto const rootComponent = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(rootComponent != nullptr);
-      auto* const box = dynamic_cast<Gtk::Box*>(&rootComponent->widget());
+      REQUIRE(rootComponentPtr != nullptr);
+      auto* const box = dynamic_cast<Gtk::Box*>(&rootComponentPtr->widget());
       REQUIRE(box != nullptr);
       CHECK(box->has_css_class("ao-test-class"));
     }
@@ -131,10 +125,10 @@ namespace ao::gtk::layout::test
     {
       auto const templates = getBuiltInTemplates();
       auto const& barTemplate = templates.at("playback.defaultBar");
-      auto const barComp = ctx.registry.create(ctx, barTemplate);
+      auto const barCompPtr = ctx.registry.create(ctx, barTemplate);
 
-      REQUIRE(barComp != nullptr);
-      auto* const barBox = dynamic_cast<Gtk::Box*>(&barComp->widget());
+      REQUIRE(barCompPtr != nullptr);
+      auto* const barBox = dynamic_cast<Gtk::Box*>(&barCompPtr->widget());
       REQUIRE(barBox != nullptr);
 
       auto* const leftChild = barBox->get_first_child();
@@ -152,11 +146,11 @@ namespace ao::gtk::layout::test
       // template reference node, expanded through LayoutRuntime::build().
       auto doc = createDefaultLayout();
       doc.templates = getBuiltInTemplates();
-      auto const fullLayout = layoutRuntime.build(ctx, doc);
+      auto const fullLayoutPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(fullLayout != nullptr);
+      REQUIRE(fullLayoutPtr != nullptr);
       // Find the playback row child within the root box.
-      auto* const rootBox = dynamic_cast<Gtk::Box*>(&fullLayout->widget());
+      auto* const rootBox = dynamic_cast<Gtk::Box*>(&fullLayoutPtr->widget());
       REQUIRE(rootBox != nullptr);
 
       // Child order: 0=menuBar, 1=playback-row (expanded template), 2=split, 3=status region
@@ -180,16 +174,10 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   TEST_CASE("Container error states", "[layout][unit][containers]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -201,9 +189,9 @@ namespace ao::gtk::layout::test
 
     auto layoutRuntime = LayoutRuntime{registry};
 
-    auto const checkError = [](ILayoutComponent& comp, std::string const& expectedFragment)
+    auto const checkError = [](ILayoutComponent& compPtr, std::string const& expectedFragment)
     {
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp.widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr.widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_label().find("[Layout Error]") != std::string::npos);
       CHECK(label->get_label().find(expectedFragment) != std::string::npos);
@@ -213,8 +201,8 @@ namespace ao::gtk::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "split";
-      auto const comp = layoutRuntime.build(ctx, doc);
-      checkError(*comp, "2 children");
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      checkError(*compPtr, "2 children");
     }
 
     SECTION("split with 1 child returns error")
@@ -222,8 +210,8 @@ namespace ao::gtk::layout::test
       auto doc = LayoutDocument{};
       doc.root.type = "split";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const comp = layoutRuntime.build(ctx, doc);
-      checkError(*comp, "2 children");
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      checkError(*compPtr, "2 children");
     }
 
     SECTION("split with 3 children returns error")
@@ -233,16 +221,16 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const comp = layoutRuntime.build(ctx, doc);
-      checkError(*comp, "2 children");
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      checkError(*compPtr, "2 children");
     }
 
     SECTION("scroll with 0 children returns error")
     {
       auto doc = LayoutDocument{};
       doc.root.type = "scroll";
-      auto const comp = layoutRuntime.build(ctx, doc);
-      checkError(*comp, "1 child");
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      checkError(*compPtr, "1 child");
     }
 
     SECTION("scroll with 2 children returns error")
@@ -251,16 +239,16 @@ namespace ao::gtk::layout::test
       doc.root.type = "scroll";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const comp = layoutRuntime.build(ctx, doc);
-      checkError(*comp, "1 child");
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      checkError(*compPtr, "1 child");
     }
 
     SECTION("tabs with 0 children returns error")
     {
       auto doc = LayoutDocument{};
       doc.root.type = "tabs";
-      auto const comp = layoutRuntime.build(ctx, doc);
-      checkError(*comp, "at least 1 child");
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      checkError(*compPtr, "at least 1 child");
     }
   }
 
@@ -269,16 +257,10 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   TEST_CASE("Container success states", "[layout][unit][containers]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -302,8 +284,8 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const paned = dynamic_cast<Gtk::Paned*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const paned = dynamic_cast<Gtk::Paned*>(&compPtr->widget());
 
       REQUIRE(paned != nullptr);
 
@@ -334,8 +316,8 @@ namespace ao::gtk::layout::test
       c3.layout["slot"] = LayoutValue{std::string{"end"}};
       doc.root.children.push_back(c3);
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const cb = dynamic_cast<Gtk::CenterBox*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const cb = dynamic_cast<Gtk::CenterBox*>(&compPtr->widget());
 
       REQUIRE(cb != nullptr);
       CHECK(cb->get_orientation() == Gtk::Orientation::HORIZONTAL);
@@ -357,8 +339,8 @@ namespace ao::gtk::layout::test
 
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(&compPtr->widget());
 
       REQUIRE(sw != nullptr);
 
@@ -383,8 +365,8 @@ namespace ao::gtk::layout::test
       doc.root.type = "scroll";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(&compPtr->widget());
 
       REQUIRE(sw != nullptr);
 
@@ -402,8 +384,8 @@ namespace ao::gtk::layout::test
       doc.root.type = "separator";
       doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const sep = dynamic_cast<Gtk::Separator*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const sep = dynamic_cast<Gtk::Separator*>(&compPtr->widget());
 
       REQUIRE(sep != nullptr);
       CHECK(sep->get_orientation() == Gtk::Orientation::VERTICAL);
@@ -426,8 +408,8 @@ namespace ao::gtk::layout::test
       c2.layout["title"] = LayoutValue{std::string{"Second Tab"}};
       doc.root.children.push_back(c2);
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
 
@@ -454,11 +436,11 @@ namespace ao::gtk::layout::test
       c1.layout["title"] = LayoutValue{std::string{"Spacer Tab"}};
       doc.root.children.push_back(c1);
 
-      auto const comp = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
       REQUIRE(box != nullptr);
     }
   }
@@ -468,16 +450,10 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   TEST_CASE("applyCommonProps coverage", "[layout][unit][containers]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -500,8 +476,8 @@ namespace ao::gtk::layout::test
       child.layout["vexpand"] = LayoutValue{false};
       doc.root.children.push_back(child);
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
 
@@ -522,8 +498,8 @@ namespace ao::gtk::layout::test
       child.layout["valign"] = LayoutValue{std::string{"end"}};
       doc.root.children.push_back(child);
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
 
@@ -543,8 +519,8 @@ namespace ao::gtk::layout::test
       child.layout["visible"] = LayoutValue{false};
       doc.root.children.push_back(child);
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
 
@@ -563,8 +539,8 @@ namespace ao::gtk::layout::test
       child.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"my-class", "another"}};
       doc.root.children.push_back(child);
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
 
@@ -585,8 +561,8 @@ namespace ao::gtk::layout::test
       child.layout["minHeight"] = LayoutValue{static_cast<std::int64_t>(100)};
       doc.root.children.push_back(child);
 
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
 
@@ -609,16 +585,10 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   TEST_CASE("LayoutHost rebuild", "[layout][unit][containers]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     registerContainerComponents(registry);
@@ -667,14 +637,7 @@ namespace ao::gtk::layout::test
 
       auto window2 = Gtk::Window{};
       auto const tempDir2 = TempDir{};
-      auto const configStore2 =
-        std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir2.path()} / "config.yaml");
-
-      auto runtime = rt::AppRuntime{
-        rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                   .musicRoot = tempDir2.path(),
-                                   .databasePath = std::filesystem::path{tempDir2.path()} / ".aobus" / "library",
-                                   .workspaceConfigStore = configStore2}};
+      auto runtime = makeRuntime(tempDir2);
       auto const actionRegistry2 = ActionRegistry{};
       auto ctx2 = LayoutContext{
         .registry = registry2, .actionRegistry = actionRegistry2, .runtime = runtime, .parentWindow = window2};

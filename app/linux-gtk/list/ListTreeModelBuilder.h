@@ -30,9 +30,9 @@ namespace ao::gtk
   public:
     struct Result final
     {
-      Glib::RefPtr<Gio::ListStore<ListTreeItem>> store;
-      Glib::RefPtr<Gtk::TreeListModel> treeModel;
-      Glib::RefPtr<Gtk::SingleSelection> selectionModel;
+      Glib::RefPtr<Gio::ListStore<ListTreeItem>> storePtr;
+      Glib::RefPtr<Gtk::TreeListModel> treeModelPtr;
+      Glib::RefPtr<Gtk::SingleSelection> selectionModelPtr;
       std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };
 

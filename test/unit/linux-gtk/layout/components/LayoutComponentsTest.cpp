@@ -4,7 +4,6 @@
 #include "../../GtkTestSupport.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
-#include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
@@ -12,8 +11,8 @@
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/rt/yaml/Utils.h>
+#include <ao/uimodel/layout/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/menu.h>
@@ -35,7 +34,7 @@
 namespace ao::gtk::layout::test
 {
   using namespace ao::lmdb::test;
-  using ao::gtk::test::ImmediateExecutor;
+  using ao::gtk::test::makeRuntime;
 
   namespace
   {
@@ -51,16 +50,10 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("Playback component instantiation", "[layout][unit][components]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -72,11 +65,11 @@ namespace ao::gtk::layout::test
     SECTION("playPauseButton creates Gtk::Button")
     {
       auto const node = LayoutNode{.type = "playback.playPauseButton"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const btn = dynamic_cast<Gtk::Button*>(&comp->widget());
+      auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "media-playback-start-symbolic");
       CHECK(btn->get_sensitive() == false);
@@ -86,11 +79,11 @@ namespace ao::gtk::layout::test
     SECTION("stopButton creates Gtk::Button, insensitive when idle")
     {
       auto const node = LayoutNode{.type = "playback.stopButton"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const btn = dynamic_cast<Gtk::Button*>(&comp->widget());
+      auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "media-playback-stop-symbolic");
       CHECK(btn->get_sensitive() == false);
@@ -100,11 +93,11 @@ namespace ao::gtk::layout::test
     SECTION("playButton creates Gtk::Button, insensitive when not ready")
     {
       auto const node = LayoutNode{.type = "playback.playButton"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const btn = dynamic_cast<Gtk::Button*>(&comp->widget());
+      auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "media-playback-start-symbolic");
       CHECK(btn->get_sensitive() == false);
@@ -114,11 +107,11 @@ namespace ao::gtk::layout::test
     SECTION("pauseButton creates Gtk::Button, insensitive when not playing")
     {
       auto const node = LayoutNode{.type = "playback.pauseButton"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const btn = dynamic_cast<Gtk::Button*>(&comp->widget());
+      auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "media-playback-pause-symbolic");
       CHECK(btn->get_sensitive() == false);
@@ -128,11 +121,11 @@ namespace ao::gtk::layout::test
     SECTION("seekSlider creates Gtk::Scale, insensitive when idle")
     {
       auto const node = LayoutNode{.type = "playback.seekSlider"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const scale = dynamic_cast<Gtk::Scale*>(&comp->widget());
+      auto* const scale = dynamic_cast<Gtk::Scale*>(&compPtr->widget());
       REQUIRE(scale != nullptr);
       CHECK(scale->get_sensitive() == false);
       CHECK(scale->get_value() == 0.0);
@@ -142,11 +135,11 @@ namespace ao::gtk::layout::test
     SECTION("timeLabel creates Gtk::Label with default text")
     {
       auto const node = LayoutNode{.type = "playback.timeLabel"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_text() == "00:00 / 00:00");
     }
@@ -154,11 +147,11 @@ namespace ao::gtk::layout::test
     SECTION("currentTitleLabel shows Not Playing when idle")
     {
       auto const node = LayoutNode{.type = "playback.currentTitleLabel"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_text() == "Not Playing");
       CHECK(label->has_css_class("ao-playback-title"));
@@ -167,11 +160,11 @@ namespace ao::gtk::layout::test
     SECTION("currentArtistLabel shows empty when idle")
     {
       auto const node = LayoutNode{.type = "playback.currentArtistLabel"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_text().empty());
       CHECK(label->has_css_class("ao-playback-artist"));
@@ -180,20 +173,20 @@ namespace ao::gtk::layout::test
     SECTION("volumeControl shows hidden when volume unavailable")
     {
       auto const node = LayoutNode{.type = "playback.volumeControl"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
-      CHECK(comp->widget().get_visible() == false);
+      REQUIRE(compPtr != nullptr);
+      CHECK(compPtr->widget().get_visible() == false);
     }
 
     SECTION("outputButton creates Gtk::Button with AobusSoul child")
     {
       auto const node = LayoutNode{.type = "playback.outputButton"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const btn = dynamic_cast<Gtk::Button*>(&comp->widget());
+      auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(btn != nullptr);
       CHECK(btn->has_css_class("ao-output-logo"));
 
@@ -219,15 +212,15 @@ namespace ao::gtk::layout::test
     SECTION("qualityIndicator creates AobusSoul widget")
     {
       auto const node = LayoutNode{.type = "playback.qualityIndicator"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
-      CHECK(comp->widget().has_css_class("ao-soul"));
+      REQUIRE(compPtr != nullptr);
+      CHECK(compPtr->widget().has_css_class("ao-soul"));
 
       // CSS controls the glyph size; no explicit set_size_request.
       std::int32_t width = -1;
       std::int32_t height = -1;
-      comp->widget().get_size_request(width, height);
+      compPtr->widget().get_size_request(width, height);
       CHECK(width == -1);
       CHECK(height == -1);
     }
@@ -249,8 +242,8 @@ namespace ao::gtk::layout::test
       for (auto const type : types)
       {
         auto const node = LayoutNode{.type = std::string{type}};
-        auto const comp = registry.create(ctx, node);
-        CHECK(comp != nullptr);
+        auto const compPtr = registry.create(ctx, node);
+        CHECK(compPtr != nullptr);
       }
     }
   }
@@ -260,16 +253,10 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   TEST_CASE("Semantic component error states", "[layout][unit][components]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -281,25 +268,25 @@ namespace ao::gtk::layout::test
     SECTION("library.listTree shows error when rowDataProvider missing")
     {
       auto const node = LayoutNode{.type = "library.listTree"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_label().find("trackRowCache missing") != std::string::npos);
     }
 
     SECTION("library.listTree shows error when listSidebarController missing")
     {
-      auto const rdp = std::make_unique<TrackRowCache>(runtime.musicLibrary());
-      ctx.track.trackRowCache = rdp.get();
+      auto const rdpPtr = std::make_unique<TrackRowCache>(runtime.musicLibrary());
+      ctx.track.trackRowCache = rdpPtr.get();
       auto const node = LayoutNode{.type = "library.listTree"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_label().find("listSidebarController missing") != std::string::npos);
     }
@@ -307,11 +294,11 @@ namespace ao::gtk::layout::test
     SECTION("tracks.table shows error when trackPageGraph missing")
     {
       auto const node = LayoutNode{.type = "tracks.table"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
       REQUIRE(box != nullptr);
 
       auto* const child = box->get_first_child();
@@ -325,11 +312,11 @@ namespace ao::gtk::layout::test
     SECTION("inspector.image shows error when imageCache missing")
     {
       auto const node = LayoutNode{.type = "inspector.image"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_label().find("imageCache missing") != std::string::npos);
     }
@@ -337,11 +324,11 @@ namespace ao::gtk::layout::test
     SECTION("inspector.sidebar shows error when imageCache missing")
     {
       auto const node = LayoutNode{.type = "inspector.sidebar"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_label().find("imageCache missing") != std::string::npos);
     }
@@ -349,11 +336,11 @@ namespace ao::gtk::layout::test
     SECTION("app.workspaceWithInspector shows error when trackPageGraph missing")
     {
       auto const node = LayoutNode{.type = "app.workspaceWithInspector"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
       REQUIRE(box != nullptr);
 
       auto* const child = box->get_first_child();
@@ -370,16 +357,10 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   TEST_CASE("Semantic component success states", "[layout][unit][components]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -387,27 +368,27 @@ namespace ao::gtk::layout::test
     auto window = Gtk::Window{};
 
     int const cacheSize = 10;
-    auto imageCache = std::make_unique<ImageCache>(cacheSize);
-    auto menuModel = Gio::Menu::create();
-    menuModel->append_submenu("Test Menu", Gio::Menu::create());
+    auto imageCachePtr = std::make_unique<ImageCache>(cacheSize);
+    auto menuModelPtr = Gio::Menu::create();
+    menuModelPtr->append_submenu("Test Menu", Gio::Menu::create());
 
     auto actionRegistry = ActionRegistry{};
     auto ctx = LayoutContext{.registry = registry,
                              .actionRegistry = actionRegistry,
                              .runtime = runtime,
                              .parentWindow = window,
-                             .inspector = {.imageCache = imageCache.get()},
-                             .shell = {.menuModel = menuModel}};
+                             .inspector = {.imageCache = imageCachePtr.get()},
+                             .shell = {.menuModelPtr = menuModelPtr}};
 
     [[maybe_unused]] auto layoutRuntime = LayoutRuntime{registry};
 
     {
       auto const node = LayoutNode{.type = "status.messageLabel"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_text() == "Aobus Ready");
     }
@@ -415,11 +396,11 @@ namespace ao::gtk::layout::test
     SECTION("library.openLibraryButton creates Gtk::Button")
     {
       auto const node = LayoutNode{.type = "library.openLibraryButton"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const btn = dynamic_cast<Gtk::Button*>(&comp->widget());
+      auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "folder-open-symbolic");
     }
@@ -427,11 +408,11 @@ namespace ao::gtk::layout::test
     SECTION("app.menuBar creates Gtk::PopoverMenuBar")
     {
       auto const node = LayoutNode{.type = "app.menuBar"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const menuBar = dynamic_cast<Gtk::PopoverMenuBar*>(&comp->widget());
+      auto* const menuBar = dynamic_cast<Gtk::PopoverMenuBar*>(&compPtr->widget());
       REQUIRE(menuBar != nullptr);
     }
 
@@ -440,33 +421,33 @@ namespace ao::gtk::layout::test
       auto actionRegistry2 = ActionRegistry{};
       auto ctx2 = makeContext(registry, actionRegistry2, runtime, window);
       auto const node = LayoutNode{.type = "app.menuBar"};
-      auto const comp = registry.create(ctx2, node);
+      auto const compPtr = registry.create(ctx2, node);
 
-      REQUIRE(comp != nullptr);
-      CHECK(dynamic_cast<Gtk::PopoverMenuBar*>(&comp->widget()) != nullptr);
+      REQUIRE(compPtr != nullptr);
+      CHECK(dynamic_cast<Gtk::PopoverMenuBar*>(&compPtr->widget()) != nullptr);
     }
 
     SECTION("inspector.image creates ImageWidget when cache available")
     {
       auto const node = LayoutNode{.type = "inspector.image"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       CHECK(label == nullptr);
     }
 
     SECTION("inspector.sidebar creates TrackInspectorPanel when cache available")
     {
       auto const node = LayoutNode{.type = "inspector.sidebar"};
-      auto const comp = registry.create(ctx, node);
+      auto const compPtr = registry.create(ctx, node);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       CHECK(label == nullptr);
-      CHECK(comp->widget().has_css_class("ao-inspector-sidebar"));
+      CHECK(compPtr->widget().has_css_class("ao-inspector-sidebar"));
     }
   }
 
@@ -475,16 +456,10 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   TEST_CASE("All component types register and instantiate", "[layout][unit][components]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -512,8 +487,8 @@ namespace ao::gtk::layout::test
       for (auto const type : types)
       {
         auto const node = LayoutNode{.type = std::string{type}};
-        auto const comp = registry.create(ctx, node);
-        CHECK(comp != nullptr);
+        auto const compPtr = registry.create(ctx, node);
+        CHECK(compPtr != nullptr);
       }
     }
   }
@@ -523,16 +498,10 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   TEST_CASE("YAML layout with semantic components", "[layout][unit][components]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -571,10 +540,10 @@ namespace ao::gtk::layout::test
           .id = "shell.showSoul", .label = "Show Soul", .category = "Shell", .capabilities = ActionCapability::None},
         [&](ActionActivationContext&) { longPressFired++; });
 
-      auto const comp = registry.create(ctx, layoutNode);
-      REQUIRE(comp != nullptr);
+      auto const compPtr = registry.create(ctx, layoutNode);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const button = dynamic_cast<Gtk::Button*>(&comp->widget());
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(button != nullptr);
       CHECK(button->get_icon_name() == "emblem-system-symbolic");
       CHECK(button->has_css_class("circular"));
@@ -621,10 +590,10 @@ namespace ao::gtk::layout::test
       auto layoutNode = LayoutNode{};
       REQUIRE(rt::yaml::read(tree.rootref(), layoutNode));
 
-      auto const comp = registry.create(ctx, layoutNode);
-      REQUIRE(comp != nullptr);
+      auto const compPtr = registry.create(ctx, layoutNode);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
       REQUIRE(box != nullptr);
 
       auto* const child = box->get_first_child();
@@ -656,10 +625,10 @@ namespace ao::gtk::layout::test
       auto layoutNode = LayoutNode{};
       REQUIRE(rt::yaml::read(tree.rootref(), layoutNode));
 
-      auto const comp = registry.create(ctx, layoutNode);
-      REQUIRE(comp != nullptr);
+      auto const compPtr = registry.create(ctx, layoutNode);
+      REQUIRE(compPtr != nullptr);
 
-      auto* const outerBox = dynamic_cast<Gtk::Box*>(&comp->widget());
+      auto* const outerBox = dynamic_cast<Gtk::Box*>(&compPtr->widget());
       REQUIRE(outerBox != nullptr);
     }
 
@@ -689,9 +658,9 @@ namespace ao::gtk::layout::test
       CHECK(doc.root.children.size() == 4);
 
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const comp = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(comp != nullptr);
+      REQUIRE(compPtr != nullptr);
     }
   }
 } // namespace ao::gtk::layout::test

@@ -68,7 +68,7 @@ namespace ao::gtk
 
     auto label = pres.id;
 
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(pres.id))
+    if (auto const* builtin = rt::builtinTrackPresentationPreset(pres.id); builtin != nullptr)
     {
       label = std::string{builtin->label};
     }
@@ -170,7 +170,7 @@ namespace ao::gtk
 
     auto label = std::string{presentationId};
 
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(presentationId))
+    if (auto const* builtin = rt::builtinTrackPresentationPreset(presentationId); builtin != nullptr)
     {
       label = std::string{builtin->label};
     }
@@ -214,7 +214,7 @@ namespace ao::gtk
     auto const label = std::string{_button.get_label()} + " Copy";
     auto dialog = TrackCustomViewDialog{*parentWindow, spec, label};
 
-    if (auto const optResult = dialog.runDialog())
+    if (auto const optResult = dialog.runDialog(); optResult)
     {
       if (optResult->deleted)
       {

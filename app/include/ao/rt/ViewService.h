@@ -81,12 +81,12 @@ namespace ao::rt
 
     TrackListViewState trackListState(ViewId viewId) const;
     std::shared_ptr<ITrackListProjection> trackListProjection(ViewId viewId);
-    std::shared_ptr<ITrackDetailProjection> detailProjection(DetailTarget const& target,
+    std::unique_ptr<ITrackDetailProjection> detailProjection(DetailTarget const& target,
                                                              WorkspaceService& workspace,
                                                              LibraryMutationService& mutation);
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

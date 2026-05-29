@@ -78,23 +78,24 @@ namespace ao::audio::backend
 
     void monitorLoop(std::stop_token const& stopToken)
     {
-      auto udev = utility::makeUniquePtr<::udev_unref>(::udev_new());
+      auto udevPtr = utility::makeUniquePtr<::udev_unref>(::udev_new());
 
-      if (!udev)
+      if (!udevPtr)
       {
         return;
       }
 
-      auto monitor = utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udev.get(), "udev"));
+      auto monitorPtr =
+        utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udevPtr.get(), "udev"));
 
-      if (!monitor)
+      if (!monitorPtr)
       {
         return;
       }
 
-      ::udev_monitor_filter_add_match_subsystem_devtype(monitor.get(), "sound", nullptr);
-      ::udev_monitor_enable_receiving(monitor.get());
-      auto const fd = ::udev_monitor_get_fd(monitor.get());
+      ::udev_monitor_filter_add_match_subsystem_devtype(monitorPtr.get(), "sound", nullptr);
+      ::udev_monitor_enable_receiving(monitorPtr.get());
+      auto const fd = ::udev_monitor_get_fd(monitorPtr.get());
 
       while (!stopToken.stop_requested())
       {
@@ -105,9 +106,9 @@ namespace ao::audio::backend
         if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), kUdevPollTimeoutMs) > 0 &&
             (fds[0].revents & POLLIN) != 0)
         {
-          auto dev = utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
+          auto devPtr = utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitorPtr.get()));
 
-          if (dev)
+          if (devPtr)
           {
             auto newDevices = doAlsaEnumerate();
             auto subs = std::vector<DeviceSub>{};
@@ -131,7 +132,7 @@ namespace ao::audio::backend
   };
 
   AlsaProvider::AlsaProvider()
-    : _impl{std::make_unique<Impl>()}
+    : _implPtr{std::make_unique<Impl>()}
   {
   }
 
@@ -139,12 +140,12 @@ namespace ao::audio::backend
 
   Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
-    auto const id = _impl->nextSubId++;
+    auto const id = _implPtr->nextSubId++;
     auto const devices = [this, id, callback]
     {
-      auto const lock = std::scoped_lock{_impl->mutex};
-      _impl->deviceSubs.push_back({.id = id, .callback = callback});
-      return _impl->cachedDevices;
+      auto const lock = std::scoped_lock{_implPtr->mutex};
+      _implPtr->deviceSubs.push_back({.id = id, .callback = callback});
+      return _implPtr->cachedDevices;
     }();
 
     if (callback)
@@ -154,19 +155,19 @@ namespace ao::audio::backend
 
     return Subscription{[this, id]
                         {
-                          auto const lock = std::scoped_lock{_impl->mutex};
-                          auto const it = std::ranges::find(_impl->deviceSubs, id, &Impl::DeviceSub::id);
+                          auto const lock = std::scoped_lock{_implPtr->mutex};
+                          auto const it = std::ranges::find(_implPtr->deviceSubs, id, &Impl::DeviceSub::id);
 
-                          if (it != _impl->deviceSubs.end())
+                          if (it != _implPtr->deviceSubs.end())
                           {
-                            _impl->deviceSubs.erase(it);
+                            _implPtr->deviceSubs.erase(it);
                           }
                         }};
   }
 
   IBackendProvider::Status AlsaProvider::status() const
   {
-    auto const lock = std::scoped_lock{_impl->mutex};
+    auto const lock = std::scoped_lock{_implPtr->mutex};
     return {.metadata = {.id = kBackendAlsa,
                          .name = "ALSA",
                          .description = "Advanced Linux Sound Architecture (Direct Hardware Access)",
@@ -174,7 +175,7 @@ namespace ao::audio::backend
                          .supportedProfiles = {{kProfileExclusive,
                                                 "Exclusive Mode",
                                                 "Direct hardware access for low-latency, bit-perfect playback"}}},
-            .devices = _impl->cachedDevices};
+            .devices = _implPtr->cachedDevices};
   }
 
   std::unique_ptr<IBackend> AlsaProvider::createBackend(Device const& device, ProfileId const& /*profile*/)

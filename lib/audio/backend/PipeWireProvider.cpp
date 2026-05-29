@@ -21,20 +21,20 @@ namespace ao::audio::backend
 
   struct PipeWireProvider::Impl final
   {
-    std::unique_ptr<PipeWireMonitor> monitor;
+    std::unique_ptr<PipeWireMonitor> monitorPtr;
 
     Impl()
     {
       ensurePipeWireInit();
-      monitor = std::make_unique<PipeWireMonitor>();
-      monitor->start();
+      monitorPtr = std::make_unique<PipeWireMonitor>();
+      monitorPtr->start();
     }
 
     ~Impl()
     {
-      if (monitor)
+      if (monitorPtr)
       {
-        monitor->stop();
+        monitorPtr->stop();
       }
     }
 
@@ -45,7 +45,7 @@ namespace ao::audio::backend
   };
 
   PipeWireProvider::PipeWireProvider()
-    : _impl{std::make_unique<Impl>()}
+    : _implPtr{std::make_unique<Impl>()}
   {
   }
 
@@ -53,7 +53,7 @@ namespace ao::audio::backend
 
   Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
-    if (!_impl->monitor)
+    if (!_implPtr->monitorPtr)
     {
       return Subscription{};
     }
@@ -70,7 +70,7 @@ namespace ao::audio::backend
       callback(devices);
     };
 
-    return _impl->monitor->subscribeDevices(std::move(wrappedCallback));
+    return _implPtr->monitorPtr->subscribeDevices(std::move(wrappedCallback));
   }
 
   std::unique_ptr<IBackend> PipeWireProvider::createBackend(Device const& device, ProfileId const& profile)
@@ -87,16 +87,16 @@ namespace ao::audio::backend
                .iconName = "media-playback-start-symbolic",
                .supportedProfiles = {{kProfileShared, "Shared Mode", "System-level mixing with other applications"},
                                      {kProfileExclusive, "Exclusive Mode", "Direct access to the hardware device"}}},
-            .devices = _impl->monitor ? _impl->monitor->enumerateSinks() : std::vector<Device>{}};
+            .devices = _implPtr->monitorPtr ? _implPtr->monitorPtr->enumerateSinks() : std::vector<Device>{}};
   }
 
   Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
   {
-    if (!_impl->monitor)
+    if (!_implPtr->monitorPtr)
     {
       return Subscription{};
     }
 
-    return _impl->monitor->subscribeGraph(routeAnchor, std::move(callback));
+    return _implPtr->monitorPtr->subscribeGraph(routeAnchor, std::move(callback));
   }
 } // namespace ao::audio::backend

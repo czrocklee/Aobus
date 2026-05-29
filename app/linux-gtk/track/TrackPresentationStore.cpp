@@ -39,7 +39,7 @@ namespace ao::gtk
 
   std::optional<rt::TrackPresentationSpec> TrackPresentationStore::specForId(std::string_view id) const
   {
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(id))
+    if (auto const* builtin = rt::builtinTrackPresentationPreset(id); builtin != nullptr)
     {
       return builtin->spec;
     }

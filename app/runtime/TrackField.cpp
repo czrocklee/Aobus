@@ -329,7 +329,7 @@ namespace ao::rt
 
   std::string_view trackFieldId(TrackField field)
   {
-    if (auto const* def = trackFieldDefinition(field))
+    if (auto const* def = trackFieldDefinition(field); def != nullptr)
     {
       return def->id;
     }
@@ -339,7 +339,7 @@ namespace ao::rt
 
   std::string_view trackFieldFilterExpressionVariable(TrackField const field)
   {
-    if (auto const* const def = trackFieldDefinition(field))
+    if (auto const* const def = trackFieldDefinition(field); def != nullptr)
     {
       return def->filterExpressionVariable;
     }

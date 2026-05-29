@@ -19,7 +19,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("ListTreeModelBuilder - building tree", "[gtk][list][builder]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
 
@@ -54,34 +54,34 @@ namespace ao::gtk::test
     SECTION("Basic structure")
     {
       // Root store should contain exactly 1 item: "All Tracks"
-      REQUIRE(result.store->get_n_items() == 1);
-      auto const allTracks = result.store->get_item(0);
-      CHECK(allTracks->row()->name() == "All Tracks");
-      CHECK(allTracks->listId() == rt::kAllTracksListId);
+      REQUIRE(result.storePtr->get_n_items() == 1);
+      auto const allTracksPtr = result.storePtr->get_item(0);
+      CHECK(allTracksPtr->row()->name() == "All Tracks");
+      CHECK(allTracksPtr->listId() == rt::kAllTracksListId);
 
       // "All Tracks" should have "Manual List A" as child
-      REQUIRE(allTracks->nChildren() == 1);
-      auto const itemA = allTracks->child(0);
-      CHECK(itemA->row()->name() == "Manual List A");
-      CHECK(itemA->listId() == idA);
-      CHECK(itemA->parent() == allTracks.get());
+      REQUIRE(allTracksPtr->nChildren() == 1);
+      auto const itemAPtr = allTracksPtr->child(0);
+      CHECK(itemAPtr->row()->name() == "Manual List A");
+      CHECK(itemAPtr->listId() == idA);
+      CHECK(itemAPtr->parent() == allTracksPtr.get());
 
       // "Manual List A" should have "Smart Child B" as child
-      REQUIRE(itemA->nChildren() == 1);
-      auto const itemB = itemA->child(0);
-      CHECK(itemB->row()->name() == "Smart Child B");
-      CHECK(itemB->listId() == idB);
-      CHECK(itemB->parent() == itemA.get());
-      CHECK(itemB->row()->isSmart() == true);
-      CHECK(itemB->row()->filter() == "genre:rock");
+      REQUIRE(itemAPtr->nChildren() == 1);
+      auto const itemBPtr = itemAPtr->child(0);
+      CHECK(itemBPtr->row()->name() == "Smart Child B");
+      CHECK(itemBPtr->listId() == idB);
+      CHECK(itemBPtr->parent() == itemAPtr.get());
+      CHECK(itemBPtr->row()->isSmart() == true);
+      CHECK(itemBPtr->row()->filter() == "genre:rock");
     }
 
     SECTION("Models are created")
     {
-      CHECK(result.treeModel);
-      CHECK(result.selectionModel);
-      CHECK(result.selectionModel->get_model() == result.treeModel);
-      CHECK(result.treeModel->get_model() == result.store);
+      CHECK(result.treeModelPtr);
+      CHECK(result.selectionModelPtr);
+      CHECK(result.selectionModelPtr->get_model() == result.treeModelPtr);
+      CHECK(result.treeModelPtr->get_model() == result.storePtr);
     }
 
     SECTION("NodesById mapping")

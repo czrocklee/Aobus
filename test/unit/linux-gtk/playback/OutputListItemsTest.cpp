@@ -13,29 +13,30 @@ namespace ao::gtk::test
   {
     SECTION("BackendItem")
     {
-      auto item = BackendItem::create(audio::BackendId{"alsa"}, "ALSA");
-      REQUIRE(item);
-      CHECK(item->id() == audio::BackendId{"alsa"});
-      CHECK(item->name() == "ALSA");
+      auto itemPtr = BackendItem::create(audio::BackendId{"alsa"}, "ALSA");
+      REQUIRE(itemPtr);
+      CHECK(itemPtr->id() == audio::BackendId{"alsa"});
+      CHECK(itemPtr->name() == "ALSA");
     }
 
     SECTION("DeviceItem")
     {
       auto device = audio::Device{.id = audio::DeviceId{"hw:0,0"}, .displayName = "Default", .description = "Hardware"};
-      auto item = DeviceItem::create(audio::BackendId{"alsa"}, device, audio::ProfileId{"stereo"});
-      REQUIRE(item);
-      CHECK(item->backendId() == audio::BackendId{"alsa"});
-      CHECK(item->id() == audio::DeviceId{"hw:0,0"});
-      CHECK(item->profileId() == audio::ProfileId{"stereo"});
-      CHECK(item->name() == "Default");
-      CHECK(item->description() == "Hardware");
-      CHECK(item->active() == false);
+      auto itemPtr = DeviceItem::create(audio::BackendId{"alsa"}, device, audio::ProfileId{"stereo"});
+      REQUIRE(itemPtr);
+      CHECK(itemPtr->backendId() == audio::BackendId{"alsa"});
+      CHECK(itemPtr->id() == audio::DeviceId{"hw:0,0"});
+      CHECK(itemPtr->profileId() == audio::ProfileId{"stereo"});
+      CHECK(itemPtr->name() == "Default");
+      CHECK(itemPtr->description() == "Hardware");
+      CHECK(itemPtr->active() == false);
 
-      item->setActive(true);
-      CHECK(item->active() == true);
+      itemPtr->setActive(true);
+      CHECK(itemPtr->active() == true);
 
-      CHECK(item->matches(audio::BackendId{"alsa"}, audio::DeviceId{"hw:0,0"}, audio::ProfileId{"stereo"}));
-      CHECK_FALSE(item->matches(audio::BackendId{"pipewire"}, audio::DeviceId{"hw:0,0"}, audio::ProfileId{"stereo"}));
+      CHECK(itemPtr->matches(audio::BackendId{"alsa"}, audio::DeviceId{"hw:0,0"}, audio::ProfileId{"stereo"}));
+      CHECK_FALSE(
+        itemPtr->matches(audio::BackendId{"pipewire"}, audio::DeviceId{"hw:0,0"}, audio::ProfileId{"stereo"}));
     }
   }
 } // namespace ao::gtk::test

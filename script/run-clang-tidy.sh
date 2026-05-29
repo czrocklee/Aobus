@@ -14,7 +14,7 @@ BUILD_DIR="/tmp/build/debug-clang-tidy"
 FIX_MODE=false
 DEBUG_MODE=false
 OUTPUT_FILE=""
-JOBS=$(nproc)
+JOBS=$(( $(nproc) > 1 ? $(nproc) - 1 : 1 ))
 
 usage() {
     cat <<'EOF'
@@ -38,6 +38,7 @@ Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
 
 === Other =============================================================
 
+  --check <name>        Run only the specified check (e.g. readability-implicit-bool-conversion)
   --fix                 Apply fixes automatically (use with caution)
   --debug               Show debug info (config, system includes)
   -j <N>                Parallel jobs (default: nproc)
@@ -62,6 +63,9 @@ Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
   # Check production code only
   ./script/run-clang-tidy.sh --folder lib --folder app --folder include
 
+  # Run a specific check only
+  ./script/run-clang-tidy.sh --check readability-implicit-bool-conversion
+
 === Config per mode ===================================================
 
   STRICT                  All checks active (lib/app/include)
@@ -75,6 +79,7 @@ EOF
 ALL_MODE=false
 FOLDER_DIRS=()
 COMMIT_REF=""
+CHECK_ONLY=""
 FILES=()
 
 while [[ $# -gt 0 ]]; do
@@ -83,6 +88,7 @@ while [[ $# -gt 0 ]]; do
         -p*) BUILD_DIR="${1#-p}"; shift ;;
         -j) JOBS="$2"; shift 2 ;;
         -j*) JOBS="${1#-j}"; shift ;;
+        --check) CHECK_ONLY="$2"; shift 2 ;;
         --fix) FIX_MODE=true; shift ;;
         --debug) DEBUG_MODE=true; shift ;;
         -o) OUTPUT_FILE="$2"; shift 2 ;;
@@ -231,6 +237,11 @@ RELAXED_CHECKS="$(
     echo "$c"
 )"
 # ---------------------------------------------------------------------------
+
+if [[ -n "$CHECK_ONLY" ]]; then
+    STRICT_CHECKS="-*,${CHECK_ONLY}"
+    RELAXED_CHECKS="-*,${CHECK_ONLY}"
+fi
 
 classify_file() {
     local f="$1"

@@ -62,7 +62,7 @@ namespace ao::gtk
     applySizeClass(_button, size);
     _button.set_valign(Gtk::Align::CENTER);
 
-    _controller = std::make_unique<ao::uimodel::playback::TransportViewModel>(
+    _controllerPtr = std::make_unique<ao::uimodel::playback::TransportViewModel>(
       playbackService,
       queueModel,
       action,
@@ -70,7 +70,7 @@ namespace ao::gtk
       showLabel,
       [this](ao::uimodel::playback::TransportViewState const& state) { applyState(state); });
 
-    _button.signal_clicked().connect([this] { _controller->handleClick(); });
+    _button.signal_clicked().connect([this] { _controllerPtr->handleClick(); });
   }
 
   TransportButton::~TransportButton() = default;

@@ -255,9 +255,9 @@ namespace ao::gtk
     {
       APP_LOG_ERROR("Failed to update titles: {}", result.error().message);
 
-      if (_detailProjection)
+      if (_detailProjectionPtr)
       {
-        auto const snap = _detailProjection->snapshot();
+        auto const snap = _detailProjectionPtr->snapshot();
         _titleLabel.set_text(snap.title.mixed ? "<Multiple Values>" : snap.title.optValue.value_or(""));
       }
     }
@@ -283,9 +283,9 @@ namespace ao::gtk
     {
       APP_LOG_ERROR("Failed to update artists: {}", result.error().message);
 
-      if (_detailProjection)
+      if (_detailProjectionPtr)
       {
-        auto const snap = _detailProjection->snapshot();
+        auto const snap = _detailProjectionPtr->snapshot();
         _artistLabel.set_text(snap.artist.mixed ? "<Multiple Values>" : snap.artist.optValue.value_or(""));
       }
     }
@@ -311,9 +311,9 @@ namespace ao::gtk
     {
       APP_LOG_ERROR("Failed to update albums: {}", result.error().message);
 
-      if (_detailProjection)
+      if (_detailProjectionPtr)
       {
-        auto const snap = _detailProjection->snapshot();
+        auto const snap = _detailProjectionPtr->snapshot();
         _albumLabel.set_text(snap.album.mixed ? "<Multiple Values>" : snap.album.optValue.value_or(""));
       }
     }
@@ -327,10 +327,10 @@ namespace ao::gtk
     _tagEditor.set_visible(false);
   }
 
-  void TrackInspectorPanel::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
+  void TrackInspectorPanel::bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr)
   {
-    _detailProjection = std::move(projection);
-    _detailSub = _detailProjection->subscribe(std::bind_front(&TrackInspectorPanel::onTrackDetailSnapshot, this));
+    _detailProjectionPtr = std::move(projectionPtr);
+    _detailSub = _detailProjectionPtr->subscribe(std::bind_front(&TrackInspectorPanel::onTrackDetailSnapshot, this));
   }
 
   void TrackInspectorPanel::onTrackDetailSnapshot(rt::TrackDetailSnapshot const& snap)
@@ -367,21 +367,21 @@ namespace ao::gtk
       return;
     }
 
-    auto const pixbuf = _imageCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()));
+    auto const pixbufPtr = _imageCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()));
 
-    if (!pixbuf)
+    if (!pixbufPtr)
     {
-      auto const loadedPixbuf = loadImageFromLibrary(snap.singleCoverArtId);
+      auto const loadedPixbufPtr = loadImageFromLibrary(snap.singleCoverArtId);
 
-      if (loadedPixbuf)
+      if (loadedPixbufPtr)
       {
-        _imageCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()), loadedPixbuf);
+        _imageCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()), loadedPixbufPtr);
       }
     }
 
-    if (pixbuf)
+    if (pixbufPtr)
     {
-      _coverImage.set_pixbuf(pixbuf);
+      _coverImage.set_pixbuf(pixbufPtr);
       _coverImage.set_visible(true);
       _noCoverLabel.set_visible(false);
     }
@@ -400,9 +400,9 @@ namespace ao::gtk
 
     try
     {
-      auto const memStream = Gio::MemoryInputStream::create();
-      memStream->add_data(optData->data(), std::ssize(*optData), nullptr);
-      return Gdk::Pixbuf::create_from_stream(memStream);
+      auto const memStreamPtr = Gio::MemoryInputStream::create();
+      memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
+      return Gdk::Pixbuf::create_from_stream(memStreamPtr);
     }
     catch (std::exception const& ex)
     {

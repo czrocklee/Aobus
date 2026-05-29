@@ -51,6 +51,6 @@ namespace ao::gtk
 
     static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;
 
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::gtk

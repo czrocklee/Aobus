@@ -31,18 +31,18 @@ namespace ao::gtk::layout
   {
     for (auto const& id : _exportedActionIds)
     {
-      auto gioAction = _actionMap.lookup_action(id);
+      auto gioActionPtr = _actionMap.lookup_action(id);
 
-      if (!gioAction)
+      if (!gioActionPtr)
       {
         continue;
       }
 
-      if (auto simpleAction = std::dynamic_pointer_cast<Gio::SimpleAction>(gioAction))
+      if (auto simpleActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(gioActionPtr); simpleActionPtr != nullptr)
       {
         auto ctx = _contextProvider.getActionContext(id);
         auto const state = _registry.state(id, ctx);
-        simpleAction->set_enabled(state.enabled);
+        simpleActionPtr->set_enabled(state.enabled);
       }
     }
   }
@@ -65,21 +65,21 @@ namespace ao::gtk::layout
         continue;
       }
 
-      auto action = Gio::SimpleAction::create(desc.id);
+      auto actionPtr = Gio::SimpleAction::create(desc.id);
 
       // Initialize the state based on the current context
       auto ctx = contextProvider.getActionContext(desc.id);
       auto const initialState = registry.state(desc.id, ctx);
-      action->set_enabled(initialState.enabled);
+      actionPtr->set_enabled(initialState.enabled);
 
-      action->signal_activate().connect(
+      actionPtr->signal_activate().connect(
         [&registry, &contextProvider, id = desc.id](Glib::VariantBase const& /*param*/)
         {
           auto ctx = contextProvider.getActionContext(id);
           registry.tryActivate(id, ctx);
         });
 
-      actionMap.add_action(action);
+      actionMap.add_action(actionPtr);
       exportedActionIds.push_back(desc.id);
       APP_LOG_DEBUG("GioActionBridge: Exported action {}", desc.id);
     }

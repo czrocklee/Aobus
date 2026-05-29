@@ -74,9 +74,9 @@ namespace ao::gtk
     Gtk::ScrolledWindow _listScrolledWindow;
     Gtk::PopoverMenu _listContextMenu;
 
-    Glib::RefPtr<Gio::ListStore<ListTreeItem>> _listTreeStore;
-    Glib::RefPtr<Gtk::TreeListModel> _treeListModel;
-    Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
+    Glib::RefPtr<Gio::ListStore<ListTreeItem>> _listTreeStorePtr;
+    Glib::RefPtr<Gtk::TreeListModel> _treeListModelPtr;
+    Glib::RefPtr<Gtk::SingleSelection> _listSelectionModelPtr;
     std::map<ListId, Glib::RefPtr<ListTreeItem>> _nodesById;
   };
 } // namespace ao::gtk

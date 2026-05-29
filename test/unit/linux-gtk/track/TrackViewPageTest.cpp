@@ -17,7 +17,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TrackViewPage - initialization", "[gtk][track][page]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
@@ -25,10 +25,10 @@ namespace ao::gtk::test
     auto imageCache = ImageCache{200};
     auto window = Gtk::Window{};
 
-    auto model = TrackListModel::create(cache);
+    auto modelPtr = TrackListModel::create(cache);
     auto presentationStore = TrackPresentationStore{runtime.workspace()};
 
-    auto page = TrackViewPage{rt::kAllTracksListId, model, presentationStore, runtime, imageCache};
+    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, presentationStore, runtime, imageCache};
     window.set_child(page);
 
     SECTION("initial state")

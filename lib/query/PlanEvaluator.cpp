@@ -248,9 +248,7 @@ namespace ao::query
     {
       auto const* prevLoadField = findPrevLoadField(instructions, &instr);
 
-      if (bool const isTagComparison =
-            prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag;
-          isTagComparison)
+      if (prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag)
       {
         auto tagIdToMatch = DictionaryId{static_cast<std::uint32_t>(reg(registers, instr.operand))};
         auto matches = track.tags().has(tagIdToMatch);

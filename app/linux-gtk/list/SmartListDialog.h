@@ -93,9 +93,9 @@ namespace ao::gtk
     rt::AppRuntime& _runtime;
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;
-    std::unique_ptr<rt::SmartListSource> _previewFilteredList;
-    std::unique_ptr<rt::SmartListEvaluator> _previewEngine;
-    Glib::RefPtr<TrackListModel> _previewModel;
+    std::unique_ptr<rt::SmartListSource> _previewFilteredListPtr;
+    std::unique_ptr<rt::SmartListEvaluator> _previewEnginePtr;
+    Glib::RefPtr<TrackListModel> _previewModelPtr;
     bool _expressionValid = true;
 
     // Edit mode state

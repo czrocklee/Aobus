@@ -20,7 +20,7 @@ namespace ao::gtk::test
 
     SECTION("Subscriptions and refresh")
     {
-      auto controller =
+      auto controllerPtr =
         std::make_unique<uimodel::playback::TransportViewModel>(fixture.runtime().playback(),
                                                                 nullptr,
                                                                 uimodel::playback::TransportAction::Shuffle,
@@ -39,7 +39,7 @@ namespace ao::gtk::test
       log.clear();
 
       // Destroying controller disconnects events
-      controller.reset();
+      controllerPtr.reset();
       fixture.runtime().playback().setShuffleMode(rt::ShuffleMode::Off);
       CHECK(log.empty());
     }
@@ -47,7 +47,7 @@ namespace ao::gtk::test
 
   TEST_CASE("TransportButton - GTK smoke test", "[gtk][playback][viewmodel]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
 
     // Verify it instantiates and doesn't crash on applying state

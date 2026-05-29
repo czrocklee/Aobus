@@ -42,7 +42,7 @@ namespace ao::uimodel::layout
 
   std::vector<std::string> LayoutValue::asStringList() const
   {
-    if (auto const* ptr = std::get_if<std::vector<std::string>>(&data))
+    if (auto const* ptr = std::get_if<std::vector<std::string>>(&data); ptr != nullptr)
     {
       return *ptr;
     }

@@ -69,17 +69,17 @@ namespace ao::gtk
       {
         auto* ctx = find(ev.viewId);
 
-        if (ctx == nullptr || ctx->model == nullptr)
+        if (ctx == nullptr || ctx->modelPtr == nullptr)
         {
           return;
         }
 
-        ctx->model->bindProjection(ev.projection);
-        ctx->page->applyPresentation(ev.projection->presentation());
+        ctx->modelPtr->bindProjection(ev.projectionPtr);
+        ctx->pagePtr->applyPresentation(ev.projectionPtr->presentation());
 
         if (_playingTrackId != kInvalidTrackId)
         {
-          ctx->page->setPlayingTrackId(_playingTrackId);
+          ctx->pagePtr->setPlayingTrackId(_playingTrackId);
         }
       });
 
@@ -88,16 +88,16 @@ namespace ao::gtk
       {
         auto* ctx = find(ev.viewId);
 
-        if (ctx == nullptr || ctx->page == nullptr)
+        if (ctx == nullptr || ctx->pagePtr == nullptr)
         {
           return;
         }
 
-        ctx->page->applyPresentation(ev.presentation);
+        ctx->pagePtr->applyPresentation(ev.presentation);
 
         if (_playingTrackId != kInvalidTrackId)
         {
-          ctx->page->setPlayingTrackId(_playingTrackId);
+          ctx->pagePtr->setPlayingTrackId(_playingTrackId);
         }
       });
   }
@@ -105,7 +105,7 @@ namespace ao::gtk
   {
     for (auto const& [id, ctx] : _trackPages)
     {
-      if (ctx.page && ctx.page->listId() == preferredListId)
+      if (ctx.pagePtr && ctx.pagePtr->listId() == preferredListId)
       {
         return id;
       }
@@ -121,10 +121,10 @@ namespace ao::gtk
 
     if (trackId != kInvalidTrackId)
     {
-      if (auto* ctx = find(viewId))
+      if (auto* ctx = find(viewId); ctx != nullptr)
       {
         APP_LOG_DEBUG("TrackPageHost: Calling selectTrack on page for trackId: {}", trackId.raw());
-        ctx->page->selectionController().selectTrack(trackId);
+        ctx->pagePtr->selectionController().selectTrack(trackId);
       }
       else
       {
@@ -162,9 +162,9 @@ namespace ao::gtk
     {
       if (!std::ranges::contains(state.openViews, it->first))
       {
-        if (it->second.page)
+        if (it->second.pagePtr)
         {
-          _stack.remove(*it->second.page);
+          _stack.remove(*it->second.pagePtr);
         }
 
         it = _trackPages.erase(it);
@@ -199,9 +199,9 @@ namespace ao::gtk
     {
       auto it = std::prev(_trackPages.end());
 
-      if (it->second.page)
+      if (it->second.pagePtr)
       {
-        _stack.remove(*it->second.page);
+        _stack.remove(*it->second.pagePtr);
       }
 
       _trackPages.erase(it);
@@ -251,7 +251,7 @@ namespace ao::gtk
 
     for (auto& [id, ctx] : _trackPages)
     {
-      if (ctx.page.get() == visibleChild)
+      if (ctx.pagePtr.get() == visibleChild)
       {
         return &ctx;
       }
@@ -271,7 +271,7 @@ namespace ao::gtk
 
     for (auto const& [id, ctx] : _trackPages)
     {
-      if (ctx.page.get() == visibleChild)
+      if (ctx.pagePtr.get() == visibleChild)
       {
         return &ctx;
       }
@@ -291,9 +291,9 @@ namespace ao::gtk
 
     for (auto& [id, ctx] : _trackPages)
     {
-      if (ctx.page)
+      if (ctx.pagePtr)
       {
-        ctx.page->setPlayingTrackId(trackId);
+        ctx.pagePtr->setPlayingTrackId(trackId);
       }
     }
   }
@@ -305,9 +305,9 @@ namespace ao::gtk
       return; // Already exists
     }
 
-    auto proj = _runtime.views().trackListProjection(viewId);
+    auto projPtr = _runtime.views().trackListProjection(viewId);
 
-    if (!proj)
+    if (!projPtr)
     {
       return;
     }
@@ -315,10 +315,11 @@ namespace ao::gtk
     auto const state = _runtime.views().trackListState(viewId);
     auto const listId = ListId{state.listId};
 
-    auto model = TrackListModel::create(dataProvider);
-    model->bindProjection(proj);
+    auto modelPtr = TrackListModel::create(dataProvider);
+    modelPtr->bindProjection(projPtr);
 
-    auto trackPage = std::make_unique<TrackViewPage>(listId, model, _presentationStore, _runtime, *_imageCache, viewId);
+    auto trackPagePtr =
+      std::make_unique<TrackViewPage>(listId, modelPtr, _presentationStore, _runtime, *_imageCache, viewId);
     auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = std::string{"List"};
@@ -328,7 +329,7 @@ namespace ao::gtk
       auto const txn = _runtime.musicLibrary().readTransaction();
       auto lists = _runtime.musicLibrary().lists().reader(txn);
 
-      if (auto optView = lists.get(listId))
+      if (auto optView = lists.get(listId); optView)
       {
         listName = optView->name().empty() ? "<Unnamed List>" : std::string{optView->name()};
       }
@@ -338,9 +339,9 @@ namespace ao::gtk
       listName = "All Tracks";
     }
 
-    _stack.add(*trackPage, pageId, listName);
+    _stack.add(*trackPagePtr, pageId, listName);
 
-    auto ctx = TrackPageContext{.viewId = viewId, .model = std::move(model), .page = std::move(trackPage)};
+    auto ctx = TrackPageContext{.viewId = viewId, .modelPtr = std::move(modelPtr), .pagePtr = std::move(trackPagePtr)};
 
     bindTrackPage(ctx);
     _trackPages[viewId] = std::move(ctx);
@@ -348,7 +349,7 @@ namespace ao::gtk
 
   void TrackPageHost::bindTrackPage(TrackPageContext& ctx)
   {
-    auto* const page = ctx.page.get();
+    auto* const page = ctx.pagePtr.get();
     auto const viewId = rt::ViewId{ctx.viewId};
 
     page->signalSelectionChanged().connect(
@@ -409,9 +410,9 @@ namespace ao::gtk
 
   ListId TrackPageHost::activeListId() const
   {
-    if (auto const* ctx = currentVisible())
+    if (auto const* ctx = currentVisible(); ctx != nullptr)
     {
-      return ctx->page->listId();
+      return ctx->pagePtr->listId();
     }
 
     return rt::kAllTracksListId;

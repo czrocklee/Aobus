@@ -13,7 +13,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("QueryExpressionBox - smoke test", "[gtk][list][query]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
 

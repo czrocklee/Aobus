@@ -22,12 +22,12 @@ namespace ao::rt
   {
     TrackSource* parentSourceOf(TrackSource& source)
     {
-      if (auto* const manual = dynamic_cast<ManualListSource*>(&source))
+      if (auto* const manual = dynamic_cast<ManualListSource*>(&source); manual != nullptr)
       {
         return manual->source();
       }
 
-      if (auto* const smart = dynamic_cast<SmartListSource*>(&source))
+      if (auto* const smart = dynamic_cast<SmartListSource*>(&source); smart != nullptr)
       {
         return &smart->source();
       }
@@ -95,11 +95,11 @@ namespace ao::rt
       return;
     }
 
-    if (auto* const manual = dynamic_cast<ManualListSource*>(it->second.get()))
+    if (auto* const manual = dynamic_cast<ManualListSource*>(it->second.get()); manual != nullptr)
     {
       manual->reloadFromListView(*optView);
     }
-    else if (auto* const smart = dynamic_cast<SmartListSource*>(it->second.get()))
+    else if (auto* const smart = dynamic_cast<SmartListSource*>(it->second.get()); smart != nullptr)
     {
       smart->setExpression(std::string{optView->filter()});
       smart->reload();
@@ -192,17 +192,17 @@ namespace ao::rt
 
     if (optView->isSmart())
     {
-      auto smartSource = std::make_unique<SmartListSource>(parentSource, _library, _smartEvaluator);
-      smartSource->setExpression(std::string{optView->filter()});
-      smartSource->reload();
-      auto& ref = *smartSource;
-      _sources.emplace(listId, std::move(smartSource));
+      auto smartSourcePtr = std::make_unique<SmartListSource>(parentSource, _library, _smartEvaluator);
+      smartSourcePtr->setExpression(std::string{optView->filter()});
+      smartSourcePtr->reload();
+      auto& ref = *smartSourcePtr;
+      _sources.emplace(listId, std::move(smartSourcePtr));
       return ref;
     }
 
-    auto manualSource = std::make_unique<ManualListSource>(*optView, &parentSource);
-    auto& ref = *manualSource;
-    _sources.emplace(listId, std::move(manualSource));
+    auto manualSourcePtr = std::make_unique<ManualListSource>(*optView, &parentSource);
+    auto& ref = *manualSourcePtr;
+    _sources.emplace(listId, std::move(manualSourcePtr));
     return ref;
   }
 }

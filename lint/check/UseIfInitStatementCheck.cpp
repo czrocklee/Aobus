@@ -108,13 +108,13 @@ namespace clang::tidy::readability
 
     bool isEligibleControlStmt(Stmt const* target)
     {
-      if (auto const* ifStmt = dyn_cast<IfStmt>(target); ifStmt)
+      if (auto const* ifStmt = dyn_cast<IfStmt>(target); ifStmt != nullptr)
       {
         // If it already has an init statement OR a condition variable, don't crowd it.
         return !ifStmt->hasInitStorage() && (ifStmt->getConditionVariable() == nullptr);
       }
 
-      if (auto const* switchStmt = dyn_cast<SwitchStmt>(target); switchStmt)
+      if (auto const* switchStmt = dyn_cast<SwitchStmt>(target); switchStmt != nullptr)
       {
         return !switchStmt->hasInitStorage() && (switchStmt->getConditionVariable() == nullptr);
       }
@@ -137,29 +137,49 @@ namespace clang::tidy::readability
 
   void UseIfInitStatementCheck::check(MatchFinder::MatchResult const& result)
   {
-    auto const& sm = *result.SourceManager;
-
-    // Handle Matcher 2: Implicit condition variable
-    if (auto const* implicitIf = result.Nodes.getNodeAs<IfStmt>("implicitIf"))
+    if (result.Nodes.getNodeAs<IfStmt>("implicitIf") != nullptr)
     {
-      auto const* condVar = result.Nodes.getNodeAs<VarDecl>("condVar");
-      auto const* condDecl = result.Nodes.getNodeAs<DeclStmt>("condDecl");
+      handleImplicitIf(result);
+    }
+    else if (result.Nodes.getNodeAs<CompoundStmt>("block") != nullptr)
+    {
+      handleExplicitBlock(result);
+    }
+  }
 
-      if ((implicitIf == nullptr) || (condVar == nullptr) || (condDecl == nullptr))
-      {
-        return;
-      }
+  void UseIfInitStatementCheck::handleImplicitIf(MatchFinder::MatchResult const& result)
+  {
+    auto const& sm = *result.SourceManager;
+    auto const* implicitIf = result.Nodes.getNodeAs<IfStmt>("implicitIf");
+    auto const* condVar = result.Nodes.getNodeAs<VarDecl>("condVar");
+    auto const* condDecl = result.Nodes.getNodeAs<DeclStmt>("condDecl");
 
-      if (sm.isInSystemHeader(condVar->getBeginLoc()) || condVar->getBeginLoc().isMacroID())
-      {
-        return;
-      }
-
-      diag(condVar->getBeginLoc(), "prefer explicit init-statement style: if (auto var = expr; var)");
+    if ((implicitIf == nullptr) || (condVar == nullptr) || (condDecl == nullptr))
+    {
       return;
     }
 
-    // Handle Matcher 1: Variable declared before control statement
+    if (sm.isInSystemHeader(condVar->getBeginLoc()) || condVar->getBeginLoc().isMacroID())
+    {
+      return;
+    }
+
+    auto const* type = condVar->getType().getTypePtr();
+    bool const isPointer = type->isPointerType() || type->isObjCObjectPointerType() || type->isMemberPointerType();
+
+    if (isPointer)
+    {
+      diag(condVar->getBeginLoc(), "prefer explicit init-statement style with pointer syntax: if (auto* var = expr; var != nullptr)");
+    }
+    else
+    {
+      diag(condVar->getBeginLoc(), "prefer explicit init-statement style: if (auto var = expr; var)");
+    }
+  }
+
+  void UseIfInitStatementCheck::handleExplicitBlock(MatchFinder::MatchResult const& result)
+  {
+    auto const& sm = *result.SourceManager;
     auto const* block = result.Nodes.getNodeAs<CompoundStmt>("block");
     auto const* decl = result.Nodes.getNodeAs<DeclStmt>("decl");
 

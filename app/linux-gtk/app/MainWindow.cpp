@@ -22,34 +22,34 @@
 
 namespace ao::gtk
 {
-  MainWindow::MainWindow(rt::AppRuntime& runtime, std::shared_ptr<AppConfig> config)
+  MainWindow::MainWindow(rt::AppRuntime& runtime, std::shared_ptr<AppConfig> configPtr)
     : _runtime{runtime}
-    , _config{std::move(config)}
-    , _mainWindowCoordinator{std::make_unique<MainWindowCoordinator>(*this, _runtime, _config)}
-    , _shellLayout{_runtime, *this, _config}
+    , _configPtr{std::move(configPtr)}
+    , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configPtr)}
+    , _shellLayout{_runtime, *this, _configPtr}
   {
     set_title("Aobus");
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
 
-    _mainWindowCoordinator->loadSession();
+    _mainWindowCoordinatorPtr->loadSession();
 
-    _menuController = std::make_unique<MenuController>(
-      _mainWindowCoordinator->importExport(), [this] { _shellLayout.openEditor(*_config); });
-    _menuController->setup(*this);
-    _shellLayout.context().shell.menuModel = _menuController->menuModel();
+    _menuControllerPtr = std::make_unique<MenuController>(
+      _mainWindowCoordinatorPtr->importExport(), [this] { _shellLayout.openEditor(*_configPtr); });
+    _menuControllerPtr->setup(*this);
+    _shellLayout.context().shell.menuModelPtr = _menuControllerPtr->menuModel();
 
     _shellLayout.attachToWindow();
 
     // Mouse back/forward navigation (buttons 8/9).
-    auto mouseNavGesture = Gtk::GestureClick::create();
-    mouseNavGesture->set_button(0); // listen to all buttons
+    auto mouseNavGesturePtr = Gtk::GestureClick::create();
+    mouseNavGesturePtr->set_button(0); // listen to all buttons
     constexpr int kMouseBackButton = 8;
     constexpr int kMouseForwardButton = 9;
 
-    mouseNavGesture->signal_pressed().connect(
-      [this, mouseNavGesture](std::int32_t /*nPress*/, double /*x*/, double /*y*/)
+    mouseNavGesturePtr->signal_pressed().connect(
+      [this, mouseNavGesturePtr](std::int32_t /*nPress*/, double /*x*/, double /*y*/)
       {
-        if (auto const button = mouseNavGesture->get_current_button(); button == kMouseBackButton)
+        if (auto const button = mouseNavGesturePtr->get_current_button(); button == kMouseBackButton)
         {
           _runtime.workspace().goBack();
         }
@@ -58,15 +58,15 @@ namespace ao::gtk
           _runtime.workspace().goForward();
         }
       });
-    add_controller(mouseNavGesture);
+    add_controller(mouseNavGesturePtr);
   }
 
   MainWindow::~MainWindow()
   {
     try
     {
-      _mainWindowCoordinator->saveSession();
-      _shellLayout.saveLayout(*_config);
+      _mainWindowCoordinatorPtr->saveSession();
+      _shellLayout.saveLayout(*_configPtr);
     }
     catch (std::exception const& e)
     {
@@ -80,28 +80,28 @@ namespace ao::gtk
 
   void MainWindow::on_hide()
   {
-    _mainWindowCoordinator->saveSession();
-    _shellLayout.saveLayout(*_config);
+    _mainWindowCoordinatorPtr->saveSession();
+    _shellLayout.saveLayout(*_configPtr);
     Gtk::ApplicationWindow::on_hide();
   }
 
   portal::ImportExportCoordinator& MainWindow::importExportCoordinator()
   {
-    return _mainWindowCoordinator->importExport();
+    return _mainWindowCoordinatorPtr->importExport();
   }
 
   void MainWindow::initializeSession()
   {
-    _mainWindowCoordinator->initializeSession();
+    _mainWindowCoordinatorPtr->initializeSession();
 
-    _shellLayout.context().bind(_mainWindowCoordinator->uiServices());
+    _shellLayout.context().bind(_mainWindowCoordinatorPtr->uiServices());
     _shellLayout.refreshExportedActions();
 
-    _shellLayout.loadLayout(*_config);
+    _shellLayout.loadLayout(*_configPtr);
   }
 
   void MainWindow::rebuildLayout()
   {
-    _shellLayout.loadLayout(*_config);
+    _shellLayout.loadLayout(*_configPtr);
   }
 } // namespace ao::gtk

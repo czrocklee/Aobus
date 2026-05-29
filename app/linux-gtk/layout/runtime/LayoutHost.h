@@ -31,6 +31,6 @@ namespace ao::gtk::layout
 
   private:
     LayoutRuntime _runtime;
-    std::unique_ptr<ILayoutComponent> _activeComponent;
+    std::unique_ptr<ILayoutComponent> _activeComponentPtr;
   };
 } // namespace ao::gtk::layout

@@ -29,7 +29,7 @@ namespace ao::gtk
     _button.set_valign(Gtk::Align::CENTER);
     _button.set_child(_soul);
 
-    _soulController = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
+    _soulControllerPtr = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
       _playback,
       [this](ao::uimodel::playback::AobusSoulViewState const& view)
       {
@@ -52,9 +52,9 @@ namespace ao::gtk
         }
       });
 
-    auto const secondaryClick = Gtk::GestureClick::create();
-    secondaryClick->set_button(GDK_BUTTON_SECONDARY);
-    secondaryClick->signal_released().connect(
+    auto const secondaryClickPtr = Gtk::GestureClick::create();
+    secondaryClickPtr->set_button(GDK_BUTTON_SECONDARY);
+    secondaryClickPtr->signal_released().connect(
       [this](std::int32_t, double, double)
       {
         if (_longPressHandled)
@@ -68,12 +68,12 @@ namespace ao::gtk
           _actions.onSecondaryClick();
         }
       });
-    _button.add_controller(secondaryClick);
+    _button.add_controller(secondaryClickPtr);
 
-    auto const primaryLongPress = Gtk::GestureLongPress::create();
-    primaryLongPress->set_button(GDK_BUTTON_PRIMARY);
-    primaryLongPress->set_delay_factor(kLongPressDelayFactor);
-    primaryLongPress->signal_pressed().connect(
+    auto const primaryLongPressPtr = Gtk::GestureLongPress::create();
+    primaryLongPressPtr->set_button(GDK_BUTTON_PRIMARY);
+    primaryLongPressPtr->set_delay_factor(kLongPressDelayFactor);
+    primaryLongPressPtr->signal_pressed().connect(
       [this](double, double)
       {
         _longPressHandled = true;
@@ -83,12 +83,12 @@ namespace ao::gtk
           _actions.onPrimaryLongPress();
         }
       });
-    _button.add_controller(primaryLongPress);
+    _button.add_controller(primaryLongPressPtr);
 
-    auto const secondaryLongPress = Gtk::GestureLongPress::create();
-    secondaryLongPress->set_button(GDK_BUTTON_SECONDARY);
-    secondaryLongPress->set_delay_factor(kLongPressDelayFactor);
-    secondaryLongPress->signal_pressed().connect(
+    auto const secondaryLongPressPtr = Gtk::GestureLongPress::create();
+    secondaryLongPressPtr->set_button(GDK_BUTTON_SECONDARY);
+    secondaryLongPressPtr->set_delay_factor(kLongPressDelayFactor);
+    secondaryLongPressPtr->signal_pressed().connect(
       [this](double, double)
       {
         _longPressHandled = true;
@@ -98,7 +98,7 @@ namespace ao::gtk
           _actions.onSecondaryLongPress();
         }
       });
-    _button.add_controller(secondaryLongPress);
+    _button.add_controller(secondaryLongPressPtr);
   }
 
   OutputSelector::~OutputSelector() = default;

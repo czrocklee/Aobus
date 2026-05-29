@@ -20,7 +20,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TrackColumnController - column management", "[gtk][track][column]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto presentationStore = TrackPresentationStore{runtime.workspace()};
@@ -32,8 +32,8 @@ namespace ao::gtk::test
     {
       controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
-      auto const columns = columnView.get_columns();
-      CHECK(columns->get_n_items() > 0);
+      auto const columnsPtr = columnView.get_columns();
+      CHECK(columnsPtr->get_n_items() > 0);
     }
 
     SECTION("applyColumnLayout updates visibility")
@@ -44,11 +44,11 @@ namespace ao::gtk::test
       controller.applyColumnLayout(visible);
 
       // Verify only these columns are visible
-      auto const columns = columnView.get_columns();
+      auto const columnsPtr = columnView.get_columns();
 
-      for (guint i = 0; i < columns->get_n_items(); ++i)
+      for (guint i = 0; i < columnsPtr->get_n_items(); ++i)
       {
-        auto col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(i));
+        auto colPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(i));
         // We can't easily map column back to field without peering or checking title
       }
     }

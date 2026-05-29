@@ -24,7 +24,7 @@ namespace ao::audio
   class StreamingSource final : public ISource
   {
   public:
-    StreamingSource(std::unique_ptr<IDecoderSession> decoder,
+    StreamingSource(std::unique_ptr<IDecoderSession> decoderPtr,
                     DecodedStreamInfo streamInfo,
                     std::function<void(Error const&)> onError,
                     std::uint32_t prerollTargetMs,
@@ -53,7 +53,7 @@ namespace ao::audio
                     std::stop_token const& seekToken,
                     std::stop_token const* threadStopToken);
 
-    std::unique_ptr<IDecoderSession> _decoder;
+    std::unique_ptr<IDecoderSession> _decoderPtr;
     DecodedStreamInfo _streamInfo;
     std::function<void(Error const&)> _onError;
     PcmRingBuffer _ringBuffer;

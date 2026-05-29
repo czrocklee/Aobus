@@ -8,6 +8,9 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/CorePrimitives.h>
 
 #include <atomic>
 #include <chrono>
@@ -131,8 +134,8 @@ namespace ao::rt::test
   public:
     static auto create(T initial) { return AsyncTestState{std::make_shared<std::atomic<T>>(initial)}; }
 
-    void set(T value) { *_data = value; }
-    T get() const { return _data->load(); }
+    void set(T value) { *_dataPtr = value; }
+    T get() const { return _dataPtr->load(); }
 
     bool waitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::milliseconds{500})
     {
@@ -151,16 +154,16 @@ namespace ao::rt::test
       return get() == expected;
     }
 
-    std::atomic<T>* operator->() { return _data.get(); }
-    std::atomic<T>& operator*() { return *_data; }
+    std::atomic<T>* operator->() { return _dataPtr.get(); }
+    std::atomic<T>& operator*() { return *_dataPtr; }
 
   private:
-    explicit AsyncTestState(std::shared_ptr<std::atomic<T>> data)
-      : _data{std::move(data)}
+    explicit AsyncTestState(std::shared_ptr<std::atomic<T>> dataPtr)
+      : _dataPtr{std::move(dataPtr)}
     {
     }
 
-    std::shared_ptr<std::atomic<T>> _data;
+    std::shared_ptr<std::atomic<T>> _dataPtr;
   };
 
   /**
@@ -192,4 +195,29 @@ namespace ao::rt::test
     std::mutex _mutex;
     std::condition_variable _cv;
   };
+
+  /**
+   * @brief Immediate executor for tests — runs tasks synchronously on the calling thread.
+   */
+  class MockExecutor final : public IControlExecutor
+  {
+  public:
+    bool isCurrent() const noexcept override { return true; }
+    void dispatch(std::move_only_function<void()> task) override { task(); }
+    void defer(std::move_only_function<void()> task) override { task(); }
+  };
+
+  /**
+   * @brief Creates an AppRuntime backed by a temporary directory with a MockExecutor.
+   */
+  inline auto makeRuntime(lmdb::test::TempDir const& tempDir)
+  {
+    return AppRuntime{AppRuntimeDependencies{
+      .executorPtr = std::make_unique<MockExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .workspaceConfigStorePtr =
+        std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
+    }};
+  }
 } // namespace ao::rt::test

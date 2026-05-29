@@ -81,7 +81,7 @@ namespace ao::rt
       auto parsed = _staged.expression.empty() ? query::parse("true") : query::parse(_staged.expression);
       auto compiler = query::QueryCompiler{&_ml.dictionary()};
 
-      _staged.plan = std::make_unique<query::ExecutionPlan>(compiler.compile(parsed));
+      _staged.planPtr = std::make_unique<query::ExecutionPlan>(compiler.compile(parsed));
       _staged.optError.reset();
     }
     catch (std::exception const& e)
@@ -89,7 +89,7 @@ namespace ao::rt
       APP_LOG_ERROR("Smart list expression error for '{}': {}", _staged.expression, e.what());
 
       _staged.optError = Error{.code = Error::Code::FormatRejected, .message = e.what()};
-      _staged.plan.reset();
+      _staged.planPtr.reset();
     }
 
     _dirty = true;

@@ -47,7 +47,7 @@ namespace ao::gtk
     sigc::scoped_connection _textChangedConn;
     sigc::scoped_connection _debounceTimer;
 
-    std::unique_ptr<uimodel::track::TrackFilterViewModel> _controller;
+    std::unique_ptr<uimodel::track::TrackFilterViewModel> _controllerPtr;
     CreateSmartListSignal _signalCreateSmartListRequested;
   };
 } // namespace ao::gtk

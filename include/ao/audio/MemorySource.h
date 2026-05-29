@@ -20,7 +20,7 @@ namespace ao::audio
   class MemorySource final : public ISource
   {
   public:
-    MemorySource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo);
+    MemorySource(std::unique_ptr<IDecoderSession> decoderPtr, DecodedStreamInfo streamInfo);
 
     MemorySource(MemorySource const&) = delete;
     MemorySource& operator=(MemorySource const&) = delete;
@@ -39,7 +39,7 @@ namespace ao::audio
   private:
     std::size_t positionToByteOffset(std::uint32_t positionMs) const noexcept;
 
-    std::unique_ptr<IDecoderSession> _decoder;
+    std::unique_ptr<IDecoderSession> _decoderPtr;
     DecodedStreamInfo _streamInfo;
     std::vector<std::byte> _pcmBytes;
     std::atomic<std::size_t> _readOffset{0};

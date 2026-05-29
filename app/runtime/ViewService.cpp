@@ -32,9 +32,9 @@ namespace ao::rt
     struct ViewEntry final
     {
       TrackListViewState state;
-      std::unique_ptr<SmartListSource> adHocSource;
+      std::unique_ptr<SmartListSource> adHocSourcePtr;
       TrackSource* activeSource = nullptr;
-      std::shared_ptr<ITrackListProjection> projection;
+      std::shared_ptr<ITrackListProjection> projectionPtr;
     };
 
     void applyPresentation(ViewEntry& entry)
@@ -56,9 +56,10 @@ namespace ao::rt
       entry.state.presentation = preset->spec;
       entry.state.sortBy = entry.state.presentation.sortBy;
 
-      if (entry.projection)
+      if (entry.projectionPtr)
       {
-        if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projection.get()))
+        if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projectionPtr.get());
+            trackListProj != nullptr)
         {
           trackListProj->setPresentation(preset->spec);
         }
@@ -71,9 +72,10 @@ namespace ao::rt
       entry.state.groupBy = spec.groupBy;
       entry.state.sortBy = spec.sortBy;
 
-      if (entry.projection)
+      if (entry.projectionPtr)
       {
-        if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projection.get()))
+        if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projectionPtr.get());
+            trackListProj != nullptr)
         {
           trackListProj->setPresentation(spec);
         }
@@ -105,7 +107,7 @@ namespace ao::rt
   };
 
   ViewService::ViewService(IControlExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources)
-    : _impl{std::make_unique<Impl>(executor, library, sources)}
+    : _implPtr{std::make_unique<Impl>(executor, library, sources)}
   {
   }
 
@@ -113,43 +115,43 @@ namespace ao::rt
 
   Subscription ViewService::onDestroyed(std::move_only_function<void(ViewId)> handler)
   {
-    return _impl->destroyedSignal.connect(std::move(handler));
+    return _implPtr->destroyedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onProjectionChanged(
     std::move_only_function<void(TrackListProjectionChanged const&)> handler)
   {
-    return _impl->projectionChangedSignal.connect(std::move(handler));
+    return _implPtr->projectionChangedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler)
   {
-    return _impl->filterChangedSignal.connect(std::move(handler));
+    return _implPtr->filterChangedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler)
   {
-    return _impl->filterStatusChangedSignal.connect(std::move(handler));
+    return _implPtr->filterStatusChangedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler)
   {
-    return _impl->presentationChangedSignal.connect(std::move(handler));
+    return _implPtr->presentationChangedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler)
   {
-    return _impl->selectionChangedSignal.connect(std::move(handler));
+    return _implPtr->selectionChangedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onListChanged(std::move_only_function<void(ListChanged const&)> handler)
   {
-    return _impl->listChangedSignal.connect(std::move(handler));
+    return _implPtr->listChangedSignal.connect(std::move(handler));
   }
 
   CreateTrackListViewReply ViewService::createView(TrackListViewConfig const& initial, bool attached)
   {
-    auto id = ViewId{_impl->nextViewId++};
+    auto id = ViewId{_implPtr->nextViewId++};
 
     auto state = TrackListViewState{
       .id = id,
@@ -160,24 +162,25 @@ namespace ao::rt
       .sortBy = initial.sortBy,
     };
 
-    auto* baseSource = &_impl->sources.sourceFor(initial.listId);
-    auto adHocSource = std::unique_ptr<SmartListSource>{};
+    auto* baseSource = &_implPtr->sources.sourceFor(initial.listId);
+    auto adHocSourcePtr = std::unique_ptr<SmartListSource>{};
 
     if (!initial.filterExpression.empty())
     {
-      adHocSource = std::make_unique<SmartListSource>(*baseSource, _impl->library, _impl->sources.smartEvaluator());
-      adHocSource->setExpression(initial.filterExpression);
-      adHocSource->reload();
-      baseSource = adHocSource.get();
+      adHocSourcePtr =
+        std::make_unique<SmartListSource>(*baseSource, _implPtr->library, _implPtr->sources.smartEvaluator());
+      adHocSourcePtr->setExpression(initial.filterExpression);
+      adHocSourcePtr->reload();
+      baseSource = adHocSourcePtr.get();
     }
 
-    auto projection = std::make_shared<TrackListProjection>(id, *baseSource, _impl->library);
+    auto projectionPtr = std::make_shared<TrackListProjection>(id, *baseSource, _implPtr->library);
 
-    auto& entry = _impl->views[id];
+    auto& entry = _implPtr->views[id];
     entry.state = state;
-    entry.adHocSource = std::move(adHocSource);
+    entry.adHocSourcePtr = std::move(adHocSourcePtr);
     entry.activeSource = baseSource;
-    entry.projection = projection;
+    entry.projectionPtr = projectionPtr;
 
     applyPresentation(entry);
 
@@ -186,15 +189,15 @@ namespace ao::rt
 
   void ViewService::destroyView(ViewId viewId)
   {
-    if (auto it = _impl->views.find(viewId); it != _impl->views.end())
+    if (auto it = _implPtr->views.find(viewId); it != _implPtr->views.end())
     {
       it->second.state.lifecycle = ViewLifecycleState::Destroyed;
-      _impl->destroyedSignal.post(_impl->executor, viewId);
+      _implPtr->destroyedSignal.post(_implPtr->executor, viewId);
 
       // Reset projection and ad-hoc source to detach from TrackSource,
       // preventing dangling references if the underlying source is deleted.
-      it->second.projection.reset();
-      it->second.adHocSource.reset();
+      it->second.projectionPtr.reset();
+      it->second.adHocSourcePtr.reset();
       it->second.activeSource = nullptr;
     }
   }
@@ -202,53 +205,55 @@ namespace ao::rt
   void ViewService::setFilter(ViewId viewId, std::string filterExpression)
   {
     auto const timer = utility::ScopedTimer{"ViewService::setFilter"};
-    auto it = _impl->views.find(viewId);
+    auto it = _implPtr->views.find(viewId);
 
-    if (it == _impl->views.end())
+    if (it == _implPtr->views.end())
     {
       return;
     }
 
     it->second.state.filterExpression = std::move(filterExpression);
     it->second.state.revision++;
-    _impl->filterChangedSignal.post(
-      _impl->executor,
+    _implPtr->filterChangedSignal.post(
+      _implPtr->executor,
       ViewService::FilterChanged{.viewId = viewId, .filterExpression = it->second.state.filterExpression});
 
-    if (it->second.adHocSource && !it->second.state.filterExpression.empty())
+    if (it->second.adHocSourcePtr && !it->second.state.filterExpression.empty())
     {
-      it->second.adHocSource->setExpression(it->second.state.filterExpression);
-      it->second.adHocSource->reload();
+      it->second.adHocSourcePtr->setExpression(it->second.state.filterExpression);
+      it->second.adHocSourcePtr->reload();
     }
     else if (!it->second.state.filterExpression.empty())
     {
-      // If we didn't have an adHocSource but now we need one
-      auto* baseSource = &_impl->sources.sourceFor(it->second.state.listId);
-      it->second.adHocSource =
-        std::make_unique<SmartListSource>(*baseSource, _impl->library, _impl->sources.smartEvaluator());
-      it->second.adHocSource->setExpression(it->second.state.filterExpression);
-      it->second.adHocSource->reload();
-      it->second.activeSource = it->second.adHocSource.get();
+      // If we didn't have an adHocSourcePtr but now we need one
+      auto* baseSource = &_implPtr->sources.sourceFor(it->second.state.listId);
+      it->second.adHocSourcePtr =
+        std::make_unique<SmartListSource>(*baseSource, _implPtr->library, _implPtr->sources.smartEvaluator());
+      it->second.adHocSourcePtr->setExpression(it->second.state.filterExpression);
+      it->second.adHocSourcePtr->reload();
+      it->second.activeSource = it->second.adHocSourcePtr.get();
 
       // Need to attach projection to new source
-      it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
+      it->second.projectionPtr =
+        std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
       applyPresentation(it->second);
       auto ev = TrackListProjectionChanged{
-        .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision};
-      _impl->projectionChangedSignal.post(_impl->executor, std::move(ev));
+        .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision};
+      _implPtr->projectionChangedSignal.post(_implPtr->executor, std::move(ev));
     }
     else
     {
-      // Switching from adHocSource to no filter
-      auto* baseSource = &_impl->sources.sourceFor(it->second.state.listId);
-      it->second.projection.reset();
-      it->second.adHocSource.reset();
+      // Switching from adHocSourcePtr to no filter
+      auto* baseSource = &_implPtr->sources.sourceFor(it->second.state.listId);
+      it->second.projectionPtr.reset();
+      it->second.adHocSourcePtr.reset();
       it->second.activeSource = baseSource;
-      it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
+      it->second.projectionPtr =
+        std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
       applyPresentation(it->second);
       auto ev = TrackListProjectionChanged{
-        .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision};
-      _impl->projectionChangedSignal.post(_impl->executor, std::move(ev));
+        .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision};
+      _implPtr->projectionChangedSignal.post(_implPtr->executor, std::move(ev));
     }
 
     auto status = FilterStatusChanged{
@@ -257,19 +262,19 @@ namespace ao::rt
       .revision = it->second.state.revision,
     };
 
-    if (it->second.adHocSource != nullptr)
+    if (it->second.adHocSourcePtr != nullptr)
     {
-      status.optError = it->second.adHocSource->error();
+      status.optError = it->second.adHocSourcePtr->error();
     }
 
-    _impl->filterStatusChangedSignal.emit(status);
+    _implPtr->filterStatusChangedSignal.emit(status);
   }
 
   void ViewService::setPresentation(ViewId viewId, TrackPresentationSpec const& presentation)
   {
-    auto it = _impl->views.find(viewId);
+    auto it = _implPtr->views.find(viewId);
 
-    if (it == _impl->views.end())
+    if (it == _implPtr->views.end())
     {
       return;
     }
@@ -284,13 +289,13 @@ namespace ao::rt
 
     applyPresentation(it->second, spec);
     it->second.state.revision++;
-    _impl->presentationChangedSignal.post(
-      _impl->executor, ViewService::PresentationChanged{.viewId = viewId, .presentation = spec});
+    _implPtr->presentationChangedSignal.post(
+      _implPtr->executor, ViewService::PresentationChanged{.viewId = viewId, .presentation = spec});
   }
 
   TrackPresentationSpec ViewService::setPresentation(ViewId viewId, std::string_view presentationId)
   {
-    if (auto const it = _impl->views.find(viewId); it == _impl->views.end())
+    if (auto const it = _implPtr->views.find(viewId); it == _implPtr->views.end())
     {
       return {};
     }
@@ -304,9 +309,9 @@ namespace ao::rt
 
   void ViewService::setSelection(ViewId viewId, std::vector<TrackId> selection)
   {
-    auto it = _impl->views.find(viewId);
+    auto it = _implPtr->views.find(viewId);
 
-    if (it == _impl->views.end())
+    if (it == _implPtr->views.end())
     {
       return;
     }
@@ -314,15 +319,15 @@ namespace ao::rt
     it->second.state.selection = std::move(selection);
     it->second.state.revision++;
 
-    _impl->selectionChangedSignal.emit(
+    _implPtr->selectionChangedSignal.emit(
       ViewService::SelectionChanged{.viewId = viewId, .selection = it->second.state.selection});
   }
 
   void ViewService::openListInView(ViewId viewId, ListId listId)
   {
-    auto it = _impl->views.find(viewId);
+    auto it = _implPtr->views.find(viewId);
 
-    if (it == _impl->views.end())
+    if (it == _implPtr->views.end())
     {
       return;
     }
@@ -330,35 +335,36 @@ namespace ao::rt
     it->second.state.listId = listId;
     it->second.state.revision++;
 
-    it->second.projection.reset();
+    it->second.projectionPtr.reset();
 
-    if (auto* baseSource = &_impl->sources.sourceFor(listId); it->second.adHocSource)
+    if (auto* baseSource = &_implPtr->sources.sourceFor(listId); it->second.adHocSourcePtr)
     {
-      // adHocSource holds a reference to the old baseSource. We must recreate it.
-      it->second.adHocSource =
-        std::make_unique<SmartListSource>(*baseSource, _impl->library, _impl->sources.smartEvaluator());
-      it->second.adHocSource->setExpression(it->second.state.filterExpression);
-      it->second.adHocSource->reload();
-      it->second.activeSource = it->second.adHocSource.get();
+      // adHocSourcePtr holds a reference to the old baseSource. We must recreate it.
+      it->second.adHocSourcePtr =
+        std::make_unique<SmartListSource>(*baseSource, _implPtr->library, _implPtr->sources.smartEvaluator());
+      it->second.adHocSourcePtr->setExpression(it->second.state.filterExpression);
+      it->second.adHocSourcePtr->reload();
+      it->second.activeSource = it->second.adHocSourcePtr.get();
     }
     else
     {
       it->second.activeSource = baseSource;
     }
 
-    it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
+    it->second.projectionPtr =
+      std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
     applyPresentation(it->second);
-    _impl->projectionChangedSignal.post(
-      _impl->executor,
+    _implPtr->projectionChangedSignal.post(
+      _implPtr->executor,
       TrackListProjectionChanged{
-        .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision});
+        .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision});
 
-    _impl->listChangedSignal.post(_impl->executor, ViewService::ListChanged{.viewId = viewId, .listId = listId});
+    _implPtr->listChangedSignal.post(_implPtr->executor, ViewService::ListChanged{.viewId = viewId, .listId = listId});
   }
 
   std::vector<ViewRecord> ViewService::listViews() const
   {
-    return _impl->views |
+    return _implPtr->views |
            std::views::filter([](auto const& kv)
                               { return kv.second.state.lifecycle != ViewLifecycleState::Destroyed; }) |
            std::views::transform(
@@ -375,18 +381,18 @@ namespace ao::rt
 
   TrackListViewState ViewService::trackListState(ViewId viewId) const
   {
-    return _impl->views.at(viewId).state;
+    return _implPtr->views.at(viewId).state;
   }
 
   std::shared_ptr<ITrackListProjection> ViewService::trackListProjection(ViewId viewId)
   {
-    return _impl->views.at(viewId).projection;
+    return _implPtr->views.at(viewId).projectionPtr;
   }
 
-  std::shared_ptr<ITrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,
+  std::unique_ptr<ITrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,
                                                                         WorkspaceService& workspace,
                                                                         LibraryMutationService& mutation)
   {
-    return std::make_shared<TrackDetailProjection>(target, *this, _impl->library, workspace, mutation);
+    return std::make_unique<TrackDetailProjection>(target, *this, _implPtr->library, workspace, mutation);
   }
 } // namespace ao::rt

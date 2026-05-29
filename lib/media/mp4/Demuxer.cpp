@@ -227,7 +227,7 @@ namespace ao::media::mp4
       std::string_view{"mdhd"},
     };
 
-    if (auto const* node = root.find(kMdhdPath); node)
+    if (auto const* node = root.find(kMdhdPath); node != nullptr)
     {
       auto const& view = utility::unsafeDowncast<AtomView const>(*node);
       auto const& layout = view.layout<MdhdAtomLayout>();
@@ -248,7 +248,7 @@ namespace ao::media::mp4
       targetFormat,
     };
 
-    if (auto const* node = root.find(kCookiePath); node)
+    if (auto const* node = root.find(kCookiePath); node != nullptr)
     {
       auto const& view = utility::unsafeDowncast<AtomView const>(*node);
       auto const bytes = view.bytes();

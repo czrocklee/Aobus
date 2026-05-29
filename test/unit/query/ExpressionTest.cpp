@@ -92,11 +92,11 @@ namespace ao::query::test
   TEST_CASE("Expression - Normalize Collapses Binary Node Without Operation", "[query][unit][expression]")
   {
     // Input: (a) where (a) is a BinaryExpression with no optOperation
-    auto binary = std::make_unique<BinaryExpression>();
-    binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-    binary->optOperation = std::nullopt;
+    auto binaryPtr = std::make_unique<BinaryExpression>();
+    binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    binaryPtr->optOperation = std::nullopt;
 
-    auto expr = Expression{std::move(binary)};
+    auto expr = Expression{std::move(binaryPtr)};
 
     normalize(expr);
 
@@ -120,58 +120,56 @@ namespace ao::query::test
   TEST_CASE("Expression - Normalize Reassociates Right Nested Add Chain", "[query][unit][expression]")
   {
     // Input: a + (b + c)
-    auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
-    inner->optOperation = BinaryExpression::Operation{
+    auto innerPtr = std::make_unique<BinaryExpression>();
+    innerPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    innerPtr->optOperation = BinaryExpression::Operation{
       .op = Operator::Add, .operand = VariableExpression{.type = VariableType::Metadata, .name = "c"}};
 
-    auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-    root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
+    auto rootPtr = std::make_unique<BinaryExpression>();
+    rootPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    rootPtr->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(innerPtr)};
 
-    auto expr = Expression{std::move(root)};
+    auto expr = Expression{std::move(rootPtr)};
     normalize(expr);
 
-    // Expected: (a + b) + c
     CHECK(canonicalize(expr) == "((a + b) + c)");
   }
 
   TEST_CASE("Expression - Normalize Reassociates Four Term Add Chain", "[query][unit][expression]")
   {
     // Input: a + (b + (c + d))
-    auto innermost = std::make_unique<BinaryExpression>();
-    innermost->operand = VariableExpression{.type = VariableType::Metadata, .name = "c"};
-    innermost->optOperation = BinaryExpression::Operation{
+    auto innermostPtr = std::make_unique<BinaryExpression>();
+    innermostPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "c"};
+    innermostPtr->optOperation = BinaryExpression::Operation{
       .op = Operator::Add, .operand = VariableExpression{.type = VariableType::Metadata, .name = "d"}};
 
-    auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
-    inner->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(innermost)};
+    auto innerPtr = std::make_unique<BinaryExpression>();
+    innerPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    innerPtr->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(innermostPtr)};
 
-    auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-    root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
+    auto rootPtr = std::make_unique<BinaryExpression>();
+    rootPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    rootPtr->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(innerPtr)};
 
-    auto expr = Expression{std::move(root)};
+    auto expr = Expression{std::move(rootPtr)};
     normalize(expr);
 
-    // Expected: ((a + b) + c) + d
     CHECK(canonicalize(expr) == "(((a + b) + c) + d)");
   }
 
   TEST_CASE("Expression - Normalize Does Not Touch NonAdd Binary", "[query][unit][expression]")
   {
     // Input: a and (b and c)
-    auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
-    inner->optOperation = BinaryExpression::Operation{
+    auto innerPtr = std::make_unique<BinaryExpression>();
+    innerPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    innerPtr->optOperation = BinaryExpression::Operation{
       .op = Operator::And, .operand = VariableExpression{.type = VariableType::Metadata, .name = "c"}};
 
-    auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-    root->optOperation = BinaryExpression::Operation{.op = Operator::And, .operand = std::move(inner)};
+    auto rootPtr = std::make_unique<BinaryExpression>();
+    rootPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    rootPtr->optOperation = BinaryExpression::Operation{.op = Operator::And, .operand = std::move(innerPtr)};
 
-    auto expr = Expression{std::move(root)};
+    auto expr = Expression{std::move(rootPtr)};
     normalize(expr);
 
     CHECK(canonicalize(expr) == "(a and (b and c))");
@@ -180,12 +178,12 @@ namespace ao::query::test
   TEST_CASE("Expression - Normalize Stops When Right Operand Is Not Binary", "[query][unit][expression]")
   {
     // Input: a + 1
-    auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-    root->optOperation =
+    auto rootPtr = std::make_unique<BinaryExpression>();
+    rootPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    rootPtr->optOperation =
       BinaryExpression::Operation{.op = Operator::Add, .operand = ConstantExpression{std::int64_t{1}}};
 
-    auto expr = Expression{std::move(root)};
+    auto expr = Expression{std::move(rootPtr)};
     normalize(expr);
 
     CHECK(canonicalize(expr) == "(a + 1)");
@@ -194,16 +192,16 @@ namespace ao::query::test
   TEST_CASE("Expression - Normalize Stops When Right Binary Is Not Add", "[query][unit][expression]")
   {
     // Input: a + (b and c)
-    auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
-    inner->optOperation = BinaryExpression::Operation{
+    auto innerPtr = std::make_unique<BinaryExpression>();
+    innerPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    innerPtr->optOperation = BinaryExpression::Operation{
       .op = Operator::And, .operand = VariableExpression{.type = VariableType::Metadata, .name = "c"}};
 
-    auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-    root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
+    auto rootPtr = std::make_unique<BinaryExpression>();
+    rootPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    rootPtr->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(innerPtr)};
 
-    auto expr = Expression{std::move(root)};
+    auto expr = Expression{std::move(rootPtr)};
     normalize(expr);
 
     CHECK(canonicalize(expr) == "(a + (b and c))");
@@ -212,20 +210,20 @@ namespace ao::query::test
   TEST_CASE("Expression - Normalize Unary Recurses Into Operand", "[query][unit][expression]")
   {
     // Input: not (a + (b + c))
-    auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
-    inner->optOperation = BinaryExpression::Operation{
+    auto innerPtr = std::make_unique<BinaryExpression>();
+    innerPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    innerPtr->optOperation = BinaryExpression::Operation{
       .op = Operator::Add, .operand = VariableExpression{.type = VariableType::Metadata, .name = "c"}};
 
-    auto binary = std::make_unique<BinaryExpression>();
-    binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-    binary->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
+    auto binaryPtr = std::make_unique<BinaryExpression>();
+    binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    binaryPtr->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(innerPtr)};
 
-    auto unary = std::make_unique<UnaryExpression>();
-    unary->op = Operator::Not;
-    unary->operand = std::move(binary);
+    auto unaryPtr = std::make_unique<UnaryExpression>();
+    unaryPtr->op = Operator::Not;
+    unaryPtr->operand = std::move(binaryPtr);
 
-    auto expr = Expression{std::move(unary)};
+    auto expr = Expression{std::move(unaryPtr)};
     normalize(expr);
 
     CHECK(canonicalize(expr) == "not ((a + b) + c)");

@@ -68,24 +68,24 @@ namespace ao::gtk
     std::uint32_t tickId = 0;
     bool isBreathing = false;
 
-    std::unique_ptr<::GskPath, PathDeleter> unitPathO{};
-    std::unique_ptr<::GskPath, PathDeleter> unitPathA{};
-    std::unique_ptr<::GskStroke, StrokeDeleter> cachedStroke{};
-    std::unique_ptr<::GskStroke, StrokeDeleter> cachedStrokeA{};
+    std::unique_ptr<::GskPath, PathDeleter> unitPathOPtr{};
+    std::unique_ptr<::GskPath, PathDeleter> unitPathAPtr{};
+    std::unique_ptr<::GskStroke, StrokeDeleter> cachedStrokePtr{};
+    std::unique_ptr<::GskStroke, StrokeDeleter> cachedStrokeAPtr{};
   };
 
   AobusSoul::AobusSoul()
-    : _impl{std::make_unique<Impl>()}
+    : _implPtr{std::make_unique<Impl>()}
   {
     add_css_class("ao-soul");
     set_can_focus(false);
     set_focusable(false);
 
-    _impl->cachedStroke.reset(::gsk_stroke_new(1.0F));
-    _impl->cachedStrokeA.reset(::gsk_stroke_new(kStrokeWidthA / kRefHeight));
+    _implPtr->cachedStrokePtr.reset(::gsk_stroke_new(1.0F));
+    _implPtr->cachedStrokeAPtr.reset(::gsk_stroke_new(kStrokeWidthA / kRefHeight));
 
-    ::gsk_stroke_set_line_cap(_impl->cachedStroke.get(), GSK_LINE_CAP_ROUND);
-    ::gsk_stroke_set_line_cap(_impl->cachedStrokeA.get(), GSK_LINE_CAP_ROUND);
+    ::gsk_stroke_set_line_cap(_implPtr->cachedStrokePtr.get(), GSK_LINE_CAP_ROUND);
+    ::gsk_stroke_set_line_cap(_implPtr->cachedStrokeAPtr.get(), GSK_LINE_CAP_ROUND);
 
     static constexpr float kRefRadius = 30.0F;
     static constexpr float kNormalizedRadius = kRefRadius / kRefHeight;
@@ -94,7 +94,7 @@ namespace ao::gtk
     auto const origin = ::graphene_point_t{.x = 0.0F, .y = 0.0F};
 
     ::gsk_path_builder_add_circle(oBuilder, &origin, kNormalizedRadius);
-    _impl->unitPathO.reset(::gsk_path_builder_free_to_path(oBuilder));
+    _implPtr->unitPathOPtr.reset(::gsk_path_builder_free_to_path(oBuilder));
 
     auto* const aBuilder = ::gsk_path_builder_new();
 
@@ -105,28 +105,28 @@ namespace ao::gtk
 
     ::gsk_path_builder_move_to(aBuilder, kNormalizedRadius, kRefStemY1);
     ::gsk_path_builder_line_to(aBuilder, kNormalizedRadius, kRefStemY2);
-    _impl->unitPathA.reset(::gsk_path_builder_free_to_path(aBuilder));
+    _implPtr->unitPathAPtr.reset(::gsk_path_builder_free_to_path(aBuilder));
 
-    _impl->tickId = add_tick_callback(
+    _implPtr->tickId = add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
-        if (_impl->isBreathing)
+        if (_implPtr->isBreathing)
         {
           auto const frameTime = clock->get_frame_time();
 
-          if (_impl->firstFrameTime == 0)
+          if (_implPtr->firstFrameTime == 0)
           {
-            _impl->firstFrameTime = frameTime;
+            _implPtr->firstFrameTime = frameTime;
           }
 
           static constexpr double kMicrosecondsPerSecond = 1'000'000.0;
-          _impl->timeSec = static_cast<double>(frameTime - _impl->firstFrameTime) / kMicrosecondsPerSecond;
-          _impl->isStopped = false;
+          _implPtr->timeSec = static_cast<double>(frameTime - _implPtr->firstFrameTime) / kMicrosecondsPerSecond;
+          _implPtr->isStopped = false;
         }
         else
         {
-          _impl->timeSec = 0.0;
-          _impl->isStopped = true;
+          _implPtr->timeSec = 0.0;
+          _implPtr->isStopped = true;
         }
 
         queue_draw();
@@ -136,24 +136,24 @@ namespace ao::gtk
 
   AobusSoul::~AobusSoul()
   {
-    if (_impl && _impl->tickId != 0)
+    if (_implPtr && _implPtr->tickId != 0)
     {
-      remove_tick_callback(_impl->tickId);
+      remove_tick_callback(_implPtr->tickId);
     }
   }
 
   void AobusSoul::breathe(bool const breathing)
   {
-    if (_impl->isBreathing == breathing)
+    if (_implPtr->isBreathing == breathing)
     {
       return;
     }
 
-    _impl->isBreathing = breathing;
+    _implPtr->isBreathing = breathing;
 
     if (!breathing)
     {
-      _impl->firstFrameTime = 0;
+      _implPtr->firstFrameTime = 0;
     }
 
     queue_draw();
@@ -161,23 +161,23 @@ namespace ao::gtk
 
   void AobusSoul::setAura(Gdk::RGBA const& aura)
   {
-    if (_impl->aura == aura)
+    if (_implPtr->aura == aura)
     {
       return;
     }
 
-    _impl->aura = aura;
+    _implPtr->aura = aura;
     queue_draw();
   }
 
   void AobusSoul::setShowFullLogo(bool const show)
   {
-    if (_impl->showFullLogo == show)
+    if (_implPtr->showFullLogo == show)
     {
       return;
     }
 
-    _impl->showFullLogo = show;
+    _implPtr->showFullLogo = show;
     queue_draw();
   }
 
@@ -333,24 +333,24 @@ namespace ao::gtk
       return;
     }
 
-    auto const aura = Gdk::RGBA{_impl->isStopped ? _impl->cyan : _impl->aura};
-    float const horizontalRadius = _impl->showFullLogo ? (kLogoXOffset + kSoulOuterRadius) : kSoulOuterRadius;
+    auto const aura = Gdk::RGBA{_implPtr->isStopped ? _implPtr->cyan : _implPtr->aura};
+    float const horizontalRadius = _implPtr->showFullLogo ? (kLogoXOffset + kSoulOuterRadius) : kSoulOuterRadius;
     float const drawingScale = std::min(width / (horizontalRadius * 2.0F), height / (kSoulOuterRadius * 2.0F));
 
     float const centerX = width / 2.0F;
     float const centerY = height / 2.0F;
 
-    float const oCenterX = _impl->showFullLogo ? (centerX + (kLogoXOffset * drawingScale)) : centerX;
+    float const oCenterX = _implPtr->showFullLogo ? (centerX + (kLogoXOffset * drawingScale)) : centerX;
     float const aCenterX = centerX - (kLogoXOffset * drawingScale);
 
     // 1. Draw 'a' if requested
-    if (_impl->showFullLogo)
+    if (_implPtr->showFullLogo)
     {
       snapshot->save();
       snapshot->translate({aCenterX, centerY});
       snapshot->scale(drawingScale, drawingScale);
 
-      ::gtk_snapshot_push_stroke(snapshot->gobj(), _impl->unitPathA.get(), _impl->cachedStrokeA.get());
+      ::gtk_snapshot_push_stroke(snapshot->gobj(), _implPtr->unitPathAPtr.get(), _implPtr->cachedStrokeAPtr.get());
 
       static constexpr float kRefBoundsX = -kUnitRadius * 2.0F;
       static constexpr float kRefBoundsY = -kUnitRadius * 2.0F;
@@ -359,7 +359,7 @@ namespace ao::gtk
       auto const aBounds = ::graphene_rect_t{
         .origin = {.x = kRefBoundsX, .y = kRefBoundsY}, .size = {.width = kRefBoundsW, .height = kRefBoundsH}};
 
-      ::gtk_snapshot_append_color(snapshot->gobj(), _impl->amber.gobj(), &aBounds);
+      ::gtk_snapshot_append_color(snapshot->gobj(), _implPtr->amber.gobj(), &aBounds);
       ::gtk_snapshot_pop(snapshot->gobj());
 
       snapshot->restore();
@@ -370,24 +370,24 @@ namespace ao::gtk
     float currentStrokeBase = static_cast<float>(kStrokeWidthBase);
     float currentOpacity = 1.0F;
 
-    if (!_impl->isStopped)
+    if (!_implPtr->isStopped)
     {
-      rotationAngle =
-        static_cast<float>(std::fmod(_impl->timeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees));
+      rotationAngle = static_cast<float>(
+        std::fmod(_implPtr->timeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees));
       double const breathingPhase =
-        std::fmod(_impl->timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
+        std::fmod(_implPtr->timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
       currentStrokeBase = static_cast<float>(
         kStrokeWidthBase + (kStrokeWidthVariance * ((std::sin(breathingPhase) * kPhaseShift) + kPhaseShift)));
 
       double const opacityPhase =
-        std::fmod(_impl->timeSec * (2.0 * std::numbers::pi / kOpacityPeriodSec), 2.0 * std::numbers::pi);
+        std::fmod(_implPtr->timeSec * (2.0 * std::numbers::pi / kOpacityPeriodSec), 2.0 * std::numbers::pi);
       // Golden Ratio Opacity: range [0.618, 1.0]
       static constexpr double kOpacityBase = 0.809;
       static constexpr double kOpacityVariance = 0.191;
       currentOpacity = static_cast<float>(kOpacityBase + (kOpacityVariance * std::sin(opacityPhase)));
     }
 
-    ::gsk_stroke_set_line_width(_impl->cachedStroke.get(), currentStrokeBase / kRefHeight);
+    ::gsk_stroke_set_line_width(_implPtr->cachedStrokePtr.get(), currentStrokeBase / kRefHeight);
 
     snapshot->save();
     snapshot->translate({oCenterX, centerY});
@@ -401,15 +401,15 @@ namespace ao::gtk
       ::gtk_snapshot_push_opacity(snapshot->gobj(), currentOpacity);
     }
 
-    ::gtk_snapshot_push_stroke(snapshot->gobj(), _impl->unitPathO.get(), _impl->cachedStroke.get());
+    ::gtk_snapshot_push_stroke(snapshot->gobj(), _implPtr->unitPathOPtr.get(), _implPtr->cachedStrokePtr.get());
 
     // Calculate Aura Flow (Hue Shift)
     float hueShift = 0.0F;
 
-    if (!_impl->isStopped)
+    if (!_implPtr->isStopped)
     {
       float const huePhase = std::fmod(
-        static_cast<float>(_impl->timeSec) * (2.0F * std::numbers::pi_v<float> / static_cast<float>(kHuePeriodSec)),
+        static_cast<float>(_implPtr->timeSec) * (2.0F * std::numbers::pi_v<float> / static_cast<float>(kHuePeriodSec)),
         2.0F * std::numbers::pi_v<float>);
       static constexpr float kMaxHueShift = 10.0F;
       hueShift = kMaxHueShift * std::sin(huePhase);
@@ -417,7 +417,7 @@ namespace ao::gtk
 
     static constexpr std::size_t kStopCount = 3;
     auto stops = std::array<::GskColorStop, kStopCount>{};
-    auto const shiftedCyan = shiftColor(_impl->cyan, hueShift);
+    auto const shiftedCyan = shiftColor(_implPtr->cyan, hueShift);
     auto const shiftedAura = shiftColor(aura, -hueShift);
 
     // Player UI: Cyan as the core (38.2%), Indicator (Quality) as the dominant body (61.8%)

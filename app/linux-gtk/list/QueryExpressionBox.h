@@ -52,8 +52,8 @@ namespace ao::gtk
     Gtk::Popover _completionPopover;
     Gtk::ScrolledWindow _completionScrolledWindow;
     Gtk::ListView _completionListView;
-    Glib::RefPtr<Gtk::StringList> _completionItems;
-    Glib::RefPtr<Gtk::SingleSelection> _completionSelection;
+    Glib::RefPtr<Gtk::StringList> _completionItemsPtr;
+    Glib::RefPtr<Gtk::SingleSelection> _completionSelectionPtr;
     library::MusicLibrary& _musicLibrary;
     std::vector<std::string> _availableTags;
     std::vector<std::string> _availableCustomKeys;

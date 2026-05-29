@@ -27,17 +27,17 @@ namespace ao::gtk
     // The "tnum" feature in app.css guarantees all digits have the same width.
     auto const templateText = ao::uimodel::playback::PlaybackTimeViewModel::describeTimeTemplate(_mode);
 
-    auto const pangoLayout = _label.create_pango_layout(templateText);
+    auto const pangoLayoutPtr = _label.create_pango_layout(templateText);
     std::int32_t textWidth = 0;
     std::int32_t textHeight = 0;
-    pangoLayout->get_pixel_size(textWidth, textHeight);
+    pangoLayoutPtr->get_pixel_size(textWidth, textHeight);
 
     // Lock the width to the measured size, with a small tolerance.
     _label.set_size_request(textWidth + 2, -1);
 
     _label.set_text(templateText);
 
-    _controller = std::make_unique<ao::uimodel::playback::PlaybackTimeViewModel>(
+    _controllerPtr = std::make_unique<ao::uimodel::playback::PlaybackTimeViewModel>(
       playbackService, [this](ao::uimodel::playback::PlaybackTimeViewState const& view) { applyState(view); });
 
     _label.add_tick_callback(

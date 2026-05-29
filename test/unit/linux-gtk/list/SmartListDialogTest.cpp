@@ -15,7 +15,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("SmartListDialog - smoke test", "[gtk][list][dialog]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
     auto cache = TrackRowCache{fixture.runtime().musicLibrary()};
@@ -30,7 +30,7 @@ namespace ao::gtk::test
 
   TEST_CASE("SmartListDialog - populate for edit", "[gtk][list][dialog]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
     auto cache = TrackRowCache{fixture.runtime().musicLibrary()};

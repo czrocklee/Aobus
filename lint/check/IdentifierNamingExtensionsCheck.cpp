@@ -61,7 +61,7 @@ namespace clang::tidy::readability
       return;
     }
 
-    if (bool const isClass = record->isClass(); isClass)
+    if (record->isClass())
     {
       // Class members must be _camelCase
       if (name.starts_with("_"))

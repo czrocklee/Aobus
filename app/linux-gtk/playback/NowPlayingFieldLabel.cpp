@@ -48,14 +48,14 @@ namespace ao::gtk
       _label.add_css_class("ao-clickable");
       _label.set_cursor(Gdk::Cursor::create("pointer"));
 
-      auto const gesture = Gtk::GestureClick::create();
-      gesture->set_button(1);
-      gesture->set_propagation_phase(Gtk::PropagationPhase::BUBBLE);
-      gesture->signal_pressed().connect([this](std::int32_t, double, double) { onLabelClicked(); });
-      _label.add_controller(gesture);
+      auto const gesturePtr = Gtk::GestureClick::create();
+      gesturePtr->set_button(1);
+      gesturePtr->set_propagation_phase(Gtk::PropagationPhase::BUBBLE);
+      gesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { onLabelClicked(); });
+      _label.add_controller(gesturePtr);
     }
 
-    _controller = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
+    _controllerPtr = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
       _runtime.playback(), [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 
@@ -66,7 +66,7 @@ namespace ao::gtk
                   static_cast<int>(_field),
                   static_cast<int>(_action));
 
-    auto const cmd = _controller->resolveAction(_action, _field);
+    auto const cmd = _controllerPtr->resolveAction(_action, _field);
 
     using Type = uimodel::playback::NowPlayingActionCommand::Type;
 

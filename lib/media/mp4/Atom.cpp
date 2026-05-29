@@ -71,9 +71,9 @@ namespace ao::media::mp4
         if (optSkip)
         {
           // Atom header is already defined as kAtomHeaderSize
-          auto child = std::make_unique<ContainerAtomView>(data.subspan(0, length), parent);
-          parseAtoms(*child, data.subspan(kAtomHeaderSize + *optSkip, length - kAtomHeaderSize - *optSkip));
-          parent.add(std::move(child));
+          auto childPtr = std::make_unique<ContainerAtomView>(data.subspan(0, length), parent);
+          parseAtoms(*childPtr, data.subspan(kAtomHeaderSize + *optSkip, length - kAtomHeaderSize - *optSkip));
+          parent.add(std::move(childPtr));
         }
         else
         {

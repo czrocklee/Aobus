@@ -16,7 +16,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TrackPresentationButton - menu population", "[gtk][track][presentation]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto presentationStore = TrackPresentationStore{runtime.workspace()};

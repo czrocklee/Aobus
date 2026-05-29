@@ -18,7 +18,7 @@ namespace ao::gtk::test
 
     SECTION("Subscriptions and refresh")
     {
-      auto controller = std::make_unique<uimodel::playback::NowPlayingViewModel>(
+      auto controllerPtr = std::make_unique<uimodel::playback::NowPlayingViewModel>(
         fixture.runtime().playback(), [&](auto const& view) { log.render(view); });
 
       // Initial render on construction
@@ -34,7 +34,7 @@ namespace ao::gtk::test
       log.clear();
 
       // Destroying controller disconnects events
-      controller.reset();
+      controllerPtr.reset();
       fixture.runtime().playback().stop();
       CHECK(log.empty());
     }

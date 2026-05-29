@@ -5,8 +5,7 @@
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
+
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -15,11 +14,10 @@
 #include <gtkmm/window.h>
 
 #include <cstdint>
-#include <memory>
 
 using namespace ao::gtk::layout;
 using namespace ao::lmdb::test;
-using ao::gtk::test::ImmediateExecutor;
+using ao::gtk::test::makeRuntime;
 
 TEST_CASE("ActionRegistry", "[layout][action]")
 {
@@ -33,16 +31,10 @@ TEST_CASE("ActionRegistry", "[layout][action]")
                                             .category = "Test",
                                             .capabilities = ActionCapability::RequiresAnchor};
 
-  auto const app = Gtk::Application::create("io.github.aobus.layout_test");
+  auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
   auto const tempDir = TempDir{};
-  auto const configStore = std::make_shared<ao::rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-  auto runtime = ao::rt::AppRuntime{
-    ao::rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                   .musicRoot = tempDir.path(),
-                                   .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                   .workspaceConfigStore = configStore}};
+  auto runtime = makeRuntime(tempDir);
 
   auto window = Gtk::Window{};
   auto widget = Gtk::Box{};

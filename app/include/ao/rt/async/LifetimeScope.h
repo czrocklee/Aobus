@@ -35,6 +35,6 @@ namespace ao::rt::async
     std::shared_ptr<LifetimeScopeState> state() const noexcept;
 
   private:
-    std::shared_ptr<LifetimeScopeState> _state;
+    std::shared_ptr<LifetimeScopeState> _statePtr;
   };
 } // namespace ao::rt::async

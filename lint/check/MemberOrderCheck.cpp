@@ -72,7 +72,7 @@ namespace clang::tidy::readability
           continue;
         }
 
-        if (auto const* as = dyn_cast<AccessSpecDecl>(decl))
+        if (auto const* as = dyn_cast<AccessSpecDecl>(decl); as != nullptr)
         {
           std::int32_t const newAccess = static_cast<std::int32_t>(as->getAccess());
 

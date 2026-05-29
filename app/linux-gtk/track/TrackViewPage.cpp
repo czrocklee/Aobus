@@ -77,15 +77,15 @@ namespace ao::gtk
     class ProjectionGroupSectionSorter final : public Gtk::Sorter
     {
     public:
-      static Glib::RefPtr<ProjectionGroupSectionSorter> create(Glib::RefPtr<TrackListModel> model)
+      static Glib::RefPtr<ProjectionGroupSectionSorter> create(Glib::RefPtr<TrackListModel> modelPtr)
       {
         return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(
-          new ProjectionGroupSectionSorter{std::move(model)});
+          new ProjectionGroupSectionSorter{std::move(modelPtr)});
       }
 
     protected:
-      explicit ProjectionGroupSectionSorter(Glib::RefPtr<TrackListModel> model)
-        : Glib::ObjectBase{typeid(ProjectionGroupSectionSorter)}, Gtk::Sorter{}, _model{std::move(model)}
+      explicit ProjectionGroupSectionSorter(Glib::RefPtr<TrackListModel> modelPtr)
+        : Glib::ObjectBase{typeid(ProjectionGroupSectionSorter)}, Gtk::Sorter{}, _modelPtr{std::move(modelPtr)}
       {
       }
 
@@ -99,8 +99,8 @@ namespace ao::gtk
           return Gtk::Ordering::EQUAL;
         }
 
-        auto const optLhsGroup = _model->groupIndexForTrack(lhs->trackId());
-        auto const optRhsGroup = _model->groupIndexForTrack(rhs->trackId());
+        auto const optLhsGroup = _modelPtr->groupIndexForTrack(lhs->trackId());
+        auto const optRhsGroup = _modelPtr->groupIndexForTrack(rhs->trackId());
 
         if (!optLhsGroup || !optRhsGroup || *optLhsGroup == *optRhsGroup)
         {
@@ -113,12 +113,12 @@ namespace ao::gtk
       Order get_order_vfunc() override { return Order::PARTIAL; }
 
     private:
-      Glib::RefPtr<TrackListModel> _model;
+      Glib::RefPtr<TrackListModel> _modelPtr;
     };
   } // namespace
 
   TrackViewPage::TrackViewPage(ListId listId,
-                               Glib::RefPtr<TrackListModel> model,
+                               Glib::RefPtr<TrackListModel> modelPtr,
                                TrackPresentationStore& presentationStore,
                                rt::AppRuntime& runtime,
                                ImageCache& imageCache,
@@ -126,58 +126,58 @@ namespace ao::gtk
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _viewId{viewId}
-    , _model{std::move(model)}
+    , _modelPtr{std::move(modelPtr)}
 
     , _presentationStore{presentationStore}
     , _runtime{runtime}
     , _imageCache{imageCache}
-    , _groupModel{Gtk::SortListModel::create(_model, Glib::RefPtr<Gtk::Sorter>{})}
-    , _selectionModel{Gtk::MultiSelection::create(_groupModel)}
-    , _viewHost{std::make_unique<TrackColumnViewHost>(_model, _presentationStore, _selectionModel, listId)}
+    , _groupModelPtr{Gtk::SortListModel::create(_modelPtr, Glib::RefPtr<Gtk::Sorter>{})}
+    , _selectionModelPtr{Gtk::MultiSelection::create(_groupModelPtr)}
+    , _viewHostPtr{std::make_unique<TrackColumnViewHost>(_modelPtr, _presentationStore, _selectionModelPtr, listId)}
   {
     _presentationStore.setActiveListId(_listId);
-    _viewHost->setupSelectionActivation();
+    _viewHostPtr->setupSelectionActivation();
 
     _themeRefreshConnection = StyleManager::instance().signalRefreshed().connect(
       [this]
       {
         APP_LOG_INFO("Executing theme refresh for TrackViewPage...");
-        _viewHost->columnController().updateTitlePositionVariable();
-        _viewHost->columnView().queue_draw();
+        _viewHostPtr->columnController().updateTitlePositionVariable();
+        _viewHostPtr->columnView().queue_draw();
       });
 
     setupStatusBar();
     setupHeaderFactory();
 
     // 1. Configure columns and layout first (Off-tree)
-    _viewHost->setupColumns(
+    _viewHostPtr->setupColumns(
       [this](rt::TrackField field)
       { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
 
     if (_viewId != rt::kInvalidViewId)
     {
       auto const& presState = _runtime.views().trackListState(_viewId).presentation;
-      _viewHost->columnController().setLayoutAndApply(presState.visibleFields);
+      _viewHostPtr->columnController().setLayoutAndApply(presState.visibleFields);
     }
     else
     {
-      _viewHost->columnController().syncLayout(rt::defaultTrackPresentationSpec().visibleFields);
+      _viewHostPtr->columnController().syncLayout(rt::defaultTrackPresentationSpec().visibleFields);
     }
 
     // 2. Configure decorators and styles
     updateSectionHeaders();
 
-    setupColumnViewStyles(_viewHost->columnView());
+    setupColumnViewStyles(_viewHostPtr->columnView());
 
     _contextPopover.set_has_arrow(false);
 
     // 3. Finally attach model and add to scrolled window
-    _viewHost->columnView().set_model(_selectionModel);
+    _viewHostPtr->columnView().set_model(_selectionModelPtr);
 
-    _scrolledWindow.set_child(_viewHost->columnView());
+    _scrolledWindow.set_child(_viewHostPtr->columnView());
     _scrolledWindow.set_vexpand(true);
     _scrolledWindow.set_hexpand(true);
-    _contextPopover.set_parent(_viewHost->columnView());
+    _contextPopover.set_parent(_viewHostPtr->columnView());
 
     append(_statusLabel);
     append(_scrolledWindow);
@@ -193,14 +193,14 @@ namespace ao::gtk
 
   void TrackViewPage::setupHeaderFactory()
   {
-    _sectionHeaderFactory = Gtk::SignalListItemFactory::create();
+    _sectionHeaderFactoryPtr = Gtk::SignalListItemFactory::create();
 
-    _sectionHeaderFactory->signal_setup_obj().connect(
+    _sectionHeaderFactoryPtr->signal_setup_obj().connect(
       [this](Glib::RefPtr<Glib::Object> const& object)
       {
-        auto const header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+        auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
 
-        if (!header)
+        if (!headerPtr)
         {
           return;
         }
@@ -223,16 +223,16 @@ namespace ao::gtk
         label->set_valign(Gtk::Align::CENTER);
         box->append(*label);
 
-        header->set_child(*box);
+        headerPtr->set_child(*box);
       });
 
-    _sectionHeaderFactory->signal_bind_obj().connect(
+    _sectionHeaderFactoryPtr->signal_bind_obj().connect(
       [this](Glib::RefPtr<Glib::Object> const& object)
       {
-        auto const header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
-        auto* const box = header ? dynamic_cast<Gtk::Box*>(header->get_child()) : nullptr;
+        auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+        auto* const box = headerPtr ? dynamic_cast<Gtk::Box*>(headerPtr->get_child()) : nullptr;
 
-        if (header == nullptr || box == nullptr)
+        if (headerPtr == nullptr || box == nullptr)
         {
           return;
         }
@@ -248,9 +248,9 @@ namespace ao::gtk
         auto text = std::string{};
         auto coverArtId = kInvalidResourceId;
 
-        if (auto* const proj = _model->projection())
+        if (auto* const proj = _modelPtr->projection(); proj != nullptr)
         {
-          auto const start = header->get_start();
+          auto const start = headerPtr->get_start();
 
           if (auto const optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
           {
@@ -265,7 +265,7 @@ namespace ao::gtk
           text += " ";
         }
 
-        text += "(" + trackCountLabel(header->get_n_items()) + ")";
+        text += "(" + trackCountLabel(headerPtr->get_n_items()) + ")";
 
         label->set_text(text);
 
@@ -280,8 +280,8 @@ namespace ao::gtk
         }
       });
 
-    _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_model));
-    _viewHost->columnView().set_header_factory(_sectionHeaderFactory);
+    _groupModelPtr->set_section_sorter(ProjectionGroupSectionSorter::create(_modelPtr));
+    _viewHostPtr->columnView().set_header_factory(_sectionHeaderFactoryPtr);
   }
 
   void TrackViewPage::setupStatusBar()
@@ -291,8 +291,8 @@ namespace ao::gtk
     _statusLabel.set_valign(Gtk::Align::CENTER);
     _statusLabel.add_css_class("ao-track-status-message");
 
-    auto const context = _statusLabel.get_style_context();
-    context->add_class("dim-label");
+    auto const contextPtr = _statusLabel.get_style_context();
+    contextPtr->add_class("dim-label");
   }
 
   void TrackViewPage::setStatusMessage(std::string_view message)
@@ -323,7 +323,7 @@ namespace ao::gtk
   void TrackViewPage::setPlayingTrackId(TrackId trackId)
   {
     _playingTrackId = trackId;
-    _viewHost->selectionController().setPlayingTrackId(trackId);
+    _viewHostPtr->selectionController().setPlayingTrackId(trackId);
   }
 
   void TrackViewPage::rebuildColumnView(std::span<rt::TrackField const> visibleFields)
@@ -332,29 +332,29 @@ namespace ao::gtk
     { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this)); };
 
     // 1. Detach UI from Model and Tree immediately.
-    _viewHost->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+    _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
     _scrolledWindow.unset_child();
     _contextPopover.unparent();
 
     // 2. Create a new generation off-tree.
-    auto& newView = _viewHost->rebuild(_model, _presentationStore, _selectionModel, factoryProvider, _listId);
+    auto& newView = _viewHostPtr->rebuild(_modelPtr, _presentationStore, _selectionModelPtr, factoryProvider, _listId);
 
     // 3. Configure structural properties before attaching model (Safe)
     setupColumnViewStyles(newView);
 
-    _viewHost->columnController().setLayoutAndApply(visibleFields);
-    _viewHost->columnController().updateTitlePositionVariable();
+    _viewHostPtr->columnController().setLayoutAndApply(visibleFields);
+    _viewHostPtr->columnController().updateTitlePositionVariable();
 
     // 4. Apply decorations (Section Headers)
     updateSectionHeaders();
 
     // 5. Attach the model first so items_changed has a listener
-    newView.set_model(_selectionModel);
+    newView.set_model(_selectionModelPtr);
 
     // 6. Restore playing state after model is attached
     if (_playingTrackId != kInvalidTrackId)
     {
-      _viewHost->selectionController().setPlayingTrackId(_playingTrackId);
+      _viewHostPtr->selectionController().setPlayingTrackId(_playingTrackId);
     }
 
     // 7. Swap the child in the live UI tree
@@ -365,32 +365,32 @@ namespace ao::gtk
     Glib::signal_idle().connect_once(
       [this]
       {
-        if (auto const primaryId = _viewHost->selectionController().primarySelectedTrackId();
+        if (auto const primaryId = _viewHostPtr->selectionController().primarySelectedTrackId();
             primaryId != kInvalidTrackId)
         {
-          _viewHost->selectionController().scrollToTrack(primaryId);
+          _viewHostPtr->selectionController().scrollToTrack(primaryId);
         }
       });
 
-    _viewHost->setupSelectionActivation();
+    _viewHostPtr->setupSelectionActivation();
   }
 
   void TrackViewPage::updateSectionHeaders()
   {
-    auto* const proj = _model->projection();
+    auto* const proj = _modelPtr->projection();
     auto const groupBy = proj != nullptr ? proj->presentation().groupBy : rt::TrackGroupKey::None;
 
     if (groupBy == rt::TrackGroupKey::None)
     {
-      _groupModel->set_section_sorter({});
-      _viewHost->columnView().set_header_factory({});
-      _viewHost->columnView().set_show_row_separators(true);
+      _groupModelPtr->set_section_sorter({});
+      _viewHostPtr->columnView().set_header_factory({});
+      _viewHostPtr->columnView().set_show_row_separators(true);
       return;
     }
 
-    _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_model));
-    _viewHost->columnView().set_header_factory(_sectionHeaderFactory);
-    _viewHost->columnView().set_show_row_separators(false);
+    _groupModelPtr->set_section_sorter(ProjectionGroupSectionSorter::create(_modelPtr));
+    _viewHostPtr->columnView().set_header_factory(_sectionHeaderFactoryPtr);
+    _viewHostPtr->columnView().set_show_row_separators(false);
   }
 
   TrackViewPage::CreateSmartListRequestedSignal& TrackViewPage::signalCreateSmartListRequested() noexcept
@@ -402,9 +402,9 @@ namespace ao::gtk
   {
     auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY), 1, 1};
 
-    if (popover.get_parent() != &_viewHost->columnView())
+    if (popover.get_parent() != &_viewHostPtr->columnView())
     {
-      popover.set_parent(_viewHost->columnView());
+      popover.set_parent(_viewHostPtr->columnView());
     }
 
     popover.set_pointing_to(rect);
@@ -460,6 +460,6 @@ namespace ao::gtk
   void TrackViewPage::setupColumnViewStyles(Gtk::ColumnView& view)
   {
     view.set_reorderable(true);
-    view.get_style_context()->add_provider(_viewHost->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    view.get_style_context()->add_provider(_viewHostPtr->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }
 } // namespace ao::gtk

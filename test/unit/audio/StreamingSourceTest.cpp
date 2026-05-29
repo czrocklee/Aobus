@@ -36,35 +36,35 @@ namespace ao::audio::test
     {
       SECTION("Preroll success starts thread")
       {
-        auto decoder = std::make_unique<ScriptedDecoderSession>(info);
+        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
         auto block = std::vector(400, std::byte{0}); // 200ms
-        decoder->setReadScript({{block, false}, {{}, true}});
+        decoderPtr->setReadScript({{block, false}, {{}, true}});
 
-        auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
-        REQUIRE(source->initialize());
-        REQUIRE(source->bufferedMs() >= 100);
+        auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr), info, onError, 100, 500);
+        REQUIRE(sourcePtr->initialize());
+        REQUIRE(sourcePtr->bufferedMs() >= 100);
         REQUIRE(errorCount.load() == 0);
       }
 
       SECTION("EOF during preroll succeeds without thread error")
       {
-        auto decoder = std::make_unique<ScriptedDecoderSession>(info);
+        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
         auto block = std::vector(20, std::byte{0}); // 10ms
-        decoder->setReadScript({{block, true}});    // EOF immediately
+        decoderPtr->setReadScript({{block, true}}); // EOF immediately
 
-        auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
-        REQUIRE(source->initialize());
-        REQUIRE(source->isDrained());
+        auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr), info, onError, 100, 500);
+        REQUIRE(sourcePtr->initialize());
+        REQUIRE(sourcePtr->isDrained());
         REQUIRE(errorCount.load() == 0);
       }
 
       SECTION("Preroll decode failure returns error")
       {
-        auto decoder = std::make_unique<ScriptedDecoderSession>(info);
-        decoder->setReadScript({{{}, false, std::unexpected(Error{.message = "fail"})}});
+        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+        decoderPtr->setReadScript({{{}, false, std::unexpected(Error{.message = "fail"})}});
 
-        auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
-        auto result = source->initialize();
+        auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr), info, onError, 100, 500);
+        auto result = sourcePtr->initialize();
         REQUIRE_FALSE(result);
         REQUIRE(errorCount.load() == 1);
       }
@@ -72,30 +72,30 @@ namespace ao::audio::test
 
     SECTION("Seek matrix")
     {
-      auto decoder = std::make_unique<ScriptedDecoderSession>(info);
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
       auto block = std::vector(400, std::byte{0});
-      decoder->setReadScript({{block, false}, {block, false}, {{}, true}});
+      decoderPtr->setReadScript({{block, false}, {block, false}, {{}, true}});
 
-      auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
-      REQUIRE(source->initialize());
+      auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr), info, onError, 100, 500);
+      REQUIRE(sourcePtr->initialize());
 
       SECTION("Successful seek clears and re-prerolls")
       {
-        REQUIRE(source->seek(50));
-        REQUIRE(source->bufferedMs() >= 100);
+        REQUIRE(sourcePtr->seek(50));
+        REQUIRE(sourcePtr->bufferedMs() >= 100);
         REQUIRE(errorCount.load() == 0);
       }
 
       SECTION("Failed seek returns error")
       {
-        auto decoder2 = std::make_unique<ScriptedDecoderSession>(info);
-        decoder2->setSeekResult(std::unexpected(Error{.message = "seek fail"}));
-        decoder2->setReadScript({{block, false}});
+        auto decoder2Ptr = std::make_unique<ScriptedDecoderSession>(info);
+        decoder2Ptr->setSeekResult(std::unexpected(Error{.message = "seek fail"}));
+        decoder2Ptr->setReadScript({{block, false}});
 
-        auto source2 = std::make_unique<StreamingSource>(std::move(decoder2), info, onError, 100, 500);
-        REQUIRE(source2->initialize());
+        auto source2Ptr = std::make_unique<StreamingSource>(std::move(decoder2Ptr), info, onError, 100, 500);
+        REQUIRE(source2Ptr->initialize());
 
-        auto result = source2->seek(50);
+        auto result = source2Ptr->seek(50);
         REQUIRE_FALSE(result);
         REQUIRE(errorCount.load() >= 1);
       }
@@ -103,15 +103,15 @@ namespace ao::audio::test
 
     SECTION("Background decode failure marks source failed")
     {
-      auto decoder = std::make_unique<ScriptedDecoderSession>(info);
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
       auto block = std::vector(200, std::byte{0}); // 100ms
-      decoder->setReadScript({
+      decoderPtr->setReadScript({
         {block, false},                                              // first block for preroll
         {{}, false, std::unexpected(Error{.message = "async fail"})} // second block fails
       });
 
-      auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 50, 500);
-      REQUIRE(source->initialize());
+      auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr), info, onError, 50, 500);
+      REQUIRE(sourcePtr->initialize());
 
       // Wait for async failure — polling with timeout, exits as soon as error fires
       auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
@@ -126,27 +126,27 @@ namespace ao::audio::test
 
     SECTION("BufferedMs and isDrained track EOF plus ring exhaustion")
     {
-      auto decoder = std::make_unique<ScriptedDecoderSession>(info);
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
       auto block = std::vector(20, std::byte{0}); // 10ms
-      decoder->setReadScript({{block, false}, {{}, true}});
+      decoderPtr->setReadScript({{block, false}, {{}, true}});
 
-      auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 5, 500);
-      REQUIRE(source->initialize());
+      auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr), info, onError, 5, 500);
+      REQUIRE(sourcePtr->initialize());
 
       // Consume data
       auto out = std::vector<std::byte>(20);
-      REQUIRE(source->read(out) == 20);
+      REQUIRE(sourcePtr->read(out) == 20);
 
       // Wait for EOF to be processed — polling with timeout
       auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
 
-      while (!source->isDrained() && std::chrono::steady_clock::now() < deadline)
+      while (!sourcePtr->isDrained() && std::chrono::steady_clock::now() < deadline)
       {
         std::this_thread::yield();
       }
 
-      REQUIRE(source->isDrained());
-      REQUIRE(source->bufferedMs() == 0);
+      REQUIRE(sourcePtr->isDrained());
+      REQUIRE(sourcePtr->bufferedMs() == 0);
     }
   }
 } // namespace ao::audio::test

@@ -27,9 +27,9 @@ namespace ao::gtk::layout
     {
       try
       {
-        auto const bytes = Gio::Resource::lookup_data_global(std::string{path});
+        auto const bytesPtr = Gio::Resource::lookup_data_global(std::string{path});
         gsize size = 0;
-        auto const* const data = static_cast<char const*>(bytes->get_data(size));
+        auto const* const data = static_cast<char const*>(bytesPtr->get_data(size));
 
         auto tree = ryml::Tree{rt::yaml::callbacks(std::string{path}.c_str())};
         ryml::parse_in_arena(rt::yaml::toCsubstr(std::string_view{data, size}), &tree);

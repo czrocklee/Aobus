@@ -29,12 +29,12 @@ namespace ao::gtk
 
     // Move to front (Most Recently Used)
     _entries.splice(_entries.begin(), _entries, it->second);
-    return it->second->pixbuf;
+    return it->second->pixbufPtr;
   }
 
-  void ImageCache::put(std::uint64_t resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
+  void ImageCache::put(std::uint64_t resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
   {
-    if (!pixbuf)
+    if (!pixbufPtr)
     {
       return;
     }
@@ -42,13 +42,13 @@ namespace ao::gtk
     if (auto const it = _cacheMap.find(resourceId); it != _cacheMap.end())
     {
       // Update existing entry and move to front
-      it->second->pixbuf = pixbuf;
+      it->second->pixbufPtr = pixbufPtr;
       _entries.splice(_entries.begin(), _entries, it->second);
       return;
     }
 
     // Add new entry to front
-    _entries.push_front({.resourceId = resourceId, .pixbuf = pixbuf});
+    _entries.push_front({.resourceId = resourceId, .pixbufPtr = pixbufPtr});
     _cacheMap[resourceId] = _entries.begin();
 
     // Evict least recently used if over capacity

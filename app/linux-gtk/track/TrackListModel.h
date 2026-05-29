@@ -27,10 +27,10 @@ namespace ao::gtk
   public:
     static Glib::RefPtr<TrackListModel> create(TrackRowCache const& provider);
 
-    void bindProjection(std::shared_ptr<rt::ITrackListProjection> projection);
+    void bindProjection(std::shared_ptr<rt::ITrackListProjection> projectionPtr);
     void clearProjection();
 
-    rt::ITrackListProjection* projection() const noexcept { return _projection.get(); }
+    rt::ITrackListProjection* projection() const noexcept { return _projectionPtr.get(); }
 
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
     std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const noexcept;
@@ -56,7 +56,7 @@ namespace ao::gtk
     void applyRemoveRange(rt::ProjectionRemoveRange const& delta);
     void applyUpdateRange(rt::ProjectionUpdateRange const& delta);
 
-    std::shared_ptr<rt::ITrackListProjection> _projection;
+    std::shared_ptr<rt::ITrackListProjection> _projectionPtr;
     rt::Subscription _projectionSub;
     TrackRowCache const* _provider = nullptr;
     mutable ::GType _cachedItemType = G_TYPE_INVALID;

@@ -45,6 +45,6 @@ namespace ao::gtk::portal
     TrackRowCache const& _provider;
     std::filesystem::path const _root;
     std::filesystem::path const _path;
-    std::unique_ptr<sigc::connection> _timeoutConnection;
+    std::unique_ptr<sigc::connection> _timeoutConnectionPtr;
   };
 } // namespace ao::gtk::portal

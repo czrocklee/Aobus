@@ -40,7 +40,7 @@ namespace ao::gtk
   ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn)
   {
     auto result = Result{};
-    result.store = Gio::ListStore<ListTreeItem>::create();
+    result.storePtr = Gio::ListStore<ListTreeItem>::create();
 
     auto const reader = runtime.musicLibrary().lists().reader(txn);
     auto nodes = std::map<ListId, StoredListNode>{};
@@ -67,51 +67,51 @@ namespace ao::gtk
 
     for (auto const& [id, node] : nodes)
     {
-      auto listRow = ListRowObject::create(id, node.parentId, 0, node.isSmart, node.name, node.localExpression);
-      auto treeNode = ListTreeItem::create(listRow);
-      result.nodesById[id] = treeNode;
+      auto listRowPtr = ListRowObject::create(id, node.parentId, 0, node.isSmart, node.name, node.localExpression);
+      auto treeNodePtr = ListTreeItem::create(listRowPtr);
+      result.nodesById[id] = treeNodePtr;
     }
 
-    auto allRow = ListRowObject::create(rt::kAllTracksListId, kInvalidListId, 0, false, "All Tracks");
-    auto allTracksNode = ListTreeItem::create(allRow);
-    result.nodesById[rt::kAllTracksListId] = allTracksNode;
+    auto allRowPtr = ListRowObject::create(rt::kAllTracksListId, kInvalidListId, 0, false, "All Tracks");
+    auto allTracksNodePtr = ListTreeItem::create(allRowPtr);
+    result.nodesById[rt::kAllTracksListId] = allTracksNodePtr;
 
     for (auto const& [id, node] : nodes)
     {
-      auto childNode = result.nodesById[id];
+      auto childNodePtr = result.nodesById[id];
       auto parentId = node.parentId;
 
       if (auto parentIt = result.nodesById.find(parentId); parentIt != result.nodesById.end())
       {
-        parentIt->second->children()->append(childNode);
-        childNode->setParent(parentIt->second.get());
+        parentIt->second->children()->append(childNodePtr);
+        childNodePtr->setParent(parentIt->second.get());
       }
       else
       {
-        allTracksNode->children()->append(childNode);
-        childNode->setParent(allTracksNode.get());
+        allTracksNodePtr->children()->append(childNodePtr);
+        childNodePtr->setParent(allTracksNodePtr.get());
       }
     }
 
-    result.store->append(allTracksNode);
+    result.storePtr->append(allTracksNodePtr);
 
-    result.treeModel = Gtk::TreeListModel::create(
-      result.store,
+    result.treeModelPtr = Gtk::TreeListModel::create(
+      result.storePtr,
       [](Glib::RefPtr<Glib::ObjectBase> const& item) -> Glib::RefPtr<Gio::ListModel>
       {
-        auto node = std::dynamic_pointer_cast<ListTreeItem>(item);
+        auto nodePtr = std::dynamic_pointer_cast<ListTreeItem>(item);
 
-        if (!node || !node->hasChildren())
+        if (!nodePtr || !nodePtr->hasChildren())
         {
           return nullptr;
         }
 
-        return node->children();
+        return nodePtr->children();
       },
       false,
       true);
 
-    result.selectionModel = Gtk::SingleSelection::create(result.treeModel);
+    result.selectionModelPtr = Gtk::SingleSelection::create(result.treeModelPtr);
     return result;
   }
 } // namespace ao::gtk

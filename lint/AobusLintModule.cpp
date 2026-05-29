@@ -8,9 +8,11 @@
 #include "check/ForbidNodiscardCheck.h"
 #include "check/ForbidTrailingReturnCheck.h"
 #include "check/IdentifierNamingExtensionsCheck.h"
+#include "check/ImplicitBoolConversionInInitCheck.h"
 #include "check/IncludeConventionCheck.h"
 #include "check/LambdaParamsCheck.h"
 #include "check/LocalInitializationStyleCheck.h"
+#include "check/ManagedPointerSuffixCheck.h"
 #include "check/MemberOrderCheck.h"
 #include "check/OptionalNamingAndUsageCheck.h"
 #include "check/RedundantNamespaceQualificationCheck.h"
@@ -45,7 +47,9 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<ForbidNodiscardCheck>("aobus-modernize-forbid-nodiscard");
       checkFactories.registerCheck<ForbidTrailingReturnCheck>("aobus-modernize-forbid-trailing-return");
       checkFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");
+      checkFactories.registerCheck<aobus::ImplicitBoolConversionInInitCheck>("aobus-implicit-bool-conversion-in-init");
       checkFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");
+      checkFactories.registerCheck<ManagedPointerSuffixCheck>("aobus-readability-managed-pointer-suffix");
       checkFactories.registerCheck<LocalInitializationStyleCheck>("aobus-modernize-local-initialization-style");
       checkFactories.registerCheck<BracedInitializationCheck>("aobus-modernize-braced-initialization");
       checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");

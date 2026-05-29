@@ -28,7 +28,7 @@ namespace ao::rt
   };
 
   NotificationService::NotificationService()
-    : _impl{std::make_unique<Impl>()}
+    : _implPtr{std::make_unique<Impl>()}
   {
   }
 
@@ -36,27 +36,27 @@ namespace ao::rt
 
   Subscription NotificationService::onPosted(std::move_only_function<void(NotificationId)> handler)
   {
-    return _impl->postedSignal.connect(std::move(handler));
+    return _implPtr->postedSignal.connect(std::move(handler));
   }
 
   Subscription NotificationService::onUpdated(std::move_only_function<void(NotificationId)> handler)
   {
-    return _impl->updatedSignal.connect(std::move(handler));
+    return _implPtr->updatedSignal.connect(std::move(handler));
   }
 
   Subscription NotificationService::onDismissed(std::move_only_function<void(NotificationId)> handler)
   {
-    return _impl->dismissedSignal.connect(std::move(handler));
+    return _implPtr->dismissedSignal.connect(std::move(handler));
   }
 
   Subscription NotificationService::onChanged(std::move_only_function<void()> handler)
   {
-    return _impl->changedSignal.connect(std::move(handler));
+    return _implPtr->changedSignal.connect(std::move(handler));
   }
 
   NotificationFeedState NotificationService::feed() const
   {
-    return _impl->state;
+    return _implPtr->state;
   }
 
   NotificationId NotificationService::post(NotificationSeverity const severity,
@@ -74,7 +74,7 @@ namespace ao::rt
 
   NotificationId NotificationService::post(NotificationRequest request)
   {
-    auto const id = NotificationId{++_impl->nextId};
+    auto const id = NotificationId{++_implPtr->nextId};
 
     auto entry = NotificationEntry{
       .id = id,
@@ -85,73 +85,73 @@ namespace ao::rt
       .content = std::move(request.content),
     };
 
-    _impl->state.entries.push_back(std::move(entry));
-    ++_impl->state.revision;
-    _impl->postedSignal.emit(id);
-    _impl->changedSignal.emit();
+    _implPtr->state.entries.push_back(std::move(entry));
+    ++_implPtr->state.revision;
+    _implPtr->postedSignal.emit(id);
+    _implPtr->changedSignal.emit();
 
     return id;
   }
 
   void NotificationService::updateContent(NotificationId const id, NotificationContentState content)
   {
-    auto const it = std::ranges::find(_impl->state.entries, id, &NotificationEntry::id);
+    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
 
-    if (it != _impl->state.entries.end())
+    if (it != _implPtr->state.entries.end())
     {
       it->content = std::move(content);
-      ++_impl->state.revision;
-      _impl->updatedSignal.emit(id);
-      _impl->changedSignal.emit();
+      ++_implPtr->state.revision;
+      _implPtr->updatedSignal.emit(id);
+      _implPtr->changedSignal.emit();
     }
   }
 
   void NotificationService::updateProgress(NotificationId const id, NotificationProgressState progress)
   {
-    auto const it = std::ranges::find(_impl->state.entries, id, &NotificationEntry::id);
+    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
 
-    if (it != _impl->state.entries.end())
+    if (it != _implPtr->state.entries.end())
     {
       it->content.optProgress = std::move(progress);
-      ++_impl->state.revision;
-      _impl->updatedSignal.emit(id);
-      _impl->changedSignal.emit();
+      ++_implPtr->state.revision;
+      _implPtr->updatedSignal.emit(id);
+      _implPtr->changedSignal.emit();
     }
   }
 
   void NotificationService::clearProgress(NotificationId const id)
   {
-    auto const it = std::ranges::find(_impl->state.entries, id, &NotificationEntry::id);
+    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
 
-    if (it != _impl->state.entries.end() && it->content.optProgress)
+    if (it != _implPtr->state.entries.end() && it->content.optProgress)
     {
       it->content.optProgress = std::nullopt;
-      ++_impl->state.revision;
-      _impl->updatedSignal.emit(id);
-      _impl->changedSignal.emit();
+      ++_implPtr->state.revision;
+      _implPtr->updatedSignal.emit(id);
+      _implPtr->changedSignal.emit();
     }
   }
 
   void NotificationService::dismiss(NotificationId const id)
   {
-    auto const it = std::ranges::find(_impl->state.entries, id, &NotificationEntry::id);
+    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
 
-    if (it != _impl->state.entries.end())
+    if (it != _implPtr->state.entries.end())
     {
-      _impl->state.entries.erase(it);
-      ++_impl->state.revision;
-      _impl->dismissedSignal.emit(id);
-      _impl->changedSignal.emit();
+      _implPtr->state.entries.erase(it);
+      ++_implPtr->state.revision;
+      _implPtr->dismissedSignal.emit(id);
+      _implPtr->changedSignal.emit();
     }
   }
 
   void NotificationService::dismissAll()
   {
-    if (!_impl->state.entries.empty())
+    if (!_implPtr->state.entries.empty())
     {
-      _impl->state.entries.clear();
-      ++_impl->state.revision;
-      _impl->changedSignal.emit();
+      _implPtr->state.entries.clear();
+      ++_implPtr->state.revision;
+      _implPtr->changedSignal.emit();
     }
   }
 }

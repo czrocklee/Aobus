@@ -45,7 +45,7 @@ namespace ao::gtk
     void loadImage(ResourceId coverArtId);
 
     /// Bind to a runtime detail projection for reactive cover art updates.
-    void bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection);
+    void bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr);
 
   private:
     void onDetailSnapshot(rt::TrackDetailSnapshot const& snap);
@@ -54,7 +54,7 @@ namespace ao::gtk
     library::MusicLibrary& _library;
     ImageCache& _cache;
     std::int32_t _targetSize = 0;
-    std::shared_ptr<rt::ITrackDetailProjection> _detailProjection;
+    std::unique_ptr<rt::ITrackDetailProjection> _detailProjectionPtr;
     rt::Subscription _detailSub;
   };
 } // namespace ao::gtk

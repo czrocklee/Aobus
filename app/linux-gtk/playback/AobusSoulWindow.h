@@ -37,6 +37,6 @@ namespace ao::gtk
   private:
     rt::PlaybackService* _playback = nullptr;
     AobusSoul _bigSoul{};
-    std::unique_ptr<uimodel::playback::AobusSoulViewModel> _controller;
+    std::unique_ptr<uimodel::playback::AobusSoulViewModel> _controllerPtr;
   };
 } // namespace ao::gtk

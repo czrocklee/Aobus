@@ -59,7 +59,7 @@ namespace ao::gtk
 
     Gtk::Scale _scale;
     uimodel::playback::PlaybackPositionInterpolator _interpolator;
-    std::unique_ptr<uimodel::playback::SeekViewModel> _controller{};
+    std::unique_ptr<uimodel::playback::SeekViewModel> _controllerPtr{};
 
     std::uint32_t _durationMs = 0;
     InteractionState _interactionState = InteractionState::Idle;

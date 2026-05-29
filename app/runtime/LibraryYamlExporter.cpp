@@ -252,7 +252,7 @@ namespace ao::rt
       auto fileSize = std::uint64_t{0};
       auto mtime = std::uint64_t{0};
 
-      if (auto const optManifestView = manifestReader.get(property.uri()))
+      if (auto const optManifestView = manifestReader.get(property.uri()); optManifestView)
       {
         fileSize = optManifestView->fileSize();
         mtime = optManifestView->mtime();
@@ -364,7 +364,7 @@ namespace ao::rt
   };
 
   LibraryYamlExporter::LibraryYamlExporter(library::MusicLibrary& ml)
-    : _impl{std::make_unique<Impl>(ml)}
+    : _implPtr{std::make_unique<Impl>(ml)}
   {
   }
 
@@ -372,7 +372,7 @@ namespace ao::rt
 
   Result<> LibraryYamlExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
   {
-    return _impl->exportToYaml(path, mode);
+    return _implPtr->exportToYaml(path, mode);
   }
 
   Result<> LibraryYamlExporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode) const
@@ -460,9 +460,9 @@ namespace ao::rt
     {
       if (auto const fullPath = ml.rootPath() / property.uri(); std::filesystem::exists(fullPath))
       {
-        if (auto tagFile = tag::TagFile::open(fullPath))
+        if (auto tagFilePtr = tag::TagFile::open(fullPath); tagFilePtr)
         {
-          optBaseline = tagFile->loadTrack();
+          optBaseline = tagFilePtr->loadTrack();
         }
       }
     }

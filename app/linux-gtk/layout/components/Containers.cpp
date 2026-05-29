@@ -127,7 +127,7 @@ namespace ao::gtk::layout
 
     if (auto const it = layout.find("cssClasses"); it != layout.end())
     {
-      if (auto const* classes = it->second.getIf<std::vector<std::string>>())
+      if (auto const* classes = it->second.getIf<std::vector<std::string>>(); classes != nullptr)
       {
         for (auto const& className : *classes)
         {
@@ -165,10 +165,10 @@ namespace ao::gtk::layout
 
         for (auto const& childNode : node.children)
         {
-          auto child = ctx.registry.create(ctx, childNode);
-          applyCommonProps(child->widget(), childNode);
-          _box.append(child->widget());
-          _children.push_back(std::move(child));
+          auto childPtr = ctx.registry.create(ctx, childNode);
+          applyCommonProps(childPtr->widget(), childNode);
+          _box.append(childPtr->widget());
+          _children.push_back(std::move(childPtr));
         }
       }
 
@@ -199,29 +199,29 @@ namespace ao::gtk::layout
 
         for (auto const& childNode : node.children)
         {
-          auto child = ctx.registry.create(ctx, childNode);
-          applyCommonProps(child->widget(), childNode);
+          auto childPtr = ctx.registry.create(ctx, childNode);
+          applyCommonProps(childPtr->widget(), childNode);
 
           auto const slot = childNode.getLayout<std::string>("slot", "");
 
           if (slot == "start")
           {
-            _centerBox.set_start_widget(child->widget());
-            _startChild = std::move(child);
+            _centerBox.set_start_widget(childPtr->widget());
+            _startChildPtr = std::move(childPtr);
           }
           else if (slot == "center")
           {
-            _centerBox.set_center_widget(child->widget());
-            _centerChild = std::move(child);
+            _centerBox.set_center_widget(childPtr->widget());
+            _centerChildPtr = std::move(childPtr);
           }
           else if (slot == "end")
           {
-            _centerBox.set_end_widget(child->widget());
-            _endChild = std::move(child);
+            _centerBox.set_end_widget(childPtr->widget());
+            _endChildPtr = std::move(childPtr);
           }
           else
           {
-            _overflowChildren.push_back(std::move(child));
+            _overflowChildren.push_back(std::move(childPtr));
           }
         }
       }
@@ -230,9 +230,9 @@ namespace ao::gtk::layout
 
     private:
       Gtk::CenterBox _centerBox;
-      std::unique_ptr<ILayoutComponent> _startChild;
-      std::unique_ptr<ILayoutComponent> _centerChild;
-      std::unique_ptr<ILayoutComponent> _endChild;
+      std::unique_ptr<ILayoutComponent> _startChildPtr;
+      std::unique_ptr<ILayoutComponent> _centerChildPtr;
+      std::unique_ptr<ILayoutComponent> _endChildPtr;
       std::vector<std::unique_ptr<ILayoutComponent>> _overflowChildren;
     };
 
@@ -246,9 +246,10 @@ namespace ao::gtk::layout
       {
         if (node.children.size() != 2)
         {
-          _error = std::make_unique<Gtk::Label>();
-          _error->set_markup("<span foreground='red'><b>[Layout Error]</b> split requires exactly 2 children</span>");
-          _error->add_css_class("ao-layout-error");
+          _errorPtr = std::make_unique<Gtk::Label>();
+          _errorPtr->set_markup(
+            "<span foreground='red'><b>[Layout Error]</b> split requires exactly 2 children</span>");
+          _errorPtr->add_css_class("ao-layout-error");
           return;
         }
 
@@ -261,13 +262,13 @@ namespace ao::gtk::layout
 
         _paned.set_orientation(orientation);
 
-        _startChild = ctx.registry.create(ctx, node.children[0]);
-        applyCommonProps(_startChild->widget(), node.children[0]);
-        _paned.set_start_child(_startChild->widget());
+        _startChildPtr = ctx.registry.create(ctx, node.children[0]);
+        applyCommonProps(_startChildPtr->widget(), node.children[0]);
+        _paned.set_start_child(_startChildPtr->widget());
 
-        _endChild = ctx.registry.create(ctx, node.children[1]);
-        applyCommonProps(_endChild->widget(), node.children[1]);
-        _paned.set_end_child(_endChild->widget());
+        _endChildPtr = ctx.registry.create(ctx, node.children[1]);
+        applyCommonProps(_endChildPtr->widget(), node.children[1]);
+        _paned.set_end_child(_endChildPtr->widget());
 
         _paned.set_resize_start_child(node.getProp<bool>("resizeStart", true));
         _paned.set_shrink_start_child(node.getProp<bool>("shrinkStart", false));
@@ -282,14 +283,14 @@ namespace ao::gtk::layout
 
       Gtk::Widget& widget() override
       {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(_paned);
+        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_paned);
       }
 
     private:
       Gtk::Paned _paned;
-      std::unique_ptr<Gtk::Label> _error;
-      std::unique_ptr<ILayoutComponent> _startChild;
-      std::unique_ptr<ILayoutComponent> _endChild;
+      std::unique_ptr<Gtk::Label> _errorPtr;
+      std::unique_ptr<ILayoutComponent> _startChildPtr;
+      std::unique_ptr<ILayoutComponent> _endChildPtr;
     };
 
     /**
@@ -302,15 +303,15 @@ namespace ao::gtk::layout
       {
         if (node.children.size() != 1)
         {
-          _error = std::make_unique<Gtk::Label>();
-          _error->set_markup("<span foreground='red'><b>[Layout Error]</b> scroll requires exactly 1 child</span>");
-          _error->add_css_class("ao-layout-error");
+          _errorPtr = std::make_unique<Gtk::Label>();
+          _errorPtr->set_markup("<span foreground='red'><b>[Layout Error]</b> scroll requires exactly 1 child</span>");
+          _errorPtr->add_css_class("ao-layout-error");
           return;
         }
 
-        _child = ctx.registry.create(ctx, node.children[0]);
-        applyCommonProps(_child->widget(), node.children[0]);
-        _sw.set_child(_child->widget());
+        _childPtr = ctx.registry.create(ctx, node.children[0]);
+        applyCommonProps(_childPtr->widget(), node.children[0]);
+        _sw.set_child(_childPtr->widget());
 
         auto hpolicy = Gtk::PolicyType::AUTOMATIC;
         auto const hscrollPolicy = node.getProp<std::string>("hscrollPolicy", "");
@@ -347,13 +348,13 @@ namespace ao::gtk::layout
 
       Gtk::Widget& widget() override
       {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(_sw);
+        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_sw);
       }
 
     private:
       Gtk::ScrolledWindow _sw;
-      std::unique_ptr<Gtk::Label> _error;
-      std::unique_ptr<ILayoutComponent> _child;
+      std::unique_ptr<Gtk::Label> _errorPtr;
+      std::unique_ptr<ILayoutComponent> _childPtr;
     };
 
     /**
@@ -405,9 +406,9 @@ namespace ao::gtk::layout
       {
         if (node.children.empty())
         {
-          _error = std::make_unique<Gtk::Label>();
-          _error->set_markup("<span foreground='red'><b>[Layout Error]</b> tabs require at least 1 child</span>");
-          _error->add_css_class("ao-layout-error");
+          _errorPtr = std::make_unique<Gtk::Label>();
+          _errorPtr->set_markup("<span foreground='red'><b>[Layout Error]</b> tabs require at least 1 child</span>");
+          _errorPtr->add_css_class("ao-layout-error");
           return;
         }
 
@@ -418,34 +419,34 @@ namespace ao::gtk::layout
 
         for (auto const& childNode : node.children)
         {
-          auto child = ctx.registry.create(ctx, childNode);
-          applyCommonProps(child->widget(), childNode);
+          auto childPtr = ctx.registry.create(ctx, childNode);
+          applyCommonProps(childPtr->widget(), childNode);
 
           auto const title =
             childNode.getLayout<std::string>("title", !childNode.id.empty() ? childNode.id : "[Untitled]");
           auto const name = !childNode.id.empty() ? childNode.id : childNode.type;
 
-          auto const page = _stack.add(child->widget(), name, title);
+          auto const pagePtr = _stack.add(childPtr->widget(), name, title);
 
           if (auto const it = childNode.layout.find("icon"); it != childNode.layout.end())
           {
-            page->set_icon_name(it->second.asString());
+            pagePtr->set_icon_name(it->second.asString());
           }
 
-          _children.push_back(std::move(child));
+          _children.push_back(std::move(childPtr));
         }
       }
 
       Gtk::Widget& widget() override
       {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(_box);
+        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_box);
       }
 
     private:
       Gtk::Box _box;
       Gtk::StackSwitcher _switcher;
       Gtk::Stack _stack;
-      std::unique_ptr<Gtk::Label> _error;
+      std::unique_ptr<Gtk::Label> _errorPtr;
       std::vector<std::unique_ptr<ILayoutComponent>> _children;
     };
 
@@ -498,18 +499,18 @@ namespace ao::gtk::layout
 
         if (_editMode)
         {
-          _drag = Gtk::GestureDrag::create();
-          _drag->set_button(GDK_BUTTON_PRIMARY);
-          _drag->signal_drag_begin().connect([this](double posX, double posY) { onDragBegin(posX, posY); });
-          _drag->signal_drag_update().connect([this](double offsetX, double offsetY)
-                                              { onDragUpdate(offsetX, offsetY); });
-          _drag->signal_drag_end().connect([this](double offsetX, double offsetY) { onDragEnd(offsetX, offsetY); });
-          add_controller(_drag);
+          _dragPtr = Gtk::GestureDrag::create();
+          _dragPtr->set_button(GDK_BUTTON_PRIMARY);
+          _dragPtr->signal_drag_begin().connect([this](double posX, double posY) { onDragBegin(posX, posY); });
+          _dragPtr->signal_drag_update().connect([this](double offsetX, double offsetY)
+                                                 { onDragUpdate(offsetX, offsetY); });
+          _dragPtr->signal_drag_end().connect([this](double offsetX, double offsetY) { onDragEnd(offsetX, offsetY); });
+          add_controller(_dragPtr);
 
-          auto const key = Gtk::EventControllerKey::create();
-          key->signal_key_pressed().connect(
+          auto const keyPtr = Gtk::EventControllerKey::create();
+          keyPtr->signal_key_pressed().connect(
             [this](guint keyval, guint, Gdk::ModifierType) -> bool { return onKeyPressed(keyval); }, false);
-          add_controller(key);
+          add_controller(keyPtr);
         }
       }
 
@@ -539,7 +540,8 @@ namespace ao::gtk::layout
                     std::int32_t zIndex)
       {
         child.set_parent(*this);
-        _children.push_back({id, &child, posX, posY, width, height, zIndex, _insertCount++, posX, posY, width, height});
+        _children.push_back(
+          {id, &child, posX, posY, width, height, zIndex, _insertCount++, posX, posY, width, height});
       }
 
       void setSelectedChild(std::string const& id)
@@ -690,7 +692,7 @@ namespace ao::gtk::layout
                                                 static_cast<float>(child.posY),
                                                 static_cast<float>(width),
                                                 static_cast<float>(height)};
-          auto const cr = snapshot->append_cairo(rect);
+          auto const crPtr = snapshot->append_cairo(rect);
 
           // Adwaita blue: #3584e4
           static constexpr double kSelectionR = 0.21;
@@ -700,29 +702,29 @@ namespace ao::gtk::layout
           static constexpr double kHandleAlpha = 0.8;
           static constexpr double kLineWidth = 2.0;
 
-          cr->set_source_rgba(kSelectionR, kSelectionG, kSelectionB, kSelectionAlpha);
-          cr->set_line_width(kLineWidth);
+          crPtr->set_source_rgba(kSelectionR, kSelectionG, kSelectionB, kSelectionAlpha);
+          crPtr->set_line_width(kLineWidth);
 
           static constexpr double kDashLength = 6.0;
           static constexpr double kDashGap = 3.0;
-          cr->set_dash(std::vector{kDashLength, kDashGap}, 0);
-          cr->rectangle(0, 0, width, height);
-          cr->stroke();
+          crPtr->set_dash(std::vector{kDashLength, kDashGap}, 0);
+          crPtr->rectangle(0, 0, width, height);
+          crPtr->stroke();
 
           // Resize handles at 4 corners
           double const handleSize = 8.0;
 
           auto const drawHandle = [&](std::int32_t handleX, std::int32_t handleY)
           {
-            cr->set_dash(std::vector<double>{}, 0);
+            crPtr->set_dash(std::vector<double>{}, 0);
 
             double const halfHandleSize = handleSize / 2.0;
-            cr->rectangle(static_cast<double>(handleX) - halfHandleSize,
-                          static_cast<double>(handleY) - halfHandleSize,
-                          handleSize,
-                          handleSize);
-            cr->set_source_rgba(kSelectionR, kSelectionG, kSelectionB, kHandleAlpha);
-            cr->fill();
+            crPtr->rectangle(static_cast<double>(handleX) - halfHandleSize,
+                             static_cast<double>(handleY) - halfHandleSize,
+                             handleSize,
+                             handleSize);
+            crPtr->set_source_rgba(kSelectionR, kSelectionG, kSelectionB, kHandleAlpha);
+            crPtr->fill();
           };
 
           drawHandle(0, 0);
@@ -1005,7 +1007,7 @@ namespace ao::gtk::layout
       std::int32_t _gridSize = 8;
       ResizeCorner _resizeCorner = ResizeCorner::None;
       std::function<void(std::string const&, std::int32_t, std::int32_t)> _onMoved;
-      Glib::RefPtr<Gtk::GestureDrag> _drag;
+      Glib::RefPtr<Gtk::GestureDrag> _dragPtr;
       ChildData* _dragChild = nullptr;
     };
 
@@ -1020,8 +1022,8 @@ namespace ao::gtk::layout
       {
         for (auto const& childNode : node.children)
         {
-          auto child = ctx.registry.create(ctx, childNode);
-          applyCommonProps(child->widget(), childNode);
+          auto childPtr = ctx.registry.create(ctx, childNode);
+          applyCommonProps(childPtr->widget(), childNode);
 
           int const posX = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("x", 0));
           int const posY = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("y", 0));
@@ -1029,8 +1031,8 @@ namespace ao::gtk::layout
           int const height = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("height", -1));
           int const zIndex = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("zIndex", 0));
 
-          _canvas.addChild(childNode.id, child->widget(), posX, posY, width, height, zIndex);
-          _children.push_back(std::move(child));
+          _canvas.addChild(childNode.id, childPtr->widget(), posX, posY, width, height, zIndex);
+          _children.push_back(std::move(childPtr));
         }
 
         _canvas.sortChildren();

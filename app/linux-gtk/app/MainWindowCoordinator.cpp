@@ -40,21 +40,21 @@ namespace ao::gtk
 {
   MainWindowCoordinator::MainWindowCoordinator(MainWindow& window,
                                                rt::AppRuntime& runtime,
-                                               std::shared_ptr<AppConfig> config)
-    : _window{window}, _runtime{runtime}, _config{std::move(config)}
+                                               std::shared_ptr<AppConfig> configPtr)
+    : _window{window}, _runtime{runtime}, _configPtr{std::move(configPtr)}
   {
-    _layoutConfig = std::make_unique<GtkLayoutConfig>(_runtime.musicLibrary().rootPath() / ".aobus");
+    _layoutConfigPtr = std::make_unique<GtkLayoutConfig>(_runtime.musicLibrary().rootPath() / ".aobus");
 
     // Initialize cover art cache
     int const imageCacheSize = 100;
-    _imageCache = std::make_unique<ImageCache>(imageCacheSize);
+    _imageCachePtr = std::make_unique<ImageCache>(imageCacheSize);
 
     // Initialize TagEditController
-    _tagEditController =
+    _tagEditControllerPtr =
       std::make_unique<TagEditController>(window, _runtime, TagEditController::Callbacks{.onTagsMutated = [] {}});
 
     // Initialize list sidebar controller (must exist before TrackPageHost)
-    _listSidebarController = std::make_unique<ListNavigationController>(
+    _listSidebarControllerPtr = std::make_unique<ListNavigationController>(
       window,
       _runtime,
       ListNavigationController::Callbacks{
@@ -62,8 +62,8 @@ namespace ao::gtk
         .getListMembership = [this](ListId listId) { return &_runtime.sources().sourceFor(listId); }});
 
     // Initialize track presentation store
-    _trackPresentationStore = std::make_unique<TrackPresentationStore>(_runtime.workspace());
-    _trackPresentationChangedConnection = _trackPresentationStore->signalChanged().connect(
+    _trackPresentationStorePtr = std::make_unique<TrackPresentationStore>(_runtime.workspace());
+    _trackPresentationChangedConnection = _trackPresentationStorePtr->signalChanged().connect(
       [this](ao::ListId /*listId*/, TrackPresentationChangeType type)
       {
         if (type == TrackPresentationChangeType::LayoutOnly)
@@ -73,25 +73,25 @@ namespace ao::gtk
       });
 
     // Initialize track page manager
-    _trackPageHost = std::make_unique<TrackPageHost>(_stack,
-                                                     _runtime,
-                                                     _playbackQueueModel.get(),
-                                                     *_tagEditController,
-                                                     *_listSidebarController,
-                                                     *_trackPresentationStore,
-                                                     _imageCache.get());
+    _trackPageHostPtr = std::make_unique<TrackPageHost>(_stack,
+                                                        _runtime,
+                                                        _playbackQueueModelPtr.get(),
+                                                        *_tagEditControllerPtr,
+                                                        *_listSidebarControllerPtr,
+                                                        *_trackPresentationStorePtr,
+                                                        _imageCachePtr.get());
 
     // Initialize import/export coordinator
-    _importExportCoordinator = std::make_unique<portal::ImportExportCoordinator>(
+    _importExportCoordinatorPtr = std::make_unique<portal::ImportExportCoordinator>(
       window,
       _runtime,
       portal::ImportExportCallbacks{.onOpenNewLibrary = [](std::filesystem::path const&) {},
                                     .onLibraryDataMutated =
                                       [this]
                                     {
-                                      if (_trackRowCache)
+                                      if (_trackRowCachePtr)
                                       {
-                                        _trackRowCache->clearCache();
+                                        _trackRowCachePtr->clearCache();
                                         _runtime.reloadAllTracks();
                                         auto const txn = _runtime.musicLibrary().readTransaction();
                                         rebuildListPages(txn);
@@ -110,22 +110,22 @@ namespace ao::gtk
 
   void MainWindowCoordinator::initializeSession()
   {
-    _trackRowCache = std::make_unique<TrackRowCache>(_runtime.musicLibrary());
+    _trackRowCachePtr = std::make_unique<TrackRowCache>(_runtime.musicLibrary());
 
     _runtime.reloadAllTracks();
 
     registerPlatformAudioBackends(_runtime);
 
-    _playbackQueueModel = std::make_unique<ao::uimodel::playback::PlaybackQueueModel>(
-      _runtime.playback(), [this](TrackId id) { return _trackRowCache->playbackDescriptor(id); });
-    _trackPageHost->setPlaybackQueueModel(*_playbackQueueModel);
+    _playbackQueueModelPtr = std::make_unique<ao::uimodel::playback::PlaybackQueueModel>(
+      _runtime.playback(), [this](TrackId id) { return _trackRowCachePtr->playbackDescriptor(id); });
+    _trackPageHostPtr->setPlaybackQueueModel(*_playbackQueueModelPtr);
 
     _libraryTaskCompletedSubscription = _runtime.mutation().onLibraryTaskCompleted(
       [this](auto)
       {
-        if (_trackRowCache)
+        if (_trackRowCachePtr)
         {
-          _trackRowCache->clearCache();
+          _trackRowCachePtr->clearCache();
           _runtime.reloadAllTracks();
         }
       });
@@ -133,14 +133,14 @@ namespace ao::gtk
     _tracksMutatedSubscription = _runtime.mutation().onTracksMutated(
       [this](auto const& trackIds)
       {
-        if (!_trackRowCache)
+        if (!_trackRowCachePtr)
         {
           return;
         }
 
         for (auto const trackId : trackIds)
         {
-          _trackRowCache->invalidate(trackId);
+          _trackRowCachePtr->invalidate(trackId);
         }
 
         _runtime.sources().allTracks().notifyUpdated(trackIds);
@@ -149,14 +149,14 @@ namespace ao::gtk
     _listsMutatedSubscription = _runtime.mutation().onListsMutated(
       [this](auto const&)
       {
-        if (_trackRowCache)
+        if (_trackRowCachePtr)
         {
           auto const txn = _runtime.musicLibrary().readTransaction();
           rebuildListPages(txn);
         }
       });
 
-    _tagEditController->setDataProvider(_trackRowCache.get());
+    _tagEditControllerPtr->setDataProvider(_trackRowCachePtr.get());
 
     _runtime.notifications().post(rt::NotificationSeverity::Info, "Aobus Ready");
 
@@ -188,7 +188,7 @@ namespace ao::gtk
     }
 
     windowState.maximized = _window.is_maximized();
-    _config->saveWindow(windowState);
+    _configPtr->saveWindow(windowState);
 
     saveColumnLayout();
 
@@ -199,7 +199,7 @@ namespace ao::gtk
     prefs.lastBackend = pb.selectedOutput.backendId.raw();
     prefs.lastOutputDeviceId = pb.selectedOutput.deviceId.raw();
     prefs.lastProfile = pb.selectedOutput.profileId.raw();
-    _config->saveAppPrefs(prefs);
+    _configPtr->saveAppPrefs(prefs);
 
     _runtime.workspace().saveSession(_runtime.configStore());
   }
@@ -208,7 +208,7 @@ namespace ao::gtk
   {
     // Window state
     auto windowState = WindowState{};
-    _config->loadWindow(windowState);
+    _configPtr->loadWindow(windowState);
     _window.set_default_size(windowState.width, windowState.height);
 
     if (windowState.maximized)
@@ -218,12 +218,12 @@ namespace ao::gtk
 
     // Column layouts (widths and order)
     auto columnState = ColumnLayoutState{};
-    _layoutConfig->load(columnState);
-    _trackPresentationStore->setListLayouts(columnState.listLayouts);
+    _layoutConfigPtr->load(columnState);
+    _trackPresentationStorePtr->setListLayouts(columnState.listLayouts);
 
     // App prefs (playback restoration)
     auto prefs = rt::AppPrefsState{};
-    _config->loadAppPrefs(prefs);
+    _configPtr->loadAppPrefs(prefs);
 
     if (!prefs.lastBackend.empty())
     {
@@ -235,31 +235,31 @@ namespace ao::gtk
 
   GtkUiServices MainWindowCoordinator::uiServices()
   {
-    return GtkUiServices{.trackRowCache = _trackRowCache.get(),
-                         .imageCache = _imageCache.get(),
-                         .playbackQueueModel = _playbackQueueModel.get(),
-                         .tagEditController = _tagEditController.get(),
-                         .importExportCoordinator = _importExportCoordinator.get(),
-                         .trackPageHost = _trackPageHost.get(),
-                         .trackPresentationStore = _trackPresentationStore.get(),
-                         .listSidebarController = _listSidebarController.get()};
+    return GtkUiServices{.trackRowCache = _trackRowCachePtr.get(),
+                         .imageCache = _imageCachePtr.get(),
+                         .playbackQueueModel = _playbackQueueModelPtr.get(),
+                         .tagEditController = _tagEditControllerPtr.get(),
+                         .importExportCoordinator = _importExportCoordinatorPtr.get(),
+                         .trackPageHost = _trackPageHostPtr.get(),
+                         .trackPresentationStore = _trackPresentationStorePtr.get(),
+                         .listSidebarController = _listSidebarControllerPtr.get()};
   }
 
   void MainWindowCoordinator::rebuildListPages(lmdb::ReadTransaction const& txn)
   {
     APP_LOG_DEBUG("rebuildListPages called");
-    _trackPageHost->rebuild(*_trackRowCache, txn);
+    _trackPageHostPtr->rebuild(*_trackRowCachePtr, txn);
 
-    if (_listSidebarController)
+    if (_listSidebarControllerPtr)
     {
-      _listSidebarController->rebuildTree(*_trackRowCache, txn);
+      _listSidebarControllerPtr->rebuildTree(*_trackRowCachePtr, txn);
     }
   }
 
   void MainWindowCoordinator::saveColumnLayout()
   {
     auto columnState = ColumnLayoutState{};
-    columnState.listLayouts = _trackPresentationStore->listLayouts();
-    _layoutConfig->save(columnState);
+    columnState.listLayouts = _trackPresentationStorePtr->listLayouts();
+    _layoutConfigPtr->save(columnState);
   }
 } // namespace ao::gtk

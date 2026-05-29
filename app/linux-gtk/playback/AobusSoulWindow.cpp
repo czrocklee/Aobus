@@ -50,14 +50,15 @@ namespace ao::gtk
 
     std::int32_t logoHeight = kDefaultLogoHeight;
 
-    if (auto const display = Gdk::Display::get_default(); display != nullptr)
+    if (auto const displayPtr = Gdk::Display::get_default(); displayPtr != nullptr)
     {
-      if (auto const monitors = display->get_monitors(); monitors->get_n_items() > 0)
+      if (auto const monitorsPtr = displayPtr->get_monitors(); monitorsPtr->get_n_items() > 0)
       {
-        if (auto const monitor = std::dynamic_pointer_cast<Gdk::Monitor>(monitors->get_object(0)))
+        if (auto const monitorPtr = std::dynamic_pointer_cast<Gdk::Monitor>(monitorsPtr->get_object(0));
+            monitorPtr != nullptr)
         {
           auto geometry = Gdk::Rectangle{};
-          monitor->get_geometry(geometry);
+          monitorPtr->get_geometry(geometry);
 
           if (geometry.get_height() > 0)
           {
@@ -76,8 +77,8 @@ namespace ao::gtk
     centerBox->append(_bigSoul);
     set_child(*centerBox);
 
-    auto const gesture = Gtk::GestureClick::create();
-    gesture->signal_released().connect(
+    auto const gesturePtr = Gtk::GestureClick::create();
+    gesturePtr->signal_released().connect(
       [this](std::int32_t, double, double)
       {
         Glib::signal_idle().connect(
@@ -88,11 +89,11 @@ namespace ao::gtk
           });
       });
 
-    add_controller(gesture);
+    add_controller(gesturePtr);
 
-    auto const shortcutController = Gtk::ShortcutController::create();
-    auto const trigger = Gtk::ShortcutTrigger::parse_string("Escape");
-    auto const action = Gtk::CallbackAction::create(
+    auto const shortcutControllerPtr = Gtk::ShortcutController::create();
+    auto const triggerPtr = Gtk::ShortcutTrigger::parse_string("Escape");
+    auto const actionPtr = Gtk::CallbackAction::create(
       [this](Gtk::Widget&, Glib::VariantBase const&) -> bool
       {
         Glib::signal_idle().connect(
@@ -104,8 +105,8 @@ namespace ao::gtk
         return true;
       });
 
-    shortcutController->add_shortcut(Gtk::Shortcut::create(trigger, action));
-    add_controller(shortcutController);
+    shortcutControllerPtr->add_shortcut(Gtk::Shortcut::create(triggerPtr, actionPtr));
+    add_controller(shortcutControllerPtr);
 
     fullscreen();
   }
@@ -118,7 +119,7 @@ namespace ao::gtk
 
     if (get_visible())
     {
-      _controller = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
+      _controllerPtr = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
         *_playback,
         [this](ao::uimodel::playback::AobusSoulViewState const& view)
         {
@@ -134,7 +135,7 @@ namespace ao::gtk
 
     if (_playback != nullptr)
     {
-      _controller = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
+      _controllerPtr = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
         *_playback,
         [this](ao::uimodel::playback::AobusSoulViewState const& view)
         {
@@ -146,7 +147,7 @@ namespace ao::gtk
 
   void AobusSoulWindow::on_hide()
   {
-    _controller.reset();
+    _controllerPtr.reset();
     Gtk::Window::on_hide();
   }
 } // namespace ao::gtk

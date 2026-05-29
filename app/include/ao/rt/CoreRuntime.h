@@ -31,7 +31,7 @@ namespace ao::rt
   class CoreRuntime
   {
   public:
-    CoreRuntime(std::unique_ptr<IControlExecutor> executor,
+    CoreRuntime(std::unique_ptr<IControlExecutor> executorPtr,
                 std::filesystem::path musicRoot,
                 std::filesystem::path databasePath);
     virtual ~CoreRuntime();
@@ -55,6 +55,6 @@ namespace ao::rt
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

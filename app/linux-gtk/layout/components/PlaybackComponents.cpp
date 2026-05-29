@@ -139,15 +139,15 @@ namespace ao::gtk::layout
           return;
         }
 
-        _imageWidget = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
+        _imageWidgetPtr = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
 
         auto const variant = node.getProp<std::string>("variant", "default");
 
         if (variant == "thumbnail")
         {
-          _imageWidget->setTargetSize(kThumbnailSize);
-          _imageWidget->set_size_request(kThumbnailSize, kThumbnailSize);
-          _imageWidget->add_css_class("ao-nowplaying-image-thumb");
+          _imageWidgetPtr->setTargetSize(kThumbnailSize);
+          _imageWidgetPtr->set_size_request(kThumbnailSize, kThumbnailSize);
+          _imageWidgetPtr->add_css_class("ao-nowplaying-image-thumb");
         }
 
         auto const actionStr = node.getProp<std::string>("action", "none");
@@ -163,7 +163,7 @@ namespace ao::gtk::layout
           return Action::None;
         }();
 
-        _button.set_child(*_imageWidget);
+        _button.set_child(*_imageWidgetPtr);
         _button.set_has_frame(false); // Make it flat
         _button.add_css_class("ao-image-button");
 
@@ -232,7 +232,7 @@ namespace ao::gtk::layout
       {
         if (_currentTrackId == kInvalidTrackId)
         {
-          _imageWidget->clearImage();
+          _imageWidgetPtr->clearImage();
           return;
         }
 
@@ -242,17 +242,17 @@ namespace ao::gtk::layout
 
         if (optView)
         {
-          _imageWidget->loadImage(ResourceId{optView->metadata().coverArtId()});
+          _imageWidgetPtr->loadImage(ResourceId{optView->metadata().coverArtId()});
         }
         else
         {
-          _imageWidget->clearImage();
+          _imageWidgetPtr->clearImage();
         }
       }
 
       rt::AppRuntime& _runtime;
       Action _action = Action::None;
-      std::unique_ptr<ImageWidget> _imageWidget;
+      std::unique_ptr<ImageWidget> _imageWidgetPtr;
       Gtk::Button _button;
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
@@ -361,7 +361,7 @@ namespace ao::gtk::layout
     public:
       QualityIndicatorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _runtime{ctx.runtime}
-        , _soulController{std::make_unique<uimodel::playback::AobusSoulViewModel>(
+        , _soulControllerPtr{std::make_unique<uimodel::playback::AobusSoulViewModel>(
             _runtime.playback(),
             [this](uimodel::playback::AobusSoulViewState const& view)
             {
@@ -376,7 +376,7 @@ namespace ao::gtk::layout
     private:
       rt::AppRuntime& _runtime;
       AobusSoul _soul{};
-      std::unique_ptr<uimodel::playback::AobusSoulViewModel> _soulController;
+      std::unique_ptr<uimodel::playback::AobusSoulViewModel> _soulControllerPtr;
     };
 
     std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)

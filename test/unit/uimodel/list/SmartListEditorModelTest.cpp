@@ -30,7 +30,7 @@ namespace ao::uimodel::list::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel - preview status", "[unit][uimodel][list]")
+  TEST_CASE("SmartListEditorModel - SmartListStatus enum values", "[unit][uimodel][list]")
   {
     CHECK(static_cast<int>(SmartListStatus::Valid) == 1);
   }

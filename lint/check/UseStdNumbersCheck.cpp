@@ -63,14 +63,14 @@ namespace clang::tidy::readability
   {
     bool isOverriddenMethod(Decl const* decl)
     {
-      if (auto const* func = llvm::dyn_cast_or_null<CXXMethodDecl>(decl))
+      if (auto const* func = llvm::dyn_cast_or_null<CXXMethodDecl>(decl); func != nullptr)
       {
         return func->size_overridden_methods() > 0;
       }
 
-      if (auto const* parm = llvm::dyn_cast_or_null<ParmVarDecl>(decl))
+      if (auto const* parm = llvm::dyn_cast_or_null<ParmVarDecl>(decl); parm != nullptr)
       {
-        if (auto const* func = llvm::dyn_cast_or_null<CXXMethodDecl>(parm->getDeclContext()))
+        if (auto const* func = llvm::dyn_cast_or_null<CXXMethodDecl>(parm->getDeclContext()); func != nullptr)
         {
           return func->size_overridden_methods() > 0;
         }
@@ -81,20 +81,20 @@ namespace clang::tidy::readability
 
     bool hasCStyleLinkage(Decl const* decl)
     {
-      if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(decl))
+      if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(decl); func != nullptr)
       {
         return func->isExternC();
       }
 
-      if (auto const* parm = llvm::dyn_cast_or_null<ParmVarDecl>(decl))
+      if (auto const* parm = llvm::dyn_cast_or_null<ParmVarDecl>(decl); parm != nullptr)
       {
-        if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(parm->getDeclContext()))
+        if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(parm->getDeclContext()); func != nullptr)
         {
           return func->isExternC();
         }
       }
 
-      if (auto const* var = llvm::dyn_cast_or_null<VarDecl>(decl))
+      if (auto const* var = llvm::dyn_cast_or_null<VarDecl>(decl); var != nullptr)
       {
         return var->isExternC();
       }
@@ -104,14 +104,14 @@ namespace clang::tidy::readability
 
     bool isMainFunction(Decl const* decl)
     {
-      if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(decl))
+      if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(decl); func != nullptr)
       {
         return func->isMain();
       }
 
-      if (auto const* parm = llvm::dyn_cast_or_null<ParmVarDecl>(decl))
+      if (auto const* parm = llvm::dyn_cast_or_null<ParmVarDecl>(decl); parm != nullptr)
       {
-        if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(parm->getDeclContext()))
+        if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(parm->getDeclContext()); func != nullptr)
         {
           return func->isMain();
         }
@@ -132,7 +132,7 @@ namespace clang::tidy::readability
 
       bool VisitCallExpr(CallExpr* call) // NOLINT(readability-identifier-naming)
       {
-        if (auto const* calleeDecl = call->getDirectCallee())
+        if (auto const* calleeDecl = call->getDirectCallee(); calleeDecl != nullptr)
         {
           if (calleeDecl->isExternC())
           {
@@ -159,17 +159,17 @@ namespace clang::tidy::readability
 
         expr = expr->IgnoreParenImpCasts();
 
-        if (auto const* declRef = llvm::dyn_cast<DeclRefExpr>(expr))
+        if (auto const* declRef = llvm::dyn_cast<DeclRefExpr>(expr); declRef != nullptr)
         {
           return declRef->getDecl() == targetDecl;
         }
 
-        if (auto const* memberExpr = llvm::dyn_cast<MemberExpr>(expr))
+        if (auto const* memberExpr = llvm::dyn_cast<MemberExpr>(expr); memberExpr != nullptr)
         {
           return memberExpr->getMemberDecl() == targetDecl;
         }
 
-        if (auto const* unOp = llvm::dyn_cast<UnaryOperator>(expr))
+        if (auto const* unOp = llvm::dyn_cast<UnaryOperator>(expr); unOp != nullptr)
         {
           return mentionsDecl(unOp->getSubExpr());
         }
@@ -180,11 +180,11 @@ namespace clang::tidy::readability
 
     bool isPassedToExternC(ValueDecl const* decl)
     {
-      if (auto const* var = llvm::dyn_cast<VarDecl>(decl))
+      if (auto const* var = llvm::dyn_cast<VarDecl>(decl); var != nullptr)
       {
         if (auto const* declCtx = var->getDeclContext(); declCtx != nullptr && declCtx->isFunctionOrMethod())
         {
-          if (auto const* func = llvm::dyn_cast<FunctionDecl>(declCtx))
+          if (auto const* func = llvm::dyn_cast<FunctionDecl>(declCtx); func != nullptr)
           {
             if (func->hasBody())
             {
@@ -195,13 +195,13 @@ namespace clang::tidy::readability
           }
         }
       }
-      else if (auto const* field = llvm::dyn_cast<FieldDecl>(decl))
+      else if (auto const* field = llvm::dyn_cast<FieldDecl>(decl); field != nullptr)
       {
         auto const* record = field->getParent();
 
         for (auto const* member : record->decls())
         {
-          if (auto const* method = llvm::dyn_cast<FunctionDecl>(member))
+          if (auto const* method = llvm::dyn_cast<FunctionDecl>(member); method != nullptr)
           {
             if (method->hasBody())
             {
@@ -231,7 +231,7 @@ namespace clang::tidy::readability
 
     std::optional<MatchContext> getMatchContext(MatchFinder::MatchResult const& result)
     {
-      if (auto const* tl = result.Nodes.getNodeAs<TypeLoc>("tl"))
+      if (auto const* tl = result.Nodes.getNodeAs<TypeLoc>("tl"); tl != nullptr)
       {
         auto const builtinLoc = tl->getAs<BuiltinTypeLoc>();
 
@@ -242,19 +242,19 @@ namespace clang::tidy::readability
 
         auto const* contextDecl = static_cast<Decl const*>(nullptr);
 
-        if (auto const* decl = result.Nodes.getNodeAs<VarDecl>("var"))
+        if (auto const* decl = result.Nodes.getNodeAs<VarDecl>("var"); decl != nullptr)
         {
           contextDecl = decl;
         }
-        else if (auto const* decl = result.Nodes.getNodeAs<FieldDecl>("field"))
+        else if (auto const* decl = result.Nodes.getNodeAs<FieldDecl>("field"); decl != nullptr)
         {
           contextDecl = decl;
         }
-        else if (auto const* decl = result.Nodes.getNodeAs<ParmVarDecl>("parm"))
+        else if (auto const* decl = result.Nodes.getNodeAs<ParmVarDecl>("parm"); decl != nullptr)
         {
           contextDecl = decl;
         }
-        else if (auto const* decl = result.Nodes.getNodeAs<FunctionDecl>("func_ret"))
+        else if (auto const* decl = result.Nodes.getNodeAs<FunctionDecl>("func_ret"); decl != nullptr)
         {
           contextDecl = decl;
         }
@@ -266,9 +266,9 @@ namespace clang::tidy::readability
                             .isCast = false};
       }
 
-      if (auto const* expr = result.Nodes.getNodeAs<ExplicitCastExpr>("cast"))
+      if (auto const* expr = result.Nodes.getNodeAs<ExplicitCastExpr>("cast"); expr != nullptr)
       {
-        if (auto* const typeInfo = expr->getTypeInfoAsWritten())
+        if (auto* const typeInfo = expr->getTypeInfoAsWritten(); typeInfo != nullptr)
         {
           auto const builtinLoc = typeInfo->getTypeLoc().getAs<BuiltinTypeLoc>();
 
@@ -301,7 +301,7 @@ namespace clang::tidy::readability
           return true;
         }
 
-        if (auto const* valDecl = llvm::dyn_cast<ValueDecl>(match.contextDecl))
+        if (auto const* valDecl = llvm::dyn_cast<ValueDecl>(match.contextDecl); valDecl != nullptr)
         {
           if (isPassedToExternC(valDecl))
           {
@@ -372,7 +372,7 @@ namespace clang::tidy::readability
     {
       if (auto const fileId = sm.getFileID(optMatch->loc); _insertedHeaders[fileId].insert("<cstdint>").second)
       {
-        if (auto optFixit = _includeInserter.createIncludeInsertion(fileId, "<cstdint>"))
+        if (auto optFixit = _includeInserter.createIncludeInsertion(fileId, "<cstdint>"); optFixit)
         {
           diagBuilder << *optFixit;
         }
@@ -382,7 +382,7 @@ namespace clang::tidy::readability
     {
       if (auto const fileId = sm.getFileID(optMatch->loc); _insertedHeaders[fileId].insert("<cstddef>").second)
       {
-        if (auto optFixit = _includeInserter.createIncludeInsertion(fileId, "<cstddef>"))
+        if (auto optFixit = _includeInserter.createIncludeInsertion(fileId, "<cstddef>"); optFixit)
         {
           diagBuilder << *optFixit;
         }

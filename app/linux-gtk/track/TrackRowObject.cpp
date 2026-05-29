@@ -62,10 +62,10 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, TrackRowCache const& provider)
   {
-    auto obj = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
-    obj->_id = id;
-    obj->_provider = &provider;
-    return obj;
+    auto objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
+    objPtr->_id = id;
+    objPtr->_provider = &provider;
+    return objPtr;
   }
 
   Glib::ustring const* TrackRowObject::stringField(rt::TrackField field) const noexcept
@@ -146,7 +146,7 @@ namespace ao::gtk
 
   Glib::ustring TrackRowObject::fieldText(rt::TrackField field) const
   {
-    if (auto const* text = stringField(field))
+    if (auto const* text = stringField(field); text != nullptr)
     {
       return *text;
     }

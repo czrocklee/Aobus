@@ -13,7 +13,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("VolumeControl - GTK smoke test", "[gtk][playback][viewmodel]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
 
     auto& playback = fixture.runtime().playback();

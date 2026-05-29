@@ -177,11 +177,11 @@ namespace ao::gtk
 
   void QueryExpressionBox::setupCompletion()
   {
-    _completionItems = Gtk::StringList::create();
-    _completionSelection = Gtk::SingleSelection::create(_completionItems);
+    _completionItemsPtr = Gtk::StringList::create();
+    _completionSelectionPtr = Gtk::SingleSelection::create(_completionItemsPtr);
 
-    auto factory = Gtk::SignalListItemFactory::create();
-    factory->signal_setup().connect(
+    auto factoryPtr = Gtk::SignalListItemFactory::create();
+    factoryPtr->signal_setup().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
         auto* const label = Gtk::make_managed<Gtk::Label>("");
@@ -190,30 +190,30 @@ namespace ao::gtk
         listItem->set_child(*label);
       });
 
-    factory->signal_bind().connect(
+    factoryPtr->signal_bind().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
-        auto item = listItem->get_item();
-        auto stringObject = std::dynamic_pointer_cast<Gtk::StringObject>(item);
+        auto itemPtr = listItem->get_item();
+        auto stringObjectPtr = std::dynamic_pointer_cast<Gtk::StringObject>(itemPtr);
 
         if (auto* label = dynamic_cast<Gtk::Label*>(listItem->get_child()); label != nullptr)
         {
-          label->set_text(stringObject ? stringObject->get_string() : "");
+          label->set_text(stringObjectPtr ? stringObjectPtr->get_string() : "");
         }
       });
 
-    _completionListView.set_factory(factory);
-    _completionListView.set_model(_completionSelection);
+    _completionListView.set_factory(factoryPtr);
+    _completionListView.set_model(_completionSelectionPtr);
     _completionListView.set_single_click_activate(true);
     _completionListView.signal_activate().connect(
       [this](guint position)
       {
-        if (!_completionItems || position >= _completionItems->get_n_items())
+        if (!_completionItemsPtr || position >= _completionItemsPtr->get_n_items())
         {
           return;
         }
 
-        _completionSelection->set_selected(position);
+        _completionSelectionPtr->set_selected(position);
         applySelectedCompletion();
       });
 
@@ -240,8 +240,8 @@ namespace ao::gtk
         updateCompletion();
       });
 
-    auto keyController = Gtk::EventControllerKey::create();
-    keyController->signal_key_pressed().connect(
+    auto keyControllerPtr = Gtk::EventControllerKey::create();
+    keyControllerPtr->signal_key_pressed().connect(
       [this](guint keyval, guint, Gdk::ModifierType)
       {
         if (!_completionPopover.get_visible())
@@ -271,11 +271,11 @@ namespace ao::gtk
         }
       },
       false);
-    _entry.add_controller(keyController);
+    _entry.add_controller(keyControllerPtr);
 
-    auto clickController = Gtk::GestureClick::create();
-    clickController->signal_released().connect([this](std::int32_t, double, double) { updateCompletion(); });
-    _entry.add_controller(clickController);
+    auto clickControllerPtr = Gtk::GestureClick::create();
+    clickControllerPtr->signal_released().connect([this](std::int32_t, double, double) { updateCompletion(); });
+    _entry.add_controller(clickControllerPtr);
   }
 
   void QueryExpressionBox::updateCompletion()
@@ -336,8 +336,8 @@ namespace ao::gtk
     }
 
     _completionTokenStart = optQuery->tokenStart;
-    _completionItems->splice(0, _completionItems->get_n_items(), suggestions);
-    _completionSelection->set_selected(0);
+    _completionItemsPtr->splice(0, _completionItemsPtr->get_n_items(), suggestions);
+    _completionSelectionPtr->set_selected(0);
     _completionListView.scroll_to(0);
 
     if (!_suppressPopup && !_completionPopover.get_visible())
@@ -358,20 +358,20 @@ namespace ao::gtk
 
   void QueryExpressionBox::applySelectedCompletion()
   {
-    if (_completionTokenStart < 0 || !_completionItems || _completionItems->get_n_items() == 0)
+    if (_completionTokenStart < 0 || !_completionItemsPtr || _completionItemsPtr->get_n_items() == 0)
     {
       hideCompletion();
       return;
     }
 
-    auto selected = _completionSelection ? _completionSelection->get_selected() : kInvalidListPosition;
+    auto selected = _completionSelectionPtr ? _completionSelectionPtr->get_selected() : kInvalidListPosition;
 
-    if (selected == kInvalidListPosition || selected >= _completionItems->get_n_items())
+    if (selected == kInvalidListPosition || selected >= _completionItemsPtr->get_n_items())
     {
       selected = 0;
     }
 
-    auto const replacement = std::string{_completionItems->get_string(selected)};
+    auto const replacement = std::string{_completionItemsPtr->get_string(selected)};
     auto expr = std::string{_entry.get_text()};
     auto const cursor = _entry.get_position();
     expr.replace(static_cast<std::size_t>(_completionTokenStart),
@@ -386,17 +386,17 @@ namespace ao::gtk
 
   bool QueryExpressionBox::moveCompletionSelection(std::int32_t delta)
   {
-    if (!_completionSelection || !_completionItems || _completionItems->get_n_items() == 0)
+    if (!_completionSelectionPtr || !_completionItemsPtr || _completionItemsPtr->get_n_items() == 0)
     {
       return false;
     }
 
-    auto selected = _completionSelection->get_selected();
-    auto const itemCount = static_cast<std::int32_t>(_completionItems->get_n_items());
+    auto selected = _completionSelectionPtr->get_selected();
+    auto const itemCount = static_cast<std::int32_t>(_completionItemsPtr->get_n_items());
     auto const current = (selected == kInvalidListPosition) ? 0 : static_cast<std::int32_t>(selected);
     auto const next = std::clamp(current + delta, 0, itemCount - 1);
 
-    _completionSelection->set_selected(static_cast<guint>(next));
+    _completionSelectionPtr->set_selected(static_cast<guint>(next));
     _completionListView.scroll_to(static_cast<guint>(next));
     return true;
   }

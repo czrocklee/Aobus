@@ -16,15 +16,15 @@ namespace ao::gtk
   class ListTreeItem final : public Glib::Object
   {
   public:
-    Glib::RefPtr<ListRowObject> row() const { return _row; }
+    Glib::RefPtr<ListRowObject> row() const { return _rowPtr; }
 
-    ListId listId() const { return _row->listId(); }
+    ListId listId() const { return _rowPtr->listId(); }
 
-    bool hasChildren() const { return _children->get_n_items() > 0; }
+    bool hasChildren() const { return _childrenPtr->get_n_items() > 0; }
 
-    Glib::RefPtr<Gio::ListStore<ListTreeItem>> children() { return _children; }
+    Glib::RefPtr<Gio::ListStore<ListTreeItem>> children() { return _childrenPtr; }
 
-    guint nChildren() const { return _children->get_n_items(); }
+    guint nChildren() const { return _childrenPtr->get_n_items(); }
 
     Glib::RefPtr<ListTreeItem> child(guint index) const;
 
@@ -38,8 +38,8 @@ namespace ao::gtk
     explicit ListTreeItem();
 
   private:
-    Glib::RefPtr<ListRowObject> _row;
-    Glib::RefPtr<Gio::ListStore<ListTreeItem>> _children;
+    Glib::RefPtr<ListRowObject> _rowPtr;
+    Glib::RefPtr<Gio::ListStore<ListTreeItem>> _childrenPtr;
     ListTreeItem* _parent = nullptr;
   };
 } // namespace ao::gtk

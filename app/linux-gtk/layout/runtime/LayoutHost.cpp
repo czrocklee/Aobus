@@ -20,18 +20,18 @@ namespace ao::gtk::layout
 
   void LayoutHost::setLayout(LayoutContext& ctx, LayoutDocument const& doc)
   {
-    if (_activeComponent)
+    if (_activeComponentPtr)
     {
-      remove(_activeComponent->widget());
-      _activeComponent.reset();
+      remove(_activeComponentPtr->widget());
+      _activeComponentPtr.reset();
     }
 
-    _activeComponent = _runtime.build(ctx, doc);
+    _activeComponentPtr = _runtime.build(ctx, doc);
 
-    if (_activeComponent)
+    if (_activeComponentPtr)
     {
-      applyCommonProps(_activeComponent->widget(), doc.root);
-      append(_activeComponent->widget());
+      applyCommonProps(_activeComponentPtr->widget(), doc.root);
+      append(_activeComponentPtr->widget());
     }
   }
 } // namespace ao::gtk::layout

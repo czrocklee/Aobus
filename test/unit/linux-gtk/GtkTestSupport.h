@@ -87,13 +87,13 @@ namespace ao::gtk::test
       logHandlerInstalled = true;
     }
 
-    if (auto gioApp = Gio::Application::get_default())
+    if (auto gioAppPtr = Gio::Application::get_default(); gioAppPtr)
     {
-      auto gtkApp = std::dynamic_pointer_cast<Gtk::Application>(gioApp);
+      auto gtkAppPtr = std::dynamic_pointer_cast<Gtk::Application>(gioAppPtr);
 
-      if (gtkApp)
+      if (gtkAppPtr)
       {
-        return gtkApp;
+        return gtkAppPtr;
       }
     }
 
@@ -105,11 +105,11 @@ namespace ao::gtk::test
    */
   inline void drainGtkEvents()
   {
-    auto context = Glib::MainContext::get_default();
+    auto contextPtr = Glib::MainContext::get_default();
 
-    while (context->pending())
+    while (contextPtr->pending())
     {
-      context->iteration(false);
+      contextPtr->iteration(false);
     }
   }
 
@@ -128,23 +128,37 @@ namespace ao::gtk::test
       std::filesystem::create_directories(musicRoot);
       std::filesystem::create_directories(databasePath);
 
-      auto configStore = std::make_shared<rt::ConfigStore>(configPath);
+      auto configStorePtr = std::make_unique<rt::ConfigStore>(configPath);
 
-      _runtime = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
-        .executor = std::make_unique<ImmediateExecutor>(),
+      _runtimePtr = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
+        .executorPtr = std::make_unique<ImmediateExecutor>(),
         .musicRoot = musicRoot,
         .databasePath = databasePath,
-        .workspaceConfigStore = std::move(configStore),
+        .workspaceConfigStorePtr = std::move(configStorePtr),
       });
     }
 
-    rt::AppRuntime& runtime() { return *_runtime; }
+    rt::AppRuntime& runtime() { return *_runtimePtr; }
     lmdb::test::TempDir& tempDir() { return _tempDir; }
 
   private:
     lmdb::test::TempDir _tempDir;
-    std::unique_ptr<rt::AppRuntime> _runtime;
+    std::unique_ptr<rt::AppRuntime> _runtimePtr;
   };
+
+  /**
+   * @brief Creates an AppRuntime backed by a temporary directory with an ImmediateExecutor.
+   */
+  inline auto makeRuntime(lmdb::test::TempDir const& tempDir)
+  {
+    return rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executorPtr = std::make_unique<ImmediateExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .workspaceConfigStorePtr =
+        std::make_unique<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml"),
+    }};
+  }
 
   /**
    * ManualTrackDetailMock - Manual mock for ITrackDetailProjection.

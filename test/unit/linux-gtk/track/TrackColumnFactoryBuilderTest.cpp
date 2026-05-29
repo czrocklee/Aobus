@@ -61,7 +61,7 @@ namespace ao::gtk::test
 
   TEST_CASE("TrackColumnFactoryBuilder - factory lifecycle", "[gtk][track][column]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
     auto cache = TrackRowCache{library};
@@ -83,20 +83,20 @@ namespace ao::gtk::test
         txn.commit();
       }
 
-      auto source = std::make_shared<MutableTrackSource>();
-      source->addInitial(trackId);
-      auto projection = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, *source, library);
-      auto model = TrackListModel::create(cache);
-      model->bindProjection(projection);
+      auto sourcePtr = std::make_shared<MutableTrackSource>();
+      sourcePtr->addInitial(trackId);
+      auto projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, *sourcePtr, library);
+      auto modelPtr = TrackListModel::create(cache);
+      modelPtr->bindProjection(projectionPtr);
 
-      auto selection = Gtk::SingleSelection::create(model);
-      columnView.set_model(selection);
+      auto selectionPtr = Gtk::SingleSelection::create(modelPtr);
+      columnView.set_model(selectionPtr);
 
       SECTION("static column (e.g. Duration)")
       {
-        auto factory = buildColumnFactory(rt::TrackField::Duration, [](auto, auto, auto) {});
-        auto column = Gtk::ColumnViewColumn::create("Duration", factory);
-        columnView.append_column(column);
+        auto factoryPtr = buildColumnFactory(rt::TrackField::Duration, [](auto, auto, auto) {});
+        auto columnPtr = Gtk::ColumnViewColumn::create("Duration", factoryPtr);
+        columnView.append_column(columnPtr);
 
         drainGtkEvents();
 
@@ -107,19 +107,20 @@ namespace ao::gtk::test
       SECTION("editable column (e.g. Title)")
       {
         auto committedValue = std::string{};
-        auto factory = buildColumnFactory(rt::TrackField::Title, [&](auto, auto, auto val) { committedValue = val; });
-        auto column = Gtk::ColumnViewColumn::create("Title", factory);
-        columnView.append_column(column);
+        auto factoryPtr =
+          buildColumnFactory(rt::TrackField::Title, [&](auto, auto, auto val) { committedValue = val; });
+        auto columnPtr = Gtk::ColumnViewColumn::create("Title", factoryPtr);
+        columnView.append_column(columnPtr);
 
         drainGtkEvents();
 
-        auto row = cache.trackRow(trackId);
-        REQUIRE(row);
+        auto rowPtr = cache.trackRow(trackId);
+        REQUIRE(rowPtr);
 
-        row->setPlaying(true);
+        rowPtr->setPlaying(true);
         drainGtkEvents();
 
-        row->setPlaying(false);
+        rowPtr->setPlaying(false);
         drainGtkEvents();
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
@@ -130,9 +131,9 @@ namespace ao::gtk::test
       {
         for (auto const& def : rt::trackFieldDefinitions())
         {
-          auto factory = buildColumnFactory(def.field, [](auto, auto, auto) {});
-          auto column = Gtk::ColumnViewColumn::create(std::string{def.label}, factory);
-          columnView.append_column(column);
+          auto factoryPtr = buildColumnFactory(def.field, [](auto, auto, auto) {});
+          auto columnPtr = Gtk::ColumnViewColumn::create(std::string{def.label}, factoryPtr);
+          columnView.append_column(columnPtr);
         }
 
         drainGtkEvents();

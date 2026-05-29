@@ -38,14 +38,14 @@ namespace ao::cli
       {
         try
         {
-          auto const optTagFile = tag::TagFile::open(path);
+          auto const tagFilePtr = tag::TagFile::open(path);
 
-          if (!optTagFile)
+          if (!tagFilePtr)
           {
             continue;
           }
 
-          auto builder = optTagFile->loadTrack();
+          auto builder = tagFilePtr->loadTrack();
           // NOTE: pathStr must outlive builder because PropertyBuilder stores string_view
           auto const pathStr = path.string();
           builder.property().uri(pathStr);

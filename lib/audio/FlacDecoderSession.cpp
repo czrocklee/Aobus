@@ -106,7 +106,7 @@ namespace ao::audio
   };
 
   FlacDecoderSession::FlacDecoderSession(Format outputFormat)
-    : _impl{std::make_unique<Impl>(outputFormat)}
+    : _implPtr{std::make_unique<Impl>(outputFormat)}
   {
   }
 
@@ -116,16 +116,16 @@ namespace ao::audio
   {
     close();
 
-    if (auto const mapResult = _impl->mappedFile.map(filePath); !mapResult)
+    if (auto const mapResult = _implPtr->mappedFile.map(filePath); !mapResult)
     {
       return std::unexpected{mapResult.error()};
     }
 
-    _impl->currentOffset = 0;
-    _impl->eof = false;
-    _impl->nextFrameIndex = 0;
+    _implPtr->currentOffset = 0;
+    _implPtr->eof = false;
+    _implPtr->nextFrameIndex = 0;
 
-    auto const initStatus = ::FLAC__stream_decoder_init_stream(_impl->decoder,
+    auto const initStatus = ::FLAC__stream_decoder_init_stream(_implPtr->decoder,
                                                                Impl::readCallback,
                                                                Impl::seekCallback,
                                                                Impl::tellCallback,
@@ -134,7 +134,7 @@ namespace ao::audio
                                                                Impl::writeCallback,
                                                                Impl::metadataCallback,
                                                                Impl::errorCallback,
-                                                               _impl.get());
+                                                               _implPtr.get());
 
     if (initStatus != ::FLAC__STREAM_DECODER_INIT_STATUS_OK)
     {
@@ -142,7 +142,7 @@ namespace ao::audio
     }
 
     // Process until metadata is read
-    if (::FLAC__stream_decoder_process_until_end_of_metadata(_impl->decoder) == 0)
+    if (::FLAC__stream_decoder_process_until_end_of_metadata(_implPtr->decoder) == 0)
     {
       return makeError(Error::Code::DecodeFailed, "Failed to read FLAC metadata");
     }
@@ -152,23 +152,23 @@ namespace ao::audio
 
   void FlacDecoderSession::close()
   {
-    if (_impl->decoder != nullptr)
+    if (_implPtr->decoder != nullptr)
     {
-      ::FLAC__stream_decoder_finish(_impl->decoder);
+      ::FLAC__stream_decoder_finish(_implPtr->decoder);
     }
 
-    _impl->mappedFile.unmap();
-    _impl->pcmBuffer.clear();
-    _impl->bufferedFrames = 0;
+    _implPtr->mappedFile.unmap();
+    _implPtr->pcmBuffer.clear();
+    _implPtr->bufferedFrames = 0;
   }
 
   Result<> FlacDecoderSession::seek(std::uint32_t positionMs)
   {
-    _impl->pcmBuffer.clear();
-    _impl->bufferedFrames = 0;
-    _impl->eof = false;
+    _implPtr->pcmBuffer.clear();
+    _implPtr->bufferedFrames = 0;
+    _implPtr->eof = false;
 
-    auto const sampleRate = _impl->info.sourceFormat.sampleRate;
+    auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
 
     if (sampleRate == 0)
     {
@@ -177,74 +177,74 @@ namespace ao::audio
 
     auto const targetSample = static_cast<::FLAC__uint64>(positionMs) * sampleRate / 1000;
 
-    if (::FLAC__stream_decoder_seek_absolute(_impl->decoder, targetSample) == 0)
+    if (::FLAC__stream_decoder_seek_absolute(_implPtr->decoder, targetSample) == 0)
     {
       return makeError(Error::Code::SeekFailed, "FLAC seek failed");
     }
 
-    _impl->nextFrameIndex = targetSample;
+    _implPtr->nextFrameIndex = targetSample;
 
     return {};
   }
 
   void FlacDecoderSession::flush()
   {
-    ::FLAC__stream_decoder_flush(_impl->decoder);
-    _impl->pcmBuffer.clear();
-    _impl->bufferedFrames = 0;
+    ::FLAC__stream_decoder_flush(_implPtr->decoder);
+    _implPtr->pcmBuffer.clear();
+    _implPtr->bufferedFrames = 0;
   }
 
   Result<PcmBlock> FlacDecoderSession::readNextBlock()
   {
-    if (_impl->eof && _impl->bufferedFrames == 0)
+    if (_implPtr->eof && _implPtr->bufferedFrames == 0)
     {
       return PcmBlock{.bytes = {}, .endOfStream = true};
     }
 
     // If buffer is empty, process a single frame
-    while (_impl->bufferedFrames == 0 && !_impl->eof)
+    while (_implPtr->bufferedFrames == 0 && !_implPtr->eof)
     {
-      if (::FLAC__stream_decoder_process_single(_impl->decoder) == 0)
+      if (::FLAC__stream_decoder_process_single(_implPtr->decoder) == 0)
       {
-        if (::FLAC__stream_decoder_get_state(_impl->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
+        if (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
         {
-          _impl->eof = true;
+          _implPtr->eof = true;
           break;
         }
 
         return makeError(Error::Code::DecodeFailed, "FLAC process single failed");
       }
 
-      if (::FLAC__stream_decoder_get_state(_impl->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
+      if (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
       {
-        _impl->eof = true;
+        _implPtr->eof = true;
         break;
       }
     }
 
-    if (_impl->bufferedFrames == 0 && _impl->eof)
+    if (_implPtr->bufferedFrames == 0 && _implPtr->eof)
     {
       return PcmBlock{.bytes = {}, .endOfStream = true};
     }
 
     auto block = PcmBlock{
-      .bytes = _impl->pcmBuffer,
-      .bitDepth = _impl->info.outputFormat.bitDepth,
-      .frames = _impl->bufferedFrames,
-      .firstFrameIndex = _impl->nextFrameIndex,
+      .bytes = _implPtr->pcmBuffer,
+      .bitDepth = _implPtr->info.outputFormat.bitDepth,
+      .frames = _implPtr->bufferedFrames,
+      .firstFrameIndex = _implPtr->nextFrameIndex,
       .endOfStream =
-        _impl->eof && (::FLAC__stream_decoder_get_state(_impl->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM),
+        _implPtr->eof && (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM),
     };
 
-    _impl->nextFrameIndex += _impl->bufferedFrames;
-    _impl->bufferedFrames = 0;
+    _implPtr->nextFrameIndex += _implPtr->bufferedFrames;
+    _implPtr->bufferedFrames = 0;
 
     return block;
   }
 
   DecodedStreamInfo FlacDecoderSession::streamInfo() const
   {
-    return _impl->info;
+    return _implPtr->info;
   }
 
   // Implementation of callbacks

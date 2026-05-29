@@ -339,13 +339,13 @@ namespace ao::gtk
       auto rawValue = detail::TrackFieldRawValue{};
       auto editValue = detail::TrackFieldEditValue{};
 
-      if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget); entry)
+      if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget); entry != nullptr)
       {
         auto const text = entry->get_text().raw();
         rawValue = detail::TrackFieldRawValue{std::in_place_type<std::string>, text};
         editValue = detail::TrackFieldEditValue{std::in_place_type<std::string>, std::move(text)};
       }
-      else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget); spin)
+      else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget); spin != nullptr)
       {
         auto const value = static_cast<std::uint16_t>(spin->get_value_as_int());
         rawValue = detail::TrackFieldRawValue{std::in_place_type<std::uint16_t>, value};
@@ -378,13 +378,13 @@ namespace ao::gtk
 
   void TrackPropertiesDialog::setWidgetValue(rt::TrackField /*field*/, Gtk::Widget* widget, std::string_view value)
   {
-    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry)
+    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
       entry->set_text(std::string{value});
       return;
     }
 
-    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin)
+    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin != nullptr)
     {
       auto intValue = 0;
 
@@ -397,7 +397,7 @@ namespace ao::gtk
       return;
     }
 
-    if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label)
+    if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label != nullptr)
     {
       label->set_text(std::string{value});
     }
@@ -407,19 +407,19 @@ namespace ao::gtk
   {
     widget->set_sensitive(false);
 
-    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry)
+    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
       entry->set_placeholder_text("<Multiple Values>");
       return;
     }
 
-    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin)
+    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin != nullptr)
     {
       spin->set_value(0.0);
       return;
     }
 
-    if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label)
+    if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label != nullptr)
     {
       label->set_text("<Multiple Values>");
     }

@@ -55,35 +55,35 @@ namespace ao::gtk::portal
 
   void ImportExportCoordinator::openLibrary()
   {
-    auto dialog = Gtk::FileDialog::create();
-    dialog->set_title("Open Music Library");
+    auto dialogPtr = Gtk::FileDialog::create();
+    dialogPtr->set_title("Open Music Library");
 
-    dialog->select_folder(_parent,
-                          [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result)
-                          {
-                            try
-                            {
-                              if (auto const folder = dialog->select_folder_finish(result); folder)
-                              {
-                                auto const path = std::filesystem::path{folder->get_path()};
+    dialogPtr->select_folder(_parent,
+                             [this, dialogPtr](Glib::RefPtr<Gio::AsyncResult>& result)
+                             {
+                               try
+                               {
+                                 if (auto const folderPtr = dialogPtr->select_folder_finish(result); folderPtr)
+                                 {
+                                   auto const path = std::filesystem::path{folderPtr->get_path()};
 
-                                if (auto const libPath = path / "data.mdb"; std::filesystem::exists(libPath))
-                                {
-                                  openMusicLibrary(path);
-                                }
-                                else
-                                {
-                                  // Initial scan for new library
-                                  openMusicLibrary(path);
-                                  scanLibrary();
-                                }
-                              }
-                            }
-                            catch (Glib::Error const& e)
-                            {
-                              APP_LOG_ERROR("Error selecting folder: {}", e.what());
-                            }
-                          });
+                                   if (auto const libPath = path / "data.mdb"; std::filesystem::exists(libPath))
+                                   {
+                                     openMusicLibrary(path);
+                                   }
+                                   else
+                                   {
+                                     // Initial scan for new library
+                                     openMusicLibrary(path);
+                                     scanLibrary();
+                                   }
+                                 }
+                               }
+                               catch (Glib::Error const& e)
+                               {
+                                 APP_LOG_ERROR("Error selecting folder: {}", e.what());
+                               }
+                             });
   }
 
   void ImportExportCoordinator::scanLibrary()
@@ -111,16 +111,16 @@ namespace ao::gtk::portal
         APP_LOG_INFO("Scan plan: {} new, {} changed, {} missing", newCount, changedCount, missingCount);
 
         // 2. Execute Plan with progress dialog
-        self->_libraryTaskDialog =
+        self->_libraryTaskDialogPtr =
           std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), self->_parent);
-        auto* const dialogPtr = self->_libraryTaskDialog.get();
-        self->_libraryTaskDialog->signal_response().connect([dialogPtr](std::int32_t /*responseId*/)
-                                                            { dialogPtr->close(); });
+        auto* const dialogPtr = self->_libraryTaskDialogPtr.get();
+        self->_libraryTaskDialogPtr->signal_response().connect([dialogPtr](std::int32_t /*responseId*/)
+                                                               { dialogPtr->close(); });
 
         self->_libraryTaskProgressSub = self->_runtime.mutation().onLibraryTaskProgress(
           [dialogPtr](auto const& ev) { dialogPtr->updateProgress(ev.message, ev.fraction); });
 
-        self->_libraryTaskDialog->show();
+        self->_libraryTaskDialogPtr->show();
 
         try
         {
@@ -165,11 +165,11 @@ namespace ao::gtk::portal
     box->append(*label);
 
     auto* modeCombo = Gtk::make_managed<Gtk::DropDown>();
-    auto modeStrings = Gtk::StringList::create({"Delta (Sync user edits, Tags, Ratings, Lists)",
-                                                "Metadata (Curated text + Cover Art, no technical stats)",
-                                                "Full (Disaster Recovery: Everything)",
-                                                "List Only (Sync playlists without touching tracks)"});
-    modeCombo->set_model(modeStrings);
+    auto modeStringsPtr = Gtk::StringList::create({"Delta (Sync user edits, Tags, Ratings, Lists)",
+                                                   "Metadata (Curated text + Cover Art, no technical stats)",
+                                                   "Full (Disaster Recovery: Everything)",
+                                                   "List Only (Sync playlists without touching tracks)"});
+    modeCombo->set_model(modeStringsPtr);
     modeCombo->set_selected(2); // Default to Full
 
     auto* list = Gtk::make_managed<FormBoxedList>();
@@ -213,21 +213,21 @@ namespace ao::gtk::portal
 
     dialog->close();
 
-    auto fileDialog = Gtk::FileDialog::create();
-    fileDialog->set_title("Export Library to YAML");
-    fileDialog->set_initial_name("library_backup.yaml");
+    auto fileDialogPtr = Gtk::FileDialog::create();
+    fileDialogPtr->set_title("Export Library to YAML");
+    fileDialogPtr->set_initial_name("library_backup.yaml");
 
-    auto filter = Gtk::FileFilter::create();
-    filter->set_name("YAML files");
-    filter->add_pattern("*.yaml");
-    filter->add_pattern("*.yml");
-    auto filters = Gio::ListStore<Gtk::FileFilter>::create();
-    filters->append(filter);
-    fileDialog->set_filters(filters);
+    auto filterPtr = Gtk::FileFilter::create();
+    filterPtr->set_name("YAML files");
+    filterPtr->add_pattern("*.yaml");
+    filterPtr->add_pattern("*.yml");
+    auto filtersPtr = Gio::ListStore<Gtk::FileFilter>::create();
+    filtersPtr->append(filterPtr);
+    fileDialogPtr->set_filters(filtersPtr);
 
-    fileDialog->save(_parent,
-                     [this, mode, fileDialog](Glib::RefPtr<Gio::AsyncResult>& result)
-                     { onExportFileSelected(result, mode, fileDialog); });
+    fileDialogPtr->save(_parent,
+                        [this, mode, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& result)
+                        { onExportFileSelected(result, mode, fileDialogPtr); });
   }
 
   void ImportExportCoordinator::onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
@@ -236,9 +236,9 @@ namespace ao::gtk::portal
   {
     try
     {
-      if (auto const file = fileDialog->save_finish(result); file)
+      if (auto const filePtr = fileDialog->save_finish(result); filePtr)
       {
-        executeExportTask(file->get_path(), mode);
+        executeExportTask(filePtr->get_path(), mode);
       }
     }
     catch (Glib::Error const& e)
@@ -276,20 +276,20 @@ namespace ao::gtk::portal
 
   void ImportExportCoordinator::importLibrary()
   {
-    auto fileDialog = Gtk::FileDialog::create();
-    fileDialog->set_title("Import Library from YAML");
+    auto fileDialogPtr = Gtk::FileDialog::create();
+    fileDialogPtr->set_title("Import Library from YAML");
 
-    auto filter = Gtk::FileFilter::create();
-    filter->set_name("YAML files");
-    filter->add_pattern("*.yaml");
-    filter->add_pattern("*.yml");
-    auto filters = Gio::ListStore<Gtk::FileFilter>::create();
-    filters->append(filter);
-    fileDialog->set_filters(filters);
+    auto filterPtr = Gtk::FileFilter::create();
+    filterPtr->set_name("YAML files");
+    filterPtr->add_pattern("*.yaml");
+    filterPtr->add_pattern("*.yml");
+    auto filtersPtr = Gio::ListStore<Gtk::FileFilter>::create();
+    filtersPtr->append(filterPtr);
+    fileDialogPtr->set_filters(filtersPtr);
 
-    fileDialog->open(_parent,
-                     [this, fileDialog](Glib::RefPtr<Gio::AsyncResult>& result)
-                     { onLibraryImportSelected(result, fileDialog); });
+    fileDialogPtr->open(_parent,
+                        [this, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& result)
+                        { onLibraryImportSelected(result, fileDialogPtr); });
   }
 
   rt::async::Task<void> ImportExportCoordinator::importLibraryTask(std::filesystem::path importPath)
@@ -322,9 +322,9 @@ namespace ao::gtk::portal
   {
     try
     {
-      if (auto const file = dialog->open_finish(result); file)
+      if (auto const filePtr = dialog->open_finish(result); filePtr)
       {
-        auto const path = std::filesystem::path{file->get_path()};
+        auto const path = std::filesystem::path{filePtr->get_path()};
         _runtime.async().spawnWithLifetime(
           &_tasks,
           [](ImportExportCoordinator* self, std::filesystem::path importPath) -> rt::async::Task<void>

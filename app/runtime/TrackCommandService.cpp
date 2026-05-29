@@ -99,16 +99,16 @@ namespace ao::rt
 
   TrackId TrackCommandService::createTrackFromFile(std::filesystem::path const& path)
   {
-    auto const optTagFile = tag::TagFile::open(path);
+    auto const tagFilePtr = tag::TagFile::open(path);
 
-    if (!optTagFile)
+    if (!tagFilePtr)
     {
       return kInvalidTrackId;
     }
 
     auto txn = _library.writeTransaction();
     auto writer = _library.tracks().writer(txn);
-    auto builder = optTagFile->loadTrack();
+    auto builder = tagFilePtr->loadTrack();
     auto const uriStr = path.string();
     builder.property().uri(uriStr);
 

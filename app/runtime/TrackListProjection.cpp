@@ -915,96 +915,96 @@ namespace ao::rt
   };
 
   TrackListProjection::TrackListProjection(ViewId viewId, TrackSource& source, library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(viewId, source, library)}
+    : _implPtr{std::make_unique<Impl>(viewId, source, library)}
   {
     source.attach(this);
   }
 
   TrackListProjection::~TrackListProjection()
   {
-    if (!_impl->sourceDestroyed)
+    if (!_implPtr->sourceDestroyed)
     {
-      _impl->source.detach(this);
+      _implPtr->source.detach(this);
     }
   }
 
   ViewId TrackListProjection::viewId() const noexcept
   {
-    return _impl->viewId;
+    return _implPtr->viewId;
   }
 
   std::uint64_t TrackListProjection::revision() const noexcept
   {
-    return _impl->rev;
+    return _implPtr->rev;
   }
 
   void TrackListProjection::setPresentation(TrackPresentationSpec const& presentation)
   {
     auto spec = normalizeTrackPresentationSpec(presentation);
 
-    _impl->id = spec.id;
-    _impl->visibleFields = spec.visibleFields;
-    _impl->redundantFields = spec.redundantFields;
+    _implPtr->id = spec.id;
+    _implPtr->visibleFields = spec.visibleFields;
+    _implPtr->redundantFields = spec.redundantFields;
 
     // Fall back to the built-in preset when redundant fields are unspecified.
-    if (_impl->redundantFields.empty() && spec.groupBy != TrackGroupKey::None)
+    if (_implPtr->redundantFields.empty() && spec.groupBy != TrackGroupKey::None)
     {
       for (auto const& preset : builtinTrackPresentationPresets())
       {
         if (preset.spec.groupBy == spec.groupBy)
         {
-          _impl->redundantFields = preset.spec.redundantFields;
+          _implPtr->redundantFields = preset.spec.redundantFields;
           break;
         }
       }
     }
 
     // Same-group / reverse-sort fast path.
-    if (_impl->groupBy == spec.groupBy && sameSortDirection(_impl->sortBy, spec.sortBy) && _impl->comparator)
+    if (_implPtr->groupBy == spec.groupBy && sameSortDirection(_implPtr->sortBy, spec.sortBy) && _implPtr->comparator)
     {
-      _impl->sortBy = std::move(spec.sortBy);
-      _impl->comparator = buildComparator(_impl->sortBy);
-      std::ranges::reverse(_impl->orderIndex);
-      _impl->rebuildPositionIndex();
+      _implPtr->sortBy = std::move(spec.sortBy);
+      _implPtr->comparator = buildComparator(_implPtr->sortBy);
+      std::ranges::reverse(_implPtr->orderIndex);
+      _implPtr->rebuildPositionIndex();
 
-      _impl->publishDelta(TrackListProjectionDeltaBatch{
-        .revision = ++_impl->rev,
+      _implPtr->publishDelta(TrackListProjectionDeltaBatch{
+        .revision = ++_implPtr->rev,
         .deltas = {ProjectionReset{}},
       });
       return;
     }
 
-    _impl->groupBy = spec.groupBy;
-    _impl->sortBy = std::move(spec.sortBy);
-    _impl->comparator = buildComparator(_impl->sortBy);
-    _impl->loadMode = computeLoadMode(_impl->sortBy, _impl->groupBy);
+    _implPtr->groupBy = spec.groupBy;
+    _implPtr->sortBy = std::move(spec.sortBy);
+    _implPtr->comparator = buildComparator(_implPtr->sortBy);
+    _implPtr->loadMode = computeLoadMode(_implPtr->sortBy, _implPtr->groupBy);
 
-    _impl->rebuildOrderIndex();
+    _implPtr->rebuildOrderIndex();
 
-    _impl->publishDelta(TrackListProjectionDeltaBatch{
-      .revision = ++_impl->rev,
+    _implPtr->publishDelta(TrackListProjectionDeltaBatch{
+      .revision = ++_implPtr->rev,
       .deltas = {ProjectionReset{}},
     });
   }
 
   std::size_t TrackListProjection::size() const noexcept
   {
-    return _impl->orderIndex.size();
+    return _implPtr->orderIndex.size();
   }
 
   TrackId TrackListProjection::trackIdAt(std::size_t index) const
   {
-    if (index >= _impl->orderIndex.size())
+    if (index >= _implPtr->orderIndex.size())
     {
       return kInvalidTrackId;
     }
 
-    return _impl->orderIndex[index].trackId;
+    return _implPtr->orderIndex[index].trackId;
   }
 
   std::optional<std::size_t> TrackListProjection::indexOf(TrackId trackId) const noexcept
   {
-    if (auto const it = _impl->positionIndex.find(trackId); it != _impl->positionIndex.end())
+    if (auto const it = _implPtr->positionIndex.find(trackId); it != _implPtr->positionIndex.end())
     {
       return it->second;
     }
@@ -1015,27 +1015,27 @@ namespace ao::rt
   TrackPresentationSpec TrackListProjection::presentation() const
   {
     return TrackPresentationSpec{
-      .id = _impl->id,
-      .groupBy = _impl->groupBy,
-      .sortBy = _impl->sortBy,
-      .visibleFields = _impl->visibleFields,
-      .redundantFields = _impl->redundantFields,
+      .id = _implPtr->id,
+      .groupBy = _implPtr->groupBy,
+      .sortBy = _implPtr->sortBy,
+      .visibleFields = _implPtr->visibleFields,
+      .redundantFields = _implPtr->redundantFields,
     };
   }
 
   std::size_t TrackListProjection::groupCount() const noexcept
   {
-    return _impl->sections.size();
+    return _implPtr->sections.size();
   }
 
   TrackGroupSectionSnapshot TrackListProjection::groupAt(std::size_t groupIndex) const
   {
-    if (groupIndex >= _impl->sections.size())
+    if (groupIndex >= _implPtr->sections.size())
     {
       return {};
     }
 
-    auto const& section = _impl->sections[groupIndex];
+    auto const& section = _implPtr->sections[groupIndex];
     return TrackGroupSectionSnapshot{
       .rows = section.rows,
       .label = std::string{section.label},
@@ -1045,9 +1045,9 @@ namespace ao::rt
 
   std::optional<std::size_t> TrackListProjection::groupIndexAt(std::size_t rowIndex) const
   {
-    for (std::size_t idx = 0; idx < _impl->sections.size(); ++idx)
+    for (std::size_t idx = 0; idx < _implPtr->sections.size(); ++idx)
     {
-      if (auto const& section = _impl->sections[idx];
+      if (auto const& section = _implPtr->sections[idx];
           rowIndex >= section.rows.start && rowIndex < section.rows.start + section.rows.count)
       {
         return idx;
@@ -1061,62 +1061,62 @@ namespace ao::rt
     std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler)
   {
     handler(TrackListProjectionDeltaBatch{
-      .revision = _impl->rev,
+      .revision = _implPtr->rev,
       .deltas = {ProjectionReset{}},
     });
 
-    _impl->subscribers.push_back(std::move(handler));
-    std::size_t const idx = _impl->subscribers.size() - 1;
+    _implPtr->subscribers.push_back(std::move(handler));
+    std::size_t const idx = _implPtr->subscribers.size() - 1;
 
-    return Subscription{[this, idx] { _impl->subscribers[idx] = {}; }};
+    return Subscription{[this, idx] { _implPtr->subscribers[idx] = {}; }};
   }
 
   void TrackListProjection::onReset()
   {
-    _impl->rebuildOrderIndex();
-    _impl->publishDelta(TrackListProjectionDeltaBatch{
-      .revision = ++_impl->rev,
+    _implPtr->rebuildOrderIndex();
+    _implPtr->publishDelta(TrackListProjectionDeltaBatch{
+      .revision = ++_implPtr->rev,
       .deltas = {ProjectionReset{}},
     });
   }
 
   void TrackListProjection::onInserted(TrackId id, std::size_t /*sourceIndex*/)
   {
-    _impl->insertEntry(id);
+    _implPtr->insertEntry(id);
   }
 
   void TrackListProjection::onUpdated(TrackId id, std::size_t /*sourceIndex*/)
   {
-    _impl->updateEntry(id);
+    _implPtr->updateEntry(id);
   }
 
   void TrackListProjection::onRemoved(TrackId id, std::size_t /*sourceIndex*/)
   {
-    _impl->removeEntry(id);
+    _implPtr->removeEntry(id);
   }
 
   void TrackListProjection::onBulkInserted(std::span<TrackId const> ids)
   {
-    _impl->insertEntries(ids);
+    _implPtr->insertEntries(ids);
   }
 
   void TrackListProjection::onBulkUpdated(std::span<TrackId const> ids)
   {
-    _impl->updateEntries(ids);
+    _implPtr->updateEntries(ids);
   }
 
   void TrackListProjection::onBulkRemoved(std::span<TrackId const> ids)
   {
-    _impl->removeEntries(ids);
+    _implPtr->removeEntries(ids);
   }
 
   void TrackListProjection::publishDelta(TrackListProjectionDeltaBatch const& batch)
   {
-    _impl->publishDelta(batch);
+    _implPtr->publishDelta(batch);
   }
 
   void TrackListProjection::onSourceDestroyed()
   {
-    _impl->sourceDestroyed = true;
+    _implPtr->sourceDestroyed = true;
   }
 } // namespace ao::rt

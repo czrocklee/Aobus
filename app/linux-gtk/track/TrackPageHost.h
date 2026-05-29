@@ -45,9 +45,9 @@ namespace ao::gtk
   struct TrackPageContext final
   {
     rt::ViewId viewId{};
-    Glib::RefPtr<TrackListModel> model = {};
-    std::unique_ptr<TrackViewPage> page = {};
-    std::unique_ptr<portal::PlaylistExporter> exporter = {};
+    Glib::RefPtr<TrackListModel> modelPtr = {};
+    std::unique_ptr<TrackViewPage> pagePtr = {};
+    std::unique_ptr<portal::PlaylistExporter> exporterPtr = {};
   };
 
   /**

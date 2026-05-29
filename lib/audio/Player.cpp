@@ -31,7 +31,7 @@ namespace ao::audio
   {
     struct ProviderRecord
     {
-      std::unique_ptr<IBackendProvider> provider;
+      std::unique_ptr<IBackendProvider> providerPtr;
       Subscription subscription;
       std::vector<Device> devices;
     };
@@ -54,7 +54,7 @@ namespace ao::audio
     {
       // Order matters: stop PipeWire threads before their callback targets are destroyed.
       graphSubscription.reset(); // 1. remove subscription from PipeWireMonitor (still alive)
-      engine.reset();            // 2. stop PipeWire playback thread
+      enginePtr.reset();         // 2. stop PipeWire playback thread
       providers.clear();         // 3. stop PipeWire monitor thread
     }
 
@@ -63,7 +63,7 @@ namespace ao::audio
     std::optional<PendingOutput> optPendingOutput;
     IBackendProvider* activeManager = nullptr;
     Subscription graphSubscription;
-    std::unique_ptr<Engine> engine;
+    std::unique_ptr<Engine> enginePtr;
 
     mutable std::mutex backendsMutex;
     mutable std::vector<IBackendProvider::Status> cachedBackends;
@@ -89,7 +89,7 @@ namespace ao::audio
   {
     // Update individual provider cache
     auto const it =
-      std::ranges::find_if(providers, [&](auto const& record) { return record->provider.get() == provider; });
+      std::ranges::find_if(providers, [&](auto const& record) { return record->providerPtr.get() == provider; });
 
     if (it != providers.end())
     {
@@ -102,7 +102,7 @@ namespace ao::audio
 
     for (auto const& record : providers)
     {
-      auto status = record->provider->status();
+      auto status = record->providerPtr->status();
       // The provider status might have its own internal device list, but we use the one from the subscription for
       // consistency
       status.devices = record->devices;
@@ -117,7 +117,7 @@ namespace ao::audio
     }
 
     // Keep the engine's current device capabilities up-to-date
-    auto const currentSnap = engine->status();
+    auto const currentSnap = enginePtr->status();
     auto allDevicesCopy = std::vector<Device>{};
     {
       auto const lock = std::scoped_lock{backendsMutex};
@@ -131,7 +131,7 @@ namespace ao::audio
 
     if (activeIt != allDevicesCopy.end())
     {
-      engine->updateDevice(*activeIt);
+      enginePtr->updateDevice(*activeIt);
     }
 
     if (optPendingOutput)
@@ -233,30 +233,30 @@ namespace ao::audio
   }
 
   Player::Player()
-    : _impl{std::make_unique<Impl>()}
+    : _implPtr{std::make_unique<Impl>()}
   {
     // Start with a NullBackend until a provider provides something real
-    _impl->engine = std::make_unique<Engine>(std::make_unique<NullBackend>(),
-                                             Device{.id = DeviceId{"null"},
-                                                    .displayName = "None",
-                                                    .description = "No audio output selected",
-                                                    .backendId = kBackendNone,
-                                                    .capabilities = {}});
+    _implPtr->enginePtr = std::make_unique<Engine>(std::make_unique<NullBackend>(),
+                                                   Device{.id = DeviceId{"null"},
+                                                          .displayName = "None",
+                                                          .description = "No audio output selected",
+                                                          .backendId = kBackendNone,
+                                                          .capabilities = {}});
 
-    _impl->engine->setOnTrackEnded(
+    _implPtr->enginePtr->setOnTrackEnded(
       [this]
       {
-        if (_impl->onTrackEnded)
+        if (_implPtr->onTrackEnded)
         {
-          _impl->onTrackEnded();
+          _implPtr->onTrackEnded();
         }
       });
 
-    _impl->engine->setOnRouteChanged(
+    _implPtr->enginePtr->setOnRouteChanged(
       [this](Engine::RouteStatus const& status)
       {
         // Capture generation to prevent stale updates
-        auto const generation = _impl->playbackGeneration;
+        auto const generation = _implPtr->playbackGeneration;
 
         handleRouteChanged(status, generation);
       });
@@ -264,41 +264,41 @@ namespace ao::audio
 
   void Player::setOnTrackEnded(std::function<void()> callback)
   {
-    _impl->onTrackEnded = std::move(callback);
+    _implPtr->onTrackEnded = std::move(callback);
   }
 
   void Player::setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
   {
-    _impl->onDevicesChanged = std::move(callback);
+    _implPtr->onDevicesChanged = std::move(callback);
   }
 
   void Player::setOnQualityChanged(std::function<void(Quality quality, bool ready)> callback)
   {
-    _impl->onQualityChanged = std::move(callback);
+    _implPtr->onQualityChanged = std::move(callback);
   }
 
   Player::~Player() = default;
 
-  void Player::addProvider(std::unique_ptr<IBackendProvider> provider)
+  void Player::addProvider(std::unique_ptr<IBackendProvider> providerPtr)
   {
-    if (!provider)
+    if (!providerPtr)
     {
       return;
     }
 
-    auto record = std::make_unique<Impl::ProviderRecord>();
-    record->provider = std::move(provider);
+    auto recordPtr = std::make_unique<Impl::ProviderRecord>();
+    recordPtr->providerPtr = std::move(providerPtr);
 
-    auto* const providerPtr = record->provider.get();
-    auto* const recordPtr = record.get();
+    auto* const rawProviderPtr = recordPtr->providerPtr.get();
+    auto* const rawRecordPtr = recordPtr.get();
 
-    _impl->providers.push_back(std::move(record));
+    _implPtr->providers.push_back(std::move(recordPtr));
 
-    recordPtr->subscription = providerPtr->subscribeDevices(
-      [this, providerPtr, recordPtr](std::vector<Device> const& devices)
+    rawRecordPtr->subscription = rawProviderPtr->subscribeDevices(
+      [this, rawProviderPtr, rawRecordPtr](std::vector<Device> const& devices)
       {
-        recordPtr->devices = devices;
-        _impl->handleDevicesChanged(this, providerPtr, devices);
+        rawRecordPtr->devices = devices;
+        _implPtr->handleDevicesChanged(this, rawProviderPtr, devices);
         return true;
       });
   }
@@ -311,33 +311,33 @@ namespace ao::audio
       return;
     }
 
-    _impl->playbackGeneration++;
+    _implPtr->playbackGeneration++;
     {
-      auto const lock = std::scoped_lock{_impl->graphMutex};
-      _impl->cachedRouteStatus = {};
-      _impl->cachedSystemGraph = {};
-      _impl->mergedGraph = {};
-      _impl->qualityResult = {};
+      auto const lock = std::scoped_lock{_implPtr->graphMutex};
+      _implPtr->cachedRouteStatus = {};
+      _implPtr->cachedSystemGraph = {};
+      _implPtr->mergedGraph = {};
+      _implPtr->qualityResult = {};
     }
-    _impl->graphSubscription.reset();
-    _impl->optCurrentTrack = descriptor;
-    _impl->engine->play(descriptor);
+    _implPtr->graphSubscription.reset();
+    _implPtr->optCurrentTrack = descriptor;
+    _implPtr->enginePtr->play(descriptor);
   }
 
   void Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
-    if (auto const currentSnap = _impl->engine->status();
+    if (auto const currentSnap = _implPtr->enginePtr->status();
         backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
     {
-      _impl->optPendingOutput.reset();
+      _implPtr->optPendingOutput.reset();
       return;
     }
 
     // 2. Find the Device matching the kind and id from our cache
     auto allDevicesCopy = std::vector<Device>{};
     {
-      auto const lock = std::scoped_lock{_impl->backendsMutex};
-      allDevicesCopy = _impl->allDevices;
+      auto const lock = std::scoped_lock{_implPtr->backendsMutex};
+      allDevicesCopy = _implPtr->allDevices;
     }
 
     auto const it = std::ranges::find_if(
@@ -346,19 +346,19 @@ namespace ao::audio
     if (it == allDevicesCopy.end())
     {
       // If we don't have it yet, store it as pending.
-      _impl->optPendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
+      _implPtr->optPendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
       AUDIO_LOG_DEBUG("Player: Requested output {}:{} not yet available, pending discovery", backend, deviceId);
       return;
     }
 
     // Found it! Clear any pending output.
-    _impl->optPendingOutput.reset();
+    _implPtr->optPendingOutput.reset();
 
     // 3. Find the provider object that can handle this BackendId
     auto const recordIt = std::ranges::find_if(
-      _impl->providers, [&](auto const& record) { return record->provider->status().metadata.id == backend; });
+      _implPtr->providers, [&](auto const& record) { return record->providerPtr->status().metadata.id == backend; });
 
-    if (recordIt == _impl->providers.end())
+    if (recordIt == _implPtr->providers.end())
     {
       AUDIO_LOG_ERROR("Player: No provider found for backend {}", backend);
       return;
@@ -366,79 +366,79 @@ namespace ao::audio
 
     // 4. Create the backend and swap it in the engine
     auto const& device = *it;
-    auto newBackend = (*recordIt)->provider->createBackend(device, profile);
-    _impl->activeManager = (*recordIt)->provider.get();
-    _impl->playbackGeneration++;
-    _impl->engine->setBackend(std::move(newBackend), device);
+    auto newBackendPtr = (*recordIt)->providerPtr->createBackend(device, profile);
+    _implPtr->activeManager = (*recordIt)->providerPtr.get();
+    _implPtr->playbackGeneration++;
+    _implPtr->enginePtr->setBackend(std::move(newBackendPtr), device);
   }
 
   void Player::pause()
   {
-    _impl->engine->pause();
+    _implPtr->enginePtr->pause();
   }
 
   void Player::resume()
   {
-    _impl->engine->resume();
+    _implPtr->enginePtr->resume();
   }
 
   void Player::stop()
   {
-    _impl->playbackGeneration++;
+    _implPtr->playbackGeneration++;
     {
-      auto const lock = std::scoped_lock{_impl->graphMutex};
-      _impl->cachedRouteStatus = {};
-      _impl->cachedSystemGraph = {};
-      _impl->mergedGraph = {};
-      _impl->qualityResult = {};
+      auto const lock = std::scoped_lock{_implPtr->graphMutex};
+      _implPtr->cachedRouteStatus = {};
+      _implPtr->cachedSystemGraph = {};
+      _implPtr->mergedGraph = {};
+      _implPtr->qualityResult = {};
     }
-    _impl->graphSubscription.reset();
-    _impl->optCurrentTrack.reset();
-    _impl->engine->stop();
+    _implPtr->graphSubscription.reset();
+    _implPtr->optCurrentTrack.reset();
+    _implPtr->enginePtr->stop();
   }
 
   void Player::seek(std::uint32_t positionMs)
   {
-    _impl->engine->seek(positionMs);
+    _implPtr->enginePtr->seek(positionMs);
   }
 
   void Player::setVolume(float vol)
   {
-    _impl->engine->setVolume(vol);
+    _implPtr->enginePtr->setVolume(vol);
   }
 
   void Player::setMuted(bool muted)
   {
-    _impl->engine->setMuted(muted);
+    _implPtr->enginePtr->setMuted(muted);
   }
 
   void Player::toggleMute()
   {
-    auto const engineStatus = _impl->engine->status();
+    auto const engineStatus = _implPtr->enginePtr->status();
     setMuted(!engineStatus.muted);
   }
 
   Player::Status Player::status() const
   {
     auto status = Player::Status{};
-    status.engine = _impl->engine->status();
+    status.engine = _implPtr->enginePtr->status();
 
-    if (_impl->optCurrentTrack)
+    if (_implPtr->optCurrentTrack)
     {
-      status.trackTitle = _impl->optCurrentTrack->title;
-      status.trackArtist = _impl->optCurrentTrack->artist;
+      status.trackTitle = _implPtr->optCurrentTrack->title;
+      status.trackArtist = _implPtr->optCurrentTrack->artist;
     }
 
     {
-      auto const lock = std::scoped_lock{_impl->backendsMutex};
-      status.availableBackends = _impl->cachedBackends;
+      auto const lock = std::scoped_lock{_implPtr->backendsMutex};
+      status.availableBackends = _implPtr->cachedBackends;
     }
 
     {
-      auto const lock = std::scoped_lock{_impl->graphMutex};
-      status.flow = _impl->mergedGraph;
-      status.quality = _impl->qualityResult.quality;
-      status.qualityTooltip = _impl->qualityResult.tooltip;
+      auto const lock = std::scoped_lock{_implPtr->graphMutex};
+      status.flow = _implPtr->mergedGraph;
+      status.quality = _implPtr->qualityResult.quality;
+      status.qualityTooltip = _implPtr->qualityResult.tooltip;
     }
     status.isReady = isReady();
 
@@ -450,61 +450,62 @@ namespace ao::audio
 
   Transport Player::transport() const
   {
-    return _impl->engine->transport();
+    return _implPtr->enginePtr->transport();
   }
 
   bool Player::isReady() const
   {
-    return _impl->engine->backendId() != kBackendNone && !_impl->optPendingOutput;
+    return _implPtr->enginePtr->backendId() != kBackendNone && !_implPtr->optPendingOutput;
   }
 
   void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
   {
-    if (generation != _impl->playbackGeneration)
+    if (generation != _implPtr->playbackGeneration)
     {
       return;
     }
 
-    auto lock = std::unique_lock{_impl->graphMutex};
-    _impl->cachedRouteStatus = status;
+    auto lock = std::unique_lock{_implPtr->graphMutex};
+    _implPtr->cachedRouteStatus = status;
     lock.unlock();
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
-    auto const hasRoute = status.optAnchor && _impl->activeManager != nullptr;
+    auto const hasRoute = status.optAnchor && _implPtr->activeManager != nullptr;
 
     if (hasRoute)
     {
-      if (!_impl->graphSubscription)
+      if (!_implPtr->graphSubscription)
       {
-        _impl->graphSubscription = _impl->activeManager->subscribeGraph(
-          status.optAnchor->id,
-          [this, generation](flow::Graph const& graph) { _impl->handleSystemGraphChanged(this, graph, generation); });
+        _implPtr->graphSubscription =
+          _implPtr->activeManager->subscribeGraph(status.optAnchor->id,
+                                                  [this, generation](flow::Graph const& graph)
+                                                  { _implPtr->handleSystemGraphChanged(this, graph, generation); });
       }
     }
     else
     {
-      _impl->graphSubscription.reset();
+      _implPtr->graphSubscription.reset();
     }
 
     lock.lock();
 
     if (!hasRoute)
     {
-      _impl->cachedSystemGraph = {};
+      _implPtr->cachedSystemGraph = {};
     }
 
-    _impl->updateMergedGraph();
+    _implPtr->updateMergedGraph();
     lock.unlock();
 
-    if (_impl->onQualityChanged)
+    if (_implPtr->onQualityChanged)
     {
       auto const playerStatus = this->status();
-      _impl->onQualityChanged(playerStatus.quality, playerStatus.isReady);
+      _implPtr->onQualityChanged(playerStatus.quality, playerStatus.isReady);
     }
   }
 
   std::uint64_t Player::playbackGeneration() const noexcept
   {
-    return _impl->playbackGeneration;
+    return _implPtr->playbackGeneration;
   }
 } // namespace ao::audio

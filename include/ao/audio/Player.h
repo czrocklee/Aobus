@@ -49,7 +49,7 @@ namespace ao::audio
     Player(Player&&) = delete;
     Player& operator=(Player&&) = delete;
 
-    void addProvider(std::unique_ptr<IBackendProvider> provider);
+    void addProvider(std::unique_ptr<IBackendProvider> providerPtr);
 
     void play(TrackPlaybackDescriptor const& descriptor);
     void setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
@@ -80,6 +80,6 @@ namespace ao::audio
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio

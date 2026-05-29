@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "TestUtils.h"
+
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
@@ -19,42 +20,17 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <memory>
 #include <string>
-#include <utility>
 
 namespace ao::rt::test
 {
   using namespace ao::lmdb::test;
-  using ao::rt::IControlExecutor;
-
-  class MockExecutor final : public IControlExecutor
-  {
-  public:
-    bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
-    void defer(std::move_only_function<void()> task) override { task(); }
-  };
 
   namespace
   {
-    auto makeRuntime(TempDir const& tempDir, std::shared_ptr<ConfigStore> workspaceConfigStore = nullptr)
-    {
-      if (!workspaceConfigStore)
-      {
-        workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
-      }
-
-      return AppRuntime{AppRuntimeDependencies{
-        .executor = std::make_unique<MockExecutor>(),
-        .musicRoot = tempDir.path(),
-        .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-        .workspaceConfigStore = std::move(workspaceConfigStore),
-      }};
-    }
   }
 
   TEST_CASE("NavigationWorkspace - first navigateTo commits", "[navigation][unit][workspace]")
@@ -316,18 +292,17 @@ namespace ao::rt::test
   TEST_CASE("NavigationWorkspace - session restore commits initial point", "[navigation][unit][workspace]")
   {
     auto tempDir = TempDir{};
-    auto configStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
 
     // Save session with one view.
     {
-      auto runtime = makeRuntime(tempDir, configStore);
+      auto runtime = makeRuntime(tempDir);
       runtime.workspace().navigateTo(ListId{10});
       runtime.workspace().saveSession(runtime.configStore());
     }
 
     // Restore in new runtime.
     {
-      auto runtime = makeRuntime(tempDir, configStore);
+      auto runtime = makeRuntime(tempDir);
       runtime.workspace().restoreSession(runtime.configStore());
 
       auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
@@ -340,15 +315,14 @@ namespace ao::rt::test
   TEST_CASE("NavigationWorkspace - restore then navigate and back", "[navigation][unit][workspace]")
   {
     auto tempDir = TempDir{};
-    auto configStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
 
     {
-      auto runtime = makeRuntime(tempDir, configStore);
+      auto runtime = makeRuntime(tempDir);
       runtime.workspace().navigateTo(ListId{10});
       runtime.workspace().saveSession(runtime.configStore());
     }
 
-    auto runtime = makeRuntime(tempDir, configStore);
+    auto runtime = makeRuntime(tempDir);
     runtime.workspace().restoreSession(runtime.configStore());
     runtime.workspace().navigateTo(ListId{20});
 
@@ -600,9 +574,9 @@ namespace ao::rt::test
     auto runtime = makeRuntime(tempDir);
 
     // Create a config store using a directory path, which will fail to open as a file
-    auto badConfigStore = std::make_shared<ConfigStore>(tempDir.path());
+    auto badConfigStorePtr = std::make_shared<ConfigStore>(tempDir.path());
     // Should not throw, but flush will fail and log an error
-    REQUIRE_NOTHROW(runtime.workspace().saveSession(*badConfigStore));
+    REQUIRE_NOTHROW(runtime.workspace().saveSession(*badConfigStorePtr));
   }
 
   TEST_CASE("WorkspaceService - session restore error path", "[workspace][unit]")
@@ -613,9 +587,9 @@ namespace ao::rt::test
     auto const configPath = tempDir.path() + "/bad.yaml";
     std::ofstream{configPath} << "workspace: \"not a map\"";
 
-    auto badConfigStore = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
+    auto badConfigStorePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     // Should not throw, just return early and log a warning
-    REQUIRE_NOTHROW(runtime.workspace().restoreSession(*badConfigStore));
+    REQUIRE_NOTHROW(runtime.workspace().restoreSession(*badConfigStorePtr));
   }
 
   TEST_CASE("WorkspaceService - invalid navigation targets and presentations are handled gracefully",
@@ -676,8 +650,8 @@ namespace ao::rt::test
       file << "    - listId: " << static_cast<std::uint32_t>(listId) << "\n";
     }
 
-    auto store = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
-    runtime.workspace().restoreSession(*store);
+    auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
+    runtime.workspace().restoreSession(*storePtr);
 
     auto layout = runtime.workspace().layoutState();
     CHECK(layout.openViews.size() == 1);

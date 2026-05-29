@@ -55,13 +55,13 @@ namespace ao::gtk::test
 
   TEST_CASE("TrackSelectionController - selection management", "[gtk][track][selection]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
     auto cache = TrackRowCache{library};
 
-    auto model = TrackListModel::create(cache);
-    auto selectionModel = Gtk::MultiSelection::create(model);
+    auto modelPtr = TrackListModel::create(cache);
+    auto selectionModelPtr = Gtk::MultiSelection::create(modelPtr);
 
     auto trackId1 = TrackId{kInvalidTrackId};
     auto trackId2 = TrackId{kInvalidTrackId};
@@ -85,25 +85,25 @@ namespace ao::gtk::test
     }
 
     // 2. Bind model to a projection
-    auto source = std::make_shared<MutableTrackSource>();
-    source->addInitial(trackId1);
-    source->addInitial(trackId2);
-    auto projection = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, *source, library);
-    model->bindProjection(projection);
+    auto sourcePtr = std::make_shared<MutableTrackSource>();
+    sourcePtr->addInitial(trackId1);
+    sourcePtr->addInitial(trackId2);
+    auto projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, *sourcePtr, library);
+    modelPtr->bindProjection(projectionPtr);
     drainGtkEvents();
 
     {
       auto columnView = Gtk::ColumnView{};
-      columnView.set_model(selectionModel);
+      columnView.set_model(selectionModelPtr);
 
-      auto controller = TrackSelectionController{columnView, model, selectionModel};
+      auto controller = TrackSelectionController{columnView, modelPtr, selectionModelPtr};
 
       SECTION("selection updates")
       {
         CHECK(controller.selectedTrackCount() == 0);
 
         // Select first track
-        selectionModel->select_item(0, true);
+        selectionModelPtr->select_item(0, true);
         drainGtkEvents();
 
         CHECK(controller.selectedTrackCount() == 1);
@@ -127,7 +127,7 @@ namespace ao::gtk::test
         auto changed = false;
         controller.signalSelectionChanged().connect([&] { changed = true; });
 
-        selectionModel->select_item(1, true);
+        selectionModelPtr->select_item(1, true);
         drainGtkEvents();
 
         CHECK(changed == true);

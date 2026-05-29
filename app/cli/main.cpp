@@ -23,8 +23,8 @@ int main(int argc, char const* argv[])
 {
   try
   {
-    auto executor = std::make_unique<rt::ImmediateControlExecutor>();
-    auto runtime = rt::CoreRuntime{std::move(executor), ".", ".aobus/library"};
+    auto executorPtr = std::make_unique<rt::ImmediateControlExecutor>();
+    auto runtime = rt::CoreRuntime{std::move(executorPtr), ".", ".aobus/library"};
 
     auto app = CLI::App{"Aobus CLI - aobus"};
     app.require_subcommand(1);

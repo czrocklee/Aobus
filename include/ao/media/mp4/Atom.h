@@ -121,7 +121,7 @@ namespace ao::media::mp4
       }
     }
 
-    void add(std::unique_ptr<Atom> child) { _children.push_back(std::move(child)); }
+    void add(std::unique_ptr<Atom> childPtr) { _children.push_back(std::move(childPtr)); }
 
   private:
     std::vector<std::unique_ptr<Atom>> _children;
@@ -152,7 +152,7 @@ namespace ao::media::mp4
       }
     }
 
-    void add(std::unique_ptr<Atom> atom) { _children.push_back(std::move(atom)); }
+    void add(std::unique_ptr<Atom> atomPtr) { _children.push_back(std::move(atomPtr)); }
 
   private:
     std::vector<std::unique_ptr<Atom>> _children;

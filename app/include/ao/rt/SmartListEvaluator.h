@@ -77,7 +77,7 @@ namespace ao::rt
       TrackSource* source = nullptr;
       bool sourceAlive = true;
       std::vector<SmartListSource*> lists;
-      std::unique_ptr<TrackSourceObserver> observer;
+      std::unique_ptr<TrackSourceObserver> observerPtr;
     };
 
     void evaluateAllLists(SourceBucket& bucket);

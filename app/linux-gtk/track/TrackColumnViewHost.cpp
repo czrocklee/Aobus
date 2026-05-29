@@ -21,13 +21,13 @@
 
 namespace ao::gtk
 {
-  TrackColumnViewHost::TrackColumnViewHost(Glib::RefPtr<TrackListModel> model,
+  TrackColumnViewHost::TrackColumnViewHost(Glib::RefPtr<TrackListModel> modelPtr,
                                            TrackPresentationStore& presentationStore,
                                            Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                            ao::ListId listId)
-    : _columnView{std::make_unique<Gtk::ColumnView>()}
-    , _columnController{std::make_unique<TrackColumnController>(*_columnView, presentationStore, listId)}
-    , _selectionController{std::make_unique<TrackSelectionController>(*_columnView, model, selectionModel)}
+    : _columnViewPtr{std::make_unique<Gtk::ColumnView>()}
+    , _columnControllerPtr{std::make_unique<TrackColumnController>(*_columnViewPtr, presentationStore, listId)}
+    , _selectionControllerPtr{std::make_unique<TrackSelectionController>(*_columnViewPtr, modelPtr, selectionModel)}
   {
     connectSelectionSignals();
   }
@@ -36,52 +36,52 @@ namespace ao::gtk
 
   Glib::RefPtr<Gtk::CssProvider> const& TrackColumnViewHost::cssProvider() const
   {
-    return _columnController->cssProvider();
+    return _columnControllerPtr->cssProvider();
   }
 
   void TrackColumnViewHost::setupColumns(FactoryProvider const& factoryProvider)
   {
-    _columnController->setupColumns(factoryProvider);
+    _columnControllerPtr->setupColumns(factoryProvider);
   }
 
   void TrackColumnViewHost::setupSelectionActivation()
   {
-    _selectionController->setupActivation();
+    _selectionControllerPtr->setupActivation();
   }
 
   void TrackColumnViewHost::connectSelectionSignals()
   {
     _selectionChangedConn =
-      _selectionController->signalSelectionChanged().connect([this] { _selectionChangedSignal.emit(); });
+      _selectionControllerPtr->signalSelectionChanged().connect([this] { _selectionChangedSignal.emit(); });
     _trackActivatedConn =
-      _selectionController->signalTrackActivated().connect([this](TrackId id) { _trackActivatedSignal.emit(id); });
-    _contextMenuRequestedConn = _selectionController->signalContextMenuRequested().connect(
+      _selectionControllerPtr->signalTrackActivated().connect([this](TrackId id) { _trackActivatedSignal.emit(id); });
+    _contextMenuRequestedConn = _selectionControllerPtr->signalContextMenuRequested().connect(
       [this](double xPos, double yPos) { _contextMenuRequestedSignal.emit(xPos, yPos); });
-    _tagEditRequestedConn = _selectionController->signalTagEditRequested().connect(
+    _tagEditRequestedConn = _selectionControllerPtr->signalTagEditRequested().connect(
       [this](std::vector<TrackId> const& ids, Gtk::Widget* widget) { _tagEditRequestedSignal.emit(ids, widget); });
   }
 
-  Gtk::ColumnView& TrackColumnViewHost::rebuild(Glib::RefPtr<TrackListModel> model,
+  Gtk::ColumnView& TrackColumnViewHost::rebuild(Glib::RefPtr<TrackListModel> modelPtr,
                                                 TrackPresentationStore& presentationStore,
                                                 Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                                 FactoryProvider const& factoryProvider,
                                                 ao::ListId listId)
   {
-    auto newView = std::make_unique<Gtk::ColumnView>();
-    auto newSelection = std::make_unique<TrackSelectionController>(*newView, model, selectionModel);
-    auto newColumn = std::make_unique<TrackColumnController>(*newView, presentationStore, listId);
+    auto newViewPtr = std::make_unique<Gtk::ColumnView>();
+    auto newSelectionPtr = std::make_unique<TrackSelectionController>(*newViewPtr, modelPtr, selectionModel);
+    auto newColumnPtr = std::make_unique<TrackColumnController>(*newViewPtr, presentationStore, listId);
 
     // Retire old generation
-    _columnController = std::move(newColumn);
-    _selectionController = std::move(newSelection);
-    _columnView = std::move(newView);
+    _columnControllerPtr = std::move(newColumnPtr);
+    _selectionControllerPtr = std::move(newSelectionPtr);
+    _columnViewPtr = std::move(newViewPtr);
 
     // Wire factories for the new columns
-    _columnController->setupColumns(factoryProvider);
+    _columnControllerPtr->setupColumns(factoryProvider);
 
     // Reconnect forwarding signals to the new selection controller
     connectSelectionSignals();
 
-    return *_columnView;
+    return *_columnViewPtr;
   }
 } // namespace ao::gtk

@@ -74,12 +74,12 @@ namespace ao::gtk
   } // namespace
 
   TrackSelectionController::TrackSelectionController(Gtk::ColumnView& columnView,
-                                                     Glib::RefPtr<TrackListModel> model,
-                                                     Glib::RefPtr<Gtk::MultiSelection> selectionModel)
+                                                     Glib::RefPtr<TrackListModel> modelPtr,
+                                                     Glib::RefPtr<Gtk::MultiSelection> selectionModelPtr)
     : _columnView{columnView}
-    , _model{std::move(model)}
-    , _selectionModel{std::move(selectionModel)}
-    , _selectionChangedConnection{_selectionModel->signal_selection_changed().connect(
+    , _modelPtr{std::move(modelPtr)}
+    , _selectionModelPtr{std::move(selectionModelPtr)}
+    , _selectionChangedConnection{_selectionModelPtr->signal_selection_changed().connect(
         sigc::mem_fun(*this, &TrackSelectionController::onSelectionChanged))}
   {
   }
@@ -107,8 +107,8 @@ namespace ao::gtk
         onActivateCurrentSelection();
       });
 
-    auto const keyController = Gtk::EventControllerKey::create();
-    keyController->signal_key_pressed().connect(
+    auto const keyControllerPtr = Gtk::EventControllerKey::create();
+    keyControllerPtr->signal_key_pressed().connect(
       [this](guint keyval, guint, Gdk::ModifierType modifiers)
       {
         if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter)
@@ -134,14 +134,14 @@ namespace ao::gtk
       },
       false);
 
-    _columnView.add_controller(keyController);
+    _columnView.add_controller(keyControllerPtr);
 
-    auto const primaryClickController = Gtk::GestureClick::create();
-    primaryClickController->set_button(GDK_BUTTON_PRIMARY);
-    primaryClickController->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+    auto const primaryClickControllerPtr = Gtk::GestureClick::create();
+    primaryClickControllerPtr->set_button(GDK_BUTTON_PRIMARY);
+    primaryClickControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
 
-    primaryClickController->signal_pressed().connect(
-      [this, primaryClickController](std::int32_t nPress, double xPos, double yPos)
+    primaryClickControllerPtr->signal_pressed().connect(
+      [this, primaryClickControllerPtr](std::int32_t nPress, double xPos, double yPos)
       {
         if (nPress != 2)
         {
@@ -162,19 +162,19 @@ namespace ao::gtk
           return;
         }
 
-        primaryClickController->set_state(Gtk::EventSequenceState::CLAIMED);
+        primaryClickControllerPtr->set_state(Gtk::EventSequenceState::CLAIMED);
         _suppressNextTrackActivation = true;
         _tagEditRequested.emit(selectedIds, dynamic_cast<Gtk::Widget*>(target));
       });
 
-    _columnView.add_controller(primaryClickController);
+    _columnView.add_controller(primaryClickControllerPtr);
 
-    auto const longPressController = Gtk::GestureLongPress::create();
-    longPressController->set_touch_only(false);
-    longPressController->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+    auto const longPressControllerPtr = Gtk::GestureLongPress::create();
+    longPressControllerPtr->set_touch_only(false);
+    longPressControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
 
-    longPressController->signal_pressed().connect(
-      [this, longPressController](double xPos, double yPos)
+    longPressControllerPtr->signal_pressed().connect(
+      [this, longPressControllerPtr](double xPos, double yPos)
       {
         auto* const target = _columnView.pick(xPos, yPos, Gtk::PickFlags::NON_TARGETABLE);
         auto* const stack = findInlineEditStack(target);
@@ -184,22 +184,22 @@ namespace ao::gtk
           return;
         }
 
-        longPressController->set_state(Gtk::EventSequenceState::CLAIMED);
+        longPressControllerPtr->set_state(Gtk::EventSequenceState::CLAIMED);
         _suppressNextTrackActivation = true;
         stack->set_visible_child("edit");
 
-        if (auto* const entry = dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit")))
+        if (auto* const entry = dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit")); entry != nullptr)
         {
           entry->grab_focus();
         }
       });
 
-    _columnView.add_controller(longPressController);
+    _columnView.add_controller(longPressControllerPtr);
 
-    auto const secondaryClickController = Gtk::GestureClick::create();
-    secondaryClickController->set_button(GDK_BUTTON_SECONDARY);
+    auto const secondaryClickControllerPtr = Gtk::GestureClick::create();
+    secondaryClickControllerPtr->set_button(GDK_BUTTON_SECONDARY);
 
-    secondaryClickController->signal_released().connect(
+    secondaryClickControllerPtr->signal_released().connect(
       [this](std::int32_t, double xPos, double yPos)
       {
         if (selectedTrackCount() == 0)
@@ -210,7 +210,7 @@ namespace ao::gtk
         _contextMenuRequested.emit(xPos, yPos);
       });
 
-    _columnView.add_controller(secondaryClickController);
+    _columnView.add_controller(secondaryClickControllerPtr);
   }
 
   void TrackSelectionController::onActivateCurrentSelection()
@@ -234,33 +234,33 @@ namespace ao::gtk
 
   TrackId TrackSelectionController::trackIdAtPosition(std::uint32_t position) const noexcept
   {
-    if (!_selectionModel)
+    if (!_selectionModelPtr)
     {
       return kInvalidTrackId;
     }
 
-    auto const item = _selectionModel->get_object(position);
+    auto const itemPtr = _selectionModelPtr->get_object(position);
 
-    if (!item)
+    if (!itemPtr)
     {
       return kInvalidTrackId;
     }
 
-    auto const row = std::dynamic_pointer_cast<TrackRowObject>(item);
+    auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
 
-    if (!row)
+    if (!rowPtr)
     {
       return kInvalidTrackId;
     }
 
-    return row->trackId();
+    return rowPtr->trackId();
   }
 
   std::size_t TrackSelectionController::selectedTrackCount() const noexcept
   {
-    if (auto const bitset = _selectionModel->get_selection())
+    if (auto const bitsetPtr = _selectionModelPtr->get_selection(); bitsetPtr)
     {
-      return bitset->get_size();
+      return bitsetPtr->get_size();
     }
 
     return 0;
@@ -268,49 +268,49 @@ namespace ao::gtk
 
   std::vector<TrackId> TrackSelectionController::selectedTrackIds() const noexcept
   {
-    auto const model = _selectionModel->get_model();
+    auto const modelPtr = _selectionModelPtr->get_model();
 
-    if (!model)
+    if (!modelPtr)
     {
       return {};
     }
 
-    return std::views::iota(0U, model->get_n_items()) |
-           std::views::filter([this](auto idx) { return _selectionModel->is_selected(idx); }) |
+    return std::views::iota(0U, modelPtr->get_n_items()) |
+           std::views::filter([this](auto idx) { return _selectionModelPtr->is_selected(idx); }) |
            std::views::transform([this](auto idx) { return trackIdAtPosition(idx); }) |
            std::views::filter([](auto const& id) { return id != kInvalidTrackId; }) | std::ranges::to<std::vector>();
   }
 
   std::vector<Glib::RefPtr<TrackRowObject>> TrackSelectionController::selectedRows() const noexcept
   {
-    auto const model = _selectionModel->get_model();
+    auto const modelPtr = _selectionModelPtr->get_model();
 
-    if (!model)
+    if (!modelPtr)
     {
       return {};
     }
 
-    return std::views::iota(0U, model->get_n_items()) |
-           std::views::filter([this](auto idx) { return _selectionModel->is_selected(idx); }) |
-           std::views::transform([model](auto idx)
-                                 { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(idx)); }) |
+    return std::views::iota(0U, modelPtr->get_n_items()) |
+           std::views::filter([this](auto idx) { return _selectionModelPtr->is_selected(idx); }) |
+           std::views::transform([modelPtr](auto idx)
+                                 { return std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(idx)); }) |
            std::views::filter([](auto const& row) { return static_cast<bool>(row); }) | std::ranges::to<std::vector>();
   }
 
   std::chrono::milliseconds TrackSelectionController::selectedTracksDuration() const noexcept
   {
-    auto const model = _selectionModel->get_model();
+    auto const modelPtr = _selectionModelPtr->get_model();
 
-    if (!model)
+    if (!modelPtr)
     {
       return std::chrono::milliseconds{0};
     }
 
     return std::ranges::fold_left(
-      std::views::iota(0U, model->get_n_items()) |
-        std::views::filter([this](auto idx) { return _selectionModel->is_selected(idx); }) |
-        std::views::transform([model](auto idx)
-                              { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(idx)); }) |
+      std::views::iota(0U, modelPtr->get_n_items()) |
+        std::views::filter([this](auto idx) { return _selectionModelPtr->is_selected(idx); }) |
+        std::views::transform([modelPtr](auto idx)
+                              { return std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(idx)); }) |
         std::views::filter([](auto const& row) { return static_cast<bool>(row); }) |
         std::views::transform([](auto const& row) { return row->duration(); }),
       std::chrono::milliseconds{0},
@@ -319,36 +319,36 @@ namespace ao::gtk
 
   TrackId TrackSelectionController::primarySelectedTrackId() const noexcept
   {
-    auto const bitset = _selectionModel->get_selection();
+    auto const bitsetPtr = _selectionModelPtr->get_selection();
 
-    if (!bitset || bitset->get_size() == 0)
+    if (!bitsetPtr || bitsetPtr->get_size() == 0)
     {
       return kInvalidTrackId;
     }
 
-    return trackIdAtPosition(static_cast<std::uint32_t>(bitset->get_nth(0)));
+    return trackIdAtPosition(static_cast<std::uint32_t>(bitsetPtr->get_nth(0)));
   }
 
   void TrackSelectionController::selectTrack(TrackId trackId)
   {
-    auto const optIndex = _model->indexOf(trackId);
+    auto const optIndex = _modelPtr->indexOf(trackId);
 
-    if (!optIndex || *optIndex >= _selectionModel->get_n_items())
+    if (!optIndex || *optIndex >= _selectionModelPtr->get_n_items())
     {
       return;
     }
 
     auto const pos = static_cast<guint>(*optIndex);
 
-    _selectionModel->select_item(pos, true);
+    _selectionModelPtr->select_item(pos, true);
     _columnView.scroll_to(pos, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
   }
 
   void TrackSelectionController::scrollToTrack(TrackId trackId)
   {
-    auto const optIndex = _model->indexOf(trackId);
+    auto const optIndex = _modelPtr->indexOf(trackId);
 
-    if (!optIndex || *optIndex >= _selectionModel->get_n_items())
+    if (!optIndex || *optIndex >= _selectionModelPtr->get_n_items())
     {
       return;
     }
@@ -360,12 +360,12 @@ namespace ao::gtk
   void TrackSelectionController::setPlayingTrackId(TrackId trackId)
   {
     _playingTrackId = trackId;
-    _model->setPlayingTrackId(trackId);
+    _modelPtr->setPlayingTrackId(trackId);
   }
 
   std::vector<TrackId> TrackSelectionController::visibleTrackIds() const noexcept
   {
-    auto* const proj = _model->projection();
+    auto* const proj = _modelPtr->projection();
 
     if (proj == nullptr)
     {

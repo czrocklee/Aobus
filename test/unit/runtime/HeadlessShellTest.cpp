@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "TestUtils.h"
+
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
@@ -15,32 +16,16 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
-#include <functional>
-#include <memory>
 
 namespace ao::rt::test
 {
   using namespace ao::lmdb::test;
-  using ao::rt::IControlExecutor;
-
-  class MockExecutor final : public IControlExecutor
-  {
-  public:
-    bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
-    void defer(std::move_only_function<void()> task) override { task(); }
-  };
 
   TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][unit][runtime][headless]")
   {
     auto tempDir = TempDir{};
-    auto workspaceConfigStore = std::make_shared<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml");
-
-    auto runtime =
-      AppRuntime{AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
-                                        .musicRoot = tempDir.path(),
-                                        .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                        .workspaceConfigStore = workspaceConfigStore}};
+    auto const workspaceConfigPath = std::filesystem::path{tempDir.path()} / "workspace.yaml";
+    auto runtime = makeRuntime(tempDir);
 
     SECTION("Initial layout is empty")
     {
@@ -107,15 +92,12 @@ namespace ao::rt::test
       runtime.workspace().saveSession(runtime.configStore());
 
       auto loaded = SessionState{};
-      workspaceConfigStore->load("workspace", loaded);
+      auto verifyStore = ConfigStore{workspaceConfigPath};
+      verifyStore.load("workspace", loaded);
       CHECK(loaded.openViews.size() == 2);
 
       // Create new runtime with same persistence
-      auto session2 =
-        AppRuntime{AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
-                                          .musicRoot = tempDir.path(),
-                                          .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                          .workspaceConfigStore = workspaceConfigStore}};
+      auto session2 = makeRuntime(tempDir);
 
       session2.workspace().restoreSession(session2.configStore());
 
@@ -140,16 +122,13 @@ namespace ao::rt::test
       runtime.workspace().saveSession(runtime.configStore());
 
       auto loaded = SessionState{};
-      workspaceConfigStore->load("workspace", loaded);
+      auto verifyStore = ConfigStore{workspaceConfigPath};
+      verifyStore.load("workspace", loaded);
       REQUIRE(loaded.openViews.size() == 1);
       CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
 
       // Restore in new runtime
-      auto session2 =
-        AppRuntime{AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
-                                          .musicRoot = tempDir.path(),
-                                          .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                          .workspaceConfigStore = workspaceConfigStore}};
+      auto session2 = makeRuntime(tempDir);
 
       session2.workspace().restoreSession(session2.configStore());
 
@@ -166,11 +145,7 @@ namespace ao::rt::test
       runtime.workspace().navigateTo(ListId{10});
       runtime.workspace().saveSession(runtime.configStore());
 
-      auto session2 =
-        AppRuntime{AppRuntimeDependencies{.executor = std::make_unique<MockExecutor>(),
-                                          .musicRoot = tempDir.path(),
-                                          .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                          .workspaceConfigStore = workspaceConfigStore}};
+      auto session2 = makeRuntime(tempDir);
 
       session2.workspace().restoreSession(session2.configStore());
 

@@ -516,14 +516,14 @@ namespace ao::rt::test
       auto testLibrary = TestMusicLibrary{};
       auto engine = SmartListEvaluator{testLibrary.library()};
 
-      auto source = std::make_unique<MutableTrackSource>();
-      auto filtered = std::make_unique<SmartListSource>(*source, testLibrary.library(), engine);
+      auto sourcePtr = std::make_unique<MutableTrackSource>();
+      auto filteredPtr = std::make_unique<SmartListSource>(*sourcePtr, testLibrary.library(), engine);
 
       auto spy = ObserverSpy{};
-      filtered->attach(&spy);
+      filteredPtr->attach(&spy);
 
       // Destroy source while filtered list is still alive
-      source.reset();
+      sourcePtr.reset();
 
       // Filtered list should be notified of reset (source is gone)
       REQUIRE(spy.events.size() == 1);
@@ -531,7 +531,7 @@ namespace ao::rt::test
 
       // Now destroy filtered list - this calls unregisterList
       // This should not crash despite source being gone!
-      filtered.reset();
+      filteredPtr.reset();
     }
 
     SECTION("batch operations emit batch notifications")
@@ -602,13 +602,13 @@ namespace ao::rt::test
     {
       auto testLibrary = TestMusicLibrary{};
       auto source = MutableTrackSource{};
-      auto engine = std::make_unique<SmartListEvaluator>(testLibrary.library());
-      auto list = std::make_unique<SmartListSource>(source, testLibrary.library(), *engine);
+      auto enginePtr = std::make_unique<SmartListEvaluator>(testLibrary.library());
+      auto listPtr = std::make_unique<SmartListSource>(source, testLibrary.library(), *enginePtr);
 
       // Destroy engine BEFORE source and list
       // Note: list won't be able to reload anymore but we just want to hit the destructor
-      engine.reset();
-      list.reset();
+      enginePtr.reset();
+      listPtr.reset();
     }
 
     SECTION("single mutations on base source are handled correctly")

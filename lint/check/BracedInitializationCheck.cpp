@@ -46,7 +46,7 @@ namespace clang::tidy::readability
 
       if (name.empty())
       {
-        if (auto const* spec = dyn_cast<ClassTemplateSpecializationDecl>(record))
+        if (auto const* spec = dyn_cast<ClassTemplateSpecializationDecl>(record); spec != nullptr)
         {
           name = spec->getSpecializedTemplate()->getName();
         }
@@ -201,23 +201,23 @@ namespace clang::tidy::readability
     {
       auto optTarget = BraceTarget{.lParen = init->getLParenLoc(), .rParen = init->getRParenLoc(), .name = ""};
 
-      if (auto const* member = init->getMember())
+      if (auto const* member = init->getMember(); member != nullptr)
       {
         optTarget.name = member->getNameAsString();
       }
-      else if (auto const* base = init->getBaseClass())
+      else if (auto const* base = init->getBaseClass(); base != nullptr)
       {
-        if (auto const* record = base->getAsCXXRecordDecl())
+        if (auto const* record = base->getAsCXXRecordDecl(); record != nullptr)
         {
           optTarget.name = record->getNameAsString();
         }
-        else if (auto const* type = base->getAs<TypedefType>())
+        else if (auto const* type = base->getAs<TypedefType>(); type != nullptr)
         {
           optTarget.name = type->getDecl()->getNameAsString();
         }
       }
 
-      if (auto const* construct = dyn_cast_or_null<CXXConstructExpr>(init->getInit()))
+      if (auto const* construct = dyn_cast_or_null<CXXConstructExpr>(init->getInit()); construct != nullptr)
       {
         QualType const initType =
           init->getTypeSourceInfo() != nullptr ? init->getTypeSourceInfo()->getType() : construct->getType();
@@ -242,7 +242,7 @@ namespace clang::tidy::readability
 
       if (construct == nullptr)
       {
-        if (auto const* bind = dyn_cast_or_null<CXXBindTemporaryExpr>(cast->getSubExpr()->IgnoreImplicit()))
+        if (auto const* bind = dyn_cast_or_null<CXXBindTemporaryExpr>(cast->getSubExpr()->IgnoreImplicit()); bind != nullptr)
         {
           construct = dyn_cast_or_null<CXXConstructExpr>(bind->getSubExpr()->IgnoreImplicit());
         }
@@ -267,7 +267,7 @@ namespace clang::tidy::readability
       auto const range = temp->getParenOrBraceRange();
       auto optTarget = BraceTarget{.lParen = range.getBegin(), .rParen = range.getEnd(), .name = ""};
 
-      if (auto const* ctor = temp->getConstructor())
+      if (auto const* ctor = temp->getConstructor(); ctor != nullptr)
       {
         optTarget.name = ctor->getParent()->getNameAsString();
       }
@@ -328,15 +328,15 @@ namespace clang::tidy::readability
     auto const& sm = *result.SourceManager;
     auto optTarget = std::optional<BraceTarget>{};
 
-    if (auto const* init = result.Nodes.getNodeAs<CXXCtorInitializer>("ctor_init"))
+    if (auto const* init = result.Nodes.getNodeAs<CXXCtorInitializer>("ctor_init"); init != nullptr)
     {
       optTarget = analyzeCtorInit(init);
     }
-    else if (auto const* cast = result.Nodes.getNodeAs<CXXFunctionalCastExpr>("func_cast"))
+    else if (auto const* cast = result.Nodes.getNodeAs<CXXFunctionalCastExpr>("func_cast"); cast != nullptr)
     {
       optTarget = analyzeFunctionalCast(cast);
     }
-    else if (auto const* temp = result.Nodes.getNodeAs<CXXTemporaryObjectExpr>("temp_obj"))
+    else if (auto const* temp = result.Nodes.getNodeAs<CXXTemporaryObjectExpr>("temp_obj"); temp != nullptr)
     {
       optTarget = analyzeTempObject(temp);
     }
@@ -344,7 +344,7 @@ namespace clang::tidy::readability
     {
       optTarget = analyzeNewExpr(result);
     }
-    else if (auto const* var = result.Nodes.getNodeAs<VarDecl>("var_decl"))
+    else if (auto const* var = result.Nodes.getNodeAs<VarDecl>("var_decl"); var != nullptr)
     {
       optTarget = analyzeVarDecl(var, result);
     }

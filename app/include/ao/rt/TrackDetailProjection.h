@@ -49,6 +49,6 @@ namespace ao::rt
     void publishSnapshot();
 
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 }

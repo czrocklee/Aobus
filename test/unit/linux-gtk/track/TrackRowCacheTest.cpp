@@ -88,7 +88,7 @@ namespace ao::gtk::test
 
   TEST_CASE("TrackRowCache loads track data correctly", "[app][unit][model]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.row_cache_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.row_cache_test");
     auto testLibrary = TestMusicLibrary{};
 
     SECTION("Basic data loading")
@@ -111,47 +111,47 @@ namespace ao::gtk::test
 
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const row1 = provider.trackRow(id1);
-      REQUIRE(row1);
-      CHECK(row1->fieldText(rt::TrackField::Artist) == "Artist 1");
-      CHECK(row1->fieldText(rt::TrackField::Album) == "Album 1");
-      CHECK(row1->fieldText(rt::TrackField::Title) == "Track 1");
-      CHECK(row1->fieldText(rt::TrackField::Genre) == "Genre 1");
-      CHECK(row1->year() == 2021);
-      CHECK(row1->trackNumber() == 1);
-      CHECK(row1->duration().count() == 180000);
+      auto const row1Ptr = provider.trackRow(id1);
+      REQUIRE(row1Ptr);
+      CHECK(row1Ptr->fieldText(rt::TrackField::Artist) == "Artist 1");
+      CHECK(row1Ptr->fieldText(rt::TrackField::Album) == "Album 1");
+      CHECK(row1Ptr->fieldText(rt::TrackField::Title) == "Track 1");
+      CHECK(row1Ptr->fieldText(rt::TrackField::Genre) == "Genre 1");
+      CHECK(row1Ptr->year() == 2021);
+      CHECK(row1Ptr->trackNumber() == 1);
+      CHECK(row1Ptr->duration().count() == 180000);
 
-      auto const row2 = provider.trackRow(id2);
-      REQUIRE(row2);
-      CHECK(row2->fieldText(rt::TrackField::Title) == "Track 2");
-      CHECK(row2->duration().count() == 240000);
+      auto const row2Ptr = provider.trackRow(id2);
+      REQUIRE(row2Ptr);
+      CHECK(row2Ptr->fieldText(rt::TrackField::Title) == "Track 2");
+      CHECK(row2Ptr->duration().count() == 240000);
 
       // Verify playing properties and setters/getters
-      CHECK_FALSE(row1->isPlaying());
-      row1->setPlaying(true);
-      CHECK(row1->isPlaying());
-      auto const proxy = row1->property_playing();
+      CHECK_FALSE(row1Ptr->isPlaying());
+      row1Ptr->setPlaying(true);
+      CHECK(row1Ptr->isPlaying());
+      auto const proxy = row1Ptr->property_playing();
       CHECK(proxy.get_value() == true);
 
       // Verify custom string fields and failure paths
-      CHECK(row1->setStringField(rt::TrackField::Artist, "New Artist"));
-      CHECK(row1->fieldText(rt::TrackField::Artist) == "New Artist");
-      CHECK_FALSE(row1->setStringField(rt::TrackField::Duration, "Failed"));
+      CHECK(row1Ptr->setStringField(rt::TrackField::Artist, "New Artist"));
+      CHECK(row1Ptr->fieldText(rt::TrackField::Artist) == "New Artist");
+      CHECK_FALSE(row1Ptr->setStringField(rt::TrackField::Duration, "Failed"));
 
       // Verify other metadata and resource/playback properties
-      row1->setYear(2025);
-      row1->setDiscNumber(2);
-      row1->setTotalDiscs(3);
-      row1->setTrackNumber(4);
-      row1->setTotalTracks(10);
-      CHECK(row1->year() == 2025);
-      CHECK(row1->discNumber() == 2);
-      CHECK(row1->totalDiscs() == 3);
-      CHECK(row1->trackNumber() == 4);
-      CHECK(row1->totalTracks() == 10);
-      CHECK(row1->sampleRate() == 44100);
-      CHECK(row1->channels() == 2);
-      CHECK(row1->bitDepth() == 16);
+      row1Ptr->setYear(2025);
+      row1Ptr->setDiscNumber(2);
+      row1Ptr->setTotalDiscs(3);
+      row1Ptr->setTrackNumber(4);
+      row1Ptr->setTotalTracks(10);
+      CHECK(row1Ptr->year() == 2025);
+      CHECK(row1Ptr->discNumber() == 2);
+      CHECK(row1Ptr->totalDiscs() == 3);
+      CHECK(row1Ptr->trackNumber() == 4);
+      CHECK(row1Ptr->totalTracks() == 10);
+      CHECK(row1Ptr->sampleRate() == 44100);
+      CHECK(row1Ptr->channels() == 2);
+      CHECK(row1Ptr->bitDepth() == 16);
     }
 
     SECTION("Cache helper methods")
@@ -182,12 +182,12 @@ namespace ao::gtk::test
       auto const id1 = testLibrary.addTrack({});
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const row1A = provider.trackRow(id1);
-      auto const row1B = provider.trackRow(id1);
+      auto const row1APtr = provider.trackRow(id1);
+      auto const row1BPtr = provider.trackRow(id1);
 
-      REQUIRE(row1A);
-      REQUIRE(row1B);
-      CHECK(row1A == row1B);
+      REQUIRE(row1APtr);
+      REQUIRE(row1BPtr);
+      CHECK(row1APtr == row1BPtr);
     }
 
     SECTION("Invalidation")
@@ -195,12 +195,12 @@ namespace ao::gtk::test
       auto const id1 = testLibrary.addTrack({});
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const row1 = provider.trackRow(id1);
-      REQUIRE(row1);
+      auto const row1Ptr = provider.trackRow(id1);
+      REQUIRE(row1Ptr);
       provider.invalidate(id1);
 
-      auto const row1New = provider.trackRow(id1);
-      CHECK(row1 != row1New);
+      auto const row1NewPtr = provider.trackRow(id1);
+      CHECK(row1Ptr != row1NewPtr);
     }
 
     SECTION("Dictionary resolution")
@@ -218,8 +218,8 @@ namespace ao::gtk::test
     SECTION("Non-existent track")
     {
       auto provider = TrackRowCache{testLibrary.library()};
-      auto const row = provider.trackRow(TrackId{999});
-      CHECK_FALSE(row);
+      auto const rowPtr = provider.trackRow(TrackId{999});
+      CHECK_FALSE(rowPtr);
     }
   }
 } // namespace ao::gtk::test

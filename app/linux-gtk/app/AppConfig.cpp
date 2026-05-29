@@ -17,7 +17,7 @@
 namespace ao::gtk
 {
   AppConfig::AppConfig(std::filesystem::path const& configPath)
-    : _store{std::make_unique<rt::ConfigStore>(configPath)}
+    : _storePtr{std::make_unique<rt::ConfigStore>(configPath)}
   {
   }
 
@@ -28,7 +28,7 @@ namespace ao::gtk
 
   void AppConfig::loadWindow(WindowState& state) const
   {
-    if (auto const res = _store->load("window", state); !res && res.error().code != Error::Code::NotFound)
+    if (auto const res = _storePtr->load("window", state); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("AppConfig: Failed to load window config: {}", res.error().message);
     }
@@ -36,9 +36,9 @@ namespace ao::gtk
 
   void AppConfig::saveWindow(WindowState const& state)
   {
-    _store->save("window", state);
+    _storePtr->save("window", state);
 
-    if (auto const res = _store->flush(); !res)
+    if (auto const res = _storePtr->flush(); !res)
     {
       APP_LOG_ERROR("AppConfig: Failed to flush window config: {}", res.error().message);
     }
@@ -46,7 +46,7 @@ namespace ao::gtk
 
   void AppConfig::loadAppPrefs(rt::AppPrefsState& state) const
   {
-    if (auto const res = _store->load("runtime", state); !res && res.error().code != Error::Code::NotFound)
+    if (auto const res = _storePtr->load("runtime", state); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("AppConfig: Failed to load app prefs: {}", res.error().message);
     }
@@ -54,9 +54,9 @@ namespace ao::gtk
 
   void AppConfig::saveAppPrefs(rt::AppPrefsState const& state)
   {
-    _store->save("runtime", state);
+    _storePtr->save("runtime", state);
 
-    if (auto const res = _store->flush(); !res)
+    if (auto const res = _storePtr->flush(); !res)
     {
       APP_LOG_ERROR("AppConfig: Failed to flush app prefs: {}", res.error().message);
     }
@@ -65,7 +65,7 @@ namespace ao::gtk
   bool AppConfig::loadShellLayout(layout::LayoutDocument& state, std::string_view presetId) const
   {
     auto const key = std::format("linuxGtkLayout_{}", presetId);
-    auto const res = _store->load(key, state);
+    auto const res = _storePtr->load(key, state);
 
     if (!res && res.error().code != Error::Code::NotFound)
     {
@@ -78,9 +78,9 @@ namespace ao::gtk
   void AppConfig::saveShellLayout(layout::LayoutDocument const& state, std::string_view presetId)
   {
     auto const key = std::format("linuxGtkLayout_{}", presetId);
-    _store->save(key, state);
+    _storePtr->save(key, state);
 
-    if (auto const res = _store->flush(); !res)
+    if (auto const res = _storePtr->flush(); !res)
     {
       APP_LOG_ERROR("AppConfig: Failed to flush shell layout ({}): {}", key, res.error().message);
     }

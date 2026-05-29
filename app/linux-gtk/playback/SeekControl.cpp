@@ -36,19 +36,19 @@ namespace ao::gtk
 
     _scale.signal_value_changed().connect([this] { handleScaleValueChanged(); });
 
-    auto const clickGesture = Gtk::GestureClick::create();
-    clickGesture->set_button(1);
-    clickGesture->signal_pressed().connect([this](std::int32_t, double, double) { beginUserInteraction(); });
-    clickGesture->signal_released().connect([this](std::int32_t, double, double) { endUserInteraction(); });
-    _scale.add_controller(clickGesture);
+    auto const clickGesturePtr = Gtk::GestureClick::create();
+    clickGesturePtr->set_button(1);
+    clickGesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { beginUserInteraction(); });
+    clickGesturePtr->signal_released().connect([this](std::int32_t, double, double) { endUserInteraction(); });
+    _scale.add_controller(clickGesturePtr);
 
-    auto const dragGesture = Gtk::GestureDrag::create();
-    dragGesture->set_button(1);
-    dragGesture->signal_drag_begin().connect([this](double, double) { beginUserInteraction(); });
-    dragGesture->signal_drag_end().connect([this](double, double) { endUserInteraction(); });
-    _scale.add_controller(dragGesture);
+    auto const dragGesturePtr = Gtk::GestureDrag::create();
+    dragGesturePtr->set_button(1);
+    dragGesturePtr->signal_drag_begin().connect([this](double, double) { beginUserInteraction(); });
+    dragGesturePtr->signal_drag_end().connect([this](double, double) { endUserInteraction(); });
+    _scale.add_controller(dragGesturePtr);
 
-    _controller = std::make_unique<ao::uimodel::playback::SeekViewModel>(
+    _controllerPtr = std::make_unique<ao::uimodel::playback::SeekViewModel>(
       playbackService, [this](ao::uimodel::playback::SeekViewState const& view) { applyState(view); });
 
     _scale.add_tick_callback(
@@ -144,7 +144,7 @@ namespace ao::gtk
     auto const positionMs = scalePositionMs();
     _pendingFinalSeek = true;
     _interpolator.updateState(positionMs, _durationMs, false);
-    _controller->seekPreview(positionMs);
+    _controllerPtr->seekPreview(positionMs);
   }
 
   void SeekControl::executeDebouncedFinalSeek()
@@ -153,7 +153,7 @@ namespace ao::gtk
 
     if (_durationMs > 0)
     {
-      _controller->seekFinal(scalePositionMs());
+      _controllerPtr->seekFinal(scalePositionMs());
     }
   }
 

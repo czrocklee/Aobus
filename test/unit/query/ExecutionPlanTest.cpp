@@ -14,6 +14,7 @@
 #include <lmdb.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -32,7 +33,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - Compile Empty Expression", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - Compile Constant True Expression", "[query][unit][execution_plan]")
   {
     // Note: matchesAll is not automatically set - it's a hint for optimization
     // The plan should still compile a constant true expression
@@ -811,28 +812,28 @@ namespace ao::query::test
 
     SECTION("Unsupported operator in BinaryExpression")
     {
-      auto binary = std::make_unique<BinaryExpression>();
-      binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
-      binary->optOperation =
+      auto binaryPtr = std::make_unique<BinaryExpression>();
+      binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
+      binaryPtr->optOperation =
         BinaryExpression::Operation{.op = Operator::Add, .operand = ConstantExpression{std::int64_t(100)}};
 
-      REQUIRE_THROWS(compiler.compile(std::move(binary)));
+      REQUIRE_THROWS(compiler.compile(std::move(binaryPtr)));
 
-      auto binaryInvalid = std::make_unique<BinaryExpression>();
-      binaryInvalid->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
-      binaryInvalid->optOperation =
+      auto binaryInvalidPtr = std::make_unique<BinaryExpression>();
+      binaryInvalidPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
+      binaryInvalidPtr->optOperation =
         BinaryExpression::Operation{.op = static_cast<Operator>(99), .operand = ConstantExpression{std::int64_t(100)}};
 
-      REQUIRE_THROWS(compiler.compile(std::move(binaryInvalid)));
+      REQUIRE_THROWS(compiler.compile(std::move(binaryInvalidPtr)));
     }
 
     SECTION("Compiler rejects unsupported unary operators")
     {
-      auto unary = std::make_unique<UnaryExpression>();
-      unary->op = Operator::Add; // Unsupported unary operator
-      unary->operand = VariableExpression{.type = VariableType::Tag, .name = "rock"};
+      auto unaryPtr = std::make_unique<UnaryExpression>();
+      unaryPtr->op = Operator::Add; // Unsupported unary operator
+      unaryPtr->operand = VariableExpression{.type = VariableType::Tag, .name = "rock"};
 
-      REQUIRE_THROWS(compiler.compile(std::move(unary)));
+      REQUIRE_THROWS(compiler.compile(std::move(unaryPtr)));
     }
   }
 

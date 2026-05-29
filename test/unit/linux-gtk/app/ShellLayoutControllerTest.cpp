@@ -16,11 +16,11 @@ namespace ao::gtk::test
 {
   TEST_CASE("ShellLayoutController - lifecycle", "[gtk][app][shell]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto window = Gtk::ApplicationWindow{};
-    window.set_application(app);
+    window.set_application(appPtr);
 
     auto controller = ShellLayoutController{runtime, window, nullptr};
 
@@ -54,12 +54,12 @@ namespace ao::gtk::test
       auto* actionMap = dynamic_cast<Gio::ActionMap*>(&window);
       REQUIRE(actionMap != nullptr);
 
-      auto gioAction = actionMap->lookup_action("playback.stop");
-      REQUIRE(gioAction != nullptr);
+      auto gioActionPtr = actionMap->lookup_action("playback.stop");
+      REQUIRE(gioActionPtr != nullptr);
 
       // Queue model is not bound, so hasActiveQueue is false, thus stop should be disabled
       controller.refreshExportedActions();
-      CHECK(gioAction->property_enabled() == false);
+      CHECK(gioActionPtr->property_enabled() == false);
     }
   }
 } // namespace ao::gtk::test

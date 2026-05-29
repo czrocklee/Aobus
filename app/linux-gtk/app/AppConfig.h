@@ -44,6 +44,6 @@ namespace ao::gtk
     void saveShellLayout(layout::LayoutDocument const& state, std::string_view presetId);
 
   private:
-    std::unique_ptr<rt::ConfigStore> _store;
+    std::unique_ptr<rt::ConfigStore> _storePtr;
   };
 } // namespace ao::gtk

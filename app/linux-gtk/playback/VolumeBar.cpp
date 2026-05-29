@@ -49,27 +49,27 @@ namespace ao::gtk
     set_can_target(true);
 
     // Drag: Uses offsets relative to start
-    auto const drag = Gtk::GestureDrag::create();
-    drag->signal_drag_begin().connect([this](double, double) { _dragStartVolume = _volume; });
-    drag->signal_drag_update().connect([this](double offsetX, double) { handleDragUpdate(offsetX); });
-    add_controller(drag);
+    auto const dragPtr = Gtk::GestureDrag::create();
+    dragPtr->signal_drag_begin().connect([this](double, double) { _dragStartVolume = _volume; });
+    dragPtr->signal_drag_update().connect([this](double offsetX, double) { handleDragUpdate(offsetX); });
+    add_controller(dragPtr);
 
     // Click: Immediate jump to position
-    auto const click = Gtk::GestureClick::create();
-    click->signal_pressed().connect([this](std::int32_t, double offsetX, double) { handleAbsoluteClick(offsetX); });
-    add_controller(click);
+    auto const clickPtr = Gtk::GestureClick::create();
+    clickPtr->signal_pressed().connect([this](std::int32_t, double offsetX, double) { handleAbsoluteClick(offsetX); });
+    add_controller(clickPtr);
 
     // Scroll
-    auto const scroll = Gtk::EventControllerScroll::create();
-    scroll->set_flags(Gtk::EventControllerScroll::Flags::VERTICAL);
-    scroll->signal_scroll().connect(
+    auto const scrollPtr = Gtk::EventControllerScroll::create();
+    scrollPtr->set_flags(Gtk::EventControllerScroll::Flags::VERTICAL);
+    scrollPtr->signal_scroll().connect(
       [this](double /*dx*/, double dy)
       {
         handleScroll(0.0, dy);
         return true;
       },
       false);
-    add_controller(scroll);
+    add_controller(scrollPtr);
   }
 
   VolumeBar::~VolumeBar() = default;
@@ -130,12 +130,12 @@ namespace ao::gtk
     auto const width = get_width();
     auto const height = get_height();
 
-    auto const cr =
+    auto const crPtr =
       snapshot->append_cairo(Gdk::Graphene::Rect{0, 0, static_cast<float>(width), static_cast<float>(height)});
 
-    auto const context = get_style_context();
-    auto const color = context->get_color();
-    auto const cssPadding = context->get_padding();
+    auto const contextPtr = get_style_context();
+    auto const color = contextPtr->get_color();
+    auto const cssPadding = contextPtr->get_padding();
 
     float const vPadding = static_cast<float>(cssPadding.get_top());
     float const hPadding = static_cast<float>(cssPadding.get_left());
@@ -152,9 +152,9 @@ namespace ao::gtk
     // Dynamically lookup the theme's accent/selection color
     auto activeColor = Gdk::RGBA{};
 
-    if (!context->lookup_color("accent_color", activeColor))
+    if (!contextPtr->lookup_color("accent_color", activeColor))
     {
-      if (!context->lookup_color("theme_selected_bg_color", activeColor))
+      if (!contextPtr->lookup_color("theme_selected_bg_color", activeColor))
       {
         // Fallback to a nice blue if theme doesn't provide named colors
         activeColor.set_rgba(kFallbackRed, kFallbackGreen, kFallbackBlue, kFallbackAlpha);
@@ -163,51 +163,51 @@ namespace ao::gtk
 
     // 1. Create the clipping path (10 rounded segments)
     // This defines the "containers" that will slice our triangle
-    cr->save();
-    cr->begin_new_path();
+    crPtr->save();
+    crPtr->begin_new_path();
 
     for (std::int32_t idx = 0; idx < kNumSegments; ++idx)
     {
       float const segmentX = hPadding + (static_cast<float>(idx) * (segmentWidth + segmentGap));
-      cr->begin_new_sub_path();
-      cr->arc(segmentX + segmentRadius, yOffset + segmentRadius, segmentRadius, kAngle180, kAngle270);
-      cr->arc(segmentX + segmentWidth - segmentRadius, yOffset + segmentRadius, segmentRadius, kAngle270, kAngle360);
-      cr->arc(
+      crPtr->begin_new_sub_path();
+      crPtr->arc(segmentX + segmentRadius, yOffset + segmentRadius, segmentRadius, kAngle180, kAngle270);
+      crPtr->arc(segmentX + segmentWidth - segmentRadius, yOffset + segmentRadius, segmentRadius, kAngle270, kAngle360);
+      crPtr->arc(
         segmentX + segmentWidth - segmentRadius, yOffset + drawHeight - segmentRadius, segmentRadius, 0, kAngle90);
-      cr->arc(segmentX + segmentRadius, yOffset + drawHeight - segmentRadius, segmentRadius, kAngle90, kAngle180);
-      cr->close_path();
+      crPtr->arc(segmentX + segmentRadius, yOffset + drawHeight - segmentRadius, segmentRadius, kAngle90, kAngle180);
+      crPtr->close_path();
     }
 
-    cr->clip();
+    crPtr->clip();
 
     // 2. Define the "Perfect Triangle" path (a trapezoid from 10% to 100% height)
     auto const drawTrapezoid = [&](float currentWidth)
     {
-      cr->begin_new_path();
-      cr->move_to(0, yOffset + drawHeight);            // Bottom Left
-      cr->line_to(currentWidth, yOffset + drawHeight); // Bottom Right
+      crPtr->begin_new_path();
+      crPtr->move_to(0, yOffset + drawHeight);            // Bottom Left
+      crPtr->line_to(currentWidth, yOffset + drawHeight); // Bottom Right
       float const hAtW =
         drawHeight * (kMinHeightFactor + kMaxHeightFactor * (currentWidth / static_cast<float>(width)));
-      cr->line_to(currentWidth, yOffset + drawHeight - hAtW);
-      cr->line_to(0, yOffset + drawHeight - (drawHeight * kMinHeightFactor));
-      cr->close_path();
+      crPtr->line_to(currentWidth, yOffset + drawHeight - hAtW);
+      crPtr->line_to(0, yOffset + drawHeight - (drawHeight * kMinHeightFactor));
+      crPtr->close_path();
     };
 
     // 3. Draw Background (Inactive)
     drawTrapezoid(static_cast<float>(width));
-    cr->set_source_rgba(color.get_red(), color.get_green(), color.get_blue(), kBackgroundOpacity);
-    cr->fill();
+    crPtr->set_source_rgba(color.get_red(), color.get_green(), color.get_blue(), kBackgroundOpacity);
+    crPtr->fill();
 
     // 4. Draw Foreground (Active) - Clipped horizontally by volume
     if (_volume > 0.0F)
     {
       drawTrapezoid(static_cast<float>(width) * _volume);
       // Use the dynamically discovered theme color
-      cr->set_source_rgba(activeColor.get_red(), activeColor.get_green(), activeColor.get_blue(), kFullOpacity);
-      cr->fill();
+      crPtr->set_source_rgba(activeColor.get_red(), activeColor.get_green(), activeColor.get_blue(), kFullOpacity);
+      crPtr->fill();
     }
 
-    cr->restore();
+    crPtr->restore();
   }
 
   void VolumeBar::handleAbsoluteClick(double offsetX)

@@ -34,7 +34,7 @@ namespace ao::gtk
                                                 layout::ActionHandler,
                                                 layout::ActionStateProvider)>;
 
-    ShellLayoutController(rt::AppRuntime& runtime, Gtk::Window& parentWindow, std::shared_ptr<AppConfig> config);
+    ShellLayoutController(rt::AppRuntime& runtime, Gtk::Window& parentWindow, std::shared_ptr<AppConfig> configPtr);
 
     layout::ComponentRegistry& registry() { return _registry; }
     layout::LayoutContext& context() { return _context; }
@@ -63,11 +63,11 @@ namespace ao::gtk
     layout::ActionRegistry _actionRegistry;
     layout::LayoutContext _context;
     layout::LayoutHost _host;
-    std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSession;
+    std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
     std::vector<rt::Subscription> _playbackSubs;
     layout::LayoutDocument _activeLayout;
     std::string _activePresetId;
-    std::shared_ptr<AppConfig> _config;
+    std::shared_ptr<AppConfig> _configPtr;
     bool _isCustomized = false;
     rt::async::LifetimeScope _tasks;
   };

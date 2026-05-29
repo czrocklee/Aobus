@@ -26,7 +26,7 @@ namespace clang::tidy::readability
   {
     auto const& sm = *result.SourceManager;
 
-    if (auto const* func = result.Nodes.getNodeAs<FunctionDecl>("func"))
+    if (auto const* func = result.Nodes.getNodeAs<FunctionDecl>("func"); func != nullptr)
     {
       SourceLocation const loc = func->getLocation();
 
@@ -41,7 +41,7 @@ namespace clang::tidy::readability
         << func;
     }
 
-    if (auto const* record = result.Nodes.getNodeAs<CXXRecordDecl>("record"))
+    if (auto const* record = result.Nodes.getNodeAs<CXXRecordDecl>("record"); record != nullptr)
     {
       SourceLocation const loc = record->getLocation();
 

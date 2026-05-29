@@ -31,7 +31,7 @@ namespace ao::library
                                      ProgressCallback progress,
                                      FinishedCallback finished)
     : _ml{ml}
-    , _plan{std::make_unique<ScanPlan>(std::move(plan))}
+    , _planPtr{std::make_unique<ScanPlan>(std::move(plan))}
     , _progressCallback{std::move(progress)}
     , _finishedCallback{std::move(finished)}
   {
@@ -44,7 +44,7 @@ namespace ao::library
 
   void ScanPlanExecutor::run(std::stop_token stopToken)
   {
-    if (!_plan)
+    if (!_planPtr)
     {
       APP_LOG_ERROR("ScanPlanExecutor: No plan provided");
       return;
@@ -55,7 +55,7 @@ namespace ao::library
     auto manifestWriter = _ml.manifest().writer(txn);
     auto& dict = _ml.dictionary();
 
-    for (std::size_t i = 0; i < _plan->items.size(); ++i)
+    for (std::size_t i = 0; i < _planPtr->items.size(); ++i)
     {
       if (stopToken.stop_requested())
       {
@@ -80,7 +80,7 @@ namespace ao::library
                                      FileManifestStore::Writer& manifestWriter,
                                      DictionaryStore& dict)
   {
-    auto const& item = _plan->items[itemIndex];
+    auto const& item = _planPtr->items[itemIndex];
 
     try
     {
@@ -104,7 +104,7 @@ namespace ao::library
       if (item.classification == ScanClassification::Missing)
       {
         // Update manifest status to Missing
-        if (auto const optView = _ml.manifest().reader(txn).get(item.uri))
+        if (auto const optView = _ml.manifest().reader(txn).get(item.uri); optView)
         {
           auto builder = FileManifestBuilder::fromView(*optView);
           builder.status(FileStatus::Missing);
@@ -115,16 +115,16 @@ namespace ao::library
       }
 
       // Handle NEW or CHANGED
-      auto const tagFile = tag::TagFile::open(item.fullPath);
+      auto const tagFilePtr = tag::TagFile::open(item.fullPath);
 
-      if (!tagFile)
+      if (!tagFilePtr)
       {
         APP_LOG_WARN("Skipping unsupported file: {}", item.fullPath.string());
         ++_result.skippedCount;
         return;
       }
 
-      auto builder = tagFile->loadTrack();
+      auto builder = tagFilePtr->loadTrack();
       builder.property().uri(item.uri);
 
       if (item.classification == ScanClassification::Changed && item.trackId != kInvalidTrackId)
@@ -193,9 +193,9 @@ namespace ao::library
 
   std::size_t ScanPlanExecutor::fileCount() const
   {
-    if (_plan)
+    if (_planPtr)
     {
-      return _plan->items.size();
+      return _planPtr->items.size();
     }
 
     return 0;

@@ -14,7 +14,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TagPopover - lifecycle", "[gtk][tag][popover]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
     auto window = Gtk::Window{};

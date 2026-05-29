@@ -39,7 +39,7 @@ namespace ao::gtk
 {
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
                                                Gtk::Window& parentWindow,
-                                               std::shared_ptr<AppConfig> config)
+                                               std::shared_ptr<AppConfig> configPtr)
     : _registry{}
     , _actionRegistry{}
     , _context{.registry = _registry,
@@ -47,15 +47,15 @@ namespace ao::gtk
                .runtime = runtime,
                .parentWindow = parentWindow}
     , _host{_registry}
-    , _config{std::move(config)}
+    , _configPtr{std::move(configPtr)}
   {
     layout::LayoutRuntime::registerStandardComponents(_registry);
 
     auto const refreshActionStates = [this]
     {
-      if (_gioBridgeSession)
+      if (_gioBridgeSessionPtr)
       {
-        _gioBridgeSession->refreshStates();
+        _gioBridgeSessionPtr->refreshStates();
       }
     };
 
@@ -84,7 +84,7 @@ namespace ao::gtk
 
     auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> layout::ActionState
     {
-      if (auto* const queueModel = _context.playback.queueModel; queueModel)
+      if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
       {
         return layout::ActionState{.enabled = queueModel->isActive(), .disabledReason = ""};
       }
@@ -137,14 +137,14 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [this](layout::ActionActivationContext&)
       {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
           queueModel->next();
         }
       },
       [this](layout::ActionActivationContext const&) -> layout::ActionState
       {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
           return layout::ActionState{.enabled = queueModel->hasNext(), .disabledReason = ""};
         }
@@ -159,14 +159,14 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [this](layout::ActionActivationContext&)
       {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
           queueModel->previous();
         }
       },
       [this](layout::ActionActivationContext const&) -> layout::ActionState
       {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
           return layout::ActionState{.enabled = queueModel->hasPrevious(), .disabledReason = ""};
         }
@@ -181,7 +181,7 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
           auto const current = ctx.runtime.playback().state().shuffleMode;
           auto const next = (current == rt::ShuffleMode::Off) ? rt::ShuffleMode::On : rt::ShuffleMode::Off;
@@ -197,7 +197,7 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
           auto const current = ctx.runtime.playback().state().repeatMode;
           auto next = rt::RepeatMode::Off;
@@ -238,9 +238,9 @@ namespace ao::gtk
                    layout::ActionCapability::RequiresAnchor | layout::ActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
-                     if (auto const menu = _context.shell.menuModel; menu)
+                     if (auto const menuPtr = _context.shell.menuModelPtr; menuPtr)
                      {
-                       auto* const popover = Gtk::make_managed<Gtk::PopoverMenu>(menu);
+                       auto* const popover = Gtk::make_managed<Gtk::PopoverMenu>(menuPtr);
                        popover->set_parent(ctx.anchorWidget);
                        popover->set_has_arrow(true);
                        popover->signal_closed().connect([popover] { popover->unparent(); });
@@ -273,9 +273,9 @@ namespace ao::gtk
                    layout::ActionCapability::None,
                    [this](layout::ActionActivationContext&)
                    {
-                     if (_config)
+                     if (_configPtr)
                      {
-                       openEditor(*_config);
+                       openEditor(*_configPtr);
                      }
                    },
                    {});
@@ -297,9 +297,9 @@ namespace ao::gtk
   {
     _context.parentWindow.set_child(_host);
 
-    if (auto* actionMap = dynamic_cast<Gio::ActionMap*>(&_context.parentWindow); actionMap)
+    if (auto* actionMap = dynamic_cast<Gio::ActionMap*>(&_context.parentWindow); actionMap != nullptr)
     {
-      _gioBridgeSession = layout::GioActionBridge::exportActions(_actionRegistry, *actionMap, *this);
+      _gioBridgeSessionPtr = layout::GioActionBridge::exportActions(_actionRegistry, *actionMap, *this);
     }
     else
     {
@@ -309,9 +309,9 @@ namespace ao::gtk
 
   void ShellLayoutController::refreshExportedActions()
   {
-    if (_gioBridgeSession)
+    if (_gioBridgeSessionPtr)
     {
-      _gioBridgeSession->refreshStates();
+      _gioBridgeSessionPtr->refreshStates();
     }
   }
 
@@ -373,26 +373,26 @@ namespace ao::gtk
 
     auto const initialPresetId = _activePresetId.empty() ? "classic" : _activePresetId;
 
-    auto const dialog = std::make_shared<layout::editor::LayoutEditorDialog>(
+    auto const dialogPtr = std::make_shared<layout::editor::LayoutEditorDialog>(
       dynamic_cast<Gtk::Window&>(_context.parentWindow), _registry, _actionRegistry, _activeLayout, initialPresetId);
-    auto* const dialogPtr = dialog.get();
+    auto* const dialogRaw = dialogPtr.get();
 
     _context.editMode = true;
-    _context.onNodeMoved = [dialogPtr](std::string const& nodeId, std::int32_t posX, std::int32_t posY)
-    { dialogPtr->updateNodePosition(nodeId, posX, posY); };
+    _context.onNodeMoved = [dialogRaw](std::string const& nodeId, std::int32_t posX, std::int32_t posY)
+    { dialogRaw->updateNodePosition(nodeId, posX, posY); };
 
     _host.setLayout(_context, _activeLayout);
 
-    dialogPtr->signalApplyPreview().connect([this](layout::LayoutDocument const& doc)
+    dialogRaw->signalApplyPreview().connect([this](layout::LayoutDocument const& doc)
                                             { _host.setLayout(_context, doc); });
 
-    dialogPtr->signalSaveRequest().connect(
-      [this, sharedDialog = dialog, &config](layout::LayoutDocument const& doc)
+    dialogRaw->signalSaveRequest().connect(
+      [this, sharedDialogPtr = dialogPtr, &config](layout::LayoutDocument const& doc)
       {
         _activeLayout = doc;
         _isCustomized = true;
 
-        if (auto const presetIdDialog = sharedDialog->selectedPresetId(); !presetIdDialog.empty())
+        if (auto const presetIdDialog = sharedDialogPtr->selectedPresetId(); !presetIdDialog.empty())
         {
           _activePresetId = presetIdDialog;
 
@@ -406,15 +406,15 @@ namespace ao::gtk
         config.saveShellLayout(_activeLayout, _activePresetId);
       });
 
-    dialogPtr->signal_hide().connect(
-      [this, sharedDialog = dialog]
+    dialogRaw->signal_hide().connect(
+      [this, sharedDialogPtr = dialogPtr]
       {
         _context.editMode = false;
         _context.onNodeMoved = nullptr;
       });
 
-    dialogPtr->signal_response().connect(
-      [this, sharedDialog = dialog](std::int32_t responseId)
+    dialogRaw->signal_response().connect(
+      [this, sharedDialogPtr = dialogPtr](std::int32_t responseId)
       {
         if (responseId == Gtk::ResponseType::CANCEL)
         {
@@ -422,7 +422,7 @@ namespace ao::gtk
         }
       });
 
-    dialogPtr->present();
+    dialogRaw->present();
   }
 
   layout::ActionActivationContext ShellLayoutController::getActionContext(std::string_view componentId)

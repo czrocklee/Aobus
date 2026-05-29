@@ -53,7 +53,7 @@ namespace ao::gtk
     using CreateSmartListRequestedSignal = sigc::signal<void(std::string)>;
 
     explicit TrackViewPage(ListId listId,
-                           Glib::RefPtr<TrackListModel> model,
+                           Glib::RefPtr<TrackListModel> modelPtr,
                            TrackPresentationStore& presentationStore,
                            rt::AppRuntime& runtime,
                            ImageCache& imageCache,
@@ -67,19 +67,19 @@ namespace ao::gtk
 
     ListId listId() const noexcept { return _listId; }
 
-    TrackSelectionController& selectionController() noexcept { return _viewHost->selectionController(); }
+    TrackSelectionController& selectionController() noexcept { return _viewHostPtr->selectionController(); }
 
     // Stable signals forwarded from the current view host generation
-    SelectionChangedSignal& signalSelectionChanged() noexcept { return _viewHost->signalSelectionChanged(); }
-    TrackActivatedSignal& signalTrackActivated() noexcept { return _viewHost->signalTrackActivated(); }
+    SelectionChangedSignal& signalSelectionChanged() noexcept { return _viewHostPtr->signalSelectionChanged(); }
+    TrackActivatedSignal& signalTrackActivated() noexcept { return _viewHostPtr->signalTrackActivated(); }
     ContextMenuRequestedSignal& signalContextMenuRequested() noexcept
     {
-      return _viewHost->signalContextMenuRequested();
+      return _viewHostPtr->signalContextMenuRequested();
     }
-    TagEditRequestedSignal& signalTagEditRequested() noexcept { return _viewHost->signalTagEditRequested(); }
+    TagEditRequestedSignal& signalTagEditRequested() noexcept { return _viewHostPtr->signalTagEditRequested(); }
 
     CreateSmartListRequestedSignal& signalCreateSmartListRequested() noexcept;
-    rt::ITrackListProjection* projection() const noexcept { return _model ? _model->projection() : nullptr; }
+    rt::ITrackListProjection* projection() const noexcept { return _modelPtr ? _modelPtr->projection() : nullptr; }
 
     void showTagPopover(TagPopover& popover, double posX, double posY);
     void setStatusMessage(std::string_view message);
@@ -110,20 +110,20 @@ namespace ao::gtk
     // Models
     ListId _listId;
     rt::ViewId _viewId{};
-    Glib::RefPtr<TrackListModel> _model;
+    Glib::RefPtr<TrackListModel> _modelPtr;
     TrackPresentationStore& _presentationStore;
     rt::AppRuntime& _runtime;
     ImageCache& _imageCache;
-    Glib::RefPtr<Gtk::SortListModel> _groupModel;
-    Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
-    Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
+    Glib::RefPtr<Gtk::SortListModel> _groupModelPtr;
+    Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
+    Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactoryPtr;
     TrackId _playingTrackId{kInvalidTrackId};
 
     sigc::scoped_connection _themeRefreshConnection;
     sigc::scoped_connection _modelChangedConnection;
 
     // Controllers (owned)
-    std::unique_ptr<TrackColumnViewHost> _viewHost;
+    std::unique_ptr<TrackColumnViewHost> _viewHostPtr;
 
     // Signals
     CreateSmartListRequestedSignal _createSmartListRequested;

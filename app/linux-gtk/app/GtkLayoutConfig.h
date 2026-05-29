@@ -42,6 +42,6 @@ namespace ao::gtk
     void save(ColumnLayoutState const& state);
 
   private:
-    std::unique_ptr<rt::ConfigStore> _store;
+    std::unique_ptr<rt::ConfigStore> _storePtr;
   };
 } // namespace ao::gtk

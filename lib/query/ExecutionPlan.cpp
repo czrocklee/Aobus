@@ -712,9 +712,9 @@ namespace ao::query
     _resolveStringConstantsToIds = true;
 
     // Check if the expression is a constant "true"
-    if (auto const* constant = std::get_if<ConstantExpression>(&expr); constant)
+    if (auto const* constant = std::get_if<ConstantExpression>(&expr); constant != nullptr)
     {
-      if (bool const* val = std::get_if<bool>(constant); val)
+      if (bool const* val = std::get_if<bool>(constant); val != nullptr)
       {
         if (*val)
         {

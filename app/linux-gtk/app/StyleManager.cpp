@@ -100,10 +100,10 @@ namespace ao::gtk
   }
 
   void StyleManager::registerWidgetProvider(Gtk::Widget& widget,
-                                            Glib::RefPtr<Gtk::CssProvider> provider,
+                                            Glib::RefPtr<Gtk::CssProvider> providerPtr,
                                             guint priority)
   {
-    Gtk::StyleContext::add_provider_for_display(widget.get_display(), provider, priority);
+    Gtk::StyleContext::add_provider_for_display(widget.get_display(), providerPtr, priority);
   }
 
   void StyleManager::unregisterWidgetProvider(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& provider)
@@ -113,7 +113,7 @@ namespace ao::gtk
 
   Glib::RefPtr<Gtk::CssProvider> const& StyleManager::appProvider() const
   {
-    return _appProvider;
+    return _appProviderPtr;
   }
 
   StyleManager& StyleManager::instance()
@@ -128,9 +128,9 @@ namespace ao::gtk
 
   void StyleManager::loadAppCss()
   {
-    auto const display = Gdk::Display::get_default();
+    auto const displayPtr = Gdk::Display::get_default();
 
-    if (display == nullptr)
+    if (displayPtr == nullptr)
     {
       return;
     }
@@ -140,9 +140,9 @@ namespace ao::gtk
 
     try
     {
-      auto const data = Gio::Resource::lookup_data_global("/org/aobus/app.css");
+      auto const dataPtr = Gio::Resource::lookup_data_global("/org/aobus/app.css");
       gsize size = 0;
-      auto const* const buf = static_cast<char const*>(data->get_data(size));
+      auto const* const buf = static_cast<char const*>(dataPtr->get_data(size));
       appCss = std::string{buf, size};
     }
     catch (Glib::Error const& err)
@@ -150,16 +150,16 @@ namespace ao::gtk
       APP_LOG_ERROR("StyleManager: Failed to load app.css from GResource: {}", err.what());
     }
 
-    _appProvider = Gtk::CssProvider::create();
-    _appProvider->load_from_data(appCss);
-    Gtk::StyleContext::add_provider_for_display(display, _appProvider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    _appProviderPtr = Gtk::CssProvider::create();
+    _appProviderPtr->load_from_data(appCss);
+    Gtk::StyleContext::add_provider_for_display(displayPtr, _appProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }
 
   void StyleManager::loadUserCss()
   {
-    auto const display = Gdk::Display::get_default();
+    auto const displayPtr = Gdk::Display::get_default();
 
-    if (display == nullptr)
+    if (displayPtr == nullptr)
     {
       return;
     }
@@ -171,12 +171,12 @@ namespace ao::gtk
       return;
     }
 
-    _userProvider = Gtk::CssProvider::create();
+    _userProviderPtr = Gtk::CssProvider::create();
 
     try
     {
-      _userProvider->load_from_path(userCssPath.string());
-      Gtk::StyleContext::add_provider_for_display(display, _userProvider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+      _userProviderPtr->load_from_path(userCssPath.string());
+      Gtk::StyleContext::add_provider_for_display(displayPtr, _userProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_USER);
     }
     catch (Glib::Error const& err)
     {
@@ -186,32 +186,32 @@ namespace ao::gtk
 
   void StyleManager::reloadUserCss()
   {
-    auto const display = Gdk::Display::get_default();
+    auto const displayPtr = Gdk::Display::get_default();
 
-    if (display == nullptr)
+    if (displayPtr == nullptr)
     {
       return;
     }
 
-    if (_userProvider)
+    if (_userProviderPtr)
     {
-      Gtk::StyleContext::remove_provider_for_display(display, _userProvider);
+      Gtk::StyleContext::remove_provider_for_display(displayPtr, _userProviderPtr);
     }
 
     auto const userCssPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "user.css";
 
     if (!std::filesystem::exists(userCssPath))
     {
-      _userProvider.reset();
+      _userProviderPtr.reset();
       return;
     }
 
-    _userProvider = Gtk::CssProvider::create();
+    _userProviderPtr = Gtk::CssProvider::create();
 
     try
     {
-      _userProvider->load_from_path(userCssPath.string());
-      Gtk::StyleContext::add_provider_for_display(display, _userProvider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+      _userProviderPtr->load_from_path(userCssPath.string());
+      Gtk::StyleContext::add_provider_for_display(displayPtr, _userProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_USER);
     }
     catch (Glib::Error const& err)
     {
@@ -230,12 +230,12 @@ namespace ao::gtk
 
     try
     {
-      auto const keyfile = Glib::KeyFile::create();
-      keyfile->load_from_file(settingsPath.string());
+      auto const keyfilePtr = Glib::KeyFile::create();
+      keyfilePtr->load_from_file(settingsPath.string());
 
       if (schemaExists("org.gnome.desktop.interface"))
       {
-        auto const gsettings = Gio::Settings::create("org.gnome.desktop.interface");
+        auto const gsettingsPtr = Gio::Settings::create("org.gnome.desktop.interface");
 
         auto* const source = ::g_settings_schema_source_get_default();
         auto* const schema = ::g_settings_schema_source_lookup(source, "org.gnome.desktop.interface", TRUE);
@@ -243,16 +243,16 @@ namespace ao::gtk
         auto const hasSchemaKey = [schema](char const* key)
         { return schema != nullptr && ::g_settings_schema_has_key(schema, key); };
 
-        if (keyfile->has_key("Settings", "gtk-theme-name") && hasSchemaKey("gtk-theme-name"))
+        if (keyfilePtr->has_key("Settings", "gtk-theme-name") && hasSchemaKey("gtk-theme-name"))
         {
-          gsettings->set_string("gtk-theme-name", keyfile->get_string("Settings", "gtk-theme-name"));
+          gsettingsPtr->set_string("gtk-theme-name", keyfilePtr->get_string("Settings", "gtk-theme-name"));
         }
 
-        if (keyfile->has_key("Settings", "gtk-application-prefer-dark-theme") &&
+        if (keyfilePtr->has_key("Settings", "gtk-application-prefer-dark-theme") &&
             hasSchemaKey("gtk-application-prefer-dark-theme"))
         {
-          gsettings->set_boolean(
-            "gtk-application-prefer-dark-theme", keyfile->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
+          gsettingsPtr->set_boolean("gtk-application-prefer-dark-theme",
+                                    keyfilePtr->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
         }
 
         if (schema != nullptr)
@@ -262,17 +262,17 @@ namespace ao::gtk
       }
       else
       {
-        auto const settings = Gtk::Settings::get_default();
+        auto const settingsPtr = Gtk::Settings::get_default();
 
-        if (keyfile->has_key("Settings", "gtk-theme-name"))
+        if (keyfilePtr->has_key("Settings", "gtk-theme-name"))
         {
-          settings->property_gtk_theme_name().set_value(keyfile->get_string("Settings", "gtk-theme-name"));
+          settingsPtr->property_gtk_theme_name().set_value(keyfilePtr->get_string("Settings", "gtk-theme-name"));
         }
 
-        if (keyfile->has_key("Settings", "gtk-application-prefer-dark-theme"))
+        if (keyfilePtr->has_key("Settings", "gtk-application-prefer-dark-theme"))
         {
-          settings->property_gtk_application_prefer_dark_theme().set_value(
-            keyfile->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
+          settingsPtr->property_gtk_application_prefer_dark_theme().set_value(
+            keyfilePtr->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
         }
       }
     }
@@ -284,32 +284,32 @@ namespace ao::gtk
 
   void StyleManager::reloadGtkUserCss()
   {
-    auto const display = Gdk::Display::get_default();
+    auto const displayPtr = Gdk::Display::get_default();
 
-    if (display == nullptr)
+    if (displayPtr == nullptr)
     {
       return;
     }
 
-    if (_gtkUserCssProvider)
+    if (_gtkUserCssProviderPtr)
     {
-      Gtk::StyleContext::remove_provider_for_display(display, _gtkUserCssProvider);
+      Gtk::StyleContext::remove_provider_for_display(displayPtr, _gtkUserCssProviderPtr);
     }
 
     auto const cssPath = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0" / "gtk.css";
 
     if (!std::filesystem::exists(cssPath))
     {
-      _gtkUserCssProvider.reset();
+      _gtkUserCssProviderPtr.reset();
       return;
     }
 
-    _gtkUserCssProvider = Gtk::CssProvider::create();
+    _gtkUserCssProviderPtr = Gtk::CssProvider::create();
 
     try
     {
-      _gtkUserCssProvider->load_from_path(cssPath.string());
-      Gtk::StyleContext::add_provider_for_display(display, _gtkUserCssProvider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+      _gtkUserCssProviderPtr->load_from_path(cssPath.string());
+      Gtk::StyleContext::add_provider_for_display(displayPtr, _gtkUserCssProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_USER);
     }
     catch (Glib::Error const& err)
     {
@@ -320,10 +320,10 @@ namespace ao::gtk
   void StyleManager::setupGtkConfigMonitor()
   {
     auto const configDir = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0";
-    auto const configFile = Gio::File::create_for_path(configDir.string());
+    auto const configFilePtr = Gio::File::create_for_path(configDir.string());
 
-    _gtkConfigMonitor = configFile->monitor_directory();
-    _gtkConfigMonitor->signal_changed().connect(
+    _gtkConfigMonitorPtr = configFilePtr->monitor_directory();
+    _gtkConfigMonitorPtr->signal_changed().connect(
       [this](Glib::RefPtr<Gio::File> const& file,
              Glib::RefPtr<Gio::File> const& /*otherFile*/,
              Gio::FileMonitor::Event event)
@@ -348,10 +348,10 @@ namespace ao::gtk
 
     std::filesystem::create_directories(aobusDir);
 
-    auto const aobusFile = Gio::File::create_for_path(aobusDir.string());
+    auto const aobusFilePtr = Gio::File::create_for_path(aobusDir.string());
 
-    _aobusConfigMonitor = aobusFile->monitor_directory();
-    _aobusConfigMonitor->signal_changed().connect(
+    _aobusConfigMonitorPtr = aobusFilePtr->monitor_directory();
+    _aobusConfigMonitorPtr->signal_changed().connect(
       [this](Glib::RefPtr<Gio::File> const& file,
              Glib::RefPtr<Gio::File> const& /*otherFile*/,
              Gio::FileMonitor::Event event)
@@ -380,9 +380,9 @@ namespace ao::gtk
   {
     try
     {
-      if (auto bus = Gio::DBus::Connection::get_sync(Gio::DBus::BusType::SESSION); bus)
+      if (auto busPtr = Gio::DBus::Connection::get_sync(Gio::DBus::BusType::SESSION); busPtr)
       {
-        _dbusSubscriptionId = bus->signal_subscribe(
+        _dbusSubscriptionId = busPtr->signal_subscribe(
           [this](Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/,
                  Glib::ustring const& /*sender*/,
                  Glib::ustring const& /*iface*/,

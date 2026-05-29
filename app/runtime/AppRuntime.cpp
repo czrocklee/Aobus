@@ -22,13 +22,13 @@ namespace ao::rt
     ViewService viewService;
     PlaybackService playbackService;
     WorkspaceService workspaceService;
-    std::shared_ptr<ConfigStore> workspaceConfigStore;
+    std::unique_ptr<ConfigStore> workspaceConfigStorePtr;
 
-    Impl(AppRuntime& runtime, std::shared_ptr<ConfigStore> workspaceConfig)
+    Impl(AppRuntime& runtime, std::unique_ptr<ConfigStore> workspaceConfigPtr)
       : viewService{runtime.async().controlExecutor(), runtime.musicLibrary(), runtime.sources()}
       , playbackService{runtime.async().controlExecutor(), viewService, runtime.musicLibrary()}
       , workspaceService{viewService, playbackService, runtime.mutation(), runtime.musicLibrary()}
-      , workspaceConfigStore{std::move(workspaceConfig)}
+      , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
     {
     }
 
@@ -41,10 +41,10 @@ namespace ao::rt
   };
 
   AppRuntime::AppRuntime(AppRuntimeDependencies dependencies)
-    : CoreRuntime{std::move(dependencies.executor),
+    : CoreRuntime{std::move(dependencies.executorPtr),
                   std::move(dependencies.musicRoot),
                   std::move(dependencies.databasePath)}
-    , _impl{std::make_unique<Impl>(*this, std::move(dependencies.workspaceConfigStore))}
+    , _implPtr{std::make_unique<Impl>(*this, std::move(dependencies.workspaceConfigStorePtr))}
   {
   }
 
@@ -52,22 +52,22 @@ namespace ao::rt
 
   PlaybackService& AppRuntime::playback() noexcept
   {
-    return _impl->playbackService;
+    return _implPtr->playbackService;
   }
 
   WorkspaceService& AppRuntime::workspace() noexcept
   {
-    return _impl->workspaceService;
+    return _implPtr->workspaceService;
   }
 
   ViewService& AppRuntime::views() noexcept
   {
-    return _impl->viewService;
+    return _implPtr->viewService;
   }
 
   ConfigStore& AppRuntime::configStore() noexcept
   {
-    return *_impl->workspaceConfigStore;
+    return *_implPtr->workspaceConfigStorePtr;
   }
 
   async::Runtime& AppRuntime::async() noexcept
@@ -82,18 +82,18 @@ namespace ao::rt
 
   TrackId AppRuntime::playSelectionInFocusedView()
   {
-    auto const focus = _impl->workspaceService.layoutState();
+    auto const focus = _implPtr->workspaceService.layoutState();
 
     if (focus.activeViewId == rt::kInvalidViewId)
     {
       return kInvalidTrackId;
     }
 
-    return _impl->playbackService.playSelectionInView(focus.activeViewId);
+    return _implPtr->playbackService.playSelectionInView(focus.activeViewId);
   }
 
-  void AppRuntime::addAudioProvider(std::unique_ptr<audio::IBackendProvider> provider)
+  void AppRuntime::addAudioProvider(std::unique_ptr<audio::IBackendProvider> providerPtr)
   {
-    _impl->playbackService.addProvider(std::move(provider));
+    _implPtr->playbackService.addProvider(std::move(providerPtr));
   }
 } // namespace ao::rt

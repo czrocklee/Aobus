@@ -70,7 +70,7 @@ namespace ao::query
         std::swap((*rhs)->operand, (*rhs)->optOperation->operand);
         std::swap(binary.operand, *op);
 
-        if (auto* next = std::get_if<std::unique_ptr<BinaryExpression>>(&binary.operand); next)
+        if (auto* next = std::get_if<std::unique_ptr<BinaryExpression>>(&binary.operand); next != nullptr)
         {
           if (*next)
           {

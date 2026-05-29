@@ -43,32 +43,32 @@ namespace ao::tag::test
     SECTION("MP3 extension")
     {
       auto const temp = TempFile{".mp3"};
-      auto file = TagFile::open(temp.path);
-      REQUIRE(file != nullptr);
-      CHECK(dynamic_cast<mpeg::File*>(file.get()) != nullptr);
+      auto filePtr = TagFile::open(temp.path);
+      REQUIRE(filePtr != nullptr);
+      CHECK(dynamic_cast<mpeg::File*>(filePtr.get()) != nullptr);
     }
 
     SECTION("M4A extension")
     {
       auto const temp = TempFile{".m4a"};
-      auto file = TagFile::open(temp.path);
-      REQUIRE(file != nullptr);
-      CHECK(dynamic_cast<mp4::File*>(file.get()) != nullptr);
+      auto filePtr = TagFile::open(temp.path);
+      REQUIRE(filePtr != nullptr);
+      CHECK(dynamic_cast<mp4::File*>(filePtr.get()) != nullptr);
     }
 
     SECTION("FLAC extension")
     {
       auto const temp = TempFile{".flac"};
-      auto file = TagFile::open(temp.path);
-      REQUIRE(file != nullptr);
-      CHECK(dynamic_cast<flac::File*>(file.get()) != nullptr);
+      auto filePtr = TagFile::open(temp.path);
+      REQUIRE(filePtr != nullptr);
+      CHECK(dynamic_cast<flac::File*>(filePtr.get()) != nullptr);
     }
 
     SECTION("Unknown extension")
     {
       auto const temp = TempFile{".txt"};
-      auto file = TagFile::open(temp.path);
-      CHECK(file == nullptr);
+      auto filePtr = TagFile::open(temp.path);
+      CHECK(filePtr == nullptr);
     }
   }
 } // namespace ao::tag::test

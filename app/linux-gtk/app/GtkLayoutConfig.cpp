@@ -15,7 +15,7 @@ namespace ao::gtk
   GtkLayoutConfig::GtkLayoutConfig(std::filesystem::path const& libraryPath)
   {
     auto const configPath = libraryPath / "gtk_layout.yaml";
-    _store = std::make_unique<rt::ConfigStore>(configPath);
+    _storePtr = std::make_unique<rt::ConfigStore>(configPath);
   }
 
   GtkLayoutConfig::~GtkLayoutConfig() = default;
@@ -25,7 +25,7 @@ namespace ao::gtk
 
   void GtkLayoutConfig::load(ColumnLayoutState& state) const
   {
-    if (auto const res = _store->load("trackView", state); !res && res.error().code != Error::Code::NotFound)
+    if (auto const res = _storePtr->load("trackView", state); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("GtkLayoutConfig: Failed to load: {}", res.error().message);
     }
@@ -33,9 +33,9 @@ namespace ao::gtk
 
   void GtkLayoutConfig::save(ColumnLayoutState const& state)
   {
-    _store->save("trackView", state);
+    _storePtr->save("trackView", state);
 
-    if (auto const res = _store->flush(); !res)
+    if (auto const res = _storePtr->flush(); !res)
     {
       APP_LOG_ERROR("GtkLayoutConfig: Failed to flush: {}", res.error().message);
     }

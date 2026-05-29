@@ -47,13 +47,13 @@ namespace ao::gtk
 
   void GtkControlExecutor::defer(std::move_only_function<void()> task)
   {
-    auto sharedTask = std::make_shared<std::move_only_function<void()>>(std::move(task));
+    auto sharedTaskPtr = std::make_shared<std::move_only_function<void()>>(std::move(task));
     Glib::signal_idle().connect(
-      [sharedTask]
+      [sharedTaskPtr]
       {
-        if (*sharedTask)
+        if (*sharedTaskPtr)
         {
-          (*sharedTask)();
+          (*sharedTaskPtr)();
         }
 
         return false;

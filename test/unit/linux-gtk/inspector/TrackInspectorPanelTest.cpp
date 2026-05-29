@@ -13,7 +13,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TrackInspectorPanel - smoke test", "[gtk][inspector]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto imageCache = ImageCache{200};

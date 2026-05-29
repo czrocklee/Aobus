@@ -54,7 +54,7 @@ namespace ao::gtk
     struct CacheEntry final
     {
       std::uint64_t resourceId;
-      Glib::RefPtr<Gdk::Pixbuf> pixbuf;
+      Glib::RefPtr<Gdk::Pixbuf> pixbufPtr;
     };
 
     std::size_t _maxSize;

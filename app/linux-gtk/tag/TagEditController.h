@@ -88,11 +88,11 @@ namespace ao::gtk
     std::optional<TrackSelectionContext> _optActiveSelection;
 
     // Actions
-    Glib::RefPtr<Gio::SimpleAction> _trackTagAddAction;
-    Glib::RefPtr<Gio::SimpleAction> _trackTagRemoveAction;
-    Glib::RefPtr<Gio::SimpleAction> _trackTagToggleAction;
+    Glib::RefPtr<Gio::SimpleAction> _trackTagAddActionPtr;
+    Glib::RefPtr<Gio::SimpleAction> _trackTagRemoveActionPtr;
+    Glib::RefPtr<Gio::SimpleAction> _trackTagToggleActionPtr;
 
-    std::unique_ptr<TagPopover> _tagPopover;
-    std::unique_ptr<Gtk::Popover> _contextPopover;
+    std::unique_ptr<TagPopover> _tagPopoverPtr;
+    std::unique_ptr<Gtk::Popover> _contextPopoverPtr;
   };
 } // namespace ao::gtk

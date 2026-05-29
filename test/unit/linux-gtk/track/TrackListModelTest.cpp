@@ -173,7 +173,7 @@ namespace ao::gtk::test
 
   TEST_CASE("TrackListModel", "[app][unit][adapter]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.list_model_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.list_model_test");
     auto testLibrary = TestMusicLibrary{};
 
     auto const id1 = testLibrary.addTrack(makeTrackSpec("Song A", "Artist A", "Album A", 2020));
@@ -184,35 +184,35 @@ namespace ao::gtk::test
     source.addInitial(id2);
 
     auto rowCache = TrackRowCache{testLibrary.library()};
-    auto const projection = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, source, testLibrary.library());
+    auto const projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, source, testLibrary.library());
 
-    auto const model = TrackListModel::create(rowCache);
-    model->bindProjection(projection);
+    auto const modelPtr = TrackListModel::create(rowCache);
+    modelPtr->bindProjection(projectionPtr);
 
     auto spy = ModelSpy{};
-    model->signal_items_changed().connect(sigc::mem_fun(spy, &ModelSpy::onItemsChanged));
+    modelPtr->signal_items_changed().connect(sigc::mem_fun(spy, &ModelSpy::onItemsChanged));
 
     SECTION("Basic properties and size")
     {
-      CHECK(model->projection() == projection.get());
-      CHECK(model->indexOf(id1) == 0);
-      CHECK(model->indexOf(id2) == 1);
-      CHECK_FALSE(model->groupIndexForTrack(id1).has_value());
-      CHECK(model->get_n_items() == 2);
-      CHECK(model->get_item_type() != G_TYPE_INVALID);
+      CHECK(modelPtr->projection() == projectionPtr.get());
+      CHECK(modelPtr->indexOf(id1) == 0);
+      CHECK(modelPtr->indexOf(id2) == 1);
+      CHECK_FALSE(modelPtr->groupIndexForTrack(id1).has_value());
+      CHECK(modelPtr->get_n_items() == 2);
+      CHECK(modelPtr->get_item_type() != G_TYPE_INVALID);
 
-      auto const item = model->get_object(0);
-      REQUIRE(item != nullptr);
-      auto const castRow = std::dynamic_pointer_cast<TrackRowObject>(item);
-      REQUIRE(castRow);
-      CHECK(castRow->trackId() == id1);
-      CHECK(castRow->fieldText(rt::TrackField::Artist) == "Artist A");
+      auto const itemPtr = modelPtr->get_object(0);
+      REQUIRE(itemPtr != nullptr);
+      auto const castRowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
+      REQUIRE(castRowPtr);
+      CHECK(castRowPtr->trackId() == id1);
+      CHECK(castRowPtr->fieldText(rt::TrackField::Artist) == "Artist A");
     }
 
     SECTION("Playing state updates refresh model items")
     {
       CHECK(spy.events.empty());
-      model->setPlayingTrackId(id1);
+      modelPtr->setPlayingTrackId(id1);
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].position == 0);
@@ -225,7 +225,7 @@ namespace ao::gtk::test
       auto const id3 = testLibrary.addTrack(makeTrackSpec("Song C", "Artist C", "Album C", 2022));
       source.insert(id3, 0);
 
-      CHECK(model->get_n_items() == 3);
+      CHECK(modelPtr->get_n_items() == 3);
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].position == 2);
       CHECK(spy.events[0].removed == 0);
@@ -236,7 +236,7 @@ namespace ao::gtk::test
     {
       source.remove(id1);
 
-      CHECK(model->get_n_items() == 1);
+      CHECK(modelPtr->get_n_items() == 1);
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].position == 0);
       CHECK(spy.events[0].removed == 1);
@@ -265,9 +265,9 @@ namespace ao::gtk::test
 
     SECTION("Clearing and unbinding projection")
     {
-      model->clearProjection();
-      CHECK(model->projection() == nullptr);
-      CHECK(model->get_n_items() == 0);
+      modelPtr->clearProjection();
+      CHECK(modelPtr->projection() == nullptr);
+      CHECK(modelPtr->get_n_items() == 0);
     }
   }
 } // namespace ao::gtk::test

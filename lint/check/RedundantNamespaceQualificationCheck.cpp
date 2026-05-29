@@ -38,9 +38,9 @@ namespace clang::tidy::readability
 
       for (auto const& parent : parents)
       {
-        if (auto const* decl = parent.get<Decl>())
+        if (auto const* decl = parent.get<Decl>(); decl != nullptr)
         {
-          if (auto const* dc = dyn_cast<DeclContext>(decl))
+          if (auto const* dc = dyn_cast<DeclContext>(decl); dc != nullptr)
           {
             return dc;
           }
@@ -48,7 +48,7 @@ namespace clang::tidy::readability
           return decl->getDeclContext();
         }
 
-        if (auto const* dc = getEnclosingContext(context, parent))
+        if (auto const* dc = getEnclosingContext(context, parent); dc != nullptr)
         {
           return dc;
         }
@@ -93,7 +93,7 @@ namespace clang::tidy::readability
     auto specLoc = NestedNameSpecifierLoc{};
     auto node = DynTypedNode{};
 
-    if (auto const* declRef = result.Nodes.getNodeAs<DeclRefExpr>("declRef"))
+    if (auto const* declRef = result.Nodes.getNodeAs<DeclRefExpr>("declRef"); declRef != nullptr)
     {
       if (!declRef->hasQualifier())
       {
@@ -103,7 +103,7 @@ namespace clang::tidy::readability
       specLoc = declRef->getQualifierLoc();
       node = DynTypedNode::create(*declRef);
     }
-    else if (auto const* typeLoc = result.Nodes.getNodeAs<ElaboratedTypeLoc>("elaboratedTypeLoc"))
+    else if (auto const* typeLoc = result.Nodes.getNodeAs<ElaboratedTypeLoc>("elaboratedTypeLoc"); typeLoc != nullptr)
     {
       auto const* contextTypeLoc = result.Nodes.getNodeAs<TypeLoc>("typeLoc");
 

@@ -43,7 +43,7 @@ namespace ao::uimodel::track::test
     };
   }
 
-  TEST_CASE("TrackFilterViewModel - initial state", "[unit][uimodel][track]")
+  TEST_CASE("TrackFilterViewModel - initial state and filter interactions", "[unit][uimodel][track]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = NullExecutor{};

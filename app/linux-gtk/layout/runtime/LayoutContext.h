@@ -66,7 +66,7 @@ namespace ao::gtk::layout
 
   struct ShellUiContext final
   {
-    Glib::RefPtr<Gio::MenuModel> menuModel;
+    Glib::RefPtr<Gio::MenuModel> menuModelPtr;
   };
 
   struct PortalContext final

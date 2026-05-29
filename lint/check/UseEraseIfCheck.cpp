@@ -51,11 +51,11 @@ namespace clang::tidy::readability
 
       while (true)
       {
-        if (auto const* ice = dyn_cast<ImplicitCastExpr>(current))
+        if (auto const* ice = dyn_cast<ImplicitCastExpr>(current); ice != nullptr)
         {
           current = ice->getSubExpr();
         }
-        else if (auto const* cce = dyn_cast<CXXConstructExpr>(current))
+        else if (auto const* cce = dyn_cast<CXXConstructExpr>(current); cce != nullptr)
         {
           if (cce->getNumArgs() == 1)
           {
@@ -66,7 +66,7 @@ namespace clang::tidy::readability
             break;
           }
         }
-        else if (auto const* mte = dyn_cast<MaterializeTemporaryExpr>(current))
+        else if (auto const* mte = dyn_cast<MaterializeTemporaryExpr>(current); mte != nullptr)
         {
           current = mte->getSubExpr();
         }

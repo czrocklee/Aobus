@@ -91,7 +91,7 @@ namespace ao::library
           item.classification = ScanClassification::Error;
           item.errorMessage = entryEc.message();
         }
-        else if (auto const optView = manifestReader.get(uri))
+        else if (auto const optView = manifestReader.get(uri); optView)
         {
           item.trackId = optView->trackId();
 

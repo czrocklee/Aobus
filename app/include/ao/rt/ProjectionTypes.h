@@ -86,7 +86,7 @@ namespace ao::rt
   struct TrackListProjectionChanged final
   {
     ViewId viewId{};
-    std::shared_ptr<ITrackListProjection> projection{};
+    std::shared_ptr<ITrackListProjection> projectionPtr{};
     std::uint64_t revision = 0;
   };
 

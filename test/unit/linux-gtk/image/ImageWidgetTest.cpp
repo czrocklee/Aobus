@@ -11,12 +11,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <utility>
 
 namespace ao::gtk::test
 {
   TEST_CASE("ImageWidget - basic functionality", "[gtk][image]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto imageCache = ImageCache{200};
@@ -30,16 +31,17 @@ namespace ao::gtk::test
 
     SECTION("bind to projection updates image")
     {
-      auto mockProj = std::make_shared<ManualTrackDetailMock>();
+      auto mockProjPtr = std::make_unique<ManualTrackDetailMock>();
+      auto* mockRawPtr = mockProjPtr.get();
 
       auto snapshot = rt::TrackDetailSnapshot{};
       snapshot.selectionKind = rt::SelectionKind::Single;
       snapshot.trackIds = {TrackId{1}};
       snapshot.singleCoverArtId = ResourceId{123};
 
-      widget.bindToDetailProjection(mockProj);
+      widget.bindToDetailProjection(std::move(mockProjPtr));
 
-      mockProj->emit(snapshot);
+      mockRawPtr->emit(snapshot);
       drainGtkEvents();
 
       // Since we don't have a real resource with ID 123, it won't actually load an image,

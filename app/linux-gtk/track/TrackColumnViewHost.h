@@ -25,7 +25,7 @@ namespace ao::gtk
   public:
     using FactoryProvider = TrackColumnController::FactoryProvider;
 
-    TrackColumnViewHost(Glib::RefPtr<TrackListModel> model,
+    TrackColumnViewHost(Glib::RefPtr<TrackListModel> modelPtr,
                         TrackPresentationStore& presentationStore,
                         Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                         ListId listId);
@@ -37,11 +37,11 @@ namespace ao::gtk
     TrackColumnViewHost(TrackColumnViewHost&&) = delete;
     TrackColumnViewHost& operator=(TrackColumnViewHost&&) = delete;
 
-    Gtk::ColumnView& columnView() { return *_columnView; }
-    Gtk::ColumnView const& columnView() const { return *_columnView; }
+    Gtk::ColumnView& columnView() { return *_columnViewPtr; }
+    Gtk::ColumnView const& columnView() const { return *_columnViewPtr; }
 
-    TrackColumnController& columnController() { return *_columnController; }
-    TrackSelectionController& selectionController() { return *_selectionController; }
+    TrackColumnController& columnController() { return *_columnControllerPtr; }
+    TrackSelectionController& selectionController() { return *_selectionControllerPtr; }
 
     Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const;
 
@@ -59,7 +59,7 @@ namespace ao::gtk
 
     // Build a new ColumnView generation off-tree and return it.
     // The old generation is retired. Caller swaps the scrolled-window child.
-    Gtk::ColumnView& rebuild(Glib::RefPtr<TrackListModel> model,
+    Gtk::ColumnView& rebuild(Glib::RefPtr<TrackListModel> modelPtr,
                              TrackPresentationStore& presentationStore,
                              Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                              FactoryProvider const& factoryProvider,
@@ -68,9 +68,9 @@ namespace ao::gtk
   private:
     void connectSelectionSignals();
 
-    std::unique_ptr<Gtk::ColumnView> _columnView;
-    std::unique_ptr<TrackColumnController> _columnController;
-    std::unique_ptr<TrackSelectionController> _selectionController;
+    std::unique_ptr<Gtk::ColumnView> _columnViewPtr;
+    std::unique_ptr<TrackColumnController> _columnControllerPtr;
+    std::unique_ptr<TrackSelectionController> _selectionControllerPtr;
 
     // Internal forwarding connections - must be scoped to prevent dangling pointers
     sigc::scoped_connection _selectionChangedConn;

@@ -147,8 +147,10 @@ namespace ao::gtk
   void SmartListDialog::setupUi()
   {
     constexpr std::int32_t kBoxSpacing = 12;
+    constexpr std::int32_t kDefaultWidth = 850;
+    constexpr std::int32_t kDefaultHeight = 600;
 
-    set_default_size(850, 600);
+    set_default_size(kDefaultWidth, kDefaultHeight);
 
     // Setup Actions in HeaderBar
     _cancelButton = addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
@@ -244,16 +246,16 @@ namespace ao::gtk
 
   void SmartListDialog::setupPreview()
   {
-    _previewEngine = std::make_unique<rt::SmartListEvaluator>(_runtime.musicLibrary());
+    _previewEnginePtr = std::make_unique<rt::SmartListEvaluator>(_runtime.musicLibrary());
     setupPreviewColumns();
     rebuildPreviewSource();
   }
 
   void SmartListDialog::setupPreviewColumns()
   {
-    auto factory = Gtk::SignalListItemFactory::create();
+    auto factoryPtr = Gtk::SignalListItemFactory::create();
 
-    factory->signal_setup().connect(
+    factoryPtr->signal_setup().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
         auto* const label = Gtk::make_managed<Gtk::Label>("");
@@ -262,17 +264,17 @@ namespace ao::gtk
         listItem->set_child(*label);
       });
 
-    factory->signal_bind().connect(
+    factoryPtr->signal_bind().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
-        auto const item = listItem->get_item();
-        auto row = std::dynamic_pointer_cast<TrackRowObject>(item);
+        auto const itemPtr = listItem->get_item();
+        auto rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
 
-        if (auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child()); row && label)
+        if (auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child()); rowPtr && label)
         {
-          auto const* title = row->stringField(rt::TrackField::Title);
-          auto const* artist = row->stringField(rt::TrackField::Artist);
-          auto const* album = row->stringField(rt::TrackField::Album);
+          auto const* title = rowPtr->stringField(rt::TrackField::Title);
+          auto const* artist = rowPtr->stringField(rt::TrackField::Artist);
+          auto const* album = rowPtr->stringField(rt::TrackField::Album);
           auto formatted = std::string{"(untitled)"};
 
           if (title != nullptr && !title->empty())
@@ -303,10 +305,10 @@ namespace ao::gtk
         }
       });
 
-    auto column = Gtk::ColumnViewColumn::create("Track", factory);
-    column->set_expand(true);
-    column->set_resizable(true);
-    _previewColumnView.append_column(column);
+    auto columnPtr = Gtk::ColumnViewColumn::create("Track", factoryPtr);
+    columnPtr->set_expand(true);
+    columnPtr->set_resizable(true);
+    _previewColumnView.append_column(columnPtr);
   }
 
   void SmartListDialog::rebuildPreviewSource()
@@ -315,25 +317,25 @@ namespace ao::gtk
     _rebuildConnection = Glib::signal_idle().connect(
       [this]
       {
-        auto emptySelection = Glib::RefPtr<Gtk::SelectionModel>{};
-        _previewColumnView.set_model(emptySelection);
+        auto emptySelectionPtr = Glib::RefPtr<Gtk::SelectionModel>{};
+        _previewColumnView.set_model(emptySelectionPtr);
 
-        _previewFilteredList.reset();
-        _previewModel.reset();
+        _previewFilteredListPtr.reset();
+        _previewModelPtr.reset();
 
         auto& parentSource = _runtime.sources().sourceFor(_parentListId);
 
-        _previewFilteredList =
-          std::make_unique<rt::SmartListSource>(parentSource, _runtime.musicLibrary(), *_previewEngine);
+        _previewFilteredListPtr =
+          std::make_unique<rt::SmartListSource>(parentSource, _runtime.musicLibrary(), *_previewEnginePtr);
 
-        auto proj =
-          std::make_shared<rt::TrackListProjection>(rt::kInvalidViewId, *_previewFilteredList, _runtime.musicLibrary());
+        auto projPtr = std::make_shared<rt::TrackListProjection>(
+          rt::kInvalidViewId, *_previewFilteredListPtr, _runtime.musicLibrary());
 
-        _previewModel = TrackListModel::create(_trackRowCache);
-        _previewModel->bindProjection(std::move(proj));
+        _previewModelPtr = TrackListModel::create(_trackRowCache);
+        _previewModelPtr->bindProjection(std::move(projPtr));
 
-        auto selectionModel = Gtk::SingleSelection::create(_previewModel);
-        _previewColumnView.set_model(selectionModel);
+        auto selectionModelPtr = Gtk::SingleSelection::create(_previewModelPtr);
+        _previewColumnView.set_model(selectionModelPtr);
 
         updateSourceLabels();
         updateDialogState();
@@ -383,7 +385,7 @@ namespace ao::gtk
         return SmartListStatus::InvalidExpression;
       }
 
-      if (!_previewFilteredList)
+      if (!_previewFilteredListPtr)
       {
         return SmartListStatus::EmptySource;
       }
@@ -398,7 +400,7 @@ namespace ao::gtk
   {
     updateSourceLabels();
 
-    if (!_previewFilteredList)
+    if (!_previewFilteredListPtr)
     {
       _expressionValid = false;
       _previewScrolledWindow.set_visible(false);
@@ -409,13 +411,13 @@ namespace ao::gtk
     auto const expr = std::string{_exprBox.entry().get_text()};
     auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
 
-    _previewFilteredList->setExpression(expr);
-    _previewFilteredList->reload();
+    _previewFilteredListPtr->setExpression(expr);
+    _previewFilteredListPtr->reload();
 
-    auto const hasError = _previewFilteredList->hasError();
-    auto const optError = _previewFilteredList->error();
+    auto const hasError = _previewFilteredListPtr->hasError();
+    auto const optError = _previewFilteredListPtr->error();
     auto const errorMessage = optError ? optError->message : std::string{};
-    auto const matchCount = _previewFilteredList->size();
+    auto const matchCount = _previewFilteredListPtr->size();
 
     auto const status =
       hasError ? ao::uimodel::list::SmartListStatus::InvalidExpression : ao::uimodel::list::SmartListStatus::Valid;

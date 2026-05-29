@@ -65,32 +65,34 @@ namespace
     return {.musicRoot = emptyPath, .databasePath = emptyPath / ".aobus" / "library"};
   }
 
-  Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app, LibraryPaths paths, std::shared_ptr<AppConfig> appConfig)
+  Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app,
+                                        LibraryPaths paths,
+                                        std::shared_ptr<AppConfig> appConfigPtr)
   {
-    auto executor = std::make_unique<GtkControlExecutor>();
+    auto executorPtr = std::make_unique<GtkControlExecutor>();
 
     auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
-    auto workspaceConfigStore = std::make_shared<rt::ConfigStore>(workspaceConfigPath);
+    auto workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspaceConfigPath);
 
-    auto appRuntime =
-      std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{.executor = std::move(executor),
-                                                                  .musicRoot = paths.musicRoot,
-                                                                  .databasePath = paths.databasePath,
-                                                                  .workspaceConfigStore = workspaceConfigStore});
+    auto appRuntimePtr =
+      std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
+                                                                   .musicRoot = paths.musicRoot,
+                                                                   .databasePath = paths.databasePath,
+                                                                   .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr)});
 
-    auto window = Glib::make_refptr_for_instance<MainWindow>(new MainWindow{*appRuntime, appConfig});
+    auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(new MainWindow{*appRuntimePtr, appConfigPtr});
 
     // Store AppRuntime alongside window (lifetime tied to window via pointer)
-    window->set_data("app-runtime",
-                     new std::unique_ptr<rt::AppRuntime>{std::move(appRuntime)},
-                     [](void* data) { delete static_cast<std::unique_ptr<rt::AppRuntime>*>(data); });
+    windowPtr->set_data("app-runtime",
+                        new std::unique_ptr<rt::AppRuntime>{std::move(appRuntimePtr)},
+                        [](void* data) { delete static_cast<std::unique_ptr<rt::AppRuntime>*>(data); });
 
-    window->initializeSession();
+    windowPtr->initializeSession();
 
-    app.add_window(*window);
-    window->present();
+    app.add_window(*windowPtr);
+    windowPtr->present();
 
-    return window;
+    return windowPtr;
   }
 
   struct CliOptions final
@@ -161,12 +163,12 @@ namespace
   void handleOpenNewLibrary(std::filesystem::path const& path,
                             Glib::RefPtr<Gtk::Application> const& app,
                             std::vector<Glib::RefPtr<MainWindow>>& windows,
-                            std::shared_ptr<AppConfig> appConfig)
+                            std::shared_ptr<AppConfig> appConfigPtr)
   {
     if (std::filesystem::is_directory(path))
     {
       windows.push_back(
-        createWindow(*app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}, appConfig));
+        createWindow(*app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}, appConfigPtr));
     }
   }
 
@@ -199,8 +201,8 @@ namespace
 
   void addAppActions(Glib::RefPtr<Gtk::Application>& app)
   {
-    auto const aboutAction = Gio::SimpleAction::create("about");
-    aboutAction->signal_activate().connect(
+    auto const aboutActionPtr = Gio::SimpleAction::create("about");
+    aboutActionPtr->signal_activate().connect(
       [&app](Glib::VariantBase const& /*variant*/)
       {
         auto dialog = Gtk::AboutDialog{};
@@ -216,11 +218,11 @@ namespace
 
         dialog.present();
       });
-    app->add_action(aboutAction);
+    app->add_action(aboutActionPtr);
 
-    auto const quitAction = Gio::SimpleAction::create("quit");
-    quitAction->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
-    app->add_action(quitAction);
+    auto const quitActionPtr = Gio::SimpleAction::create("quit");
+    quitActionPtr->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
+    app->add_action(quitActionPtr);
 
     // Global layout action shortcuts (exported to the window ActionMap, so they use the 'win.' prefix)
     app->set_accels_for_action("win.playback.playPause", {"<Primary>p", "space", "AudioPlay", "AudioPause"});
@@ -237,17 +239,17 @@ namespace
     StyleManager::instance().initialize();
 
     auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-    auto appConfig = std::make_shared<AppConfig>(globalConfigPath);
+    auto appConfigPtr = std::make_shared<AppConfig>(globalConfigPath);
 
-    auto paths = resolveLibraryPaths(*appConfig);
+    auto paths = resolveLibraryPaths(*appConfigPtr);
 
-    auto window = createWindow(*app, std::move(paths), appConfig);
+    auto windowPtr = createWindow(*app, std::move(paths), appConfigPtr);
 
-    window->importExportCoordinator().callbacks().onOpenNewLibrary =
-      [&app, &windows, appConfig](std::filesystem::path const& path)
-    { handleOpenNewLibrary(path, app, windows, appConfig); };
+    windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary =
+      [&app, &windows, appConfigPtr](std::filesystem::path const& path)
+    { handleOpenNewLibrary(path, app, windows, appConfigPtr); };
 
-    windows.push_back(std::move(window));
+    windows.push_back(std::move(windowPtr));
   }
 
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
@@ -299,23 +301,23 @@ int main(int argc, char* argv[])
 
     Glib::set_application_name("Aobus");
 
-    auto app = Gtk::Application::create("org.aobus.app");
+    auto appPtr = Gtk::Application::create("org.aobus.app");
 
-    setupUnixSignalHandlers(app);
+    setupUnixSignalHandlers(appPtr);
 
-    addAppActions(app);
+    addAppActions(appPtr);
 
     auto windows = std::vector<Glib::RefPtr<MainWindow>>{};
 
-    app->signal_activate().connect([&app, &windows] { onAppActivate(app, windows); });
+    appPtr->signal_activate().connect([&appPtr, &windows] { onAppActivate(appPtr, windows); });
 
     auto gtkArgv = buildGtkArgv(argc, argv);
     std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArgv.size());
 
     APP_LOG_INFO("Entering GTK main loop");
-    exitCode = app->run(gtkArgc, gtkArgv.data());
+    exitCode = appPtr->run(gtkArgc, gtkArgv.data());
 
-    releaseWindows(*app, windows);
+    releaseWindows(*appPtr, windows);
   }
   catch (ao::Exception const& e)
   {

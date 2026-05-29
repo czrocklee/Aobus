@@ -60,12 +60,12 @@ namespace ao::audio
     }
   } // namespace
 
-  StreamingSource::StreamingSource(std::unique_ptr<IDecoderSession> decoder,
+  StreamingSource::StreamingSource(std::unique_ptr<IDecoderSession> decoderPtr,
                                    DecodedStreamInfo streamInfo,
                                    std::function<void(Error const&)> onError,
                                    std::uint32_t prerollTargetMs,
                                    std::uint32_t decodeHighWatermarkMs)
-    : _decoder{std::move(decoder)}
+    : _decoderPtr{std::move(decoderPtr)}
     , _streamInfo{streamInfo}
     , _onError{std::move(onError)}
     , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
@@ -132,7 +132,7 @@ namespace ao::audio
     {
       auto lock = std::scoped_lock{_decoderMutex};
 
-      if (auto const seekResult = _decoder->seek(positionMs); !seekResult)
+      if (auto const seekResult = _decoderPtr->seek(positionMs); !seekResult)
       {
         if (!_failed.exchange(true, std::memory_order_relaxed))
         {
@@ -271,7 +271,7 @@ namespace ao::audio
         return false;
       }
 
-      auto const blockResult = _decoder->readNextBlock();
+      auto const blockResult = _decoderPtr->readNextBlock();
 
       if (!blockResult)
       {

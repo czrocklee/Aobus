@@ -34,12 +34,12 @@ namespace ao::log
 
     static bool isInitialized();
 
-    static std::shared_ptr<spdlog::logger> const& appLogger() noexcept { return _appLogger; }
-    static std::shared_ptr<spdlog::logger> const& audioLogger() noexcept { return _audioLogger; }
+    static std::shared_ptr<spdlog::logger> const& appLogger() noexcept { return _appLoggerPtr; }
+    static std::shared_ptr<spdlog::logger> const& audioLogger() noexcept { return _audioLoggerPtr; }
 
   private:
-    static std::shared_ptr<spdlog::logger> _appLogger;
-    static std::shared_ptr<spdlog::logger> _audioLogger;
+    static std::shared_ptr<spdlog::logger> _appLoggerPtr;
+    static std::shared_ptr<spdlog::logger> _audioLoggerPtr;
     static bool _initialized;
     static std::mutex _lifecycleMutex;
   };

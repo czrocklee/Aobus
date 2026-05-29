@@ -106,7 +106,7 @@ namespace ao::rt::test
       TestMusicLibrary lib;
       MutableTrackSource source;
       SmartListEvaluator engine;
-      std::unique_ptr<SmartListSource> filtered;
+      std::unique_ptr<SmartListSource> filteredPtr;
 
       TestEnv()
         : engine{lib.library()}
@@ -115,7 +115,7 @@ namespace ao::rt::test
 
       TrackListProjection createProjection(ViewId viewId)
       {
-        return TrackListProjection{viewId, *filtered, lib.library()};
+        return TrackListProjection{viewId, *filteredPtr, lib.library()};
       }
 
       void setupFiltered(std::span<TrackId const> ids)
@@ -125,8 +125,8 @@ namespace ao::rt::test
           source.addInitial(id);
         }
 
-        filtered = std::make_unique<SmartListSource>(source, lib.library(), engine);
-        filtered->reload();
+        filteredPtr = std::make_unique<SmartListSource>(source, lib.library(), engine);
+        filteredPtr->reload();
       }
     };
   }
@@ -1198,8 +1198,8 @@ namespace ao::rt::test
 
     SECTION("Destructor coverage")
     {
-      auto proj2 = std::make_unique<TrackListProjection>(ViewId{2}, env.source, env.lib.library());
-      proj2.reset();
+      auto proj2Ptr = std::make_unique<TrackListProjection>(ViewId{2}, env.source, env.lib.library());
+      proj2Ptr.reset();
     }
   }
 

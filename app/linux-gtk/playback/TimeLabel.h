@@ -41,7 +41,7 @@ namespace ao::gtk
     Mode _mode;
     Gtk::Label _label;
     uimodel::playback::PlaybackPositionInterpolator _interpolator;
-    std::unique_ptr<uimodel::playback::PlaybackTimeViewModel> _controller;
+    std::unique_ptr<uimodel::playback::PlaybackTimeViewModel> _controllerPtr;
 
     bool _isPreviewing = false;
     std::uint32_t _lastPosSec = 0;

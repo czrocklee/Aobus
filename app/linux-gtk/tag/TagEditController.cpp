@@ -48,14 +48,14 @@ namespace ao::gtk
 
   TagEditController::~TagEditController()
   {
-    if (_contextPopover)
+    if (_contextPopoverPtr)
     {
-      _contextPopover->unparent();
+      _contextPopoverPtr->unparent();
     }
 
-    if (_tagPopover)
+    if (_tagPopoverPtr)
     {
-      _tagPopover->unparent();
+      _tagPopoverPtr->unparent();
     }
   }
 
@@ -68,27 +68,27 @@ namespace ao::gtk
   {
     auto const stringType = Glib::VariantType{"s"};
 
-    _trackTagAddAction = Gio::SimpleAction::create("track-tag-add", stringType);
-    _trackTagAddAction->signal_activate().connect(
+    _trackTagAddActionPtr = Gio::SimpleAction::create("track-tag-add", stringType);
+    _trackTagAddActionPtr->signal_activate().connect(
       [this](Glib::VariantBase const& parameter)
       { addTagToCurrentSelection(Glib::VariantBase::cast_dynamic<Glib::Variant<std::string>>(parameter).get()); });
 
-    _trackTagRemoveAction = Gio::SimpleAction::create("track-tag-remove", stringType);
-    _trackTagRemoveAction->signal_activate().connect(
+    _trackTagRemoveActionPtr = Gio::SimpleAction::create("track-tag-remove", stringType);
+    _trackTagRemoveActionPtr->signal_activate().connect(
       [this](Glib::VariantBase const& parameter)
       { removeTagFromCurrentSelection(Glib::VariantBase::cast_dynamic<Glib::Variant<std::string>>(parameter).get()); });
   }
 
   void TagEditController::addActionsTo(Gio::ActionMap& actionMap)
   {
-    if (_trackTagAddAction)
+    if (_trackTagAddActionPtr)
     {
-      actionMap.add_action(_trackTagAddAction);
+      actionMap.add_action(_trackTagAddActionPtr);
     }
 
-    if (_trackTagRemoveAction)
+    if (_trackTagRemoveActionPtr)
     {
-      actionMap.add_action(_trackTagRemoveAction);
+      actionMap.add_action(_trackTagRemoveActionPtr);
     }
   }
 
@@ -104,8 +104,8 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
 
-    _contextPopover = std::make_unique<Gtk::Popover>();
-    _contextPopover->add_css_class("ao-context-menu");
+    _contextPopoverPtr = std::make_unique<Gtk::Popover>();
+    _contextPopoverPtr->add_css_class("ao-context-menu");
 
     auto* const menuBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContextMenuButtonSpacing);
     menuBox->set_margin_start(2);
@@ -119,7 +119,7 @@ namespace ao::gtk
     tagsButton->signal_clicked().connect(
       [this, &page, posX, posY]
       {
-        _contextPopover->popdown();
+        _contextPopoverPtr->popdown();
         showTagsPopover(page, posX, posY);
       });
     menuBox->append(*tagsButton);
@@ -130,17 +130,17 @@ namespace ao::gtk
     propertiesButton->signal_clicked().connect(
       [this]
       {
-        _contextPopover->popdown();
+        _contextPopoverPtr->popdown();
         showPropertiesDialog();
       });
     menuBox->append(*propertiesButton);
 
-    _contextPopover->set_child(*menuBox);
-    _contextPopover->set_parent(page);
+    _contextPopoverPtr->set_child(*menuBox);
+    _contextPopoverPtr->set_parent(page);
 
     auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY), 1, 1};
-    _contextPopover->set_pointing_to(rect);
-    _contextPopover->popup();
+    _contextPopoverPtr->set_pointing_to(rect);
+    _contextPopoverPtr->popup();
   }
 
   void TagEditController::showTagsPopover(TrackViewPage& page, double posX, double posY)
@@ -150,13 +150,13 @@ namespace ao::gtk
       return;
     }
 
-    _tagPopover = std::make_unique<TagPopover>(_runtime.musicLibrary(), _optActiveSelection->selectedIds);
+    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.musicLibrary(), _optActiveSelection->selectedIds);
 
-    _tagPopover->signalTagsChanged().connect(
+    _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
-    page.showTagPopover(*_tagPopover, posX, posY);
+    page.showTagPopover(*_tagPopoverPtr, posX, posY);
   }
 
   void TagEditController::showPropertiesDialog()
@@ -180,14 +180,14 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
 
-    _tagPopover = std::make_unique<TagPopover>(_runtime.musicLibrary(), selection.selectedIds);
+    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.musicLibrary(), selection.selectedIds);
 
-    _tagPopover->signalTagsChanged().connect(
+    _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
-    _tagPopover->set_parent(relativeTo);
-    _tagPopover->popup();
+    _tagPopoverPtr->set_parent(relativeTo);
+    _tagPopoverPtr->popup();
   }
 
   void TagEditController::addTagToCurrentSelection(std::string tag)

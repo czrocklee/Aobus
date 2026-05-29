@@ -128,7 +128,7 @@ namespace ao::gtk
 
     TrackFieldEditValue readStringEditValue(TrackRowObject const& row, rt::TrackField field)
     {
-      if (auto const* stringPtr = row.stringField(field); stringPtr)
+      if (auto const* stringPtr = row.stringField(field); stringPtr != nullptr)
       {
         return TrackFieldEditValue{std::in_place_type<std::string>, std::string{stringPtr->raw()}};
       }
@@ -138,7 +138,7 @@ namespace ao::gtk
 
     bool applyStringEditValue(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField field)
     {
-      if (auto const* str = std::get_if<std::string>(&value); str)
+      if (auto const* str = std::get_if<std::string>(&value); str != nullptr)
       {
         return row.setStringField(field, *str);
       }
@@ -155,7 +155,7 @@ namespace ao::gtk
     template<auto Setter>
     bool applyUint16Field(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField /*field*/)
     {
-      if (auto const* val = std::get_if<std::uint16_t>(&value); val)
+      if (auto const* val = std::get_if<std::uint16_t>(&value); val != nullptr)
       {
         (row.*Setter)(*val);
         return true;
@@ -321,7 +321,7 @@ namespace ao::gtk
 
     std::string formatDurationValue(TrackFieldRawValue const& raw)
     {
-      if (auto const* dur = std::get_if<Duration>(&raw); dur)
+      if (auto const* dur = std::get_if<Duration>(&raw); dur != nullptr)
       {
         return formatDuration(*dur);
       }
@@ -363,7 +363,7 @@ namespace ao::gtk
 
     void writeStrPatch(TrackFieldEditContext const& ctx, std::optional<std::string>& optTarget)
     {
-      if (auto const* str = std::get_if<std::string>(&ctx.value); str)
+      if (auto const* str = std::get_if<std::string>(&ctx.value); str != nullptr)
       {
         optTarget = *str;
       }
@@ -371,7 +371,7 @@ namespace ao::gtk
 
     void writeUint16Patch(TrackFieldEditContext const& ctx, std::optional<std::uint16_t>& optTarget)
     {
-      if (auto const* val = std::get_if<std::uint16_t>(&ctx.value); val)
+      if (auto const* val = std::get_if<std::uint16_t>(&ctx.value); val != nullptr)
       {
         optTarget = *val;
       }
@@ -456,7 +456,7 @@ namespace ao::gtk
     // fmt helpers for conciseness
     auto const readStr = +[](TrackFieldRawValue const& raw) -> std::string
     {
-      if (auto const* str = std::get_if<std::string>(&raw))
+      if (auto const* str = std::get_if<std::string>(&raw); str != nullptr)
       {
         return *str;
       }
@@ -466,7 +466,7 @@ namespace ao::gtk
 
     auto const readUint16 = +[](TrackFieldRawValue const& raw) -> std::string
     {
-      if (auto const* val = std::get_if<std::uint16_t>(&raw))
+      if (auto const* val = std::get_if<std::uint16_t>(&raw); val != nullptr)
       {
         return formatUint16(*val);
       }
@@ -703,7 +703,7 @@ namespace ao::gtk
           { return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().sampleRate()}; },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
-            if (auto const* val = std::get_if<std::uint32_t>(&raw); val)
+            if (auto const* val = std::get_if<std::uint32_t>(&raw); val != nullptr)
             {
               return formatSampleRate(*val);
             }
@@ -724,7 +724,7 @@ namespace ao::gtk
           },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
-            if (auto const* val = std::get_if<std::uint32_t>(&raw); val)
+            if (auto const* val = std::get_if<std::uint32_t>(&raw); val != nullptr)
             {
               return formatChannels(static_cast<std::uint8_t>(*val));
             }
@@ -745,7 +745,7 @@ namespace ao::gtk
           },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
-            if (auto const* val = std::get_if<std::uint32_t>(&raw); val)
+            if (auto const* val = std::get_if<std::uint32_t>(&raw); val != nullptr)
             {
               return formatBitDepth(static_cast<std::uint8_t>(*val));
             }
@@ -763,7 +763,7 @@ namespace ao::gtk
           { return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().bitrate()}; },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
-            if (auto const* val = std::get_if<std::uint32_t>(&raw); val)
+            if (auto const* val = std::get_if<std::uint32_t>(&raw); val != nullptr)
             {
               return formatBitrate(*val);
             }
@@ -791,7 +791,7 @@ namespace ao::gtk
           },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
-            if (auto const* val = std::get_if<std::uint64_t>(&raw); val)
+            if (auto const* val = std::get_if<std::uint64_t>(&raw); val != nullptr)
             {
               return formatFileSize(*val);
             }
@@ -819,7 +819,7 @@ namespace ao::gtk
           },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
-            if (auto const* val = std::get_if<std::uint64_t>(&raw); val)
+            if (auto const* val = std::get_if<std::uint64_t>(&raw); val != nullptr)
             {
               return formatTime(*val);
             }

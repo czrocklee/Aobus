@@ -52,7 +52,7 @@ namespace ao::gtk
     Actions _actions;
     Gtk::Button _button;
     AobusSoul _soul;
-    std::unique_ptr<uimodel::playback::AobusSoulViewModel> _soulController{};
+    std::unique_ptr<uimodel::playback::AobusSoulViewModel> _soulControllerPtr{};
     bool _longPressHandled = false;
   };
 } // namespace ao::gtk

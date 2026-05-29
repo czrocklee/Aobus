@@ -141,7 +141,7 @@ namespace ao::lmdb
 
     void next();
 
-    Reader::CursorPtr _cursor;
+    Reader::CursorPtr _cursorPtr;
     Reader::Value _value;
 
     friend class Reader;
@@ -194,7 +194,7 @@ namespace ao::lmdb
 
     ::MDB_dbi _dbi;
     WriteTransaction* _txn;
-    Reader::CursorPtr _cursor;
+    Reader::CursorPtr _cursorPtr;
     std::uint32_t _lastId = 0; // Start from 1 (0 = null, so first append returns 1)
     KeyKind _kind;
 

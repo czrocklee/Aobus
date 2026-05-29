@@ -16,7 +16,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TagEditController - smoke test", "[gtk][tag][controller]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
 
@@ -26,14 +26,14 @@ namespace ao::gtk::test
 
     SECTION("setup and addActionsTo does not crash")
     {
-      auto group = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*group);
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*groupPtr);
 
-      auto addAction = std::dynamic_pointer_cast<Gio::SimpleAction>(group->lookup_action("track-tag-add"));
-      REQUIRE(addAction);
+      auto addActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(groupPtr->lookup_action("track-tag-add"));
+      REQUIRE(addActionPtr);
 
       // We don't have an active selection here, so it will return early without crashing.
-      addAction->activate(Glib::Variant<Glib::ustring>::create("ActionTag"));
+      addActionPtr->activate(Glib::Variant<Glib::ustring>::create("ActionTag"));
       drainGtkEvents();
     }
   }

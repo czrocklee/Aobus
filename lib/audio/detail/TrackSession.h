@@ -30,12 +30,12 @@ namespace ao::audio::detail
 
     struct Result
     {
-      std::shared_ptr<ISource> source = nullptr;
+      std::shared_ptr<ISource> sourcePtr = nullptr;
       Format backendFormat{};
       DecodedStreamInfo info{};
       Error error{};
 
-      explicit operator bool() const noexcept { return source != nullptr; }
+      explicit operator bool() const noexcept { return sourcePtr != nullptr; }
     };
 
     /**
@@ -59,7 +59,7 @@ namespace ao::audio::detail
                                 DecoderFactoryFn const& decoderFactory,
                                 std::string& errorMsg);
 
-    static std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoder,
+    static std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
                                                     DecodedStreamInfo const& info,
                                                     OnSourceErrorFn onSourceError,
                                                     std::string& errorMsg);

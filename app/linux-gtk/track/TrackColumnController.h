@@ -53,13 +53,13 @@ namespace ao::gtk
     void syncLayout(std::span<rt::TrackField const> visibleFields);
 
     // Exposed for TrackViewPage to connect / manage
-    Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const noexcept { return _dynamicCssProvider; }
+    Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const noexcept { return _dynamicCssProviderPtr; }
 
   private:
     struct ColumnBinding final
     {
       rt::TrackField field = rt::TrackField::Title;
-      Glib::RefPtr<Gtk::ColumnViewColumn> column;
+      Glib::RefPtr<Gtk::ColumnViewColumn> columnPtr;
       std::int32_t defaultWidth = -1;
     };
 
@@ -85,7 +85,7 @@ namespace ao::gtk
     sigc::scoped_connection _layoutChangedConnection;
     bool _syncingColumnLayout = false;
     bool _capturingColumnLayout = false;
-    Glib::RefPtr<Gtk::CssProvider> _dynamicCssProvider;
+    Glib::RefPtr<Gtk::CssProvider> _dynamicCssProviderPtr;
     std::string _lastTitleCss;
     std::vector<sigc::scoped_connection> _columnNotifyConnections;
   };

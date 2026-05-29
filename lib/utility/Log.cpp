@@ -31,14 +31,14 @@ namespace ao::log
 
     std::shared_ptr<spdlog::logger> makeNullLogger(std::string const& name)
     {
-      auto logger = std::make_shared<spdlog::logger>(name, std::make_shared<spdlog::sinks::null_sink_mt>());
-      logger->set_level(spdlog::level::off);
-      return logger;
+      auto loggerPtr = std::make_shared<spdlog::logger>(name, std::make_shared<spdlog::sinks::null_sink_mt>());
+      loggerPtr->set_level(spdlog::level::off);
+      return loggerPtr;
     }
   }
 
-  std::shared_ptr<spdlog::logger> Log::_appLogger = makeNullLogger("app");
-  std::shared_ptr<spdlog::logger> Log::_audioLogger = makeNullLogger("audio");
+  std::shared_ptr<spdlog::logger> Log::_appLoggerPtr = makeNullLogger("app");
+  std::shared_ptr<spdlog::logger> Log::_audioLoggerPtr = makeNullLogger("audio");
   bool Log::_initialized = false;
   std::mutex Log::_lifecycleMutex;
 
@@ -61,16 +61,16 @@ namespace ao::log
     auto const spdLevel = static_cast<spdlog::level::level_enum>(level);
 
     // Setup sinks
-    auto const consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    consoleSink->set_pattern("%^[%T] %n: %v%$");
-    consoleSink->set_level(spdLevel);
+    auto const consoleSinkPtr = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    consoleSinkPtr->set_pattern("%^[%T] %n: %v%$");
+    consoleSinkPtr->set_level(spdLevel);
 
-    auto const fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+    auto const fileSinkPtr = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
       logPath.string(), kRotatingLogMaxSize, kRotatingLogMaxFiles);
-    fileSink->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
-    fileSink->set_level(spdlog::level::trace);
+    fileSinkPtr->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
+    fileSinkPtr->set_level(spdlog::level::trace);
 
-    auto const sinks = std::vector<spdlog::sink_ptr>{consoleSink, fileSink};
+    auto const sinks = std::vector<spdlog::sink_ptr>{consoleSinkPtr, fileSinkPtr};
 
     // Initialize async registry
     spdlog::init_thread_pool(kAsyncQueueSize, kAsyncThreadCount);
@@ -80,20 +80,20 @@ namespace ao::log
     spdlog::drop("audio");
 
     // Create loggers
-    auto appLogger = std::make_shared<spdlog::async_logger>(
+    auto appLoggerPtr = std::make_shared<spdlog::async_logger>(
       "app", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
-    appLogger->set_level(spdlog::level::trace); // Keep internal level at trace, sinks will filter
-    spdlog::register_logger(appLogger);
+    appLoggerPtr->set_level(spdlog::level::trace);
+    spdlog::register_logger(appLoggerPtr);
 
-    auto audioLogger = std::make_shared<spdlog::async_logger>(
+    auto audioLoggerPtr = std::make_shared<spdlog::async_logger>(
       "audio", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::overrun_oldest);
-    audioLogger->set_level(spdlog::level::trace);
-    spdlog::register_logger(audioLogger);
+    audioLoggerPtr->set_level(spdlog::level::trace);
+    spdlog::register_logger(audioLoggerPtr);
 
-    _appLogger = appLogger;
-    _audioLogger = audioLogger;
+    _appLoggerPtr = appLoggerPtr;
+    _audioLoggerPtr = audioLoggerPtr;
 
-    spdlog::set_default_logger(appLogger);
+    spdlog::set_default_logger(appLoggerPtr);
     _initialized = true;
 
     audio::initializeDecoders();
@@ -113,21 +113,21 @@ namespace ao::log
 
     APP_LOG_INFO("Shutting down logging...");
 
-    auto const app = _appLogger;
-    auto const audio = _audioLogger;
+    auto const appPtr = _appLoggerPtr;
+    auto const audioPtr = _audioLoggerPtr;
 
-    if (app)
+    if (appPtr)
     {
-      app->flush();
+      appPtr->flush();
     }
 
-    if (audio)
+    if (audioPtr)
     {
-      audio->flush();
+      audioPtr->flush();
     }
 
-    _appLogger = makeNullLogger("app");
-    _audioLogger = makeNullLogger("audio");
+    _appLoggerPtr = makeNullLogger("app");
+    _audioLoggerPtr = makeNullLogger("audio");
     _initialized = false;
 
     spdlog::shutdown();

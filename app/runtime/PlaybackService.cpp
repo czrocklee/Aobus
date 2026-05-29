@@ -97,7 +97,7 @@ namespace ao::rt
   {
     IControlExecutor& executor;
     PlaybackState state;
-    std::unique_ptr<audio::Player> player;
+    std::unique_ptr<audio::Player> playerPtr;
     ViewService& views;
     library::MusicLibrary& library;
     TrackId currentTrackId = kInvalidTrackId;
@@ -124,12 +124,12 @@ namespace ao::rt
 
     void ensureReady() const
     {
-      if (player->isReady())
+      if (playerPtr->isReady())
       {
         return;
       }
 
-      auto const status = player->status();
+      auto const status = playerPtr->status();
 
       if (status.availableBackends.empty())
       {
@@ -151,7 +151,7 @@ namespace ao::rt
         profileId = backend.metadata.supportedProfiles.front().id;
       }
 
-      player->setOutput(backend.metadata.id, device.id, profileId);
+      playerPtr->setOutput(backend.metadata.id, device.id, profileId);
     }
 
     PlaybackState buildState(audio::Player const& targetPlayer) const
@@ -173,26 +173,29 @@ namespace ao::rt
     }
 
     explicit Impl(IControlExecutor& controlExecutor, ViewService& viewService, library::MusicLibrary& musicLibrary)
-      : executor{controlExecutor}, player{std::make_unique<audio::Player>()}, views{viewService}, library{musicLibrary}
+      : executor{controlExecutor}
+      , playerPtr{std::make_unique<audio::Player>()}
+      , views{viewService}
+      , library{musicLibrary}
     {
-      player->setOnTrackEnded(
+      playerPtr->setOnTrackEnded(
         [this]
         {
           executor.dispatch(
             [this]
             {
-              state = buildState(*player);
+              state = buildState(*playerPtr);
               idleSignal.emit();
             });
         });
 
-      player->setOnDevicesChanged(
+      playerPtr->setOnDevicesChanged(
         [this](std::vector<audio::IBackendProvider::Status> const&)
         {
           executor.dispatch(
             [this]
             {
-              state = buildState(*player);
+              state = buildState(*playerPtr);
 
               // Auto-select first available default output if none is selected yet
               if (!state.selectedOutput.backendId.empty() || state.availableOutputs.empty())
@@ -217,13 +220,13 @@ namespace ao::rt
                 profileId = backend.supportedProfiles.front().id;
               }
 
-              player->setOutput(backend.id, device.id, profileId);
-              state = buildState(*player);
+              playerPtr->setOutput(backend.id, device.id, profileId);
+              state = buildState(*playerPtr);
               outputChangedSignal.emit(state.selectedOutput);
             });
         });
 
-      player->setOnQualityChanged(
+      playerPtr->setOnQualityChanged(
         [this](audio::Quality quality, bool const ready)
         {
           executor.dispatch(
@@ -238,7 +241,7 @@ namespace ao::rt
   };
 
   PlaybackService::PlaybackService(IControlExecutor& executor, ViewService& views, library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(executor, views, library)}
+    : _implPtr{std::make_unique<Impl>(executor, views, library)}
   {
   }
 
@@ -246,98 +249,98 @@ namespace ao::rt
 
   Subscription PlaybackService::onPreparing(std::move_only_function<void()> handler)
   {
-    return _impl->preparingSignal.connect(std::move(handler));
+    return _implPtr->preparingSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onStarted(std::move_only_function<void()> handler)
   {
-    return _impl->startedSignal.connect(std::move(handler));
+    return _implPtr->startedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onPaused(std::move_only_function<void()> handler)
   {
-    return _impl->pausedSignal.connect(std::move(handler));
+    return _implPtr->pausedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onIdle(std::move_only_function<void()> handler)
   {
-    return _impl->idleSignal.connect(std::move(handler));
+    return _implPtr->idleSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler)
   {
-    return _impl->nowPlayingChangedSignal.connect(std::move(handler));
+    return _implPtr->nowPlayingChangedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onOutputChanged(std::move_only_function<void(OutputSelection const&)> handler)
   {
-    return _impl->outputChangedSignal.connect(std::move(handler));
+    return _implPtr->outputChangedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onStopped(std::move_only_function<void()> handler)
   {
-    return _impl->stoppedSignal.connect(std::move(handler));
+    return _implPtr->stoppedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onDevicesChanged(std::move_only_function<void()> handler)
   {
-    return _impl->devicesChangedSignal.connect(std::move(handler));
+    return _implPtr->devicesChangedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler)
   {
-    return _impl->qualityChangedSignal.connect(std::move(handler));
+    return _implPtr->qualityChangedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onVolumeChanged(std::move_only_function<void(float)> handler)
   {
-    return _impl->volumeChangedSignal.connect(std::move(handler));
+    return _implPtr->volumeChangedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onRevealTrackRequested(
     std::move_only_function<void(RevealTrackRequested const&)> handler)
   {
-    return _impl->revealTrackRequestedSignal.connect(std::move(handler));
+    return _implPtr->revealTrackRequestedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler)
   {
-    return _impl->seekUpdateSignal.connect(std::move(handler));
+    return _implPtr->seekUpdateSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler)
   {
-    return _impl->shuffleModeChangedSignal.connect(std::move(handler));
+    return _implPtr->shuffleModeChangedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler)
   {
-    return _impl->repeatModeChangedSignal.connect(std::move(handler));
+    return _implPtr->repeatModeChangedSignal.connect(std::move(handler));
   }
 
   PlaybackState const& PlaybackService::state() const
   {
-    return _impl->state;
+    return _implPtr->state;
   }
 
   void PlaybackService::play(audio::TrackPlaybackDescriptor const& descriptor, ListId const sourceListId)
   {
-    _impl->ensureReady();
+    _implPtr->ensureReady();
 
     // Signal "about to play" so the UI resets the seekbar before the
     // blocking Engine::play call freezes the main thread.
-    _impl->preparingSignal.emit();
+    _implPtr->preparingSignal.emit();
 
-    _impl->player->play(descriptor);
-    _impl->currentTrackId = descriptor.trackId;
-    _impl->currentSourceListId = sourceListId;
-    _impl->currentTrackTitle = descriptor.title;
-    _impl->currentTrackArtist = descriptor.artist;
-    _impl->currentTrackDurationMs = descriptor.durationMs;
-    _impl->state = _impl->buildState(*_impl->player);
-    _impl->startedSignal.emit();
+    _implPtr->playerPtr->play(descriptor);
+    _implPtr->currentTrackId = descriptor.trackId;
+    _implPtr->currentSourceListId = sourceListId;
+    _implPtr->currentTrackTitle = descriptor.title;
+    _implPtr->currentTrackArtist = descriptor.artist;
+    _implPtr->currentTrackDurationMs = descriptor.durationMs;
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->startedSignal.emit();
 
-    _impl->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
+    _implPtr->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
       .trackId = descriptor.trackId,
       .sourceListId = sourceListId,
     });
@@ -347,7 +350,7 @@ namespace ao::rt
   {
     try
     {
-      auto const state = _impl->views.trackListState(viewId);
+      auto const state = _implPtr->views.trackListState(viewId);
       auto const sel = state.selection;
 
       if (sel.empty())
@@ -356,8 +359,8 @@ namespace ao::rt
       }
 
       auto const trackId = TrackId{sel.front()};
-      auto const txn = _impl->library.readTransaction();
-      auto reader = _impl->library.tracks().reader(txn);
+      auto const txn = _implPtr->library.readTransaction();
+      auto reader = _implPtr->library.tracks().reader(txn);
       auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
@@ -367,7 +370,7 @@ namespace ao::rt
 
       auto const uri = std::filesystem::path{optView->property().uri()};
       auto const filePath =
-        uri.is_absolute() ? uri.lexically_normal() : (_impl->library.rootPath() / uri).lexically_normal();
+        uri.is_absolute() ? uri.lexically_normal() : (_implPtr->library.rootPath() / uri).lexically_normal();
 
       auto const desc = audio::TrackPlaybackDescriptor{
         .trackId = trackId,
@@ -388,30 +391,30 @@ namespace ao::rt
 
   void PlaybackService::pause()
   {
-    _impl->player->pause();
-    _impl->state = _impl->buildState(*_impl->player);
-    _impl->pausedSignal.emit();
+    _implPtr->playerPtr->pause();
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->pausedSignal.emit();
   }
 
   void PlaybackService::resume()
   {
-    _impl->player->resume();
-    _impl->state = _impl->buildState(*_impl->player);
-    _impl->startedSignal.emit();
+    _implPtr->playerPtr->resume();
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->startedSignal.emit();
   }
 
   void PlaybackService::stop()
   {
-    _impl->player->stop();
-    _impl->currentTrackId = {};
-    _impl->currentSourceListId = {};
-    _impl->currentTrackTitle.clear();
-    _impl->currentTrackArtist.clear();
-    _impl->currentTrackDurationMs = 0;
-    _impl->state = _impl->buildState(*_impl->player);
-    _impl->stoppedSignal.emit();
-    _impl->idleSignal.emit();
-    _impl->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
+    _implPtr->playerPtr->stop();
+    _implPtr->currentTrackId = {};
+    _implPtr->currentSourceListId = {};
+    _implPtr->currentTrackTitle.clear();
+    _implPtr->currentTrackArtist.clear();
+    _implPtr->currentTrackDurationMs = 0;
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->stoppedSignal.emit();
+    _implPtr->idleSignal.emit();
+    _implPtr->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
       .trackId = kInvalidTrackId,
       .sourceListId = kInvalidListId,
     });
@@ -419,36 +422,36 @@ namespace ao::rt
 
   void PlaybackService::setShuffleMode(ShuffleMode const mode)
   {
-    _impl->shuffleMode = mode;
-    _impl->state = _impl->buildState(*_impl->player);
-    _impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode});
+    _implPtr->shuffleMode = mode;
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode});
   }
 
   void PlaybackService::setRepeatMode(RepeatMode const mode)
   {
-    _impl->repeatMode = mode;
-    _impl->state = _impl->buildState(*_impl->player);
-    _impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode});
+    _implPtr->repeatMode = mode;
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode});
   }
 
   void PlaybackService::seek(std::uint32_t const positionMs, SeekMode const mode)
   {
     if (mode == SeekMode::Final)
     {
-      _impl->player->seek(positionMs);
-      _impl->state = _impl->buildState(*_impl->player);
+      _implPtr->playerPtr->seek(positionMs);
+      _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
     }
 
-    _impl->seekUpdateSignal.emit(SeekUpdate{.positionMs = positionMs, .mode = mode});
+    _implPtr->seekUpdateSignal.emit(SeekUpdate{.positionMs = positionMs, .mode = mode});
   }
 
   void PlaybackService::setOutput(audio::BackendId const& backendId,
                                   audio::DeviceId const& deviceId,
                                   audio::ProfileId const& profileId)
   {
-    _impl->player->setOutput(backendId, deviceId, profileId);
-    _impl->state = _impl->buildState(*_impl->player);
-    _impl->outputChangedSignal.emit(OutputSelection{
+    _implPtr->playerPtr->setOutput(backendId, deviceId, profileId);
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->outputChangedSignal.emit(OutputSelection{
       .backendId = backendId,
       .deviceId = deviceId,
       .profileId = profileId,
@@ -457,30 +460,30 @@ namespace ao::rt
 
   void PlaybackService::setVolume(float const volume)
   {
-    _impl->player->setVolume(volume);
-    _impl->state = _impl->buildState(*_impl->player);
-    _impl->volumeChangedSignal.emit(volume);
+    _implPtr->playerPtr->setVolume(volume);
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->volumeChangedSignal.emit(volume);
   }
 
   void PlaybackService::setMuted(bool const muted)
   {
-    _impl->player->setMuted(muted);
-    _impl->state = _impl->buildState(*_impl->player);
+    _implPtr->playerPtr->setMuted(muted);
+    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
   }
 
   void PlaybackService::revealPlayingTrack()
   {
-    revealTrack(_impl->state.trackId, kInvalidViewId, _impl->state.sourceListId);
+    revealTrack(_implPtr->state.trackId, kInvalidViewId, _implPtr->state.sourceListId);
   }
 
   void PlaybackService::revealTrack(TrackId const trackId, ViewId const preferredViewId, ListId const preferredListId)
   {
-    _impl->revealTrackRequestedSignal.emit(PlaybackService::RevealTrackRequested{
+    _implPtr->revealTrackRequestedSignal.emit(PlaybackService::RevealTrackRequested{
       .trackId = trackId, .preferredListId = preferredListId, .preferredViewId = preferredViewId});
   }
 
-  void PlaybackService::addProvider(std::unique_ptr<audio::IBackendProvider> provider)
+  void PlaybackService::addProvider(std::unique_ptr<audio::IBackendProvider> providerPtr)
   {
-    _impl->player->addProvider(std::move(provider));
+    _implPtr->playerPtr->addProvider(std::move(providerPtr));
   }
 } // namespace ao::rt

@@ -11,7 +11,6 @@
 #include "app/linux-gtk/track/StatusSlot.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/rt/ListSourceStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -19,11 +18,9 @@
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 
-#include <memory>
-
 namespace ao::gtk::layout::test
 {
-  using ao::gtk::test::ImmediateExecutor;
+  using ao::gtk::test::makeRuntime;
 
   namespace
   {
@@ -32,16 +29,10 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("Status bar components", "[gtk][unit][shell]")
   {
-    auto const app = Gtk::Application::create("io.github.aobus.status_test");
+    auto const appPtr = Gtk::Application::create("io.github.aobus.status_test");
 
     auto const tempDir = TempDir{};
-    auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
-
-    auto runtime = rt::AppRuntime{
-      rt::AppRuntimeDependencies{.executor = std::make_unique<ImmediateExecutor>(),
-                                 .musicRoot = tempDir.path(),
-                                 .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-                                 .workspaceConfigStore = configStore}};
+    auto runtime = makeRuntime(tempDir);
 
     SECTION("PlaybackDetailsWidget instantiates")
     {

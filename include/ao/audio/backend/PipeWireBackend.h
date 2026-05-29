@@ -49,7 +49,7 @@ namespace ao::audio::backend
     PropertyInfo queryProperty(PropertyId id) const noexcept override;
 
   private:
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
     std::string _targetDeviceId;
     bool _exclusiveMode = false;
   };

@@ -42,6 +42,6 @@ namespace ao::gtk
     void applyState(uimodel::playback::TransportViewState const& view);
 
     Gtk::Button _button;
-    std::unique_ptr<uimodel::playback::TransportViewModel> _controller;
+    std::unique_ptr<uimodel::playback::TransportViewModel> _controllerPtr;
   };
 } // namespace ao::gtk

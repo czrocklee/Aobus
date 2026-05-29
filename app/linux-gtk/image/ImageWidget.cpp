@@ -40,10 +40,10 @@ namespace ao::gtk
     _targetSize = size;
   }
 
-  void ImageWidget::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
+  void ImageWidget::bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr)
   {
-    _detailProjection = std::move(projection);
-    _detailSub = _detailProjection->subscribe(std::bind_front(&ImageWidget::onDetailSnapshot, this));
+    _detailProjectionPtr = std::move(projectionPtr);
+    _detailSub = _detailProjectionPtr->subscribe(std::bind_front(&ImageWidget::onDetailSnapshot, this));
   }
 
   void ImageWidget::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)
@@ -66,9 +66,9 @@ namespace ao::gtk
     }
 
     auto const rid = static_cast<std::uint64_t>(coverArtId.raw());
-    auto cached = _cache.get(rid);
+    auto cachedPtr = _cache.get(rid);
 
-    if (!cached)
+    if (!cachedPtr)
     {
       auto const txn = _library.readTransaction();
       auto const resReader = _library.resources().reader(txn);
@@ -82,10 +82,10 @@ namespace ao::gtk
 
       try
       {
-        auto const memStream = Gio::MemoryInputStream::create();
-        memStream->add_data(optData->data(), std::ssize(*optData), nullptr);
-        cached = Gdk::Pixbuf::create_from_stream(memStream);
-        _cache.put(rid, cached);
+        auto const memStreamPtr = Gio::MemoryInputStream::create();
+        memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
+        cachedPtr = Gdk::Pixbuf::create_from_stream(memStreamPtr);
+        _cache.put(rid, cachedPtr);
       }
       catch (Glib::Error const&)
       {
@@ -94,7 +94,7 @@ namespace ao::gtk
       }
     }
 
-    setImagePixbuf(cached);
+    setImagePixbuf(cachedPtr);
   }
 
   void ImageWidget::setImageFromBytes(std::span<std::byte const> bytes)
@@ -107,9 +107,9 @@ namespace ao::gtk
 
     try
     {
-      auto const memStream = Gio::MemoryInputStream::create();
-      memStream->add_data(bytes.data(), std::ssize(bytes), nullptr);
-      setImagePixbuf(Gdk::Pixbuf::create_from_stream(memStream));
+      auto const memStreamPtr = Gio::MemoryInputStream::create();
+      memStreamPtr->add_data(bytes.data(), std::ssize(bytes), nullptr);
+      setImagePixbuf(Gdk::Pixbuf::create_from_stream(memStreamPtr));
     }
     catch (Glib::Error const&)
     {
@@ -143,8 +143,8 @@ namespace ao::gtk
 
   void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
   {
-    auto const scaled = scalePixbuf(pixbuf);
-    scaled ? set_pixbuf(scaled) : clearImage();
+    auto const scaledPtr = scalePixbuf(pixbuf);
+    scaledPtr ? set_pixbuf(scaledPtr) : clearImage();
   }
 
   void ImageWidget::clearImage()

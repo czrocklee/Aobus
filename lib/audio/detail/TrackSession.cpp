@@ -68,20 +68,20 @@ namespace ao::audio::detail
   {
     auto const outputFormat = [] { return Format{.isInterleaved = true}; }();
 
-    auto decoder = decoderFactory ? decoderFactory(descriptor.filePath, outputFormat)
-                                  : createDecoderSession(descriptor.filePath, outputFormat);
+    auto decoderPtr = decoderFactory ? decoderFactory(descriptor.filePath, outputFormat)
+                                     : createDecoderSession(descriptor.filePath, outputFormat);
 
-    if (decoder == nullptr)
+    if (decoderPtr == nullptr)
     {
       return {.error = {.message = "No audio decoder backend is available"}};
     }
 
-    if (auto const openResult = decoder->open(descriptor.filePath); !openResult)
+    if (auto const openResult = decoderPtr->open(descriptor.filePath); !openResult)
     {
       return {.error = openResult.error()};
     }
 
-    auto info = decoder->streamInfo();
+    auto info = decoderPtr->streamInfo();
 
     if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
     {
@@ -92,20 +92,20 @@ namespace ao::audio::detail
     auto errorMsg = std::string{};
 
     if (!negotiateFormat(
-          descriptor.filePath, info, decoder, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))
+          descriptor.filePath, info, decoderPtr, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))
     {
       return {.error = {.message = errorMsg}};
     }
 
-    info = decoder->streamInfo();
-    auto source = createPcmSource(std::move(decoder), info, std::move(onSourceError), errorMsg);
+    info = decoderPtr->streamInfo();
+    auto sourcePtr = createPcmSource(std::move(decoderPtr), info, std::move(onSourceError), errorMsg);
 
-    if (!source)
+    if (!sourcePtr)
     {
       return {.error = {.message = errorMsg}};
     }
 
-    return {.source = std::move(source), .backendFormat = backendFormat, .info = info};
+    return {.sourcePtr = std::move(sourcePtr), .backendFormat = backendFormat, .info = info};
   }
 
   bool TrackSession::negotiateFormat(std::filesystem::path const& path,
@@ -175,34 +175,34 @@ namespace ao::audio::detail
     return true;
   }
 
-  std::shared_ptr<ISource> TrackSession::createPcmSource(std::unique_ptr<IDecoderSession> decoder,
+  std::shared_ptr<ISource> TrackSession::createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
                                                          DecodedStreamInfo const& info,
                                                          OnSourceErrorFn onSourceError,
                                                          std::string& errorMsg)
   {
     if (shouldUseMemoryPcmSource(info))
     {
-      auto const memorySource = std::make_shared<MemorySource>(std::move(decoder), info);
+      auto const memorySourcePtr = std::make_shared<MemorySource>(std::move(decoderPtr), info);
 
-      if (auto const initResult = memorySource->initialize(); !initResult)
+      if (auto const initResult = memorySourcePtr->initialize(); !initResult)
       {
         errorMsg = initResult.error().message;
         return nullptr;
       }
 
-      return memorySource;
+      return memorySourcePtr;
     }
 
-    auto const streamingSource = std::make_shared<StreamingSource>(
-      std::move(decoder), info, std::move(onSourceError), kPrerollTargetMs, kDecodeHighWatermarkMs);
+    auto const streamingSourcePtr = std::make_shared<StreamingSource>(
+      std::move(decoderPtr), info, std::move(onSourceError), kPrerollTargetMs, kDecodeHighWatermarkMs);
 
-    if (auto const initResult = streamingSource->initialize(); !initResult)
+    if (auto const initResult = streamingSourcePtr->initialize(); !initResult)
     {
       errorMsg = initResult.error().message;
       return nullptr;
     }
 
-    return streamingSource;
+    return streamingSourcePtr;
   }
 
   bool TrackSession::shouldUseMemoryPcmSource(DecodedStreamInfo const& info)

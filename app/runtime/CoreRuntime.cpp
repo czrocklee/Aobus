@@ -17,7 +17,7 @@ namespace ao::rt
 {
   struct CoreRuntime::Impl final
   {
-    std::unique_ptr<IControlExecutor> executor;
+    std::unique_ptr<IControlExecutor> executorPtr;
     async::Runtime asyncRuntime;
     std::filesystem::path musicRoot;
     std::filesystem::path databasePath;
@@ -27,9 +27,9 @@ namespace ao::rt
     ListSourceStore listSourceStore;
     NotificationService notificationService;
 
-    Impl(std::unique_ptr<IControlExecutor> exec, std::filesystem::path musicRoot, std::filesystem::path databasePath)
-      : executor{std::move(exec)}
-      , asyncRuntime{*executor}
+    Impl(std::unique_ptr<IControlExecutor> execPtr, std::filesystem::path musicRoot, std::filesystem::path databasePath)
+      : executorPtr{std::move(execPtr)}
+      , asyncRuntime{*executorPtr}
       , musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
       , musicLibrary{this->musicRoot, this->databasePath}
@@ -41,10 +41,10 @@ namespace ao::rt
     }
   };
 
-  CoreRuntime::CoreRuntime(std::unique_ptr<IControlExecutor> executor,
+  CoreRuntime::CoreRuntime(std::unique_ptr<IControlExecutor> executorPtr,
                            std::filesystem::path musicRoot,
                            std::filesystem::path databasePath)
-    : _impl{std::make_unique<Impl>(std::move(executor), std::move(musicRoot), std::move(databasePath))}
+    : _implPtr{std::make_unique<Impl>(std::move(executorPtr), std::move(musicRoot), std::move(databasePath))}
   {
   }
 
@@ -52,41 +52,41 @@ namespace ao::rt
 
   library::MusicLibrary& CoreRuntime::musicLibrary() noexcept
   {
-    return _impl->musicLibrary;
+    return _implPtr->musicLibrary;
   }
 
   std::filesystem::path const& CoreRuntime::musicRoot() const noexcept
   {
-    return _impl->musicRoot;
+    return _implPtr->musicRoot;
   }
 
   std::filesystem::path const& CoreRuntime::databasePath() const noexcept
   {
-    return _impl->databasePath;
+    return _implPtr->databasePath;
   }
 
   LibraryMutationService& CoreRuntime::mutation() noexcept
   {
-    return _impl->mutationService;
+    return _implPtr->mutationService;
   }
 
   TrackCommandService& CoreRuntime::trackCommands() noexcept
   {
-    return _impl->trackCommandService;
+    return _implPtr->trackCommandService;
   }
 
   ListSourceStore& CoreRuntime::sources() noexcept
   {
-    return _impl->listSourceStore;
+    return _implPtr->listSourceStore;
   }
 
   NotificationService& CoreRuntime::notifications() noexcept
   {
-    return _impl->notificationService;
+    return _implPtr->notificationService;
   }
 
   async::Runtime& CoreRuntime::async() noexcept
   {
-    return _impl->asyncRuntime;
+    return _implPtr->asyncRuntime;
   }
 } // namespace ao::rt

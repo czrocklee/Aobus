@@ -15,17 +15,17 @@ namespace ao::audio::test
 
     SECTION("Creates FLAC runtime for .flac")
     {
-      auto runtime = createDecoderSession("song.flac", format);
-      REQUIRE(runtime != nullptr);
+      auto runtimePtr = createDecoderSession("song.flac", format);
+      REQUIRE(runtimePtr != nullptr);
     }
 
     SECTION("Creates ALAC runtime for .m4a and .mp4")
     {
-      auto session1 = createDecoderSession("song.m4a", format);
-      REQUIRE(session1 != nullptr);
+      auto session1Ptr = createDecoderSession("song.m4a", format);
+      REQUIRE(session1Ptr != nullptr);
 
-      auto session2 = createDecoderSession("song.mp4", format);
-      REQUIRE(session2 != nullptr);
+      auto session2Ptr = createDecoderSession("song.mp4", format);
+      REQUIRE(session2Ptr != nullptr);
     }
 
     SECTION("Returns null for unsupported extensions")

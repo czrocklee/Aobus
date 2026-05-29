@@ -86,7 +86,7 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromView(TrackId id, library::TrackView const& view) const
   {
-    auto const row = TrackRowObject::create(id, *this);
+    auto const rowPtr = TrackRowObject::create(id, *this);
 
     auto const& metadata = view.metadata();
     auto const title = metadata.title();
@@ -100,7 +100,7 @@ namespace ao::gtk
       auto txn = _ml.readTransaction();
       auto const reader = _ml.manifest().reader(txn);
 
-      if (auto const optManifestView = reader.get(uri))
+      if (auto const optManifestView = reader.get(uri); optManifestView)
       {
         fileSize = optManifestView->fileSize();
         mtime = optManifestView->mtime();
@@ -108,31 +108,31 @@ namespace ao::gtk
       }
     }
 
-    row->populate(Glib::ustring{title.begin(), title.end()},
-                  metadata.artistId(),
-                  metadata.albumId(),
-                  metadata.albumArtistId(),
-                  metadata.genreId(),
-                  metadata.composerId(),
-                  metadata.workId(),
-                  joinResolvedTags(view.tags(), _dict),
-                  std::chrono::milliseconds{view.property().durationMs()},
-                  metadata.year(),
-                  metadata.discNumber(),
-                  metadata.totalDiscs(),
-                  metadata.trackNumber(),
-                  metadata.totalTracks(),
-                  metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt,
-                  view.property().sampleRate(),
-                  view.property().channels(),
-                  view.property().bitDepth(),
-                  view.property().codecId(),
-                  view.property().bitrate(),
-                  fileSize,
-                  mtime,
-                  status);
+    rowPtr->populate(Glib::ustring{title.begin(), title.end()},
+                     metadata.artistId(),
+                     metadata.albumId(),
+                     metadata.albumArtistId(),
+                     metadata.genreId(),
+                     metadata.composerId(),
+                     metadata.workId(),
+                     joinResolvedTags(view.tags(), _dict),
+                     std::chrono::milliseconds{view.property().durationMs()},
+                     metadata.year(),
+                     metadata.discNumber(),
+                     metadata.totalDiscs(),
+                     metadata.trackNumber(),
+                     metadata.totalTracks(),
+                     metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt,
+                     view.property().sampleRate(),
+                     view.property().channels(),
+                     view.property().bitDepth(),
+                     view.property().codecId(),
+                     view.property().bitrate(),
+                     fileSize,
+                     mtime,
+                     status);
 
-    return row;
+    return rowPtr;
   }
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id) const
@@ -152,9 +152,9 @@ namespace ao::gtk
       return nullptr;
     }
 
-    auto const row = createRowFromView(id, *optView);
-    _rowCache[id] = row;
-    return row;
+    auto const rowPtr = createRowFromView(id, *optView);
+    _rowCache[id] = rowPtr;
+    return rowPtr;
   }
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id, library::TrackStore::Reader const& reader) const
@@ -171,9 +171,9 @@ namespace ao::gtk
       return nullptr;
     }
 
-    auto const row = createRowFromView(id, *optView);
-    _rowCache[id] = row;
-    return row;
+    auto const rowPtr = createRowFromView(id, *optView);
+    _rowCache[id] = rowPtr;
+    return rowPtr;
   }
 
   std::optional<std::uint32_t> TrackRowCache::coverArtId(TrackId id) const
@@ -238,7 +238,7 @@ namespace ao::gtk
                                                .bitDepthHint = property.bitDepth()};
 
     // File path
-    if (auto const optFilePath = resolveLibraryPath(_ml.rootPath(), property.uri()))
+    if (auto const optFilePath = resolveLibraryPath(_ml.rootPath(), property.uri()); optFilePath)
     {
       desc.filePath = *optFilePath;
     }

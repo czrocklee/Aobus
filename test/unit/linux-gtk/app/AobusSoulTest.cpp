@@ -16,7 +16,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("AobusSoul - basic functionality", "[gtk][app]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto soul = AobusSoul{};
 

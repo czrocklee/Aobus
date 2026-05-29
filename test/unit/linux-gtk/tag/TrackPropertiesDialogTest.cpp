@@ -20,7 +20,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("TrackPropertiesDialog - lifecycle", "[gtk][tag][dialog]")
   {
-    [[maybe_unused]] auto const app = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();

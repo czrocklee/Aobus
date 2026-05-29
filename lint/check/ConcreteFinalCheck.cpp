@@ -74,7 +74,7 @@ namespace clang::tidy::readability
         return false;
       }
 
-      if (auto const* dtor = record->getDestructor(); dtor)
+      if (auto const* dtor = record->getDestructor(); dtor != nullptr)
       {
         if (dtor->getAccess() == AS_protected)
         {
@@ -123,7 +123,7 @@ namespace clang::tidy::readability
 
     auto const* dc = record->getDeclContext();
 
-    if (auto const* ns = dyn_cast<NamespaceDecl>(dc); ns)
+    if (auto const* ns = dyn_cast<NamespaceDecl>(dc); ns != nullptr)
     {
       if (ns->isAnonymousNamespace())
       {
@@ -152,7 +152,7 @@ namespace clang::tidy::readability
                        << (record->isClass() ? "class" : "struct") << record;
 
     // Provide fix-it: insert 'final' before the opening brace or class body
-    if (auto const* classDef = record->getDefinition(); classDef)
+    if (auto const* classDef = record->getDefinition(); classDef != nullptr)
     {
       SourceLocation const braceLoc = classDef->getBraceRange().getBegin();
 

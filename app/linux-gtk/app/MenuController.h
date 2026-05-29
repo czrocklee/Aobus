@@ -24,11 +24,11 @@ namespace ao::gtk
 
     void setup(Gtk::ApplicationWindow& window);
 
-    Glib::RefPtr<Gio::MenuModel> menuModel() const { return _menuModel; }
+    Glib::RefPtr<Gio::MenuModel> menuModel() const { return _menuModelPtr; }
 
   private:
     portal::ImportExportCoordinator& _importExport;
     std::function<void()> _onEditLayout;
-    Glib::RefPtr<Gio::Menu> _menuModel;
+    Glib::RefPtr<Gio::Menu> _menuModelPtr;
   };
 } // namespace ao::gtk

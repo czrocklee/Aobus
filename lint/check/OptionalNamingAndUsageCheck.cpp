@@ -34,7 +34,7 @@ namespace clang::tidy::readability
     auto const& sm = *result.SourceManager;
 
     // Check Rule 1: Naming
-    if (auto const* decl = result.Nodes.getNodeAs<DeclaratorDecl>("optional_decl"))
+    if (auto const* decl = result.Nodes.getNodeAs<DeclaratorDecl>("optional_decl"); decl != nullptr)
     {
       if (sm.isInSystemHeader(decl->getLocation()) || decl->getLocation().isMacroID())
       {
@@ -55,7 +55,7 @@ namespace clang::tidy::readability
     }
 
     // Check Rule 2: .has_value() usage
-    if (auto const* call = result.Nodes.getNodeAs<CXXMemberCallExpr>("has_value_call"))
+    if (auto const* call = result.Nodes.getNodeAs<CXXMemberCallExpr>("has_value_call"); call != nullptr)
     {
       if (sm.isInSystemHeader(call->getBeginLoc()) || call->getBeginLoc().isMacroID())
       {

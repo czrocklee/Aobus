@@ -124,7 +124,7 @@ namespace ao::gtk::layout::editor
     LayoutDocument _document;
 
     ModelColumns _columns;
-    Glib::RefPtr<Gtk::TreeStore> _treeStore;
+    Glib::RefPtr<Gtk::TreeStore> _treeStorePtr;
     Gtk::TreeView _treeView;
     Gtk::ScrolledWindow _treeScroll;
 
@@ -143,7 +143,7 @@ namespace ao::gtk::layout::editor
     Gtk::PopoverMenu _addPopover;
     Gtk::PopoverMenu _wrapPopover;
 
-    Glib::RefPtr<Gio::SimpleActionGroup> _actionGroup;
+    Glib::RefPtr<Gio::SimpleActionGroup> _actionGroupPtr;
 
     Gtk::Box _propertiesBox{Gtk::Orientation::VERTICAL};
     Gtk::ScrolledWindow _propertiesScroll;

@@ -70,6 +70,6 @@ namespace ao::rt
     void publishDelta(TrackListProjectionDeltaBatch const& batch);
 
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

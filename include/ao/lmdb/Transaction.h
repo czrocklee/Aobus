@@ -34,18 +34,18 @@ namespace ao::lmdb
       void operator()(MDB_txn* txn) const noexcept { ::mdb_txn_abort(txn); }
     };
 
-    ReadTransaction(std::unique_ptr<MDB_txn, MdbTxnDeleter> handle)
-      : _handle{std::move(handle)}
+    ReadTransaction(std::unique_ptr<MDB_txn, MdbTxnDeleter> txnPtr)
+      : _txnPtr{std::move(txnPtr)}
     {
     }
 
     static auto create(MDB_env* env, MDB_txn* parent, std::uint32_t flags);
 
-    MDB_txn* handle() const noexcept { return _handle.get(); }
-    MDB_txn* releaseHandle() noexcept { return _handle.release(); }
+    MDB_txn* handle() const noexcept { return _txnPtr.get(); }
+    MDB_txn* releaseHandle() noexcept { return _txnPtr.release(); }
 
   private:
-    std::unique_ptr<MDB_txn, MdbTxnDeleter> _handle;
+    std::unique_ptr<MDB_txn, MdbTxnDeleter> _txnPtr;
     friend class Database;
   };
 

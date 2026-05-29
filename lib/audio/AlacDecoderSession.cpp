@@ -53,13 +53,13 @@ namespace ao::audio
     Format requestedOutput;
     DecodedStreamInfo info;
 
-    std::unique_ptr<ALACDecoder> decoder;
+    std::unique_ptr<ALACDecoder> decoderPtr;
 
     std::uint32_t currentSampleIndex = 0;
     std::uint32_t timescale = 0;
 
     utility::MappedFile mappedFile;
-    std::unique_ptr<Demuxer> demuxer;
+    std::unique_ptr<Demuxer> demuxerPtr;
 
     std::vector<std::byte> sourcePcm;
     std::vector<std::byte> targetPcm;
@@ -67,24 +67,24 @@ namespace ao::audio
     Impl(Format const& output)
       : requestedOutput{output}
     {
-      decoder = std::make_unique<ALACDecoder>();
+      decoderPtr = std::make_unique<ALACDecoder>();
     }
 
     std::uint64_t firstFrameIndex(std::uint32_t sampleIndex) const noexcept
     {
-      if (!demuxer)
+      if (!demuxerPtr)
       {
         return 0;
       }
 
-      if (auto const sampleInfo = demuxer->sampleInfo(sampleIndex);
+      if (auto const sampleInfo = demuxerPtr->sampleInfo(sampleIndex);
           timescale > 0 && (sampleInfo.startTime > 0 || sampleInfo.duration > 0))
       {
         return (sampleInfo.startTime * info.sourceFormat.sampleRate) / timescale;
       }
 
-      auto const frameLength = decoder->mConfig.frameLength > 0
-                                 ? decoder->mConfig.frameLength
+      auto const frameLength = decoderPtr->mConfig.frameLength > 0
+                                 ? decoderPtr->mConfig.frameLength
                                  : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
 
       return static_cast<std::uint64_t>(sampleIndex) * frameLength;
@@ -92,7 +92,7 @@ namespace ao::audio
   };
 
   AlacDecoderSession::AlacDecoderSession(Format outputFormat)
-    : _impl{std::make_unique<Impl>(outputFormat)}
+    : _implPtr{std::make_unique<Impl>(outputFormat)}
   {
   }
 
@@ -102,89 +102,91 @@ namespace ao::audio
   {
     close();
 
-    if (auto const mapResult = _impl->mappedFile.map(filePath); !mapResult)
+    if (auto const mapResult = _implPtr->mappedFile.map(filePath); !mapResult)
     {
       return std::unexpected{mapResult.error()};
     }
 
-    _impl->demuxer = std::make_unique<Demuxer>(_impl->mappedFile.bytes());
+    _implPtr->demuxerPtr = std::make_unique<Demuxer>(_implPtr->mappedFile.bytes());
 
-    if (auto const demuxResult = _impl->demuxer->parseTrack("alac"); !demuxResult)
+    if (auto const demuxResult = _implPtr->demuxerPtr->parseTrack("alac"); !demuxResult)
     {
       return makeError(Error::Code::InitFailed, demuxResult.error().message);
     }
 
-    auto const cookie = _impl->demuxer->magicCookie();
-    auto const initStatus = _impl->decoder->Init(layout::asLegacyPtr<std::uint8_t>(cookie), layout::size32(cookie));
+    auto const cookie = _implPtr->demuxerPtr->magicCookie();
+    auto const initStatus =
+      _implPtr->decoderPtr->Init(layout::asLegacyPtr<std::uint8_t>(cookie), layout::size32(cookie));
 
     if (initStatus != ALAC_noErr)
     {
       return makeError(Error::Code::InitFailed, "Failed to initialize ALAC decoder");
     }
 
-    auto const& config = _impl->decoder->mConfig;
+    auto const& config = _implPtr->decoderPtr->mConfig;
 
     if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
     {
       return makeError(Error::Code::InitFailed, "Invalid ALAC stream configuration");
     }
 
-    _impl->timescale = _impl->demuxer->timescale();
-    auto const duration = _impl->demuxer->duration();
+    _implPtr->timescale = _implPtr->demuxerPtr->timescale();
+    auto const duration = _implPtr->demuxerPtr->duration();
 
-    if (_impl->timescale == 0)
+    if (_implPtr->timescale == 0)
     {
-      _impl->timescale = config.sampleRate;
+      _implPtr->timescale = config.sampleRate;
     }
 
-    if (_impl->timescale > 0)
+    if (_implPtr->timescale > 0)
     {
-      _impl->info.durationMs =
-        static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000U) / _impl->timescale);
+      _implPtr->info.durationMs =
+        static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000U) / _implPtr->timescale);
     }
 
-    _impl->info.sourceFormat.channels = config.numChannels;
-    _impl->info.sourceFormat.sampleRate = config.sampleRate;
-    _impl->info.sourceFormat.bitDepth = config.bitDepth;
-    _impl->info.sourceFormat.validBits = config.bitDepth;
-    _impl->info.sourceFormat.isInterleaved = true;
+    _implPtr->info.sourceFormat.channels = config.numChannels;
+    _implPtr->info.sourceFormat.sampleRate = config.sampleRate;
+    _implPtr->info.sourceFormat.bitDepth = config.bitDepth;
+    _implPtr->info.sourceFormat.validBits = config.bitDepth;
+    _implPtr->info.sourceFormat.isInterleaved = true;
 
-    _impl->info.outputFormat = _impl->info.sourceFormat;
+    _implPtr->info.outputFormat = _implPtr->info.sourceFormat;
 
-    if (_impl->requestedOutput.bitDepth != 0)
+    if (_implPtr->requestedOutput.bitDepth != 0)
     {
-      _impl->info.outputFormat.bitDepth = _impl->requestedOutput.bitDepth;
-      _impl->info.outputFormat.validBits =
-        (_impl->requestedOutput.validBits != 0) ? _impl->requestedOutput.validBits : _impl->requestedOutput.bitDepth;
+      _implPtr->info.outputFormat.bitDepth = _implPtr->requestedOutput.bitDepth;
+      _implPtr->info.outputFormat.validBits = (_implPtr->requestedOutput.validBits != 0)
+                                                ? _implPtr->requestedOutput.validBits
+                                                : _implPtr->requestedOutput.bitDepth;
     }
 
-    _impl->currentSampleIndex = 0;
+    _implPtr->currentSampleIndex = 0;
 
     return {};
   }
 
   void AlacDecoderSession::close()
   {
-    _impl->demuxer.reset();
-    _impl->mappedFile.unmap();
-    _impl->currentSampleIndex = 0;
-    _impl->timescale = 0;
+    _implPtr->demuxerPtr.reset();
+    _implPtr->mappedFile.unmap();
+    _implPtr->currentSampleIndex = 0;
+    _implPtr->timescale = 0;
   }
 
   Result<> AlacDecoderSession::seek(std::uint32_t positionMs)
   {
-    if (_impl->timescale == 0)
+    if (_implPtr->timescale == 0)
     {
       return makeError(Error::Code::SeekFailed, "Timescale is 0");
     }
 
-    if (!_impl->demuxer)
+    if (!_implPtr->demuxerPtr)
     {
-      return makeError(Error::Code::SeekFailed, "ALAC demuxer is not open");
+      return makeError(Error::Code::SeekFailed, "ALAC demuxerPtr is not open");
     }
 
-    auto const targetTime = (static_cast<std::uint64_t>(positionMs) * _impl->timescale) / 1000U;
-    _impl->currentSampleIndex = _impl->demuxer->sampleIndexAtTime(targetTime);
+    auto const targetTime = (static_cast<std::uint64_t>(positionMs) * _implPtr->timescale) / 1000U;
+    _implPtr->currentSampleIndex = _implPtr->demuxerPtr->sampleIndexAtTime(targetTime);
     return {};
   }
 
@@ -194,26 +196,26 @@ namespace ao::audio
 
   Result<PcmBlock> AlacDecoderSession::readNextBlock()
   {
-    if (!_impl->demuxer || _impl->currentSampleIndex >= _impl->demuxer->sampleCount())
+    if (!_implPtr->demuxerPtr || _implPtr->currentSampleIndex >= _implPtr->demuxerPtr->sampleCount())
     {
       return PcmBlock{.bytes = {}, .endOfStream = true};
     }
 
-    auto const firstFrameIndex = _impl->firstFrameIndex(_impl->currentSampleIndex);
-    auto const packet = _impl->demuxer->samplePayload(_impl->currentSampleIndex);
+    auto const firstFrameIndex = _implPtr->firstFrameIndex(_implPtr->currentSampleIndex);
+    auto const packet = _implPtr->demuxerPtr->samplePayload(_implPtr->currentSampleIndex);
 
     if (packet.empty())
     {
       return makeError(Error::Code::DecodeFailed, "Failed to read ALAC sample payload");
     }
 
-    auto const maxFrames = (_impl->decoder->mConfig.frameLength > 0)
-                             ? _impl->decoder->mConfig.frameLength
+    auto const maxFrames = (_implPtr->decoderPtr->mConfig.frameLength > 0)
+                             ? _implPtr->decoderPtr->mConfig.frameLength
                              : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
 
-    auto const sourceBps = _impl->info.sourceFormat.bitDepth;
-    auto const targetBps = _impl->info.outputFormat.bitDepth;
-    auto const channels = _impl->info.outputFormat.channels;
+    auto const sourceBps = _implPtr->info.sourceFormat.bitDepth;
+    auto const targetBps = _implPtr->info.outputFormat.bitDepth;
+    auto const channels = _implPtr->info.outputFormat.channels;
 
     auto const sourceBytesPerFrame = channels * bytesPerSample(sourceBps);
     auto const targetBytesPerFrame = channels * bytesPerSample(targetBps);
@@ -228,30 +230,30 @@ namespace ao::audio
     // Reuse member buffers to avoid per-block allocations
     if (sourceBps != targetBps)
     {
-      _impl->sourcePcm.resize(static_cast<std::size_t>(maxFrames) * sourceBytesPerFrame);
+      _implPtr->sourcePcm.resize(static_cast<std::size_t>(maxFrames) * sourceBytesPerFrame);
       auto bitBuffer = BitBuffer{};
       ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
-      auto const status = _impl->decoder->Decode(
-        &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_impl->sourcePcm}), maxFrames, channels, &numFrames);
+      auto const status = _implPtr->decoderPtr->Decode(
+        &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_implPtr->sourcePcm}), maxFrames, channels, &numFrames);
 
       if (status != 0)
       {
         return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
       }
 
-      _impl->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
+      _implPtr->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
 
       if (sourceBps == 16 && targetBps == 32)
       {
-        auto const src = layout::viewArray<std::int16_t>(std::span{_impl->sourcePcm});
-        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_impl->targetPcm});
+        auto const src = layout::viewArray<std::int16_t>(std::span{_implPtr->sourcePcm});
+        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_implPtr->targetPcm});
         PcmConverter::pad<std::int16_t, std::int32_t>(src, dst, 16);
       }
       else if (sourceBps == 24 && targetBps == 32)
       {
-        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_impl->targetPcm});
-        PcmConverter::unpackS24(_impl->sourcePcm, dst, 8);
+        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_implPtr->targetPcm});
+        PcmConverter::unpackS24(_implPtr->sourcePcm, dst, 8);
       }
       else
       {
@@ -259,45 +261,45 @@ namespace ao::audio
           Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
       }
 
-      _impl->currentSampleIndex++;
+      _implPtr->currentSampleIndex++;
 
       return PcmBlock{
-        .bytes = _impl->targetPcm,
+        .bytes = _implPtr->targetPcm,
         .bitDepth = targetBps,
         .frames = numFrames,
         .firstFrameIndex = firstFrameIndex,
-        .endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount()),
+        .endOfStream = (_implPtr->currentSampleIndex >= _implPtr->demuxerPtr->sampleCount()),
       };
     }
 
     // Direct decode
-    _impl->targetPcm.resize(static_cast<std::size_t>(maxFrames) * targetBytesPerFrame);
+    _implPtr->targetPcm.resize(static_cast<std::size_t>(maxFrames) * targetBytesPerFrame);
 
     auto bitBuffer = BitBuffer{};
     ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
-    auto const status = _impl->decoder->Decode(
-      &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_impl->targetPcm}), maxFrames, channels, &numFrames);
+    auto const status = _implPtr->decoderPtr->Decode(
+      &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_implPtr->targetPcm}), maxFrames, channels, &numFrames);
 
     if (status != 0)
     {
       return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
     }
 
-    _impl->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
-    _impl->currentSampleIndex++;
+    _implPtr->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
+    _implPtr->currentSampleIndex++;
 
     return PcmBlock{
-      .bytes = _impl->targetPcm,
+      .bytes = _implPtr->targetPcm,
       .bitDepth = targetBps,
       .frames = numFrames,
       .firstFrameIndex = firstFrameIndex,
-      .endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount()),
+      .endOfStream = (_implPtr->currentSampleIndex >= _implPtr->demuxerPtr->sampleCount()),
     };
   }
 
   DecodedStreamInfo AlacDecoderSession::streamInfo() const
   {
-    return _impl->info;
+    return _implPtr->info;
   }
 } // namespace ao::audio

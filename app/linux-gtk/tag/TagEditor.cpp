@@ -65,7 +65,7 @@ namespace ao::gtk
     _searchEntry.signal_changed().connect([this] { _availableTagsBox.invalidate_filter(); });
 
     // Tag names must match query parser identifier rules: [a-zA-Z_][a-zA-Z0-9_]*
-    static auto const kTagNamePattern = Glib::Regex::create("^[a-zA-Z_][a-zA-Z0-9_]*$");
+    static auto const kTagNamePatternPtr = Glib::Regex::create("^[a-zA-Z_][a-zA-Z0-9_]*$");
 
     _searchEntry.signal_insert_text().connect(
       [this](Glib::ustring const& text, int const* position)
@@ -73,7 +73,7 @@ namespace ao::gtk
         auto candidate = _searchEntry.get_text();
         candidate.insert(*position, text);
 
-        if (!candidate.empty() && !kTagNamePattern->match(candidate))
+        if (!candidate.empty() && !kTagNamePatternPtr->match(candidate))
         {
           ::g_signal_stop_emission_by_name(_searchEntry.gobj(), "insert-text");
         }

@@ -27,10 +27,10 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-    auto const file = TagFile::open(path);
-    REQUIRE(file != nullptr);
+    auto const filePtr = TagFile::open(path);
+    REQUIRE(filePtr != nullptr);
 
-    auto builder = file->loadTrack();
+    auto builder = filePtr->loadTrack();
     auto& meta = builder.metadata();
 
     CHECK(meta.title() == "Test Title");
@@ -51,10 +51,10 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("hires." + std::string{format});
 
-    auto const file = TagFile::open(path);
-    REQUIRE(file != nullptr);
+    auto const filePtr = TagFile::open(path);
+    REQUIRE(filePtr != nullptr);
 
-    auto builder = file->loadTrack();
+    auto builder = filePtr->loadTrack();
     auto& meta = builder.metadata();
 
     CHECK(meta.title() == "HiRes Title");
@@ -75,8 +75,8 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-    auto const file = TagFile::open(path);
-    auto builder = file->loadTrack();
+    auto const filePtr = TagFile::open(path);
+    auto builder = filePtr->loadTrack();
     auto& prop = builder.property();
 
     // Duration ~1 second sine wave (allow some tolerance for encoding)
@@ -101,8 +101,8 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("hires." + std::string{format});
 
-    auto const file = TagFile::open(path);
-    auto builder = file->loadTrack();
+    auto const filePtr = TagFile::open(path);
+    auto builder = filePtr->loadTrack();
     auto& prop = builder.property();
 
     // Duration ~1 second sine wave (allow some tolerance for encoding)
@@ -149,10 +149,10 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("with_cover." + std::string{format});
 
-    auto const file = TagFile::open(path);
-    REQUIRE(file != nullptr);
+    auto const filePtr = TagFile::open(path);
+    REQUIRE(filePtr != nullptr);
 
-    auto builder = file->loadTrack();
+    auto builder = filePtr->loadTrack();
 
     // Create temp LMDB environment to test cover art serialization
     auto const tempDir = fs::temp_directory_path() / "rs_tag_test_XXXXXX";
@@ -183,10 +183,10 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("empty." + std::string{format});
 
-    auto const file = TagFile::open(path);
-    REQUIRE(file != nullptr);
+    auto const filePtr = TagFile::open(path);
+    REQUIRE(filePtr != nullptr);
 
-    auto builder = file->loadTrack();
+    auto builder = filePtr->loadTrack();
     auto& meta = builder.metadata();
     auto& prop = builder.property();
 

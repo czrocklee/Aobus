@@ -140,7 +140,7 @@ namespace ao::rt
   };
 
   LibraryMutationService::LibraryMutationService(async::Runtime& asyncRuntime, library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(asyncRuntime, library)}
+    : _implPtr{std::make_unique<Impl>(asyncRuntime, library)}
   {
   }
 
@@ -149,30 +149,30 @@ namespace ao::rt
   Subscription LibraryMutationService::onTracksMutated(
     std::move_only_function<void(std::vector<TrackId> const&)> handler)
   {
-    return _impl->tracksMutatedSignal.connect(std::move(handler));
+    return _implPtr->tracksMutatedSignal.connect(std::move(handler));
   }
 
   Subscription LibraryMutationService::onListsMutated(std::move_only_function<void(ListsMutated const&)> handler)
   {
-    return _impl->listsMutatedSignal.connect(std::move(handler));
+    return _implPtr->listsMutatedSignal.connect(std::move(handler));
   }
 
   Subscription LibraryMutationService::onLibraryTaskCompleted(std::move_only_function<void(std::size_t)> handler)
   {
-    return _impl->libraryTaskCompletedSignal.connect(std::move(handler));
+    return _implPtr->libraryTaskCompletedSignal.connect(std::move(handler));
   }
 
   Subscription LibraryMutationService::onLibraryTaskProgress(
     std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler)
   {
-    return _impl->libraryTaskProgressSignal.connect(std::move(handler));
+    return _implPtr->libraryTaskProgressSignal.connect(std::move(handler));
   }
 
   Result<UpdateTrackMetadataReply> LibraryMutationService::updateMetadata(std::span<TrackId const> trackIds,
                                                                           MetadataPatch const& patch)
   {
-    auto txn = _impl->library.writeTransaction();
-    auto writer = _impl->library.tracks().writer(txn);
+    auto txn = _implPtr->library.writeTransaction();
+    auto writer = _implPtr->library.tracks().writer(txn);
     auto mutated = std::vector<TrackId>{};
 
     for (auto const trackId : trackIds)
@@ -184,20 +184,21 @@ namespace ao::rt
         continue;
       }
 
-      auto builder = library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
+      auto builder = library::TrackBuilder::fromView(*optView, _implPtr->library.dictionary());
 
       if (auto const patchResult = applyMetadataPatch(builder, patch);
           patchResult.changedHot || patchResult.changedCold)
       {
         if (patchResult.changedHot)
         {
-          auto const hotData = builder.serializeHot(txn, _impl->library.dictionary());
+          auto const hotData = builder.serializeHot(txn, _implPtr->library.dictionary());
           writer.updateHot(trackId, hotData);
         }
 
         if (patchResult.changedCold)
         {
-          auto const coldData = builder.serializeCold(txn, _impl->library.dictionary(), _impl->library.resources());
+          auto const coldData =
+            builder.serializeCold(txn, _implPtr->library.dictionary(), _implPtr->library.resources());
           writer.updateCold(trackId, coldData);
         }
       }
@@ -207,7 +208,7 @@ namespace ao::rt
 
     txn.commit();
 
-    _impl->tracksMutatedSignal.emit(mutated);
+    _implPtr->tracksMutatedSignal.emit(mutated);
 
     return UpdateTrackMetadataReply{.mutatedIds = std::move(mutated)};
   }
@@ -216,8 +217,8 @@ namespace ao::rt
                                                               std::span<std::string const> tagsToAdd,
                                                               std::span<std::string const> tagsToRemove)
   {
-    auto txn = _impl->library.writeTransaction();
-    auto writer = _impl->library.tracks().writer(txn);
+    auto txn = _implPtr->library.writeTransaction();
+    auto writer = _implPtr->library.tracks().writer(txn);
     auto mutated = std::vector<TrackId>{};
 
     for (auto const trackId : trackIds)
@@ -229,7 +230,7 @@ namespace ao::rt
         continue;
       }
 
-      auto builder = library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
+      auto builder = library::TrackBuilder::fromView(*optView, _implPtr->library.dictionary());
 
       auto& tags = builder.tags();
 
@@ -243,88 +244,88 @@ namespace ao::rt
         tags.remove(tag);
       }
 
-      auto const hotData = builder.serializeHot(txn, _impl->library.dictionary());
+      auto const hotData = builder.serializeHot(txn, _implPtr->library.dictionary());
       writer.updateHot(trackId, hotData);
       mutated.push_back(trackId);
     }
 
     txn.commit();
 
-    _impl->tracksMutatedSignal.emit(mutated);
+    _implPtr->tracksMutatedSignal.emit(mutated);
 
     return EditTrackTagsReply{.mutatedIds = std::move(mutated)};
   }
 
   async::Task<void> LibraryMutationService::importLibraryAsync(std::filesystem::path path)
   {
-    co_await _impl->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryImport");
-    auto importer = ao::rt::LibraryYamlImporter{_impl->library};
+    auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
 
     if (auto const result = importer.importFromYaml(path); !result)
     {
       throwException<Exception>("Library import failed: {}", result.error().message);
     }
 
-    co_await _impl->asyncRuntime.resumeOnControl();
+    co_await _implPtr->asyncRuntime.resumeOnControl();
   }
 
   async::Task<void> LibraryMutationService::exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode)
   {
-    co_await _impl->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryExport");
-    auto exporter = ao::rt::LibraryYamlExporter{_impl->library};
+    auto exporter = ao::rt::LibraryYamlExporter{_implPtr->library};
 
     if (auto const result = exporter.exportToYaml(path, mode); !result)
     {
       throwException<Exception>("Library export failed: {}", result.error().message);
     }
 
-    co_await _impl->asyncRuntime.resumeOnControl();
+    co_await _implPtr->asyncRuntime.resumeOnControl();
   }
 
   async::Task<library::ScanPlan> LibraryMutationService::buildScanPlanAsync()
   {
-    co_await _impl->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryScanner");
 
-    auto scanner = library::LibraryScanner{_impl->library};
+    auto scanner = library::LibraryScanner{_implPtr->library};
     auto plan = scanner.buildPlan(
       [this](std::filesystem::path const& path)
       {
-        _impl->asyncRuntime.controlExecutor().dispatch(
+        _implPtr->asyncRuntime.controlExecutor().dispatch(
           [this, path]
           {
-            _impl->libraryTaskProgressSignal.emit(LibraryMutationService::LibraryTaskProgressUpdated{
+            _implPtr->libraryTaskProgressSignal.emit(LibraryMutationService::LibraryTaskProgressUpdated{
               .fraction = 0.0, // Indeterminate during scan
               .message = "Scanning: " + path.filename().string(),
             });
           });
       });
 
-    co_await _impl->asyncRuntime.resumeOnControl();
+    co_await _implPtr->asyncRuntime.resumeOnControl();
     co_return plan;
   }
 
   async::Task<void> LibraryMutationService::applyScanPlanAsync(library::ScanPlan plan)
   {
-    co_await _impl->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("ApplyScanPlan");
 
     auto resultIds = std::vector<TrackId>{};
     auto const totalItems = plan.items.size();
 
     auto executor = ao::library::ScanPlanExecutor{
-      _impl->library,
+      _implPtr->library,
       std::move(plan),
       [this, totalItems](std::filesystem::path const& filePath, std::int32_t index)
       {
-        _impl->asyncRuntime.controlExecutor().dispatch(
+        _implPtr->asyncRuntime.controlExecutor().dispatch(
           [this, filePath, index, totalItems]
           {
             auto const fraction = totalItems > 0 ? static_cast<double>(index) / static_cast<double>(totalItems) : 0.0;
             auto const message = "Updating: " + filePath.filename().string();
-            _impl->libraryTaskProgressSignal.emit(LibraryMutationService::LibraryTaskProgressUpdated{
+            _implPtr->libraryTaskProgressSignal.emit(LibraryMutationService::LibraryTaskProgressUpdated{
               .fraction = fraction,
               .message = message,
             });
@@ -335,19 +336,19 @@ namespace ao::rt
     executor.run();
     resultIds = executor.result().processedIds;
 
-    co_await _impl->asyncRuntime.resumeOnControl();
+    co_await _implPtr->asyncRuntime.resumeOnControl();
 
-    _impl->libraryTaskCompletedSignal.emit(resultIds.size());
+    _implPtr->libraryTaskCompletedSignal.emit(resultIds.size());
 
     if (!resultIds.empty())
     {
-      _impl->tracksMutatedSignal.emit(resultIds);
+      _implPtr->tracksMutatedSignal.emit(resultIds);
     }
   }
 
   ListId LibraryMutationService::createList(ListDraft const& draft)
   {
-    auto txn = _impl->library.writeTransaction();
+    auto txn = _implPtr->library.writeTransaction();
 
     auto builder =
       library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
@@ -366,19 +367,19 @@ namespace ao::rt
 
     auto const payload = builder.serialize();
 
-    auto const [listId, view] = _impl->library.lists().writer(txn).create(payload);
+    auto const [listId, view] = _implPtr->library.lists().writer(txn).create(payload);
 
     txn.commit();
 
     auto const ev = LibraryMutationService::ListsMutated{.upserted = {listId}, .deleted = {}};
-    _impl->listsMutatedSignal.emit(ev);
+    _implPtr->listsMutatedSignal.emit(ev);
 
     return listId;
   }
 
   void LibraryMutationService::updateList(ListDraft const& draft)
   {
-    auto txn = _impl->library.writeTransaction();
+    auto txn = _implPtr->library.writeTransaction();
 
     auto builder =
       library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
@@ -397,36 +398,36 @@ namespace ao::rt
 
     auto const payload = builder.serialize();
 
-    _impl->library.lists().writer(txn).update(draft.listId, payload);
+    _implPtr->library.lists().writer(txn).update(draft.listId, payload);
 
     txn.commit();
 
     auto const ev = LibraryMutationService::ListsMutated{.upserted = {draft.listId}, .deleted = {}};
-    _impl->listsMutatedSignal.emit(ev);
+    _implPtr->listsMutatedSignal.emit(ev);
   }
 
   void LibraryMutationService::deleteList(ListId listId)
   {
-    auto txn = _impl->library.writeTransaction();
-    _impl->library.lists().writer(txn).del(listId);
+    auto txn = _implPtr->library.writeTransaction();
+    _implPtr->library.lists().writer(txn).del(listId);
     txn.commit();
 
     auto const ev = LibraryMutationService::ListsMutated{.upserted = {}, .deleted = {listId}};
-    _impl->listsMutatedSignal.emit(ev);
+    _implPtr->listsMutatedSignal.emit(ev);
   }
 
   void LibraryMutationService::notifyTracksMutated(std::vector<TrackId> trackIds)
   {
-    _impl->tracksMutatedSignal.emit(trackIds);
+    _implPtr->tracksMutatedSignal.emit(trackIds);
   }
 
   void LibraryMutationService::notifyListsMutated(std::vector<ListId> upserted, std::vector<ListId> deleted)
   {
-    _impl->listsMutatedSignal.emit({.upserted = std::move(upserted), .deleted = std::move(deleted)});
+    _implPtr->listsMutatedSignal.emit({.upserted = std::move(upserted), .deleted = std::move(deleted)});
   }
 
   void LibraryMutationService::notifyLibraryTaskCompleted(std::size_t count)
   {
-    _impl->libraryTaskCompletedSignal.emit(count);
+    _implPtr->libraryTaskCompletedSignal.emit(count);
   }
 } // namespace ao::rt

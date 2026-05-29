@@ -47,19 +47,19 @@ namespace ao::gtk
     _listScrolledWindow.set_child(_listView);
     _listScrolledWindow.set_size_request(kSidebarWidth, -1);
 
-    auto factory = Gtk::SignalListItemFactory::create();
-    factory->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                    { setupSidebarListItem(listItem); });
-    factory->signal_bind().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                   { bindSidebarListItem(listItem); });
+    auto factoryPtr = Gtk::SignalListItemFactory::create();
+    factoryPtr->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
+                                       { setupSidebarListItem(listItem); });
+    factoryPtr->signal_bind().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
+                                      { bindSidebarListItem(listItem); });
 
-    _listView.set_factory(factory);
+    _listView.set_factory(factoryPtr);
 
-    auto menuModel = Gio::Menu::create();
-    menuModel->append("New Smart List...", "win.new");
-    menuModel->append("Edit List...", "win.edit");
-    menuModel->append("Delete List", "win.delete");
-    _listContextMenu.set_menu_model(menuModel);
+    auto menuModelPtr = Gio::Menu::create();
+    menuModelPtr->append("New Smart List...", "win.new");
+    menuModelPtr->append("Edit List...", "win.edit");
+    menuModelPtr->append("Delete List", "win.delete");
+    _listContextMenu.set_menu_model(menuModelPtr);
     _listContextMenu.set_parent(_listView);
   }
 
@@ -72,38 +72,38 @@ namespace ao::gtk
   {
     auto result = ListTreeModelBuilder::build(runtime, txn);
     _nodesById = std::move(result.nodesById);
-    _listTreeStore = std::move(result.store);
-    _treeListModel = std::move(result.treeModel);
-    _listSelectionModel = std::move(result.selectionModel);
-    _listSelectionModel->signal_selection_changed().connect(
+    _listTreeStorePtr = std::move(result.storePtr);
+    _treeListModelPtr = std::move(result.treeModelPtr);
+    _listSelectionModelPtr = std::move(result.selectionModelPtr);
+    _listSelectionModelPtr->signal_selection_changed().connect(
       sigc::mem_fun(*this, &ListSidebarPanel::onListSelectionChanged));
-    _listView.set_model(_listSelectionModel);
+    _listView.set_model(_listSelectionModelPtr);
   }
 
   void ListSidebarPanel::selectList(ListId listId)
   {
-    if (!_treeListModel)
+    if (!_treeListModelPtr)
     {
       return;
     }
 
-    auto const itemCount = _treeListModel->get_n_items();
+    auto const itemCount = _treeListModelPtr->get_n_items();
 
     for (guint idx = 0; idx < itemCount; ++idx)
     {
-      auto item = _treeListModel->get_object(idx);
-      auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(item);
+      auto itemPtr = _treeListModelPtr->get_object(idx);
+      auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(itemPtr);
 
-      if (!treeListRow)
+      if (!treeListRowPtr)
       {
         continue;
       }
 
-      auto node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
+      auto nodePtr = std::dynamic_pointer_cast<ListTreeItem>(treeListRowPtr->get_item());
 
-      if (node && node->listId() == listId)
+      if (nodePtr && nodePtr->listId() == listId)
       {
-        _listSelectionModel->set_selected(idx);
+        _listSelectionModelPtr->set_selected(idx);
         break;
       }
     }
@@ -121,33 +121,34 @@ namespace ao::gtk
 
   ListId ListSidebarPanel::selectedListId() const
   {
-    if (_listSelectionModel == nullptr)
+    if (_listSelectionModelPtr == nullptr)
     {
       return kInvalidListId;
     }
 
-    auto const selectedPosition = _listSelectionModel->get_selected();
+    auto const selectedPosition = _listSelectionModelPtr->get_selected();
 
     if (selectedPosition == kInvalidListPosition)
     {
       return kInvalidListId;
     }
 
-    auto const treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(_listSelectionModel->get_selected_item());
+    auto const treeListRowPtr =
+      std::dynamic_pointer_cast<Gtk::TreeListRow>(_listSelectionModelPtr->get_selected_item());
 
-    if (treeListRow == nullptr)
+    if (treeListRowPtr == nullptr)
     {
       return kInvalidListId;
     }
 
-    auto const node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
+    auto const nodePtr = std::dynamic_pointer_cast<ListTreeItem>(treeListRowPtr->get_item());
 
-    if (node == nullptr)
+    if (nodePtr == nullptr)
     {
       return kInvalidListId;
     }
 
-    return node->listId();
+    return nodePtr->listId();
   }
 
   void ListSidebarPanel::showContextMenu(Gdk::Rectangle const& rect)
@@ -178,14 +179,14 @@ namespace ao::gtk
     filterLabel->set_hexpand(true);
     rowBox->append(*filterLabel);
 
-    auto clickController = Gtk::GestureClick::create();
-    clickController->set_button(GDK_BUTTON_SECONDARY);
-    clickController->signal_pressed().connect(
+    auto clickControllerPtr = Gtk::GestureClick::create();
+    clickControllerPtr->set_button(GDK_BUTTON_SECONDARY);
+    clickControllerPtr->signal_pressed().connect(
       [this, listItem, rowBox](std::int32_t /*nPress*/, double xPos, double yPos)
       {
         if (auto const position = listItem->get_position(); position != kInvalidListPosition)
         {
-          _listSelectionModel->set_selected(position);
+          _listSelectionModelPtr->set_selected(position);
         }
 
         auto optPoint =
@@ -205,22 +206,22 @@ namespace ao::gtk
         }
       });
 
-    rowBox->add_controller(clickController);
+    rowBox->add_controller(clickControllerPtr);
     listItem->set_child(*rowBox);
   }
 
   void ListSidebarPanel::bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
   {
-    auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(listItem->get_item());
+    auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(listItem->get_item());
 
-    if (!treeListRow)
+    if (!treeListRowPtr)
     {
       return;
     }
 
-    auto node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
+    auto nodePtr = std::dynamic_pointer_cast<ListTreeItem>(treeListRowPtr->get_item());
 
-    if (!node)
+    if (!nodePtr)
     {
       return;
     }
@@ -232,7 +233,7 @@ namespace ao::gtk
 
     if (expander != nullptr)
     {
-      expander->set_list_row(treeListRow);
+      expander->set_list_row(treeListRowPtr);
     }
 
     if (label == nullptr)
@@ -240,21 +241,21 @@ namespace ao::gtk
       return;
     }
 
-    auto row = node->row();
+    auto rowPtr = nodePtr->row();
 
-    if (!row)
+    if (!rowPtr)
     {
       return;
     }
 
-    label->set_text(row->name());
+    label->set_text(rowPtr->name());
 
     if (filterLabel == nullptr)
     {
       return;
     }
 
-    if (auto const filter = row->filter(); !filter.empty())
+    if (auto const filter = rowPtr->filter(); !filter.empty())
     {
       filterLabel->set_text(std::format("[{}]", filter.raw()));
       filterLabel->set_visible(true);

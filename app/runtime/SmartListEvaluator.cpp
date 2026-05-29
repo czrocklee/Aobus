@@ -152,13 +152,13 @@ namespace ao::rt
         list->_evaluator = nullptr;
       }
 
-      if (bucket->observer)
+      if (bucket->observerPtr)
       {
-        utility::unsafeDowncast<SourceObserver>(bucket->observer.get())->invalidate();
+        utility::unsafeDowncast<SourceObserver>(bucket->observerPtr.get())->invalidate();
 
         if (bucket->sourceAlive)
         {
-          source->detach(bucket->observer.get());
+          source->detach(bucket->observerPtr.get());
         }
       }
     }
@@ -172,8 +172,8 @@ namespace ao::rt
     {
       bucket = std::make_unique<SourceBucket>();
       bucket->source = &source;
-      bucket->observer = std::make_unique<SourceObserver>(*this, source);
-      source.attach(bucket->observer.get());
+      bucket->observerPtr = std::make_unique<SourceObserver>(*this, source);
+      source.attach(bucket->observerPtr.get());
     }
 
     bucket->lists.push_back(&list);
@@ -190,7 +190,7 @@ namespace ao::rt
       {
         if (bucket.sourceAlive)
         {
-          source.detach(bucket.observer.get());
+          source.detach(bucket.observerPtr.get());
         }
 
         _buckets.erase(it);
@@ -265,7 +265,7 @@ namespace ao::rt
 
     for (auto* const list : lists)
     {
-      if (list->_current.optError || !list->_current.plan)
+      if (list->_current.optError || !list->_current.planPtr)
       {
         list->_members.clear();
       }
@@ -316,7 +316,7 @@ namespace ao::rt
 
       for (std::size_t i = 0; i < lists.size(); ++i)
       {
-        if (lists[i]->_planEvaluator.matches(*lists[i]->_current.plan, *optView))
+        if (lists[i]->_planEvaluator.matches(*lists[i]->_current.planPtr, *optView))
         {
           nextMembers[i].push_back(id);
         }
@@ -343,7 +343,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_current.optError || !list->_current.plan || list->_dirty)
+      if (list->_current.optError || !list->_current.planPtr || list->_dirty)
       {
         continue;
       }
@@ -368,7 +368,7 @@ namespace ao::rt
 
     for (auto* const list : evaluatableLists)
     {
-      if (list->_planEvaluator.matches(*list->_current.plan, *optView))
+      if (list->_planEvaluator.matches(*list->_current.planPtr, *optView))
       {
         auto [it, inserted] = list->_members.insert(id);
 
@@ -387,7 +387,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_current.optError || !list->_current.plan || list->_dirty)
+      if (list->_current.optError || !list->_current.planPtr || list->_dirty)
       {
         continue;
       }
@@ -407,7 +407,7 @@ namespace ao::rt
 
     for (auto* const list : evaluatableLists)
     {
-      bool const nowMatches = optView && list->_planEvaluator.matches(*list->_current.plan, *optView);
+      bool const nowMatches = optView && list->_planEvaluator.matches(*list->_current.planPtr, *optView);
 
       if (auto const it = list->_members.find(id); nowMatches && it == list->_members.end())
       {
@@ -460,7 +460,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_current.optError || !list->_current.plan || list->_dirty)
+      if (list->_current.optError || !list->_current.planPtr || list->_dirty)
       {
         continue;
       }
@@ -490,7 +490,7 @@ namespace ao::rt
 
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
-        if (evaluatableLists[i]->_planEvaluator.matches(*evaluatableLists[i]->_current.plan, *optView))
+        if (evaluatableLists[i]->_planEvaluator.matches(*evaluatableLists[i]->_current.planPtr, *optView))
         {
           matchedIds[i].push_back(id);
         }
@@ -523,7 +523,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_current.optError || !list->_current.plan || list->_dirty)
+      if (list->_current.optError || !list->_current.planPtr || list->_dirty)
       {
         continue;
       }
@@ -557,7 +557,7 @@ namespace ao::rt
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
         auto& list = *evaluatableLists[i];
-        bool const nowMatches = optView && list._planEvaluator.matches(*list._current.plan, *optView);
+        bool const nowMatches = optView && list._planEvaluator.matches(*list._current.planPtr, *optView);
 
         if (bool const wasPresent = list._members.contains(id); nowMatches && !wasPresent)
         {
@@ -666,12 +666,12 @@ namespace ao::rt
 
     for (auto* const list : lists)
     {
-      if (!list->_current.plan)
+      if (!list->_current.planPtr)
       {
         continue;
       }
 
-      switch (list->_current.plan->accessProfile)
+      switch (list->_current.planPtr->accessProfile)
       {
         case query::AccessProfile::HotOnly: needsHot = true; break;
         case query::AccessProfile::ColdOnly: needsCold = true; break;

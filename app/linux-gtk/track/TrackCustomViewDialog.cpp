@@ -67,7 +67,7 @@ namespace ao::gtk
 
     Glib::RefPtr<Gtk::StringList> createSortFieldsModel(std::vector<rt::TrackSortField>& mapping)
     {
-      auto model = Gtk::StringList::create({});
+      auto modelPtr = Gtk::StringList::create({});
       auto const defs = rt::trackFieldDefinitions();
       mapping.clear();
 
@@ -79,31 +79,31 @@ namespace ao::gtk
         {
           if (def.optSortField == sortField)
           {
-            model->append(std::string{def.label});
+            modelPtr->append(std::string{def.label});
             mapping.push_back(sortField);
             break;
           }
         }
       }
 
-      return model;
+      return modelPtr;
     }
 
     Glib::RefPtr<Gtk::StringList> createVisibleFieldsModel(std::vector<rt::TrackField>& mapping)
     {
-      auto model = Gtk::StringList::create({});
+      auto modelPtr = Gtk::StringList::create({});
       mapping.clear();
 
       for (auto const& def : rt::trackFieldDefinitions())
       {
         if (def.presentable)
         {
-          model->append(std::string{def.label});
+          modelPtr->append(std::string{def.label});
           mapping.push_back(def.field);
         }
       }
 
-      return model;
+      return modelPtr;
     }
   }
 
@@ -114,7 +114,10 @@ namespace ao::gtk
   {
     set_title("Edit Custom View");
     set_transient_for(parent);
-    set_default_size(500, 600);
+    constexpr std::int32_t kDefaultWidth = 500;
+    constexpr std::int32_t kDefaultHeight = 600;
+
+    set_default_size(kDefaultWidth, kDefaultHeight);
 
     setupUi();
     populateFromSpec(initialSpec, initialLabel);
@@ -132,7 +135,7 @@ namespace ao::gtk
     _nameEntry.set_placeholder_text("View label");
     metaList->addEntryRow("Name", _nameEntry);
 
-    auto groupModel = Gtk::StringList::create({});
+    auto groupModelPtr = Gtk::StringList::create({});
     _availableGroupKeys = {
       rt::TrackGroupKey::None,
       rt::TrackGroupKey::Artist,
@@ -146,10 +149,10 @@ namespace ao::gtk
 
     for (auto const key : _availableGroupKeys)
     {
-      groupModel->append(std::string{groupKeyName(key)});
+      groupModelPtr->append(std::string{groupKeyName(key)});
     }
 
-    _groupDropdown.set_model(groupModel);
+    _groupDropdown.set_model(groupModelPtr);
     metaList->addRow("Group By", _groupDropdown);
     mainBox->append(*metaList);
 
@@ -403,17 +406,17 @@ namespace ao::gtk
   {
     show();
 
-    auto loop = Glib::MainLoop::create(false);
+    auto loopPtr = Glib::MainLoop::create(false);
     auto response = Gtk::ResponseType::CANCEL;
 
     signal_response().connect(
-      [&loop, &response](std::int32_t resp)
+      [&loopPtr, &response](std::int32_t resp)
       {
         response = static_cast<Gtk::ResponseType>(resp);
-        loop->quit();
+        loopPtr->quit();
       });
 
-    loop->run();
+    loopPtr->run();
     hide();
 
     if (response == Gtk::ResponseType::OK)

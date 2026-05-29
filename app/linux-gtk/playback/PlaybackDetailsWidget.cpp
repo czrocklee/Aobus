@@ -60,7 +60,7 @@ namespace ao::gtk
     _container.append(_streamInfoLabel);
     _container.append(_sinkStatusIcon);
 
-    _controller = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
+    _controllerPtr = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
       playbackService, [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 

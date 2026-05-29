@@ -33,19 +33,19 @@ namespace ao::audio::backend::detail
       return caps;
     }
 
-    auto pcm = utility::makeUniquePtr<::snd_pcm_close>(rawPcm);
+    auto pcmPtr = utility::makeUniquePtr<::snd_pcm_close>(rawPcm);
 
     ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
 
-    if (::snd_pcm_hw_params_any(pcm.get(), params) < 0)
+    if (::snd_pcm_hw_params_any(pcmPtr.get(), params) < 0)
     {
       return caps;
     }
 
     for (auto const rate : std::to_array({44100, 48000, 88200, 96000, 176400, 192000}))
     {
-      if (::snd_pcm_hw_params_test_rate(pcm.get(), params, static_cast<std::uint32_t>(rate), 0) == 0)
+      if (::snd_pcm_hw_params_test_rate(pcmPtr.get(), params, static_cast<std::uint32_t>(rate), 0) == 0)
       {
         caps.sampleRates.push_back(static_cast<std::uint32_t>(rate));
       }
@@ -64,7 +64,7 @@ namespace ao::audio::backend::detail
            {.alsaFormat = SND_PCM_FORMAT_S32_LE, .capability = {.bitDepth = 32, .validBits = 32, .isFloat = false}},
          }))
     {
-      if (::snd_pcm_hw_params_test_format(pcm.get(), params, probe.alsaFormat) == 0)
+      if (::snd_pcm_hw_params_test_format(pcmPtr.get(), params, probe.alsaFormat) == 0)
       {
         addSampleFormatCapability(caps, probe.capability);
 
@@ -78,7 +78,7 @@ namespace ao::audio::backend::detail
 
     for (auto const channelCount : std::to_array({1, 2, 4, 6, 8}))
     {
-      if (::snd_pcm_hw_params_test_channels(pcm.get(), params, static_cast<std::uint32_t>(channelCount)) == 0)
+      if (::snd_pcm_hw_params_test_channels(pcmPtr.get(), params, static_cast<std::uint32_t>(channelCount)) == 0)
       {
         caps.channelCounts.push_back(static_cast<std::uint8_t>(channelCount));
       }
@@ -97,35 +97,35 @@ namespace ao::audio::backend::detail
     {
       if (char* cardName = nullptr; ::snd_card_get_name(card, &cardName) == 0)
       {
-        auto const safeCardName = std::unique_ptr<char, void (*)(void*)>{cardName, ::free};
+        auto const safeCardNamePtr = std::unique_ptr<char, void (*)(void*)>{cardName, ::free};
         auto const cardId = std::format("hw:{}", card);
 
         if (::snd_ctl_t* rawCtl = nullptr; ::snd_ctl_open(&rawCtl, cardId.c_str(), 0) >= 0)
         {
-          auto ctl = utility::makeUniquePtr<::snd_ctl_close>(rawCtl);
+          auto ctlPtr = utility::makeUniquePtr<::snd_ctl_close>(rawCtl);
           int device = -1;
 
-          while (::snd_ctl_pcm_next_device(ctl.get(), &device) == 0 && device >= 0)
+          while (::snd_ctl_pcm_next_device(ctlPtr.get(), &device) == 0 && device >= 0)
           {
             ::snd_pcm_info_t* info = nullptr;
             snd_pcm_info_alloca(&info);
             ::snd_pcm_info_set_device(info, static_cast<std::uint32_t>(device));
             ::snd_pcm_info_set_stream(info, SND_PCM_STREAM_PLAYBACK);
 
-            if (::snd_ctl_pcm_info(ctl.get(), info) == 0)
+            if (::snd_ctl_pcm_info(ctlPtr.get(), info) == 0)
             {
               auto const hwId = std::format("hw:{},{}", card, device);
               auto const plughwId = std::format("plughw:{},{}", card, device);
 
               devices.push_back({.id = DeviceId{plughwId},
-                                 .displayName = std::string{safeCardName.get()},
+                                 .displayName = std::string{safeCardNamePtr.get()},
                                  .description = plughwId,
                                  .isDefault = false,
                                  .backendId = kBackendAlsa,
                                  .capabilities = queryAlsaDeviceCapabilities(hwId)});
 
               devices.push_back({.id = DeviceId{hwId},
-                                 .displayName = std::format("{} (Raw)", safeCardName.get()),
+                                 .displayName = std::format("{} (Raw)", safeCardNamePtr.get()),
                                  .description = hwId,
                                  .isDefault = false,
                                  .backendId = kBackendAlsa,

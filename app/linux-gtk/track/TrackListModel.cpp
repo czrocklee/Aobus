@@ -45,19 +45,19 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackListModel> TrackListModel::create(TrackRowCache const& provider)
   {
-    auto model = Glib::make_refptr_for_instance<TrackListModel>(new TrackListModel{});
-    model->_provider = &provider;
-    return model;
+    auto modelPtr = Glib::make_refptr_for_instance<TrackListModel>(new TrackListModel{});
+    modelPtr->_provider = &provider;
+    return modelPtr;
   }
 
-  void TrackListModel::bindProjection(std::shared_ptr<rt::ITrackListProjection> projection)
+  void TrackListModel::bindProjection(std::shared_ptr<rt::ITrackListProjection> projectionPtr)
   {
     _projectionSub.reset();
 
     auto const oldSize = static_cast<::guint>(_modelSize);
-    auto const newSize = static_cast<::guint>(projection->size());
+    auto const newSize = static_cast<::guint>(projectionPtr->size());
 
-    _projection = std::move(projection);
+    _projectionPtr = std::move(projectionPtr);
     _modelSize = newSize;
 
     if (oldSize != newSize || oldSize > 0)
@@ -65,31 +65,31 @@ namespace ao::gtk
       notifyReset(oldSize, newSize);
     }
 
-    _projectionSub = _projection->subscribe(std::bind_front(&TrackListModel::applyDeltaBatch, this));
+    _projectionSub = _projectionPtr->subscribe(std::bind_front(&TrackListModel::applyDeltaBatch, this));
   }
 
   void TrackListModel::clearProjection()
   {
     _projectionSub.reset();
-    _projection = nullptr;
+    _projectionPtr = nullptr;
     _modelSize = 0;
   }
 
   std::optional<std::size_t> TrackListModel::indexOf(TrackId trackId) const noexcept
   {
-    return (_projection != nullptr) ? _projection->indexOf(trackId) : std::nullopt;
+    return (_projectionPtr != nullptr) ? _projectionPtr->indexOf(trackId) : std::nullopt;
   }
 
   std::optional<std::size_t> TrackListModel::groupIndexForTrack(TrackId trackId) const noexcept
   {
-    if (_projection == nullptr)
+    if (_projectionPtr == nullptr)
     {
       return std::nullopt;
     }
 
-    if (auto const optIdx = _projection->indexOf(trackId))
+    if (auto const optIdx = _projectionPtr->indexOf(trackId); optIdx)
     {
-      return _projection->groupIndexAt(*optIdx);
+      return _projectionPtr->groupIndexAt(*optIdx);
     }
 
     return std::nullopt;
@@ -110,13 +110,13 @@ namespace ao::gtk
     }
 
     // Try to resolve via a live row if available
-    if (_projection != nullptr && _provider != nullptr && _projection->size() > 0)
+    if (_projectionPtr != nullptr && _provider != nullptr && _projectionPtr->size() > 0)
     {
-      auto const id = _projection->trackIdAt(0);
+      auto const id = _projectionPtr->trackIdAt(0);
 
-      if (auto const row = _provider->trackRow(id))
+      if (auto const rowPtr = _provider->trackRow(id); rowPtr)
       {
-        _cachedItemType = G_OBJECT_TYPE(row->gobj()); // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
+        _cachedItemType = G_OBJECT_TYPE(rowPtr->gobj()); // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
         return _cachedItemType;
       }
     }
@@ -131,28 +131,28 @@ namespace ao::gtk
 
   ::gpointer TrackListModel::get_item_vfunc(::guint position)
   {
-    if (_projection == nullptr || _provider == nullptr)
+    if (_projectionPtr == nullptr || _provider == nullptr)
     {
       return nullptr;
     }
 
-    if (position >= _projection->size())
+    if (position >= _projectionPtr->size())
     {
       return nullptr;
     }
 
-    auto const trackId = _projection->trackIdAt(position);
-    auto const row = _provider->trackRow(trackId);
+    auto const trackId = _projectionPtr->trackIdAt(position);
+    auto const rowPtr = _provider->trackRow(trackId);
 
-    if (!row)
+    if (!rowPtr)
     {
       return nullptr;
     }
 
     // Synchronize playing state before returning the object to the UI
-    row->setPlaying(trackId == _playingTrackId);
+    rowPtr->setPlaying(trackId == _playingTrackId);
 
-    auto* const gobj = row->gobj();
+    auto* const gobj = rowPtr->gobj();
     (g_object_ref)(gobj);
     return gobj;
   }
@@ -162,7 +162,7 @@ namespace ao::gtk
     auto const oldId = _playingTrackId;
     _playingTrackId = id;
 
-    if (_projection == nullptr)
+    if (_projectionPtr == nullptr)
     {
       return;
     }
@@ -170,7 +170,7 @@ namespace ao::gtk
     // Notify UI that the playing/previously-playing rows need a refresh
     if (oldId != kInvalidTrackId)
     {
-      if (auto const optIdx = _projection->indexOf(oldId))
+      if (auto const optIdx = _projectionPtr->indexOf(oldId); optIdx)
       {
         items_changed(static_cast<::guint>(*optIdx), 1, 1);
       }
@@ -178,7 +178,7 @@ namespace ao::gtk
 
     if (id != kInvalidTrackId)
     {
-      if (auto const optIdx = _projection->indexOf(id))
+      if (auto const optIdx = _projectionPtr->indexOf(id); optIdx)
       {
         items_changed(static_cast<::guint>(*optIdx), 1, 1);
       }
@@ -199,12 +199,12 @@ namespace ao::gtk
                  delta);
     }
 
-    gsl_Expects(_modelSize == _projection->size());
+    gsl_Expects(_modelSize == _projectionPtr->size());
   }
 
   void TrackListModel::applyResetDelta()
   {
-    auto const newSize = static_cast<::guint>(_projection->size());
+    auto const newSize = static_cast<::guint>(_projectionPtr->size());
     auto const oldSize = static_cast<::guint>(_modelSize);
     notifyReset(oldSize, newSize);
     _modelSize = newSize;
@@ -233,7 +233,7 @@ namespace ao::gtk
 
     for (auto const idx : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
     {
-      _provider->invalidate(_projection->trackIdAt(idx));
+      _provider->invalidate(_projectionPtr->trackIdAt(idx));
     }
 
     notifyUpdate(pos, count);
