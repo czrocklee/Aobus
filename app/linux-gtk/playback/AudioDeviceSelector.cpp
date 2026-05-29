@@ -3,8 +3,8 @@
 
 #include "playback/AudioDeviceSelector.h"
 
-#include "layout/LayoutConstants.h"
 #include "OutputListItems.h"
+#include "layout/LayoutConstants.h"
 #include <ao/audio/Backend.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/AudioOutputViewModel.h>

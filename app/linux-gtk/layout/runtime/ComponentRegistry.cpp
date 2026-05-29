@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/runtime/ComponentRegistry.h"
 
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -21,16 +22,12 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    /**
-     * @brief Internal fallback component for unknown types or errors.
-     */
     class ErrorComponent final : public ILayoutComponent
     {
     public:
       explicit ErrorComponent(std::string const& message)
       {
         _label.set_markup("<span foreground='red'><b>[Layout Error]</b></span> " + message);
-
         _label.add_css_class("ao-layout-error");
       }
 
@@ -43,23 +40,15 @@ namespace ao::gtk::layout
 
   ComponentRegistry::ComponentRegistry() = default;
 
-  void ComponentRegistry::registerComponent(ComponentDescriptor descriptor, ComponentFactory factory)
+  void ComponentRegistry::registerComponent(uimodel::layout::ComponentDescriptor descriptor, ComponentFactory factory)
   {
     auto const type = std::string{descriptor.type};
     _factories[type] = factory;
-
-    if (auto const it = _descriptorIndexMap.find(type); it != _descriptorIndexMap.end())
-    {
-      _descriptors[it->second] = std::move(descriptor);
-    }
-    else
-    {
-      _descriptorIndexMap[type] = _descriptors.size();
-      _descriptors.push_back(std::move(descriptor));
-    }
+    _catalog.registerComponentDescriptor(std::move(descriptor));
   }
 
-  std::unique_ptr<ILayoutComponent> ComponentRegistry::create(LayoutContext& ctx, LayoutNode const& node) const
+  std::unique_ptr<ILayoutComponent> ComponentRegistry::create(LayoutContext& ctx,
+                                                              uimodel::layout::LayoutNode const& node) const
   {
     if (auto const it = _factories.find(node.type); it != _factories.end())
     {
@@ -69,18 +58,18 @@ namespace ao::gtk::layout
     return std::make_unique<ErrorComponent>("Unknown component type: " + node.type);
   }
 
-  std::vector<ComponentDescriptor> const& ComponentRegistry::descriptors() const
+  std::vector<uimodel::layout::ComponentDescriptor> const& ComponentRegistry::descriptors() const
   {
-    return _descriptors;
+    return _catalog.descriptors();
   }
 
-  std::optional<ComponentDescriptor> ComponentRegistry::descriptor(std::string_view type) const
+  std::optional<uimodel::layout::ComponentDescriptor> ComponentRegistry::descriptor(std::string_view type) const
   {
-    if (auto const it = _descriptorIndexMap.find(type); it != _descriptorIndexMap.end())
-    {
-      return _descriptors[it->second];
-    }
+    return _catalog.descriptor(type);
+  }
 
-    return std::nullopt;
+  uimodel::layout::ComponentCatalog const& ComponentRegistry::catalog() const noexcept
+  {
+    return _catalog;
   }
 } // namespace ao::gtk::layout

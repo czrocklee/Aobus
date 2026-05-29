@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
-#include "ActionRegistry.h"
-
-#include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -21,75 +18,29 @@
 
 namespace ao::gtk::layout
 {
-  enum class PropertyKind : std::uint8_t
-  {
-    Bool,
-    Int,
-    Double,
-    String,
-    Enum,
-    StringList,
-    CssClassList,
-    Size
-  };
+  using PropertyKind = uimodel::layout::PropertyKind;
+  using PropertyDescriptor = uimodel::layout::PropertyDescriptor;
+  using ComponentDescriptor = uimodel::layout::ComponentDescriptor;
 
-  struct PropertyDescriptor final
-  {
-    std::string name;
-    PropertyKind kind = PropertyKind::String;
-    std::string label;
-    LayoutValue defaultValue = {};
-    std::vector<std::string> enumValues = {};
-    std::optional<ActionBindingProperty> optActionBinding = {};
-  };
+  using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(LayoutContext&, uimodel::layout::LayoutNode const&);
 
-  struct ComponentDescriptor final
-  {
-    std::string type;
-    std::string displayName;
-    std::string category;
-    bool container = false;
-    std::vector<PropertyDescriptor> props = {};
-    std::vector<PropertyDescriptor> layoutProps = {};
-    std::size_t minChildren = 0;
-    std::optional<std::size_t> optMaxChildren = {};
-  };
-
-  using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(LayoutContext&, LayoutNode const&);
-
-  /**
-   * @brief Registry for layout component types and their metadata.
-   */
   class ComponentRegistry final
   {
   public:
     ComponentRegistry();
 
-    /**
-     * @brief Register a factory and metadata for a component type.
-     */
-    void registerComponent(ComponentDescriptor descriptor, ComponentFactory factory);
+    void registerComponent(uimodel::layout::ComponentDescriptor descriptor, ComponentFactory factory);
 
-    /**
-     * @brief Create a component instance for a given node.
-     *
-     * Returns an error placeholder component if the type is unknown.
-     */
-    std::unique_ptr<ILayoutComponent> create(LayoutContext& ctx, LayoutNode const& node) const;
+    std::unique_ptr<ILayoutComponent> create(LayoutContext& ctx, uimodel::layout::LayoutNode const& node) const;
 
-    /**
-     * @brief Get all registered component descriptors.
-     */
-    std::vector<ComponentDescriptor> const& descriptors() const;
+    std::vector<uimodel::layout::ComponentDescriptor> const& descriptors() const;
 
-    /**
-     * @brief Get a descriptor by component type.
-     */
-    std::optional<ComponentDescriptor> descriptor(std::string_view type) const;
+    std::optional<uimodel::layout::ComponentDescriptor> descriptor(std::string_view type) const;
+
+    uimodel::layout::ComponentCatalog const& catalog() const noexcept;
 
   private:
+    uimodel::layout::ComponentCatalog _catalog;
     std::map<std::string, ComponentFactory, std::less<>> _factories;
-    std::vector<ComponentDescriptor> _descriptors;
-    std::map<std::string, std::size_t, std::less<>> _descriptorIndexMap;
   };
 }

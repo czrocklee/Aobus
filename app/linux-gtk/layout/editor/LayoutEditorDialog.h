@@ -119,6 +119,8 @@ namespace ao::gtk::layout::editor
 
     ComponentRegistry const& _registry;
     ActionRegistry const& _actionRegistry;
+
+    // Forward declaration of resolver (defined in ActionValidator.h already included)
     LayoutDocument _document;
 
     ModelColumns _columns;

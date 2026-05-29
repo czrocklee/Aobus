@@ -4,8 +4,8 @@
 #include "../../GtkTestSupport.h"
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
+#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
@@ -302,7 +302,8 @@ namespace ao::gtk::layout::editor::test
       auto dialogValid = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, validDoc, "classic");
 
       // Attempting to save a valid document should succeed and close the dialog
-      dialogValid->response(Gtk::ResponseType::OK);    }
+      dialogValid->response(Gtk::ResponseType::OK);
+    }
 
     SECTION("signalApplyPreview is emitted on document changes")
     {
@@ -407,8 +408,9 @@ namespace ao::gtk::layout::editor::test
 
       auto const app = Gtk::Application::create("io.github.aobus.template_test");
       auto window = Gtk::Window{};
-    auto const actionRegistry = ActionRegistry{};
-      auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+      auto const actionRegistry = ActionRegistry{};
+      auto ctx = LayoutContext{
+        .registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
       auto doc = LayoutDocument{};
       doc.version = 1;
@@ -441,8 +443,9 @@ namespace ao::gtk::layout::editor::test
 
       auto const app = Gtk::Application::create("io.github.aobus.recursive_test");
       auto window = Gtk::Window{};
-    auto const actionRegistry = ActionRegistry{};
-      auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+      auto const actionRegistry = ActionRegistry{};
+      auto ctx = LayoutContext{
+        .registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
       auto doc = LayoutDocument{};
       doc.version = 1;
@@ -496,7 +499,8 @@ namespace ao::gtk::layout::editor::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto ctx =
+      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
     SECTION("absoluteCanvas descriptor is registered as container")
     {

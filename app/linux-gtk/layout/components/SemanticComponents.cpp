@@ -6,10 +6,10 @@
 #include "image/ImageWidget.h"
 #include "inspector/TrackInspectorPanel.h"
 #include "layout/document/LayoutNode.h"
-#include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/ActionBinder.h"
 #include "layout/runtime/ActionRegistry.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
@@ -191,7 +191,8 @@ namespace ao::gtk::layout
             });
         }
 
-        auto const primaryLongPressCb = binder.bind(node, "primaryLongPressAction", "none", ActionSlot::PrimaryLongPress, _button);
+        auto const primaryLongPressCb =
+          binder.bind(node, "primaryLongPressAction", "none", ActionSlot::PrimaryLongPress, _button);
 
         if (primaryLongPressCb)
         {
@@ -407,21 +408,36 @@ namespace ao::gtk::layout
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<LabelComponent>(ctx, node); });
 
-    registry.registerComponent({.type = "app.actionButton",
-                                .displayName = "Action Button",
-                                .category = "Generic",
-                                .container = false,
-                                .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"},
-                                          {.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
-                                          {.name = "primaryAction", .kind = PropertyKind::Enum, .label = "Primary Action", .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryClick}},
-                                          {.name = "primaryLongPressAction", .kind = PropertyKind::Enum, .label = "Long Press", .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryLongPress}},
-                                          {.name = "size", .kind = PropertyKind::Enum, .label = "Size", .defaultValue = LayoutValue{"normal"}, .enumValues = {"small", "normal", "large"}},
-                                          {.name = "style", .kind = PropertyKind::Enum, .label = "Style", .defaultValue = LayoutValue{"flat"}, .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<ActionButtonComponent>(ctx, node); });
+    registry.registerComponent(
+      {.type = "app.actionButton",
+       .displayName = "Action Button",
+       .category = "Generic",
+       .container = false,
+       .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"},
+                 {.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
+                 {.name = "primaryAction",
+                  .kind = PropertyKind::Enum,
+                  .label = "Primary Action",
+                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryClick}},
+                 {.name = "primaryLongPressAction",
+                  .kind = PropertyKind::Enum,
+                  .label = "Long Press",
+                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryLongPress}},
+                 {.name = "size",
+                  .kind = PropertyKind::Enum,
+                  .label = "Size",
+                  .defaultValue = LayoutValue{"normal"},
+                  .enumValues = {"small", "normal", "large"}},
+                 {.name = "style",
+                  .kind = PropertyKind::Enum,
+                  .label = "Style",
+                  .defaultValue = LayoutValue{"flat"},
+                  .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+      { return std::make_unique<ActionButtonComponent>(ctx, node); });
 
     registry.registerComponent({.type = "library.listTree",
                                 .displayName = "Library Tree",

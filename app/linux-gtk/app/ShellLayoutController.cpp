@@ -18,10 +18,10 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/async/Runtime.h>
 #include <ao/rt/async/Task.h>
+#include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/utility/Log.h>
 
 #include <gtkmm/dialog.h>
@@ -37,8 +37,17 @@
 
 namespace ao::gtk
 {
-  ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime, Gtk::Window& parentWindow, std::shared_ptr<AppConfig> config)
-    : _registry{}, _actionRegistry{}, _context{.registry = _registry, .actionRegistry = _actionRegistry, .runtime = runtime, .parentWindow = parentWindow}, _host{_registry}, _config{std::move(config)}
+  ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
+                                               Gtk::Window& parentWindow,
+                                               std::shared_ptr<AppConfig> config)
+    : _registry{}
+    , _actionRegistry{}
+    , _context{.registry = _registry,
+               .actionRegistry = _actionRegistry,
+               .runtime = runtime,
+               .parentWindow = parentWindow}
+    , _host{_registry}
+    , _config{std::move(config)}
   {
     layout::LayoutRuntime::registerStandardComponents(_registry);
 
@@ -52,9 +61,12 @@ namespace ao::gtk
 
     _playbackSubs.push_back(_context.runtime.playback().onStarted(refreshActionStates));
     _playbackSubs.push_back(_context.runtime.playback().onStopped(refreshActionStates));
-    _playbackSubs.push_back(_context.runtime.playback().onNowPlayingChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
-    _playbackSubs.push_back(_context.runtime.playback().onShuffleModeChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
-    _playbackSubs.push_back(_context.runtime.playback().onRepeatModeChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
+    _playbackSubs.push_back(
+      _context.runtime.playback().onNowPlayingChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
+    _playbackSubs.push_back(
+      _context.runtime.playback().onShuffleModeChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
+    _playbackSubs.push_back(
+      _context.runtime.playback().onRepeatModeChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
 
     auto const registerAction = [this](std::string_view id,
                                        std::string_view label,
@@ -65,10 +77,7 @@ namespace ao::gtk
     {
       _actionRegistry.registerAction(
         layout::ActionDescriptor{
-          .id = std::string{id},
-          .label = std::string{label},
-          .category = std::string{category},
-          .capabilities = caps},
+          .id = std::string{id}, .label = std::string{label}, .category = std::string{category}, .capabilities = caps},
         std::move(handler),
         std::move(stateProvider));
     };
@@ -89,29 +98,29 @@ namespace ao::gtk
   }
 
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction,
-                                                       layout::ActionStateProvider const& hasActiveQueue)
+                                                      layout::ActionStateProvider const& hasActiveQueue)
   {
-    registerAction(
-      "playback.playPause",
-      "Play/Pause",
-      "Playback",
-      layout::ActionCapability::None,
-      [](layout::ActionActivationContext& ctx)
-      {
-        if (auto const& state = ctx.runtime.playback().state(); state.transport == audio::Transport::Paused)
-        {
-          ctx.runtime.playback().resume();
-        }
-        else if (state.transport == audio::Transport::Playing)
-        {
-          ctx.runtime.playback().pause();
-        }
-        else
-        {
-          ctx.runtime.playSelectionInFocusedView();
-        }
-      },
-      {});
+    registerAction("playback.playPause",
+                   "Play/Pause",
+                   "Playback",
+                   layout::ActionCapability::None,
+                   [](layout::ActionActivationContext& ctx)
+                   {
+                     if (auto const& state = ctx.runtime.playback().state();
+                         state.transport == audio::Transport::Paused)
+                     {
+                       ctx.runtime.playback().resume();
+                     }
+                     else if (state.transport == audio::Transport::Playing)
+                     {
+                       ctx.runtime.playback().pause();
+                     }
+                     else
+                     {
+                       ctx.runtime.playSelectionInFocusedView();
+                     }
+                   },
+                   {});
 
     registerAction(
       "playback.stop",
@@ -207,73 +216,69 @@ namespace ao::gtk
       },
       hasActiveQueue);
 
-    registerAction(
-      "playback.showAudioDeviceSelector",
-      "Audio Devices",
-      "Playback",
-      layout::ActionCapability::RequiresAnchor | layout::ActionCapability::PresentsMenu,
-      [](layout::ActionActivationContext& ctx)
-      {
-        auto* const popover = Gtk::make_managed<AudioDeviceSelector>(ctx.runtime.playback());
-        popover->set_parent(ctx.anchorWidget);
-        popover->signal_closed().connect([popover] { popover->unparent(); });
-        popover->popup();
-      },
-      {});
+    registerAction("playback.showAudioDeviceSelector",
+                   "Audio Devices",
+                   "Playback",
+                   layout::ActionCapability::RequiresAnchor | layout::ActionCapability::PresentsMenu,
+                   [](layout::ActionActivationContext& ctx)
+                   {
+                     auto* const popover = Gtk::make_managed<AudioDeviceSelector>(ctx.runtime.playback());
+                     popover->set_parent(ctx.anchorWidget);
+                     popover->signal_closed().connect([popover] { popover->unparent(); });
+                     popover->popup();
+                   },
+                   {});
   }
 
   void ShellLayoutController::registerShellActions(RegisterActionFn const& registerAction)
   {
-    registerAction(
-      "shell.showSystemMenu",
-      "System Menu",
-      "Shell",
-      layout::ActionCapability::RequiresAnchor | layout::ActionCapability::PresentsMenu,
-      [this](layout::ActionActivationContext& ctx)
-      {
-        if (auto const menu = _context.shell.menuModel)
-        {
-          auto* const popover = Gtk::make_managed<Gtk::PopoverMenu>(menu);
-          popover->set_parent(ctx.anchorWidget);
-          popover->set_has_arrow(true);
-          popover->signal_closed().connect([popover] { popover->unparent(); });
-          popover->popup();
-        }
-        else
-        {
-          APP_LOG_WARN("shell.showSystemMenu invoked but menuModel is missing");
-        }
-      },
-      {});
+    registerAction("shell.showSystemMenu",
+                   "System Menu",
+                   "Shell",
+                   layout::ActionCapability::RequiresAnchor | layout::ActionCapability::PresentsMenu,
+                   [this](layout::ActionActivationContext& ctx)
+                   {
+                     if (auto const menu = _context.shell.menuModel)
+                     {
+                       auto* const popover = Gtk::make_managed<Gtk::PopoverMenu>(menu);
+                       popover->set_parent(ctx.anchorWidget);
+                       popover->set_has_arrow(true);
+                       popover->signal_closed().connect([popover] { popover->unparent(); });
+                       popover->popup();
+                     }
+                     else
+                     {
+                       APP_LOG_WARN("shell.showSystemMenu invoked but menuModel is missing");
+                     }
+                   },
+                   {});
 
-    registerAction(
-      "shell.showSoul",
-      "Aobus Soul",
-      "Shell",
-      layout::ActionCapability::None,
-      [](layout::ActionActivationContext& ctx)
-      {
-        auto* const window = new AobusSoulWindow{};
-        window->set_transient_for(ctx.parentWindow);
-        window->bind(ctx.runtime.playback());
-        window->signal_hide().connect([window] { delete window; });
-        window->present();
-      },
-      {});
+    registerAction("shell.showSoul",
+                   "Aobus Soul",
+                   "Shell",
+                   layout::ActionCapability::None,
+                   [](layout::ActionActivationContext& ctx)
+                   {
+                     auto* const window = new AobusSoulWindow{};
+                     window->set_transient_for(ctx.parentWindow);
+                     window->bind(ctx.runtime.playback());
+                     window->signal_hide().connect([window] { delete window; });
+                     window->present();
+                   },
+                   {});
 
-    registerAction(
-      "shell.editLayout",
-      "Edit Layout",
-      "Shell",
-      layout::ActionCapability::None,
-      [this](layout::ActionActivationContext&)
-      {
-        if (_config)
-        {
-          openEditor(*_config);
-        }
-      },
-      {});
+    registerAction("shell.editLayout",
+                   "Edit Layout",
+                   "Shell",
+                   layout::ActionCapability::None,
+                   [this](layout::ActionActivationContext&)
+                   {
+                     if (_config)
+                     {
+                       openEditor(*_config);
+                     }
+                   },
+                   {});
   }
 
   void ShellLayoutController::registerWorkspaceActions(RegisterActionFn const& registerAction,
@@ -422,12 +427,10 @@ namespace ao::gtk
 
   layout::ActionActivationContext ShellLayoutController::getActionContext(std::string_view componentId)
   {
-    return layout::ActionActivationContext{
-      .runtime = _context.runtime,
-      .parentWindow = _context.parentWindow,
-      .anchorWidget = _context.parentWindow,
-      .componentId = std::string{componentId}
-    };
+    return layout::ActionActivationContext{.runtime = _context.runtime,
+                                           .parentWindow = _context.parentWindow,
+                                           .anchorWidget = _context.parentWindow,
+                                           .componentId = std::string{componentId}};
   }
 
   bool ShellLayoutController::canProvideSafeAnchor(layout::ActionDescriptor const& desc) const

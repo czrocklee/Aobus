@@ -32,6 +32,12 @@ target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
 
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
 add_library(ao_app_uimodel STATIC
+    uimodel/layout/ActionCatalog.cpp
+    uimodel/layout/ActionValidator.cpp
+    uimodel/layout/ComponentCatalog.cpp
+    uimodel/layout/LayoutDocument.cpp
+    uimodel/layout/LayoutTemplateExpander.cpp
+    uimodel/layout/LayoutValue.cpp
     uimodel/list/ListActionPolicy.cpp
     uimodel/list/SmartListEditorModel.cpp
     uimodel/playback/AobusSoulViewModel.cpp
@@ -52,6 +58,26 @@ target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/in
 target_include_directories(ao_app_uimodel PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_app_uimodel PUBLIC ao ao_app_runtime)
 target_link_libraries(ao_app_uimodel PRIVATE)
+
+# --- Boundary guardrails for ao_app_uimodel ---
+# Ensure shared UI-model layout files never include platform UI headers
+add_custom_target(ao_uimodel_layout_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          -DROOTS="${CMAKE_SOURCE_DIR}/app/include/ao/uimodel/layout;${CMAKE_SOURCE_DIR}/app/uimodel/layout"
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking for forbidden platform UI includes in ao_app_uimodel layout files"
+)
+
+add_dependencies(ao_app_uimodel ao_uimodel_layout_boundary_check)
+
+# Configure-time check: ao_app_uimodel must not link platform UI targets
+get_target_property(_ao_uimodel_links ao_app_uimodel LINK_LIBRARIES)
+foreach(_lib IN LISTS _ao_uimodel_links)
+  if(_lib MATCHES "PkgGTKMM|gtkmm|gdkmm|giomm|glibmm|WinUI|WindowsApp")
+    message(FATAL_ERROR
+      "ao_app_uimodel must not link platform UI libraries (found: ${_lib})")
+  endif()
+endforeach()
 
 # Frontends
 add_subdirectory(linux-gtk)

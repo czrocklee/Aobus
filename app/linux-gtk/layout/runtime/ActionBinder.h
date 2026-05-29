@@ -9,7 +9,10 @@
 #include <functional>
 #include <string_view>
 
-namespace Gtk { class Widget; }
+namespace Gtk
+{
+  class Widget;
+}
 
 namespace ao::gtk::layout
 {
@@ -18,9 +21,7 @@ namespace ao::gtk::layout
   class ActionBinder final
   {
   public:
-    ActionBinder(ActionRegistry const& registry,
-                 rt::AppRuntime& runtime,
-                 Gtk::Window& parentWindow);
+    ActionBinder(ActionRegistry const& registry, rt::AppRuntime& runtime, Gtk::Window& parentWindow);
 
     /**
      * @brief Binds a layout action to a property.
@@ -28,7 +29,7 @@ namespace ao::gtk::layout
      * @param propName The property name containing the action ID.
      * @param defaultActionId The default action ID if the property is missing.
      * @param slot The action slot.
-     * @param anchorWidget The anchor widget for the action context. 
+     * @param anchorWidget The anchor widget for the action context.
      *                     NOTE: The caller must ensure 'anchorWidget' outlives the returned function.
      * @return A function that activates the action.
      */

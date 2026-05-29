@@ -2,23 +2,23 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/runtime/GioActionBridge.h"
+
 #include "layout/runtime/ActionRegistry.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <giomm/simpleactiongroup.h>
+#include <gtkmm/application.h>
+#include <gtkmm/box.h>
+#include <gtkmm/window.h>
 
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
-
-#include <giomm/simpleactiongroup.h>
-#include <gtkmm/application.h>
-#include <gtkmm/box.h>
-#include <gtkmm/window.h>
 
 using namespace ao::gtk::layout;
 using namespace ao::lmdb::test;
@@ -30,29 +30,19 @@ namespace
   {
   public:
     DummyContextProvider(ao::rt::AppRuntime& runtime, Gtk::Window& window, Gtk::Widget& widget)
-      : _runtime{runtime}
-      , _window{window}
-      , _widget{widget}
+      : _runtime{runtime}, _window{window}, _widget{widget}
     {
     }
 
     ActionActivationContext getActionContext(std::string_view componentId) override
     {
-      return ActionActivationContext{.runtime = _runtime,
-                                 .parentWindow = _window,
-                                 .anchorWidget = _widget,
-                                  .componentId = std::string{componentId}};
+      return ActionActivationContext{
+        .runtime = _runtime, .parentWindow = _window, .anchorWidget = _widget, .componentId = std::string{componentId}};
     }
 
-    bool canProvideSafeAnchor(ActionDescriptor const& /*desc*/) const override
-    {
-      return _canProvideSafeAnchor;
-    }
+    bool canProvideSafeAnchor(ActionDescriptor const& /*desc*/) const override { return _canProvideSafeAnchor; }
 
-    void setCanProvideSafeAnchor(bool val)
-    {
-      _canProvideSafeAnchor = val;
-    }
+    void setCanProvideSafeAnchor(bool val) { _canProvideSafeAnchor = val; }
 
   private:
     ao::rt::AppRuntime& _runtime;
@@ -85,7 +75,8 @@ TEST_CASE("GioActionBridge", "[layout][action]")
   {
     std::int32_t action1Fired = 0;
     registry.registerAction(
-      ActionDescriptor{.id = "test.action1", .label = "Action 1", .category = "Test", .capabilities = ActionCapability::None},
+      ActionDescriptor{
+        .id = "test.action1", .label = "Action 1", .category = "Test", .capabilities = ActionCapability::None},
       [&](ActionActivationContext&) { action1Fired++; });
 
     GioActionBridge::exportActions(registry, *actionMap, contextProvider);
@@ -100,9 +91,11 @@ TEST_CASE("GioActionBridge", "[layout][action]")
 
   SECTION("Does not export anchored actions if no safe anchor")
   {
-    registry.registerAction(
-      ActionDescriptor{.id = "test.action2", .label = "Action 2", .category = "Test", .capabilities = ActionCapability::RequiresAnchor},
-      [&](ActionActivationContext&) {});
+    registry.registerAction(ActionDescriptor{.id = "test.action2",
+                                             .label = "Action 2",
+                                             .category = "Test",
+                                             .capabilities = ActionCapability::RequiresAnchor},
+                            [&](ActionActivationContext&) {});
 
     GioActionBridge::exportActions(registry, *actionMap, contextProvider);
 
@@ -113,7 +106,8 @@ TEST_CASE("GioActionBridge", "[layout][action]")
   SECTION("Does not export menu-presenting actions if no safe anchor")
   {
     registry.registerAction(
-      ActionDescriptor{.id = "test.action3", .label = "Action 3", .category = "Test", .capabilities = ActionCapability::PresentsMenu},
+      ActionDescriptor{
+        .id = "test.action3", .label = "Action 3", .category = "Test", .capabilities = ActionCapability::PresentsMenu},
       [&](ActionActivationContext&) {});
 
     GioActionBridge::exportActions(registry, *actionMap, contextProvider);
@@ -126,9 +120,11 @@ TEST_CASE("GioActionBridge", "[layout][action]")
   {
     contextProvider.setCanProvideSafeAnchor(true);
 
-    registry.registerAction(
-      ActionDescriptor{.id = "test.action_anchored", .label = "Anchored Action", .category = "Test", .capabilities = ActionCapability::RequiresAnchor},
-      [&](ActionActivationContext&) {});
+    registry.registerAction(ActionDescriptor{.id = "test.action_anchored",
+                                             .label = "Anchored Action",
+                                             .category = "Test",
+                                             .capabilities = ActionCapability::RequiresAnchor},
+                            [&](ActionActivationContext&) {});
 
     GioActionBridge::exportActions(registry, *actionMap, contextProvider);
 
@@ -136,13 +132,14 @@ TEST_CASE("GioActionBridge", "[layout][action]")
     CHECK(gioAction != nullptr);
   }
 
-
-
   SECTION("refreshStates updates enabled state of exported actions")
   {
     bool isEnabled = true;
     registry.registerAction(
-      ActionDescriptor{.id = "test.action_refresh", .label = "Refresh Action", .category = "Test", .capabilities = ActionCapability::None},
+      ActionDescriptor{.id = "test.action_refresh",
+                       .label = "Refresh Action",
+                       .category = "Test",
+                       .capabilities = ActionCapability::None},
       [&](ActionActivationContext&) {},
       [&](ActionActivationContext const&) { return ActionState{.enabled = isEnabled, .disabledReason = ""}; });
 

@@ -8,10 +8,10 @@
 #include <giomm/actionmap.h>
 #include <glibmm/refptr.h>
 
-#include <string_view>
-#include <vector>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace ao::gtk::layout
 {

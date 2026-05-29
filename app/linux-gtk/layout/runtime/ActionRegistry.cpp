@@ -20,65 +20,29 @@ namespace ao::gtk::layout
                                       ActionHandler handler,
                                       ActionStateProvider stateProvider)
   {
-    auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.descriptor.id == descriptor.id; });
-
-    if (it != _entries.end())
+    if (!_catalog.registerActionDescriptor(descriptor))
     {
       APP_LOG_ERROR("ActionRegistry: Duplicate registration for action id '{}'", descriptor.id);
       return false;
     }
 
-    _entries.push_back({std::move(descriptor), std::move(handler), std::move(stateProvider)});
+    _entries.push_back({descriptor.id, std::move(handler), std::move(stateProvider)});
     return true;
   }
 
   std::optional<ActionDescriptor> ActionRegistry::descriptor(std::string_view id) const
   {
-    auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.descriptor.id == id; });
-
-    if (it != _entries.end())
-    {
-      return it->descriptor;
-    }
-
-    return std::nullopt;
+    return _catalog.descriptor(id);
   }
 
   std::vector<ActionDescriptor> ActionRegistry::descriptors() const
   {
-    auto result = std::vector<ActionDescriptor>{};
-    result.reserve(_entries.size());
-
-    for (auto const& entry : _entries)
-    {
-      result.push_back(entry.descriptor);
-    }
-
-    return result;
+    return _catalog.descriptors();
   }
 
   bool ActionRegistry::canBind(std::string_view id, ActionBindingContext const& ctx) const
   {
-    auto const optDescriptor = descriptor(id);
-
-    if (!optDescriptor)
-    {
-      return false;
-    }
-
-    auto const& desc = *optDescriptor;
-
-    if (!ctx.hasAnchor && desc.capabilities.has(ActionCapability::RequiresAnchor))
-    {
-      return false;
-    }
-
-    if (!ctx.hasFocusedView && desc.capabilities.has(ActionCapability::RequiresFocusedView))
-    {
-      return false;
-    }
-
-    return true;
+    return _catalog.canBind(id, ctx);
   }
 
   bool ActionRegistry::tryBind(std::string_view id, ActionBindingContext const& ctx) const
@@ -88,10 +52,12 @@ namespace ao::gtk::layout
       return false;
     }
 
-    if (!canBind(id, ctx))
+    if (!_catalog.canBind(id, ctx))
     {
-      APP_LOG_DEBUG("ActionRegistry: Action '{}' cannot be bound to context (slot={}, anchor={})", 
-                   id, static_cast<int>(ctx.slot), ctx.hasAnchor);
+      APP_LOG_DEBUG("ActionRegistry: Action '{}' cannot be bound to context (slot={}, anchor={})",
+                    id,
+                    static_cast<int>(ctx.slot),
+                    ctx.hasAnchor);
       return false;
     }
 
@@ -100,7 +66,7 @@ namespace ao::gtk::layout
 
   ActionState ActionRegistry::state(std::string_view id, ActionActivationContext const& ctx) const
   {
-    auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.descriptor.id == id; });
+    auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.id == id; });
 
     if (it != _entries.end() && it->stateProvider)
     {
@@ -112,7 +78,7 @@ namespace ao::gtk::layout
 
   ActionActivationOutcome ActionRegistry::activate(std::string_view id, ActionActivationContext& ctx) const
   {
-    auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.descriptor.id == id; });
+    auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.id == id; });
 
     if (it == _entries.end())
     {
@@ -149,10 +115,8 @@ namespace ao::gtk::layout
         APP_LOG_WARN("ActionRegistry: Attempt to activate unknown action id '{}'", id);
         break;
       case ActionActivationResult::Disabled:
-      {
         APP_LOG_DEBUG("ActionRegistry: Action '{}' is disabled: {}", id, outcome.state.disabledReason);
         break;
-      }
       case ActionActivationResult::Activated:
         APP_LOG_DEBUG("ActionRegistry: Activated action '{}' for component '{}'", id, ctx.componentId);
         break;
@@ -162,5 +126,10 @@ namespace ao::gtk::layout
     }
 
     return outcome;
+  }
+
+  uimodel::layout::ActionCatalog const& ActionRegistry::catalog() const noexcept
+  {
+    return _catalog;
   }
 } // namespace ao::gtk::layout

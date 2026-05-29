@@ -1,62 +1,36 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
+#include "layout/document/GtkLayoutPresets.h"
 #include "layout/document/LayoutNode.h"
-#include <ao/Error.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
 
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <string>
-#include <string_view>
-
-namespace ao::rt
-{
-  class ConfigStore;
-}
 
 namespace ao::gtk::layout
 {
-  /**
-   * @brief Top-level shell layout state.
-   */
-  struct LayoutDocument final
+  using uimodel::layout::LayoutDocument;
+  using uimodel::layout::loadLayout;
+  using uimodel::layout::saveLayout;
+
+  using LayoutPresetId = GtkLayoutPresetId;
+
+  inline LayoutDocument createDefaultLayout()
   {
-    std::uint32_t version = 1;
-    LayoutNode root{};
-    std::map<std::string, LayoutNode, std::less<>> templates{};
-  };
+    return createDefaultGtkLayout();
+  }
 
-  enum class LayoutPresetId : std::uint8_t
+  inline LayoutDocument createBuiltInLayout(LayoutPresetId presetId)
   {
-    Classic,
-    Modern
-  };
+    return createBuiltInGtkLayout(presetId);
+  }
 
-  /**
-   * @brief Create a built-in default layout document.
-   */
-  LayoutDocument createDefaultLayout();
-
-  /**
-   * @brief Create a built-in layout document by preset ID.
-   */
-  LayoutDocument createBuiltInLayout(LayoutPresetId presetId);
-
-  /**
-   * @brief Get a map of all built-in layout templates.
-   */
-  std::map<std::string, LayoutNode, std::less<>> getBuiltInTemplates();
-
-  /**
-   * @brief Load a layout document from a config store.
-   */
-  Result<> loadLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument& doc);
-
-  /**
-   * @brief Save a layout document to a config store.
-   */
-  void saveLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument const& doc);
+  inline std::map<std::string, LayoutNode, std::less<>> getBuiltInTemplates()
+  {
+    return getBuiltInGtkTemplates();
+  }
 }

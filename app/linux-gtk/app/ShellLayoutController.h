@@ -4,11 +4,11 @@
 #pragma once
 
 #include "layout/document/LayoutDocument.h"
-#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ActionRegistry.h"
-#include "layout/runtime/LayoutHost.h"
+#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/GioActionBridge.h"
 #include "layout/runtime/LayoutContext.h"
+#include "layout/runtime/LayoutHost.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/async/LifetimeScope.h>
 

@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/runtime/ActionBinder.h"
-#include "layout/runtime/ActionRegistry.h"
+
 #include "layout/document/LayoutNode.h"
+#include "layout/runtime/ActionRegistry.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -25,18 +26,21 @@ namespace ao::gtk::layout::test
     auto anchor = Gtk::Box{};
 
     auto registry = ActionRegistry{};
-    
+
     auto lastFiredId = std::string{};
     auto lastComponentId = std::string{};
     Gtk::Widget* lastAnchor = nullptr;
 
-    registry.registerAction(
-      ActionDescriptor{.id = "test.action", .label = "Test Action", .category = "Test", .capabilities = ActionCapability::RequiresAnchor},
-      [&](ActionActivationContext& ctx) {
-        lastFiredId = "test.action";
-        lastComponentId = ctx.componentId;
-        lastAnchor = &ctx.anchorWidget;
-      });
+    registry.registerAction(ActionDescriptor{.id = "test.action",
+                                             .label = "Test Action",
+                                             .category = "Test",
+                                             .capabilities = ActionCapability::RequiresAnchor},
+                            [&](ActionActivationContext& ctx)
+                            {
+                              lastFiredId = "test.action";
+                              lastComponentId = ctx.componentId;
+                              lastAnchor = &ctx.anchorWidget;
+                            });
 
     // Binder doesn't need LayoutContext, only registry, runtime, and parent window
     auto const binder = ActionBinder{registry, runtime, window};
@@ -60,12 +64,12 @@ namespace ao::gtk::layout::test
     {
       auto node = LayoutNode{.id = "my-component", .type = "test.node"};
       node.props["action"] = LayoutValue{std::string{"test.action"}};
-      
+
       auto const cb = binder.bind(node, "action", "none", ActionSlot::PrimaryClick, anchor);
       REQUIRE(cb);
 
       cb();
-      
+
       CHECK(lastFiredId == "test.action");
       CHECK(lastComponentId == "my-component");
       CHECK(lastAnchor == &anchor);
@@ -74,12 +78,12 @@ namespace ao::gtk::layout::test
     SECTION("bind uses default action ID if property is missing")
     {
       auto const node = LayoutNode{.id = "default-comp", .type = "test.node"};
-      
+
       auto const cb = binder.bind(node, "missing", "test.action", ActionSlot::PrimaryClick, anchor);
       REQUIRE(cb);
 
       cb();
-      
+
       CHECK(lastFiredId == "test.action");
       CHECK(lastComponentId == "default-comp");
     }

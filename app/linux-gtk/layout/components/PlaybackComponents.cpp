@@ -6,12 +6,12 @@
 #include "app/AobusSoul.h"
 #include "image/ImageWidget.h"
 #include "layout/document/LayoutNode.h"
+#include "layout/runtime/ActionBinder.h"
+#include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/NowPlayingFieldLabel.h"
-#include "layout/runtime/ActionBinder.h"
 #include "playback/OutputSelector.h"
 #include "playback/SeekControl.h"
 #include "playback/TimeLabel.h"
@@ -337,11 +337,14 @@ namespace ao::gtk::layout
       {
         auto const binder = ActionBinder{ctx.actionRegistry, ctx.runtime, ctx.parentWindow};
         _selector.setActions(OutputSelector::Actions{
-          .onPrimaryClick = binder.bind(node, "primaryAction", "playback.showAudioDeviceSelector", ActionSlot::PrimaryClick, _selector.widget()),
-          .onPrimaryLongPress = binder.bind(node, "primaryLongPressAction", "none", ActionSlot::PrimaryLongPress, _selector.widget()),
-          .onSecondaryClick = binder.bind(node, "secondaryAction", "shell.showSystemMenu", ActionSlot::SecondaryClick, _selector.widget()),
-          .onSecondaryLongPress = binder.bind(node, "secondaryLongPressAction", "shell.showSoul", ActionSlot::SecondaryLongPress, _selector.widget())
-        });
+          .onPrimaryClick = binder.bind(
+            node, "primaryAction", "playback.showAudioDeviceSelector", ActionSlot::PrimaryClick, _selector.widget()),
+          .onPrimaryLongPress =
+            binder.bind(node, "primaryLongPressAction", "none", ActionSlot::PrimaryLongPress, _selector.widget()),
+          .onSecondaryClick = binder.bind(
+            node, "secondaryAction", "shell.showSystemMenu", ActionSlot::SecondaryClick, _selector.widget()),
+          .onSecondaryLongPress = binder.bind(
+            node, "secondaryLongPressAction", "shell.showSoul", ActionSlot::SecondaryLongPress, _selector.widget())});
       }
 
       Gtk::Widget& widget() override { return _selector.widget(); }
@@ -676,18 +679,31 @@ namespace ao::gtk::layout
        .optMaxChildren = 0},
       createPauseButton);
 
-    registry.registerComponent({.type = "playback.outputButton",
-                                .displayName = "Output Button",
-                                .category = "Playback",
-                                .container = false,
-                                .props = {{.name = "primaryAction", .kind = PropertyKind::Enum, .label = "Primary Action", .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryClick}},
-                                          {.name = "primaryLongPressAction", .kind = PropertyKind::Enum, .label = "Primary Long Press", .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryLongPress}},
-                                          {.name = "secondaryAction", .kind = PropertyKind::Enum, .label = "Secondary Action", .optActionBinding = ActionBindingProperty{.slot = ActionSlot::SecondaryClick}},
-                                          {.name = "secondaryLongPressAction", .kind = PropertyKind::Enum, .label = "Secondary Long Press", .optActionBinding = ActionBindingProperty{.slot = ActionSlot::SecondaryLongPress}}},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createOutputButton);
+    registry.registerComponent(
+      {.type = "playback.outputButton",
+       .displayName = "Output Button",
+       .category = "Playback",
+       .container = false,
+       .props = {{.name = "primaryAction",
+                  .kind = PropertyKind::Enum,
+                  .label = "Primary Action",
+                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryClick}},
+                 {.name = "primaryLongPressAction",
+                  .kind = PropertyKind::Enum,
+                  .label = "Primary Long Press",
+                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryLongPress}},
+                 {.name = "secondaryAction",
+                  .kind = PropertyKind::Enum,
+                  .label = "Secondary Action",
+                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::SecondaryClick}},
+                 {.name = "secondaryLongPressAction",
+                  .kind = PropertyKind::Enum,
+                  .label = "Secondary Long Press",
+                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::SecondaryLongPress}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      createOutputButton);
 
     registry.registerComponent({.type = "playback.qualityIndicator",
                                 .displayName = "Quality Indicator",

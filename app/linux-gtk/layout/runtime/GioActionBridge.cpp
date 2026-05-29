@@ -4,7 +4,6 @@
 #include "GioActionBridge.h"
 
 #include "ActionRegistry.h"
-
 #include <ao/utility/Log.h>
 
 #include <giomm/simpleaction.h>
@@ -57,17 +56,17 @@ namespace ao::gtk::layout
 
     for (auto const& desc : descriptors)
     {
-      // Phase 3c: support anchored or menu-presenting actions only when a context provider can supply the needed parent/anchor safely.
-      if (!contextProvider.canProvideSafeAnchor(desc) &&
-          (desc.capabilities.has(ActionCapability::RequiresAnchor) ||
-           desc.capabilities.has(ActionCapability::PresentsMenu)))
+      // Phase 3c: support anchored or menu-presenting actions only when a context provider can supply the needed
+      // parent/anchor safely.
+      if (!contextProvider.canProvideSafeAnchor(desc) && (desc.capabilities.has(ActionCapability::RequiresAnchor) ||
+                                                          desc.capabilities.has(ActionCapability::PresentsMenu)))
       {
         APP_LOG_DEBUG("GioActionBridge: Skipping action {} due to missing context capabilities", desc.id);
         continue;
       }
 
       auto action = Gio::SimpleAction::create(desc.id);
-      
+
       // Initialize the state based on the current context
       auto ctx = contextProvider.getActionContext(desc.id);
       auto const initialState = registry.state(desc.id, ctx);

@@ -5,8 +5,8 @@
 
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
 
-#include <gtkmm/enums.h>
 #include <gdk/gdk.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/gesturelongpress.h>
 
@@ -46,7 +46,10 @@ namespace ao::gtk
           return;
         }
 
-        if (_actions.onPrimaryClick) { _actions.onPrimaryClick(); }
+        if (_actions.onPrimaryClick)
+        {
+          _actions.onPrimaryClick();
+        }
       });
 
     auto const secondaryClick = Gtk::GestureClick::create();
@@ -54,9 +57,16 @@ namespace ao::gtk
     secondaryClick->signal_released().connect(
       [this](std::int32_t, double, double)
       {
-        if (_longPressHandled) { _longPressHandled = false; return; }
+        if (_longPressHandled)
+        {
+          _longPressHandled = false;
+          return;
+        }
 
-        if (_actions.onSecondaryClick) { _actions.onSecondaryClick(); }
+        if (_actions.onSecondaryClick)
+        {
+          _actions.onSecondaryClick();
+        }
       });
     _button.add_controller(secondaryClick);
 
@@ -68,7 +78,10 @@ namespace ao::gtk
       {
         _longPressHandled = true;
 
-        if (_actions.onPrimaryLongPress) { _actions.onPrimaryLongPress(); }
+        if (_actions.onPrimaryLongPress)
+        {
+          _actions.onPrimaryLongPress();
+        }
       });
     _button.add_controller(primaryLongPress);
 
@@ -80,7 +93,10 @@ namespace ao::gtk
       {
         _longPressHandled = true;
 
-        if (_actions.onSecondaryLongPress) { _actions.onSecondaryLongPress(); }
+        if (_actions.onSecondaryLongPress)
+        {
+          _actions.onSecondaryLongPress();
+        }
       });
     _button.add_controller(secondaryLongPress);
   }

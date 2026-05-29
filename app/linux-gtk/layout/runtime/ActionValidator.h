@@ -3,29 +3,19 @@
 
 #pragma once
 
-#include "layout/document/LayoutDocument.h"
+#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/ActionValidator.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
-#include <string>
-#include <vector>
+#include <optional>
 
 namespace ao::gtk::layout
 {
-  class ComponentRegistry;
-  class ActionRegistry;
+  using LayoutDiagnostic = uimodel::layout::LayoutDiagnostic;
+  using uimodel::layout::validateActions;
 
-  struct LayoutDiagnostic final
-  {
-    std::string componentId;
-    std::string propertyName;
-    std::string actionId;
-    std::string message;
-  };
-
-  /**
-   * @brief Validates all action bindings in a layout document.
-   * @return A list of diagnostics for invalid action bindings. Empty if valid.
-   */
-  std::vector<LayoutDiagnostic> validateActions(LayoutDocument const& doc,
-                                                ComponentRegistry const& compRegistry,
-                                                ActionRegistry const& actionRegistry);
-} // namespace ao::gtk::layout
+  std::optional<uimodel::layout::ActionBindingContext> resolveGtkLayoutActionBindingContext(
+    uimodel::layout::LayoutNode const& node,
+    uimodel::layout::PropertyDescriptor const& property);
+}

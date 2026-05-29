@@ -68,6 +68,11 @@ add_executable(ao_test
     unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
 
     # ui model tests (no platform deps)
+    unit/uimodel/layout/ActionCatalogTest.cpp
+    unit/uimodel/layout/ActionValidatorTest.cpp
+    unit/uimodel/layout/ComponentCatalogTest.cpp
+    unit/uimodel/layout/LayoutModelTest.cpp
+    unit/uimodel/layout/LayoutTemplateExpanderTest.cpp
     unit/uimodel/list/ListActionPolicyTest.cpp
     unit/uimodel/list/SmartListEditorModelTest.cpp
     unit/uimodel/playback/AobusSoulViewModelTest.cpp

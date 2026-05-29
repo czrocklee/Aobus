@@ -5,8 +5,8 @@
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
+#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
 #include "layout/document/LayoutDocument.h"
@@ -39,9 +39,13 @@ namespace ao::gtk::layout::test
 
   namespace
   {
-    LayoutContext makeContext(ComponentRegistry& registry, ActionRegistry& actionRegistry, rt::AppRuntime& runtime, Gtk::Window& window)
+    LayoutContext makeContext(ComponentRegistry& registry,
+                              ActionRegistry& actionRegistry,
+                              rt::AppRuntime& runtime,
+                              Gtk::Window& window)
     {
-      return LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+      return LayoutContext{
+        .registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
     }
   } // namespace
 
@@ -555,18 +559,17 @@ namespace ao::gtk::layout::test
 
       std::int32_t primaryFired = 0;
       std::int32_t longPressFired = 0;
-      
+
       actionRegistry.registerAction(ActionDescriptor{.id = "shell.showSystemMenu",
-                                                           .label = "System Menu",
-                                                           .category = "Shell",
-                                                           .capabilities = ActionCapability::None},
+                                                     .label = "System Menu",
+                                                     .category = "Shell",
+                                                     .capabilities = ActionCapability::None},
                                     [&](ActionActivationContext&) { primaryFired++; });
 
-      actionRegistry.registerAction(ActionDescriptor{.id = "shell.showSoul",
-                                                           .label = "Show Soul",
-                                                           .category = "Shell",
-                                                           .capabilities = ActionCapability::None},
-                                    [&](ActionActivationContext&) { longPressFired++; });
+      actionRegistry.registerAction(
+        ActionDescriptor{
+          .id = "shell.showSoul", .label = "Show Soul", .category = "Shell", .capabilities = ActionCapability::None},
+        [&](ActionActivationContext&) { longPressFired++; });
 
       auto const comp = registry.create(ctx, layoutNode);
       REQUIRE(comp != nullptr);
@@ -587,8 +590,8 @@ namespace ao::gtk::layout::test
       auto const optDesc = registry.descriptor("app.actionButton");
       REQUIRE(optDesc.has_value());
 
-      auto const it = std::find_if(optDesc->props.begin(), optDesc->props.end(),
-                                   [](auto const& p) { return p.name == "primaryAction"; });
+      auto const it = std::find_if(
+        optDesc->props.begin(), optDesc->props.end(), [](auto const& p) { return p.name == "primaryAction"; });
       REQUIRE(it != optDesc->props.end());
       CHECK(it->kind == PropertyKind::Enum);
       CHECK(it->enumValues.empty());

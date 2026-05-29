@@ -4,8 +4,8 @@
 #include "app/linux-gtk/layout/components/Containers.h"
 
 #include "../../GtkTestSupport.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
+#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
@@ -56,7 +56,8 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto ctx =
+      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
     auto layoutRuntime = LayoutRuntime{registry};
 
@@ -195,7 +196,8 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto ctx =
+      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
     auto layoutRuntime = LayoutRuntime{registry};
 
@@ -283,7 +285,8 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto ctx =
+      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
     auto layoutRuntime = LayoutRuntime{registry};
 
@@ -481,7 +484,8 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto ctx =
+      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
     auto layoutRuntime = LayoutRuntime{registry};
 
@@ -621,7 +625,8 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto ctx = LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto ctx =
+      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
 
     auto host = LayoutHost{registry};
 
@@ -671,7 +676,8 @@ namespace ao::gtk::layout::test
                                    .databasePath = std::filesystem::path{tempDir2.path()} / ".aobus" / "library",
                                    .workspaceConfigStore = configStore2}};
       auto const actionRegistry2 = ActionRegistry{};
-      auto ctx2 = LayoutContext{.registry = registry2, .actionRegistry = actionRegistry2, .runtime = runtime, .parentWindow = window2};
+      auto ctx2 = LayoutContext{
+        .registry = registry2, .actionRegistry = actionRegistry2, .runtime = runtime, .parentWindow = window2};
 
       auto const node = LayoutNode{};
       REQUIRE_NOTHROW(registry2.create(ctx2, node));

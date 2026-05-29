@@ -7,6 +7,7 @@
 #include "playback/AobusSoulWindow.h"
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
+
 #include <gtkmm/button.h>
 #include <gtkmm/widget.h>
 

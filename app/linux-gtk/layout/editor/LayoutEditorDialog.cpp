@@ -7,9 +7,9 @@
 #include "app/AppDialog.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
-#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ActionValidator.h"
+#include "layout/runtime/ComponentRegistry.h"
 
 #include <giomm/menu.h>
 #include <giomm/simpleactiongroup.h>
@@ -63,12 +63,12 @@ namespace ao::gtk::layout::editor
                                          ActionRegistry const& actionRegistry,
                                          LayoutDocument initialLayout,
                                          std::string initialPresetId)
-    : AppDialog{},
-      _registry{registry},
-      _actionRegistry{actionRegistry},
-      _document{std::move(initialLayout)},
-      _treeStore{Gtk::TreeStore::create(_columns)},
-      _actionGroup{Gio::SimpleActionGroup::create()}
+    : AppDialog{}
+    , _registry{registry}
+    , _actionRegistry{actionRegistry}
+    , _document{std::move(initialLayout)}
+    , _treeStore{Gtk::TreeStore::create(_columns)}
+    , _actionGroup{Gio::SimpleActionGroup::create()}
   {
     set_title("Layout Editor");
     set_transient_for(parent);
@@ -630,25 +630,20 @@ namespace ao::gtk::layout::editor
 
   bool LayoutEditorDialog::validateDocument()
   {
-    auto const diagnostics = validateActions(_document, _registry, _actionRegistry);
+    auto const diagnostics =
+      validateActions(_document, _registry.catalog(), _actionRegistry.catalog(), resolveGtkLayoutActionBindingContext);
 
     if (!diagnostics.empty())
     {
       auto const& firstError = diagnostics.front();
       auto* const msg = Gtk::make_managed<Gtk::MessageDialog>(
-        *this,
-        "Invalid Layout Actions",
-        false,
-        Gtk::MessageType::ERROR,
-        Gtk::ButtonsType::OK,
-        true);
-      msg->set_secondary_text(
-        std::format("Validation failed on component '{}' property '{}':\n\n{}",
-                    firstError.componentId,
-                    firstError.propertyName,
-                    firstError.message));
+        *this, "Invalid Layout Actions", false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
+      msg->set_secondary_text(std::format("Validation failed on component '{}' property '{}':\n\n{}",
+                                          firstError.componentId,
+                                          firstError.propertyName,
+                                          firstError.message));
       msg->signal_response().connect([msg](std::int32_t) { msg->close(); });
-      
+
       if (get_visible())
       {
         msg->show();
@@ -793,19 +788,20 @@ namespace ao::gtk::layout::editor
     _propertiesBox.append(*createPropertyRow(prop.label, *spin));
   }
 
-  void LayoutEditorDialog::populateActionComboBox(Gtk::ComboBoxText* combo, LayoutNode* node, PropertyDescriptor const& prop)
+  void LayoutEditorDialog::populateActionComboBox(Gtk::ComboBoxText* combo,
+                                                  LayoutNode* node,
+                                                  PropertyDescriptor const& prop)
   {
     if (!prop.optActionBinding)
     {
       return;
     }
 
-    auto const bindCtx = ao::gtk::layout::ActionBindingContext{
-      .slot = prop.optActionBinding->slot,
-      .hasAnchor = true,      // We assume standard UI buttons have anchors
-      .hasFocusedView = true, // And we assume focus is valid during edit
-      .componentType = node->type
-    };
+    auto const bindCtx =
+      ao::gtk::layout::ActionBindingContext{.slot = prop.optActionBinding->slot,
+                                            .hasAnchor = true,      // We assume standard UI buttons have anchors
+                                            .hasFocusedView = true, // And we assume focus is valid during edit
+                                            .componentType = node->type};
 
     combo->append("none", "none");
 
@@ -887,15 +883,16 @@ namespace ao::gtk::layout::editor
     combo->signal_changed().connect(
       [this, node, prop, combo, isLayoutProp]
       { applyPropertyChange(node, prop.name, LayoutValue{combo->get_active_id().raw()}, isLayoutProp); });
-      
+
     auto* const rowBox = createPropertyRow(prop.label, *combo);
 
     if (isUnknown && prop.optActionBinding && currentStr != "none" && !currentStr.empty())
     {
       auto* const warning = Gtk::make_managed<Gtk::Label>("⚠ Unknown");
-      warning->add_css_class("error"); 
-      
-      warning->set_markup(std::format("<span color='red' weight='bold'>⚠ Unknown ID: {}</span>", Glib::Markup::escape_text(currentStr)));
+      warning->add_css_class("error");
+
+      warning->set_markup(
+        std::format("<span color='red' weight='bold'>⚠ Unknown ID: {}</span>", Glib::Markup::escape_text(currentStr)));
       rowBox->append(*warning);
     }
 

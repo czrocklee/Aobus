@@ -50,13 +50,13 @@ namespace ao::gtk::test
     SECTION("attachToWindow exports actions and refreshExportedActions works")
     {
       controller.attachToWindow();
-      
+
       auto* actionMap = dynamic_cast<Gio::ActionMap*>(&window);
       REQUIRE(actionMap != nullptr);
-      
+
       auto gioAction = actionMap->lookup_action("playback.stop");
       REQUIRE(gioAction != nullptr);
-      
+
       // Queue model is not bound, so hasActiveQueue is false, thus stop should be disabled
       controller.refreshExportedActions();
       CHECK(gioAction->property_enabled() == false);
