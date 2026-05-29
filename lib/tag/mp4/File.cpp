@@ -74,7 +74,12 @@ namespace ao::tag::mp4
 
     using AtomHandler = void (*)(library::TrackBuilder&, AtomView const&);
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
 #include "tag/mp4/AtomDispatch.h"
+#pragma GCC diagnostic pop
 
     constexpr std::array kIlstPath = {
       std::string_view{"root"},
@@ -147,7 +152,9 @@ namespace ao::tag::mp4
         auto const& audioLayout =
           *utility::layout::view<AudioSampleEntryLayout>(utility::bytes::view(data, sizeof(AudioSampleEntryLayout)));
 
-        builder.property().channels(audioLayout.channelCount.value()).bitDepth(audioLayout.sampleSize.value());
+        builder.property()
+          .channels(static_cast<std::uint8_t>(audioLayout.channelCount.value()))
+          .bitDepth(static_cast<std::uint8_t>(audioLayout.sampleSize.value()));
 
         // Sample rate is a 16.16 fixed point, extract integer part
         // Only use if non-zero (ALAC may have 0 here, mdhd has correct rate)

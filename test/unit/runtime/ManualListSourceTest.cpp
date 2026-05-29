@@ -134,17 +134,17 @@ namespace ao::rt::test
         events.push_back({.kind = EventKind::Removed, .id = id, .index = index});
       }
 
-      void onInserted(std::span<TrackId const> ids) override
+      void onBulkInserted(std::span<TrackId const> ids) override
       {
         events.push_back({.kind = EventKind::BatchInserted, .batchIds = {ids.begin(), ids.end()}});
       }
 
-      void onUpdated(std::span<TrackId const> ids) override
+      void onBulkUpdated(std::span<TrackId const> ids) override
       {
         events.push_back({.kind = EventKind::BatchUpdated, .batchIds = {ids.begin(), ids.end()}});
       }
 
-      void onRemoved(std::span<TrackId const> ids) override
+      void onBulkRemoved(std::span<TrackId const> ids) override
       {
         events.push_back({.kind = EventKind::BatchRemoved, .batchIds = {ids.begin(), ids.end()}});
       }
@@ -539,7 +539,7 @@ namespace ao::rt::test
       mls.attach(&spy);
 
       auto const batch = std::array{TrackId{10}, TrackId{20}};
-      mls.onInserted(std::span{batch});
+      mls.onBulkInserted(std::span{batch});
 
       CHECK(spy.events.empty());
       CHECK(mls.size() == 1);

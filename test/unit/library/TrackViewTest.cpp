@@ -236,6 +236,7 @@ namespace ao::library::test
   {
     auto const data = createColdData({}, {}, "");
     auto const view = makeColdView(data);
+    CHECK(view.isColdValid());
   }
 
   TEST_CASE("TrackView - Cold Audio Format", "[library][unit][track]")

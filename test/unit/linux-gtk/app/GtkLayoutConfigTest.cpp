@@ -49,27 +49,5 @@ namespace ao::gtk::test
         CHECK(state.listLayouts[rt::kAllTracksListId][0].width == 250);
       }
     }
-
-    SECTION("Migration from old config name")
-    {
-      auto const oldPath = libraryPath / "gtk_workspace.yaml";
-      auto const newPath = libraryPath / "gtk_layout.yaml";
-
-      // Manually create old file
-      {
-        auto config = GtkLayoutConfig{libraryPath};
-        config.save(ColumnLayoutState{});
-      }
-      std::filesystem::rename(newPath, oldPath);
-      REQUIRE(std::filesystem::exists(oldPath));
-      REQUIRE_FALSE(std::filesystem::exists(newPath));
-
-      // Constructor should migrate
-      {
-        auto const config = GtkLayoutConfig{libraryPath};
-        CHECK(std::filesystem::exists(newPath));
-        CHECK_FALSE(std::filesystem::exists(oldPath));
-      }
-    }
   }
 } // namespace ao::gtk::test

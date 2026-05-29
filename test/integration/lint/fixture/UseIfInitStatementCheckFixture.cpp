@@ -46,4 +46,16 @@ static void testUseIfInit(std::int32_t cond)
   {
     std::cout << localY;
   }
+
+  // POSITIVE
+  if (std::int32_t const localImplicit = cond * 2)
+  {
+    std::cout << localImplicit;
+  }
+
+  // NEGATIVE
+  if (std::int32_t const localExplicit = cond * 2; localExplicit)
+  {
+    std::cout << localExplicit;
+  }
 }

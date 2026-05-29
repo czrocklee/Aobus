@@ -157,17 +157,17 @@ namespace ao::rt::test
         events.push_back({.kind = EventKind::Removed, .id = id, .index = index});
       }
 
-      void onInserted(std::span<TrackId const> ids) override
+      void onBulkInserted(std::span<TrackId const> ids) override
       {
         events.push_back({.kind = EventKind::BatchInserted, .batchIds = {ids.begin(), ids.end()}});
       }
 
-      void onUpdated(std::span<TrackId const> ids) override
+      void onBulkUpdated(std::span<TrackId const> ids) override
       {
         events.push_back({.kind = EventKind::BatchUpdated, .batchIds = {ids.begin(), ids.end()}});
       }
 
-      void onRemoved(std::span<TrackId const> ids) override
+      void onBulkRemoved(std::span<TrackId const> ids) override
       {
         events.push_back({.kind = EventKind::BatchRemoved, .batchIds = {ids.begin(), ids.end()}});
       }

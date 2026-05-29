@@ -409,7 +409,7 @@ namespace ao::audio::backend
 
         if (id == SPA_PARAM_Format)
         {
-          if (auto const optFmt = detail::parseRawStreamFormat(param))
+          if (auto const optFmt = detail::parseRawStreamFormat(param); optFmt)
           {
             impl->nodeFormatMap[binding->id] = *optFmt;
           }
@@ -418,7 +418,7 @@ namespace ao::audio::backend
         {
           if (!impl->nodeFormatMap.contains(binding->id))
           {
-            if (auto const optFmt = detail::parseRawStreamFormat(param))
+            if (auto const optFmt = detail::parseRawStreamFormat(param); optFmt)
             {
               impl->nodeFormatMap[binding->id] = *optFmt;
             }
@@ -692,7 +692,7 @@ namespace ao::audio::backend
 
       for (auto const& sub : graphSubscriptions)
       {
-        if (auto const optParsedId = detail::parseUintProperty(sub.routeAnchor.c_str()))
+        if (auto const optParsedId = detail::parseUintProperty(sub.routeAnchor.c_str()); optParsedId)
         {
           subscribedStreamIds.insert(*optParsedId);
         }
@@ -799,8 +799,8 @@ namespace ao::audio::backend
       auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_Props});
       ::pw_node_subscribe_params(
         binding->proxy.get(), utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
-      ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
-      ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_Props, 0, -1, nullptr);
+      ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
+      ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
       auto* bindingPtr = binding.get();
       ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &streamNodeEvents, bindingPtr);
       streamNodeBindings[streamId] = std::move(binding);
@@ -830,9 +830,10 @@ namespace ao::audio::backend
           constexpr std::uint32_t kFormatSequence = 1;
           constexpr std::uint32_t kEnumFormatSequence = 2;
           constexpr std::uint32_t kPropsSequence = 3;
-          ::pw_node_enum_params(binding->proxy.get(), kFormatSequence, SPA_PARAM_Format, 0, -1, nullptr);
-          ::pw_node_enum_params(binding->proxy.get(), kEnumFormatSequence, SPA_PARAM_EnumFormat, 0, -1, nullptr);
-          ::pw_node_enum_params(binding->proxy.get(), kPropsSequence, SPA_PARAM_Props, 0, -1, nullptr);
+          ::pw_node_enum_params(binding->proxy.get(), kFormatSequence, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
+          ::pw_node_enum_params(
+            binding->proxy.get(), kEnumFormatSequence, SPA_PARAM_EnumFormat, 0, UINT32_MAX, nullptr);
+          ::pw_node_enum_params(binding->proxy.get(), kPropsSequence, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
 
           auto* bindingPtr = binding.get();
           ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &sinkNodeEvents, bindingPtr);

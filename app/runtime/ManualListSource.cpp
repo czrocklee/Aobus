@@ -85,7 +85,7 @@ namespace ao::rt
 
   void ManualListSource::onUpdated(TrackId const id, std::size_t /*index*/)
   {
-    if (auto const optMyIndex = indexOf(id))
+    if (auto const optMyIndex = indexOf(id); optMyIndex)
     {
       TrackSource::notifyUpdated(id, *optMyIndex);
     }
@@ -101,13 +101,14 @@ namespace ao::rt
     }
   }
 
-  void ManualListSource::onInserted(std::span<TrackId const> /*ids*/)
+  void ManualListSource::onBulkInserted(std::span<TrackId const> /*ids*/)
   {
   }
 
-  void ManualListSource::onUpdated(std::span<TrackId const> const ids)
+  void ManualListSource::onBulkUpdated(std::span<TrackId const> const ids)
   {
     auto matched = std::vector<TrackId>{};
+    matched.reserve(ids.size());
 
     for (auto const id : ids)
     {
@@ -123,9 +124,10 @@ namespace ao::rt
     }
   }
 
-  void ManualListSource::onRemoved(std::span<TrackId const> const ids)
+  void ManualListSource::onBulkRemoved(std::span<TrackId const> const ids)
   {
     auto removed = std::vector<TrackId>{};
+    removed.reserve(ids.size());
 
     for (auto const id : ids)
     {

@@ -47,6 +47,7 @@ set_target_properties(AobusLintPlugin PROPERTIES
 )
 
 target_include_directories(AobusLintPlugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(AobusLintPlugin PRIVATE -Wno-null-dereference)
 
 target_link_libraries(AobusLintPlugin PRIVATE
   clangTidy

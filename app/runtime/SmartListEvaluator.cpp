@@ -82,7 +82,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onInserted(std::span<TrackId const> const ids)
+  void SourceObserver::onBulkInserted(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
@@ -95,7 +95,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onUpdated(std::span<TrackId const> const ids)
+  void SourceObserver::onBulkUpdated(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
@@ -108,7 +108,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onRemoved(std::span<TrackId const> const ids)
+  void SourceObserver::onBulkRemoved(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
@@ -216,7 +216,7 @@ namespace ao::rt
     if (auto const it = _buckets.find(&source); it != _buckets.end())
     {
       // Re-evaluate membership for all lists in this bucket
-      if (auto const optSourceIndex = source.indexOf(trackId))
+      if (auto const optSourceIndex = source.indexOf(trackId); optSourceIndex)
       {
         handleSourceUpdated(*it->second, trackId, *optSourceIndex);
       }

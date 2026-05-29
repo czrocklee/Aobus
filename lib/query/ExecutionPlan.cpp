@@ -31,9 +31,14 @@ namespace ao::query
     // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
     constexpr std::uint32_t kBloomBitMask = 31;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
 #include "query/MetadataDispatch.h"
 #include "query/PropertyDispatch.h"
 #include "query/UnitDispatch.h"
+#pragma GCC diagnostic pop
 
     Field variableTypeToField(VariableType type, std::string_view name)
     {
@@ -707,9 +712,9 @@ namespace ao::query
     _resolveStringConstantsToIds = true;
 
     // Check if the expression is a constant "true"
-    if (auto const* constant = std::get_if<ConstantExpression>(&expr))
+    if (auto const* constant = std::get_if<ConstantExpression>(&expr); constant)
     {
-      if (bool const* val = std::get_if<bool>(constant))
+      if (bool const* val = std::get_if<bool>(constant); val)
       {
         if (*val)
         {

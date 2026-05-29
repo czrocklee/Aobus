@@ -29,33 +29,33 @@ namespace ao::rt
 
   void TrackSource::notifyUpdated(TrackId id)
   {
-    if (auto const optIndex = indexOf(id))
+    if (auto const optIndex = indexOf(id); optIndex)
     {
       notifyUpdated(id, *optIndex);
     }
   }
 
-  void TrackSource::notifyInserted(std::span<TrackId const> ids)
+  void TrackSource::notifyInserted(std::span<TrackId const> const ids)
   {
     for (auto* const obs : _observers)
     {
-      obs->onInserted(ids);
+      obs->onBulkInserted(ids);
     }
   }
 
-  void TrackSource::notifyUpdated(std::span<TrackId const> ids)
+  void TrackSource::notifyUpdated(std::span<TrackId const> const ids)
   {
     for (auto* const obs : _observers)
     {
-      obs->onUpdated(ids);
+      obs->onBulkUpdated(ids);
     }
   }
 
-  void TrackSource::notifyRemoved(std::span<TrackId const> ids)
+  void TrackSource::notifyRemoved(std::span<TrackId const> const ids)
   {
     for (auto* const obs : _observers)
     {
-      obs->onRemoved(ids);
+      obs->onBulkRemoved(ids);
     }
   }
 

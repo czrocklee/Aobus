@@ -205,6 +205,13 @@ namespace ao::query
       }
     }
 
+    // Helper for safe register access to avoid sign-conversion warnings
+    inline std::int64_t& reg(std::vector<std::int64_t>& registers, std::int32_t index)
+    {
+      gsl_Expects(index >= 0);
+      return registers[static_cast<std::size_t>(index)];
+    }
+
     // Execute comparison operation (helper for Ne, Lt, Le, Gt, Ge)
     template<typename Op>
     void executeComparison(std::vector<std::int64_t>& registers,
@@ -215,20 +222,20 @@ namespace ao::query
     {
       auto const* prevLoadField = findPrevLoadField(plan->instructions, &instr);
 
-      if (auto const stringIdx = registers[instr.operand];
+      if (auto const stringIdx = reg(registers, instr.operand);
           prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
       {
         auto field = static_cast<Field>(prevLoadField->field);
         auto const fieldStr = loadStringFieldValue(track, field, prevLoadField);
         auto const constantStr = getStringConstant(plan, stringIdx);
-        registers[instr.operand - 1] = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
+        reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
       else
       {
         // Numeric comparison
-        auto rhs = registers[instr.operand];
-        auto lhs = registers[instr.operand - 1];
-        registers[instr.operand - 1] = std::invoke(std::forward<Op>(op), lhs, rhs) ? 1 : 0;
+        auto rhs = reg(registers, instr.operand);
+        auto lhs = reg(registers, instr.operand - 1);
+        reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), lhs, rhs) ? 1 : 0;
       }
     }
 
@@ -245,25 +252,25 @@ namespace ao::query
             prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag;
           isTagComparison)
       {
-        auto tagIdToMatch = DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
+        auto tagIdToMatch = DictionaryId{static_cast<std::uint32_t>(reg(registers, instr.operand))};
         auto matches = track.tags().has(tagIdToMatch);
-        registers[instr.operand - 1] = matches ? 1 : 0;
+        reg(registers, instr.operand - 1) = matches ? 1 : 0;
       }
       else
       {
-        if (auto stringIdx = registers[instr.operand];
+        if (auto stringIdx = reg(registers, instr.operand);
             prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
         {
           auto field = static_cast<Field>(prevLoadField->field);
           auto const fieldStr = loadStringFieldValue(track, field, prevLoadField);
           auto const constantStr = getStringConstant(plan, stringIdx);
-          registers[instr.operand - 1] = (fieldStr == constantStr) ? 1 : 0;
+          reg(registers, instr.operand - 1) = (fieldStr == constantStr) ? 1 : 0;
         }
         else
         {
-          auto rhs = registers[instr.operand];
-          auto lhs = registers[instr.operand - 1];
-          registers[instr.operand - 1] = (lhs == rhs) ? 1 : 0;
+          auto rhs = reg(registers, instr.operand);
+          auto lhs = reg(registers, instr.operand - 1);
+          reg(registers, instr.operand - 1) = (lhs == rhs) ? 1 : 0;
         }
       }
     }
@@ -277,7 +284,7 @@ namespace ao::query
     {
       // instr.field contains the left field from the LoadField instruction
       auto field = static_cast<Field>(instr.field);
-      auto rhs = registers[instr.operand];
+      auto rhs = reg(registers, instr.operand);
       auto const* prevLoadField = findPrevLoadField(instructions, &instr);
 
       auto fieldStr = std::string_view{};
@@ -293,7 +300,7 @@ namespace ao::query
 
       auto const constantStr = getStringConstant(plan, rhs);
       auto found = fieldStr.contains(constantStr);
-      registers[instr.operand - 1] = found ? 1 : 0;
+      reg(registers, instr.operand - 1) = found ? 1 : 0;
     }
   }
 
@@ -343,10 +350,10 @@ namespace ao::query
       switch (instr.op)
       {
         case OpCode::LoadField:
-          _registers[instr.operand] = loadFieldValue(track, static_cast<Field>(instr.field));
+          reg(_registers, instr.operand) = loadFieldValue(track, static_cast<Field>(instr.field));
           break;
 
-        case OpCode::LoadConstant: _registers[instr.operand] = instr.constValue; break;
+        case OpCode::LoadConstant: reg(_registers, instr.operand) = instr.constValue; break;
 
         case OpCode::Eq: executeEq(_registers, track, &plan, instr, plan.instructions); break;
 
@@ -372,24 +379,24 @@ namespace ao::query
 
         case OpCode::And:
         {
-          auto rhs = _registers[instr.operand];
-          auto lhs = _registers[instr.operand - 1];
-          _registers[instr.operand - 1] = (lhs != 0 && rhs != 0) ? 1 : 0;
+          auto rhs = reg(_registers, instr.operand);
+          auto lhs = reg(_registers, instr.operand - 1);
+          reg(_registers, instr.operand - 1) = (lhs != 0 && rhs != 0) ? 1 : 0;
           break;
         }
 
         case OpCode::Or:
         {
-          auto rhs = _registers[instr.operand];
-          auto lhs = _registers[instr.operand - 1];
-          _registers[instr.operand - 1] = (lhs != 0 || rhs != 0) ? 1 : 0;
+          auto rhs = reg(_registers, instr.operand);
+          auto lhs = reg(_registers, instr.operand - 1);
+          reg(_registers, instr.operand - 1) = (lhs != 0 || rhs != 0) ? 1 : 0;
           break;
         }
 
         case OpCode::Not:
         {
-          auto val = _registers[instr.operand];
-          _registers[instr.operand] = (val == 0) ? 1 : 0;
+          auto val = reg(_registers, instr.operand);
+          reg(_registers, instr.operand) = (val == 0) ? 1 : 0;
           break;
         }
 

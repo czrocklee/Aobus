@@ -28,7 +28,7 @@ namespace ao::tag::mpeg
     std::uint32_t durationMs = 0;
 
     // 1. Prefer Xing/Info header if present for accurate duration (especially VBR)
-    if (auto optXing = frame.xingInfo())
+    if (auto optXing = frame.xingInfo(); optXing)
     {
       if (optXing->frames > 0 && frame.sampleRate() > 0)
       {
@@ -50,7 +50,7 @@ namespace ao::tag::mpeg
 
       if (lastBytePtr > firstFramePtr)
       {
-        std::uint64_t const actualAudioBytes = lastBytePtr - firstFramePtr;
+        std::uint64_t const actualAudioBytes = static_cast<std::uint64_t>(lastBytePtr - firstFramePtr);
         durationMs = static_cast<std::uint32_t>((actualAudioBytes * kMsPerSecond * kBitsPerByte) / frame.bitrate());
       }
     }
@@ -111,7 +111,7 @@ namespace ao::tag::mpeg
     }
 
     // 3. Locate first valid MPEG frame and extract audio properties
-    if (auto optFrameView = locate(audioStart, audioSize))
+    if (auto optFrameView = locate(audioStart, audioSize); optFrameView)
     {
       auto bitrate = optFrameView->bitrate();
       std::uint32_t durationMs = 0;

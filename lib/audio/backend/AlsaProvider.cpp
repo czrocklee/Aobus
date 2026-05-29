@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnull-dereference"
+
 #include <ao/audio/Backend.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IBackendProvider.h>
@@ -20,6 +23,8 @@ extern "C"
 }
 
 #include <ao/audio/backend/detail/AlsaProviderHelpers.h>
+
+#pragma GCC diagnostic pop
 
 #include <algorithm>
 #include <array>

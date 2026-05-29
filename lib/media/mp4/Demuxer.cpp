@@ -130,8 +130,9 @@ namespace ao::media::mp4
 
     for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
     {
-      out[idx].sampleCount = entry.sampleCount.value();
-      out[idx].sampleDelta = entry.sampleDelta.value();
+      auto const uidx = static_cast<std::size_t>(idx);
+      out[uidx].sampleCount = entry.sampleCount.value();
+      out[uidx].sampleDelta = entry.sampleDelta.value();
     }
   }
 
@@ -149,7 +150,7 @@ namespace ao::media::mp4
 
       for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
       {
-        _samples[idx].size = entry.size.value();
+        _samples[static_cast<std::size_t>(idx)].size = entry.size.value();
       }
     }
     else
@@ -171,8 +172,9 @@ namespace ao::media::mp4
 
     for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
     {
-      out[idx].firstChunk = entry.firstChunk.value();
-      out[idx].samplesPerChunk = entry.samplesPerChunk.value();
+      auto const uidx = static_cast<std::size_t>(idx);
+      out[uidx].firstChunk = entry.firstChunk.value();
+      out[uidx].samplesPerChunk = entry.samplesPerChunk.value();
     }
   }
 
@@ -186,7 +188,7 @@ namespace ao::media::mp4
 
     for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
     {
-      out[idx] = entry.chunkOffset.value();
+      out[static_cast<std::size_t>(idx)] = entry.chunkOffset.value();
     }
   }
 
@@ -200,7 +202,7 @@ namespace ao::media::mp4
 
     for (auto const& [idx, entry] : std::ranges::views::enumerate(entries))
     {
-      out[idx] = entry.chunkOffset.value();
+      out[static_cast<std::size_t>(idx)] = entry.chunkOffset.value();
     }
   }
 
@@ -225,7 +227,7 @@ namespace ao::media::mp4
       std::string_view{"mdhd"},
     };
 
-    if (auto const* node = root.find(kMdhdPath))
+    if (auto const* node = root.find(kMdhdPath); node)
     {
       auto const& view = utility::unsafeDowncast<AtomView const>(*node);
       auto const& layout = view.layout<MdhdAtomLayout>();
@@ -246,7 +248,7 @@ namespace ao::media::mp4
       targetFormat,
     };
 
-    if (auto const* node = root.find(kCookiePath))
+    if (auto const* node = root.find(kCookiePath); node)
     {
       auto const& view = utility::unsafeDowncast<AtomView const>(*node);
       auto const bytes = view.bytes();

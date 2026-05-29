@@ -120,7 +120,8 @@ namespace ao::tag::mpeg::id3v2
 
       ++ptr; // skip null terminator
 
-      std::size_t const imageSize = size - (ptr - frameData);
+      auto const offset = static_cast<std::size_t>(ptr - frameData);
+      std::size_t const imageSize = size - offset;
       builder.metadata().coverArtData(utility::bytes::view(ptr, imageSize));
     }
 
@@ -159,7 +160,12 @@ namespace ao::tag::mpeg::id3v2
       }
     }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
 #include "tag/mpeg/id3v2/FrameDispatch.h"
+#pragma GCC diagnostic pop
   } // namespace
 
   library::TrackBuilder loadFrames(TagFile const& owner,

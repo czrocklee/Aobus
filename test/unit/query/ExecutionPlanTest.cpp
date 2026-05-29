@@ -596,7 +596,7 @@ namespace ao::query::test
       if (instr.op == OpCode::Eq)
       {
         // The register before Eq should contain the constant we loaded
-        auto const& loadInstr = plan.instructions[&instr - plan.instructions.data() - 1];
+        auto const& loadInstr = plan.instructions[static_cast<std::size_t>(&instr - plan.instructions.data()) - 1U];
 
         if (loadInstr.op == OpCode::LoadConstant)
         {
@@ -811,8 +811,6 @@ namespace ao::query::test
 
     SECTION("Unsupported operator in BinaryExpression")
     {
-      auto compiler = QueryCompiler{};
-
       auto binary = std::make_unique<BinaryExpression>();
       binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
       binary->optOperation =
@@ -830,8 +828,6 @@ namespace ao::query::test
 
     SECTION("Compiler rejects unsupported unary operators")
     {
-      auto compiler = QueryCompiler{};
-
       auto unary = std::make_unique<UnaryExpression>();
       unary->op = Operator::Add; // Unsupported unary operator
       unary->operand = VariableExpression{.type = VariableType::Tag, .name = "rock"};

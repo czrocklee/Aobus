@@ -80,5 +80,5 @@ namespace clang::tidy::readability
 namespace
 {
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables,aobus-threading-policy)
-  int volatile AobusLintModuleAnchorSource = 0;
+  [[maybe_unused]] int volatile AobusLintModuleAnchorSource = 0;
 } // namespace

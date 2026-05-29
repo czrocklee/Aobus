@@ -132,7 +132,7 @@ namespace ao::rt
         {
           auto const hi = hexDigit(uuidStr[i]);
           auto const lo = hexDigit(uuidStr[i + 1]);
-          result.at(byteIndex++) = static_cast<std::byte>((hi << 4U) | lo);
+          result.at(static_cast<std::size_t>(byteIndex++)) = static_cast<std::byte>((hi << 4U) | lo);
           ++i;
         }
       }
@@ -468,7 +468,7 @@ namespace ao::rt
 
       if (strategy == ImportMode::Merge)
       {
-        if (auto const optManifestView = manifestReader.get(uriStr))
+        if (auto const optManifestView = manifestReader.get(uriStr); optManifestView)
         {
           optExistingTrackId = optManifestView->trackId();
         }
@@ -539,9 +539,10 @@ namespace ao::rt
       else if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
       {
         manifestBuilder.fileSize(std::filesystem::file_size(fullPath));
-        manifestBuilder.mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                std::filesystem::last_write_time(fullPath).time_since_epoch())
-                                .count());
+        manifestBuilder.mtime(
+          static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                       std::filesystem::last_write_time(fullPath).time_since_epoch())
+                                       .count()));
       }
 
       if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
@@ -799,7 +800,7 @@ namespace ao::rt
 
         for (auto const& uri : importedList.trackUris)
         {
-          if (auto const optManifestView = manifestReader.get(uri))
+          if (auto const optManifestView = manifestReader.get(uri); optManifestView)
           {
             builder.tracks().add(optManifestView->trackId());
           }

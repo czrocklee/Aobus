@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 
@@ -50,9 +51,10 @@ namespace ao::library::test
       auto builder1 = FileManifestBuilder::createNew();
       builder1.trackId(TrackId{1})
         .fileSize(std::filesystem::file_size(musicRoot / unchangedUri))
-        .mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                 std::filesystem::last_write_time(musicRoot / unchangedUri).time_since_epoch())
-                 .count());
+        .mtime(
+          static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                       std::filesystem::last_write_time(musicRoot / unchangedUri).time_since_epoch())
+                                       .count()));
       manifestWriter.put(unchangedUri, builder1.serialize());
 
       // Changed (different size)

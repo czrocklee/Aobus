@@ -75,7 +75,7 @@ namespace ao::gtk
     // Initialize track page manager
     _trackPageHost = std::make_unique<TrackPageHost>(_stack,
                                                      _runtime,
-                                                     _playbackSequenceController.get(),
+                                                     _playbackQueueModel.get(),
                                                      *_tagEditController,
                                                      *_listSidebarController,
                                                      *_trackPresentationStore,
@@ -116,9 +116,9 @@ namespace ao::gtk
 
     registerPlatformAudioBackends(_runtime);
 
-    _playbackSequenceController = std::make_unique<ao::uimodel::playback::PlaybackQueueModel>(
+    _playbackQueueModel = std::make_unique<ao::uimodel::playback::PlaybackQueueModel>(
       _runtime.playback(), [this](TrackId id) { return _trackRowCache->playbackDescriptor(id); });
-    _trackPageHost->setPlaybackQueueModel(*_playbackSequenceController);
+    _trackPageHost->setPlaybackQueueModel(*_playbackQueueModel);
 
     _libraryTaskCompletedSubscription = _runtime.mutation().onLibraryTaskCompleted(
       [this](auto)
@@ -237,7 +237,7 @@ namespace ao::gtk
   {
     return GtkUiServices{.trackRowCache = _trackRowCache.get(),
                          .imageCache = _imageCache.get(),
-                         .playbackQueueModel = _playbackSequenceController.get(),
+                         .playbackQueueModel = _playbackQueueModel.get(),
                          .tagEditController = _tagEditController.get(),
                          .importExportCoordinator = _importExportCoordinator.get(),
                          .trackPageHost = _trackPageHost.get(),

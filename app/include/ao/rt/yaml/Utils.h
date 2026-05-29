@@ -9,6 +9,7 @@
 #include <ryml.hpp>
 #include <ryml_std.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -94,11 +95,11 @@ namespace ao::rt::yaml
       throwException<Exception>("Failed to open file: {}", path.string());
     }
 
-    auto const size = ifs.tellg();
+    auto const size = static_cast<std::size_t>(ifs.tellg());
     ifs.seekg(0, std::ios::beg);
     auto buffer = std::vector<char>(size);
 
-    if (!ifs.read(buffer.data(), size))
+    if (!ifs.read(buffer.data(), static_cast<std::streamsize>(size)))
     {
       throwException<Exception>("Failed to read file: {}", path.string());
     }

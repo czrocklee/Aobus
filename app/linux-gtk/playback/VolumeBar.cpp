@@ -39,7 +39,6 @@ namespace ao::gtk
     constexpr double kAngle180 = std::numbers::pi;
     constexpr double kAngle270 = 1.5 * std::numbers::pi;
     constexpr double kAngle360 = 2.0 * std::numbers::pi;
-    constexpr float kScrollStep = 0.05F;
     constexpr float kFullOpacity = 1.0F;
   }
 

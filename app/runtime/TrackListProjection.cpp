@@ -558,9 +558,9 @@ namespace ao::rt
       positionIndex.clear();
       positionIndex.reserve(orderIndex.size());
 
-      for (auto const& [idx, entry] : std::views::enumerate(orderIndex))
+      for (auto const& [idx, entry] : std::ranges::views::enumerate(orderIndex))
       {
-        positionIndex[entry.trackId] = idx;
+        positionIndex[entry.trackId] = static_cast<std::size_t>(idx);
       }
     }
 
@@ -793,7 +793,7 @@ namespace ao::rt
 
       for (auto const id : ids)
       {
-        if (auto optPos = findPosition(id))
+        if (auto optPos = findPosition(id); optPos)
         {
           positions.push_back(*optPos);
         }
@@ -1095,17 +1095,17 @@ namespace ao::rt
     _impl->removeEntry(id);
   }
 
-  void TrackListProjection::onInserted(std::span<TrackId const> ids)
+  void TrackListProjection::onBulkInserted(std::span<TrackId const> ids)
   {
     _impl->insertEntries(ids);
   }
 
-  void TrackListProjection::onUpdated(std::span<TrackId const> ids)
+  void TrackListProjection::onBulkUpdated(std::span<TrackId const> ids)
   {
     _impl->updateEntries(ids);
   }
 
-  void TrackListProjection::onRemoved(std::span<TrackId const> ids)
+  void TrackListProjection::onBulkRemoved(std::span<TrackId const> ids)
   {
     _impl->removeEntries(ids);
   }

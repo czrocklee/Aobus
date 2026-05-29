@@ -58,7 +58,7 @@ namespace clang::tidy::readability
 
       StringRef const name = id->getName();
 
-      if (name.starts_with("I") && name.size() > 1 && isUppercase(name[1]))
+      if (name.starts_with("I") && name.size() > 1 && isUppercase(static_cast<unsigned char>(name[1])))
       {
         return false;
       }
@@ -74,7 +74,7 @@ namespace clang::tidy::readability
         return false;
       }
 
-      if (auto const* dtor = record->getDestructor())
+      if (auto const* dtor = record->getDestructor(); dtor)
       {
         if (dtor->getAccess() == AS_protected)
         {
@@ -123,7 +123,7 @@ namespace clang::tidy::readability
 
     auto const* dc = record->getDeclContext();
 
-    if (auto const* ns = dyn_cast<NamespaceDecl>(dc))
+    if (auto const* ns = dyn_cast<NamespaceDecl>(dc); ns)
     {
       if (ns->isAnonymousNamespace())
       {
@@ -152,7 +152,7 @@ namespace clang::tidy::readability
                        << (record->isClass() ? "class" : "struct") << record;
 
     // Provide fix-it: insert 'final' before the opening brace or class body
-    if (auto const* classDef = record->getDefinition())
+    if (auto const* classDef = record->getDefinition(); classDef)
     {
       SourceLocation const braceLoc = classDef->getBraceRange().getBegin();
 

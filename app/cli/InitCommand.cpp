@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -63,9 +64,9 @@ namespace ao::cli
           auto manifestBuilder = library::FileManifestBuilder::createNew();
           manifestBuilder.trackId(id)
             .fileSize(std::filesystem::file_size(path))
-            .mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                     std::filesystem::last_write_time(path).time_since_epoch())
-                     .count());
+            .mtime(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                std::filesystem::last_write_time(path).time_since_epoch())
+                                                .count()));
           manifestWriter.put(pathStr, manifestBuilder.serialize());
 
           os << "add track: " << id << " " << trackView.metadata().title() << '\n';

@@ -21,6 +21,7 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 4. **No TACO (Trump Always Chickens Out):** Do not over-promise and under-deliver. Always follow through on complex requirements, without taking shortcuts when things get difficult.
 5. **Design Docs:** Update `doc/design/` when modifying code that affects user-facing behavior. Sync all affected docs.
 6. **Test Coverage:** All changes must include appropriate test coverage.
+7. **Temporary Workspace:** Do not use the repository directory as a scratch or temporary workspace. Generate throwaway files, experiment outputs, and ad hoc test artifacts under `/tmp` or another explicit external workspace, unless the file is an intentional source, test, fixture, or documentation change.
 
 ## Build And Validation
 

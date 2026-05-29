@@ -38,9 +38,9 @@ namespace ao::rt
 
     // Multi-item notifications for performance during bulk operations.
     // Default implementation can fallback to individual notifications if needed.
-    virtual void onInserted(std::span<TrackId const> /*ids*/) {}
-    virtual void onUpdated(std::span<TrackId const> /*ids*/) {}
-    virtual void onRemoved(std::span<TrackId const> /*ids*/) {}
+    virtual void onBulkInserted(std::span<TrackId const> /*ids*/) {}
+    virtual void onBulkUpdated(std::span<TrackId const> /*ids*/) {}
+    virtual void onBulkRemoved(std::span<TrackId const> /*ids*/) {}
 
     /**
      * Called when the source list is being destroyed.

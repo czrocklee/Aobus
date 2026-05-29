@@ -24,7 +24,7 @@ namespace clang::tidy::readability
   {
     bool isCamelBack(StringRef name)
     {
-      return !name.empty() && isLowercase(name[0]) && !name.contains('_');
+      return !name.empty() && isLowercase(static_cast<unsigned char>(name[0])) && !name.contains('_');
     }
 
     bool hasPrivateMembers(CXXRecordDecl const* record)

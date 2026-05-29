@@ -79,7 +79,7 @@ namespace ao::library
 
       // Hot properties
       std::uint16_t codecId() const noexcept { return _track.hotHeader().codecId; }
-      std::uint8_t bitDepth() const noexcept { return _track.hotHeader().bitDepth; }
+      std::uint8_t bitDepth() const noexcept { return static_cast<std::uint8_t>(_track.hotHeader().bitDepth); }
 
       // Technical properties (from cold)
       std::uint32_t durationMs() const noexcept { return _track.coldHeader().durationMs; }
@@ -103,7 +103,12 @@ namespace ao::library
       {
       }
 
-      std::uint8_t count() const noexcept { return hotHeader().tagLen / sizeof(DictionaryId); }
+      std::uint8_t count() const noexcept
+      {
+        auto const& header = hotHeader();
+        return static_cast<std::uint8_t>(header.tagLen / sizeof(DictionaryId));
+      }
+
       std::uint32_t bloom() const noexcept { return hotHeader().tagBloom; }
 
       DictionaryId id(std::uint8_t index) const noexcept
@@ -114,9 +119,8 @@ namespace ao::library
 
       DictionaryId const* begin() const noexcept
       {
-        gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
-        return utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), hotHeader().tagLen))
-          .data();
+        auto const& header = hotHeader();
+        return utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), header.tagLen)).data();
       }
 
       DictionaryId const* end() const noexcept { return begin() + count(); }
@@ -126,7 +130,16 @@ namespace ao::library
       TrackHotHeader const& hotHeader() const
       {
         gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
-        return *utility::layout::view<TrackHotHeader>(_hotData);
+
+        auto const* header = utility::layout::view<TrackHotHeader>(_hotData);
+        gsl_Assert(header != nullptr);
+
+        if (header == nullptr)
+        {
+          std::unreachable();
+        }
+
+        return *header;
       }
 
       std::span<std::byte const> _hotData;
@@ -221,13 +234,31 @@ namespace ao::library
     TrackHotHeader const& hotHeader() const
     {
       gsl_Expects(isHotValid());
-      return *utility::layout::view<TrackHotHeader>(_hotData);
+
+      auto const* header = utility::layout::view<TrackHotHeader>(_hotData);
+      gsl_Assert(header != nullptr);
+
+      if (header == nullptr)
+      {
+        std::unreachable();
+      }
+
+      return *header;
     }
 
     TrackColdHeader const& coldHeader() const
     {
       gsl_Expects(isColdValid());
-      return *utility::layout::view<TrackColdHeader>(_coldData);
+
+      auto const* header = utility::layout::view<TrackColdHeader>(_coldData);
+      gsl_Assert(header != nullptr);
+
+      if (header == nullptr)
+      {
+        std::unreachable();
+      }
+
+      return *header;
     }
 
   private:

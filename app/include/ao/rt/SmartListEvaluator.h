@@ -30,9 +30,9 @@ namespace ao::rt
     void onUpdated(TrackId id, std::size_t index) override;
     void onRemoved(TrackId id, std::size_t index) override;
 
-    void onInserted(std::span<TrackId const> ids) override;
-    void onUpdated(std::span<TrackId const> ids) override;
-    void onRemoved(std::span<TrackId const> ids) override;
+    void onBulkInserted(std::span<TrackId const> ids) override;
+    void onBulkUpdated(std::span<TrackId const> ids) override;
+    void onBulkRemoved(std::span<TrackId const> ids) override;
 
     void onSourceDestroyed() override;
 

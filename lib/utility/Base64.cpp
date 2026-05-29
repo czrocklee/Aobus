@@ -55,7 +55,7 @@ namespace ao::utility
       {
         bits -= kBase64BitsPerChar;
         result.push_back(kAlphabet[(buffer >> bits) & kBase64Mask]);
-        buffer &= (1 << bits) - 1;
+        buffer &= (1U << bits) - 1U;
       }
     }
 
@@ -107,7 +107,7 @@ namespace ao::utility
       {
         bits -= kBitsPerByte;
         result.push_back(static_cast<std::byte>((buffer >> bits) & kByteMask));
-        buffer &= (1 << bits) - 1;
+        buffer &= (1U << bits) - 1U;
       }
     }
 

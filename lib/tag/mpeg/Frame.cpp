@@ -60,7 +60,7 @@ namespace ao::tag::mpeg
 
     constexpr std::uint8_t kFrameSyncByte1 = 0xFF;
     constexpr std::uint8_t kFrameSyncByte2Mask = 0xE0;
-    constexpr std::size_t kXingDataFieldOffset = 8;
+    [[maybe_unused]] constexpr std::size_t kXingDataFieldOffset = 8;
 
     std::uint8_t const* findFrameSync(std::uint8_t const* begin, std::uint8_t const* end)
     {

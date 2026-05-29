@@ -56,7 +56,12 @@ namespace ao::tag::flac
       }
     }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
 #include "tag/flac/VorbisCommentDispatch.h"
+#pragma GCC diagnostic pop
   } // namespace
 
   library::TrackBuilder File::loadTrack() const

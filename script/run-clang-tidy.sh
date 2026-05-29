@@ -279,10 +279,16 @@ run_one() {
         header_filter="${PROJECT_ROOT}/(test|include)/.*"
     fi
 
+    local extra_args=()
+    while IFS= read -r arg; do
+        [[ -n "$arg" ]] && extra_args+=("$arg")
+    done <<< "$ISYSTEM_ARGS_STR"
+
     # Relax certain rules for GTK code due to framework patterns
     local rel_f="${f#$PROJECT_ROOT/}"
-    if [[ "${rel_f}" == app/linux-gtk/* ]]; then
+    if [[ "${rel_f}" == *linux-gtk/* ]]; then
         checks="${checks},-cppcoreguidelines-owning-memory"
+        extra_args+=("--extra-arg=-Wno-format-nonliteral")
     fi
 
     # Re-build config string with updated checks
@@ -290,10 +296,6 @@ run_one() {
     config="$(echo "$CONFIG_BASE" | sed "s/PLACEHOLDER/${checks}/" | tr '\n' ' ' | sed 's/  */ /g')"
     $DEBUG_MODE && echo "DEBUG CONFIG: $config"
 
-    local extra_args=()
-    while IFS= read -r arg; do
-        [[ -n "$arg" ]] && extra_args+=("$arg")
-    done <<< "$ISYSTEM_ARGS_STR"
     [[ -f "$PLUGIN" ]] && extra_args+=("-load=$PLUGIN")
     if $FIX_MODE; then
         local fix_file="${tmp%.log}.yaml"

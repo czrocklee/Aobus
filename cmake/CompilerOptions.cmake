@@ -34,11 +34,34 @@ if(AOBUS_ENABLE_TSAN)
 endif()
 
 # ── Warnings ────────────────────────────────────────────────────────────────
+set(COMMON_WARNINGS
+  -Wall
+  -Wextra
+  -Wpedantic
+  -Wunused
+  -Wformat=2
+  $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
+  $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>
+  -Wcast-align
+)
+
 # Disable -Werror when using sanitizers to avoid noise from third-party headers.
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(${COMMON_WARNINGS})
 else()
-  add_compile_options(-Wall -Wextra -Wpedantic -Wno-error)
+  # Enable -Werror for common clean warnings in non-sanitizer builds.
+  add_compile_options(${COMMON_WARNINGS} -Werror)
+
+  # Keep the noisiest warnings disabled globally until third-party headers are
+  # consistently isolated behind SYSTEM include paths or local diagnostic guards.
+  add_compile_options(
+    -Wno-null-dereference
+    -Wno-double-promotion
+    -Wno-conversion
+    -Wno-sign-conversion
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-old-style-cast>
+    -Wno-float-conversion
+  )
 endif()
 
 # ── GSL-lite ────────────────────────────────────────────────────────────────

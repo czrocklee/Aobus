@@ -39,7 +39,7 @@ namespace ao::library
       }
 
       std::memcpy(buffer.data(), uri.data(), uri.size());
-      size_t const paddedSize = (uri.size() + 3) & ~3;
+      size_t const paddedSize = (uri.size() + 3) & ~size_t{3};
       std::memset(buffer.data() + uri.size(), 0, paddedSize - uri.size());
       return buffer.subspan(0, paddedSize);
     }
@@ -67,7 +67,7 @@ namespace ao::library
     auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
     auto const key = padUri(uri, buffer);
 
-    if (auto const optData = _reader.get(key))
+    if (auto const optData = _reader.get(key); optData)
     {
       if (optData->size() < sizeof(FileManifestHeader))
       {

@@ -40,16 +40,15 @@ namespace ao::gtk
 {
   namespace
   {
-    constexpr int kBoxSpacing = layout::kSpacingMedium;
     constexpr int kSectionSpacing = layout::kSpacingLarge;
-    constexpr int kFieldRowSpacing = layout::kSpacingSmall;
-    constexpr float kLabelOpacity = 0.6F;
-    constexpr int kLabelWidthChars = 14;
     constexpr int kSpinButtonStepIncrement = 1;
     constexpr int kSpinButtonPageIncrement = 10;
     constexpr double kSpinMin = 0.0;
-    constexpr double kSpinMax = 65535.0;
+    constexpr int kSpinMax = 65535.0;
     constexpr int kSpinDigits = 0;
+
+    constexpr int kDefaultWidth = 520;
+    constexpr int kDefaultHeight = 580;
 
     bool shouldShowEditableMetadataRow(rt::TrackFieldDefinition const& rtDef,
                                        detail::TrackFieldUiDefinition const& uiDef)
@@ -83,7 +82,7 @@ namespace ao::gtk
 
     set_title(title);
     set_transient_for(parent);
-    set_default_size(520, 580);
+    set_default_size(kDefaultWidth, kDefaultHeight);
 
     setupUi();
     loadData();
@@ -340,13 +339,13 @@ namespace ao::gtk
       auto rawValue = detail::TrackFieldRawValue{};
       auto editValue = detail::TrackFieldEditValue{};
 
-      if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget))
+      if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget); entry)
       {
         auto const text = entry->get_text().raw();
         rawValue = detail::TrackFieldRawValue{std::in_place_type<std::string>, text};
         editValue = detail::TrackFieldEditValue{std::in_place_type<std::string>, std::move(text)};
       }
-      else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget))
+      else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget); spin)
       {
         auto const value = static_cast<std::uint16_t>(spin->get_value_as_int());
         rawValue = detail::TrackFieldRawValue{std::in_place_type<std::uint16_t>, value};
@@ -379,13 +378,13 @@ namespace ao::gtk
 
   void TrackPropertiesDialog::setWidgetValue(rt::TrackField /*field*/, Gtk::Widget* widget, std::string_view value)
   {
-    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget))
+    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry)
     {
       entry->set_text(std::string{value});
       return;
     }
 
-    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget))
+    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin)
     {
       auto intValue = 0;
 
@@ -398,7 +397,7 @@ namespace ao::gtk
       return;
     }
 
-    if (auto* const label = dynamic_cast<Gtk::Label*>(widget))
+    if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label)
     {
       label->set_text(std::string{value});
     }
@@ -408,19 +407,19 @@ namespace ao::gtk
   {
     widget->set_sensitive(false);
 
-    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget))
+    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry)
     {
       entry->set_placeholder_text("<Multiple Values>");
       return;
     }
 
-    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget))
+    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin)
     {
       spin->set_value(0.0);
       return;
     }
 
-    if (auto* const label = dynamic_cast<Gtk::Label*>(widget))
+    if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label)
     {
       label->set_text("<Multiple Values>");
     }

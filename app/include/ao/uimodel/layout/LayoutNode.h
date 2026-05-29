@@ -38,7 +38,7 @@ namespace ao::uimodel::layout
     template<typename T>
     T as(T defaultValue) const
     {
-      if (auto const* ptr = getIf<T>())
+      if (auto const* ptr = getIf<T>(); ptr)
       {
         return *ptr;
       }

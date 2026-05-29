@@ -60,7 +60,7 @@ namespace ao::gtk
 
     TrackRowCache* trackRowCache() { return _trackRowCache.get(); }
     ImageCache* imageCache() { return _imageCache.get(); }
-    uimodel::playback::PlaybackQueueModel* playbackQueueModel() { return _playbackSequenceController.get(); }
+    uimodel::playback::PlaybackQueueModel* playbackQueueModel() { return _playbackQueueModel.get(); }
     TagEditController* tagEditController() { return _tagEditController.get(); }
     portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinator.get(); }
     TrackPageHost* trackPageHost() { return _trackPageHost.get(); }
@@ -83,7 +83,7 @@ namespace ao::gtk
     std::unique_ptr<ListNavigationController> _listSidebarController;
     std::unique_ptr<TrackPresentationStore> _trackPresentationStore;
     std::unique_ptr<TrackPageHost> _trackPageHost;
-    std::unique_ptr<uimodel::playback::PlaybackQueueModel> _playbackSequenceController;
+    std::unique_ptr<uimodel::playback::PlaybackQueueModel> _playbackQueueModel;
     std::unique_ptr<portal::ImportExportCoordinator> _importExportCoordinator;
 
     Gtk::Stack _stack;

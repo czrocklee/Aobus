@@ -124,7 +124,7 @@ namespace ao::rt
         return;
       }
 
-      if (auto optPoint = snapshotActiveView())
+      if (auto optPoint = snapshotActiveView(); optPoint)
       {
         auto const beforeBack = navigationHistory.canGoBack();
         auto const beforeForward = navigationHistory.canGoForward();
@@ -198,7 +198,7 @@ namespace ao::rt
 
     std::optional<TrackPresentationSpec> presentationForId(std::string_view id) const
     {
-      if (auto const* preset = builtinTrackPresentationPreset(id))
+      if (auto const* preset = builtinTrackPresentationPreset(id); preset)
       {
         return preset->spec;
       }
@@ -372,7 +372,7 @@ namespace ao::rt
     _impl->focusView(targetViewId);
 
     // Apply album presentation without recording.
-    if (auto const* preset = builtinTrackPresentationPreset("albums"))
+    if (auto const* preset = builtinTrackPresentationPreset("albums"); preset)
     {
       _impl->views.setPresentation(targetViewId, preset->spec);
     }

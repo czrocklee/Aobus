@@ -108,13 +108,13 @@ namespace clang::tidy::readability
 
     bool isEligibleControlStmt(Stmt const* target)
     {
-      if (auto const* ifStmt = dyn_cast<IfStmt>(target))
+      if (auto const* ifStmt = dyn_cast<IfStmt>(target); ifStmt)
       {
         // If it already has an init statement OR a condition variable, don't crowd it.
         return !ifStmt->hasInitStorage() && (ifStmt->getConditionVariable() == nullptr);
       }
 
-      if (auto const* switchStmt = dyn_cast<SwitchStmt>(target))
+      if (auto const* switchStmt = dyn_cast<SwitchStmt>(target); switchStmt)
       {
         return !switchStmt->hasInitStorage() && (switchStmt->getConditionVariable() == nullptr);
       }
@@ -125,14 +125,43 @@ namespace clang::tidy::readability
 
   void UseIfInitStatementCheck::registerMatchers(MatchFinder* finder)
   {
+    // Matcher 1: Variable declared before control statement
     finder->addMatcher(declStmt(hasParent(compoundStmt().bind("block"))).bind("decl"), this);
+
+    // Matcher 2: Implicit condition variable inside if
+    finder->addMatcher(ifStmt(hasConditionVariableStatement(declStmt(hasSingleDecl(varDecl().bind("condVar"))).bind("condDecl")),
+                              unless(hasInitStatement(anything())))
+                         .bind("implicitIf"),
+                       this);
   }
 
   void UseIfInitStatementCheck::check(MatchFinder::MatchResult const& result)
   {
+    auto const& sm = *result.SourceManager;
+
+    // Handle Matcher 2: Implicit condition variable
+    if (auto const* implicitIf = result.Nodes.getNodeAs<IfStmt>("implicitIf"))
+    {
+      auto const* condVar = result.Nodes.getNodeAs<VarDecl>("condVar");
+      auto const* condDecl = result.Nodes.getNodeAs<DeclStmt>("condDecl");
+
+      if ((implicitIf == nullptr) || (condVar == nullptr) || (condDecl == nullptr))
+      {
+        return;
+      }
+
+      if (sm.isInSystemHeader(condVar->getBeginLoc()) || condVar->getBeginLoc().isMacroID())
+      {
+        return;
+      }
+
+      diag(condVar->getBeginLoc(), "prefer explicit init-statement style: if (auto var = expr; var)");
+      return;
+    }
+
+    // Handle Matcher 1: Variable declared before control statement
     auto const* block = result.Nodes.getNodeAs<CompoundStmt>("block");
     auto const* decl = result.Nodes.getNodeAs<DeclStmt>("decl");
-    auto const& sm = *result.SourceManager;
 
     if ((block == nullptr) || (decl == nullptr))
     {

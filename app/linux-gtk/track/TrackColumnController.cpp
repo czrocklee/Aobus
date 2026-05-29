@@ -34,7 +34,6 @@ namespace ao::gtk
 {
   namespace
   {
-    constexpr double kTitlePositionDivisor = 2.0;
   }
 
   TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView,
@@ -67,7 +66,7 @@ namespace ao::gtk
 
     _columnView.signal_map().connect(sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
 
-    if (auto const adj = _columnView.get_hadjustment())
+    if (auto const adj = _columnView.get_hadjustment(); adj)
     {
       adj->property_page_size().signal_changed().connect(
         sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
@@ -75,7 +74,7 @@ namespace ao::gtk
         sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
     }
 
-    if (auto const columns = _columnView.get_columns())
+    if (auto const columns = _columnView.get_columns(); columns)
     {
       _columnNotifyConnections.emplace_back(columns->signal_items_changed().connect(
         [this](::guint, ::guint, ::guint)
@@ -138,14 +137,14 @@ namespace ao::gtk
   {
     rt::TrackField chooseExpandingColumn(std::span<rt::TrackField const> visibleFields)
     {
-      if (std::ranges::contains(visibleFields, rt::TrackField::Tags))
-      {
-        return rt::TrackField::Tags;
-      }
-
       if (std::ranges::contains(visibleFields, rt::TrackField::Title))
       {
         return rt::TrackField::Title;
+      }
+
+      if (std::ranges::contains(visibleFields, rt::TrackField::Tags))
+      {
+        return rt::TrackField::Tags;
       }
 
       if (!visibleFields.empty())
@@ -176,7 +175,7 @@ namespace ao::gtk
           continue;
         }
 
-        ensureColumnPosition(columns, idx, binding->column);
+        ensureColumnPosition(columns, static_cast<std::size_t>(idx), binding->column);
 
         // Find width in stored layout if it exists
         auto width = 0;
@@ -212,7 +211,7 @@ namespace ao::gtk
 
     if (columns->get_n_items() > index)
     {
-      if (auto currentObj = columns->get_object(static_cast<::guint>(index)))
+      if (auto currentObj = columns->get_object(static_cast<::guint>(index)); currentObj)
       {
         if (currentObj == column)
         {

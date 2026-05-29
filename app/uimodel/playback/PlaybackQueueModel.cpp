@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <random>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -136,9 +137,7 @@ namespace ao::uimodel::playback
     // If we are more than 3 seconds into the song, just restart it
     if (state.positionMs > kRestartThresholdMs)
     {
-      auto const optDesc = _descriptorProvider(_queueState->trackIds[_queueState->currentIndex]);
-
-      if (optDesc)
+      if (auto const optDesc = _descriptorProvider(_queueState->trackIds[_queueState->currentIndex]))
       {
         _playback.play(*optDesc, _queueState->sourceListId);
         return;
@@ -149,11 +148,10 @@ namespace ao::uimodel::playback
     {
       auto const prevIndex = _queueState->currentIndex - 1;
 
-      for (std::int32_t idx = static_cast<std::int32_t>(prevIndex); idx >= 0; --idx)
+      for (auto [idx, trackId] :
+           _queueState->trackIds | std::views::take(prevIndex + 1) | std::views::enumerate | std::views::reverse)
       {
-        auto const optDesc = _descriptorProvider(_queueState->trackIds[idx]);
-
-        if (optDesc)
+        if (auto const optDesc = _descriptorProvider(trackId))
         {
           _queueState->currentIndex = static_cast<std::size_t>(idx);
           _playback.play(*optDesc, _queueState->sourceListId);
@@ -163,11 +161,9 @@ namespace ao::uimodel::playback
     }
     else if (state.repeatMode == rt::RepeatMode::All && !_queueState->trackIds.empty())
     {
-      for (std::int32_t idx = static_cast<std::int32_t>(_queueState->trackIds.size() - 1); idx >= 0; --idx)
+      for (auto [idx, trackId] : _queueState->trackIds | std::views::enumerate | std::views::reverse)
       {
-        auto const optDesc = _descriptorProvider(_queueState->trackIds[idx]);
-
-        if (optDesc)
+        if (auto const optDesc = _descriptorProvider(trackId))
         {
           _queueState->currentIndex = static_cast<std::size_t>(idx);
           _playback.play(*optDesc, _queueState->sourceListId);
@@ -234,9 +230,7 @@ namespace ao::uimodel::playback
 
     if (state.repeatMode == rt::RepeatMode::One)
     {
-      auto const optDesc = _descriptorProvider(_queueState->trackIds[_queueState->currentIndex]);
-
-      if (optDesc)
+      if (auto const optDesc = _descriptorProvider(_queueState->trackIds[_queueState->currentIndex]))
       {
         _playback.play(*optDesc, _queueState->sourceListId);
         return;
@@ -256,9 +250,7 @@ namespace ao::uimodel::playback
         nextIdx = (nextIdx + 1) % _queueState->trackIds.size();
       }
 
-      auto const optDesc = _descriptorProvider(_queueState->trackIds[nextIdx]);
-
-      if (optDesc)
+      if (auto const optDesc = _descriptorProvider(_queueState->trackIds[nextIdx]))
       {
         _queueState->currentIndex = nextIdx;
         _playback.play(*optDesc, _queueState->sourceListId);
@@ -268,13 +260,11 @@ namespace ao::uimodel::playback
 
     auto const nextIndex = _queueState->currentIndex + 1;
 
-    for (auto idx = nextIndex; idx < _queueState->trackIds.size(); ++idx)
+    for (auto [idx, trackId] : _queueState->trackIds | std::views::enumerate | std::views::drop(nextIndex))
     {
-      auto const optDesc = _descriptorProvider(_queueState->trackIds[idx]);
-
-      if (optDesc)
+      if (auto const optDesc = _descriptorProvider(trackId))
       {
-        _queueState->currentIndex = idx;
+        _queueState->currentIndex = static_cast<std::size_t>(idx);
         _playback.play(*optDesc, _queueState->sourceListId);
         return;
       }
@@ -282,13 +272,11 @@ namespace ao::uimodel::playback
 
     if (state.repeatMode == rt::RepeatMode::All && !_queueState->trackIds.empty())
     {
-      for (std::size_t idx = 0; idx < _queueState->trackIds.size(); ++idx)
+      for (auto [idx, trackId] : _queueState->trackIds | std::views::enumerate)
       {
-        auto const optDesc = _descriptorProvider(_queueState->trackIds[idx]);
-
-        if (optDesc)
+        if (auto const optDesc = _descriptorProvider(trackId))
         {
-          _queueState->currentIndex = idx;
+          _queueState->currentIndex = static_cast<std::size_t>(idx);
           _playback.play(*optDesc, _queueState->sourceListId);
           return;
         }

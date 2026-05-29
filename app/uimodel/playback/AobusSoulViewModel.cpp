@@ -55,10 +55,8 @@ namespace ao::uimodel::playback
     _outputSub = _playback.onOutputChanged([refreshCallback](auto const&) { refreshCallback(); });
     _startedSub = _playback.onStarted(refreshCallback);
 
-    auto const onStopped = [this, refreshCallback] { refreshCallback(); };
-
-    _stoppedSub = _playback.onStopped(onStopped);
-    _idleSub = _playback.onIdle(onStopped);
+    _stoppedSub = _playback.onStopped(refreshCallback);
+    _idleSub = _playback.onIdle(refreshCallback);
 
     refresh();
   }

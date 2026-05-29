@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/layout/document/LayoutNode.h"
-#include "app/linux-gtk/layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "layout/document/LayoutDocument.h"
-#include <ao/rt/yaml/Utils.h>
+#include <ao/uimodel/layout/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdint>
+#include <string>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -17,8 +15,6 @@
 
 namespace ao::gtk::layout::test
 {
-  namespace yaml = ao::rt::yaml;
-
   TEST_CASE("Layout model GTK serialization", "[layout][unit][gtk][model]")
   {
     SECTION("LayoutDocument round-trip via createDefaultLayout")

@@ -24,6 +24,12 @@ namespace clang::tidy::readability
   void LambdaParamsCheck::check(MatchFinder::MatchResult const& result)
   {
     auto const* lambda = result.Nodes.getNodeAs<LambdaExpr>("lambda");
+
+    if (lambda == nullptr)
+    {
+      return;
+    }
+
     auto const& sm = *result.SourceManager;
 
     if (sm.isInSystemHeader(lambda->getBeginLoc()) || lambda->getBeginLoc().isMacroID())

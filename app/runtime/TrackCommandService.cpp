@@ -126,9 +126,9 @@ namespace ao::rt
     auto manifestBuilder = library::FileManifestBuilder::createNew();
     manifestBuilder.trackId(id)
       .fileSize(static_cast<std::uint64_t>(std::filesystem::file_size(path)))
-      .mtime(
+      .mtime(static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch())
-          .count());
+          .count()));
     manifestWriter.put(path.string(), manifestBuilder.serialize());
 
     txn.commit();

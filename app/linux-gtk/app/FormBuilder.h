@@ -5,7 +5,6 @@
 
 #include <glibmm/refptr.h>
 #include <gtkmm/listbox.h>
-#include <gtkmm/listboxrow.h>
 #include <gtkmm/sizegroup.h>
 #include <gtkmm/widget.h>
 
@@ -34,13 +33,3 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::SizeGroup> _labelSizeGroup;
   };
 } // namespace ao::gtk
-
-namespace ao::gtk::FormBuilder
-{
-  /**
-   * Backwards compatible helper for old code.
-   */
-  Gtk::ListBox* createBoxedList();
-  Gtk::ListBoxRow* createFormRow(std::string const& labelText, Gtk::Widget& widget);
-  Gtk::ListBoxRow* createEntryRow(std::string const& labelText, Gtk::Widget& entry);
-} // namespace ao::gtk::FormBuilder

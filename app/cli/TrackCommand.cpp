@@ -245,7 +245,7 @@ namespace ao::cli
       {
         auto const id = TrackId{targetId};
 
-        if (auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both))
+        if (auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both); optView)
         {
           processTrackDump(id, *optView, dict, raw, yaml, os);
         }

@@ -181,6 +181,31 @@ namespace ao::uimodel::playback::test
       CHECK(queueModel.nowPlayingTrackId() == TrackId{3});
     }
 
+    SECTION("Previous skips invalid tracks")
+    {
+      // Setup: [1, 999, 3] where 999 is invalid
+      auto const tracks = std::vector{TrackId{1}, TrackId{999}, TrackId{3}};
+      queueModel.playQueue(tracks, TrackId{3}, ListId{10});
+      CHECK(queueModel.nowPlayingTrackId() == TrackId{3});
+
+      // From 3, go previous. Should skip 999 and find 1.
+      queueModel.previous();
+      CHECK(queueModel.nowPlayingTrackId() == TrackId{1});
+    }
+
+    SECTION("Previous at start with Repeat All skips invalid tracks at end")
+    {
+      queueModel.setRepeatMode(rt::RepeatMode::All);
+      // Setup: [1, 2, 999] where 999 is invalid
+      auto const tracks = std::vector{TrackId{1}, TrackId{2}, TrackId{999}};
+      queueModel.playQueue(tracks, TrackId{1}, ListId{10});
+      CHECK(queueModel.nowPlayingTrackId() == TrackId{1});
+
+      // From 1, go previous. Should wrap to end, skip 999, and find 2.
+      queueModel.previous();
+      CHECK(queueModel.nowPlayingTrackId() == TrackId{2});
+    }
+
     SECTION("Shuffle mode next picks random track")
     {
       queueModel.setShuffleMode(rt::ShuffleMode::On);

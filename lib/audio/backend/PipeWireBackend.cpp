@@ -191,10 +191,10 @@ namespace ao::audio::backend
     if (bytesRead > 0)
     {
       buffer->buffer->datas[0].chunk->offset = 0;
-      buffer->buffer->datas[0].chunk->size = bytesRead;
-      buffer->buffer->datas[0].chunk->stride = stride;
+      buffer->buffer->datas[0].chunk->size = static_cast<std::uint32_t>(bytesRead);
+      buffer->buffer->datas[0].chunk->stride = static_cast<std::int32_t>(stride);
       ::pw_stream_queue_buffer(stream.get(), buffer);
-      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(bytesRead / stride));
+      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(bytesRead / static_cast<std::size_t>(stride)));
     }
 
     else
@@ -229,7 +229,7 @@ namespace ao::audio::backend
 
   void PipeWireBackend::Impl::handleFormatParam(::spa_pod const* param)
   {
-    if (auto optNegotiated = parseRawStreamFormat(param))
+    if (auto optNegotiated = parseRawStreamFormat(param); optNegotiated)
     {
       format = *optNegotiated;
       AUDIO_LOG_INFO(
@@ -242,7 +242,7 @@ namespace ao::audio::backend
   void PipeWireBackend::Impl::handlePropsParam(::spa_pod const* param)
   {
     // Parse SPA_PROP_volume and SPA_PROP_mute from the Props pod
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume); prop)
     {
       if (float volFloat = 0.0F; ::spa_pod_get_float(&prop->value, &volFloat) == 0)
       {
@@ -253,7 +253,7 @@ namespace ao::audio::backend
       }
     }
 
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute); prop)
     {
       if (bool muteBool = false; ::spa_pod_get_bool(&prop->value, &muteBool) == 0)
       {

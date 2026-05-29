@@ -84,7 +84,7 @@ namespace ao::gtk
 
     auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> layout::ActionState
     {
-      if (auto* const queueModel = _context.playback.queueModel)
+      if (auto* const queueModel = _context.playback.queueModel; queueModel)
       {
         return layout::ActionState{.enabled = queueModel->isActive(), .disabledReason = ""};
       }
@@ -137,14 +137,14 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [this](layout::ActionActivationContext&)
       {
-        if (auto* const queueModel = _context.playback.queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel)
         {
           queueModel->next();
         }
       },
       [this](layout::ActionActivationContext const&) -> layout::ActionState
       {
-        if (auto* const queueModel = _context.playback.queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel)
         {
           return layout::ActionState{.enabled = queueModel->hasNext(), .disabledReason = ""};
         }
@@ -159,14 +159,14 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [this](layout::ActionActivationContext&)
       {
-        if (auto* const queueModel = _context.playback.queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel)
         {
           queueModel->previous();
         }
       },
       [this](layout::ActionActivationContext const&) -> layout::ActionState
       {
-        if (auto* const queueModel = _context.playback.queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel)
         {
           return layout::ActionState{.enabled = queueModel->hasPrevious(), .disabledReason = ""};
         }
@@ -181,7 +181,7 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (auto* const queueModel = _context.playback.queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel)
         {
           auto const current = ctx.runtime.playback().state().shuffleMode;
           auto const next = (current == rt::ShuffleMode::Off) ? rt::ShuffleMode::On : rt::ShuffleMode::Off;
@@ -197,7 +197,7 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (auto* const queueModel = _context.playback.queueModel)
+        if (auto* const queueModel = _context.playback.queueModel; queueModel)
         {
           auto const current = ctx.runtime.playback().state().repeatMode;
           auto next = rt::RepeatMode::Off;
@@ -238,7 +238,7 @@ namespace ao::gtk
                    layout::ActionCapability::RequiresAnchor | layout::ActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
-                     if (auto const menu = _context.shell.menuModel)
+                     if (auto const menu = _context.shell.menuModel; menu)
                      {
                        auto* const popover = Gtk::make_managed<Gtk::PopoverMenu>(menu);
                        popover->set_parent(ctx.anchorWidget);
@@ -297,7 +297,7 @@ namespace ao::gtk
   {
     _context.parentWindow.set_child(_host);
 
-    if (auto* actionMap = dynamic_cast<Gio::ActionMap*>(&_context.parentWindow))
+    if (auto* actionMap = dynamic_cast<Gio::ActionMap*>(&_context.parentWindow); actionMap)
     {
       _gioBridgeSession = layout::GioActionBridge::exportActions(_actionRegistry, *actionMap, *this);
     }
