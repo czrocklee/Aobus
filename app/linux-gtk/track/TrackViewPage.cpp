@@ -12,7 +12,6 @@
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
-#include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
@@ -23,6 +22,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 #include <ao/utility/Log.h>
 
 #include <gdkmm/rectangle.h>
@@ -119,7 +119,7 @@ namespace ao::gtk
 
   TrackViewPage::TrackViewPage(ListId listId,
                                Glib::RefPtr<TrackListModel> modelPtr,
-                               TrackPresentationStore& presentationStore,
+                               uimodel::track::TrackPresentationViewModel& presentationStore,
                                rt::AppRuntime& runtime,
                                ImageCache& imageCache,
                                rt::ViewId viewId)

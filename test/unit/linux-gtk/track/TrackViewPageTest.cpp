@@ -6,9 +6,9 @@
 #include "image/ImageCache.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackListModel.h"
-#include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
 #include <ao/rt/CorePrimitives.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
@@ -26,7 +26,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);
-    auto presentationStore = TrackPresentationStore{runtime.workspace()};
+    auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
 
     auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, presentationStore, runtime, imageCache};
     window.set_child(page);

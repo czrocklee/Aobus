@@ -3,9 +3,10 @@
 
 #pragma once
 
-#include "track/TrackPresentationStore.h"
 #include <ao/Type.h>
+#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
@@ -29,7 +30,9 @@ namespace ao::gtk
   public:
     using FactoryProvider = std::function<Glib::RefPtr<Gtk::ListItemFactory>(rt::TrackField)>;
 
-    TrackColumnController(Gtk::ColumnView& columnView, TrackPresentationStore& presentationStore, ListId listId);
+    TrackColumnController(Gtk::ColumnView& columnView,
+                          uimodel::track::TrackPresentationViewModel& presentationStore,
+                          ListId listId);
     ~TrackColumnController();
 
     TrackColumnController(TrackColumnController const&) = delete;
@@ -78,11 +81,11 @@ namespace ao::gtk
 
     ListId _listId;
     Gtk::ColumnView& _columnView;
-    TrackPresentationStore& _presentationStore;
+    uimodel::track::TrackPresentationViewModel& _presentationStore;
 
     std::vector<ColumnBinding> _columns;
     sigc::scoped_connection _queuedColumnLayoutUpdateConnection;
-    sigc::scoped_connection _layoutChangedConnection;
+    rt::Subscription _layoutChangedSubscription;
     bool _syncingColumnLayout = false;
     bool _capturingColumnLayout = false;
     Glib::RefPtr<Gtk::CssProvider> _dynamicCssProviderPtr;

@@ -52,6 +52,8 @@ add_library(ao_app_uimodel STATIC
     uimodel/track/TrackPageRoute.cpp
     uimodel/track/TrackFilterViewModel.cpp
     uimodel/track/TrackFilterResolver.cpp
+    uimodel/track/TrackPresentationViewModel.cpp
+    uimodel/track/TrackFieldFormatter.cpp
     uimodel/tag/TagEditWorkflow.cpp
 )
 target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")

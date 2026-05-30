@@ -3,10 +3,10 @@
 
 #include "app/GtkLayoutConfig.h"
 
-#include "app/UIState.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -24,7 +24,7 @@ namespace ao::gtk::test
     SECTION("Load non-existent config returns default")
     {
       auto const config = GtkLayoutConfig{libraryPath};
-      auto state = ColumnLayoutState{};
+      auto state = uimodel::track::ColumnLayoutState{};
       state.listLayouts[ListId{1}] = {{rt::TrackField::Title, 100}};
 
       config.load(state);
@@ -36,14 +36,14 @@ namespace ao::gtk::test
     {
       {
         auto config = GtkLayoutConfig{libraryPath};
-        auto state = ColumnLayoutState{};
+        auto state = uimodel::track::ColumnLayoutState{};
         state.listLayouts[rt::kAllTracksListId] = {{rt::TrackField::Artist, 250}};
         config.save(state);
       }
 
       {
         auto const config = GtkLayoutConfig{libraryPath};
-        auto state = ColumnLayoutState{};
+        auto state = uimodel::track::ColumnLayoutState{};
         config.load(state);
         REQUIRE(state.listLayouts.contains(rt::kAllTracksListId));
         CHECK(state.listLayouts[rt::kAllTracksListId][0].width == 250);

@@ -5,9 +5,9 @@
 
 #include "track/TrackColumnController.h"
 #include "track/TrackListModel.h"
-#include "track/TrackPresentationStore.h"
 #include "track/TrackSelectionController.h"
 #include <ao/Type.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
@@ -22,7 +22,7 @@
 namespace ao::gtk
 {
   TrackColumnViewHost::TrackColumnViewHost(Glib::RefPtr<TrackListModel> modelPtr,
-                                           TrackPresentationStore& presentationStore,
+                                           uimodel::track::TrackPresentationViewModel& presentationStore,
                                            Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                            ao::ListId listId)
     : _columnViewPtr{std::make_unique<Gtk::ColumnView>()}
@@ -62,7 +62,7 @@ namespace ao::gtk
   }
 
   Gtk::ColumnView& TrackColumnViewHost::rebuild(Glib::RefPtr<TrackListModel> modelPtr,
-                                                TrackPresentationStore& presentationStore,
+                                                uimodel::track::TrackPresentationViewModel& presentationStore,
                                                 Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                                 FactoryProvider const& factoryProvider,
                                                 ao::ListId listId)

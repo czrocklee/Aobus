@@ -3,8 +3,8 @@
 
 #include "GtkLayoutConfig.h"
 
-#include "UIState.h"
 #include <ao/rt/ConfigStore.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 #include <ao/utility/Log.h>
 
 #include <filesystem>
@@ -23,7 +23,7 @@ namespace ao::gtk
   GtkLayoutConfig::GtkLayoutConfig(GtkLayoutConfig&&) noexcept = default;
   GtkLayoutConfig& GtkLayoutConfig::operator=(GtkLayoutConfig&&) noexcept = default;
 
-  void GtkLayoutConfig::load(ColumnLayoutState& state) const
+  void GtkLayoutConfig::load(uimodel::track::ColumnLayoutState& state) const
   {
     if (auto const res = _storePtr->load("trackView", state); !res && res.error().code != Error::Code::NotFound)
     {
@@ -31,7 +31,7 @@ namespace ao::gtk
     }
   }
 
-  void GtkLayoutConfig::save(ColumnLayoutState const& state)
+  void GtkLayoutConfig::save(uimodel::track::ColumnLayoutState const& state)
   {
     _storePtr->save("trackView", state);
 

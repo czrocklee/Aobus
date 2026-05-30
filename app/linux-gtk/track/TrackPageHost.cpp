@@ -6,7 +6,6 @@
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "track/TrackListModel.h"
-#include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/Type.h>
@@ -24,6 +23,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/uimodel/track/TrackPageRoute.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 #include <ao/utility/Log.h>
 
 #include <gtkmm/stack.h>
@@ -46,7 +46,7 @@ namespace ao::gtk
                                ao::uimodel::playback::PlaybackQueueModel* queueModel,
                                TagEditController& tagEditController,
                                ListNavigationController& listSidebar,
-                               TrackPresentationStore& presentationStore,
+                               uimodel::track::TrackPresentationViewModel& presentationStore,
                                ImageCache* imageCache)
     : _stack{stack}
     , _runtime{runtime}

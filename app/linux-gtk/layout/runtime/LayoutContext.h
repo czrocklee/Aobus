@@ -28,9 +28,13 @@ namespace ao::gtk
     class ImportExportCoordinator;
   }
   class TrackPageHost;
-  class TrackPresentationStore;
   class ListNavigationController;
 } // namespace ao::gtk
+
+namespace ao::uimodel::track
+{
+  class TrackPresentationViewModel;
+}
 
 namespace ao::gtk::layout
 {
@@ -40,7 +44,7 @@ namespace ao::gtk::layout
   struct TrackUiContext final
   {
     TrackPageHost* pageHost = nullptr;
-    TrackPresentationStore* presentationStore = nullptr;
+    uimodel::track::TrackPresentationViewModel* presentationStore = nullptr;
     TrackRowCache* trackRowCache = nullptr;
   };
 

@@ -4,13 +4,13 @@
 #include "track/TrackPresentationButton.h"
 
 #include "track/TrackCustomViewDialog.h"
-#include "track/TrackPresentationStore.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/button.h>
@@ -45,7 +45,7 @@ namespace ao::gtk
 
   TrackPresentationButton::~TrackPresentationButton() = default;
 
-  void TrackPresentationButton::setPresentationStore(TrackPresentationStore* store)
+  void TrackPresentationButton::setPresentationStore(uimodel::track::TrackPresentationViewModel* store)
   {
     _presentationStore = store;
     populatePresentationOptions();

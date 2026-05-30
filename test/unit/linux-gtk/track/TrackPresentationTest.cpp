@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/linux-gtk/app/GtkLayoutConfig.h"
-#include "app/linux-gtk/app/UIState.h"
 #include "app/linux-gtk/track/TrackFieldUi.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -83,9 +83,9 @@ namespace ao::gtk::test
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
     auto const configPath = configDir / "gtk_layout.yaml";
 
-    auto state = ColumnLayoutState{};
-    auto layout = std::vector{ColumnState{.field = rt::TrackField::Title, .width = 321},
-                              ColumnState{.field = rt::TrackField::Artist, .width = 222}};
+    auto state = uimodel::track::ColumnLayoutState{};
+    auto layout = std::vector{uimodel::track::ColumnState{.field = rt::TrackField::Title, .width = 321},
+                              uimodel::track::ColumnState{.field = rt::TrackField::Artist, .width = 222}};
     state.listLayouts.emplace(ListId{42}, layout);
 
     {
@@ -95,7 +95,7 @@ namespace ao::gtk::test
 
     REQUIRE(std::filesystem::exists(configPath));
 
-    auto loaded = ColumnLayoutState{};
+    auto loaded = uimodel::track::ColumnLayoutState{};
     auto config = GtkLayoutConfig{configDir};
     config.load(loaded);
 

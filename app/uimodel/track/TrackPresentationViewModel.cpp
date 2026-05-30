@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "track/TrackPresentationStore.h"
-
-#include "app/UIState.h"
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <algorithm>
 #include <map>
@@ -18,26 +16,26 @@
 #include <utility>
 #include <vector>
 
-namespace ao::gtk
+namespace ao::uimodel::track
 {
-  TrackPresentationStore::TrackPresentationStore(rt::WorkspaceService& workspace)
+  TrackPresentationViewModel::TrackPresentationViewModel(rt::WorkspaceService& workspace)
     : _workspace{workspace}
   {
     _customPresetsSub = _workspace.onCustomPresetsChanged(
       [this] { _changed.emit(ao::kInvalidListId, TrackPresentationChangeType::FullRebuild); });
   }
 
-  std::span<rt::TrackPresentationPreset const> TrackPresentationStore::builtinPresets() const noexcept
+  std::span<rt::TrackPresentationPreset const> TrackPresentationViewModel::builtinPresets() const noexcept
   {
     return rt::builtinTrackPresentationPresets();
   }
 
-  std::span<rt::CustomTrackPresentationPreset const> TrackPresentationStore::customPresentations() const noexcept
+  std::span<rt::CustomTrackPresentationPreset const> TrackPresentationViewModel::customPresentations() const noexcept
   {
     return _workspace.customPresets();
   }
 
-  std::optional<rt::TrackPresentationSpec> TrackPresentationStore::specForId(std::string_view id) const
+  std::optional<rt::TrackPresentationSpec> TrackPresentationViewModel::specForId(std::string_view id) const
   {
     if (auto const* builtin = rt::builtinTrackPresentationPreset(id); builtin != nullptr)
     {
@@ -55,7 +53,7 @@ namespace ao::gtk
     return std::nullopt;
   }
 
-  void TrackPresentationStore::setActivePresentationId(std::string_view id)
+  void TrackPresentationViewModel::setActivePresentationId(std::string_view id)
   {
     if (_activePresentationId == id)
     {
@@ -67,7 +65,7 @@ namespace ao::gtk
     _changed.emit(_activeListId, TrackPresentationChangeType::LayoutOnly);
   }
 
-  std::vector<ColumnState> const& TrackPresentationStore::layoutForList(ao::ListId listId) const noexcept
+  std::vector<ColumnState> const& TrackPresentationViewModel::layoutForList(ao::ListId listId) const noexcept
   {
     static std::vector<ColumnState> const kEmpty{};
 
@@ -79,7 +77,7 @@ namespace ao::gtk
     return kEmpty;
   }
 
-  void TrackPresentationStore::updateLayout(ao::ListId listId, std::vector<ColumnState> const& layout)
+  void TrackPresentationViewModel::updateLayout(ao::ListId listId, std::vector<ColumnState> const& layout)
   {
     if (listId == ao::kInvalidListId)
     {
@@ -95,7 +93,7 @@ namespace ao::gtk
     _changed.emit(listId, TrackPresentationChangeType::LayoutOnly);
   }
 
-  std::vector<rt::TrackField> TrackPresentationStore::activeFieldOrder() const noexcept
+  std::vector<rt::TrackField> TrackPresentationViewModel::activeFieldOrder() const noexcept
   {
     auto const& layout = layoutForList(_activeListId);
     auto order = std::vector<rt::TrackField>{};
@@ -109,7 +107,7 @@ namespace ao::gtk
     return order;
   }
 
-  void TrackPresentationStore::setActiveListId(ao::ListId listId)
+  void TrackPresentationViewModel::setActiveListId(ao::ListId listId)
   {
     if (_activeListId == listId)
     {
@@ -120,7 +118,7 @@ namespace ao::gtk
     _changed.emit(_activeListId, TrackPresentationChangeType::LayoutOnly);
   }
 
-  void TrackPresentationStore::setListLayouts(std::map<ao::ListId, std::vector<ColumnState>> const& layouts)
+  void TrackPresentationViewModel::setListLayouts(std::map<ao::ListId, std::vector<ColumnState>> const& layouts)
   {
     if (_listLayouts == layouts)
     {
@@ -131,13 +129,13 @@ namespace ao::gtk
     _changed.emit(ao::kInvalidListId, TrackPresentationChangeType::LayoutOnly);
   }
 
-  void TrackPresentationStore::addCustomPresentation(rt::CustomTrackPresentationPreset const& state)
+  void TrackPresentationViewModel::addCustomPresentation(rt::CustomTrackPresentationPreset const& state)
   {
     _workspace.addCustomPreset(state);
   }
 
-  void TrackPresentationStore::removeCustomPresentation(std::string_view id)
+  void TrackPresentationViewModel::removeCustomPresentation(std::string_view id)
   {
     _workspace.removeCustomPreset(id);
   }
-} // namespace ao::gtk
+} // namespace ao::uimodel::track

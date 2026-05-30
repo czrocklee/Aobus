@@ -9,6 +9,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <gtkmm/stack.h>
 
@@ -37,7 +38,6 @@ namespace ao::gtk
   {
     class PlaylistExporter;
   }
-  class TrackPresentationStore;
 
   /**
    * TrackPageContext holds the per-page state for a track list.
@@ -61,7 +61,7 @@ namespace ao::gtk
                   uimodel::playback::PlaybackQueueModel* queueModel,
                   TagEditController& tagEditController,
                   ListNavigationController& listSidebar,
-                  TrackPresentationStore& presentationStore,
+                  uimodel::track::TrackPresentationViewModel& presentationStore,
                   ImageCache* imageCache);
     ~TrackPageHost();
 
@@ -74,7 +74,7 @@ namespace ao::gtk
     void setPlaybackQueueModel(uimodel::playback::PlaybackQueueModel& controller) { _playbackQueueModel = &controller; }
 
     Gtk::Stack& stack() { return _stack; }
-    TrackPresentationStore& presentationStore() { return _presentationStore; }
+    uimodel::track::TrackPresentationViewModel& presentationStore() { return _presentationStore; }
 
     void clear();
     void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
@@ -104,7 +104,7 @@ namespace ao::gtk
     uimodel::playback::PlaybackQueueModel* _playbackQueueModel;
     TagEditController& _tagEditController;
     ListNavigationController& _listSidebar;
-    TrackPresentationStore& _presentationStore;
+    uimodel::track::TrackPresentationViewModel& _presentationStore;
     ImageCache* _imageCache = nullptr;
     rt::Subscription _revealSub;
     rt::Subscription _nowPlayingSub;

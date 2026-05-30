@@ -41,7 +41,6 @@ add_library(aobus-gtk-lib STATIC
     track/TrackPresentationButton.cpp
     track/TrackSelectionController.cpp
     track/TrackListModel.cpp
-    track/TrackPresentationStore.cpp
     track/TrackCustomViewDialog.cpp
     track/TrackRowObject.cpp
     track/TrackRowCache.cpp

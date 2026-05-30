@@ -17,9 +17,14 @@ namespace ao::gtk
     class ImportExportCoordinator;
   }
   class TrackPageHost;
-  class TrackPresentationStore;
   class ListNavigationController;
-
+} // namespace ao::gtk
+namespace ao::uimodel::track
+{
+  class TrackPresentationViewModel;
+}
+namespace ao::gtk
+{
   /**
    * A bag of services provided by the GTK application layer to be consumed by
    * the UI layout components.
@@ -32,7 +37,7 @@ namespace ao::gtk
     TagEditController* tagEditController = nullptr;
     portal::ImportExportCoordinator* importExportCoordinator = nullptr;
     TrackPageHost* trackPageHost = nullptr;
-    TrackPresentationStore* trackPresentationStore = nullptr;
+    uimodel::track::TrackPresentationViewModel* trackPresentationStore = nullptr;
     ListNavigationController* listSidebarController = nullptr;
   };
 } // namespace ao::gtk

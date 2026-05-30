@@ -14,7 +14,6 @@
 #include "portal/ImportExportCoordinator.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
-#include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
 #include <ao/lmdb/Transaction.h>
@@ -28,6 +27,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 #include <ao/utility/Log.h>
 
 #include <filesystem>
@@ -62,11 +62,11 @@ namespace ao::gtk
         .getListMembership = [this](ListId listId) { return &_runtime.sources().sourceFor(listId); }});
 
     // Initialize track presentation store
-    _trackPresentationStorePtr = std::make_unique<TrackPresentationStore>(_runtime.workspace());
-    _trackPresentationChangedConnection = _trackPresentationStorePtr->signalChanged().connect(
-      [this](ao::ListId /*listId*/, TrackPresentationChangeType type)
+    _trackPresentationStorePtr = std::make_unique<ao::uimodel::track::TrackPresentationViewModel>(_runtime.workspace());
+    _trackPresentationChangedSubscription = _trackPresentationStorePtr->signalChanged().connect(
+      [this](ao::ListId /*listId*/, ao::uimodel::track::TrackPresentationChangeType type)
       {
-        if (type == TrackPresentationChangeType::LayoutOnly)
+        if (type == ao::uimodel::track::TrackPresentationChangeType::LayoutOnly)
         {
           saveColumnLayout();
         }
@@ -106,6 +106,7 @@ namespace ao::gtk
     _libraryTaskProgressSubscription.reset();
     _libraryTaskCompletedSubscription.reset();
     _listsMutatedSubscription.reset();
+    _trackPresentationChangedSubscription.reset();
   }
 
   void MainWindowCoordinator::initializeSession()
@@ -217,7 +218,7 @@ namespace ao::gtk
     }
 
     // Column layouts (widths and order)
-    auto columnState = ColumnLayoutState{};
+    auto columnState = ao::uimodel::track::ColumnLayoutState{};
     _layoutConfigPtr->load(columnState);
     _trackPresentationStorePtr->setListLayouts(columnState.listLayouts);
 
@@ -258,7 +259,7 @@ namespace ao::gtk
 
   void MainWindowCoordinator::saveColumnLayout()
   {
-    auto columnState = ColumnLayoutState{};
+    auto columnState = ao::uimodel::track::ColumnLayoutState{};
     columnState.listLayouts = _trackPresentationStorePtr->listLayouts();
     _layoutConfigPtr->save(columnState);
   }

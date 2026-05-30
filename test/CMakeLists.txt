@@ -88,6 +88,8 @@ add_executable(ao_test
     unit/uimodel/track/TrackFilterViewModelTest.cpp
     unit/uimodel/track/TrackFilterResolverTest.cpp
     unit/uimodel/track/TrackPageRouteTest.cpp
+    unit/uimodel/track/TrackFieldFormatterTest.cpp
+    unit/uimodel/track/TrackPresentationViewModelTest.cpp
 
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp
@@ -184,7 +186,6 @@ add_executable(ao_test_gtk
     unit/linux-gtk/track/TrackViewPageTest.cpp
     unit/linux-gtk/track/TrackColumnControllerTest.cpp
     unit/linux-gtk/track/TrackColumnFactoryBuilderTest.cpp
-    unit/linux-gtk/track/TrackPresentationStoreTest.cpp
     unit/linux-gtk/track/TrackQuickFilterTest.cpp
     unit/linux-gtk/track/TrackPresentationButtonTest.cpp
     unit/linux-gtk/track/TrackCustomViewDialogTest.cpp

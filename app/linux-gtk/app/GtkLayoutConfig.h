@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "UIState.h"
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <filesystem>
 #include <memory>
@@ -34,12 +34,12 @@ namespace ao::gtk
     /**
      * @brief Load the layout state from disk.
      */
-    void load(ColumnLayoutState& state) const;
+    void load(uimodel::track::ColumnLayoutState& state) const;
 
     /**
      * @brief Save the layout state to disk and flush.
      */
-    void save(ColumnLayoutState const& state);
+    void save(uimodel::track::ColumnLayoutState const& state);
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;

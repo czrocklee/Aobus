@@ -8,7 +8,6 @@
 #include <ao/rt/CorePrimitives.h>
 
 #include <gtkmm/stack.h>
-#include <sigc++/scoped_connection.h>
 
 #include <memory>
 
@@ -30,7 +29,6 @@ namespace ao::gtk
   class ImageCache;
   class TagEditController;
   class ListNavigationController;
-  class TrackPresentationStore;
   class TrackPageHost;
   namespace portal
   {
@@ -65,7 +63,7 @@ namespace ao::gtk
     portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinatorPtr.get(); }
     TrackPageHost* trackPageHost() { return _trackPageHostPtr.get(); }
     ListNavigationController* listSidebarController() { return _listSidebarControllerPtr.get(); }
-    TrackPresentationStore* trackPresentationStore() { return _trackPresentationStorePtr.get(); }
+    uimodel::track::TrackPresentationViewModel* trackPresentationStore() { return _trackPresentationStorePtr.get(); }
 
     portal::ImportExportCoordinator& importExport() { return *_importExportCoordinatorPtr; }
 
@@ -81,7 +79,7 @@ namespace ao::gtk
     std::unique_ptr<ImageCache> _imageCachePtr;
     std::unique_ptr<TagEditController> _tagEditControllerPtr;
     std::unique_ptr<ListNavigationController> _listSidebarControllerPtr;
-    std::unique_ptr<TrackPresentationStore> _trackPresentationStorePtr;
+    std::unique_ptr<uimodel::track::TrackPresentationViewModel> _trackPresentationStorePtr;
     std::unique_ptr<TrackPageHost> _trackPageHostPtr;
     std::unique_ptr<uimodel::playback::PlaybackQueueModel> _playbackQueueModelPtr;
     std::unique_ptr<portal::ImportExportCoordinator> _importExportCoordinatorPtr;
@@ -92,6 +90,6 @@ namespace ao::gtk
     rt::Subscription _libraryTaskProgressSubscription;
     rt::Subscription _libraryTaskCompletedSubscription;
     rt::Subscription _listsMutatedSubscription;
-    sigc::scoped_connection _trackPresentationChangedConnection;
+    rt::Subscription _trackPresentationChangedSubscription;
   };
 } // namespace ao::gtk

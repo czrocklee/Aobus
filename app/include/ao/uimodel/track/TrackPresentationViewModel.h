@@ -3,13 +3,10 @@
 
 #pragma once
 
-#include "app/UIState.h"
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-
-#include <sigc++/signal.h>
 
 #include <cstdint>
 #include <map>
@@ -24,7 +21,7 @@ namespace ao::rt
   class WorkspaceService;
 }
 
-namespace ao::gtk
+namespace ao::uimodel::track
 {
   enum class TrackPresentationChangeType : std::uint8_t
   {
@@ -32,12 +29,23 @@ namespace ao::gtk
     LayoutOnly,
   };
 
-  class TrackPresentationStore final
+  struct ColumnState final
+  {
+    rt::TrackField field = rt::TrackField::Title;
+    std::int32_t width = -1;
+
+    bool operator==(ColumnState const&) const = default;
+  };
+
+  struct ColumnLayoutState final
+  {
+    std::map<ListId, std::vector<ColumnState>> listLayouts;
+  };
+
+  class TrackPresentationViewModel final
   {
   public:
-    using ChangedSignal = sigc::signal<void(ao::ListId, TrackPresentationChangeType)>;
-
-    explicit TrackPresentationStore(rt::WorkspaceService& workspace);
+    explicit TrackPresentationViewModel(rt::WorkspaceService& workspace);
 
     std::span<rt::TrackPresentationPreset const> builtinPresets() const noexcept;
     std::span<rt::CustomTrackPresentationPreset const> customPresentations() const noexcept;
@@ -61,7 +69,7 @@ namespace ao::gtk
 
     std::vector<rt::TrackField> activeFieldOrder() const noexcept;
 
-    ChangedSignal& signalChanged() noexcept { return _changed; }
+    rt::Signal<ListId, TrackPresentationChangeType>& signalChanged() noexcept { return _changed; }
 
   private:
     rt::WorkspaceService& _workspace;
@@ -70,6 +78,6 @@ namespace ao::gtk
     std::string _activePresentationId{};
     ListId _activeListId = kInvalidListId;
     std::map<ListId, std::vector<ColumnState>> _listLayouts{};
-    ChangedSignal _changed;
+    rt::Signal<ListId, TrackPresentationChangeType> _changed;
   };
-} // namespace ao::gtk
+} // namespace ao::uimodel::track

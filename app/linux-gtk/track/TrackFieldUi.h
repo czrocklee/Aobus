@@ -8,6 +8,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/track/TrackFieldFormatter.h>
 
 #include <chrono>
 #include <cstdint>
@@ -35,7 +36,7 @@ namespace ao::gtk
     using TrackFieldRawValue =
       std::variant<std::monostate, std::string, std::uint16_t, std::uint32_t, std::uint64_t, Duration>;
 
-    using TrackFieldEditValue = std::variant<std::monostate, std::string, std::uint16_t>;
+    using TrackFieldEditValue = uimodel::track::TrackFieldEditValue;
 
     struct TrackFieldEditContext final
     {

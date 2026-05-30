@@ -16,11 +16,13 @@ namespace ao::rt
 {
   class AppRuntime;
 }
+namespace ao::uimodel::track
+{
+  class TrackPresentationViewModel;
+}
 
 namespace ao::gtk
 {
-  class TrackPresentationStore;
-
   /**
    * @brief TrackPresentationButton is a global menu button that manages view presentations for the focused track view.
    */
@@ -35,7 +37,7 @@ namespace ao::gtk
     TrackPresentationButton(TrackPresentationButton&&) = delete;
     TrackPresentationButton& operator=(TrackPresentationButton&&) = delete;
 
-    void setPresentationStore(TrackPresentationStore* store);
+    void setPresentationStore(uimodel::track::TrackPresentationViewModel* store);
 
   private:
     void onFocusedViewChanged(rt::ViewId viewId);
@@ -45,7 +47,7 @@ namespace ao::gtk
 
     rt::AppRuntime& _runtime;
     rt::ViewId _activeViewId = rt::kInvalidViewId;
-    TrackPresentationStore* _presentationStore = nullptr;
+    uimodel::track::TrackPresentationViewModel* _presentationStore = nullptr;
 
     Gtk::MenuButton _button;
     Gtk::Popover _popover;

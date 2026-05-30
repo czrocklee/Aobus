@@ -3,12 +3,7 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/rt/TrackField.h>
-
 #include <cstdint>
-#include <map>
-#include <vector>
 
 namespace ao::gtk
 {
@@ -21,18 +16,5 @@ namespace ao::gtk
     std::int32_t width = kDefaultWindowWidth;
     std::int32_t height = kDefaultWindowHeight;
     bool maximized = false;
-  };
-
-  struct ColumnState final
-  {
-    rt::TrackField field = rt::TrackField::Title;
-    std::int32_t width = -1;
-
-    bool operator==(ColumnState const&) const = default;
-  };
-
-  struct ColumnLayoutState final
-  {
-    std::map<ListId, std::vector<ColumnState>> listLayouts;
   };
 } // namespace ao::gtk

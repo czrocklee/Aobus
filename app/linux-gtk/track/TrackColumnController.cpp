@@ -3,11 +3,10 @@
 
 #include "track/TrackColumnController.h"
 
-#include "app/UIState.h"
 #include "track/TrackFieldUi.h"
-#include "track/TrackPresentationStore.h"
 #include <ao/Type.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <giomm/listmodel.h>
 #include <glib.h>
@@ -37,16 +36,16 @@ namespace ao::gtk
   }
 
   TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView,
-                                               TrackPresentationStore& presentationStore,
+                                               uimodel::track::TrackPresentationViewModel& presentationStore,
                                                ao::ListId listId)
     : _listId{listId}, _columnView{columnView}, _presentationStore{presentationStore}
   {
     _dynamicCssProviderPtr = Gtk::CssProvider::create();
 
-    _layoutChangedConnection = _presentationStore.signalChanged().connect(
-      [this](ao::ListId listId, TrackPresentationChangeType type)
+    _layoutChangedSubscription = _presentationStore.signalChanged().connect(
+      [this](ao::ListId listId, uimodel::track::TrackPresentationChangeType type)
       {
-        if (_capturingColumnLayout)
+        if (_capturingColumnLayout || _syncingColumnLayout)
         {
           return;
         }
@@ -56,7 +55,7 @@ namespace ao::gtk
           return;
         }
 
-        if (type == TrackPresentationChangeType::FullRebuild)
+        if (type == uimodel::track::TrackPresentationChangeType::FullRebuild)
         {
           // FullRebuild might change field order/visibility handled by TrackViewPage,
           // but we still want to ensure our columns match the store's state if we're active.
@@ -160,7 +159,6 @@ namespace ao::gtk
   void TrackColumnController::applyColumnLayout(std::span<rt::TrackField const> visibleFields)
   {
     _syncingColumnLayout = true;
-    _layoutChangedConnection.block();
 
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
@@ -180,7 +178,7 @@ namespace ao::gtk
 
         // Find width in stored layout if it exists
         auto width = 0;
-        auto const it = std::ranges::find(storedLayout, field, &ColumnState::field);
+        auto const it = std::ranges::find(storedLayout, field, &uimodel::track::ColumnState::field);
 
         if (it != storedLayout.end())
         {
@@ -195,8 +193,6 @@ namespace ao::gtk
         }
       }
     }
-
-    _layoutChangedConnection.unblock();
 
     updateColumnExpansion(visibleFields);
     updateColumnVisibility(visibleFields);
@@ -281,7 +277,7 @@ namespace ao::gtk
   {
     _capturingColumnLayout = true;
 
-    auto layout = std::vector<ColumnState>{};
+    auto layout = std::vector<uimodel::track::ColumnState>{};
 
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {

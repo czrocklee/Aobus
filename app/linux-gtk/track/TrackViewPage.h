@@ -6,7 +6,6 @@
 #include "tag/TagPopover.h"
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackListModel.h"
-#include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
 #include <ao/Type.h>
@@ -14,6 +13,7 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
@@ -54,7 +54,7 @@ namespace ao::gtk
 
     explicit TrackViewPage(ListId listId,
                            Glib::RefPtr<TrackListModel> modelPtr,
-                           TrackPresentationStore& presentationStore,
+                           uimodel::track::TrackPresentationViewModel& presentationStore,
                            rt::AppRuntime& runtime,
                            ImageCache& imageCache,
                            rt::ViewId viewId = rt::kInvalidViewId);
@@ -111,7 +111,7 @@ namespace ao::gtk
     ListId _listId;
     rt::ViewId _viewId{};
     Glib::RefPtr<TrackListModel> _modelPtr;
-    TrackPresentationStore& _presentationStore;
+    uimodel::track::TrackPresentationViewModel& _presentationStore;
     rt::AppRuntime& _runtime;
     ImageCache& _imageCache;
     Glib::RefPtr<Gtk::SortListModel> _groupModelPtr;
