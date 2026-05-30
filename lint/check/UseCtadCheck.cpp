@@ -16,6 +16,7 @@
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
 #include <llvm/ADT/StringRef.h>
 
 #include <algorithm>
@@ -196,6 +197,44 @@ namespace clang::tidy::readability
       }
 
       return lhs.getCanonicalType().getUnqualifiedType() == rhs.getCanonicalType().getUnqualifiedType();
+    }
+
+    bool isFixedWidthIntegerTypeSpelling(llvm::StringRef spelling)
+    {
+      return spelling.contains("int8_t") || spelling.contains("int16_t") || spelling.contains("int32_t") ||
+             spelling.contains("int64_t") || spelling.contains("uint8_t") || spelling.contains("uint16_t") ||
+             spelling.contains("uint32_t") || spelling.contains("uint64_t");
+    }
+
+    bool hasFixedWidthIntegerTemplateArgument(TemplateSpecializationTypeLoc tsLoc,
+                                              SourceManager const& sm,
+                                              LangOptions const& langOpts)
+    {
+      for (std::uint32_t i = 0; i < tsLoc.getNumArgs(); ++i)
+      {
+        auto const argLoc = tsLoc.getArgLoc(i);
+
+        if (argLoc.getArgument().getKind() != TemplateArgument::Type)
+        {
+          continue;
+        }
+
+        auto const range = argLoc.getSourceRange();
+
+        if (range.isInvalid())
+        {
+          continue;
+        }
+
+        auto const spelling = Lexer::getSourceText(CharSourceRange::getTokenRange(range), sm, langOpts);
+
+        if (isFixedWidthIntegerTypeSpelling(spelling))
+        {
+          return true;
+        }
+      }
+
+      return false;
     }
 
     bool isTypeChangingInitializerElement(Expr const* init, QualType valueType)
@@ -471,6 +510,11 @@ namespace clang::tidy::readability
         return;
       }
 
+      if (hasFixedWidthIntegerTemplateArgument(tsLoc, sm, result.Context->getLangOpts()))
+      {
+        return;
+      }
+
       auto const templateName = getTemplateName(tsLoc);
 
       diag(
@@ -504,6 +548,11 @@ namespace clang::tidy::readability
       auto const tsLoc = elabLoc.getNamedTypeLoc().getAs<TemplateSpecializationTypeLoc>();
 
       if (tsLoc.isNull())
+      {
+        return;
+      }
+
+      if (hasFixedWidthIntegerTemplateArgument(tsLoc, sm, result.Context->getLangOpts()))
       {
         return;
       }

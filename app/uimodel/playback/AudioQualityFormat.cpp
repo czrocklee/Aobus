@@ -81,7 +81,7 @@ namespace ao::uimodel::playback
       case audio::QualityFindingKind::LossySource: return "Lossy source";
       case audio::QualityFindingKind::SoftwareVolumeModification: return "Software volume attenuation";
       case audio::QualityFindingKind::HardwareVolumeModification: return "Hardware volume control";
-      case audio::QualityFindingKind::UnclassifiedVolumeModification: return "Volume modified (source unknown)";
+      case audio::QualityFindingKind::UnclassifiedVolumeModification: return "Software volume attenuation";
       case audio::QualityFindingKind::Muted: return "Muted";
       case audio::QualityFindingKind::Resampling:
         if (finding.optFromFormat && finding.optToFormat)

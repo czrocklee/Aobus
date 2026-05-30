@@ -10,7 +10,7 @@
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
 #include <ao/audio/backend/AlsaProvider.h>
-#include <ao/audio/flow/Graph.h>
+#include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/Raii.h>
 #include <ao/utility/ThreadUtils.h>
@@ -32,7 +32,6 @@ extern "C"
 #include <memory>
 #include <mutex>
 #include <stop_token>
-#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -50,6 +49,7 @@ namespace ao::audio::backend
   {
     mutable std::mutex mutex;
     std::vector<Device> cachedDevices;
+    detail::AlsaGraphRegistry graphRegistry;
     std::jthread monitorThread;
 
     struct DeviceSub
@@ -180,24 +180,11 @@ namespace ao::audio::backend
 
   std::unique_ptr<IBackend> AlsaProvider::createBackend(Device const& device, ProfileId const& /*profile*/)
   {
-    return std::make_unique<AlsaExclusiveBackend>(device, kProfileExclusive);
+    return std::make_unique<AlsaExclusiveBackend>(device, kProfileExclusive, _implPtr->graphRegistry);
   }
 
   Subscription AlsaProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
   {
-    if (callback)
-    {
-      auto graph = flow::Graph{};
-      graph.nodes.push_back(
-        {.id = "alsa-stream", .type = flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
-      graph.nodes.push_back({.id = "alsa-sink",
-                             .type = flow::NodeType::Sink,
-                             .name = std::string{routeAnchor},
-                             .objectPath = std::string{routeAnchor}});
-      graph.connections.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
-      callback(graph);
-    }
-
-    return Subscription{};
+    return _implPtr->graphRegistry.subscribe(routeAnchor, std::move(callback));
   }
 } // namespace ao::audio::backend

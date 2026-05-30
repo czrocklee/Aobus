@@ -27,6 +27,8 @@ if(LINUX)
         backend/detail/PipeWireShared.cpp
         backend/detail/PipeWireMonitorHelpers.cpp
         backend/detail/AlsaProviderHelpers.cpp
+        backend/detail/AlsaGraphRegistry.cpp
+        backend/detail/AlsaPcmVolume.cpp
     )
     target_link_libraries(ao_audio PRIVATE PkgALSA PkgPipeWire PkgUDEV)
 endif()

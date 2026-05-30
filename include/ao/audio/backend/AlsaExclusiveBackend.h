@@ -12,6 +12,11 @@
 
 #include <memory>
 
+namespace ao::audio::backend::detail
+{
+  class AlsaGraphRegistry;
+}
+
 namespace ao::audio::backend
 {
   /**
@@ -21,6 +26,9 @@ namespace ao::audio::backend
   {
   public:
     explicit AlsaExclusiveBackend(Device const& device, ProfileId const& profile);
+    explicit AlsaExclusiveBackend(Device const& device,
+                                  ProfileId const& profile,
+                                  detail::AlsaGraphRegistry& graphRegistry);
     ~AlsaExclusiveBackend() override;
 
     AlsaExclusiveBackend(AlsaExclusiveBackend const&) = delete;

@@ -116,6 +116,8 @@ void ctadNegativeCases()
   [[maybe_unused]] auto const v9 = std::vector<int>{v4};
   [[maybe_unused]] auto const v10 = std::vector{std::pair<std::string, std::string>{"key", "value"}};
   [[maybe_unused]] auto const v11 = std::vector<Row>{{"Gamma", 1, 2}, {"Alpha", 1, 3}};
+  [[maybe_unused]] auto const v12 = std::vector<std::int32_t>{1, 2, 3};
+  [[maybe_unused]] auto const p3 = std::pair<std::uint32_t, std::uint32_t>{1, 2};
 
   std::array<int, 3> arr{1, 2, 3};
   [[maybe_unused]] auto const s2 = std::span<int>{arr.data(), arr.size()};
