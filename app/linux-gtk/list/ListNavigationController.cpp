@@ -29,6 +29,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -98,7 +99,12 @@ namespace ao::gtk
     if (_pendingSelectId != kInvalidListId)
     {
       _panelPtr->selectList(_pendingSelectId);
-      _runtime.workspace().navigateTo(_pendingSelectId);
+
+      if (_callbacks.onListSelected)
+      {
+        _callbacks.onListSelected(_pendingSelectId);
+      }
+
       _pendingSelectId = kInvalidListId;
     }
   }
@@ -169,13 +175,24 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::OK)
         {
+          auto const presId = dialog->presentationId();
+
           if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
           {
             updateList(draft);
+
+            if (_callbacks.onListPresentationSaved)
+            {
+              _callbacks.onListPresentationSaved(draft.listId, presId);
+            }
           }
           else
           {
-            createList(draft);
+            if (auto const newListId = createList(draft);
+                _callbacks.onListPresentationSaved && newListId != kInvalidListId)
+            {
+              _callbacks.onListPresentationSaved(newListId, presId);
+            }
           }
         }
 
@@ -200,18 +217,24 @@ namespace ao::gtk
     auto readTxn = _runtime.musicLibrary().readTransaction();
     auto reader = _runtime.musicLibrary().lists().reader(readTxn);
 
-    if (auto optView = reader.get(listId); optView)
+    if (auto const optView = reader.get(listId); optView)
     {
+      auto const optPres = _callbacks.getListPresentation ? _callbacks.getListPresentation(listId) : std::nullopt;
       auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optView->parentId(), *_dataProvider);
-      dialog->populate(listId, *optView);
+      dialog->populate(listId, *optView, optPres);
       dialog->signal_response().connect(
-        [this, dialog](std::int32_t responseId)
+        [this, dialog, listId](std::int32_t responseId)
         {
           if (responseId == Gtk::ResponseType::OK)
           {
             if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
             {
               updateList(draft);
+
+              if (_callbacks.onListPresentationSaved)
+              {
+                _callbacks.onListPresentationSaved(listId, dialog->presentationId());
+              }
             }
           }
 
@@ -222,10 +245,11 @@ namespace ao::gtk
     }
   }
 
-  void ListNavigationController::createList(rt::LibraryMutationService::ListDraft const& draft)
+  ListId ListNavigationController::createList(rt::LibraryMutationService::ListDraft const& draft)
   {
     auto listId = _runtime.mutation().createList(draft);
     _pendingSelectId = listId;
+    return listId;
   }
 
   void ListNavigationController::updateList(rt::LibraryMutationService::ListDraft const& draft)

@@ -144,7 +144,9 @@ namespace ao::rt
         .canGoBack = navigationHistory.canGoBack(), .canGoForward = navigationHistory.canGoForward()});
     }
 
-    ViewId resolveOrCreateTargetView(NavigationTarget const& target, ViewService& viewsSvc)
+    ViewId resolveOrCreateTargetView(NavigationTarget const& target,
+                                     ViewService& viewsSvc,
+                                     std::optional<TrackPresentationSpec> const& optPresentation)
     {
       if (std::holds_alternative<ListId>(target))
       {
@@ -157,19 +159,38 @@ namespace ao::rt
             if (auto const& state = viewsSvc.trackListState(record.id);
                 state.listId == listId && state.filterExpression.empty())
             {
+              if (optPresentation)
+              {
+                viewsSvc.setPresentation(record.id, *optPresentation);
+              }
+
               return record.id;
             }
           }
         }
 
-        auto const res = viewsSvc.createView(TrackListViewConfig{.listId = listId}, true);
+        auto config = TrackListViewConfig{.listId = listId};
+
+        if (optPresentation)
+        {
+          config.optPresentation = *optPresentation;
+        }
+
+        auto const res = viewsSvc.createView(config, true);
         return res.viewId;
       }
 
-      if (std::holds_alternative<std::string>(target))
+      if (std::holds_alternative<FilteredListTarget>(target))
       {
-        auto const query = std::get<std::string>(target);
-        auto const res = viewsSvc.createView(TrackListViewConfig{.filterExpression = query}, true);
+        auto const& filtered = std::get<FilteredListTarget>(target);
+        auto config = TrackListViewConfig{.listId = filtered.listId, .filterExpression = filtered.filterExpression};
+
+        if (optPresentation)
+        {
+          config.optPresentation = *optPresentation;
+        }
+
+        auto const res = viewsSvc.createView(config, true);
         return res.viewId;
       }
 
@@ -177,7 +198,7 @@ namespace ao::rt
       {
         if (std::get<GlobalViewKind>(target) == GlobalViewKind::AllTracks)
         {
-          return resolveOrCreateTargetView(ListId{kAllTracksListId}, viewsSvc);
+          return resolveOrCreateTargetView(ListId{kAllTracksListId}, viewsSvc, optPresentation);
         }
       }
 
@@ -303,7 +324,7 @@ namespace ao::rt
 
   void WorkspaceService::navigateTo(NavigationTarget const& target, NavigationOptions const options)
   {
-    auto const targetViewId = _implPtr->resolveOrCreateTargetView(target, _implPtr->views);
+    auto const targetViewId = _implPtr->resolveOrCreateTargetView(target, _implPtr->views, options.optPresentation);
 
     if (targetViewId == kInvalidViewId)
     {
@@ -362,7 +383,7 @@ namespace ao::rt
 
     // Navigate to AllTracks without recording.
     auto const allTracksTarget = NavigationTarget{ListId{kAllTracksListId}};
-    auto const targetViewId = _implPtr->resolveOrCreateTargetView(allTracksTarget, _implPtr->views);
+    auto const targetViewId = _implPtr->resolveOrCreateTargetView(allTracksTarget, _implPtr->views, std::nullopt);
 
     if (targetViewId == kInvalidViewId)
     {

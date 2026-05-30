@@ -23,17 +23,27 @@ namespace ao::gtk
   GtkLayoutConfig::GtkLayoutConfig(GtkLayoutConfig&&) noexcept = default;
   GtkLayoutConfig& GtkLayoutConfig::operator=(GtkLayoutConfig&&) noexcept = default;
 
-  void GtkLayoutConfig::load(uimodel::track::ColumnLayoutState& state) const
+  void GtkLayoutConfig::load(uimodel::track::TrackColumnLayoutState& layoutState,
+                             uimodel::track::ListPresentationPreferenceState& prefState) const
   {
-    if (auto const res = _storePtr->load("trackView", state); !res && res.error().code != Error::Code::NotFound)
+    if (auto const res = _storePtr->load("trackView.columnLayouts", layoutState);
+        !res && res.error().code != Error::Code::NotFound)
     {
-      APP_LOG_DEBUG("GtkLayoutConfig: Failed to load: {}", res.error().message);
+      APP_LOG_DEBUG("GtkLayoutConfig: Failed to load column layouts: {}", res.error().message);
+    }
+
+    if (auto const res = _storePtr->load("trackView.presentations", prefState);
+        !res && res.error().code != Error::Code::NotFound)
+    {
+      APP_LOG_DEBUG("GtkLayoutConfig: Failed to load presentations: {}", res.error().message);
     }
   }
 
-  void GtkLayoutConfig::save(uimodel::track::ColumnLayoutState const& state)
+  void GtkLayoutConfig::save(uimodel::track::TrackColumnLayoutState const& layoutState,
+                             uimodel::track::ListPresentationPreferenceState const& prefState)
   {
-    _storePtr->save("trackView", state);
+    _storePtr->save("trackView.columnLayouts", layoutState);
+    _storePtr->save("trackView.presentations", prefState);
 
     if (auto const res = _storePtr->flush(); !res)
     {

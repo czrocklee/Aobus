@@ -90,6 +90,7 @@ add_executable(ao_test
     unit/uimodel/track/TrackPageRouteTest.cpp
     unit/uimodel/track/TrackFieldFormatterTest.cpp
     unit/uimodel/track/TrackPresentationViewModelTest.cpp
+    unit/uimodel/track/TrackPresentationRecommenderTest.cpp
 
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp

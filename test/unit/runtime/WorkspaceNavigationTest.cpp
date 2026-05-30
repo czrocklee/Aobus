@@ -108,7 +108,8 @@ namespace ao::rt::test
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
-    runtime.workspace().navigateTo("genre == \"Rock\"");
+    runtime.workspace().navigateTo(
+      FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "genre == \"Rock\""});
 
     auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
     CHECK(state.filterExpression == "genre == \"Rock\"");
@@ -119,6 +120,20 @@ namespace ao::rt::test
     auto const backState = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
     CHECK(backState.listId == ListId{10});
     CHECK(backState.filterExpression.empty());
+  }
+
+  TEST_CASE("NavigationWorkspace - navigateTo string query uses all tracks as base list",
+            "[navigation][unit][workspace]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    runtime.workspace().navigateTo(
+      FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "$genre = \"Rock\""});
+
+    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    CHECK(state.listId == rt::kAllTracksListId);
+    CHECK(state.filterExpression == "$genre = \"Rock\"");
   }
 
   TEST_CASE("NavigationWorkspace - goBack restores list", "[navigation][unit][workspace]")

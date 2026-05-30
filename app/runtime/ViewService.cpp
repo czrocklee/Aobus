@@ -182,7 +182,14 @@ namespace ao::rt
     entry.activeSource = baseSource;
     entry.projectionPtr = projectionPtr;
 
-    applyPresentation(entry);
+    if (initial.optPresentation)
+    {
+      applyPresentation(entry, *initial.optPresentation);
+    }
+    else
+    {
+      applyPresentation(entry);
+    }
 
     return CreateTrackListViewReply{.viewId = id};
   }
@@ -236,7 +243,7 @@ namespace ao::rt
       // Need to attach projection to new source
       it->second.projectionPtr =
         std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
-      applyPresentation(it->second);
+      applyPresentation(it->second, it->second.state.presentation);
       auto ev = TrackListProjectionChanged{
         .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision};
       _implPtr->projectionChangedSignal.post(_implPtr->executor, std::move(ev));
@@ -250,7 +257,7 @@ namespace ao::rt
       it->second.activeSource = baseSource;
       it->second.projectionPtr =
         std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
-      applyPresentation(it->second);
+      applyPresentation(it->second, it->second.state.presentation);
       auto ev = TrackListProjectionChanged{
         .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision};
       _implPtr->projectionChangedSignal.post(_implPtr->executor, std::move(ev));
@@ -353,7 +360,7 @@ namespace ao::rt
 
     it->second.projectionPtr =
       std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
-    applyPresentation(it->second);
+    applyPresentation(it->second, it->second.state.presentation);
     _implPtr->projectionChangedSignal.post(
       _implPtr->executor,
       TrackListProjectionChanged{

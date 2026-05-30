@@ -11,6 +11,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/columnview.h>
+#include <gtkmm/dropdown.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/label.h>
 #include <gtkmm/scrolledwindow.h>
@@ -18,6 +19,8 @@
 #include <sigc++/connection.h>
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
 
 namespace ao::library
@@ -52,13 +55,16 @@ namespace ao::gtk
     SmartListDialog& operator=(SmartListDialog&&) = delete;
 
     // Populate dialog fields from an existing list for editing
-    void populate(ListId id, library::ListView const& view);
+    void populate(ListId id, library::ListView const& view, std::optional<std::string> const& optPresentationId);
 
     // Returns the ListId for update (0 if creating a new list)
     ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
     rt::LibraryMutationService::ListDraft draft() const;
+
+    // Returns the selected presentation ID. Auto is resolved to a concrete ID.
+    std::string presentationId() const;
 
     void setLocalExpression(std::string_view expression);
 
@@ -76,6 +82,7 @@ namespace ao::gtk
     Gtk::Entry _nameEntry;
     Gtk::Entry _descEntry;
     QueryExpressionBox _exprBox;
+    Gtk::DropDown _presentationDropDown;
     Gtk::Button* _okButton = nullptr;
     Gtk::Button* _cancelButton = nullptr;
     Gtk::Box _leftPanel;

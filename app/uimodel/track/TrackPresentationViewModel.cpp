@@ -6,6 +6,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/track/TrackPresentationRecommender.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <algorithm>
@@ -127,6 +128,67 @@ namespace ao::uimodel::track
 
     _listLayouts = layouts;
     _changed.emit(ao::kInvalidListId, TrackPresentationChangeType::LayoutOnly);
+  }
+
+  void TrackPresentationViewModel::setListPresentations(std::map<ao::ListId, std::string> const& presentations)
+  {
+    if (_presentations == presentations)
+    {
+      return;
+    }
+
+    _presentations = presentations;
+    _changed.emit(ao::kInvalidListId, TrackPresentationChangeType::FullRebuild);
+  }
+
+  std::optional<std::string_view> TrackPresentationViewModel::presentationIdForList(ao::ListId listId) const
+  {
+    if (auto const it = _presentations.find(listId); it != _presentations.end())
+    {
+      return it->second;
+    }
+
+    return std::nullopt;
+  }
+
+  void TrackPresentationViewModel::setPresentationIdForList(ao::ListId listId, std::string_view presentationId)
+  {
+    if (listId == ao::kInvalidListId)
+    {
+      return;
+    }
+
+    auto const strId = std::string{presentationId};
+
+    if (_presentations[listId] == strId)
+    {
+      return;
+    }
+
+    _presentations[listId] = strId;
+    _changed.emit(listId, TrackPresentationChangeType::FullRebuild);
+  }
+
+  void TrackPresentationViewModel::clearPresentationForList(ao::ListId listId)
+  {
+    if (_presentations.erase(listId) > 0)
+    {
+      _changed.emit(listId, TrackPresentationChangeType::FullRebuild);
+    }
+  }
+
+  rt::TrackPresentationSpec TrackPresentationViewModel::presentationForList(ao::ListId listId,
+                                                                            std::string_view smartListFilter) const
+  {
+    if (auto const optId = presentationIdForList(listId); optId)
+    {
+      if (auto const optSpec = specForId(*optId); optSpec)
+      {
+        return *optSpec;
+      }
+    }
+
+    return recommendPresentation(smartListFilter, builtinPresets(), customPresentations());
   }
 
   void TrackPresentationViewModel::addCustomPresentation(rt::CustomTrackPresentationPreset const& state)

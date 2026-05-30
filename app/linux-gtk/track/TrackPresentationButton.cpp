@@ -4,6 +4,7 @@
 #include "track/TrackPresentationButton.h"
 
 #include "track/TrackCustomViewDialog.h"
+#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>
@@ -188,6 +189,14 @@ namespace ao::gtk
     _button.set_label(label);
 
     auto spec = rt::TrackPresentationSpec{*optSpec};
+
+    auto const state = _runtime.views().trackListState(_activeViewId);
+
+    if (state.listId != ao::kInvalidListId)
+    {
+      _presentationStore->setPresentationIdForList(state.listId, spec.id);
+    }
+
     Glib::signal_idle().connect_once([this, spec = std::move(spec)]
                                      { _runtime.workspace().setActivePresentation(spec); });
   }

@@ -28,7 +28,9 @@ namespace ao::gtk::test
     auto selectedId = ListId{999};
     auto callbacks =
       ListNavigationController::Callbacks{.onListSelected = [&](ListId id) { selectedId = id; },
-                                          .getListMembership = [&](ListId) -> rt::TrackSource* { return nullptr; }};
+                                          .getListMembership = [&](ListId) -> rt::TrackSource* { return nullptr; },
+                                          .onListPresentationSaved = {},
+                                          .getListPresentation = {}};
 
     auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks)};
     window.set_child(controller.widget());

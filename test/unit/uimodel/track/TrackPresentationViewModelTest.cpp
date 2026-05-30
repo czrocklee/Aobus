@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
-
 #include "test/unit/runtime/TestUtils.h"
+#include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/TrackField.h>
-#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/async/Runtime.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -68,6 +68,30 @@ namespace ao::uimodel::track::test
       REQUIRE(retrieved.size() == 1);
       CHECK(retrieved[0].field == rt::TrackField::Title);
       CHECK(retrieved[0].width == 200);
+    }
+
+    SECTION("list presentation preferences")
+    {
+      auto const listId = rt::kAllTracksListId;
+
+      CHECK_FALSE(store.presentationIdForList(listId));
+
+      store.setPresentationIdForList(listId, "albums");
+
+      auto const optId = store.presentationIdForList(listId);
+      REQUIRE(optId);
+      CHECK(*optId == "albums");
+      CHECK(store.presentationForList(listId).id == "albums");
+
+      store.clearPresentationForList(listId);
+      CHECK_FALSE(store.presentationIdForList(listId));
+    }
+
+    SECTION("invalid list id presentation preference is ignored")
+    {
+      store.setPresentationIdForList(kInvalidListId, "albums");
+
+      CHECK_FALSE(store.presentationIdForList(kInvalidListId));
     }
 
     SECTION("signal propagation on change")

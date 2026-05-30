@@ -19,12 +19,15 @@
 #include <ao/rt/SmartListSource.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackListProjection.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackSource.h>
 #include <ao/uimodel/list/SmartListEditorModel.h>
+#include <ao/uimodel/track/TrackPresentationRecommender.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
+#include <gtk/gtktypes.h>
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
@@ -37,13 +40,17 @@
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/singleselection.h>
+#include <gtkmm/stringlist.h>
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -121,7 +128,9 @@ namespace ao::gtk
     _rebuildConnection.disconnect();
   }
 
-  void SmartListDialog::populate(ListId id, library::ListView const& view)
+  void SmartListDialog::populate(ListId id,
+                                 library::ListView const& view,
+                                 std::optional<std::string> const& optPresentationId)
   {
     _editListId = id;
     _nameEntry.set_text(std::string{view.name()});
@@ -129,12 +138,55 @@ namespace ao::gtk
     _exprBox.entry().set_text(std::string{view.filter()});
     set_title("Edit List");
     _okButton->set_label("Save");
+
+    if (optPresentationId)
+    {
+      auto const& presets = rt::builtinTrackPresentationPresets();
+      auto const it = std::ranges::find(presets, *optPresentationId, [](auto const& preset) { return preset.spec.id; });
+
+      if (it != presets.end())
+      {
+        auto const index = std::distance(presets.begin(), it);
+        _presentationDropDown.set_selected(static_cast<std::uint32_t>(index + 1));
+      }
+      else
+      {
+        _presentationDropDown.set_selected(0);
+      }
+    }
+    else
+    {
+      _presentationDropDown.set_selected(0);
+    }
+
     updateDialogState();
   }
 
   ListId SmartListDialog::editListId() const
   {
     return _editListId;
+  }
+
+  std::string SmartListDialog::presentationId() const
+  {
+    auto const selected = _presentationDropDown.get_selected();
+
+    if (selected == 0 || selected == GTK_INVALID_LIST_POSITION)
+    {
+      auto const localExpr = std::string{_exprBox.entry().get_text()};
+      auto const recommended =
+        uimodel::track::recommendPresentation(localExpr, rt::builtinTrackPresentationPresets(), {});
+      return recommended.id;
+    }
+
+    auto const& presets = rt::builtinTrackPresentationPresets();
+
+    if (auto const index = selected - 1; index < presets.size())
+    {
+      return std::string{presets[index].spec.id};
+    }
+
+    return std::string{rt::kDefaultTrackPresentationId};
   }
 
   void SmartListDialog::setLocalExpression(std::string_view expression)
@@ -205,6 +257,23 @@ namespace ao::gtk
     filterList->addRow("Effective Filter", _effectiveExprLabel);
 
     _leftPanel.append(*filterList);
+
+    // Section 3: Presentation Preference
+    auto* const presList = Gtk::make_managed<FormBoxedList>();
+    auto stringListPtr = Gtk::StringList::create();
+    stringListPtr->append("Auto");
+
+    for (auto const& preset : rt::builtinTrackPresentationPresets())
+    {
+      stringListPtr->append(std::string{preset.label});
+    }
+
+    _presentationDropDown.set_model(stringListPtr);
+    _presentationDropDown.set_valign(Gtk::Align::CENTER);
+    _presentationDropDown.set_halign(Gtk::Align::END);
+    _presentationDropDown.property_selected().signal_changed().connect([this] { updatePreview(); });
+    presList->addRow("Presentation", _presentationDropDown);
+    _leftPanel.append(*presList);
 
     // Error Label (Global for the left panel)
     _errorLabel.set_visible(false);

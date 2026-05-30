@@ -4,7 +4,6 @@
 #include "app/GtkLayoutConfig.h"
 
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
@@ -24,29 +23,35 @@ namespace ao::gtk::test
     SECTION("Load non-existent config returns default")
     {
       auto const config = GtkLayoutConfig{libraryPath};
-      auto state = uimodel::track::ColumnLayoutState{};
-      state.listLayouts[ListId{1}] = {{rt::TrackField::Title, 100}};
-
-      config.load(state);
+      auto newState = uimodel::track::TrackColumnLayoutState{};
+      auto newPrefState = uimodel::track::ListPresentationPreferenceState{};
+      config.load(newState, newPrefState);
       // Not found should not modify
-      CHECK(state.listLayouts[ListId{1}][0].width == 100);
+      CHECK(newState.listLayouts.empty());
+      CHECK(newPrefState.presentations.empty());
     }
 
     SECTION("Save and load layout state")
     {
       {
         auto config = GtkLayoutConfig{libraryPath};
-        auto state = uimodel::track::ColumnLayoutState{};
-        state.listLayouts[rt::kAllTracksListId] = {{rt::TrackField::Artist, 250}};
-        config.save(state);
+        auto state = uimodel::track::TrackColumnLayoutState{};
+        auto prefState = uimodel::track::ListPresentationPreferenceState{};
+        state.listLayouts[ListId{10}] = {uimodel::track::ColumnState{.field = rt::TrackField::Artist, .width = 150}};
+        state.listLayouts[ListId{20}] = {uimodel::track::ColumnState{.field = rt::TrackField::Album, .width = 200}};
+        prefState.presentations[ListId{10}] = "albums";
+        config.save(state, prefState);
       }
 
       {
         auto const config = GtkLayoutConfig{libraryPath};
-        auto state = uimodel::track::ColumnLayoutState{};
-        config.load(state);
-        REQUIRE(state.listLayouts.contains(rt::kAllTracksListId));
-        CHECK(state.listLayouts[rt::kAllTracksListId][0].width == 250);
+        auto state = uimodel::track::TrackColumnLayoutState{};
+        auto prefState = uimodel::track::ListPresentationPreferenceState{};
+        config.load(state, prefState);
+        REQUIRE(state.listLayouts.size() == 2);
+        CHECK(state.listLayouts[ListId{10}][0].width == 150);
+        REQUIRE(prefState.presentations.size() == 1);
+        CHECK(prefState.presentations[ListId{10}] == "albums");
       }
     }
   }

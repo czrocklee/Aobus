@@ -200,9 +200,7 @@ namespace ao::rt::yaml
       return true;
     }
 
-    T val;
-
-    if (read(node, val))
+    if (auto val = T{}; read(node, val))
     {
       rhs = std::move(val);
       return true;

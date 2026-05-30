@@ -53,6 +53,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/track/TrackFilterViewModel.cpp
     uimodel/track/TrackFilterResolver.cpp
     uimodel/track/TrackPresentationViewModel.cpp
+    uimodel/track/TrackPresentationRecommender.cpp
     uimodel/track/TrackFieldFormatter.cpp
     uimodel/tag/TagEditWorkflow.cpp
 )

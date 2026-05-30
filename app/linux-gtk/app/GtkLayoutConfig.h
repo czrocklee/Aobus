@@ -34,12 +34,14 @@ namespace ao::gtk
     /**
      * @brief Load the layout state from disk.
      */
-    void load(uimodel::track::ColumnLayoutState& state) const;
+    void load(uimodel::track::TrackColumnLayoutState& layoutState,
+              uimodel::track::ListPresentationPreferenceState& prefState) const;
 
     /**
      * @brief Save the layout state to disk and flush.
      */
-    void save(uimodel::track::ColumnLayoutState const& state);
+    void save(uimodel::track::TrackColumnLayoutState const& layoutState,
+              uimodel::track::ListPresentationPreferenceState const& prefState);
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;

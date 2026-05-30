@@ -201,6 +201,7 @@ namespace ao::rt
     std::string filterExpression{};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
+    std::optional<TrackPresentationSpec> optPresentation{};
   };
 
   struct ViewRecord final

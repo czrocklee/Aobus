@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -31,9 +32,16 @@ namespace ao::rt
   struct NavigationOptions final
   {
     bool recordHistory = true;
+    std::optional<TrackPresentationSpec> optPresentation = std::nullopt;
   };
 
-  using NavigationTarget = std::variant<ListId, std::string, GlobalViewKind>;
+  struct FilteredListTarget
+  {
+    ListId listId;
+    std::string filterExpression;
+  };
+
+  using NavigationTarget = std::variant<ListId, FilteredListTarget, GlobalViewKind>;
 
   class WorkspaceService final
   {

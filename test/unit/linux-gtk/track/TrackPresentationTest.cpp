@@ -83,21 +83,23 @@ namespace ao::gtk::test
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
     auto const configPath = configDir / "gtk_layout.yaml";
 
-    auto state = uimodel::track::ColumnLayoutState{};
+    auto state = uimodel::track::TrackColumnLayoutState{};
+    auto prefState = uimodel::track::ListPresentationPreferenceState{};
     auto layout = std::vector{uimodel::track::ColumnState{.field = rt::TrackField::Title, .width = 321},
                               uimodel::track::ColumnState{.field = rt::TrackField::Artist, .width = 222}};
     state.listLayouts.emplace(ListId{42}, layout);
 
     {
       auto config = GtkLayoutConfig{configDir};
-      config.save(state);
+      config.save(state, prefState);
     }
 
     REQUIRE(std::filesystem::exists(configPath));
 
-    auto loaded = uimodel::track::ColumnLayoutState{};
+    auto loaded = uimodel::track::TrackColumnLayoutState{};
+    auto loadedPref = uimodel::track::ListPresentationPreferenceState{};
     auto config = GtkLayoutConfig{configDir};
-    config.load(loaded);
+    config.load(loaded, loadedPref);
 
     REQUIRE(loaded.listLayouts.contains(ListId{42}));
     auto const& loadedLayout = loaded.listLayouts.at(ListId{42});

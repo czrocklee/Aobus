@@ -37,9 +37,14 @@ namespace ao::uimodel::track
     bool operator==(ColumnState const&) const = default;
   };
 
-  struct ColumnLayoutState final
+  struct TrackColumnLayoutState final
   {
     std::map<ListId, std::vector<ColumnState>> listLayouts;
+  };
+
+  struct ListPresentationPreferenceState final
+  {
+    std::map<ListId, std::string> presentations;
   };
 
   class TrackPresentationViewModel final
@@ -67,6 +72,14 @@ namespace ao::uimodel::track
     std::vector<ColumnState> const& layoutForList(ListId listId) const noexcept;
     void updateLayout(ListId listId, std::vector<ColumnState> const& layout);
 
+    std::map<ListId, std::string> const& listPresentations() const noexcept { return _presentations; }
+    void setListPresentations(std::map<ListId, std::string> const& presentations);
+
+    std::optional<std::string_view> presentationIdForList(ListId listId) const;
+    void setPresentationIdForList(ListId listId, std::string_view presentationId);
+    void clearPresentationForList(ListId listId);
+    rt::TrackPresentationSpec presentationForList(ListId listId, std::string_view smartListFilter = "") const;
+
     std::vector<rt::TrackField> activeFieldOrder() const noexcept;
 
     rt::Signal<ListId, TrackPresentationChangeType>& signalChanged() noexcept { return _changed; }
@@ -78,6 +91,7 @@ namespace ao::uimodel::track
     std::string _activePresentationId{};
     ListId _activeListId = kInvalidListId;
     std::map<ListId, std::vector<ColumnState>> _listLayouts{};
+    std::map<ListId, std::string> _presentations{};
     rt::Signal<ListId, TrackPresentationChangeType> _changed;
   };
 } // namespace ao::uimodel::track

@@ -5,6 +5,7 @@
 
 #include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/WorkspaceService.h>
@@ -88,7 +89,8 @@ namespace ao::gtk
 
       case Type::Navigate:
         APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), cmd.navigateQuery);
-        _runtime.workspace().navigateTo(cmd.navigateQuery);
+        _runtime.workspace().navigateTo(
+          rt::FilteredListTarget{.listId = rt::kAllTracksListId, .filterExpression = cmd.navigateQuery});
         break;
 
       case Type::None:

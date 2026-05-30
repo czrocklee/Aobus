@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace ao::rt
@@ -37,6 +38,8 @@ namespace ao::gtk
     {
       std::function<void(ListId)> onListSelected;
       std::function<rt::TrackSource*(ListId)> getListMembership;
+      std::function<void(ListId, std::string)> onListPresentationSaved;
+      std::function<std::optional<std::string>(ListId)> getListPresentation;
     };
 
     ListNavigationController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks);
@@ -65,7 +68,7 @@ namespace ao::gtk
     void openNewSmartListDialog();
     void openEditListDialog(ListId listId);
 
-    void createList(rt::LibraryMutationService::ListDraft const& draft);
+    ListId createList(rt::LibraryMutationService::ListDraft const& draft);
     void updateList(rt::LibraryMutationService::ListDraft const& draft);
     void onDeleteList();
     void onEditList();
