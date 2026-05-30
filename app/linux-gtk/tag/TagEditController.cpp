@@ -14,14 +14,13 @@
 #include <ao/utility/Log.h>
 
 #include <giomm/actionmap.h>
+#include <giomm/menu.h>
 #include <giomm/simpleaction.h>
+#include <giomm/simpleactiongroup.h>
 #include <glibmm/variant.h>
 #include <glibmm/varianttype.h>
-#include <gtkmm/box.h>
-#include <gtkmm/button.h>
-#include <gtkmm/enums.h>
 #include <gtkmm/object.h>
-#include <gtkmm/popover.h>
+#include <gtkmm/popovermenu.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -37,7 +36,6 @@ namespace ao::gtk
 {
   namespace
   {
-    constexpr int kContextMenuButtonSpacing = 2;
   }
 
   TagEditController::TagEditController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks)
@@ -77,6 +75,37 @@ namespace ao::gtk
     _trackTagRemoveActionPtr->signal_activate().connect(
       [this](Glib::VariantBase const& parameter)
       { removeTagFromCurrentSelection(Glib::VariantBase::cast_dynamic<Glib::Variant<std::string>>(parameter).get()); });
+
+    _contextActionGroupPtr = Gio::SimpleActionGroup::create();
+
+    auto editTagsActionPtr = Gio::SimpleAction::create("edit-tags");
+    editTagsActionPtr->signal_activate().connect(
+      [this](Glib::VariantBase const&)
+      {
+        if (_contextPopoverPtr)
+        {
+          _contextPopoverPtr->popdown();
+        }
+
+        if (_contextPage)
+        {
+          showTagsPopover(*_contextPage, _contextPosX, _contextPosY);
+        }
+      });
+    _contextActionGroupPtr->add_action(editTagsActionPtr);
+
+    auto propertiesActionPtr = Gio::SimpleAction::create("properties");
+    propertiesActionPtr->signal_activate().connect(
+      [this](Glib::VariantBase const&)
+      {
+        if (_contextPopoverPtr)
+        {
+          _contextPopoverPtr->popdown();
+        }
+
+        showPropertiesDialog();
+      });
+    _contextActionGroupPtr->add_action(propertiesActionPtr);
   }
 
   void TagEditController::addActionsTo(Gio::ActionMap& actionMap)
@@ -103,40 +132,21 @@ namespace ao::gtk
     }
 
     _optActiveSelection = selection;
+    _contextPage = &page;
+    _contextPosX = posX;
+    _contextPosY = posY;
 
-    _contextPopoverPtr = std::make_unique<Gtk::Popover>();
-    _contextPopoverPtr->add_css_class("ao-context-menu");
+    _contextPopoverPtr = std::make_unique<Gtk::PopoverMenu>();
 
-    auto* const menuBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContextMenuButtonSpacing);
-    menuBox->set_margin_start(2);
-    menuBox->set_margin_end(2);
-    menuBox->set_margin_top(2);
-    menuBox->set_margin_bottom(2);
+    auto menuModelPtr = Gio::Menu::create();
+    menuModelPtr->append("Edit Tags", "ctx.edit-tags");
+    menuModelPtr->append("Properties", "ctx.properties");
 
-    auto* const tagsButton = Gtk::make_managed<Gtk::Button>("Edit Tags");
-    tagsButton->set_halign(Gtk::Align::FILL);
-    tagsButton->set_hexpand(true);
-    tagsButton->signal_clicked().connect(
-      [this, &page, posX, posY]
-      {
-        _contextPopoverPtr->popdown();
-        showTagsPopover(page, posX, posY);
-      });
-    menuBox->append(*tagsButton);
+    _contextPopoverPtr->set_menu_model(menuModelPtr);
+    _contextPopoverPtr->insert_action_group("ctx", _contextActionGroupPtr);
 
-    auto* const propertiesButton = Gtk::make_managed<Gtk::Button>("Properties");
-    propertiesButton->set_halign(Gtk::Align::FILL);
-    propertiesButton->set_hexpand(true);
-    propertiesButton->signal_clicked().connect(
-      [this]
-      {
-        _contextPopoverPtr->popdown();
-        showPropertiesDialog();
-      });
-    menuBox->append(*propertiesButton);
-
-    _contextPopoverPtr->set_child(*menuBox);
     _contextPopoverPtr->set_parent(page);
+    _contextPopoverPtr->set_has_arrow(false);
 
     auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY), 1, 1};
     _contextPopoverPtr->set_pointing_to(rect);

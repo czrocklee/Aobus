@@ -9,8 +9,9 @@
 
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>
+#include <giomm/simpleactiongroup.h>
 #include <glibmm/refptr.h>
-#include <gtkmm/popover.h>
+#include <gtkmm/popovermenu.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -93,6 +94,11 @@ namespace ao::gtk
     Glib::RefPtr<Gio::SimpleAction> _trackTagToggleActionPtr;
 
     std::unique_ptr<TagPopover> _tagPopoverPtr;
-    std::unique_ptr<Gtk::Popover> _contextPopoverPtr;
+    std::unique_ptr<Gtk::PopoverMenu> _contextPopoverPtr;
+    Glib::RefPtr<Gio::SimpleActionGroup> _contextActionGroupPtr;
+
+    TrackViewPage* _contextPage = nullptr;
+    double _contextPosX = 0.0;
+    double _contextPosY = 0.0;
   };
 } // namespace ao::gtk
