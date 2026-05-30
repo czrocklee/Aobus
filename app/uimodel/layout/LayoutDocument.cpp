@@ -162,6 +162,13 @@ namespace ao::rt::yaml
       child << ryml::key("children");
       write(child, value.children);
     }
+
+    if (value.optTooltip && value.optTooltip->nodePtr)
+    {
+      auto child = node.append_child();
+      child << ryml::key("tooltip");
+      write(child, *value.optTooltip->nodePtr);
+    }
   }
 
   bool read(ryml::ConstNodeRef node, LayoutNode& value)
@@ -194,6 +201,14 @@ namespace ao::rt::yaml
     if (auto const childrenNode = findChild(node, "children"); childrenNode.readable())
     {
       read(childrenNode, value.children);
+    }
+
+    if (auto const tooltipNode = findChild(node, "tooltip"); tooltipNode.readable())
+    {
+      if (auto tooltipValue = LayoutNode{}; read(tooltipNode, tooltipValue))
+      {
+        value.optTooltip = BoxedLayoutNode{std::move(tooltipValue)};
+      }
     }
 
     return true;

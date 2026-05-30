@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace ao::uimodel::layout
@@ -39,6 +40,14 @@ namespace ao::uimodel::layout
     std::optional<ActionBindingProperty> optActionBinding = {};
   };
 
+  enum class SurfaceCapability : std::uint8_t
+  {
+    Main = 1,
+    Tooltip = 2,
+  };
+
+  using SurfaceCapabilityMask = std::underlying_type_t<SurfaceCapability>;
+
   struct ComponentDescriptor final
   {
     std::string type;
@@ -49,6 +58,7 @@ namespace ao::uimodel::layout
     std::vector<PropertyDescriptor> layoutProps = {};
     std::size_t minChildren = 0;
     std::optional<std::size_t> optMaxChildren = {};
+    SurfaceCapabilityMask surfaces = static_cast<SurfaceCapabilityMask>(SurfaceCapability::Main);
   };
 
   class ComponentCatalog final

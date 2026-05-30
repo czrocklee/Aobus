@@ -31,7 +31,9 @@ Findings describe specific properties or transitions that impact audio quality. 
 
 **Node Self-Properties:**
 - `LossySource`: The node decodes a lossy format (e.g., MP3, AAC).
-- `VolumeModification`: The node applies non-unity gain (software volume control).
+- `SoftwareVolumeModification`: The node applies non-unity digital gain (software volume attenuation), treated as a `LinearIntervention`.
+- `HardwareVolumeModification`: The node applies non-unity volume via hardware controls. This is a neutral finding and does not downgrade the pipeline rating because it occurs after the digital bit-perfect path. A node with only hardware volume control is considered bit-perfect (maintains `BitwisePerfect` rating), though it does not carry an explicit `BitPerfect` finding.
+- `UnclassifiedVolumeModification`: The node applies non-unity gain but PipeWire lacks sufficient evidence to classify it as hardware or software. Treated conservatively as a `LinearIntervention`.
 - `Muted`: The node is muting the signal.
 - `MixedSources`: The node receives input from multiple sources (e.g., shared with another application). This finding carries the names of the sharing applications.
 

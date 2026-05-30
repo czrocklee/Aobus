@@ -9,6 +9,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::uimodel::layout::test
@@ -128,6 +130,30 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.root.type == "playback.outputButton");
     CHECK(decoded.root.props.at("primaryAction").asString() == "playback.playPause");
     CHECK(decoded.root.props.at("secondaryAction").asString() == "shell.showSystemMenu");
+  }
+
+  TEST_CASE("LayoutDocument round-trip preserves tooltip", "[layout][unit][model]")
+  {
+    auto doc = LayoutDocument{};
+    doc.root.type = "playback.outputButton";
+
+    auto tooltipNode = LayoutNode{};
+    tooltipNode.type = "playback.audioPipelinePanel";
+    tooltipNode.props["variant"] = LayoutValue{std::string{"tooltip"}};
+
+    doc.root.optTooltip = BoxedLayoutNode{std::move(tooltipNode)};
+
+    auto tree = ryml::Tree{};
+    rt::yaml::write(tree.rootref(), doc);
+
+    auto decoded = LayoutDocument{};
+    REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+
+    CHECK(decoded.root.type == "playback.outputButton");
+    REQUIRE(decoded.root.optTooltip.has_value());
+    REQUIRE(decoded.root.optTooltip->nodePtr != nullptr);
+    CHECK(decoded.root.optTooltip->nodePtr->type == "playback.audioPipelinePanel");
+    CHECK(decoded.root.optTooltip->nodePtr->props.at("variant").asString() == "tooltip");
   }
 
   TEST_CASE("YAML decode tolerates missing optional fields", "[layout][unit][model]")

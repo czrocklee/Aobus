@@ -42,16 +42,31 @@ namespace ao::audio::backend::detail
 
   struct SinkProps final
   {
+    bool hasVolume = false;
+    bool volumeIsHardware = false;
     float volume = 1.0F;
+
     bool isMuted = false;
+
+    bool hasChannelVolumes = false;
+    bool channelVolumesAreHardware = false;
     std::vector<float> channelVolumes;
+
     bool isSoftMuted = false;
+    bool hasSoftVolumes = false;
     std::vector<float> softVolumes;
 
+    struct VolumeClassification final
+    {
+      bool hardwareNotUnity = false;
+      bool softwareNotUnity = false;
+      bool unclassifiedNotUnity = false;
+    };
+
     /**
-     * @brief Checks if all volume components are at unity (1.0).
+     * @brief Classifies the volume state based on hardware and software evidence.
      */
-    bool isUnity() const noexcept;
+    VolumeClassification classifyVolume() const noexcept;
   };
 
   /**

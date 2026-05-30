@@ -34,7 +34,9 @@ namespace ao::audio::flow
     NodeType type = NodeType::Intermediary;
     std::string name{};
     std::optional<Format> optFormat = std::nullopt;
-    bool volumeNotUnity = false;
+    bool hardwareVolumeNotUnity = false;
+    bool softwareVolumeNotUnity = false;
+    bool unclassifiedVolumeNotUnity = false;
     bool isMuted = false;
     bool isLossySource = false;
     std::string objectPath{};

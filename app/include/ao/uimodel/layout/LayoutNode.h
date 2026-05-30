@@ -7,6 +7,8 @@
 #include <format>
 #include <functional>
 #include <map>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -151,6 +153,24 @@ namespace ao::uimodel::layout
     Value data{};
   };
 
+  struct LayoutNode;
+
+  struct BoxedLayoutNode final
+  {
+    std::unique_ptr<LayoutNode> nodePtr{};
+
+    BoxedLayoutNode();
+    explicit BoxedLayoutNode(LayoutNode value);
+
+    BoxedLayoutNode(BoxedLayoutNode const& other);
+    BoxedLayoutNode& operator=(BoxedLayoutNode const& other);
+
+    BoxedLayoutNode(BoxedLayoutNode&&) noexcept;
+    BoxedLayoutNode& operator=(BoxedLayoutNode&&) noexcept;
+
+    ~BoxedLayoutNode();
+  };
+
   struct LayoutNode final
   {
     template<typename T>
@@ -180,5 +200,6 @@ namespace ao::uimodel::layout
     std::map<std::string, LayoutValue, std::less<>> props{};
     std::map<std::string, LayoutValue, std::less<>> layout{};
     std::vector<LayoutNode> children{};
+    std::optional<BoxedLayoutNode> optTooltip{};
   };
 }

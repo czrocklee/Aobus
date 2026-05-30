@@ -132,9 +132,20 @@ namespace ao::audio
         assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LossySource);
       }
 
-      if (node.volumeNotUnity)
+      if (node.softwareVolumeNotUnity)
       {
-        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::VolumeModification});
+        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::SoftwareVolumeModification});
+        assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LinearIntervention);
+      }
+
+      if (node.hardwareVolumeNotUnity)
+      {
+        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::HardwareVolumeModification});
+      }
+
+      if (node.unclassifiedVolumeNotUnity)
+      {
+        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::UnclassifiedVolumeModification});
         assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LinearIntervention);
       }
 

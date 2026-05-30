@@ -119,10 +119,10 @@ namespace ao::uimodel::playback
         std::format_to(std::back_inserter(plainTextFallback), "\n{}", conclusionText);
       }
 
-      view.audioQualityTooltip = AudioQualityTooltipView{.flow = state.flow,
-                                                         .quality = state.quality,
-                                                         .assessments = state.qualityAssessments,
-                                                         .plainTextFallback = plainTextFallback};
+      view.audioPipeline = AudioPipelineView{.flow = state.flow,
+                                             .quality = state.quality,
+                                             .assessments = state.qualityAssessments,
+                                             .plainTextFallback = plainTextFallback};
 
       view.isActive = (state.quality != audio::Quality::Unknown);
       view.qualityCategory = mapQuality(state.quality);

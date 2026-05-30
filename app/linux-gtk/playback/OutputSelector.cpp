@@ -4,7 +4,6 @@
 #include "playback/OutputSelector.h"
 
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gdk/gdk.h>
 #include <gtkmm/enums.h>
@@ -28,11 +27,7 @@ namespace ao::gtk
                         _soul.breathe(view.isBreathing);
                         _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
                       }}
-    , _tooltipViewModel{_playback,
-                        [this](ao::uimodel::playback::NowPlayingViewState const& view)
-                        { _richTooltipController.apply(view.audioQualityTooltip); }}
   {
-    _richTooltipController.attach(_button);
     _button.set_has_frame(false);
     _button.add_css_class("ao-output-logo");
     _button.set_halign(Gtk::Align::START);

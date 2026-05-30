@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace ao::uimodel::layout::test
 {
@@ -109,6 +110,45 @@ namespace ao::uimodel::layout::test
 
     REQUIRE(expanded.children.size() == 1);
     CHECK(expanded.children[0].type == "spacer");
+  }
+
+  TEST_CASE("LayoutTemplateExpander integrates tooltip overrides", "[layout][unit][template]")
+  {
+    auto doc = LayoutDocument{};
+    auto templateTooltip = LayoutNode{.type = "my.templateTooltip"};
+    doc.templates["my.template"] =
+      LayoutNode{.type = "app.actionButton", .optTooltip = BoxedLayoutNode{std::move(templateTooltip)}};
+
+    doc.root.type = "template";
+    doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
+
+    auto useSiteTooltip = LayoutNode{.type = "my.useSiteTooltip"};
+    doc.root.optTooltip = BoxedLayoutNode{std::move(useSiteTooltip)};
+
+    auto const expanded = LayoutTemplateExpander::expand(doc);
+
+    CHECK(expanded.type == "app.actionButton");
+    REQUIRE(expanded.optTooltip.has_value());
+    REQUIRE(expanded.optTooltip->nodePtr != nullptr);
+    CHECK(expanded.optTooltip->nodePtr->type == "my.useSiteTooltip");
+  }
+
+  TEST_CASE("LayoutTemplateExpander recurses into non-template tooltip", "[layout][unit][template]")
+  {
+    auto doc = LayoutDocument{};
+    doc.templates["inner.template"] = LayoutNode{.type = "spacer"};
+
+    doc.root.type = "box";
+    auto tooltipNode =
+      LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"inner.template"}}}}};
+    doc.root.optTooltip = BoxedLayoutNode{std::move(tooltipNode)};
+
+    auto const expanded = LayoutTemplateExpander::expand(doc);
+
+    CHECK(expanded.type == "box");
+    REQUIRE(expanded.optTooltip.has_value());
+    REQUIRE(expanded.optTooltip->nodePtr != nullptr);
+    CHECK(expanded.optTooltip->nodePtr->type == "spacer");
   }
 
   TEST_CASE("LayoutTemplateExpander error on missing templateId", "[layout][unit][template]")

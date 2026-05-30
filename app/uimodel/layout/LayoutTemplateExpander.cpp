@@ -75,6 +75,11 @@ namespace ao::uimodel::layout
           expanded.children.push_back(expandNode(child, templates, visited));
         }
 
+        if (node.optTooltip && node.optTooltip->nodePtr)
+        {
+          expanded.optTooltip = BoxedLayoutNode{expandNode(*node.optTooltip->nodePtr, templates, visited)};
+        }
+
         return expanded;
       }
 
@@ -84,6 +89,11 @@ namespace ao::uimodel::layout
       for (auto const& child : node.children)
       {
         result.children.push_back(expandNode(child, templates, visited));
+      }
+
+      if (result.optTooltip && result.optTooltip->nodePtr)
+      {
+        result.optTooltip = BoxedLayoutNode{expandNode(*result.optTooltip->nodePtr, templates, visited)};
       }
 
       return result;

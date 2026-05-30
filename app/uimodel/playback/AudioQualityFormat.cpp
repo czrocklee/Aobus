@@ -79,7 +79,9 @@ namespace ao::uimodel::playback
     {
       case audio::QualityFindingKind::BitPerfect: return "";
       case audio::QualityFindingKind::LossySource: return "Lossy source";
-      case audio::QualityFindingKind::VolumeModification: return "Volume modified";
+      case audio::QualityFindingKind::SoftwareVolumeModification: return "Software volume attenuation";
+      case audio::QualityFindingKind::HardwareVolumeModification: return "Hardware volume control";
+      case audio::QualityFindingKind::UnclassifiedVolumeModification: return "Volume modified (source unknown)";
       case audio::QualityFindingKind::Muted: return "Muted";
       case audio::QualityFindingKind::Resampling:
         if (finding.optFromFormat && finding.optToFormat)
@@ -141,9 +143,11 @@ namespace ao::uimodel::playback
   {
     switch (finding.kind)
     {
-      case audio::QualityFindingKind::BitPerfect: return audio::Quality::BitwisePerfect;
+      case audio::QualityFindingKind::BitPerfect:
+      case audio::QualityFindingKind::HardwareVolumeModification: return audio::Quality::BitwisePerfect;
       case audio::QualityFindingKind::LossySource: return audio::Quality::LossySource;
-      case audio::QualityFindingKind::VolumeModification:
+      case audio::QualityFindingKind::SoftwareVolumeModification:
+      case audio::QualityFindingKind::UnclassifiedVolumeModification:
       case audio::QualityFindingKind::Muted:
       case audio::QualityFindingKind::Resampling:
       case audio::QualityFindingKind::ChannelMapping: return audio::Quality::LinearIntervention;

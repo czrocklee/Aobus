@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "playback/AudioQualityTooltipWidget.h"
+#include "playback/AudioPipelinePanel.h"
 
 #include "playback/AudioQualityCss.h"
 #include <ao/audio/QualityAnalyzer.h>
@@ -20,15 +20,33 @@
 
 namespace ao::gtk
 {
-  AudioQualityTooltipWidget::AudioQualityTooltipWidget()
-    : Gtk::Box{Gtk::Orientation::VERTICAL}
+  AudioPipelinePanel::AudioPipelinePanel(AudioPipelinePanelVariant variant)
+    : Gtk::Box{Gtk::Orientation::VERTICAL}, _variant{variant}
   {
     constexpr int kSpacing = 6;
     set_spacing(kSpacing);
-    add_css_class("ao-quality-tooltip");
+    add_css_class("ao-quality-panel");
+
+    setVariant(variant);
   }
 
-  void AudioQualityTooltipWidget::apply(uimodel::playback::AudioQualityTooltipView const& view)
+  void AudioPipelinePanel::setVariant(AudioPipelinePanelVariant variant)
+  {
+    remove_css_class("ao-quality-panel-inline");
+    remove_css_class("ao-quality-panel-compact");
+    remove_css_class("ao-quality-panel-tooltip");
+
+    _variant = variant;
+
+    switch (_variant)
+    {
+      case AudioPipelinePanelVariant::Inline: add_css_class("ao-quality-panel-inline"); break;
+      case AudioPipelinePanelVariant::Compact: add_css_class("ao-quality-panel-compact"); break;
+      case AudioPipelinePanelVariant::Tooltip: add_css_class("ao-quality-panel-tooltip"); break;
+    }
+  }
+
+  void AudioPipelinePanel::apply(uimodel::playback::AudioPipelineView const& view)
   {
     // Remove all existing children
     while (auto* child = get_first_child())
@@ -38,7 +56,17 @@ namespace ao::gtk
 
     if (view.flow.nodes.empty())
     {
+      if (_variant == AudioPipelinePanelVariant::Tooltip)
+      {
+        set_visible(false);
+      }
+
       return;
+    }
+
+    if (_variant == AudioPipelinePanelVariant::Tooltip)
+    {
+      set_visible(true);
     }
 
     // Title label

@@ -17,6 +17,7 @@ extern "C"
 #include <spa/param/props.h>
 #include <spa/pod/body.h>
 #include <spa/pod/builder.h>
+#include <spa/pod/iter.h>
 #include <spa/pod/pod.h>
 #include <spa/pod/vararg.h>
 #include <spa/utils/dict.h>
@@ -219,7 +220,7 @@ namespace ao::audio::backend::detail::test
       mergeSinkProps(props, pod);
       CHECK(std::abs(props.volume - 0.5F) < 1e-4F);
       CHECK(props.isMuted == true);
-      CHECK_FALSE(props.isUnity());
+      CHECK(props.classifyVolume().unclassifiedNotUnity == true);
     }
 
     SECTION("mergeSinkProps - channel volumes")
@@ -237,30 +238,245 @@ namespace ao::audio::backend::detail::test
       REQUIRE(props.channelVolumes.size() == 2);
       CHECK(props.channelVolumes[0] == 1.0F);
       CHECK(props.channelVolumes[1] == 0.8F);
-      CHECK_FALSE(props.isUnity());
+      CHECK(props.classifyVolume().unclassifiedNotUnity == true);
     }
 
-    SECTION("SinkProps::isUnity - corner cases")
+    SECTION("SinkProps::classifyVolume - Hardware-only")
+    {
+      auto const vols = std::array{0.5F, 0.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+
+      auto const softVols = std::array{1.0F, 1.0F};
+      ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == true);
+      CHECK(cls.softwareNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Mixed Scalar Hardware / Channel Unclassified")
+    {
+      auto const vols = std::array{0.5F, 0.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+
+      // Scalar volume with hardware flag
+      ::spa_pod_builder_prop(&b, SPA_PROP_volume, SPA_POD_PROP_FLAG_HARDWARE);
+      ::spa_pod_builder_float(&b, 0.5F);
+
+      // Channel volume without hardware flag
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == true);
+      CHECK(cls.softwareNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Software-only")
+    {
+      auto const vols = std::array{0.5F, 0.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0); // No hardware flag
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+
+      auto const softVols = std::array{0.5F, 0.5F};
+      ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == false);
+      CHECK(cls.softwareNotUnity == true);
+      CHECK(cls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Mixed")
+    {
+      auto const vols = std::array{0.25F, 0.25F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+
+      auto const softVols = std::array{0.5F, 0.5F};
+      ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == true);
+      CHECK(cls.softwareNotUnity == true);
+      CHECK(cls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Ambiguous")
+    {
+      auto const vols = std::array{0.5F, 0.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0); // No hardware flag
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+      // No softVolumes
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == false);
+      CHECK(cls.softwareNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == true);
+    }
+
+    SECTION("SinkProps::classifyVolume - Hardware-capable unity")
+    {
+      auto const vols = std::array{1.0F, 1.0F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+
+      auto const softVols = std::array{1.0F, 1.0F};
+      ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == false);
+      CHECK(cls.softwareNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Scalar hardware volume")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_volume, SPA_POD_PROP_FLAG_HARDWARE);
+      ::spa_pod_builder_float(&b, 0.5F);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == true);
+      CHECK(cls.softwareNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Scalar ambiguous volume")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_volume, 0);
+      ::spa_pod_builder_float(&b, 0.5F);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == false);
+      CHECK(cls.softwareNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == true);
+    }
+
+    SECTION("SinkProps::classifyVolume - Unity tolerance")
     {
       auto props = SinkProps{};
-      CHECK(props.isUnity()); // Default is 1.0
+      props.hasVolume = true;
+      props.volumeIsHardware = true;
 
-      props.volume = 0.99999F;
-      CHECK(props.isUnity()); // Within tolerance
+      props.volume = 0.99999F; // Within tolerance
+      auto const cls1 = props.classifyVolume();
+      CHECK(cls1.hardwareNotUnity == false);
 
-      props.volume = 0.999F;
-      CHECK_FALSE(props.isUnity());
+      props.volume = 0.999F; // Outside tolerance
+      auto const cls2 = props.classifyVolume();
+      CHECK(cls2.hardwareNotUnity == true);
+    }
 
-      props.volume = 1.0F;
-      props.channelVolumes = {1.0F, 1.0F, 0.99999F};
-      CHECK(props.isUnity());
+    SECTION("SinkProps::classifyVolume - Flag preservation")
+    {
+      // First event has hardware flag
+      auto f1 = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f1, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
+      auto const vols1 = std::array{0.5F, 0.5F};
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols1.size(), utility::layout::asLegacyPtr<float>(vols1.data()));
+      auto* pod1 = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f1));
 
-      props.channelVolumes[2] = 0.99F;
-      CHECK_FALSE(props.isUnity());
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod1);
+      CHECK(props.channelVolumesAreHardware == true);
 
-      props.channelVolumes.clear();
-      props.softVolumes = {1.0F, 0.5F};
-      CHECK_FALSE(props.isUnity());
+      // Second event updates volume without repeating hardware flag (e.g. just raw param update)
+      auto f2 = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f2, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      auto const vols2 = std::array{0.25F, 0.25F};
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols2.size(), utility::layout::asLegacyPtr<float>(vols2.data()));
+      auto* pod2 = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f2));
+
+      mergeSinkProps(props, pod2);
+
+      // Hardware flag should be preserved
+      CHECK(props.channelVolumesAreHardware == true);
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == true);
+    }
+
+    SECTION("Builder flag propagation")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
+      auto const vols = std::array{0.5F, 0.5F};
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto const* prop = ::spa_pod_find_prop(pod, nullptr, SPA_PROP_channelVolumes);
+      REQUIRE(prop != nullptr);
+      CHECK((prop->flags & SPA_POD_PROP_FLAG_HARDWARE) != 0);
     }
   }
 

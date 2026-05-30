@@ -943,7 +943,10 @@ namespace ao::audio::backend
     if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
     {
       auto const& sinkProps = propsIt->second;
-      node.volumeNotUnity = !sinkProps.isUnity();
+      auto const volumeCls = sinkProps.classifyVolume();
+      node.hardwareVolumeNotUnity = volumeCls.hardwareNotUnity;
+      node.softwareVolumeNotUnity = volumeCls.softwareNotUnity;
+      node.unclassifiedVolumeNotUnity = volumeCls.unclassifiedNotUnity;
       node.isMuted = sinkProps.isMuted || sinkProps.isSoftMuted;
     }
 

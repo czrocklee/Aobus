@@ -57,8 +57,7 @@ add_library(aobus-gtk-lib STATIC
 
     playback/AobusSoulWindow.cpp
     playback/AudioQualityCss.cpp
-    playback/AudioQualityTooltipController.cpp
-    playback/AudioQualityTooltipWidget.cpp
+    playback/AudioPipelinePanel.cpp
     playback/NowPlayingFieldLabel.cpp
     playback/NowPlayingStatusLabel.cpp
     playback/PlaybackDetailsWidget.cpp
@@ -85,6 +84,8 @@ add_library(aobus-gtk-lib STATIC
     layout/document/GtkLayoutPresets.cpp
     layout/runtime/LayoutRuntime.cpp
     layout/runtime/ComponentRegistry.cpp
+    layout/runtime/ComponentTooltipController.cpp
+    layout/runtime/DecoratedLayoutComponent.cpp
     layout/runtime/ActionRegistry.cpp
     layout/runtime/GioActionBridge.cpp
     layout/runtime/ActionValidator.cpp

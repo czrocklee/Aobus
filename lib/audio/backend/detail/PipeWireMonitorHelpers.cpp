@@ -286,6 +286,13 @@ namespace ao::audio::backend::detail
     {
       if (float val = 0.0F; ::spa_pod_get_float(&prop->value, &val) == 0)
       {
+        sinkProps.hasVolume = true;
+
+        if ((prop->flags & SPA_POD_PROP_FLAG_HARDWARE) != 0)
+        {
+          sinkProps.volumeIsHardware = true;
+        }
+
         sinkProps.volume = val;
       }
     }
@@ -300,7 +307,15 @@ namespace ao::audio::backend::detail
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes); prop != nullptr)
     {
-      copyFloatArray(prop->value, sinkProps.channelVolumes);
+      if (copyFloatArray(prop->value, sinkProps.channelVolumes))
+      {
+        sinkProps.hasChannelVolumes = true;
+
+        if ((prop->flags & SPA_POD_PROP_FLAG_HARDWARE) != 0)
+        {
+          sinkProps.channelVolumesAreHardware = true;
+        }
+      }
     }
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softMute); prop != nullptr)
@@ -313,30 +328,38 @@ namespace ao::audio::backend::detail
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes); prop != nullptr)
     {
-      copyFloatArray(prop->value, sinkProps.softVolumes);
+      if (copyFloatArray(prop->value, sinkProps.softVolumes))
+      {
+        sinkProps.hasSoftVolumes = true;
+      }
     }
   }
 
-  bool SinkProps::isUnity() const noexcept
+  SinkProps::VolumeClassification SinkProps::classifyVolume() const noexcept
   {
     static constexpr float kUnityEpsilon = 1e-4F;
-    auto const checkUnity = [](float val) { return std::abs(val - 1.0F) < kUnityEpsilon; };
+    auto const isNotUnity = [](float val) { return std::abs(val - 1.0F) >= kUnityEpsilon; };
 
-    if (!checkUnity(volume))
+    auto cls = VolumeClassification{};
+
+    if (hasSoftVolumes && std::ranges::any_of(softVolumes, isNotUnity))
     {
-      return false;
+      cls.softwareNotUnity = true;
     }
 
-    if (!channelVolumes.empty() && !std::ranges::all_of(channelVolumes, checkUnity))
+    bool const channelNotUnity = hasChannelVolumes && std::ranges::any_of(channelVolumes, isNotUnity);
+    bool const scalarNotUnity = hasVolume && isNotUnity(volume);
+
+    if ((channelNotUnity && channelVolumesAreHardware) || (scalarNotUnity && volumeIsHardware))
     {
-      return false;
+      cls.hardwareNotUnity = true;
     }
 
-    if (!softVolumes.empty() && !std::ranges::all_of(softVolumes, checkUnity))
+    if ((channelNotUnity || scalarNotUnity) && !cls.hardwareNotUnity && !cls.softwareNotUnity)
     {
-      return false;
+      cls.unclassifiedNotUnity = true;
     }
 
-    return true;
+    return cls;
   }
 } // namespace ao::audio::backend::detail

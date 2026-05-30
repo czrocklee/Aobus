@@ -55,7 +55,7 @@ namespace ao::uimodel::playback
     std::string navigateQuery;
   };
 
-  struct AudioQualityTooltipView final
+  struct AudioPipelineView final
   {
     audio::flow::Graph flow{};
     audio::Quality quality = audio::Quality::Unknown;
@@ -66,7 +66,7 @@ namespace ao::uimodel::playback
   struct NowPlayingViewState final
   {
     std::string streamInfo;
-    AudioQualityTooltipView audioQualityTooltip{};
+    AudioPipelineView audioPipeline{};
     AudioQualityCategory qualityCategory = AudioQualityCategory::Unknown;
     bool isActive = false;
 

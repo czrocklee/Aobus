@@ -5,10 +5,7 @@
 
 #include "app/AobusSoul.h"
 #include "playback/AobusSoulWindow.h"
-#include "playback/AudioQualityTooltipController.h"
-#include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/widget.h>
@@ -55,8 +52,6 @@ namespace ao::gtk
     AobusSoul _soul;
 
     bool _longPressHandled = false;
-    AudioQualityTooltipController _richTooltipController;
     uimodel::playback::AobusSoulViewModel _soulController;
-    uimodel::playback::NowPlayingViewModel _tooltipViewModel;
   };
 } // namespace ao::gtk

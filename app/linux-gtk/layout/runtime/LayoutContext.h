@@ -78,8 +78,15 @@ namespace ao::gtk::layout
     portal::ImportExportCoordinator* coordinator = nullptr;
   };
 
+  enum class LayoutSurface : std::uint8_t
+  {
+    Main,
+    Tooltip,
+  };
+
   struct LayoutContext final
   {
+    LayoutSurface surface = LayoutSurface::Main;
     ComponentRegistry const& registry;
     ActionRegistry const& actionRegistry;
     rt::AppRuntime& runtime;

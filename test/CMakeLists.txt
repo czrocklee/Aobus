@@ -206,7 +206,7 @@ add_executable(ao_test_gtk
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp
       unit/linux-gtk/app/AppConfigTest.cpp
-    unit/linux-gtk/playback/AudioQualityTooltipWidgetTest.cpp
+    unit/linux-gtk/playback/AudioPipelinePanelTest.cpp
     unit/linux-gtk/playback/PlaybackUiComponentsTest.cpp
     unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
     unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp

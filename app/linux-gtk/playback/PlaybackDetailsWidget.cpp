@@ -30,8 +30,6 @@ namespace ao::gtk
 
     _container.append(_streamInfoLabel);
     _container.append(_sinkStatusIcon);
-
-    _tooltipController.attach(_container);
   }
 
   PlaybackDetailsWidget::~PlaybackDetailsWidget() = default;
@@ -39,8 +37,6 @@ namespace ao::gtk
   void PlaybackDetailsWidget::applyState(ao::uimodel::playback::NowPlayingViewState const& view)
   {
     _streamInfoLabel.set_text(view.streamInfo);
-
-    _tooltipController.apply(view.audioQualityTooltip);
 
     clearQualityCssClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(view.isActive);

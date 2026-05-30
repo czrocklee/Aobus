@@ -43,6 +43,12 @@ namespace ao::uimodel::playback
           audio::Quality::LossySource);
     CHECK(qualityForFinding(audio::QualityFinding{.kind = audio::QualityFindingKind::Resampling}) ==
           audio::Quality::LinearIntervention);
+    CHECK(qualityForFinding(audio::QualityFinding{.kind = audio::QualityFindingKind::SoftwareVolumeModification}) ==
+          audio::Quality::LinearIntervention);
+    CHECK(qualityForFinding(audio::QualityFinding{.kind = audio::QualityFindingKind::HardwareVolumeModification}) ==
+          audio::Quality::BitwisePerfect);
+    CHECK(qualityForFinding(audio::QualityFinding{.kind = audio::QualityFindingKind::UnclassifiedVolumeModification}) ==
+          audio::Quality::LinearIntervention);
     CHECK(qualityForFinding(audio::QualityFinding{.kind = audio::QualityFindingKind::LosslessPadding}) ==
           audio::Quality::LosslessPadded);
     CHECK(qualityForFinding(audio::QualityFinding{.kind = audio::QualityFindingKind::LosslessFloat}) ==

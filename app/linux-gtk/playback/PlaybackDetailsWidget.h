@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "playback/AudioQualityTooltipController.h"
 #include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gtkmm/box.h>
@@ -46,7 +45,6 @@ namespace ao::gtk
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
 
-    AudioQualityTooltipController _tooltipController;
     uimodel::playback::NowPlayingViewModel _controller;
   };
 } // namespace ao::gtk

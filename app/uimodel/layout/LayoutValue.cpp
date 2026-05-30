@@ -3,8 +3,10 @@
 
 #include <ao/uimodel/layout/LayoutNode.h>
 
+#include <memory>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -54,4 +56,31 @@ namespace ao::uimodel::layout
 
     return {};
   }
+
+  BoxedLayoutNode::BoxedLayoutNode() = default;
+
+  BoxedLayoutNode::BoxedLayoutNode(LayoutNode value)
+    : nodePtr{std::make_unique<LayoutNode>(std::move(value))}
+  {
+  }
+
+  BoxedLayoutNode::BoxedLayoutNode(BoxedLayoutNode const& other)
+    : nodePtr{other.nodePtr ? std::make_unique<LayoutNode>(*other.nodePtr) : nullptr}
+  {
+  }
+
+  BoxedLayoutNode& BoxedLayoutNode::operator=(BoxedLayoutNode const& other)
+  {
+    if (this != &other)
+    {
+      nodePtr = other.nodePtr ? std::make_unique<LayoutNode>(*other.nodePtr) : nullptr;
+    }
+
+    return *this;
+  }
+
+  BoxedLayoutNode::BoxedLayoutNode(BoxedLayoutNode&&) noexcept = default;
+  BoxedLayoutNode& BoxedLayoutNode::operator=(BoxedLayoutNode&&) noexcept = default;
+
+  BoxedLayoutNode::~BoxedLayoutNode() = default;
 }

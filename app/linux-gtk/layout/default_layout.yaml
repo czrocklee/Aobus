@@ -102,6 +102,10 @@ templates:
               primaryAction: playback.showAudioDeviceSelector
               secondaryAction: shell.showSystemMenu
               secondaryLongPressAction: shell.showSoul
+            tooltip:
+              type: playback.audioPipelinePanel
+              props:
+                variant: tooltip
             layout:
               halign: start
               valign: center

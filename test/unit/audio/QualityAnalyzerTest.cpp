@@ -113,16 +113,57 @@ namespace ao::audio::test
     REQUIRE(eng->worstQuality == Quality::LinearIntervention);
   }
 
-  TEST_CASE("QualityAnalyzer - Volume Modification", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - Software Volume Modification", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
-    graph.nodes[1].volumeNotUnity = true;
+    graph.nodes[1].softwareVolumeNotUnity = true;
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
 
     auto const* eng = findAssessment(result, "ao-engine");
-    REQUIRE(hasFinding(eng, QualityFindingKind::VolumeModification));
+    REQUIRE(hasFinding(eng, QualityFindingKind::SoftwareVolumeModification));
+    REQUIRE(eng->worstQuality == Quality::LinearIntervention);
+  }
+
+  TEST_CASE("QualityAnalyzer - Hardware Volume Modification", "[audio][unit][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+    graph.nodes[1].hardwareVolumeNotUnity = true;
+
+    auto const result = analyzeAudioQuality(graph);
+    REQUIRE(result.quality == Quality::BitwisePerfect);
+
+    auto const* eng = findAssessment(result, "ao-engine");
+    REQUIRE(hasFinding(eng, QualityFindingKind::HardwareVolumeModification));
+    REQUIRE(eng->worstQuality == Quality::BitwisePerfect);
+  }
+
+  TEST_CASE("QualityAnalyzer - Unclassified Volume Modification", "[audio][unit][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+    graph.nodes[1].unclassifiedVolumeNotUnity = true;
+
+    auto const result = analyzeAudioQuality(graph);
+    REQUIRE(result.quality == Quality::LinearIntervention);
+
+    auto const* eng = findAssessment(result, "ao-engine");
+    REQUIRE(hasFinding(eng, QualityFindingKind::UnclassifiedVolumeModification));
+    REQUIRE(eng->worstQuality == Quality::LinearIntervention);
+  }
+
+  TEST_CASE("QualityAnalyzer - Mixed Hardware and Software Volume", "[audio][unit][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+    graph.nodes[1].hardwareVolumeNotUnity = true;
+    graph.nodes[1].softwareVolumeNotUnity = true;
+
+    auto const result = analyzeAudioQuality(graph);
+    REQUIRE(result.quality == Quality::LinearIntervention);
+
+    auto const* eng = findAssessment(result, "ao-engine");
+    REQUIRE(hasFinding(eng, QualityFindingKind::HardwareVolumeModification));
+    REQUIRE(hasFinding(eng, QualityFindingKind::SoftwareVolumeModification));
     REQUIRE(eng->worstQuality == Quality::LinearIntervention);
   }
 
