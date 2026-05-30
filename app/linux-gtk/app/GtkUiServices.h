@@ -38,6 +38,6 @@ namespace ao::gtk
     portal::ImportExportCoordinator* importExportCoordinator = nullptr;
     TrackPageHost* trackPageHost = nullptr;
     uimodel::track::TrackPresentationViewModel* trackPresentationStore = nullptr;
-    ListNavigationController* listSidebarController = nullptr;
+    ListNavigationController* listNavigationController = nullptr;
   };
 } // namespace ao::gtk

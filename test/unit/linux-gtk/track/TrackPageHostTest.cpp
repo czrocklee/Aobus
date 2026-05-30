@@ -37,15 +37,15 @@ namespace ao::gtk::test
     auto tagEditCallbacks = TagEditController::Callbacks{};
     auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks)};
 
-    auto sidebarCallbacks = ListNavigationController::Callbacks{};
-    auto listSidebar = ListNavigationController{window, runtime, std::move(sidebarCallbacks)};
+    auto navCallbacks = ListNavigationController::Callbacks{};
+    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks)};
 
     auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
     auto queueModel = uimodel::playback::PlaybackQueueModel{
       runtime.playback(), [&cache](TrackId id) { return cache.playbackDescriptor(id); }};
 
     auto host =
-      TrackPageHost{stack, runtime, &queueModel, tagEditController, listSidebar, presentationStore, &imageCache};
+      TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, presentationStore, &imageCache};
 
     SECTION("initial state")
     {

@@ -28,7 +28,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class TrackRowCache;
-  class ListSidebarPanel;
+  class ListNavigationPanel;
 
   class ListNavigationController final
   {
@@ -77,7 +77,7 @@ namespace ao::gtk
     rt::AppRuntime& _runtime;
     TrackRowCache* _dataProvider = nullptr;
 
-    std::unique_ptr<ListSidebarPanel> _panelPtr;
+    std::unique_ptr<ListNavigationPanel> _panelPtr;
 
     Glib::RefPtr<Gio::SimpleAction> _newListActionPtr;
     Glib::RefPtr<Gio::SimpleAction> _deleteListActionPtr;

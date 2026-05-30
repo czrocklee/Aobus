@@ -33,7 +33,7 @@ namespace ao::gtk::test
     auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks)};
     window.set_child(controller.widget());
 
-    SECTION("rebuildTree populates the sidebar")
+    SECTION("rebuildTree populates the navigation panel")
     {
       {
         auto txn = fixture.runtime().musicLibrary().writeTransaction();
@@ -48,7 +48,7 @@ namespace ao::gtk::test
       controller.rebuildTree(cache, txn);
       drainGtkEvents();
 
-      // Sidebar should contain "All Tracks" and "Test List"
+      // Navigation panel should contain "All Tracks" and "Test List"
     }
 
     SECTION("select triggers callback")

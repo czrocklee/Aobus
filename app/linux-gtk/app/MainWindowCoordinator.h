@@ -7,8 +7,6 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 
-#include <gtkmm/stack.h>
-
 #include <memory>
 
 namespace ao::lmdb
@@ -19,6 +17,10 @@ namespace ao::lmdb
 namespace ao::uimodel::playback
 {
   class PlaybackQueueModel;
+}
+namespace ao::uimodel::track
+{
+  class TrackPresentationViewModel;
 }
 namespace ao::gtk
 {
@@ -56,16 +58,16 @@ namespace ao::gtk
 
     void rebuildListPages(lmdb::ReadTransaction const& txn);
 
-    TrackRowCache* trackRowCache() { return _trackRowCachePtr.get(); }
-    ImageCache* imageCache() { return _imageCachePtr.get(); }
-    uimodel::playback::PlaybackQueueModel* playbackQueueModel() { return _playbackQueueModelPtr.get(); }
-    TagEditController* tagEditController() { return _tagEditControllerPtr.get(); }
-    portal::ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinatorPtr.get(); }
-    TrackPageHost* trackPageHost() { return _trackPageHostPtr.get(); }
-    ListNavigationController* listSidebarController() { return _listSidebarControllerPtr.get(); }
-    uimodel::track::TrackPresentationViewModel* trackPresentationStore() { return _trackPresentationStorePtr.get(); }
+    TrackRowCache* trackRowCache();
+    ImageCache* imageCache();
+    uimodel::playback::PlaybackQueueModel* playbackQueueModel();
+    TagEditController* tagEditController();
+    portal::ImportExportCoordinator* importExportCoordinator();
+    TrackPageHost* trackPageHost();
+    ListNavigationController* listNavigationController();
+    uimodel::track::TrackPresentationViewModel* trackPresentationStore();
 
-    portal::ImportExportCoordinator& importExport() { return *_importExportCoordinatorPtr; }
+    portal::ImportExportCoordinator& importExport();
 
   private:
     void saveColumnLayout();
@@ -73,18 +75,8 @@ namespace ao::gtk
     MainWindow& _window;
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfig> _configPtr;
-    std::unique_ptr<GtkLayoutConfig> _layoutConfigPtr;
-
-    std::unique_ptr<TrackRowCache> _trackRowCachePtr;
-    std::unique_ptr<ImageCache> _imageCachePtr;
-    std::unique_ptr<TagEditController> _tagEditControllerPtr;
-    std::unique_ptr<ListNavigationController> _listSidebarControllerPtr;
-    std::unique_ptr<uimodel::track::TrackPresentationViewModel> _trackPresentationStorePtr;
-    std::unique_ptr<TrackPageHost> _trackPageHostPtr;
-    std::unique_ptr<uimodel::playback::PlaybackQueueModel> _playbackQueueModelPtr;
-    std::unique_ptr<portal::ImportExportCoordinator> _importExportCoordinatorPtr;
-
-    Gtk::Stack _stack;
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
 
     rt::Subscription _tracksMutatedSubscription;
     rt::Subscription _libraryTaskProgressSubscription;

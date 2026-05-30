@@ -56,13 +56,13 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (ctx.list.sidebarController == nullptr)
+        if (ctx.list.navigationController == nullptr)
         {
-          _error = Gtk::make_managed<Gtk::Label>("Error: listSidebarController missing");
+          _error = Gtk::make_managed<Gtk::Label>("Error: listNavigationController missing");
           return;
         }
 
-        _controller = ctx.list.sidebarController;
+        _controller = ctx.list.navigationController;
 
         // Initial rebuild
         auto const txn = ctx.runtime.musicLibrary().readTransaction();
@@ -268,12 +268,12 @@ namespace ao::gtk::layout
     };
 
     /**
-     * @brief inspector.sidebar
+     * @brief inspector.panel
      */
-    class InspectorSidebarComponent final : public ILayoutComponent
+    class InspectorPanelComponent final : public ILayoutComponent
     {
     public:
-      InspectorSidebarComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      InspectorPanelComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
       {
         if (ctx.inspector.imageCache == nullptr)
         {
@@ -367,7 +367,7 @@ namespace ao::gtk::layout
 
         // Inspector side panel.
         // Matching original MainWindow setupLayout order and properties.
-        _inspectorPtr = std::make_unique<InspectorSidebarComponent>(ctx, node);
+        _inspectorPtr = std::make_unique<InspectorPanelComponent>(ctx, node);
         _inspectorPtr->widget().set_vexpand(true);
         _revealer.set_transition_type(Gtk::RevealerTransitionType::SLIDE_LEFT);
         _revealer.set_child(_inspectorPtr->widget());
@@ -486,8 +486,8 @@ namespace ao::gtk::layout
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<ImageComponent>(ctx, node); });
 
-    registry.registerComponent({.type = "inspector.sidebar",
-                                .displayName = "Inspector Sidebar",
+    registry.registerComponent({.type = "inspector.panel",
+                                .displayName = "Inspector Panel",
                                 .category = "Inspector",
                                 .container = false,
                                 .props = {},
@@ -495,7 +495,7 @@ namespace ao::gtk::layout
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<InspectorSidebarComponent>(ctx, node); });
+                               { return std::make_unique<InspectorPanelComponent>(ctx, node); });
 
     registry.registerComponent({.type = "app.menuBar",
                                 .displayName = "Menu Bar",

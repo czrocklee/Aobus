@@ -34,7 +34,7 @@ namespace ao::gtk
 {
   class ListTreeItem;
 
-  class ListSidebarPanel final
+  class ListNavigationPanel final
   {
   public:
     struct Callbacks final
@@ -43,14 +43,14 @@ namespace ao::gtk
       std::function<void(ListId, Gdk::Rectangle const&)> onContextMenuRequested;
     };
 
-    ListSidebarPanel(Callbacks callbacks);
-    ~ListSidebarPanel();
+    ListNavigationPanel(Callbacks callbacks);
+    ~ListNavigationPanel();
 
     // Not copyable or movable
-    ListSidebarPanel(ListSidebarPanel const&) = delete;
-    ListSidebarPanel& operator=(ListSidebarPanel const&) = delete;
-    ListSidebarPanel(ListSidebarPanel&&) = delete;
-    ListSidebarPanel& operator=(ListSidebarPanel&&) = delete;
+    ListNavigationPanel(ListNavigationPanel const&) = delete;
+    ListNavigationPanel& operator=(ListNavigationPanel const&) = delete;
+    ListNavigationPanel(ListNavigationPanel&&) = delete;
+    ListNavigationPanel& operator=(ListNavigationPanel&&) = delete;
 
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
@@ -62,10 +62,10 @@ namespace ao::gtk
     void showContextMenu(Gdk::Rectangle const& rect);
 
   private:
-    static constexpr int kSidebarWidth = 200;
+    static constexpr int kDefaultWidth = 200;
 
-    void setupSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
-    void bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
+    void setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
+    void bindNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems) const;
 
     Callbacks _callbacks;

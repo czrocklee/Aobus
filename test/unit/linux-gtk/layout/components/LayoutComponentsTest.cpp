@@ -277,7 +277,7 @@ namespace ao::gtk::layout::test
       CHECK(label->get_label().find("trackRowCache missing") != std::string::npos);
     }
 
-    SECTION("library.listTree shows error when listSidebarController missing")
+    SECTION("library.listTree shows error when listNavigationController missing")
     {
       auto const rdpPtr = std::make_unique<TrackRowCache>(runtime.musicLibrary());
       ctx.track.trackRowCache = rdpPtr.get();
@@ -288,7 +288,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("listSidebarController missing") != std::string::npos);
+      CHECK(label->get_label().find("listNavigationController missing") != std::string::npos);
     }
 
     SECTION("tracks.table shows error when trackPageGraph missing")
@@ -321,9 +321,9 @@ namespace ao::gtk::layout::test
       CHECK(label->get_label().find("imageCache missing") != std::string::npos);
     }
 
-    SECTION("inspector.sidebar shows error when imageCache missing")
+    SECTION("inspector.panel shows error when imageCache missing")
     {
-      auto const node = LayoutNode{.type = "inspector.sidebar"};
+      auto const node = LayoutNode{.type = "inspector.panel"};
       auto const compPtr = registry.create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
@@ -438,16 +438,16 @@ namespace ao::gtk::layout::test
       CHECK(label == nullptr);
     }
 
-    SECTION("inspector.sidebar creates TrackInspectorPanel when cache available")
+    SECTION("inspector.panel creates TrackInspectorPanel when cache available")
     {
-      auto const node = LayoutNode{.type = "inspector.sidebar"};
+      auto const node = LayoutNode{.type = "inspector.panel"};
       auto const compPtr = registry.create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
 
       auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       CHECK(label == nullptr);
-      CHECK(compPtr->widget().has_css_class("ao-inspector-sidebar"));
+      CHECK(compPtr->widget().has_css_class("ao-inspector-pane"));
     }
   }
 
@@ -475,7 +475,7 @@ namespace ao::gtk::layout::test
                                                           "tracks.table",
                                                           "library.openLibraryButton",
                                                           "inspector.image",
-                                                          "inspector.sidebar",
+                                                          "inspector.panel",
                                                           "app.menuBar",
                                                           "app.workspaceWithInspector",
                                                           "status.playbackDetails",

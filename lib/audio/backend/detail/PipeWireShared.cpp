@@ -31,8 +31,8 @@ namespace ao::audio::backend::detail
 
     PipeWireRuntimeState& pipeWireRuntimeState()
     {
-      static auto* const state = new PipeWireRuntimeState{};
-      return *state;
+      static PipeWireRuntimeState state;
+      return state;
     }
   } // namespace
 

@@ -18,12 +18,12 @@ root:
       layout:
         vexpand: true
       children:
-        - id: left-sidebar
+        - id: list-pane
           type: box
           props:
             orientation: vertical
           layout:
-            cssClasses: ao-modern-sidebar
+            cssClasses: ao-modern-list-pane
           children:
             - type: library.listTree
               layout:

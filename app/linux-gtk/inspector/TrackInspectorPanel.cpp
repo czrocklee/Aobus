@@ -112,7 +112,7 @@ namespace ao::gtk
 
   void TrackInspectorPanel::setupUi()
   {
-    add_css_class("ao-inspector-sidebar");
+    add_css_class("ao-inspector-pane");
 
     _scrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _scrolledWindow.set_child(_contentBox);

@@ -48,7 +48,7 @@ add_library(aobus-gtk-lib STATIC
     track/TrackFieldUi.cpp
 
     list/ListNavigationController.cpp
-    list/ListSidebarPanel.cpp
+    list/ListNavigationPanel.cpp
     list/ListTreeModelBuilder.cpp
     list/ListRowObject.cpp
     list/ListTreeItem.cpp

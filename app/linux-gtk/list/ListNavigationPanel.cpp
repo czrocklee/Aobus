@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "list/ListSidebarPanel.h"
+#include "list/ListNavigationPanel.h"
 
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
@@ -40,18 +40,18 @@ namespace ao::gtk
     constexpr guint kInvalidListPosition = std::numeric_limits<guint>::max();
   }
 
-  ListSidebarPanel::ListSidebarPanel(Callbacks callbacks)
+  ListNavigationPanel::ListNavigationPanel(Callbacks callbacks)
     : _callbacks{std::move(callbacks)}
   {
     _listScrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _listScrolledWindow.set_child(_listView);
-    _listScrolledWindow.set_size_request(kSidebarWidth, -1);
+    _listScrolledWindow.set_size_request(kDefaultWidth, -1);
 
     auto factoryPtr = Gtk::SignalListItemFactory::create();
     factoryPtr->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                       { setupSidebarListItem(listItem); });
+                                       { setupNavListItem(listItem); });
     factoryPtr->signal_bind().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                      { bindSidebarListItem(listItem); });
+                                      { bindNavListItem(listItem); });
 
     _listView.set_factory(factoryPtr);
 
@@ -63,12 +63,12 @@ namespace ao::gtk
     _listContextMenu.set_parent(_listView);
   }
 
-  ListSidebarPanel::~ListSidebarPanel()
+  ListNavigationPanel::~ListNavigationPanel()
   {
     _listContextMenu.unparent();
   }
 
-  void ListSidebarPanel::rebuildTree(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn)
+  void ListNavigationPanel::rebuildTree(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn)
   {
     auto result = ListTreeModelBuilder::build(runtime, txn);
     _nodesById = std::move(result.nodesById);
@@ -76,11 +76,11 @@ namespace ao::gtk
     _treeListModelPtr = std::move(result.treeModelPtr);
     _listSelectionModelPtr = std::move(result.selectionModelPtr);
     _listSelectionModelPtr->signal_selection_changed().connect(
-      sigc::mem_fun(*this, &ListSidebarPanel::onListSelectionChanged));
+      sigc::mem_fun(*this, &ListNavigationPanel::onListSelectionChanged));
     _listView.set_model(_listSelectionModelPtr);
   }
 
-  void ListSidebarPanel::selectList(ListId listId)
+  void ListNavigationPanel::selectList(ListId listId)
   {
     if (!_treeListModelPtr)
     {
@@ -109,7 +109,7 @@ namespace ao::gtk
     }
   }
 
-  bool ListSidebarPanel::listHasChildren(ListId listId) const
+  bool ListNavigationPanel::listHasChildren(ListId listId) const
   {
     if (auto it = _nodesById.find(listId); it != _nodesById.end())
     {
@@ -119,7 +119,7 @@ namespace ao::gtk
     return false;
   }
 
-  ListId ListSidebarPanel::selectedListId() const
+  ListId ListNavigationPanel::selectedListId() const
   {
     if (_listSelectionModelPtr == nullptr)
     {
@@ -151,18 +151,18 @@ namespace ao::gtk
     return nodePtr->listId();
   }
 
-  void ListSidebarPanel::showContextMenu(Gdk::Rectangle const& rect)
+  void ListNavigationPanel::showContextMenu(Gdk::Rectangle const& rect)
   {
     _listContextMenu.set_pointing_to(rect);
     _listContextMenu.popup();
   }
 
-  void ListSidebarPanel::setupSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
+  void ListNavigationPanel::setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
   {
     auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     rowBox->set_halign(Gtk::Align::FILL);
     rowBox->set_hexpand(true);
-    rowBox->add_css_class("ao-sidebar-row");
+    rowBox->add_css_class("ao-list-row");
 
     auto* expander = Gtk::make_managed<Gtk::TreeExpander>();
     rowBox->append(*expander);
@@ -174,7 +174,7 @@ namespace ao::gtk
     auto* filterLabel = Gtk::make_managed<Gtk::Label>("");
     filterLabel->set_halign(Gtk::Align::START);
     filterLabel->add_css_class("dim-label");
-    filterLabel->add_css_class("ao-sidebar-filter-label");
+    filterLabel->add_css_class("ao-list-filter-label");
     filterLabel->set_ellipsize(Pango::EllipsizeMode::END);
     filterLabel->set_hexpand(true);
     rowBox->append(*filterLabel);
@@ -210,7 +210,7 @@ namespace ao::gtk
     listItem->set_child(*rowBox);
   }
 
-  void ListSidebarPanel::bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
+  void ListNavigationPanel::bindNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
   {
     auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(listItem->get_item());
 
@@ -267,7 +267,7 @@ namespace ao::gtk
     }
   }
 
-  void ListSidebarPanel::onListSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/) const
+  void ListNavigationPanel::onListSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/) const
   {
     if (_callbacks.onSelectionChanged)
     {

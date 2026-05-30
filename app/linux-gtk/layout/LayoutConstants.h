@@ -20,6 +20,6 @@ namespace ao::gtk::layout
   constexpr int kTransitionDurationMs = 250;
 
   // UI Element sizing
-  constexpr int kDefaultSidebarWidth = 330;
+  constexpr int kDefaultListPaneWidth = 330;
   constexpr int kMinCoverArtHeight = 50;
 } // namespace ao::gtk::layout

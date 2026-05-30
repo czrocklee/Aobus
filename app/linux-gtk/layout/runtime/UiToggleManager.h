@@ -13,7 +13,7 @@
 namespace ao::gtk::layout
 {
   /**
-   * @brief Manages boolean toggle states for UI elements like sidebars and revealers.
+   * @brief Manages boolean toggle states for UI elements like panes and revealers.
    *
    * This is a GTK-layer service that decouples UI visibility states from the core runtime.
    */

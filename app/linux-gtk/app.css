@@ -236,12 +236,12 @@ listbox.ao-boxed-list > row entry.flat-entry:focus {
   margin-top: var(--ao-spacing-xl);
 }
 
-/* Sidebar */
-.ao-sidebar-row {
+/* Navigation */
+.ao-list-row {
   padding: var(--ao-spacing-sm) var(--ao-spacing-md);
 }
 
-.ao-sidebar-filter-label {
+.ao-list-filter-label {
   margin-left: var(--ao-spacing-md);
 }
 
@@ -703,8 +703,43 @@ columnview row.ao-missing-row label {
 
 /* ===== Modern Shell & Table Scoping ===== */
 
-.ao-layout-preset-modern .ao-modern-sidebar {
+.ao-layout-preset-modern .ao-modern-list-pane {
   background: alpha(@theme_bg_color, 0.4);
+}
+
+/* Navigation Rail (Modern) */
+.ao-layout-preset-modern .ao-modern-list-pane listview {
+  background: transparent;
+}
+
+.ao-layout-preset-modern .ao-modern-list-pane listview > row {
+  border-radius: 6px;
+  margin: 2px 8px;
+  border: 1px solid transparent;
+  transition: background-color 150ms ease;
+}
+
+.ao-layout-preset-modern .ao-modern-list-pane .ao-list-row {
+  padding: 6px 8px;
+}
+
+.ao-layout-preset-modern .ao-modern-list-pane listview > row:hover {
+  background-color: alpha(currentColor, 0.04);
+}
+
+.ao-layout-preset-modern .ao-modern-list-pane listview > row:selected {
+  background-color: alpha(@theme_selected_bg_color, 0.1);
+  border-color: alpha(@theme_selected_bg_color, 0.05);
+  color: inherit;
+}
+
+.ao-layout-preset-modern .ao-modern-list-pane listview > row:selected:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.14);
+}
+
+.ao-layout-preset-modern .ao-modern-list-pane listview > row:selected label:not(.ao-list-filter-label) {
+  color: @theme_selected_bg_color;
+  font-weight: 600;
 }
 
 /* Modern Content Shell (the card surface) */

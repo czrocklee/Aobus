@@ -3,7 +3,7 @@
 
 #include "list/ListNavigationController.h"
 
-#include "list/ListSidebarPanel.h"
+#include "list/ListNavigationPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
@@ -37,13 +37,13 @@ namespace ao::gtk
   ListNavigationController::ListNavigationController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks)
     : _parent{parent}, _callbacks{std::move(callbacks)}, _runtime{runtime}
   {
-    auto panelCallbacks = ListSidebarPanel::Callbacks{
+    auto panelCallbacks = ListNavigationPanel::Callbacks{
       .onSelectionChanged = [this](ListId listId) { onSelectionChanged(listId); },
       .onContextMenuRequested = [this](ListId listId, Gdk::Rectangle const& rect)
       { onContextMenuRequested(listId, rect); },
     };
 
-    _panelPtr = std::make_unique<ListSidebarPanel>(std::move(panelCallbacks));
+    _panelPtr = std::make_unique<ListNavigationPanel>(std::move(panelCallbacks));
     setupActions();
 
     _focusSub = _runtime.workspace().onFocusedViewChanged(

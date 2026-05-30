@@ -50,7 +50,7 @@ namespace ao::gtk::layout
 
   struct ListUiContext final
   {
-    ListNavigationController* sidebarController = nullptr;
+    ListNavigationController* navigationController = nullptr;
   };
 
   struct PlaybackUiContext final
@@ -101,7 +101,7 @@ namespace ao::gtk::layout
       track.pageHost = services.trackPageHost;
       track.presentationStore = services.trackPresentationStore;
       track.trackRowCache = services.trackRowCache;
-      list.sidebarController = services.listSidebarController;
+      list.navigationController = services.listNavigationController;
       playback.queueModel = services.playbackQueueModel;
       inspector.imageCache = services.imageCache;
       tag.editController = services.tagEditController;

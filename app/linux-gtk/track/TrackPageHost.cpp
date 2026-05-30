@@ -45,14 +45,14 @@ namespace ao::gtk
                                rt::AppRuntime& runtime,
                                ao::uimodel::playback::PlaybackQueueModel* queueModel,
                                TagEditController& tagEditController,
-                               ListNavigationController& listSidebar,
+                               ListNavigationController& listNavigation,
                                uimodel::track::TrackPresentationViewModel& presentationStore,
                                ImageCache* imageCache)
     : _stack{stack}
     , _runtime{runtime}
     , _playbackQueueModel{queueModel}
     , _tagEditController{tagEditController}
-    , _listSidebar{listSidebar}
+    , _listNavigation{listNavigation}
     , _presentationStore{presentationStore}
     , _imageCache{imageCache}
   {
@@ -398,7 +398,7 @@ namespace ao::gtk
       [this, page](std::string const& expression)
       {
         auto const parentId = ao::uimodel::track::smartListParentIdFromPage(page->listId());
-        _listSidebar.createSmartListFromExpression(parentId, expression);
+        _listNavigation.createSmartListFromExpression(parentId, expression);
       });
 
     // Set initial playing track state

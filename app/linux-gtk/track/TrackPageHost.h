@@ -53,7 +53,7 @@ namespace ao::gtk
                   rt::AppRuntime& runtime,
                   uimodel::playback::PlaybackQueueModel* queueModel,
                   TagEditController& tagEditController,
-                  ListNavigationController& listSidebar,
+                  ListNavigationController& listNavigation,
                   uimodel::track::TrackPresentationViewModel& presentationStore,
                   ImageCache* imageCache);
     ~TrackPageHost();
@@ -96,7 +96,7 @@ namespace ao::gtk
     rt::AppRuntime& _runtime;
     uimodel::playback::PlaybackQueueModel* _playbackQueueModel;
     TagEditController& _tagEditController;
-    ListNavigationController& _listSidebar;
+    ListNavigationController& _listNavigation;
     uimodel::track::TrackPresentationViewModel& _presentationStore;
     ImageCache* _imageCache = nullptr;
     rt::Subscription _revealSub;

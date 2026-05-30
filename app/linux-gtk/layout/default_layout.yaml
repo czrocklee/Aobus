@@ -20,7 +20,7 @@ root:
       layout:
         vexpand: true
       children:
-        - id: left-sidebar
+        - id: list-pane
           type: box
           props:
             orientation: vertical
@@ -122,7 +122,7 @@ templates:
         children:
           - type: playback.timeLabel
           - type: playback.volumeControl
-  library.defaultSidebar:
+  library.defaultListPane:
     type: box
     props:
       orientation: vertical
@@ -134,7 +134,7 @@ templates:
         layout:
           minHeight: 50
   inspector.defaultPanel:
-    type: inspector.sidebar
+    type: inspector.panel
   status.defaultBar:
     type: box
     props:

@@ -220,7 +220,7 @@ namespace ao::gtk::layout::editor::test
                                                           "tracks.table",
                                                           "library.openLibraryButton",
                                                           "inspector.image",
-                                                          "inspector.sidebar",
+                                                          "inspector.panel",
                                                           "app.menuBar",
                                                           "app.workspaceWithInspector"});
 
@@ -328,7 +328,7 @@ namespace ao::gtk::layout::editor::test
       CHECK(templates.contains("playback.compactControls"));
       CHECK(templates.contains("playback.transportGroup"));
       CHECK(templates.contains("playback.defaultBar"));
-      CHECK(templates.contains("library.defaultSidebar"));
+      CHECK(templates.contains("library.defaultListPane"));
       CHECK(templates.contains("inspector.defaultPanel"));
       CHECK(templates.contains("status.defaultBar"));
       CHECK(templates.contains("tracks.defaultWorkspace"));
