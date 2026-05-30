@@ -30,6 +30,8 @@ namespace ao::gtk
     void setVolume(float volume);
     float volume() const;
 
+    void setIsHardwareAssisted(bool hw);
+
     VolumeChangedSignal& signalVolumeChanged();
 
   protected:
@@ -45,14 +47,14 @@ namespace ao::gtk
   private:
     friend class VolumeBarTestPeer;
 
+    void updateTooltip();
     void handleAbsoluteClick(double offsetX);
     void handleDragUpdate(double offsetX);
     void handleScroll(double dx, double dy);
 
     float _volume = 1.0F;
     float _dragStartVolume = 0.0F;
+    bool _isHardwareAssisted = false;
     VolumeChangedSignal _volumeChanged;
-
-    static constexpr int kNumSegments = 10;
   };
 } // namespace ao::gtk

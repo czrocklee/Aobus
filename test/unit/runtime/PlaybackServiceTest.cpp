@@ -99,7 +99,14 @@ namespace ao::rt::test
 
           return 0.0F;
         });
-    fakeit::When(Method(spyBackendPtr->mock(), queryProperty)).AlwaysReturn(audio::PropertyInfo{});
+    fakeit::When(Method(spyBackendPtr->mock(), queryProperty))
+      .AlwaysReturn(audio::PropertyInfo{
+        .canRead = true,
+        .canWrite = true,
+        .isAvailable = true,
+        .emitsChangeNotifications = false,
+        .isHardwareAssisted = true,
+      });
     fakeit::When(Method(spyBackendPtr->mock(), backendId)).AlwaysReturn(audio::BackendId{"mock_backend"});
     fakeit::When(Method(spyBackendPtr->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
 
@@ -246,6 +253,7 @@ namespace ao::rt::test
     {
       playbackService.setVolume(0.5F);
       CHECK(playbackService.state().volume == 0.5F);
+      CHECK(playbackService.state().volumeIsHardwareAssisted == true);
 
       playbackService.setMuted(true);
       CHECK(playbackService.state().muted == true);

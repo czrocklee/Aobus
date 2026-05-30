@@ -997,11 +997,28 @@ namespace ao::audio::backend
 
   PropertyInfo AlsaExclusiveBackend::queryProperty(PropertyId id) const noexcept
   {
-    if (id == PropertyId::Volume || id == PropertyId::Muted)
+    if (id == PropertyId::Volume)
     {
       bool const available =
         _implPtr != nullptr && _implPtr->volumeMode.load() != detail::AlsaVolumeControlMode::Unavailable;
-      return {.canRead = true, .canWrite = true, .isAvailable = available, .emitsChangeNotifications = false};
+      bool const hardware =
+        _implPtr != nullptr && _implPtr->volumeMode.load() == detail::AlsaVolumeControlMode::HardwareMixer;
+      return {.canRead = true,
+              .canWrite = true,
+              .isAvailable = available,
+              .emitsChangeNotifications = false,
+              .isHardwareAssisted = hardware};
+    }
+
+    if (id == PropertyId::Muted)
+    {
+      bool const available =
+        _implPtr != nullptr && _implPtr->volumeMode.load() != detail::AlsaVolumeControlMode::Unavailable;
+      return {.canRead = true,
+              .canWrite = true,
+              .isAvailable = available,
+              .emitsChangeNotifications = false,
+              .isHardwareAssisted = false};
     }
 
     return {};

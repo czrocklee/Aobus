@@ -339,9 +339,20 @@ namespace ao::gtk
     }
 
     auto const pos = static_cast<guint>(*optIndex);
-
     _selectionModelPtr->select_item(pos, true);
-    _columnView.scroll_to(pos, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
+
+    // Always try to scroll the group header into view for context
+    auto scrollPos = pos;
+
+    if (auto const optGroupIdx = _modelPtr->groupIndexForTrack(trackId); optGroupIdx)
+    {
+      if (auto* const proj = _modelPtr->projection(); proj != nullptr)
+      {
+        scrollPos = static_cast<guint>(proj->groupAt(*optGroupIdx).rows.start);
+      }
+    }
+
+    _columnView.scroll_to(scrollPos, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
   }
 
   void TrackSelectionController::scrollToTrack(TrackId trackId)

@@ -37,6 +37,7 @@ namespace ao::audio
       float volume = 1.0F;
       bool muted = false;
       bool volumeAvailable = false;
+      bool volumeIsHardwareAssisted = false;
       bool isReady = false;
 
       bool operator==(Status const&) const = default;

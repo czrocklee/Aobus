@@ -574,7 +574,8 @@ namespace ao::audio::backend
       return {.canRead = true,
               .canWrite = true,
               .isAvailable = _implPtr && _implPtr->volumeAvailable,
-              .emitsChangeNotifications = true};
+              .emitsChangeNotifications = true,
+              .isHardwareAssisted = false};
     }
 
     return {};

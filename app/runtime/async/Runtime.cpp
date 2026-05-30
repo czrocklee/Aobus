@@ -60,9 +60,23 @@ namespace ao::rt::async
 
   Task<void> Runtime::resumeOnControl()
   {
+    auto state = co_await boost::asio::this_coro::cancellation_state;
+
+    if (state.cancelled() != boost::asio::cancellation_type::none)
+    {
+      throw boost::system::system_error{boost::asio::error::operation_aborted};
+    }
+
     co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
       [this](auto handler) { controlExecutor().dispatch([cb = std::move(handler)] mutable { cb(); }); },
       boost::asio::use_awaitable);
+
+    state = co_await boost::asio::this_coro::cancellation_state;
+
+    if (state.cancelled() != boost::asio::cancellation_type::none)
+    {
+      throw boost::system::system_error{boost::asio::error::operation_aborted};
+    }
   }
 
   Task<void> Runtime::resumeOnWorker()

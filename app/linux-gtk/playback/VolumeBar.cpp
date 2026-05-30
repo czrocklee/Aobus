@@ -5,6 +5,7 @@
 
 #include <ao/uimodel/playback/VolumeViewModel.h>
 
+#include <cairomm/fontface.h>
 #include <gdkmm/graphene_rect.h>
 #include <gdkmm/rgba.h>
 #include <glibmm/refptr.h>
@@ -13,10 +14,12 @@
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/gesturedrag.h>
 #include <gtkmm/snapshot.h>
+#include <gtkmm/widget.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <numbers>
 
 namespace ao::gtk
@@ -40,6 +43,14 @@ namespace ao::gtk
     constexpr double kAngle270 = 1.5 * std::numbers::pi;
     constexpr double kAngle360 = 2.0 * std::numbers::pi;
     constexpr float kFullOpacity = 1.0F;
+
+    // Hardware-accelerated label colors
+    constexpr double kHardwareLabelRed = 0.6;
+    constexpr double kHardwareLabelGreen = 0.2;
+    constexpr double kHardwareLabelBlue = 0.8;
+
+    constexpr double kHardwareLabelFontSize = 8.0;
+    constexpr double kHardwareLabelYOffset = 6.0;
   }
 
   VolumeBar::VolumeBar()
@@ -79,6 +90,7 @@ namespace ao::gtk
     if (auto const clamped = std::clamp(volume, 0.0F, 1.0F); std::abs(_volume - clamped) > kVolumeEpsilon)
     {
       _volume = clamped;
+      updateTooltip();
       queue_draw();
     }
   }
@@ -86,6 +98,31 @@ namespace ao::gtk
   float VolumeBar::volume() const
   {
     return _volume;
+  }
+
+  void VolumeBar::setIsHardwareAssisted(bool hw)
+  {
+    if (_isHardwareAssisted == hw)
+    {
+      return;
+    }
+
+    _isHardwareAssisted = hw;
+    updateTooltip();
+    queue_draw();
+  }
+
+  void VolumeBar::updateTooltip()
+  {
+    auto const percent = std::clamp(static_cast<std::int32_t>(std::round(_volume * 100.0F)), 0, 100);
+    auto text = std::format("Volume: {}%", percent);
+
+    if (_isHardwareAssisted)
+    {
+      text += " (Hardware)";
+    }
+
+    set_tooltip_text(text);
   }
 
   VolumeBar::VolumeChangedSignal& VolumeBar::signalVolumeChanged()
@@ -142,11 +179,32 @@ namespace ao::gtk
     float const drawHeight = std::max(kMinDrawHeight, static_cast<float>(height) - (2.0F * vPadding));
     float const yOffset = vPadding;
 
-    // Segment gap and radius scale with the available width.
-    float const segmentGap = std::max(1.0F, (static_cast<float>(width) - 2.0F * hPadding) * 0.025F);
-    float const segmentWidth =
-      ((static_cast<float>(width) - 2.0F * hPadding) - (static_cast<float>(kNumSegments) - 1.0F) * segmentGap) /
-      static_cast<float>(kNumSegments);
+    float const drawWidth = std::max(0.0F, static_cast<float>(width) - (2.0F * hPadding));
+
+    // 1. Calculate base segment width based on Soul proportion
+    // Note: AobusSoul uses the full raw widget height for scaling, so we must do the same to match exactly.
+    static constexpr float kSoulStrokeRatio = 9.0F / 89.124F;
+    float const segmentWidth = static_cast<float>(height) * kSoulStrokeRatio;
+
+    // 2. Determine how many segments fit
+    // Use a balanced gap (e.g. 0.6x the bar width, minimum 1.5px) for the perfect density.
+    float const minGap = std::max(1.5F, segmentWidth * 0.6F);
+
+    std::int32_t numSegments = 1;
+    float segmentGap = 0.0F;
+
+    if (drawWidth > segmentWidth)
+    {
+      float const rawSegments = (drawWidth + minGap) / (segmentWidth + minGap);
+      numSegments = std::max<std::int32_t>(1, static_cast<std::int32_t>(std::floor(rawSegments)));
+
+      if (numSegments > 1)
+      {
+        segmentGap =
+          (drawWidth - (static_cast<float>(numSegments) * segmentWidth)) / static_cast<float>(numSegments - 1);
+      }
+    }
+
     float const segmentRadius = segmentWidth * 0.08F;
 
     // Dynamically lookup the theme's accent/selection color
@@ -166,7 +224,7 @@ namespace ao::gtk
     crPtr->save();
     crPtr->begin_new_path();
 
-    for (std::int32_t idx = 0; idx < kNumSegments; ++idx)
+    for (std::int32_t idx = 0; idx < numSegments; ++idx)
     {
       float const segmentX = hPadding + (static_cast<float>(idx) * (segmentWidth + segmentGap));
       crPtr->begin_new_sub_path();
@@ -205,6 +263,16 @@ namespace ao::gtk
       // Use the dynamically discovered theme color
       crPtr->set_source_rgba(activeColor.get_red(), activeColor.get_green(), activeColor.get_blue(), kFullOpacity);
       crPtr->fill();
+    }
+
+    // 5. Draw HW Indicator
+    if (_isHardwareAssisted)
+    {
+      crPtr->set_source_rgba(kHardwareLabelRed, kHardwareLabelGreen, kHardwareLabelBlue, kFullOpacity);
+      crPtr->select_font_face("sans-serif", Cairo::ToyFontFace::Slant::NORMAL, Cairo::ToyFontFace::Weight::BOLD);
+      crPtr->set_font_size(kHardwareLabelFontSize);
+      crPtr->move_to(0, yOffset + kHardwareLabelYOffset);
+      crPtr->show_text("HW");
     }
 
     crPtr->restore();

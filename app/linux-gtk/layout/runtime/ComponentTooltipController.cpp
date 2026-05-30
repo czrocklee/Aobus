@@ -5,37 +5,82 @@
 
 #include "layout/runtime/ILayoutComponent.h"
 
+#include <glibmm/main.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollermotion.h>
+#include <gtkmm/settings.h>
 #include <gtkmm/widget.h>
-#include <sigc++/functors/mem_fun.h>
 
 #include <cstdint>
+#include <string_view>
 
 namespace ao::gtk::layout
 {
+  namespace
+  {
+    constexpr std::string_view kPopoverShellClassPrefix = "ao-popover-";
+    constexpr std::uint32_t kDefaultHoverDelayMs = 500;
+  } // namespace
+
   ComponentTooltipController::ComponentTooltipController() = default;
 
+  ComponentTooltipController::~ComponentTooltipController()
+  {
+    _hoverTimeout.disconnect();
+    _popover.unparent();
+  }
 
   void ComponentTooltipController::attach(Gtk::Widget& target, ILayoutComponent& tooltipComponent)
   {
     _target = &target;
     _tooltipComponent = &tooltipComponent;
 
-    _target->set_has_tooltip(true);
-    _target->signal_query_tooltip().connect(sigc::mem_fun(*this, &ComponentTooltipController::onQueryTooltip), false);
-  }
+    // Configure the popover
+    _popover.set_parent(target);
+    _popover.set_child(tooltipComponent.widget());
+    _popover.set_has_arrow(false);
+    _popover.set_autohide(false);
+    _popover.set_position(Gtk::PositionType::BOTTOM);
+    _popover.add_css_class("ao-layout-tooltip-popover");
 
-  bool ComponentTooltipController::onQueryTooltip(std::int32_t /*xCoord*/,
-                                                  std::int32_t /*yCoord*/,
-                                                  bool /*keyboardTooltip*/,
-                                                  Glib::RefPtr<Gtk::Tooltip> const& tooltip)
-  {
-    if (_tooltipComponent == nullptr || !_tooltipComponent->widget().get_visible())
+    // Popover shell utilities target the GtkPopover CSS node; generic utility
+    // classes must stay on the tooltip content widget.
+    for (auto const& cssClass : tooltipComponent.widget().get_css_classes())
     {
-      return false;
+      if (auto const& cssClassRaw = cssClass.raw();
+          std::string_view{cssClassRaw.data(), cssClassRaw.size()}.starts_with(kPopoverShellClassPrefix))
+      {
+        _popover.add_css_class(cssClass);
+      }
     }
 
-    // The component's widget must remain persistent and stable across repeated queries.
-    tooltip->set_custom(_tooltipComponent->widget());
-    return true;
+    // Set up hover interaction
+    _motionControllerPtr = Gtk::EventControllerMotion::create();
+    _motionControllerPtr->signal_enter().connect([this](double, double) { onEnter(); });
+    _motionControllerPtr->signal_leave().connect([this] { onLeave(); });
+    target.add_controller(_motionControllerPtr);
+  }
+
+  void ComponentTooltipController::onEnter()
+  {
+    _hoverTimeout.disconnect();
+
+    _hoverTimeout = Glib::signal_timeout().connect(
+      [this] -> bool
+      {
+        if (_tooltipComponent != nullptr && _tooltipComponent->widget().get_visible())
+        {
+          _popover.popup();
+        }
+
+        return false; // run once
+      },
+      kDefaultHoverDelayMs);
+  }
+
+  void ComponentTooltipController::onLeave()
+  {
+    _hoverTimeout.disconnect();
+    _popover.popdown();
   }
 } // namespace ao::gtk::layout

@@ -95,9 +95,21 @@ templates:
               - type: playback.image
                 props:
                   action: jumpToAlbum
-                  variant: thumbnail
+                  targetSize: 48
+                  forceSquare: true
                 layout:
                   cssClasses: ao-nowplaying-image-thumb
+                tooltip:
+                  type: playback.image
+                  props:
+                    targetSize: 500
+                  layout:
+                    cssClasses:
+                      - ao-popover-transparent
+                      - ao-popover-p-none
+                      - ao-popover-rounded-md
+                      - ao-rounded-md
+                      - ao-opacity-80
               - type: box
                 props:
                   orientation: vertical

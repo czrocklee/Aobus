@@ -25,6 +25,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -517,11 +518,21 @@ namespace ao::audio::test
 
     SECTION("queryProperty returns valid info for Volume")
     {
+      backendRaw->setMockPropertyInfo(PropertyId::Volume,
+                                      PropertyInfo{
+                                        .canRead = true,
+                                        .canWrite = true,
+                                        .isAvailable = true,
+                                        .emitsChangeNotifications = false,
+                                        .isHardwareAssisted = true,
+                                      });
+
       auto const info = backendRaw->queryProperty(PropertyId::Volume);
 
       REQUIRE(info.canRead == true);
       REQUIRE(info.canWrite == true);
       REQUIRE(info.isAvailable == true);
+      REQUIRE(info.isHardwareAssisted == true);
     }
 
     SECTION("setProperty returns error for unknown PropertyId")
@@ -544,11 +555,27 @@ namespace ao::audio::test
 
     SECTION("onPropertyChanged callback updates engine volume status")
     {
+      backendRaw->setMockPropertyInfo(PropertyId::Volume,
+                                      PropertyInfo{
+                                        .canRead = true,
+                                        .canWrite = true,
+                                        .isAvailable = true,
+                                        .emitsChangeNotifications = false,
+                                        .isHardwareAssisted = true,
+                                      });
+
+      // Play must be called so the backend target is initialized
+      engine.play(desc);
+
       backendRaw->firePropertyChanged(PropertyId::Volume);
+
+      // wait for the async task to run
+      std::this_thread::sleep_for(std::chrono::milliseconds{200});
 
       REQUIRE(engine.status().volume == Catch::Approx{1.0F});
       REQUIRE(engine.volume() == Catch::Approx{1.0F});
       REQUIRE(engine.status().volumeAvailable == true);
+      REQUIRE(engine.status().volumeIsHardwareAssisted == true);
     }
 
     SECTION("onPropertyChanged handles backend read errors gracefully")

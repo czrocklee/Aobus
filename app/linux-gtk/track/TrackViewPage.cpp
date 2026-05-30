@@ -66,7 +66,7 @@ namespace ao::gtk
       return std::format("{} {}", count, count == 1 ? "track" : "tracks");
     }
 
-    constexpr int kSectionCoverSize = 32;
+    constexpr int kSectionCoverSize = 48;
 
     TrackRowObject* trackRowFromSorterItem(gpointer item)
     {

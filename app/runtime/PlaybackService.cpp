@@ -79,6 +79,7 @@ namespace ao::rt
         .volume = status.volume,
         .muted = status.muted,
         .volumeAvailable = status.volumeAvailable,
+        .volumeIsHardwareAssisted = status.volumeIsHardwareAssisted,
         .ready = status.isReady,
         .selectedOutput =
           OutputSelection{

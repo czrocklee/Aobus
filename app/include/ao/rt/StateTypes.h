@@ -89,6 +89,7 @@ namespace ao::rt
     float volume = 1.0F;
     bool muted = false;
     bool volumeAvailable = false;
+    bool volumeIsHardwareAssisted = false;
     bool ready = false;
 
     ShuffleMode shuffleMode = ShuffleMode::Off;

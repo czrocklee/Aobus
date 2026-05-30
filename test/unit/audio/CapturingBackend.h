@@ -11,6 +11,7 @@
 #include <ao/audio/Property.h>
 
 #include <expected>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -114,6 +115,13 @@ namespace ao::audio::test
 
     PropertyInfo queryProperty(PropertyId id) const noexcept override
     {
+      auto const lock = std::scoped_lock{_mutex};
+
+      if (auto const it = _mockPropertyInfos.find(id); it != _mockPropertyInfos.end())
+      {
+        return it->second;
+      }
+
       if (id == PropertyId::Volume || id == PropertyId::Muted)
       {
         return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
@@ -123,6 +131,11 @@ namespace ao::audio::test
     }
 
     // Helpers for tests
+    void setMockPropertyInfo(PropertyId id, PropertyInfo const& info)
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _mockPropertyInfos[id] = info;
+    }
     void setOpenResult(Result<> res)
     {
       auto const lock = std::scoped_lock{_mutex};
@@ -233,6 +246,7 @@ namespace ao::audio::test
     Format _format{};
     Result<> _openResult{};
     std::optional<Error::Code> _optPropError{};
+    std::map<PropertyId, PropertyInfo> _mockPropertyInfos{};
     float _volume = 1.0F;
     bool _muted = false;
   };

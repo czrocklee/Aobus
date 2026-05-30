@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtils.h"
+#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ImmediateControlExecutor.h>
 #include <ao/rt/async/LifetimeScope.h>
 #include <ao/rt/async/Runtime.h>
@@ -9,7 +10,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstdint>
+#include <deque>
+#include <functional>
+#include <mutex>
 #include <thread>
 #include <utility>
 
@@ -37,6 +42,63 @@ namespace ao::rt::test
       AsyncTestState<int> completed;
     };
 
+    class QueuedControlExecutor final : public IControlExecutor
+    {
+    public:
+      bool isCurrent() const noexcept override { return true; }
+
+      void dispatch(std::move_only_function<void()> task) override
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _tasks.push_back(std::move(task));
+      }
+
+      void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
+
+      void runQueued()
+      {
+        auto tasks = std::deque<std::move_only_function<void()>>{};
+
+        {
+          auto const lock = std::scoped_lock{_mutex};
+          tasks.swap(_tasks);
+        }
+
+        while (!tasks.empty())
+        {
+          auto task = std::move(tasks.front());
+          tasks.pop_front();
+          task();
+        }
+      }
+
+      bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::milliseconds{500})
+      {
+        auto const start = std::chrono::steady_clock::now();
+
+        while (std::chrono::steady_clock::now() - start < timeout)
+        {
+          {
+            auto const lock = std::scoped_lock{_mutex};
+
+            if (!_tasks.empty())
+            {
+              return true;
+            }
+          }
+
+          std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+
+        auto const lock = std::scoped_lock{_mutex};
+        return !_tasks.empty();
+      }
+
+    private:
+      std::deque<std::move_only_function<void()>> _tasks;
+      std::mutex _mutex;
+    };
+
     Task<void> longRunningTask(Runtime* runtime, AsyncBarrier* barrier, AsyncTestState<bool> completed)
     {
       co_await runtime->resumeOnWorker();
@@ -44,6 +106,13 @@ namespace ao::rt::test
 
       co_await runtime->resumeOnControl();
       // If cancelled, this line should never be reached.
+      completed.set(true);
+    }
+
+    Task<void> pendingControlResumeTask(Runtime* runtime, AsyncTestState<bool> completed)
+    {
+      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnControl();
       completed.set(true);
     }
   }
@@ -93,6 +162,25 @@ namespace ao::rt::test
     {
       std::this_thread::yield();
     }
+
+    REQUIRE_FALSE(completed.get());
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("LifetimeScope - Cancellation before queued control resume", "[async][unit][runtime]")
+  {
+    auto executor = QueuedControlExecutor{};
+    auto runtime = Runtime{executor};
+    auto completed = AsyncTestState<bool>::create(false);
+
+    {
+      auto scope = LifetimeScope{};
+      runtime.spawnWithLifetime(&scope, pendingControlResumeTask(&runtime, completed));
+      REQUIRE(executor.waitUntilQueued());
+    }
+
+    executor.runQueued();
 
     REQUIRE_FALSE(completed.get());
     runtime.requestStop();

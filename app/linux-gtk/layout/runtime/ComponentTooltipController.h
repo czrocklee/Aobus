@@ -5,10 +5,11 @@
 
 #include "layout/runtime/ILayoutComponent.h"
 
-#include <gtkmm/tooltip.h>
+#include <glibmm/main.h>
+#include <gtkmm/eventcontrollermotion.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
-
-#include <cstdint>
+#include <sigc++/connection.h>
 
 namespace ao::gtk::layout
 {
@@ -16,7 +17,7 @@ namespace ao::gtk::layout
   {
   public:
     ComponentTooltipController();
-    ~ComponentTooltipController() = default;
+    ~ComponentTooltipController();
 
     ComponentTooltipController(ComponentTooltipController const&) = delete;
     ComponentTooltipController& operator=(ComponentTooltipController const&) = delete;
@@ -26,12 +27,14 @@ namespace ao::gtk::layout
     void attach(Gtk::Widget& target, ILayoutComponent& tooltipComponent);
 
   private:
-    bool onQueryTooltip(std::int32_t xCoord,
-                        std::int32_t yCoord,
-                        bool keyboardTooltip,
-                        Glib::RefPtr<Gtk::Tooltip> const& tooltip);
+    void onEnter();
+    void onLeave();
 
     Gtk::Widget* _target = nullptr;
     ILayoutComponent* _tooltipComponent = nullptr;
+
+    Gtk::Popover _popover;
+    Glib::RefPtr<Gtk::EventControllerMotion> _motionControllerPtr;
+    sigc::connection _hoverTimeout;
   };
 } // namespace ao::gtk::layout

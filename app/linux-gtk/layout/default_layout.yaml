@@ -31,6 +31,17 @@ root:
             - type: playback.image
               layout:
                 minHeight: 50
+              tooltip:
+                type: playback.image
+                props:
+                  targetSize: 500
+                layout:
+                  cssClasses:
+                    - ao-popover-transparent
+                    - ao-popover-p-none
+                    - ao-popover-rounded-md
+                    - ao-rounded-md
+                    - ao-opacity-80
         - type: box
           props:
             orientation: vertical
@@ -137,6 +148,17 @@ templates:
       - type: playback.image
         layout:
           minHeight: 50
+        tooltip:
+          type: playback.image
+          props:
+            targetSize: 500
+          layout:
+            cssClasses:
+              - ao-popover-transparent
+              - ao-popover-p-none
+              - ao-popover-rounded-md
+              - ao-rounded-md
+              - ao-opacity-80
   inspector.defaultPanel:
     type: inspector.panel
   status.defaultBar:

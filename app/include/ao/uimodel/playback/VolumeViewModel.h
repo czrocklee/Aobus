@@ -14,6 +14,7 @@ namespace ao::uimodel::playback
   {
     bool visible = false;
     float volume = 1.0F;
+    bool isHardwareAssisted = false;
   };
 
   class VolumeViewModel final

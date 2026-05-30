@@ -441,6 +441,7 @@ namespace ao::audio
     status.volume = status.engine.volume;
     status.muted = status.engine.muted;
     status.volumeAvailable = status.engine.volumeAvailable;
+    status.volumeIsHardwareAssisted = status.engine.volumeIsHardwareAssisted;
     return status;
   }
 

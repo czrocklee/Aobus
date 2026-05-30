@@ -61,7 +61,8 @@ In software fallback mode:
 - Volume is attenuated by multiplying PCM samples digitally.
 - The `Sink` node in the graph is updated to report `SoftwareVolumeModification` if gain is non-unity.
 - Quality analyzer correctly downgrades the pipeline to `LinearIntervention`.
-- The UI reflects this with a yellow `Software volume attenuation` indicator.
+- The UI reflects this with a yellow `Software volume attenuation` indicator in the pipeline view.
+- In the GTK frontend, the volume bar widget actively displays a "HW" badge in its top-left corner when the ALSA hardware mixer is functioning properly; this badge disappears if it falls back to software gain.
 
 ## UI Formatting
 

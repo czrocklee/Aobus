@@ -96,7 +96,9 @@ namespace ao::audio
         status.muted = *mute;
       }
 
-      status.volumeAvailable = backendPtr->queryProperty(PropertyId::Volume).isAvailable;
+      auto const volProp = backendPtr->queryProperty(PropertyId::Volume);
+      status.volumeAvailable = volProp.isAvailable;
+      status.volumeIsHardwareAssisted = volProp.isHardwareAssisted;
     }
 
     void resetEngine()
@@ -265,7 +267,9 @@ namespace ao::audio
           }
         }
 
-        status.volumeAvailable = backendPtr->queryProperty(PropertyId::Volume).isAvailable;
+        auto const volProp = backendPtr->queryProperty(PropertyId::Volume);
+        status.volumeAvailable = volProp.isAvailable;
+        status.volumeIsHardwareAssisted = volProp.isHardwareAssisted;
       }
 
       notifyRouteChanged();

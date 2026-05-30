@@ -32,6 +32,7 @@
 #include <ao/utility/Log.h>
 
 #include <gdkmm/cursor.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/widget.h>
@@ -143,14 +144,23 @@ namespace ao::gtk::layout
         }
 
         _imageWidgetPtr = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
+        _imageWidgetPtr->set_overflow(Gtk::Overflow::HIDDEN);
 
-        auto const variant = node.getProp<std::string>("variant", "default");
+        auto const targetSize = node.getProp<std::int64_t>("targetSize", kThumbnailSize);
+        _imageWidgetPtr->setTargetSize(static_cast<std::int32_t>(targetSize));
 
-        if (variant == "thumbnail")
+        if (node.getProp<bool>("forceSquare", false))
         {
-          _imageWidgetPtr->setTargetSize(kThumbnailSize);
-          _imageWidgetPtr->set_size_request(kThumbnailSize, kThumbnailSize);
-          _imageWidgetPtr->add_css_class("ao-nowplaying-image-thumb");
+          _imageWidgetPtr->set_size_request(
+            static_cast<std::int32_t>(targetSize), static_cast<std::int32_t>(targetSize));
+        }
+
+        if (auto const it = node.props.find("opacity"); it != node.props.end())
+        {
+          if (auto const opacity = it->second.asDouble(-1.0); opacity >= 0.0)
+          {
+            _button.set_opacity(opacity);
+          }
         }
 
         auto const actionStr = node.getProp<std::string>("action", "none");
@@ -168,6 +178,7 @@ namespace ao::gtk::layout
 
         _button.set_child(*_imageWidgetPtr);
         _button.set_has_frame(false); // Make it flat
+        _button.set_overflow(Gtk::Overflow::HIDDEN);
         _button.add_css_class("ao-image-button");
 
         if (_action != Action::None)
@@ -246,10 +257,12 @@ namespace ao::gtk::layout
         if (optView)
         {
           _imageWidgetPtr->loadImage(ResourceId{optView->metadata().coverArtId()});
+          _button.set_visible(true);
         }
         else
         {
           _imageWidgetPtr->clearImage();
+          _button.set_visible(false);
         }
       }
 
@@ -513,12 +526,7 @@ namespace ao::gtk::layout
                                 .displayName = "Playback Cover Art",
                                 .category = "Playback",
                                 .container = false,
-                                .props = {{.name = "variant",
-                                           .kind = PropertyKind::Enum,
-                                           .label = "Variant",
-                                           .defaultValue = LayoutValue{"default"},
-                                           .enumValues = {"default", "thumbnail"}},
-                                          {.name = "action",
+                                .props = {{.name = "action",
                                            .kind = PropertyKind::Enum,
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},

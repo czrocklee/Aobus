@@ -163,11 +163,16 @@ namespace ao::gtk::test
         ::guint position;
         ::guint removed;
         ::guint added;
+        ::guint sizeDuringEvent;
       };
 
       std::vector<Event> events;
+      Glib::RefPtr<TrackListModel> modelPtr;
 
-      void onItemsChanged(::guint pos, ::guint rem, ::guint add) { events.push_back({pos, rem, add}); }
+      void onItemsChanged(::guint pos, ::guint rem, ::guint add)
+      {
+        events.push_back({pos, rem, add, modelPtr->get_n_items()});
+      }
     };
   } // namespace
 
@@ -190,6 +195,7 @@ namespace ao::gtk::test
     modelPtr->bindProjection(projectionPtr);
 
     auto spy = ModelSpy{};
+    spy.modelPtr = modelPtr;
     modelPtr->signal_items_changed().connect(sigc::mem_fun(spy, &ModelSpy::onItemsChanged));
 
     SECTION("Basic properties and size")
@@ -218,6 +224,7 @@ namespace ao::gtk::test
       CHECK(spy.events[0].position == 0);
       CHECK(spy.events[0].removed == 1);
       CHECK(spy.events[0].added == 1);
+      CHECK(spy.events[0].sizeDuringEvent == 2);
     }
 
     SECTION("Delta batch notifications - Insert")
@@ -225,22 +232,24 @@ namespace ao::gtk::test
       auto const id3 = testLibrary.addTrack(makeTrackSpec("Song C", "Artist C", "Album C", 2022));
       source.insert(id3, 0);
 
-      CHECK(modelPtr->get_n_items() == 3);
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].position == 2);
       CHECK(spy.events[0].removed == 0);
       CHECK(spy.events[0].added == 1);
+      CHECK(spy.events[0].sizeDuringEvent == 3);
+      CHECK(modelPtr->get_n_items() == 3);
     }
 
     SECTION("Delta batch notifications - Remove")
     {
       source.remove(id1);
 
-      CHECK(modelPtr->get_n_items() == 1);
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].position == 0);
       CHECK(spy.events[0].removed == 1);
       CHECK(spy.events[0].added == 0);
+      CHECK(spy.events[0].sizeDuringEvent == 1);
+      CHECK(modelPtr->get_n_items() == 1);
     }
 
     SECTION("Delta batch notifications - Update")
@@ -251,6 +260,7 @@ namespace ao::gtk::test
       CHECK(spy.events[0].position == 1);
       CHECK(spy.events[0].removed == 1);
       CHECK(spy.events[0].added == 1);
+      CHECK(spy.events[0].sizeDuringEvent == 2);
     }
 
     SECTION("Delta batch notifications - Reset")
@@ -261,6 +271,7 @@ namespace ao::gtk::test
       CHECK(spy.events[0].position == 0);
       CHECK(spy.events[0].removed == 2);
       CHECK(spy.events[0].added == 2);
+      CHECK(spy.events[0].sizeDuringEvent == 2);
     }
 
     SECTION("Clearing and unbinding projection")

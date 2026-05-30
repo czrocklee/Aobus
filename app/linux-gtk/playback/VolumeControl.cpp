@@ -38,6 +38,7 @@ namespace ao::gtk
     {
       _updating = true;
       _volumeBar.setVolume(view.volume);
+      _volumeBar.setIsHardwareAssisted(view.isHardwareAssisted);
       _updating = false;
     }
   }

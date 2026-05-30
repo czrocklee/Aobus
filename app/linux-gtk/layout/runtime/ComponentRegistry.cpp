@@ -3,6 +3,7 @@
 
 #include "layout/runtime/ComponentRegistry.h"
 
+#include "layout/components/Containers.h"
 #include "layout/runtime/DecoratedLayoutComponent.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
@@ -90,6 +91,11 @@ namespace ao::gtk::layout
       if (guard.saved != LayoutSurface::Tooltip)
       {
         tooltipComponentPtr = create(ctx, *node.optTooltip->nodePtr);
+
+        if (tooltipComponentPtr)
+        {
+          applyCommonProps(tooltipComponentPtr->widget(), *node.optTooltip->nodePtr);
+        }
       }
 
       if (tooltipComponentPtr)

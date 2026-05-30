@@ -32,6 +32,10 @@ namespace ao::audio
     bool isAvailable = false;
     bool emitsChangeNotifications = false;
 
+    /// For Volume, indicates the volume write/read is handled by a hardware mixer;
+    /// for other properties, defaults to false.
+    bool isHardwareAssisted = false;
+
     constexpr bool operator==(PropertyInfo const&) const noexcept = default;
   };
 

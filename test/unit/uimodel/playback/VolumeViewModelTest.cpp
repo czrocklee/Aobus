@@ -60,6 +60,7 @@ namespace ao::uimodel::playback::test
     {
       viewModel.handleVolumeChanged(0.35F);
       CHECK(playback.state().volume == 0.35F);
+      CHECK(log.last().isHardwareAssisted == false); // Initially false in mock
     }
   }
 

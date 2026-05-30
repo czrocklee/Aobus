@@ -206,24 +206,24 @@ namespace ao::gtk
   {
     auto const newSize = static_cast<::guint>(_projectionPtr->size());
     auto const oldSize = static_cast<::guint>(_modelSize);
-    notifyReset(oldSize, newSize);
     _modelSize = newSize;
+    notifyReset(oldSize, newSize);
   }
 
   void TrackListModel::applyInsertRange(rt::ProjectionInsertRange const& delta)
   {
     auto const pos = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
-    notifyInsert(pos, count);
     _modelSize += count;
+    notifyInsert(pos, count);
   }
 
   void TrackListModel::applyRemoveRange(rt::ProjectionRemoveRange const& delta)
   {
     auto const pos = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
-    notifyRemove(pos, count);
     _modelSize -= count;
+    notifyRemove(pos, count);
   }
 
   void TrackListModel::applyUpdateRange(rt::ProjectionUpdateRange const& delta)

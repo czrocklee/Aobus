@@ -32,6 +32,7 @@ namespace ao::uimodel::playback
     auto view = VolumeViewState{};
     view.visible = state.volumeAvailable;
     view.volume = state.volume;
+    view.isHardwareAssisted = state.volumeIsHardwareAssisted;
 
     if (_onRender)
     {
