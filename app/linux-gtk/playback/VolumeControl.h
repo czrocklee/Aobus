@@ -9,8 +9,6 @@
 
 #include <gtkmm/widget.h>
 
-#include <memory>
-
 namespace ao::gtk
 {
   /**
@@ -34,6 +32,6 @@ namespace ao::gtk
 
     VolumeBar _volumeBar;
     bool _updating = false;
-    std::unique_ptr<uimodel::playback::VolumeViewModel> _controllerPtr;
+    uimodel::playback::VolumeViewModel _controller;
   };
 } // namespace ao::gtk

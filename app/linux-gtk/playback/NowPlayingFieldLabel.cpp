@@ -19,7 +19,6 @@
 #include <unistd.h>
 
 #include <cstdint>
-#include <memory>
 
 namespace ao::gtk
 {
@@ -37,7 +36,11 @@ namespace ao::gtk
   } // namespace
 
   NowPlayingFieldLabel::NowPlayingFieldLabel(rt::AppRuntime& runtime, rt::TrackField field, Action action)
-    : _runtime{runtime}, _field{field}, _action{action}
+    : _runtime{runtime}
+    , _field{field}
+    , _action{action}
+    , _controller{_runtime.playback(),
+                  [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.set_ellipsize(Pango::EllipsizeMode::END);
     _label.add_css_class(cssClassForField(field));
@@ -54,9 +57,6 @@ namespace ao::gtk
       gesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { onLabelClicked(); });
       _label.add_controller(gesturePtr);
     }
-
-    _controllerPtr = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
-      _runtime.playback(), [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 
   void NowPlayingFieldLabel::onLabelClicked()
@@ -66,7 +66,7 @@ namespace ao::gtk
                   static_cast<int>(_field),
                   static_cast<int>(_action));
 
-    auto const cmd = _controllerPtr->resolveAction(_action, _field);
+    auto const cmd = _controller.resolveAction(_action, _field);
 
     using Type = uimodel::playback::NowPlayingActionCommand::Type;
 

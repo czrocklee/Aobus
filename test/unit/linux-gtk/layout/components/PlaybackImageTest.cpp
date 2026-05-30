@@ -9,7 +9,6 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/lmdb/TestUtils.h"
 
-
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/button.h>

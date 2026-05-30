@@ -12,7 +12,6 @@
 #include <sigc++/connection.h>
 
 #include <cstdint>
-#include <memory>
 
 namespace ao::gtk::test
 {
@@ -59,13 +58,13 @@ namespace ao::gtk
 
     Gtk::Scale _scale;
     uimodel::playback::PlaybackPositionInterpolator _interpolator;
-    std::unique_ptr<uimodel::playback::SeekViewModel> _controllerPtr{};
 
     std::uint32_t _durationMs = 0;
     InteractionState _interactionState = InteractionState::Idle;
     bool _pendingFinalSeek = false;
     bool _updatingScale = false;
     sigc::connection _debounceConnection;
+    uimodel::playback::SeekViewModel _controller;
 
     friend class test::SeekControlTestPeer;
   };

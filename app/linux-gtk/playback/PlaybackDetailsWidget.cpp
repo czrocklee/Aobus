@@ -10,7 +10,6 @@
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 
-#include <memory>
 #include <string>
 
 namespace ao::gtk
@@ -48,6 +47,7 @@ namespace ao::gtk
   }
 
   PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playbackService)
+    : _controller{playbackService, [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); }}
   {
     _container.set_spacing(layout::kSpacingLarge);
     _container.add_css_class("ao-playback-details");
@@ -59,9 +59,6 @@ namespace ao::gtk
 
     _container.append(_streamInfoLabel);
     _container.append(_sinkStatusIcon);
-
-    _controllerPtr = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
-      playbackService, [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 
   PlaybackDetailsWidget::~PlaybackDetailsWidget() = default;

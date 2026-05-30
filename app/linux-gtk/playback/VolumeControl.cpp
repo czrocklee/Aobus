@@ -8,17 +8,13 @@
 
 #include <gtkmm/enums.h>
 
-#include <memory>
-
 namespace ao::gtk
 {
   VolumeControl::VolumeControl(rt::PlaybackService& playbackService)
+    : _controller{playbackService, [this](ao::uimodel::playback::VolumeViewState const& state) { applyState(state); }}
   {
     _volumeBar.set_valign(Gtk::Align::CENTER);
     _volumeBar.set_tooltip_text("Volume");
-
-    _controllerPtr = std::make_unique<ao::uimodel::playback::VolumeViewModel>(
-      playbackService, [this](ao::uimodel::playback::VolumeViewState const& state) { applyState(state); });
 
     _volumeBar.signalVolumeChanged().connect(
       [this](float volume)
@@ -28,7 +24,7 @@ namespace ao::gtk
           return;
         }
 
-        _controllerPtr->handleVolumeChanged(volume);
+        _controller.handleVolumeChanged(volume);
       });
   }
 

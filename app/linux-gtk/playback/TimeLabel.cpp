@@ -11,12 +11,13 @@
 #include <gtkmm/enums.h>
 
 #include <cstdint>
-#include <memory>
 
 namespace ao::gtk
 {
   TimeLabel::TimeLabel(rt::PlaybackService& playbackService, Mode mode)
     : _mode{mode}
+    , _controller{playbackService,
+                  [this](ao::uimodel::playback::PlaybackTimeViewState const& view) { applyState(view); }}
   {
     _label.set_halign(Gtk::Align::CENTER);
     _label.set_valign(Gtk::Align::CENTER);
@@ -36,9 +37,6 @@ namespace ao::gtk
     _label.set_size_request(textWidth + 2, -1);
 
     _label.set_text(templateText);
-
-    _controllerPtr = std::make_unique<ao::uimodel::playback::PlaybackTimeViewModel>(
-      playbackService, [this](ao::uimodel::playback::PlaybackTimeViewState const& view) { applyState(view); });
 
     _label.add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool

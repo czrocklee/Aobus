@@ -12,8 +12,6 @@
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
 
-#include <memory>
-
 namespace ao::rt
 {
   class PlaybackService;
@@ -36,8 +34,9 @@ namespace ao::gtk
     Gtk::Widget* createRow(Glib::RefPtr<Glib::Object> const& item);
 
     rt::PlaybackService& _playback;
-    std::unique_ptr<uimodel::playback::AudioOutputViewModel> _outputControllerPtr{};
+
     Gtk::ListBox _listBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _storePtr{};
+    uimodel::playback::AudioOutputViewModel _outputController;
   };
 } // namespace ao::gtk

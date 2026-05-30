@@ -74,11 +74,11 @@ namespace
     auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
     auto workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspaceConfigPath);
 
-    auto appRuntimePtr =
-      std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
-                                                                   .musicRoot = paths.musicRoot,
-                                                                   .databasePath = paths.databasePath,
-                                                                   .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr)});
+    auto appRuntimePtr = std::make_unique<rt::AppRuntime>(
+      rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
+                                 .musicRoot = paths.musicRoot,
+                                 .databasePath = paths.databasePath,
+                                 .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr)});
 
     auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(new MainWindow{*appRuntimePtr, appConfigPtr});
 

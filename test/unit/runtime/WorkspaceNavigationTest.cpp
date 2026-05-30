@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtils.h"
-
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>

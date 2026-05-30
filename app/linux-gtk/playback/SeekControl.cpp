@@ -15,7 +15,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <memory>
 
 namespace ao::gtk
 {
@@ -26,6 +25,7 @@ namespace ao::gtk
   }
 
   SeekControl::SeekControl(rt::PlaybackService& playbackService)
+    : _controller{playbackService, [this](ao::uimodel::playback::SeekViewState const& view) { applyState(view); }}
   {
     _scale.set_range(0, kDefaultMaxRange);
     _scale.set_value(0);
@@ -47,9 +47,6 @@ namespace ao::gtk
     dragGesturePtr->signal_drag_begin().connect([this](double, double) { beginUserInteraction(); });
     dragGesturePtr->signal_drag_end().connect([this](double, double) { endUserInteraction(); });
     _scale.add_controller(dragGesturePtr);
-
-    _controllerPtr = std::make_unique<ao::uimodel::playback::SeekViewModel>(
-      playbackService, [this](ao::uimodel::playback::SeekViewState const& view) { applyState(view); });
 
     _scale.add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
@@ -144,7 +141,7 @@ namespace ao::gtk
     auto const positionMs = scalePositionMs();
     _pendingFinalSeek = true;
     _interpolator.updateState(positionMs, _durationMs, false);
-    _controllerPtr->seekPreview(positionMs);
+    _controller.seekPreview(positionMs);
   }
 
   void SeekControl::executeDebouncedFinalSeek()
@@ -153,7 +150,7 @@ namespace ao::gtk
 
     if (_durationMs > 0)
     {
-      _controllerPtr->seekFinal(scalePositionMs());
+      _controller.seekFinal(scalePositionMs());
     }
   }
 

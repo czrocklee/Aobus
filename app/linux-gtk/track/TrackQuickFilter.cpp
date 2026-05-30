@@ -14,7 +14,6 @@
 #include <gtkmm/entry.h>
 #include <sigc++/functors/mem_fun.h>
 
-#include <memory>
 #include <string>
 
 namespace ao::gtk
@@ -27,6 +26,9 @@ namespace ao::gtk
   TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime)
     : _runtime{runtime}
     , _textChangedConn{signal_changed().connect(sigc::mem_fun(*this, &TrackQuickFilter::onFilterTextChanged))}
+    , _controller{_runtime.views(),
+                  _runtime.workspace(),
+                  [this](ao::uimodel::track::TrackFilterViewState const& state) { applyState(state); }}
   {
     set_placeholder_text("Quick filter or expression...");
     set_hexpand(true);
@@ -62,11 +64,6 @@ namespace ao::gtk
       false);
 
     add_controller(dropTargetPtr);
-
-    _controllerPtr = std::make_unique<ao::uimodel::track::TrackFilterViewModel>(
-      _runtime.views(),
-      _runtime.workspace(),
-      [this](ao::uimodel::track::TrackFilterViewState const& state) { applyState(state); });
   }
 
   TrackQuickFilter::~TrackQuickFilter() = default;
@@ -77,7 +74,7 @@ namespace ao::gtk
     _debounceTimer = Glib::signal_timeout().connect(
       [this]
       {
-        _controllerPtr->updateFilter(get_text().raw());
+        _controller.updateFilter(get_text().raw());
         return false;
       },
       kFilterDebounceMs);

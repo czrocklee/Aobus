@@ -8,8 +8,6 @@
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
-#include <memory>
-
 namespace ao::rt
 {
   class PlaybackService;
@@ -41,6 +39,6 @@ namespace ao::gtk
     rt::PlaybackService& _playbackService;
     Gtk::Label _label;
 
-    std::unique_ptr<uimodel::playback::NowPlayingViewModel> _controllerPtr;
+    uimodel::playback::NowPlayingViewModel _controller;
   };
 } // namespace ao::gtk

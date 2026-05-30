@@ -11,7 +11,6 @@
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
-#include <memory>
 #include <string>
 
 namespace ao::rt
@@ -47,8 +46,8 @@ namespace ao::gtk
     Gtk::Box _container{Gtk::Orientation::HORIZONTAL};
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
-    std::unique_ptr<uimodel::playback::NowPlayingViewModel> _controllerPtr{};
 
     std::string _lastTooltipText;
+    uimodel::playback::NowPlayingViewModel _controller;
   };
 } // namespace ao::gtk

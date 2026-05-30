@@ -9,8 +9,6 @@
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
-#include <memory>
-
 namespace ao::rt
 {
   class AppRuntime;
@@ -36,6 +34,6 @@ namespace ao::gtk
     Action _action;
     Gtk::Label _label;
 
-    std::unique_ptr<uimodel::playback::NowPlayingViewModel> _controllerPtr;
+    uimodel::playback::NowPlayingViewModel _controller;
   };
 } // namespace ao::gtk

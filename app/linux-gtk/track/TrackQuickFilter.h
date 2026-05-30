@@ -9,7 +9,6 @@
 #include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
-#include <memory>
 #include <string>
 
 namespace ao::rt
@@ -47,7 +46,7 @@ namespace ao::gtk
     sigc::scoped_connection _textChangedConn;
     sigc::scoped_connection _debounceTimer;
 
-    std::unique_ptr<uimodel::track::TrackFilterViewModel> _controllerPtr;
     CreateSmartListSignal _signalCreateSmartListRequested;
+    uimodel::track::TrackFilterViewModel _controller;
   };
 } // namespace ao::gtk

@@ -11,7 +11,6 @@
 #include <gtkmm/enums.h>
 
 #include <functional>
-#include <memory>
 #include <string>
 #include <utility>
 
@@ -56,21 +55,19 @@ namespace ao::gtk
                                    std::function<void()> onPlaySelection,
                                    bool showLabel,
                                    std::string const& size)
+    : _controller{playbackService,
+                  queueModel,
+                  action,
+                  std::move(onPlaySelection),
+                  showLabel,
+                  [this](ao::uimodel::playback::TransportViewState const& state) { applyState(state); }}
   {
     _button.set_has_frame(false);
     _button.add_css_class("ao-playback-button");
     applySizeClass(_button, size);
     _button.set_valign(Gtk::Align::CENTER);
 
-    _controllerPtr = std::make_unique<ao::uimodel::playback::TransportViewModel>(
-      playbackService,
-      queueModel,
-      action,
-      std::move(onPlaySelection),
-      showLabel,
-      [this](ao::uimodel::playback::TransportViewState const& state) { applyState(state); });
-
-    _button.signal_clicked().connect([this] { _controllerPtr->handleClick(); });
+    _button.signal_clicked().connect([this] { _controller.handleClick(); });
   }
 
   TransportButton::~TransportButton() = default;

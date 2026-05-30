@@ -6,6 +6,7 @@
 #include "playback/SeekControl.h"
 #include "playback/TimeLabel.h"
 #include <ao/rt/AppRuntime.h>
+
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/adjustment.h>  // NOLINT(misc-include-cleaner)
 #include <gtkmm/application.h> // NOLINT(misc-include-cleaner)

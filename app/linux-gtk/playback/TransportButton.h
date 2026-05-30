@@ -11,7 +11,6 @@
 #include <gtkmm/widget.h>
 
 #include <functional>
-#include <memory>
 #include <string>
 
 namespace ao::gtk
@@ -42,6 +41,6 @@ namespace ao::gtk
     void applyState(uimodel::playback::TransportViewState const& view);
 
     Gtk::Button _button;
-    std::unique_ptr<uimodel::playback::TransportViewModel> _controllerPtr;
+    uimodel::playback::TransportViewModel _controller;
   };
 } // namespace ao::gtk

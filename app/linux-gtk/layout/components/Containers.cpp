@@ -540,8 +540,7 @@ namespace ao::gtk::layout
                     std::int32_t zIndex)
       {
         child.set_parent(*this);
-        _children.push_back(
-          {id, &child, posX, posY, width, height, zIndex, _insertCount++, posX, posY, width, height});
+        _children.push_back({id, &child, posX, posY, width, height, zIndex, _insertCount++, posX, posY, width, height});
       }
 
       void setSelectedChild(std::string const& id)

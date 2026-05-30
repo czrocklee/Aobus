@@ -9,7 +9,6 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
-
 #include <ao/uimodel/layout/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>

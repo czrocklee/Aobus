@@ -12,7 +12,6 @@
 #include <gtkmm/widget.h>
 
 #include <functional>
-#include <memory>
 #include <utility>
 
 namespace ao::rt
@@ -52,7 +51,8 @@ namespace ao::gtk
     Actions _actions;
     Gtk::Button _button;
     AobusSoul _soul;
-    std::unique_ptr<uimodel::playback::AobusSoulViewModel> _soulControllerPtr{};
+
     bool _longPressHandled = false;
+    uimodel::playback::AobusSoulViewModel _soulController;
   };
 } // namespace ao::gtk

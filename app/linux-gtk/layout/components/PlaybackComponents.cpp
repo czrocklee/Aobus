@@ -361,13 +361,12 @@ namespace ao::gtk::layout
     public:
       QualityIndicatorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _runtime{ctx.runtime}
-        , _soulControllerPtr{std::make_unique<uimodel::playback::AobusSoulViewModel>(
-            _runtime.playback(),
-            [this](uimodel::playback::AobusSoulViewState const& view)
-            {
-              _soul.breathe(view.isBreathing);
-              _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
-            })}
+        , _soulController{_runtime.playback(),
+                          [this](uimodel::playback::AobusSoulViewState const& view)
+                          {
+                            _soul.breathe(view.isBreathing);
+                            _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
+                          }}
       {
       }
 
@@ -376,7 +375,7 @@ namespace ao::gtk::layout
     private:
       rt::AppRuntime& _runtime;
       AobusSoul _soul{};
-      std::unique_ptr<uimodel::playback::AobusSoulViewModel> _soulControllerPtr;
+      uimodel::playback::AobusSoulViewModel _soulController;
     };
 
     std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)

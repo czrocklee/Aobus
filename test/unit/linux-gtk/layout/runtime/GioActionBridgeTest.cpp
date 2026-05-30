@@ -7,6 +7,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
+
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleactiongroup.h>
 #include <gtkmm/application.h>

@@ -11,12 +11,13 @@
 #include <gtkmm/label.h>
 
 #include <cstdint>
-#include <memory>
 
 namespace ao::gtk
 {
   NowPlayingStatusLabel::NowPlayingStatusLabel(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
+    , _controller{_playbackService,
+                  [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.add_css_class("ao-nowplaying");
     _label.add_css_class("ao-clickable");
@@ -28,9 +29,6 @@ namespace ao::gtk
 
     _label.add_controller(clickGesturePtr);
     _label.set_cursor(Gdk::Cursor::create("pointer"));
-
-    _controllerPtr = std::make_unique<ao::uimodel::playback::NowPlayingViewModel>(
-      _playbackService, [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); });
   }
 
   NowPlayingStatusLabel::~NowPlayingStatusLabel() = default;

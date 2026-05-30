@@ -11,7 +11,6 @@
 #include <gtkmm/widget.h>
 
 #include <cstdint>
-#include <memory>
 
 namespace ao::gtk
 {
@@ -41,11 +40,11 @@ namespace ao::gtk
     Mode _mode;
     Gtk::Label _label;
     uimodel::playback::PlaybackPositionInterpolator _interpolator;
-    std::unique_ptr<uimodel::playback::PlaybackTimeViewModel> _controllerPtr;
 
     bool _isPreviewing = false;
     std::uint32_t _lastPosSec = 0;
     std::uint32_t _lastDurSec = 0;
     bool _dirty = true;
+    uimodel::playback::PlaybackTimeViewModel _controller;
   };
 } // namespace ao::gtk

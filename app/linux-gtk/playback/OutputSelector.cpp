@@ -11,7 +11,6 @@
 #include <gtkmm/gesturelongpress.h>
 
 #include <cstdint>
-#include <memory>
 
 namespace ao::gtk
 {
@@ -22,20 +21,18 @@ namespace ao::gtk
 
   OutputSelector::OutputSelector(rt::PlaybackService& playback)
     : _playback{playback}
+    , _soulController{_playback,
+                      [this](ao::uimodel::playback::AobusSoulViewState const& view)
+                      {
+                        _soul.breathe(view.isBreathing);
+                        _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
+                      }}
   {
     _button.set_has_frame(false);
     _button.add_css_class("ao-output-logo");
     _button.set_halign(Gtk::Align::START);
     _button.set_valign(Gtk::Align::CENTER);
     _button.set_child(_soul);
-
-    _soulControllerPtr = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
-      _playback,
-      [this](ao::uimodel::playback::AobusSoulViewState const& view)
-      {
-        _soul.breathe(view.isBreathing);
-        _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
-      });
 
     _button.signal_clicked().connect(
       [this]
