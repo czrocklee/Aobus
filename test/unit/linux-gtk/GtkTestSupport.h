@@ -14,6 +14,8 @@
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/widget.h>
 
 #include <cstddef>
 #include <filesystem>
@@ -25,6 +27,22 @@
 
 namespace ao::gtk::test
 {
+  /**
+   * collectScrolledWindows - Recursively collects all Gtk::ScrolledWindow widgets.
+   */
+  inline void collectScrolledWindows(Gtk::Widget& widget, std::vector<Gtk::ScrolledWindow*>& result)
+  {
+    if (auto* const scrolledWindow = dynamic_cast<Gtk::ScrolledWindow*>(&widget); scrolledWindow != nullptr)
+    {
+      result.push_back(scrolledWindow);
+    }
+
+    for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+    {
+      collectScrolledWindows(*child, result);
+    }
+  }
+
   /**
    * ImmediateExecutor - Standalone test double for IControlExecutor.
    * Executes tasks immediately on the caller's thread.

@@ -175,6 +175,7 @@ add_executable(ao_test_gtk
     unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp
     unit/linux-gtk/image/ImageWidgetTest.cpp
     unit/linux-gtk/image/ImageCacheTest.cpp
+    unit/linux-gtk/app/AppDialogTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/StyleManagerTest.cpp
     unit/linux-gtk/app/AppConfigTest.cpp

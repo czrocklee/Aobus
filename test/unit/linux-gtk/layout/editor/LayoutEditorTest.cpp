@@ -15,6 +15,7 @@
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -30,11 +31,8 @@
 
 namespace ao::gtk::layout::editor::test
 {
+  using ao::gtk::test::collectScrolledWindows;
   using ao::gtk::test::makeRuntime;
-
-  namespace
-  {
-  } // namespace
 
   using namespace ao::lmdb::test;
 
@@ -250,6 +248,41 @@ namespace ao::gtk::layout::editor::test
     {
       auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
       REQUIRE(dialogPtr != nullptr);
+
+      auto width = 0;
+      auto height = 0;
+      dialogPtr->get_default_size(width, height);
+
+      CHECK(width == -1);
+      CHECK(height == -1);
+
+      auto scrolledWindows = std::vector<Gtk::ScrolledWindow*>{};
+      collectScrolledWindows(*dialogPtr, scrolledWindows);
+
+      auto foundTreeScroll = false;
+      auto foundPropertiesScroll = false;
+
+      for (auto* const scrolledWindow : scrolledWindows)
+      {
+        CHECK(scrolledWindow->get_propagate_natural_width());
+        CHECK(scrolledWindow->get_propagate_natural_height());
+
+        if (scrolledWindow->get_min_content_width() == 300)
+        {
+          foundTreeScroll = true;
+          CHECK(scrolledWindow->get_min_content_height() == 460);
+        }
+
+        if (scrolledWindow->get_min_content_width() == 420)
+        {
+          foundPropertiesScroll = true;
+          CHECK(scrolledWindow->get_max_content_width() == 560);
+          CHECK(scrolledWindow->get_max_content_height() == 560);
+        }
+      }
+
+      CHECK(foundTreeScroll);
+      CHECK(foundPropertiesScroll);
       dialogPtr->close();
     }
 

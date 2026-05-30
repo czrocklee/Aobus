@@ -47,8 +47,9 @@ namespace ao::gtk
     constexpr int kSpinMax = 65535.0;
     constexpr int kSpinDigits = 0;
 
-    constexpr int kDefaultWidth = 520;
-    constexpr int kDefaultHeight = 580;
+    constexpr int kMinScrollContentWidth = 480;
+    constexpr int kMaxScrollContentWidth = 640;
+    constexpr int kMaxScrollContentHeight = 520;
 
     bool shouldShowEditableMetadataRow(rt::TrackFieldDefinition const& rtDef,
                                        detail::TrackFieldUiDefinition const& uiDef)
@@ -82,7 +83,7 @@ namespace ao::gtk
 
     set_title(title);
     set_transient_for(parent);
-    set_default_size(kDefaultWidth, kDefaultHeight);
+    set_default_size(-1, -1);
 
     setupUi();
     loadData();
@@ -109,6 +110,11 @@ namespace ao::gtk
   void TrackPropertiesDialog::setupMetadataTab()
   {
     _metadataScroll.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
+    _metadataScroll.set_propagate_natural_width(true);
+    _metadataScroll.set_propagate_natural_height(true);
+    _metadataScroll.set_min_content_width(kMinScrollContentWidth);
+    _metadataScroll.set_max_content_width(kMaxScrollContentWidth);
+    _metadataScroll.set_max_content_height(kMaxScrollContentHeight);
     _metadataScroll.set_vexpand(true);
     _metadataScroll.set_child(_metadataBox);
 
@@ -140,6 +146,11 @@ namespace ao::gtk
   void TrackPropertiesDialog::setupPropertiesTab()
   {
     _propertiesScroll.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
+    _propertiesScroll.set_propagate_natural_width(true);
+    _propertiesScroll.set_propagate_natural_height(true);
+    _propertiesScroll.set_min_content_width(kMinScrollContentWidth);
+    _propertiesScroll.set_max_content_width(kMaxScrollContentWidth);
+    _propertiesScroll.set_max_content_height(kMaxScrollContentHeight);
     _propertiesScroll.set_vexpand(true);
     _propertiesScroll.set_child(_propertiesBox);
 

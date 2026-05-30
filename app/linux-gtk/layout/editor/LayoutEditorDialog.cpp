@@ -54,8 +54,11 @@ namespace ao::gtk::layout::editor
 {
   namespace
   {
-    constexpr int kEditorDefaultWidth = 850;
-    constexpr int kEditorDefaultHeight = 650;
+    constexpr int kTreeMinContentWidth = 300;
+    constexpr int kTreeMinContentHeight = 460;
+    constexpr int kPropertiesMinContentWidth = 420;
+    constexpr int kPropertiesMaxContentWidth = 560;
+    constexpr int kPropertiesMaxContentHeight = 560;
   }
 
   LayoutEditorDialog::LayoutEditorDialog(Gtk::Window& parent,
@@ -72,7 +75,7 @@ namespace ao::gtk::layout::editor
   {
     set_title("Layout Editor");
     set_transient_for(parent);
-    set_default_size(kEditorDefaultWidth, kEditorDefaultHeight);
+    set_default_size(-1, -1);
 
     addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
     addPrimaryAction("Apply", Gtk::ResponseType::APPLY);
@@ -125,6 +128,10 @@ namespace ao::gtk::layout::editor
 
     _treeScroll.set_child(_treeView);
     _treeScroll.set_policy(Gtk::PolicyType::AUTOMATIC, Gtk::PolicyType::AUTOMATIC);
+    _treeScroll.set_propagate_natural_width(true);
+    _treeScroll.set_propagate_natural_height(true);
+    _treeScroll.set_min_content_width(kTreeMinContentWidth);
+    _treeScroll.set_min_content_height(kTreeMinContentHeight);
     _treeScroll.set_vexpand(true);
 
     _toolbar.set_spacing(2);
@@ -196,6 +203,11 @@ namespace ao::gtk::layout::editor
 
     _propertiesScroll.set_child(_propertiesBox);
     _propertiesScroll.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
+    _propertiesScroll.set_propagate_natural_width(true);
+    _propertiesScroll.set_propagate_natural_height(true);
+    _propertiesScroll.set_min_content_width(kPropertiesMinContentWidth);
+    _propertiesScroll.set_max_content_width(kPropertiesMaxContentWidth);
+    _propertiesScroll.set_max_content_height(kPropertiesMaxContentHeight);
 
     _paned.set_start_child(_treeBox);
     _paned.set_end_child(_propertiesScroll);

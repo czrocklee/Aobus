@@ -147,10 +147,12 @@ namespace ao::gtk
   void SmartListDialog::setupUi()
   {
     constexpr std::int32_t kBoxSpacing = 12;
-    constexpr std::int32_t kDefaultWidth = 850;
-    constexpr std::int32_t kDefaultHeight = 600;
+    constexpr int kPreviewMinContentWidth = 420;
+    constexpr int kPreviewMinContentHeight = 360;
+    constexpr int kPreviewMaxContentWidth = 640;
+    constexpr int kPreviewMaxContentHeight = 520;
 
-    set_default_size(kDefaultWidth, kDefaultHeight);
+    set_default_size(-1, -1);
 
     // Setup Actions in HeaderBar
     _cancelButton = addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
@@ -232,6 +234,12 @@ namespace ao::gtk
 
     _previewScrolledWindow.set_vexpand(true);
     _previewScrolledWindow.set_hexpand(true);
+    _previewScrolledWindow.set_propagate_natural_width(true);
+    _previewScrolledWindow.set_propagate_natural_height(true);
+    _previewScrolledWindow.set_min_content_width(kPreviewMinContentWidth);
+    _previewScrolledWindow.set_min_content_height(kPreviewMinContentHeight);
+    _previewScrolledWindow.set_max_content_width(kPreviewMaxContentWidth);
+    _previewScrolledWindow.set_max_content_height(kPreviewMaxContentHeight);
     _previewScrolledWindow.add_css_class("ao-modern-content-shell"); // Reuse shell styling
     _previewColumnView.set_show_row_separators(true);
     _previewScrolledWindow.set_child(_previewColumnView);

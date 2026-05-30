@@ -15,6 +15,7 @@ namespace ao::gtk
 {
   AppDialog::AppDialog()
   {
+    _headerBar.set_show_title_buttons(false);
     set_titlebar(_headerBar);
     set_child(_rootBox);
 

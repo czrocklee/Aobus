@@ -39,6 +39,9 @@ namespace ao::gtk
   namespace
   {
     constexpr int kBoxSpacing = 6;
+    constexpr int kMinScrollContentWidth = 480;
+    constexpr int kMaxScrollContentWidth = 700;
+    constexpr std::int32_t kMaxScrollContentHeight = 520;
 
     std::string generateId()
     {
@@ -114,10 +117,8 @@ namespace ao::gtk
   {
     set_title("Edit Custom View");
     set_transient_for(parent);
-    constexpr std::int32_t kDefaultWidth = 500;
-    constexpr std::int32_t kDefaultHeight = 600;
 
-    set_default_size(kDefaultWidth, kDefaultHeight);
+    set_default_size(-1, -1);
 
     setupUi();
     populateFromSpec(initialSpec, initialLabel);
@@ -198,6 +199,11 @@ namespace ao::gtk
 
     auto* scroll = Gtk::make_managed<Gtk::ScrolledWindow>();
     scroll->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
+    scroll->set_propagate_natural_width(true);
+    scroll->set_propagate_natural_height(true);
+    scroll->set_min_content_width(kMinScrollContentWidth);
+    scroll->set_max_content_width(kMaxScrollContentWidth);
+    scroll->set_max_content_height(kMaxScrollContentHeight);
     scroll->set_child(*mainBox);
     scroll->set_vexpand(true);
 

@@ -12,6 +12,8 @@
 #include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
 #include <vector>
@@ -83,8 +85,36 @@ namespace ao::gtk::test
 
     SECTION("dialog creation and data loading")
     {
-      auto const dialog = TrackPropertiesDialog{window, library, runtime.mutation(), cache, {trackId1}};
+      auto dialog = TrackPropertiesDialog{window, library, runtime.mutation(), cache, {trackId1}};
       drainGtkEvents();
+
+      auto width = 0;
+      auto height = 0;
+      dialog.get_default_size(width, height);
+
+      CHECK(width == -1);
+      CHECK(height == -1);
+
+      auto scrolledWindows = std::vector<Gtk::ScrolledWindow*>{};
+      auto* const child = dialog.get_child();
+      REQUIRE(child != nullptr);
+      collectScrolledWindows(*child, scrolledWindows);
+
+      auto configuredScrollCount = 0;
+
+      for (auto* const scrolledWindow : scrolledWindows)
+      {
+        if (scrolledWindow->get_min_content_width() == 480)
+        {
+          ++configuredScrollCount;
+          CHECK(scrolledWindow->get_propagate_natural_width());
+          CHECK(scrolledWindow->get_propagate_natural_height());
+          CHECK(scrolledWindow->get_max_content_width() == 640);
+          CHECK(scrolledWindow->get_max_content_height() == 520);
+        }
+      }
+
+      CHECK(configuredScrollCount == 2);
     }
 
     SECTION("multi-track selection")
