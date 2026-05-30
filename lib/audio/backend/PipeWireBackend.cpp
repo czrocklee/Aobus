@@ -50,7 +50,7 @@ namespace ao::audio::backend
    */
   struct PipeWireBackend::Impl final
   {
-    Impl() { ensurePipeWireInit(); }
+    Impl() = default;
 
     ~Impl()
     {
@@ -110,6 +110,7 @@ namespace ao::audio::backend
     }();
 
     // Members
+    PipeWireEnvironmentGuard envGuard;
     IRenderTarget* renderTarget = nullptr;
     Format format;
     std::atomic<bool> drainPending = false;

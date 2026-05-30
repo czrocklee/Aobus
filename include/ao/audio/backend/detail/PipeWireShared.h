@@ -133,9 +133,24 @@ namespace ao::audio::backend::detail
     ::pw_thread_loop* _loop;
   };
 
+  class PipeWireEnvironmentGuard final
+  {
+  public:
+    PipeWireEnvironmentGuard();
+    ~PipeWireEnvironmentGuard() noexcept;
+
+    PipeWireEnvironmentGuard(PipeWireEnvironmentGuard const&) = delete;
+    PipeWireEnvironmentGuard& operator=(PipeWireEnvironmentGuard const&) = delete;
+
+    PipeWireEnvironmentGuard(PipeWireEnvironmentGuard&&) = delete;
+    PipeWireEnvironmentGuard& operator=(PipeWireEnvironmentGuard&&) = delete;
+
+  private:
+    bool _active = false;
+  };
+
   // --- Shared Helper Functions ---
 
-  void ensurePipeWireInit();
   std::optional<std::uint32_t> parseUintProperty(char const* value) noexcept;
   std::optional<Format> parseRawStreamFormat(::spa_pod const* param) noexcept;
 } // namespace ao::audio::backend::detail

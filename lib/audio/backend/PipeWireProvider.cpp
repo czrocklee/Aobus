@@ -8,7 +8,6 @@
 #include <ao/audio/backend/PipeWireBackend.h>
 #include <ao/audio/backend/PipeWireMonitor.h>
 #include <ao/audio/backend/PipeWireProvider.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
 
 #include <memory>
 #include <string_view>
@@ -17,15 +16,12 @@
 
 namespace ao::audio::backend
 {
-  using namespace detail;
-
   struct PipeWireProvider::Impl final
   {
     std::unique_ptr<PipeWireMonitor> monitorPtr;
 
     Impl()
     {
-      ensurePipeWireInit();
       monitorPtr = std::make_unique<PipeWireMonitor>();
       monitorPtr->start();
     }

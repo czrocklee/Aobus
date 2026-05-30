@@ -14,26 +14,57 @@ extern "C"
 
 #include <charconv>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <string_view>
 #include <system_error>
 
 namespace ao::audio::backend::detail
 {
-  void ensurePipeWireInit()
+  namespace
   {
-    struct PwInitGuard
+    struct PipeWireRuntimeState final
     {
-      PwInitGuard() { ::pw_init(nullptr, nullptr); }
-      ~PwInitGuard() noexcept { ::pw_deinit(); }
-
-      PwInitGuard(PwInitGuard const&) = delete;
-      PwInitGuard& operator=(PwInitGuard const&) = delete;
-      PwInitGuard(PwInitGuard&&) = delete;
-      PwInitGuard& operator=(PwInitGuard&&) = delete;
+      std::mutex mutex;
+      std::uint32_t refCount = 0;
     };
 
-    static PwInitGuard const guard;
+    PipeWireRuntimeState& pipeWireRuntimeState()
+    {
+      static auto* const state = new PipeWireRuntimeState{};
+      return *state;
+    }
+  } // namespace
+
+  PipeWireEnvironmentGuard::PipeWireEnvironmentGuard()
+  {
+    auto& state = pipeWireRuntimeState();
+    auto const lock = std::scoped_lock{state.mutex};
+
+    if (state.refCount == 0)
+    {
+      ::pw_init(nullptr, nullptr);
+    }
+
+    ++state.refCount;
+    _active = true;
+  }
+
+  PipeWireEnvironmentGuard::~PipeWireEnvironmentGuard() noexcept
+  {
+    if (!_active)
+    {
+      return;
+    }
+
+    auto& state = pipeWireRuntimeState();
+    auto const lock = std::scoped_lock{state.mutex};
+    --state.refCount;
+
+    if (state.refCount == 0)
+    {
+      ::pw_deinit();
+    }
   }
 
   std::optional<std::uint32_t> parseUintProperty(char const* value) noexcept

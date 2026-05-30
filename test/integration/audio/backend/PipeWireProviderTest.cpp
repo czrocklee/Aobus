@@ -34,6 +34,7 @@ namespace ao::audio::backend::test
   {
     struct DummySinkGuard final
     {
+      PipeWireEnvironmentGuard envGuard;
       PwThreadLoopPtr threadLoopPtr;
       PwContextPtr contextPtr;
       PwCorePtr corePtr;
@@ -46,7 +47,6 @@ namespace ao::audio::backend::test
 
       DummySinkGuard()
       {
-        ensurePipeWireInit();
         threadLoopPtr.reset(::pw_thread_loop_new("TestSinkLoop", nullptr));
 
         if (!threadLoopPtr)
@@ -113,8 +113,7 @@ namespace ao::audio::backend::test
 
   TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integration][pipewire]")
   {
-    // Check if PipeWire is available
-    ensurePipeWireInit();
+    auto const envGuard = PipeWireEnvironmentGuard{};
 
     // Quick check if we can connect to a daemon
     {
@@ -173,7 +172,6 @@ namespace ao::audio::backend::test
 
     SECTION("Enumeration finds Audio/Duplex nodes")
     {
-      ensurePipeWireInit();
       auto threadLoopPtr = PwThreadLoopPtr{};
       auto contextPtr = PwContextPtr{};
       auto corePtr = PwCorePtr{};

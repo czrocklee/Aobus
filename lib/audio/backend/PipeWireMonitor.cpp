@@ -112,7 +112,6 @@ namespace ao::audio::backend
 
     Impl()
     {
-      detail::ensurePipeWireInit();
       threadLoopPtr.reset(::pw_thread_loop_new("PipeWireMonitor", nullptr));
 
       if (!threadLoopPtr)
@@ -177,6 +176,7 @@ namespace ao::audio::backend
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
+    detail::PipeWireEnvironmentGuard envGuard;
     detail::PwThreadLoopPtr threadLoopPtr;
     detail::PwContextPtr contextPtr;
     detail::PwCorePtr corePtr;
