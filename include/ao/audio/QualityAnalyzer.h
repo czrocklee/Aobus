@@ -4,32 +4,96 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/flow/Graph.h>
 
+#include <cstdint>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace ao::audio
 {
+  /**
+   * @brief Classification of a quality-relevant observation at a single node.
+   */
+  enum class QualityFindingKind : std::uint8_t
+  {
+    Unknown,
+    BitPerfect,
+    LossySource,
+    VolumeModification,
+    Muted,
+    Resampling,
+    ChannelMapping,
+    LosslessPadding,
+    LosslessFloat,
+    Truncation,
+    MixedSources,
+  };
+
+  /**
+   * @brief A single quality-relevant observation at a node in the audio path.
+   *
+   * Format transition findings (Resampling, ChannelMapping, LosslessPadding,
+   * LosslessFloat, Truncation) carry the source and destination formats.
+   * MixedSources findings carry the names of other applications sharing the node.
+   */
+  struct QualityFinding final
+  {
+    QualityFindingKind kind = QualityFindingKind::Unknown;
+    std::optional<Format> optFromFormat{};
+    std::optional<Format> optToFormat{};
+    std::vector<std::string> sharedApps{};
+
+    bool operator==(QualityFinding const&) const = default;
+  };
+
+  /**
+   * @brief Quality assessment for a single node in the playback path.
+   *
+   * Every node in the analyzed path receives exactly one assessment.
+   * Nodes with no quality issues receive a single BitPerfect finding.
+   */
+  struct NodeQualityAssessment final
+  {
+    std::string nodeId{};
+    std::string nodeName{};
+    flow::NodeType nodeType = flow::NodeType::Intermediary;
+    Quality worstQuality = Quality::BitwisePerfect;
+    std::vector<QualityFinding> findings{};
+
+    bool operator==(NodeQualityAssessment const&) const = default;
+  };
+
   /**
    * @brief The result of an audio path quality analysis.
    */
   struct QualityResult final
   {
     Quality quality = Quality::Unknown;
-    std::string tooltip;
+    std::vector<NodeQualityAssessment> assessments{};
 
     bool operator==(QualityResult const&) const = default;
   };
 
   /**
+   * @brief Returns the worse of two quality levels.
+   *
+   * Encapsulates the severity ordering so callers are not coupled
+   * to the numeric values of the Quality enum.
+   */
+  Quality worseQuality(Quality lhs, Quality rhs) noexcept;
+
+  /**
    * @brief Analyzes a flow graph to determine the overall audio quality.
    *
    * This is a pure function that evaluates the signal path from the decoder
-   * to the final output device, identifying any lossy steps or linear
-   * interventions.
+   * to the final output device, producing a per-node assessment of quality
+   * findings.
    *
    * @param graph The complete system audio graph to analyze.
-   * @return A QualityResult containing the verdict and a descriptive tooltip.
+   * @return A QualityResult containing per-node assessments and the global verdict.
    */
   QualityResult analyzeAudioQuality(flow::Graph const& graph);
 } // namespace ao::audio

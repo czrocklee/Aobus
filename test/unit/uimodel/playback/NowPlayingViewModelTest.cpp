@@ -14,12 +14,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <functional>
+#include <string>
 #include <vector>
 
 namespace ao::uimodel::playback::test
 {
   using namespace ao::rt::test;
   using namespace ao::rt;
+
   namespace
   {
     struct NullExecutor final : public IControlExecutor
@@ -148,17 +150,6 @@ namespace ao::uimodel::playback::test
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
       CHECK(cmd.navigateQuery == "$title = 'A \"Song\"'");
-    }
-
-    SECTION("Pipeline tooltip generation")
-    {
-      auto desc =
-        audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .title = "Song", .artist = "Artist", .durationMs = 1000};
-      playback.play(desc, ListId{1});
-
-      // Since we can't easily inject state into the real PlaybackService,
-      // this test is currently limited. In a future refactor, we might
-      // make NowPlayingViewModel take a state provider.
     }
   }
 } // namespace ao::uimodel::playback::test

@@ -2,11 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/playback/AudioQualityFormat.h>
 #include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <algorithm>
@@ -15,8 +15,8 @@
 #include <iterator>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace ao::uimodel::playback
 {
@@ -38,94 +38,10 @@ namespace ao::uimodel::playback
       std::ranges::replace(sanitized, '"', '\'');
       return std::format("\"{}\"", sanitized);
     }
+  } // namespace
 
-    std::string formatStream(audio::Format const& format)
-    {
-      constexpr auto kKhzMultiplier = 1000.0;
-      auto const channelsText = [&] -> std::string
-      {
-        if (format.channels == 1)
-        {
-          return "Mono";
-        }
-
-        if (format.channels == 2)
-        {
-          return "Stereo";
-        }
-
-        return std::format("{} ch", format.channels);
-      }();
-
-      return std::format("{:.1f} kHz · {}-bit · {}", format.sampleRate / kKhzMultiplier, format.bitDepth, channelsText);
-    }
-
-    std::string computePipelineTooltip(rt::PlaybackState const& state)
-    {
-      auto tooltip = std::string{"Audio Pipeline:\n"};
-      auto const nodeTypeString = [](audio::flow::NodeType type)
-      {
-        using Type = audio::flow::NodeType;
-
-        switch (type)
-        {
-          case Type::Decoder: return "[Source]";
-          case Type::Engine: return "[Engine]";
-          case Type::Stream: return "[Stream]";
-          case Type::Intermediary: return "[Filter]";
-          case Type::Sink: return "[Device]";
-          case Type::ExternalSource: return "[Other Source]";
-        }
-
-        return "[Unknown]";
-      };
-
-      auto currentId = std::string{"ao-decoder"};
-      auto visited = std::unordered_set<std::string>{};
-
-      while (!currentId.empty() && !visited.contains(currentId))
-      {
-        visited.insert(currentId);
-        auto const it = std::ranges::find(state.flow.nodes, currentId, &audio::flow::Node::id);
-
-        if (it == state.flow.nodes.end())
-        {
-          break;
-        }
-
-        auto const& node = *it;
-        std::format_to(std::back_inserter(tooltip), "• {} {}", nodeTypeString(node.type), node.name);
-
-        if (node.optFormat)
-        {
-          std::format_to(std::back_inserter(tooltip), " ({})", formatStream(*node.optFormat));
-        }
-
-        if (node.volumeNotUnity)
-        {
-          tooltip += " [Vol Control]";
-        }
-
-        if (node.isMuted)
-        {
-          tooltip += " [Muted]";
-        }
-
-        tooltip += "\n";
-
-        auto const linkIt = std::ranges::find_if(
-          state.flow.connections, [&](auto const& link) { return link.isActive && link.sourceId == currentId; });
-        currentId = (linkIt != state.flow.connections.end()) ? linkIt->destId : "";
-      }
-
-      if (!state.qualityTooltip.empty())
-      {
-        std::format_to(std::back_inserter(tooltip), "\n{}", state.qualityTooltip);
-      }
-
-      return tooltip;
-    }
-
+  namespace
+  {
     AudioQualityCategory mapQuality(audio::Quality quality)
     {
       using Quality = audio::Quality;
@@ -192,8 +108,22 @@ namespace ao::uimodel::playback
                                            [](auto const& node)
                                            { return node.type == audio::flow::NodeType::Decoder && node.optFormat; });
 
-      view.streamInfo = (it != state.flow.nodes.end() && it->optFormat) ? formatStream(*it->optFormat) : std::string{};
-      view.pipelineTooltip = computePipelineTooltip(state);
+      view.streamInfo =
+        (it != state.flow.nodes.end() && it->optFormat) ? audioFormatLabel(*it->optFormat) : std::string{};
+
+      auto plainTextFallback = std::string{"Audio Pipeline:\n"};
+      auto const conclusionText = audioQualityConclusion(state.quality);
+
+      if (!conclusionText.empty())
+      {
+        std::format_to(std::back_inserter(plainTextFallback), "\n{}", conclusionText);
+      }
+
+      view.audioQualityTooltip = AudioQualityTooltipView{.flow = state.flow,
+                                                         .quality = state.quality,
+                                                         .assessments = state.qualityAssessments,
+                                                         .plainTextFallback = plainTextFallback};
+
       view.isActive = (state.quality != audio::Quality::Unknown);
       view.qualityCategory = mapQuality(state.quality);
     }

@@ -8,6 +8,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <string_view>
+
 namespace ao::audio::test
 {
   namespace
@@ -50,6 +53,22 @@ namespace ao::audio::test
 
       return graph;
     }
+
+    NodeQualityAssessment const* findAssessment(QualityResult const& result, std::string_view id)
+    {
+      auto const it = std::ranges::find(result.assessments, id, &NodeQualityAssessment::nodeId);
+      return it != result.assessments.end() ? &(*it) : nullptr;
+    }
+
+    bool hasFinding(NodeQualityAssessment const* assessment, QualityFindingKind kind)
+    {
+      if (assessment == nullptr)
+      {
+        return false;
+      }
+
+      return std::ranges::any_of(assessment->findings, [kind](auto const& f) { return f.kind == kind; });
+    }
   } // namespace
 
   TEST_CASE("QualityAnalyzer - Bitwise Perfect", "[audio][unit][quality]")
@@ -58,7 +77,13 @@ namespace ao::audio::test
     auto const result = analyzeAudioQuality(graph);
 
     REQUIRE(result.quality == Quality::BitwisePerfect);
-    REQUIRE(result.tooltip.find("Byte-perfect") != std::string::npos);
+    REQUIRE(result.assessments.size() == 4);
+
+    for (auto const& assessment : result.assessments)
+    {
+      REQUIRE(assessment.worstQuality == Quality::BitwisePerfect);
+      REQUIRE(hasFinding(&assessment, QualityFindingKind::BitPerfect));
+    }
   }
 
   TEST_CASE("QualityAnalyzer - Lossy Source", "[audio][unit][quality]")
@@ -68,7 +93,10 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LossySource);
-    REQUIRE(result.tooltip.find("Lossy format") != std::string::npos);
+
+    auto const* dec = findAssessment(result, "ao-decoder");
+    REQUIRE(hasFinding(dec, QualityFindingKind::LossySource));
+    REQUIRE(dec->worstQuality == Quality::LossySource);
   }
 
   TEST_CASE("QualityAnalyzer - Resampling", "[audio][unit][quality]")
@@ -79,7 +107,10 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
-    REQUIRE(result.tooltip.find("Resampling") != std::string::npos);
+
+    auto const* eng = findAssessment(result, "ao-engine");
+    REQUIRE(hasFinding(eng, QualityFindingKind::Resampling));
+    REQUIRE(eng->worstQuality == Quality::LinearIntervention);
   }
 
   TEST_CASE("QualityAnalyzer - Volume Modification", "[audio][unit][quality]")
@@ -89,7 +120,10 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
-    REQUIRE(result.tooltip.find("Volume") != std::string::npos);
+
+    auto const* eng = findAssessment(result, "ao-engine");
+    REQUIRE(hasFinding(eng, QualityFindingKind::VolumeModification));
+    REQUIRE(eng->worstQuality == Quality::LinearIntervention);
   }
 
   TEST_CASE("QualityAnalyzer - Mute Detected", "[audio][unit][quality]")
@@ -99,7 +133,10 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
-    REQUIRE(result.tooltip.find("MUTED") != std::string::npos);
+
+    auto const* strm = findAssessment(result, "ao-stream");
+    REQUIRE(hasFinding(strm, QualityFindingKind::Muted));
+    REQUIRE(strm->worstQuality == Quality::LinearIntervention);
   }
 
   TEST_CASE("QualityAnalyzer - External Mixing", "[audio][unit][quality]")
@@ -113,7 +150,15 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
-    REQUIRE(result.tooltip.find("shared with Firefox") != std::string::npos);
+
+    auto const* sink = findAssessment(result, "ao-sink");
+    REQUIRE(hasFinding(sink, QualityFindingKind::MixedSources));
+    REQUIRE(sink->worstQuality == Quality::LinearIntervention);
+
+    auto const findingIt =
+      std::ranges::find_if(sink->findings, [](auto const& f) { return f.kind == QualityFindingKind::MixedSources; });
+    REQUIRE(findingIt != sink->findings.end());
+    REQUIRE(std::ranges::contains(findingIt->sharedApps, std::string{"Firefox"}));
   }
 
   TEST_CASE("QualityAnalyzer - Lossless Bit-Depth Extension", "[audio][unit][quality]")
@@ -126,7 +171,10 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LosslessPadded);
-    REQUIRE(result.tooltip.find("Integer padding") != std::string::npos);
+
+    auto const* eng = findAssessment(result, "ao-engine");
+    REQUIRE(hasFinding(eng, QualityFindingKind::LosslessPadding));
+    REQUIRE(eng->worstQuality == Quality::LosslessPadded);
   }
 
   TEST_CASE("QualityAnalyzer - Empty Graph", "[audio][unit][quality]")
@@ -134,6 +182,17 @@ namespace ao::audio::test
     auto const graph = flow::Graph{};
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::Unknown);
+    REQUIRE(result.assessments.empty());
+  }
+
+  TEST_CASE("QualityAnalyzer - Missing Playback Path", "[audio][unit][quality]")
+  {
+    auto graph = flow::Graph{};
+    graph.nodes.push_back(flow::Node{.id = "external-app", .type = flow::NodeType::ExternalSource, .name = "Firefox"});
+
+    auto const result = analyzeAudioQuality(graph);
+    REQUIRE(result.quality == Quality::Unknown);
+    REQUIRE(result.assessments.empty());
   }
 
   TEST_CASE("QualityAnalyzer - Float Conversions", "[audio][unit][quality]")
@@ -151,6 +210,9 @@ namespace ao::audio::test
 
       auto const result = analyzeAudioQuality(graph);
       REQUIRE(result.quality == Quality::LosslessFloat);
+
+      auto const* eng = findAssessment(result, "ao-engine");
+      REQUIRE(hasFinding(eng, QualityFindingKind::LosslessFloat));
     }
 
     SECTION("32-bit integer to 32-bit float is lossy (mantissa truncation)")
@@ -165,6 +227,9 @@ namespace ao::audio::test
 
       auto const result = analyzeAudioQuality(graph);
       REQUIRE(result.quality == Quality::LinearIntervention);
+
+      auto const* eng = findAssessment(result, "ao-engine");
+      REQUIRE(hasFinding(eng, QualityFindingKind::Truncation));
     }
 
     SECTION("32-bit integer to 64-bit float is lossless")

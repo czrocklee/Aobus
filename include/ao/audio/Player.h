@@ -6,6 +6,7 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
+#include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -32,7 +33,7 @@ namespace ao::audio
       std::vector<IBackendProvider::Status> availableBackends;
       flow::Graph flow;
       Quality quality = Quality::Unknown;
-      std::string qualityTooltip;
+      std::vector<NodeQualityAssessment> qualityAssessments{};
       float volume = 1.0F;
       bool muted = false;
       bool volumeAvailable = false;

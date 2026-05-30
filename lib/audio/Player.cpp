@@ -23,10 +23,6 @@
 
 namespace ao::audio
 {
-  namespace
-  {
-  }
-
   struct Player::Impl final
   {
     struct ProviderRecord
@@ -438,7 +434,7 @@ namespace ao::audio
       auto const lock = std::scoped_lock{_implPtr->graphMutex};
       status.flow = _implPtr->mergedGraph;
       status.quality = _implPtr->qualityResult.quality;
-      status.qualityTooltip = _implPtr->qualityResult.tooltip;
+      status.qualityAssessments = _implPtr->qualityResult.assessments;
     }
     status.isReady = isReady();
 

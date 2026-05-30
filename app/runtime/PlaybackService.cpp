@@ -89,6 +89,7 @@ namespace ao::rt
         .availableOutputs = std::move(outputs),
         .flow = status.flow,
         .quality = status.quality,
+        .qualityAssessments = status.qualityAssessments,
       };
     }
   }
@@ -227,14 +228,14 @@ namespace ao::rt
         });
 
       playerPtr->setOnQualityChanged(
-        [this](audio::Quality quality, bool const ready)
+        [this](audio::Quality, bool)
         {
           executor.dispatch(
-            [this, quality, ready]
+            [this]
             {
-              state.quality = quality;
-              state.ready = ready;
-              qualityChangedSignal.emit(PlaybackService::QualityChanged{.quality = quality, .ready = ready});
+              state = buildState(*playerPtr);
+              qualityChangedSignal.emit(
+                PlaybackService::QualityChanged{.quality = state.quality, .ready = state.ready});
             });
         });
     }

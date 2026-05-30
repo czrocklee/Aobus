@@ -77,6 +77,7 @@ add_executable(ao_test
     unit/uimodel/list/SmartListEditorModelTest.cpp
     unit/uimodel/playback/AobusSoulViewModelTest.cpp
     unit/uimodel/playback/AudioOutputViewModelTest.cpp
+    unit/uimodel/playback/AudioQualityFormatTest.cpp
     unit/uimodel/playback/NowPlayingViewModelTest.cpp
     unit/uimodel/playback/PlaybackQueueModelTest.cpp
     unit/uimodel/playback/PlaybackPositionInterpolatorTest.cpp
@@ -205,6 +206,7 @@ add_executable(ao_test_gtk
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp
       unit/linux-gtk/app/AppConfigTest.cpp
+    unit/linux-gtk/playback/AudioQualityTooltipWidgetTest.cpp
     unit/linux-gtk/playback/PlaybackUiComponentsTest.cpp
     unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
     unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp

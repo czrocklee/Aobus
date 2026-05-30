@@ -8,6 +8,7 @@
 #include "TrackPresentation.h"
 #include <ao/Type.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -97,7 +98,7 @@ namespace ao::rt
     std::vector<OutputBackendSnapshot> availableOutputs{};
     audio::flow::Graph flow{};
     audio::Quality quality = audio::Quality::Unknown;
-    std::string qualityTooltip{};
+    std::vector<audio::NodeQualityAssessment> qualityAssessments{};
     std::uint64_t revision = 0;
   };
 

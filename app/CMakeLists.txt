@@ -42,6 +42,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/list/SmartListEditorModel.cpp
     uimodel/playback/AobusSoulViewModel.cpp
     uimodel/playback/AudioOutputViewModel.cpp
+    uimodel/playback/AudioQualityFormat.cpp
     uimodel/playback/NowPlayingViewModel.cpp
     uimodel/playback/PlaybackPositionInterpolator.cpp
     uimodel/playback/PlaybackQueueModel.cpp

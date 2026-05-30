@@ -56,6 +56,9 @@ add_library(aobus-gtk-lib STATIC
     list/QueryExpressionBox.cpp
 
     playback/AobusSoulWindow.cpp
+    playback/AudioQualityCss.cpp
+    playback/AudioQualityTooltipController.cpp
+    playback/AudioQualityTooltipWidget.cpp
     playback/NowPlayingFieldLabel.cpp
     playback/NowPlayingStatusLabel.cpp
     playback/PlaybackDetailsWidget.cpp

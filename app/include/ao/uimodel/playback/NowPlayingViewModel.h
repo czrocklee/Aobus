@@ -3,16 +3,26 @@
 
 #pragma once
 
+#include <ao/audio/Backend.h>
+#include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/flow/Graph.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace ao::uimodel::playback
 {
+  namespace detail
+  {
+    std::string formatPipelineTooltip(rt::PlaybackState const& state);
+  }
+
   enum class AudioQualityCategory : std::uint8_t
   {
     Unknown,
@@ -45,10 +55,18 @@ namespace ao::uimodel::playback
     std::string navigateQuery;
   };
 
+  struct AudioQualityTooltipView final
+  {
+    audio::flow::Graph flow{};
+    audio::Quality quality = audio::Quality::Unknown;
+    std::vector<audio::NodeQualityAssessment> assessments{};
+    std::string plainTextFallback{};
+  };
+
   struct NowPlayingViewState final
   {
     std::string streamInfo;
-    std::string pipelineTooltip;
+    AudioQualityTooltipView audioQualityTooltip{};
     AudioQualityCategory qualityCategory = AudioQualityCategory::Unknown;
     bool isActive = false;
 

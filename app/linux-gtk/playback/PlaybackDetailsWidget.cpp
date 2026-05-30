@@ -4,46 +4,17 @@
 #include "playback/PlaybackDetailsWidget.h"
 
 #include "layout/LayoutConstants.h"
+#include "playback/AudioQualityCss.h"
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 
-#include <string>
-
 namespace ao::gtk
 {
   namespace
   {
-    void clearSinkStatusClasses(Gtk::Image& image)
-    {
-      for (auto const& cls : {"ao-quality-perfect",
-                              "ao-quality-lossless",
-                              "ao-quality-intervention",
-                              "ao-quality-lossy",
-                              "ao-quality-clipped"})
-      {
-        image.remove_css_class(cls);
-      }
-    }
-
-    char const* categoryToCssClass(uimodel::playback::AudioQualityCategory category)
-    {
-      using Category = uimodel::playback::AudioQualityCategory;
-
-      switch (category)
-      {
-        case Category::Perfect: return "ao-quality-perfect";
-        case Category::Lossless: return "ao-quality-lossless";
-        case Category::Intervention: return "ao-quality-intervention";
-        case Category::Lossy: return "ao-quality-lossy";
-        case Category::Clipped: return "ao-quality-clipped";
-        case Category::Unknown: return "";
-      }
-
-      return "";
-    }
   }
 
   PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playbackService)
@@ -59,6 +30,8 @@ namespace ao::gtk
 
     _container.append(_streamInfoLabel);
     _container.append(_sinkStatusIcon);
+
+    _tooltipController.attach(_container);
   }
 
   PlaybackDetailsWidget::~PlaybackDetailsWidget() = default;
@@ -67,18 +40,12 @@ namespace ao::gtk
   {
     _streamInfoLabel.set_text(view.streamInfo);
 
-    if (view.pipelineTooltip != _lastTooltipText)
-    {
-      _container.set_tooltip_text(view.pipelineTooltip);
-      _streamInfoLabel.set_tooltip_text(view.pipelineTooltip);
-      _sinkStatusIcon.set_tooltip_text(view.pipelineTooltip);
-      _lastTooltipText = view.pipelineTooltip;
-    }
+    _tooltipController.apply(view.audioQualityTooltip);
 
-    clearSinkStatusClasses(_sinkStatusIcon);
+    clearQualityCssClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(view.isActive);
 
-    auto const* const cssClass = categoryToCssClass(view.qualityCategory);
+    auto const* const cssClass = qualityCssClass(view.qualityCategory);
 
     if (cssClass[0] != '\0')
     {

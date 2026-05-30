@@ -15,7 +15,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
 
-    auto const selector = OutputSelector{playback};
+    auto selector = OutputSelector{playback};
 
     SECTION("initializes without crashing")
     {

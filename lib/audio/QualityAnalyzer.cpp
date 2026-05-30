@@ -8,33 +8,19 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <format>
+#include <cstdint>
 #include <set>
 #include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace ao::audio
 {
   namespace
   {
-    void appendLine(std::string& text, std::string_view line)
-    {
-      if (line.empty())
-      {
-        return;
-      }
-
-      if (!text.empty())
-      {
-        text += '\n';
-      }
-
-      text += line;
-    }
-
     bool isLosslessBitDepthChange(Format const& src, Format const& dst) noexcept
     {
       if (src.isFloat == dst.isFloat)
@@ -51,12 +37,12 @@ namespace ao::audio
 
         if (dst.bitDepth == 32)
         {
-          return srcBits <= 24;
+          return srcBits <= 24; // NOLINT(readability-magic-numbers)
         }
 
         if (dst.bitDepth == 64)
         {
-          return srcBits <= 32;
+          return srcBits <= 32; // NOLINT(readability-magic-numbers)
         }
       }
 
@@ -103,7 +89,7 @@ namespace ao::audio
                              std::span<flow::Node const* const> path,
                              std::unordered_map<std::string, std::set<std::string>> const& inputSources,
                              flow::Graph const& graph,
-                             QualityResult& result)
+                             NodeQualityAssessment& targetAssessment)
     {
       if (inputSources.contains(node.id))
       {
@@ -130,84 +116,107 @@ namespace ao::audio
           std::ranges::sort(otherAppNames);
           auto const [first, last] = std::ranges::unique(otherAppNames);
           otherAppNames.erase(first, last);
-          auto apps = std::string{};
 
-          for (size_t j = 0; j < otherAppNames.size(); ++j)
-          {
-            apps += otherAppNames[j];
-
-            if (j < otherAppNames.size() - 1)
-            {
-              apps += ", ";
-            }
-          }
-
-          appendLine(result.tooltip, std::format("• Mixed: {} shared with {}", node.name, apps));
-          result.quality = std::max(result.quality, Quality::LinearIntervention);
+          targetAssessment.findings.push_back(
+            QualityFinding{.kind = QualityFindingKind::MixedSources, .sharedApps = std::move(otherAppNames)});
+          targetAssessment.worstQuality = worseQuality(targetAssessment.worstQuality, Quality::LinearIntervention);
         }
       }
     }
 
-    void assessNodeQuality(flow::Node const& node, flow::Node const* nextNode, QualityResult& result)
+    void assessNodeSelfProperties(flow::Node const& node, NodeQualityAssessment& assessment)
     {
       if (node.isLossySource)
       {
-        appendLine(result.tooltip, std::format("• Source: Lossy format ({})", node.name));
-        result.quality = std::max(result.quality, Quality::LossySource);
+        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::LossySource});
+        assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LossySource);
       }
 
       if (node.volumeNotUnity)
       {
-        appendLine(result.tooltip, std::format("• Volume: Modification at {}", node.name));
-        result.quality = std::max(result.quality, Quality::LinearIntervention);
+        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::VolumeModification});
+        assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LinearIntervention);
       }
 
       if (node.isMuted)
       {
-        appendLine(result.tooltip, std::format("• Status: {} is MUTED", node.name));
-        result.quality = std::max(result.quality, Quality::LinearIntervention);
+        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::Muted});
+        assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LinearIntervention);
+      }
+    }
+
+    void assessFormatTransition(flow::Node const& prevNode,
+                                flow::Node const& currentNode,
+                                NodeQualityAssessment& targetAssessment)
+    {
+      if (!prevNode.optFormat || !currentNode.optFormat)
+      {
+        return;
       }
 
-      if (nextNode != nullptr)
+      auto const& f1 = *prevNode.optFormat;
+      auto const& f2 = *currentNode.optFormat;
+
+      if (f1.sampleRate != f2.sampleRate)
       {
-        if (node.optFormat && nextNode->optFormat)
+        targetAssessment.findings.push_back(
+          QualityFinding{.kind = QualityFindingKind::Resampling, .optFromFormat = f1, .optToFormat = f2});
+        targetAssessment.worstQuality = worseQuality(targetAssessment.worstQuality, Quality::LinearIntervention);
+      }
+
+      if (f1.channels != f2.channels)
+      {
+        targetAssessment.findings.push_back(
+          QualityFinding{.kind = QualityFindingKind::ChannelMapping, .optFromFormat = f1, .optToFormat = f2});
+        targetAssessment.worstQuality = worseQuality(targetAssessment.worstQuality, Quality::LinearIntervention);
+      }
+      else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
+      {
+        if (isLosslessBitDepthChange(f1, f2))
         {
-          auto const& f1 = *node.optFormat;
-          auto const& f2 = *nextNode->optFormat;
-
-          if (f1.sampleRate != f2.sampleRate)
-          {
-            appendLine(result.tooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
-            result.quality = std::max(result.quality, Quality::LinearIntervention);
-          }
-
-          if (f1.channels != f2.channels)
-          {
-            appendLine(result.tooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
-            result.quality = std::max(result.quality, Quality::LinearIntervention);
-          }
-          else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
-          {
-            if (isLosslessBitDepthChange(f1, f2))
-            {
-              appendLine(
-                result.tooltip, f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
-              result.quality = std::max(result.quality, f2.isFloat ? Quality::LosslessFloat : Quality::LosslessPadded);
-            }
-            else
-            {
-              appendLine(result.tooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
-              result.quality = std::max(result.quality, Quality::LinearIntervention);
-            }
-          }
+          targetAssessment.findings.push_back(
+            QualityFinding{.kind = f2.isFloat ? QualityFindingKind::LosslessFloat : QualityFindingKind::LosslessPadding,
+                           .optFromFormat = f1,
+                           .optToFormat = f2});
+          targetAssessment.worstQuality =
+            worseQuality(targetAssessment.worstQuality, f2.isFloat ? Quality::LosslessFloat : Quality::LosslessPadded);
+        }
+        else
+        {
+          targetAssessment.findings.push_back(
+            QualityFinding{.kind = QualityFindingKind::Truncation, .optFromFormat = f1, .optToFormat = f2});
+          targetAssessment.worstQuality = worseQuality(targetAssessment.worstQuality, Quality::LinearIntervention);
         }
       }
     }
   } // namespace
 
+  Quality worseQuality(Quality lhs, Quality rhs) noexcept
+  {
+    auto const rank = [](Quality quality) -> std::uint8_t
+    {
+      // NOLINTBEGIN(readability-magic-numbers)
+      switch (quality)
+      {
+        case Quality::Unknown: return 0;
+        case Quality::BitwisePerfect: return 1;
+        case Quality::LosslessPadded: return 2;
+        case Quality::LosslessFloat: return 3;
+        case Quality::LinearIntervention: return 4;
+        case Quality::LossySource: return 5;
+        case Quality::Clipped: return 6;
+      }
+      // NOLINTEND(readability-magic-numbers)
+
+      return 0;
+    };
+
+    return (rank(lhs) > rank(rhs)) ? lhs : rhs;
+  }
+
   QualityResult analyzeAudioQuality(flow::Graph const& graph)
   {
-    auto result = QualityResult{.quality = Quality::BitwisePerfect, .tooltip = {}};
+    auto result = QualityResult{.quality = Quality::BitwisePerfect, .assessments = {}};
 
     if (graph.nodes.empty())
     {
@@ -215,12 +224,14 @@ namespace ao::audio
       return result;
     }
 
-    appendLine(result.tooltip, "Audio Routing Analysis:");
-
-    // 1. Build linear path
     auto const path = findPlaybackPath(graph, "ao-decoder");
 
-    // 2. Identify mixing sources
+    if (path.empty())
+    {
+      result.quality = Quality::Unknown;
+      return result;
+    }
+
     auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
 
     for (auto const& link : graph.connections)
@@ -234,33 +245,30 @@ namespace ao::audio
     for (size_t i = 0; i < path.size(); ++i)
     {
       auto const* const node = path[i];
-      auto const* const nextNode = (i < path.size() - 1) ? path[i + 1] : nullptr;
+      auto assessment = NodeQualityAssessment{
+        .nodeId = node->id,
+        .nodeName = node->name,
+        .nodeType = node->type,
+        .worstQuality = Quality::BitwisePerfect,
+        .findings = {},
+      };
 
-      assessNodeQuality(*node, nextNode, result);
-      processInputSources(*node, path, inputSources, graph, result);
-    }
+      assessNodeSelfProperties(*node, assessment);
+      processInputSources(*node, path, inputSources, graph, assessment);
 
-    if (result.quality == Quality::BitwisePerfect)
-    {
-      appendLine(result.tooltip, "• Signal Path: Byte-perfect from decoder to device");
-    }
+      if (i > 0)
+      {
+        auto const* const prevNode = path[i - 1];
+        assessFormatTransition(*prevNode, *node, assessment);
+      }
 
-    switch (result.quality)
-    {
-      case Quality::BitwisePerfect:
-      case Quality::LosslessPadded: appendLine(result.tooltip, "\nConclusion: Bit-perfect output"); break;
+      if (assessment.findings.empty())
+      {
+        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::BitPerfect});
+      }
 
-      case Quality::LosslessFloat: appendLine(result.tooltip, "\nConclusion: Lossless Conversion"); break;
-
-      case Quality::LinearIntervention:
-        appendLine(result.tooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
-        break;
-
-      case Quality::LossySource: appendLine(result.tooltip, "\nConclusion: Lossy source format"); break;
-
-      case Quality::Clipped: appendLine(result.tooltip, "\nConclusion: Signal clipping detected"); break;
-
-      case Quality::Unknown: break;
+      result.quality = worseQuality(result.quality, assessment.worstQuality);
+      result.assessments.push_back(std::move(assessment));
     }
 
     return result;
