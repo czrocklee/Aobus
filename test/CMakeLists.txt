@@ -211,7 +211,6 @@ add_executable(ao_test_gtk
     unit/linux-gtk/playback/OutputListItemsTest.cpp
     unit/linux-gtk/playback/TransportButtonTest.cpp
     unit/linux-gtk/playback/TimeLabelTest.cpp
-    unit/linux-gtk/portal/PlaylistExporterTest.cpp
 )
 
 target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")

@@ -296,7 +296,6 @@ namespace ao::tag::mpeg
     {
       auto const* bytesBuf = utility::layout::viewAt<boost::endian::big_uint32_buf_t>(ptr, fieldOffset);
       info.bytes = bytesBuf->value();
-      fieldOffset += sizeof(boost::endian::big_uint32_buf_t);
     }
 
     return info;

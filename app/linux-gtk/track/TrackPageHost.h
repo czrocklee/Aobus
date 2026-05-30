@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "portal/PlaylistExporter.h"
 #include "track/TrackViewPage.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
@@ -34,11 +33,6 @@ namespace ao::gtk
   class TrackViewPage;
   class ImageCache;
 
-  namespace portal
-  {
-    class PlaylistExporter;
-  }
-
   /**
    * TrackPageContext holds the per-page state for a track list.
    */
@@ -47,7 +41,6 @@ namespace ao::gtk
     rt::ViewId viewId{};
     Glib::RefPtr<TrackListModel> modelPtr = {};
     std::unique_ptr<TrackViewPage> pagePtr = {};
-    std::unique_ptr<portal::PlaylistExporter> exporterPtr = {};
   };
 
   /**

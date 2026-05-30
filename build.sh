@@ -33,6 +33,7 @@ show_usage() {
     echo "  --target <target> - Build a specific target instead of all, and skip tests"
     echo ""
     echo "  For clang-tidy, use ./script/run-clang-tidy.sh instead."
+    echo "  For Clang Static Analyzer, use ./script/run-clang-analyzer.sh instead."
 }
 
 while [[ $# -gt 0 ]]; do

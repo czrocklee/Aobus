@@ -78,7 +78,6 @@ add_library(aobus-gtk-lib STATIC
 
     portal/ImportExportCoordinator.cpp
     portal/LibraryTaskProgressDialog.cpp
-    portal/PlaylistExporter.cpp
 
     layout/document/GtkLayoutPresets.cpp
     layout/runtime/LayoutRuntime.cpp

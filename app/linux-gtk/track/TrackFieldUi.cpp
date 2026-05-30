@@ -678,39 +678,22 @@ namespace ao::gtk
     return uiDefinitions();
   }
 
-  namespace
-  {
-    auto const& uiDefLookup()
-    {
-      static auto const table = []
-      {
-        auto arr = std::array<TrackFieldUiDefinition const*, rt::kTrackFieldCount>{};
-
-        for (auto const& def : uiDefinitions())
-        {
-          if (auto const idx = static_cast<std::size_t>(def.field); idx < arr.size())
-          {
-            arr.at(idx) = &def;
-          }
-        }
-
-        return arr;
-      }();
-
-      return table;
-    }
-  } // namespace
-
   TrackFieldUiDefinition const* trackFieldUiDefinition(rt::TrackField field)
   {
-    auto const idx = static_cast<std::size_t>(field);
-
-    if (idx >= rt::kTrackFieldCount)
+    if (auto const idx = static_cast<std::size_t>(field); idx >= rt::kTrackFieldCount)
     {
       return nullptr;
     }
 
-    return uiDefLookup().at(idx);
+    for (auto const& def : uiDefinitions())
+    {
+      if (def.field == field)
+      {
+        return &def;
+      }
+    }
+
+    return nullptr;
   }
 
   std::int32_t defaultWidthForField(rt::TrackField field)

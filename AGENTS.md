@@ -36,6 +36,11 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 ./script/run-clang-tidy.sh                     # Changed files (default)
 ./script/run-clang-tidy.sh --all               # Check entire repo
 ./script/run-clang-tidy.sh --folder test       # Check test folder
+
+# Clang Static Analyzer (standalone, report-only by default)
+./script/run-clang-analyzer.sh                 # Changed files (default)
+./script/run-clang-analyzer.sh --all           # Analyze entire repo
+./script/run-clang-analyzer.sh --folder lib    # Analyze one folder
 ```
 
 ### Manual CMake
@@ -46,4 +51,4 @@ nix-shell --run "cmake --build /tmp/build/debug --parallel"
 nix-shell --run "/tmp/build/debug/test/ao_test"
 ```
 
-When chasing a failure or clang-tidy warnings, prefer preserving the current `/tmp/build/...` directory. Note that `build.sh` automatically redirects all console output (configure, build, and tests) to `$BUILD_DIR/build.log` for easier inspection and diffing without full rebuilds.
+When chasing a failure, clang-tidy warnings, or analyzer diagnostics, prefer preserving the current `/tmp/build/...` directory. Note that `build.sh` automatically redirects all console output (configure, build, and tests) to `$BUILD_DIR/build.log` for easier inspection and diffing without full rebuilds.
