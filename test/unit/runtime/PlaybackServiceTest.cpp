@@ -29,20 +29,10 @@
 
 namespace ao::rt::test
 {
-  namespace
-  {
-    struct NullExecutor final : public IControlExecutor
-    {
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
-  }
-
   TEST_CASE("PlaybackService - Basic Flow", "[app][unit][runtime][playback]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto mutationService = LibraryMutationService{runtime, testLib.library()};
     auto listSourceStore = ListSourceStore{testLib.library(), mutationService};
@@ -346,7 +336,7 @@ namespace ao::rt::test
     SECTION("ensureReady auto-configures output on first play")
     {
       // Create a fresh PlaybackService without triggering onDevicesChanged
-      auto freshExecutor = NullExecutor{};
+      auto freshExecutor = MockExecutor{};
       auto freshRuntime = async::Runtime{freshExecutor};
       auto freshMutation = LibraryMutationService{freshRuntime, testLib.library()};
       auto freshListStore = ListSourceStore{testLib.library(), freshMutation};

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "lib/tag/mp4/File.h"
+#include "test/unit/TestUtils.h"
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/tag/TagFile.h>
 
@@ -9,36 +10,16 @@
 
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <ios>
 #include <string_view>
 #include <vector>
 
-namespace fs = std::filesystem;
 namespace ao::tag::mp4::test
 {
   using namespace ao::media::mp4;
+  using namespace ao::test;
 
   namespace
   {
-    struct TempFile final
-    {
-      fs::path path;
-      TempFile(std::vector<std::uint8_t> const& data)
-      {
-        path = fs::temp_directory_path() / "ao_mp4_test_XXXXXX";
-        auto ofs = std::ofstream{path, std::ios::binary};
-        ofs.write(reinterpret_cast<char const*>(data.data()), static_cast<std::streamsize>(data.size()));
-      }
-      ~TempFile() { fs::remove(path); }
-
-      TempFile(TempFile const&) = delete;
-      TempFile& operator=(TempFile const&) = delete;
-      TempFile(TempFile&&) = delete;
-      TempFile& operator=(TempFile&&) = delete;
-    };
-
     void addAtom(std::vector<std::uint8_t>& buffer, char const* type, std::vector<std::uint8_t> const& body)
     {
       std::uint32_t const length = 8 + static_cast<std::uint32_t>(body.size());

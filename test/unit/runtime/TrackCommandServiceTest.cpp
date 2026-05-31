@@ -17,22 +17,12 @@
 
 namespace ao::rt::test
 {
-  namespace
-  {
-    struct NullExecutor final : public IControlExecutor
-    {
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
-  }
-
   TEST_CASE("TrackCommandService - addTag and removeTag", "[app][unit][runtime][track_command]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
 
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto mutationService = LibraryMutationService{runtime, testLib.library()};
 
@@ -103,7 +93,7 @@ namespace ao::rt::test
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
 
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto mutationService = LibraryMutationService{runtime, testLib.library()};
 
@@ -136,7 +126,7 @@ namespace ao::rt::test
   TEST_CASE("TrackCommandService - createTrackFromFile", "[app][unit][runtime][track_command]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto mutationService = LibraryMutationService{runtime, testLib.library()};
 

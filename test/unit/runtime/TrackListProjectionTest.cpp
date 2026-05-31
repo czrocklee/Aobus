@@ -572,17 +572,17 @@ namespace ao::rt::test
     REQUIRE(proj.groupCount() == 3);
 
     auto s0 = proj.groupAt(0);
-    CHECK(s0.label == "Abba");
+    CHECK(s0.primaryText == "Abba");
     CHECK(s0.rows.start == 0);
     CHECK(s0.rows.count == 1);
 
     auto s1 = proj.groupAt(1);
-    CHECK(s1.label == "Coldplay");
+    CHECK(s1.primaryText == "Coldplay");
     CHECK(s1.rows.start == 1);
     CHECK(s1.rows.count == 2);
 
     auto s2 = proj.groupAt(2);
-    CHECK(s2.label == "Zeppelin");
+    CHECK(s2.primaryText == "Zeppelin");
     CHECK(s2.rows.start == 3);
     CHECK(s2.rows.count == 2);
 
@@ -686,17 +686,17 @@ namespace ao::rt::test
 
     struct ExpectedGroup final
     {
-      std::string_view label;
+      std::string_view primaryText;
       std::size_t start;
       std::size_t count;
     };
 
     auto const expectedGroups = std::array{
-      ExpectedGroup{.label = "Abba", .start = 0, .count = 5},
-      ExpectedGroup{.label = "Coldplay", .start = 5, .count = 5},
-      ExpectedGroup{.label = "Daft Punk", .start = 10, .count = 4},
-      ExpectedGroup{.label = "Radiohead", .start = 14, .count = 5},
-      ExpectedGroup{.label = "Zeppelin", .start = 19, .count = 5},
+      ExpectedGroup{.primaryText = "Abba", .start = 0, .count = 5},
+      ExpectedGroup{.primaryText = "Coldplay", .start = 5, .count = 5},
+      ExpectedGroup{.primaryText = "Daft Punk", .start = 10, .count = 4},
+      ExpectedGroup{.primaryText = "Radiohead", .start = 14, .count = 5},
+      ExpectedGroup{.primaryText = "Zeppelin", .start = 19, .count = 5},
     };
 
     REQUIRE(proj.groupCount() == expectedGroups.size());
@@ -704,7 +704,7 @@ namespace ao::rt::test
     for (std::size_t groupIndex = 0; groupIndex < expectedGroups.size(); ++groupIndex)
     {
       auto const group = proj.groupAt(groupIndex);
-      CHECK(group.label == expectedGroups.at(groupIndex).label);
+      CHECK(group.primaryText == expectedGroups.at(groupIndex).primaryText);
       CHECK(group.rows.start == expectedGroups.at(groupIndex).start);
       CHECK(group.rows.count == expectedGroups.at(groupIndex).count);
 
@@ -734,7 +734,7 @@ namespace ao::rt::test
     CHECK(proj.groupCount() == 0);
     auto s = proj.groupAt(0);
     CHECK(s.rows.count == 0);
-    CHECK(s.label.empty());
+    CHECK(s.primaryText.empty());
     CHECK_FALSE(proj.groupIndexAt(0).has_value());
   }
 
@@ -772,7 +772,7 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
-    CHECK(proj.groupAt(0).label == "Unknown Artist");
+    CHECK(proj.groupAt(0).primaryText == "Unknown Artist");
   }
 
   TEST_CASE("TrackListProjection - group label for unknown year", "[app][unit][runtime][projection]")
@@ -792,7 +792,7 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
-    CHECK(proj.groupAt(0).label == "Unknown Year");
+    CHECK(proj.groupAt(0).primaryText == "Unknown Year");
   }
 
   TEST_CASE("TrackListProjection - album groups split by album artist", "[app][unit][runtime][projection]")
@@ -817,8 +817,12 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 2);
     REQUIRE(proj.groupCount() == 2);
-    CHECK(proj.groupAt(0).label == "Greatest Hits - Artist One");
-    CHECK(proj.groupAt(1).label == "Greatest Hits - Artist Two");
+    CHECK(proj.groupAt(0).primaryText == "Greatest Hits");
+    CHECK(proj.groupAt(0).secondaryText == "Artist One");
+    CHECK(proj.groupAt(0).tertiaryText == "2020");
+    CHECK(proj.groupAt(1).primaryText == "Greatest Hits");
+    CHECK(proj.groupAt(1).secondaryText == "Artist Two");
+    CHECK(proj.groupAt(1).tertiaryText == "2020");
   }
 
   TEST_CASE("TrackListProjection - presentation() returns correct snapshot", "[app][unit][runtime][projection]")
@@ -863,7 +867,8 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
-    CHECK(proj.groupAt(0).label == "Solo Album");
+    CHECK(proj.groupAt(0).primaryText == "Solo Album");
+    CHECK(proj.groupAt(0).secondaryText == "Unknown Artist");
   }
 
   TEST_CASE("TrackListProjection - unknown album label", "[app][unit][runtime][projection]")
@@ -884,7 +889,8 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
-    CHECK(proj.groupAt(0).label == "Unknown Album");
+    CHECK(proj.groupAt(0).primaryText == "Unknown Album");
+    CHECK(proj.groupAt(0).secondaryText == "Unknown Artist");
   }
 
   TEST_CASE("TrackListProjection - incremental batch insertion", "[app][unit][runtime][projection]")
@@ -1092,9 +1098,9 @@ namespace ao::rt::test
       env.source.batchInsert(arr);
       REQUIRE(proj.size() == 4);
       REQUIRE(proj.groupCount() == 3);
-      CHECK(proj.groupAt(0).label == "Unknown Genre");
-      CHECK(proj.groupAt(1).label == "Pop");
-      CHECK(proj.groupAt(2).label == "Rock");
+      CHECK(proj.groupAt(0).primaryText == "Unknown Genre");
+      CHECK(proj.groupAt(1).primaryText == "Pop");
+      CHECK(proj.groupAt(2).primaryText == "Rock");
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
@@ -1125,7 +1131,7 @@ namespace ao::rt::test
       env.source.batchUpdate(arr);
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 1);
-      CHECK(proj.groupAt(0).label == "Unknown Artist");
+      CHECK(proj.groupAt(0).primaryText == "Unknown Artist");
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
@@ -1140,8 +1146,8 @@ namespace ao::rt::test
       env.source.singleInsert(id3);
       REQUIRE(proj.size() == 3);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).label == "Unknown Genre");
-      CHECK(proj.groupAt(1).label == "Pop");
+      CHECK(proj.groupAt(0).primaryText == "Unknown Genre");
+      CHECK(proj.groupAt(1).primaryText == "Pop");
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
@@ -1156,7 +1162,7 @@ namespace ao::rt::test
       REQUIRE(proj.size() == 1);
       CHECK(proj.trackIdAt(0) == id2);
       REQUIRE(proj.groupCount() == 1);
-      CHECK(proj.groupAt(0).label == "Unknown Genre");
+      CHECK(proj.groupAt(0).primaryText == "Unknown Genre");
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
@@ -1232,8 +1238,8 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).label == "Pop");
-      CHECK(proj.groupAt(1).label == "Rock");
+      CHECK(proj.groupAt(0).primaryText == "Pop");
+      CHECK(proj.groupAt(1).primaryText == "Rock");
     }
 
     SECTION("Group by Composer")
@@ -1243,8 +1249,8 @@ namespace ao::rt::test
                               .sortBy = {TrackSortTerm{.field = TrackSortField::Composer, .ascending = true}}});
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).label == "Bach");
-      CHECK(proj.groupAt(1).label == "Mozart");
+      CHECK(proj.groupAt(0).primaryText == "Bach");
+      CHECK(proj.groupAt(1).primaryText == "Mozart");
     }
 
     SECTION("Group by Work")
@@ -1253,8 +1259,10 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::Work, .sortBy = {TrackSortTerm{.field = TrackSortField::Work, .ascending = true}}});
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).label == "Opus 1");
-      CHECK(proj.groupAt(1).label == "Opus 2");
+      CHECK(proj.groupAt(0).primaryText == "Opus 1");
+      CHECK(proj.groupAt(0).secondaryText == "Mozart");
+      CHECK(proj.groupAt(1).primaryText == "Opus 2");
+      CHECK(proj.groupAt(1).secondaryText == "Bach");
     }
   }
 } // namespace ao::rt::test

@@ -20,22 +20,12 @@
 
 namespace ao::rt::test
 {
-  namespace
-  {
-    struct NullExecutor final : public IControlExecutor
-    {
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
-  }
-
   TEST_CASE("LibraryMutationService - updateMetadata publishes TracksMutated", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Original Title");
 
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 
@@ -54,7 +44,7 @@ namespace ao::rt::test
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Original Title");
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 
@@ -80,7 +70,7 @@ namespace ao::rt::test
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Track");
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 
@@ -95,7 +85,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryMutationService - editTags missing track continues", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 
@@ -109,7 +99,7 @@ namespace ao::rt::test
   {
     auto testLib = TestMusicLibrary{};
     auto const t1 = testLib.addTrack("A");
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 
@@ -132,7 +122,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryMutationService - updateList publishes ListsMutated", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 
@@ -155,7 +145,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryMutationService - deleteList publishes ListsMutated", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 
@@ -175,7 +165,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryMutationService - direct notifications", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 
@@ -208,7 +198,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryMutationService - Async tasks (dummy execution)", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto service = LibraryMutationService{runtime, testLib.library()};
 

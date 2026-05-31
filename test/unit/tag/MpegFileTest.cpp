@@ -4,6 +4,7 @@
 #include "lib/tag/mpeg/File.h"
 #include "lib/tag/mpeg/FrameLayout.h"
 #include "lib/tag/mpeg/id3v2/Layout.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
 #include <ao/tag/TagFile.h>
 
@@ -12,35 +13,15 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <ios>
 #include <string_view>
 #include <vector>
 
-namespace fs = std::filesystem;
-
 namespace ao::tag::mpeg::test
 {
+  using namespace ao::test;
+
   namespace
   {
-    struct TempFile final
-    {
-      fs::path path;
-      TempFile(std::vector<std::uint8_t> const& data)
-      {
-        path = fs::temp_directory_path() / "ao_mpeg_test_XXXXXX";
-        auto ofs = std::ofstream{path, std::ios::binary};
-        ofs.write(reinterpret_cast<char const*>(data.data()), static_cast<std::streamsize>(data.size()));
-      }
-      ~TempFile() { fs::remove(path); }
-
-      TempFile(TempFile const&) = delete;
-      TempFile& operator=(TempFile const&) = delete;
-      TempFile(TempFile&&) = delete;
-      TempFile& operator=(TempFile&&) = delete;
-    };
-
     void addTextFrame(std::vector<std::uint8_t>& data, char const* id, std::string_view text)
     {
       auto frame = id3v2::V23TextFrameLayout{};

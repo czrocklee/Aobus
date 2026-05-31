@@ -3,7 +3,7 @@
 
 #include "app/linux-gtk/app/GtkLayoutConfig.h"
 #include "app/linux-gtk/track/TrackFieldUi.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
@@ -46,12 +46,14 @@ namespace ao::gtk::test
     CHECK(fieldIsVisibleByDefault(rt::TrackField::Title));
     CHECK(fieldIsVisibleByDefault(rt::TrackField::Artist));
     CHECK(fieldIsVisibleByDefault(rt::TrackField::Album));
+    CHECK(fieldIsVisibleByDefault(rt::TrackField::Year));
     CHECK(fieldIsVisibleByDefault(rt::TrackField::Duration));
     CHECK(fieldIsVisibleByDefault(rt::TrackField::Tags));
+    CHECK(fieldIsVisibleByDefault(rt::TrackField::DisplayTrackNumber));
 
     CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::AlbumArtist));
     CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::Genre));
-    CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::Year));
+    CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::TrackNumber));
   }
 
   TEST_CASE("TrackPresentation - field column title", "[app][unit][presentation]")
@@ -79,7 +81,7 @@ namespace ao::gtk::test
 
   TEST_CASE("GtkLayoutConfig persists column layouts to gtk_layout.yaml", "[app][unit][presentation]")
   {
-    auto const tempDir = lmdb::test::TempDir{};
+    auto const tempDir = ao::test::TempDir{}; // NOLINT(aobus-readability-redundant-namespace-qualification)
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
     auto const configPath = configDir / "gtk_layout.yaml";
 

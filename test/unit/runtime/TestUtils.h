@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -121,7 +122,7 @@ namespace ao::rt::test
     TrackId addTrack(std::string_view title) { return addTrack(TrackSpec{.title = std::string{title}}); }
 
   private:
-    lmdb::test::TempDir _tempDir;
+    ao::test::TempDir _tempDir; // NOLINT(aobus-readability-redundant-namespace-qualification)
     library::MusicLibrary _library;
   };
 
@@ -208,9 +209,27 @@ namespace ao::rt::test
   };
 
   /**
+   * @brief Lightweight test utility that records rendered states.
+   */
+  template<typename TState>
+  struct RenderLog final
+  {
+    std::vector<TState> states;
+
+    void render(TState const& state) { states.push_back(state); }
+
+    TState const& last() const { return states.back(); }
+
+    bool empty() const { return states.empty(); }
+
+    void clear() { states.clear(); }
+  };
+
+  /**
    * @brief Creates an AppRuntime backed by a temporary directory with a MockExecutor.
    */
-  inline auto makeRuntime(lmdb::test::TempDir const& tempDir)
+  inline auto makeRuntime(
+    ao::test::TempDir const& tempDir) // NOLINT(aobus-readability-redundant-namespace-qualification)
   {
     return AppRuntime{AppRuntimeDependencies{
       .executorPtr = std::make_unique<MockExecutor>(),

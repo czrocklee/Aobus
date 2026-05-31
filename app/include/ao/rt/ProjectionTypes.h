@@ -22,7 +22,9 @@ namespace ao::rt
   struct TrackGroupSectionSnapshot final
   {
     Range rows{};
-    std::string label{};
+    std::string primaryText{};
+    std::string secondaryText{};
+    std::string tertiaryText{};
     ResourceId imageId{kInvalidResourceId};
   };
 

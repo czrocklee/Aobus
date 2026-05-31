@@ -101,12 +101,10 @@
 
 /* Track Section Header */
 .ao-track-section-box {
-  margin-top: var(--ao-spacing-lg);
-  margin-bottom: var(--ao-spacing-md);
-  padding-top: var(--ao-spacing-lg);
-  padding-bottom: var(--ao-spacing-lg);
-  padding-left: var(--ao-spacing-lg);
-  padding-right: var(--ao-spacing-lg);
+  padding-top: var(--ao-spacing-md);
+  padding-bottom: var(--ao-spacing-md);
+  padding-left: var(--ao-spacing-md);
+  padding-right: var(--ao-spacing-md);
   border-bottom: 1px solid alpha(currentColor, 0.05);
 }
 
@@ -117,10 +115,14 @@
   border: 1px solid alpha(currentColor, 0.05);
 }
 
-.ao-track-section-header {
+.ao-track-section-title {
   font-weight: bold;
   font-size: 1.05em;
   padding: 0;
+}
+
+.ao-track-section-subtitle {
+  font-size: 0.9em;
 }
 
 .ao-playback-button {
@@ -785,8 +787,7 @@ popover.ao-popover-rounded-md>contents {
   opacity: 0.7;
 }
 
-.ao-modern-center-group {
-}
+.ao-modern-center-group {}
 
 .ao-time-label {
   font-size: 0.75rem;
@@ -1029,9 +1030,9 @@ popover.ao-popover-rounded-md>contents {
 
 /* Modern Track Section (Album) separation */
 .ao-layout-preset-modern .ao-track-section-box {
-  padding-top: 16px;
+  padding-top: 8px;
   /* Use padding instead of margin to fix Gtk-CRITICAL */
-  padding-bottom: 16px;
+  padding-bottom: 8px;
   padding-left: 16px;
   padding-right: 16px;
   background: alpha(currentColor, 0.03);
@@ -1045,11 +1046,16 @@ listview>row:first-child .ao-track-section-box {
   padding-top: 16px;
 }
 
-.ao-layout-preset-modern .ao-track-section-header {
+.ao-layout-preset-modern .ao-track-section-title {
   font-size: 1.2rem;
   font-weight: 800;
   color: @theme_fg_color;
   letter-spacing: -0.01em;
+}
+
+.ao-layout-preset-modern .ao-track-section-subtitle {
+  color: @theme_fg_color;
+  opacity: 0.7;
 }
 
 .ao-layout-preset-modern .ao-track-section-cover {

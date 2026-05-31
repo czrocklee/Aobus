@@ -20,6 +20,7 @@
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
+#include <gtkmm/menubutton.h>
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/window.h>
@@ -415,6 +416,19 @@ namespace ao::gtk::layout::test
 
       auto* const menuBar = dynamic_cast<Gtk::PopoverMenuBar*>(&compPtr->widget());
       REQUIRE(menuBar != nullptr);
+    }
+
+    SECTION("app.menuButton creates Gtk::MenuButton and sets menu model")
+    {
+      auto const node = LayoutNode{.type = "app.menuButton", .props = {{"icon", LayoutValue{"test-icon"}}}};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+
+      auto* const menuButton = dynamic_cast<Gtk::MenuButton*>(&compPtr->widget());
+      REQUIRE(menuButton != nullptr);
+      CHECK(menuButton->get_icon_name() == "test-icon");
+      CHECK(menuButton->get_menu_model() == menuModelPtr);
     }
 
     SECTION("app.menuBar tolerates absent menu model")

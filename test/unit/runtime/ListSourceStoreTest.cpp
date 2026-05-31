@@ -14,23 +14,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <functional>
-
 namespace ao::rt::test
 {
   using namespace ao::library;
 
-  struct NullExecutor final : public IControlExecutor
-  {
-    bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
-    void defer(std::move_only_function<void()> task) override { task(); }
-  };
-
   TEST_CASE("ListSourceStore - Basic Operations", "[runtime][unit][ListSourceStore]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto mutationService = LibraryMutationService{runtime, testLib.library()};
 

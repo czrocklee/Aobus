@@ -25,6 +25,47 @@ namespace ao::rt
 {
   namespace
   {
+    OutputProfileSnapshot toOutputProfileSnapshot(audio::IBackendProvider::ProfileMetadata const& src)
+    {
+      return OutputProfileSnapshot{.id = src.id, .name = src.name, .description = src.description};
+    }
+
+    OutputDeviceSnapshot toOutputDeviceSnapshot(audio::Device const& src)
+    {
+      return OutputDeviceSnapshot{.id = src.id,
+                                  .displayName = src.displayName,
+                                  .description = src.description,
+                                  .isDefault = src.isDefault,
+                                  .backendId = src.backendId,
+                                  .capabilities = src.capabilities};
+    }
+
+    OutputBackendSnapshot toOutputBackendSnapshot(audio::IBackendProvider::Status const& src)
+    {
+      auto profiles = std::vector<OutputProfileSnapshot>{};
+      profiles.reserve(src.metadata.supportedProfiles.size());
+
+      for (auto const& prof : src.metadata.supportedProfiles)
+      {
+        profiles.push_back(toOutputProfileSnapshot(prof));
+      }
+
+      auto devices = std::vector<OutputDeviceSnapshot>{};
+      devices.reserve(src.devices.size());
+
+      for (auto const& dev : src.devices)
+      {
+        devices.push_back(toOutputDeviceSnapshot(dev));
+      }
+
+      return OutputBackendSnapshot{.id = src.metadata.id,
+                                   .name = src.metadata.name,
+                                   .description = src.metadata.description,
+                                   .iconName = src.metadata.iconName,
+                                   .supportedProfiles = std::move(profiles),
+                                   .devices = std::move(devices)};
+    }
+
     PlaybackState buildPlaybackState(audio::Player const& player)
     {
       auto const status = player.status();
@@ -34,41 +75,7 @@ namespace ao::rt
 
       for (auto const& backendStatus : status.availableBackends)
       {
-        auto devices = std::vector<OutputDeviceSnapshot>{};
-        devices.reserve(backendStatus.devices.size());
-
-        for (auto const& dev : backendStatus.devices)
-        {
-          devices.push_back(OutputDeviceSnapshot{
-            .id = dev.id,
-            .displayName = dev.displayName,
-            .description = dev.description,
-            .isDefault = dev.isDefault,
-            .backendId = dev.backendId,
-            .capabilities = dev.capabilities,
-          });
-        }
-
-        auto profiles = std::vector<OutputProfileSnapshot>{};
-        profiles.reserve(backendStatus.metadata.supportedProfiles.size());
-
-        for (auto const& prof : backendStatus.metadata.supportedProfiles)
-        {
-          profiles.push_back(OutputProfileSnapshot{
-            .id = prof.id,
-            .name = prof.name,
-            .description = prof.description,
-          });
-        }
-
-        outputs.push_back(OutputBackendSnapshot{
-          .id = backendStatus.metadata.id,
-          .name = backendStatus.metadata.name,
-          .description = backendStatus.metadata.description,
-          .iconName = backendStatus.metadata.iconName,
-          .supportedProfiles = std::move(profiles),
-          .devices = std::move(devices),
-        });
+        outputs.push_back(toOutputBackendSnapshot(backendStatus));
       }
 
       return PlaybackState{

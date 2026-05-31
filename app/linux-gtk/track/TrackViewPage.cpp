@@ -113,6 +113,96 @@ namespace ao::gtk
     private:
       Glib::RefPtr<TrackListModel> _modelPtr;
     };
+
+    class TrackSectionHeaderWidget final : public Gtk::Box
+    {
+    public:
+      TrackSectionHeaderWidget(library::MusicLibrary& library, ImageCache& imageCache)
+        : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _coverArt{library, imageCache}
+      {
+        set_spacing(layout::kSpacingXLarge);
+        add_css_class("ao-track-section-box");
+
+        _coverArt.add_css_class("ao-track-section-cover");
+        _coverArt.set_valign(Gtk::Align::CENTER);
+        append(_coverArt);
+
+        auto* const vbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+        vbox->set_valign(Gtk::Align::CENTER);
+        vbox->set_spacing(layout::kSpacingSmall);
+        append(*vbox);
+
+        _primaryLabel.set_halign(Gtk::Align::START);
+        _primaryLabel.add_css_class("ao-track-section-title");
+        _primaryLabel.add_css_class("title-3");
+        _primaryLabel.set_xalign(0.0F);
+        vbox->append(_primaryLabel);
+
+        auto* const subtitleBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+        subtitleBox->set_spacing(layout::kSpacingMedium);
+        subtitleBox->add_css_class("ao-track-section-subtitle");
+        vbox->append(*subtitleBox);
+
+        _secondaryLabel.set_halign(Gtk::Align::START);
+        _secondaryLabel.add_css_class("dim-label");
+        _secondaryLabel.set_xalign(0.0F);
+        subtitleBox->append(_secondaryLabel);
+
+        _separatorLabel.set_text("•");
+        _separatorLabel.add_css_class("dim-label");
+        _separatorLabel.set_halign(Gtk::Align::CENTER);
+        subtitleBox->append(_separatorLabel);
+
+        _tertiaryLabel.set_halign(Gtk::Align::START);
+        _tertiaryLabel.add_css_class("dim-label");
+        _tertiaryLabel.set_xalign(0.0F);
+        subtitleBox->append(_tertiaryLabel);
+
+        _countLabel.set_halign(Gtk::Align::START);
+        _countLabel.add_css_class("dim-label");
+        _countLabel.set_xalign(0.0F);
+        subtitleBox->append(_countLabel);
+      }
+
+      void bind(rt::TrackGroupSectionSnapshot const& snap, ::guint count)
+      {
+        _primaryLabel.set_text(snap.primaryText);
+        _secondaryLabel.set_text(snap.secondaryText);
+        _tertiaryLabel.set_text(snap.tertiaryText);
+
+        if (auto const countText = "(" + trackCountLabel(count) + ")";
+            snap.secondaryText.empty() && snap.tertiaryText.empty())
+        {
+          _countLabel.set_text(countText);
+        }
+        else
+        {
+          _countLabel.set_text("• " + countText);
+        }
+
+        _secondaryLabel.set_visible(!snap.secondaryText.empty());
+        _tertiaryLabel.set_visible(!snap.tertiaryText.empty());
+        _separatorLabel.set_visible(!snap.secondaryText.empty() && !snap.tertiaryText.empty());
+
+        if (snap.imageId != kInvalidResourceId)
+        {
+          _coverArt.loadImage(snap.imageId);
+          _coverArt.set_visible(true);
+        }
+        else
+        {
+          _coverArt.set_visible(false);
+        }
+      }
+
+    private:
+      ImageWidget _coverArt;
+      Gtk::Label _primaryLabel;
+      Gtk::Label _secondaryLabel;
+      Gtk::Label _separatorLabel;
+      Gtk::Label _tertiaryLabel;
+      Gtk::Label _countLabel;
+    };
   } // namespace
 
   TrackViewPage::TrackViewPage(ListId listId,
@@ -203,46 +293,22 @@ namespace ao::gtk
           return;
         }
 
-        auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-        box->set_spacing(layout::kSpacingXLarge);
-        box->add_css_class("ao-track-section-box");
-
-        auto* const cover = Gtk::make_managed<ImageWidget>(_runtime.musicLibrary(), _imageCache);
-        cover->add_css_class("ao-track-section-cover");
-        cover->set_valign(Gtk::Align::CENTER);
-        box->append(*cover);
-
-        auto* const label = Gtk::make_managed<Gtk::Label>("");
-        label->set_halign(Gtk::Align::START);
-        label->add_css_class("ao-track-section-header");
-        label->set_xalign(0.0F);
-        label->set_valign(Gtk::Align::CENTER);
-        box->append(*label);
-
-        headerPtr->set_child(*box);
+        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_runtime.musicLibrary(), _imageCache);
+        headerPtr->set_child(*widget);
       });
 
     _sectionHeaderFactoryPtr->signal_bind_obj().connect(
       [this](Glib::RefPtr<Glib::Object> const& object)
       {
         auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
-        auto* const box = headerPtr ? dynamic_cast<Gtk::Box*>(headerPtr->get_child()) : nullptr;
+        auto* const widget = headerPtr ? dynamic_cast<TrackSectionHeaderWidget*>(headerPtr->get_child()) : nullptr;
 
-        if (headerPtr == nullptr || box == nullptr)
+        if (headerPtr == nullptr || widget == nullptr)
         {
           return;
         }
 
-        auto* const cover = dynamic_cast<ImageWidget*>(box->get_first_child());
-        auto* const label = dynamic_cast<Gtk::Label*>(box->get_last_child());
-
-        if (cover == nullptr || label == nullptr)
-        {
-          return;
-        }
-
-        auto text = std::string{};
-        auto coverArtId = kInvalidResourceId;
+        auto snap = rt::TrackGroupSectionSnapshot{};
 
         if (auto* const proj = _modelPtr->projection(); proj != nullptr)
         {
@@ -250,30 +316,11 @@ namespace ao::gtk
 
           if (auto const optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
           {
-            auto const snap = proj->groupAt(*optGroupIndex);
-            text = snap.label;
-            coverArtId = snap.imageId;
+            snap = proj->groupAt(*optGroupIndex);
           }
         }
 
-        if (!text.empty())
-        {
-          text += " ";
-        }
-
-        text += "(" + trackCountLabel(headerPtr->get_n_items()) + ")";
-
-        label->set_text(text);
-
-        if (coverArtId != kInvalidResourceId)
-        {
-          cover->loadImage(coverArtId);
-          cover->set_visible(true);
-        }
-        else
-        {
-          cover->set_visible(false);
-        }
+        widget->bind(snap, headerPtr->get_n_items());
       });
 
     _groupModelPtr->set_section_sorter(ProjectionGroupSectionSorter::create(_modelPtr));

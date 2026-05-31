@@ -1,61 +1,18 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
+#include "test/unit/TestUtils.h"
 #include <ao/utility/ByteView.h>
 
 #include <cstddef>
-#include <cstdlib>
-#include <filesystem>
-#include <stdexcept>
-#include <string>
 #include <string_view>
 #include <vector>
 
 namespace ao::lmdb::test
 {
-  /**
-   * RAII temporary directory for LMDB test files.
-   * Creates a unique temporary directory on construction and
-   * removes it on destruction.
-   */
-  class TempDir final
-  {
-  public:
-    TempDir()
-    {
-      std::string tmpl = (std::filesystem::temp_directory_path() / "rs_lmdb_test_XXXXXX").string();
-      // NOLINTNEXTLINE(aobus-readability-use-if-init-statement)
-      char const* const result = ::mkdtemp(tmpl.data());
-
-      if (result == nullptr)
-      {
-        throw std::runtime_error{"mkdtemp failed"};
-      }
-
-      _path = result;
-
-      _path = result;
-    }
-
-    ~TempDir()
-    {
-      auto ec = std::error_code{};
-      std::filesystem::remove_all(_path, ec);
-    }
-
-    TempDir(TempDir const&) = delete;
-    TempDir& operator=(TempDir const&) = delete;
-
-    TempDir(TempDir&&) = default;
-    TempDir& operator=(TempDir&&) = default;
-
-    std::string path() const { return _path.string(); }
-
-  private:
-    std::filesystem::path _path;
-  };
+  using ao::test::TempDir;
 
   /**
    * Create a vector filled with test data.

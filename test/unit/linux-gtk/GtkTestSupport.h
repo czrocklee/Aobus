@@ -3,13 +3,13 @@
 
 #pragma once
 
+#include "test/unit/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
-#include <test/unit/lmdb/TestUtils.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -157,17 +157,18 @@ namespace ao::gtk::test
     }
 
     rt::AppRuntime& runtime() { return *_runtimePtr; }
-    lmdb::test::TempDir& tempDir() { return _tempDir; }
+    ao::test::TempDir& tempDir() { return _tempDir; } // NOLINT(aobus-readability-redundant-namespace-qualification)
 
   private:
-    lmdb::test::TempDir _tempDir;
+    ao::test::TempDir _tempDir; // NOLINT(aobus-readability-redundant-namespace-qualification)
     std::unique_ptr<rt::AppRuntime> _runtimePtr;
   };
 
   /**
    * @brief Creates an AppRuntime backed by a temporary directory with an ImmediateExecutor.
    */
-  inline auto makeRuntime(lmdb::test::TempDir const& tempDir)
+  inline auto makeRuntime(
+    ao::test::TempDir const& tempDir) // NOLINT(aobus-readability-redundant-namespace-qualification)
   {
     return rt::AppRuntime{rt::AppRuntimeDependencies{
       .executorPtr = std::make_unique<ImmediateExecutor>(),

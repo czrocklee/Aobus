@@ -54,7 +54,9 @@ namespace ao::rt
     struct GroupSection final
     {
       Range rows{};
-      std::string_view label{};
+      std::string_view primaryText{};
+      std::string_view secondaryText{};
+      std::string_view tertiaryText{};
       ResourceId imageId{kInvalidResourceId};
     };
 
@@ -63,7 +65,9 @@ namespace ao::rt
       TrackId trackId{};
       SortKeys keys{};
       std::string_view groupKey{};
-      std::string_view groupLabel{};
+      std::string_view primaryText{};
+      std::string_view secondaryText{};
+      std::string_view tertiaryText{};
       ResourceId imageId{kInvalidResourceId};
     };
 
@@ -132,7 +136,7 @@ namespace ao::rt
     library::TrackStore::Reader::LoadMode computeLoadMode(std::vector<TrackSortTerm> const& sortBy,
                                                           TrackGroupKey groupBy)
     {
-      bool needsHot = false;
+      bool needsHot = groupBy != TrackGroupKey::None;
       bool needsCold = groupByNeedsCold(groupBy);
 
       for (auto const& term : sortBy)
@@ -333,6 +337,11 @@ namespace ao::rt
             keys.workKey = getNorm(view.metadata().workId());
           }
 
+          if (keys.composerKey.empty())
+          {
+            keys.composerKey = getNorm(view.metadata().composerId());
+          }
+
           break;
         default: break;
       }
@@ -349,7 +358,7 @@ namespace ao::rt
         case TrackGroupKey::None: return;
         case TrackGroupKey::Artist:
           entry.groupKey = entry.keys.artistKey;
-          entry.groupLabel = dict.getOrDefault(view.metadata().artistId(), "Unknown Artist");
+          entry.primaryText = dict.getOrDefault(view.metadata().artistId(), "Unknown Artist");
           break;
         case TrackGroupKey::Album:
           entry.groupKey =
@@ -357,44 +366,60 @@ namespace ao::rt
           entry.imageId = ResourceId{view.metadata().coverArtId()};
           {
             auto album = std::string{dict.getOrDefault(view.metadata().albumId())};
-            auto const albumArtist = std::string{dict.getOrDefault(view.metadata().albumArtistId())};
+            auto albumArtist = std::string{dict.getOrDefault(view.metadata().albumArtistId())};
 
             if (entry.keys.albumKey.empty())
             {
-              entry.groupLabel = "Unknown Album";
-            }
-            else if (entry.keys.albumArtistKey.empty())
-            {
-              entry.groupLabel = intern(stringPool, std::move(album));
+              entry.primaryText = "Unknown Album";
             }
             else
             {
-              entry.groupLabel = intern(stringPool, album + " - " + albumArtist);
+              entry.primaryText = intern(stringPool, std::move(album));
+            }
+
+            if (entry.keys.albumArtistKey.empty())
+            {
+              entry.secondaryText = "Unknown Artist";
+            }
+            else
+            {
+              entry.secondaryText = intern(stringPool, std::move(albumArtist));
+            }
+
+            if (auto year = view.metadata().year(); year != 0)
+            {
+              entry.tertiaryText = intern(stringPool, std::format("{}", year));
+            }
+            else
+            {
+              entry.tertiaryText = "Unknown Year";
             }
           }
 
           break;
         case TrackGroupKey::AlbumArtist:
           entry.groupKey = entry.keys.albumArtistKey;
-          entry.groupLabel = dict.getOrDefault(view.metadata().albumArtistId(), "Unknown Artist");
+          entry.primaryText = dict.getOrDefault(view.metadata().albumArtistId(), "Unknown Artist");
           break;
         case TrackGroupKey::Genre:
           entry.groupKey = entry.keys.genreKey;
-          entry.groupLabel = dict.getOrDefault(view.metadata().genreId(), "Unknown Genre");
+          entry.primaryText = dict.getOrDefault(view.metadata().genreId(), "Unknown Genre");
           break;
         case TrackGroupKey::Composer:
           entry.groupKey = entry.keys.composerKey;
-          entry.groupLabel = dict.getOrDefault(view.metadata().composerId(), "Unknown Composer");
+          entry.primaryText = dict.getOrDefault(view.metadata().composerId(), "Unknown Composer");
           break;
         case TrackGroupKey::Work:
-          entry.groupKey = entry.keys.workKey;
-          entry.groupLabel = dict.getOrDefault(view.metadata().workId(), "Unknown Work");
+          entry.groupKey =
+            intern(stringPool, std::string{entry.keys.composerKey} + "\x1F" + std::string{entry.keys.workKey});
+          entry.primaryText = dict.getOrDefault(view.metadata().workId(), "Unknown Work");
+          entry.secondaryText = dict.getOrDefault(view.metadata().composerId(), "Unknown Composer");
           break;
         case TrackGroupKey::Year:
         {
           std::uint16_t const year = entry.keys.year;
           entry.groupKey = intern(stringPool, std::format("{:05d}", year));
-          entry.groupLabel = (year == 0) ? "Unknown Year" : intern(stringPool, std::format("{}", year));
+          entry.primaryText = (year == 0) ? "Unknown Year" : intern(stringPool, std::format("{}", year));
         }
 
         break;
@@ -492,7 +517,9 @@ namespace ao::rt
 
       sections.push_back(GroupSection{
         .rows = {.start = 0, .count = 1},
-        .label = orderIndex[0].groupLabel,
+        .primaryText = orderIndex[0].primaryText,
+        .secondaryText = orderIndex[0].secondaryText,
+        .tertiaryText = orderIndex[0].tertiaryText,
         .imageId = orderIndex[0].imageId,
       });
 
@@ -502,7 +529,9 @@ namespace ao::rt
         {
           sections.push_back(GroupSection{
             .rows = {.start = idx, .count = 1},
-            .label = orderIndex[idx].groupLabel,
+            .primaryText = orderIndex[idx].primaryText,
+            .secondaryText = orderIndex[idx].secondaryText,
+            .tertiaryText = orderIndex[idx].tertiaryText,
             .imageId = orderIndex[idx].imageId,
           });
         }
@@ -584,7 +613,8 @@ namespace ao::rt
       for (std::size_t idx = 0; idx < left.size(); ++idx)
       {
         if (left[idx].rows.start != right[idx].rows.start || left[idx].rows.count != right[idx].rows.count ||
-            left[idx].label != right[idx].label)
+            left[idx].primaryText != right[idx].primaryText || left[idx].secondaryText != right[idx].secondaryText ||
+            left[idx].tertiaryText != right[idx].tertiaryText || left[idx].imageId != right[idx].imageId)
         {
           return false;
         }
@@ -1038,7 +1068,9 @@ namespace ao::rt
     auto const& section = _implPtr->sections[groupIndex];
     return TrackGroupSectionSnapshot{
       .rows = section.rows,
-      .label = std::string{section.label},
+      .primaryText = (section.primaryText.data() != nullptr) ? std::string{section.primaryText} : std::string{},
+      .secondaryText = (section.secondaryText.data() != nullptr) ? std::string{section.secondaryText} : std::string{},
+      .tertiaryText = (section.tertiaryText.data() != nullptr) ? std::string{section.tertiaryText} : std::string{},
       .imageId = section.imageId,
     };
   }

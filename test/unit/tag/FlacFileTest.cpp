@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "lib/tag/flac/File.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/tag/TagFile.h>
@@ -9,36 +10,16 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <ios>
 #include <string_view>
 #include <vector>
 
-namespace fs = std::filesystem;
 namespace ao::tag::flac::test
 {
   using namespace ao::media::flac;
+  using namespace ao::test;
 
   namespace
   {
-    struct TempFile final
-    {
-      fs::path path;
-      TempFile(std::vector<std::uint8_t> const& data)
-      {
-        path = fs::temp_directory_path() / "ao_flac_test_XXXXXX";
-        auto ofs = std::ofstream{path, std::ios::binary};
-        ofs.write(reinterpret_cast<char const*>(data.data()), static_cast<std::streamsize>(data.size()));
-      }
-      ~TempFile() { fs::remove(path); }
-
-      TempFile(TempFile const&) = delete;
-      TempFile& operator=(TempFile const&) = delete;
-      TempFile(TempFile&&) = delete;
-      TempFile& operator=(TempFile&&) = delete;
-    };
-
     void addBlockHeader(std::vector<std::uint8_t>& data, MetadataBlockType type, bool isLast, std::uint32_t size)
     {
       auto first = static_cast<std::uint8_t>(type);

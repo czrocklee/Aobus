@@ -14,7 +14,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <functional>
 #include <optional>
 #include <vector>
 
@@ -23,20 +22,10 @@ namespace ao::uimodel::playback::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  namespace
-  {
-    struct NullExecutor final : public IControlExecutor
-    {
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
-  }
-
   TEST_CASE("PlaybackQueueModel - basic controls", "[unit][runtime][uimodel][playback]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto mutationService = LibraryMutationService{runtime, testLib.library()};
     auto listSourceStore = ListSourceStore{testLib.library(), mutationService};

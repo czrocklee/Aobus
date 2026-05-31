@@ -74,6 +74,112 @@ namespace clang::tidy::readability
 
       return false;
     }
+
+    bool isNamespaceRedundant(NestedNameSpecifierLoc const& specLocItem, DeclContext const* currentContext)
+    {
+      NestedNameSpecifier const* spec = specLocItem.getNestedNameSpecifier();
+
+      if (spec->getKind() == NestedNameSpecifier::Global)
+      {
+        return false;
+      }
+
+      if (spec->getKind() != NestedNameSpecifier::Namespace && spec->getKind() != NestedNameSpecifier::NamespaceAlias)
+      {
+        return false;
+      }
+
+      NamespaceDecl const* ns = (spec->getKind() == NestedNameSpecifier::Namespace)
+                                  ? spec->getAsNamespace()
+                                  : spec->getAsNamespaceAlias()->getNamespace();
+
+      return ns != nullptr && isAncestor(ns, currentContext);
+    }
+
+    bool isShadowedByIntermediateNamespace(NestedNameSpecifierLoc const& lastRedundant,
+                                           llvm::SmallVectorImpl<NestedNameSpecifierLoc> const& chain,
+                                           DeclContext const* currentContext)
+    {
+      auto const* redundantSpec = lastRedundant.getNestedNameSpecifier();
+      bool foundRedundant = false;
+
+      for (auto const& item : chain)
+      {
+        if (item.getNestedNameSpecifier() == redundantSpec)
+        {
+          foundRedundant = true;
+          continue;
+        }
+
+        if (!foundRedundant)
+        {
+          continue;
+        }
+
+        NestedNameSpecifier const* nextSpec = item.getNestedNameSpecifier();
+
+        if (nextSpec->getKind() != NestedNameSpecifier::Namespace)
+        {
+          break;
+        }
+
+        auto const* targetNs = nextSpec->getAsNamespace();
+
+        if (targetNs == nullptr)
+        {
+          break;
+        }
+
+        auto const targetName = targetNs->getDeclName();
+        auto const* const redundantNs = redundantSpec->getAsNamespace();
+
+        for (DeclContext const* dc = currentContext; dc != nullptr && dc != redundantNs; dc = dc->getParent())
+        {
+          if (auto const* nsDecl = dyn_cast<NamespaceDecl>(dc);
+              nsDecl != nullptr && nsDecl->getDeclName() == targetName)
+          {
+            return true;
+          }
+        }
+
+        break;
+      }
+
+      return false;
+    }
+
+    bool extractSpecLocAndNode(MatchFinder::MatchResult const& result,
+                               NestedNameSpecifierLoc& specLoc,
+                               DynTypedNode& node)
+    {
+      if (auto const* declRef = result.Nodes.getNodeAs<DeclRefExpr>("declRef"); declRef != nullptr)
+      {
+        if (!declRef->hasQualifier())
+        {
+          return false;
+        }
+
+        specLoc = declRef->getQualifierLoc();
+        node = DynTypedNode::create(*declRef);
+        return true;
+      }
+
+      if (auto const* typeLoc = result.Nodes.getNodeAs<ElaboratedTypeLoc>("elaboratedTypeLoc"); typeLoc != nullptr)
+      {
+        auto const* contextTypeLoc = result.Nodes.getNodeAs<TypeLoc>("typeLoc");
+
+        if (contextTypeLoc == nullptr)
+        {
+          return false;
+        }
+
+        specLoc = typeLoc->getQualifierLoc();
+        node = DynTypedNode::create(*contextTypeLoc);
+        return true;
+      }
+
+      return false;
+    }
   } // namespace
 
   void RedundantNamespaceQualificationCheck::registerMatchers(MatchFinder* finder)
@@ -88,34 +194,11 @@ namespace clang::tidy::readability
 
   void RedundantNamespaceQualificationCheck::check(MatchFinder::MatchResult const& result)
   {
-    // Enforces Rule 2.6.5: avoid redundant namespace qualification.
     auto const& sm = *result.SourceManager;
     auto specLoc = NestedNameSpecifierLoc{};
     auto node = DynTypedNode{};
 
-    if (auto const* declRef = result.Nodes.getNodeAs<DeclRefExpr>("declRef"); declRef != nullptr)
-    {
-      if (!declRef->hasQualifier())
-      {
-        return;
-      }
-
-      specLoc = declRef->getQualifierLoc();
-      node = DynTypedNode::create(*declRef);
-    }
-    else if (auto const* typeLoc = result.Nodes.getNodeAs<ElaboratedTypeLoc>("elaboratedTypeLoc"); typeLoc != nullptr)
-    {
-      auto const* contextTypeLoc = result.Nodes.getNodeAs<TypeLoc>("typeLoc");
-
-      if (contextTypeLoc == nullptr)
-      {
-        return;
-      }
-
-      specLoc = typeLoc->getQualifierLoc();
-      node = DynTypedNode::create(*contextTypeLoc);
-    }
-    else
+    if (!extractSpecLocAndNode(result, specLoc, node))
     {
       return;
     }
@@ -152,45 +235,29 @@ namespace clang::tidy::readability
 
     for (auto const& specLocItem : chain)
     {
-      NestedNameSpecifier const* spec = specLocItem.getNestedNameSpecifier();
-
-      if (spec->getKind() == NestedNameSpecifier::Global)
+      if (!isNamespaceRedundant(specLocItem, currentContext))
       {
-        // Keep global qualification if present, as it's usually intentional.
         break;
       }
 
-      if (spec->getKind() == NestedNameSpecifier::Namespace || spec->getKind() == NestedNameSpecifier::NamespaceAlias)
-      {
-        NamespaceDecl const* ns = nullptr;
-
-        if (spec->getKind() == NestedNameSpecifier::Namespace)
-        {
-          ns = spec->getAsNamespace();
-        }
-        else
-        {
-          ns = spec->getAsNamespaceAlias()->getNamespace();
-        }
-
-        if (ns != nullptr && isAncestor(ns, currentContext))
-        {
-          lastRedundant = specLocItem;
-          continue;
-        }
-      }
-
-      break;
+      lastRedundant = specLocItem;
     }
 
-    if (lastRedundant)
+    if (!lastRedundant)
     {
-      auto const range = SourceRange{specLoc.getBeginLoc(), lastRedundant.getEndLoc()};
-      auto const charRange = CharSourceRange::getCharRange(
-        range.getBegin(), Lexer::getLocForEndOfToken(range.getEnd(), 0, sm, result.Context->getLangOpts()));
-      auto const redundantText = Lexer::getSourceText(charRange, sm, result.Context->getLangOpts());
-
-      diag(loc, "redundant namespace qualification '%0'") << redundantText << FixItHint::CreateRemoval(range);
+      return;
     }
+
+    if (isShadowedByIntermediateNamespace(lastRedundant, chain, currentContext))
+    {
+      return;
+    }
+
+    auto const range = SourceRange{specLoc.getBeginLoc(), lastRedundant.getEndLoc()};
+    auto const charRange = CharSourceRange::getCharRange(
+      range.getBegin(), Lexer::getLocForEndOfToken(range.getEnd(), 0, sm, result.Context->getLangOpts()));
+    auto const redundantText = Lexer::getSourceText(charRange, sm, result.Context->getLangOpts());
+
+    diag(loc, "redundant namespace qualification '%0'") << redundantText << FixItHint::CreateRemoval(range);
   }
 } // namespace clang::tidy::readability

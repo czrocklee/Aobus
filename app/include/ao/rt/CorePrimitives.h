@@ -5,6 +5,7 @@
 
 #include <ao/Type.h>
 #include <ao/utility/StrongType.h>
+#include <ao/utility/Subscription.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -30,44 +31,7 @@ namespace ao::rt
     std::size_t count = 0;
   };
 
-  class Subscription final
-  {
-  public:
-    Subscription() = default;
-
-    explicit Subscription(std::move_only_function<void()> unsubscribe)
-      : _unsubscribe{std::move(unsubscribe)}
-    {
-    }
-
-    Subscription(Subscription const&) = delete;
-    Subscription& operator=(Subscription const&) = delete;
-
-    Subscription(Subscription&&) noexcept = default;
-    Subscription& operator=(Subscription&&) noexcept = default;
-
-    ~Subscription()
-    {
-      if (_unsubscribe)
-      {
-        _unsubscribe();
-      }
-    }
-
-    void reset()
-    {
-      if (_unsubscribe)
-      {
-        _unsubscribe();
-        _unsubscribe = {};
-      }
-    }
-
-    explicit operator bool() const noexcept { return static_cast<bool>(_unsubscribe); }
-
-  private:
-    std::move_only_function<void()> _unsubscribe;
-  };
+  using Subscription = utility::Subscription;
 
   class IControlExecutor
   {

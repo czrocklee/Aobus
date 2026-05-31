@@ -8,7 +8,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <functional>
 #include <string>
 #include <vector>
 
@@ -16,20 +15,10 @@ namespace ao::uimodel::tag::test
 {
   using namespace ao::rt::test;
 
-  namespace
-  {
-    struct NullExecutor final : public rt::IControlExecutor
-    {
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
-  }
-
   TEST_CASE("TagEditWorkflow - logic and messages", "[unit][uimodel][tag]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = rt::async::Runtime{executor};
     auto mutation = rt::LibraryMutationService{runtime, testLib.library()};
     auto workflow = TagEditWorkflow{mutation};

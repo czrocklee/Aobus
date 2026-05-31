@@ -209,6 +209,7 @@ namespace ao::rt::test
     CHECK(snap.groupBy == TrackGroupKey::Artist);
 
     auto const expected = std::vector{TrackSortField::Artist,
+                                      TrackSortField::Year,
                                       TrackSortField::Album,
                                       TrackSortField::DiscNumber,
                                       TrackSortField::TrackNumber,

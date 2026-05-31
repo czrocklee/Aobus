@@ -53,3 +53,39 @@ namespace other
     ao::library::Track const t;
   }
 }
+
+namespace ao::test
+{
+  struct TempDir
+  {};
+}
+
+namespace ao::rt::test
+{
+  using namespace ao;
+
+  void test4()
+  {
+    // NEGATIVE
+    ao::test::TempDir const t;
+  }
+}
+
+namespace ao::main::test
+{
+  void test5()
+  {
+    // NEGATIVE
+    ao::test::TempDir const t;
+  }
+}
+
+namespace ao::rt::other
+{
+  void test6()
+  {
+    // POSITIVE
+    ao::test::TempDir const t;
+  }
+}
+}

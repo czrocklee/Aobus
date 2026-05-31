@@ -23,20 +23,10 @@ namespace ao::uimodel::track::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  namespace
-  {
-    struct NullExecutor final : public IControlExecutor
-    {
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); }
-      void defer(std::move_only_function<void()> task) override { task(); }
-    };
-  }
-
   TEST_CASE("TrackPresentationViewModel - preset and layout management", "[uimodel][track][presentation]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = NullExecutor{};
+    auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto mutationService = LibraryMutationService{runtime, testLib.library()};
     auto listSourceStore = ListSourceStore{testLib.library(), mutationService};

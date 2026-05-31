@@ -208,11 +208,10 @@ templates:
                   heightRequest: 24
                   valign: center
                   cssClasses: ao-separator-subtle
-              - type: app.actionButton
+              - type: app.menuButton
                 props:
                   icon: open-menu-symbolic
                   style: flat
-                  primaryAction: shell.showSystemMenu
                 layout:
                   widthRequest: 28
                   heightRequest: 28
