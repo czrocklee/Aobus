@@ -32,6 +32,9 @@ namespace ao::gtk
 
     void setIsHardwareAssisted(bool hw);
 
+    void setOrientation(Gtk::Orientation orientation);
+    Gtk::Orientation orientation() const;
+
     VolumeChangedSignal& signalVolumeChanged();
 
   protected:
@@ -48,13 +51,14 @@ namespace ao::gtk
     friend class VolumeBarTestPeer;
 
     void updateTooltip();
-    void handleAbsoluteClick(double offsetX);
-    void handleDragUpdate(double offsetX);
+    void handleAbsoluteClick(double posX, double posY);
+    void handleDragUpdate(double posX, double posY);
     void handleScroll(double dx, double dy);
 
     float _volume = 1.0F;
     float _dragStartVolume = 0.0F;
     bool _isHardwareAssisted = false;
+    Gtk::Orientation _orientation = Gtk::Orientation::HORIZONTAL;
     VolumeChangedSignal _volumeChanged;
   };
 } // namespace ao::gtk

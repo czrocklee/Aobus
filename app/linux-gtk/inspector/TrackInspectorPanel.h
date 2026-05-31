@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "image/ImageCache.h"
+#include "image/ImageWidget.h"
 #include "tag/TagEditor.h"
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
@@ -15,7 +15,6 @@
 #include <gtkmm/editablelabel.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
-#include <gtkmm/picture.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 #include <sigc++/signal.h>
@@ -96,7 +95,7 @@ namespace ao::gtk
 
     // Hero Section
     Gtk::Box _heroBox{Gtk::Orientation::VERTICAL};
-    Gtk::Picture _coverImage;
+    ImageWidget _coverImage;
     Gtk::Label _noCoverLabel{"No Artwork"};
 
     // Metadata Section

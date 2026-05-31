@@ -15,10 +15,10 @@
 #include <ao/uimodel/layout/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <giomm/menu.h>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/scale.h>
@@ -216,8 +216,13 @@ namespace ao::gtk::layout::test
       std::int32_t soulWidth = -1;
       std::int32_t soulHeight = -1;
       soul->get_size_request(soulWidth, soulHeight);
-      CHECK(soulWidth == 48);
-      CHECK(soulHeight == 48);
+      CHECK(soulWidth == -1);
+      CHECK(soulHeight == -1);
+
+      CHECK(soul->get_hexpand() == false);
+      CHECK(soul->get_vexpand() == false);
+      CHECK(soul->get_halign() == Gtk::Align::FILL);
+      CHECK(soul->get_valign() == Gtk::Align::FILL);
     }
 
     SECTION("all 12 playback types register and instantiate")

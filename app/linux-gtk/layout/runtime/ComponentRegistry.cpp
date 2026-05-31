@@ -140,6 +140,8 @@ namespace ao::gtk::layout
       return nullptr;
     }
 
+    applyCommonProps(componentPtr->widget(), node);
+
     // Phase 2: Automatic interaction controller attachment
     auto interactionControllerPtr = std::unique_ptr<ComponentInteractionController>{};
 
@@ -210,7 +212,7 @@ namespace ao::gtk::layout
 
         if (tooltipComponentPtr)
         {
-          applyCommonProps(tooltipComponentPtr->widget(), *node.optTooltip->nodePtr);
+          // applyCommonProps is now handled inside create()
         }
       }
 

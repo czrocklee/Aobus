@@ -5,74 +5,27 @@ root:
   props:
     orientation: vertical
   children:
-    - type: app.menuBar
+    - type: template
+      props:
+        templateId: app.defaultMenuBar
     - id: playback-row
       type: template
       props:
         templateId: playback.defaultBar
       layout:
-        cssClasses: ao-playback-strip
+        valign: start
     - id: main-paned
-      type: split
+      type: template
       props:
-        orientation: horizontal
-        position: 330
-      layout:
-        vexpand: true
-      children:
-        - id: list-pane
-          type: box
-          props:
-            orientation: vertical
-          children:
-            - type: library.listTree
-              layout:
-                vexpand: true
-            - type: playback.image
-              layout:
-                minHeight: 50
-              tooltip:
-                type: playback.image
-                props:
-                  targetSize: 500
-                layout:
-                  cssClasses:
-                    - ao-popover-transparent
-                    - ao-popover-p-none
-                    - ao-popover-rounded-md
-                    - ao-rounded-md
-                    - ao-opacity-80
-        - type: box
-          props:
-            orientation: vertical
-          children:
-            - type: box
-              props:
-                orientation: horizontal
-                spacing: 6
-              layout:
-                cssClasses: ao-track-controls-bar
-              children:
-                - type: track.quickFilter
-                  layout:
-                    hexpand: true
-                - type: track.presentationButton
-            - id: workspace-with-inspector
-              type: app.workspaceWithInspector
-              layout:
-                vexpand: true
-    - type: box
+        templateId: app.defaultMainPaned
+    - type: template
       props:
-        orientation: horizontal
-      layout:
-        cssClasses: ao-status-region
-      children:
-        - type: template
-          props:
-            templateId: status.defaultBar
-          layout:
-            hexpand: true
+        templateId: app.defaultStatusRegion
+
 templates:
+  app.defaultMenuBar:
+    type: app.menuBar
+
   playback.compactControls:
     type: box
     props:
@@ -90,6 +43,7 @@ templates:
     layout:
       cssClasses: [linked]
       halign: start
+      valign: center
     children:
       - type: playback.playPauseButton
       - type: playback.stopButton
@@ -98,6 +52,8 @@ templates:
     props:
       orientation: horizontal
       spacing: 6
+    layout:
+      cssClasses: ao-playback-strip
     children:
       - type: box
         props:
@@ -110,9 +66,6 @@ templates:
         children:
           - type: playback.soulButton
             props:
-              size: 48
-              strokeWidth: 9.0
-              glyph: none
               primaryAction: playback.showAudioDeviceSelector
               secondaryAction: shell.showSystemMenu
               secondaryLongPressAction: shell.showSoul
@@ -121,6 +74,8 @@ templates:
               props:
                 variant: tooltip
             layout:
+              widthRequest: 32
+              heightRequest: 32
               halign: start
               valign: center
           - type: template
@@ -129,6 +84,7 @@ templates:
       - type: playback.seekSlider
         layout:
           hexpand: true
+          valign: center
       - type: box
         props:
           orientation: horizontal
@@ -140,6 +96,10 @@ templates:
         children:
           - type: playback.timeLabel
           - type: playback.volumeControl
+            layout:
+              halign: center
+              valign: center
+              heightRequest: 24
   library.defaultListPane:
     type: box
     props:
@@ -150,18 +110,7 @@ templates:
           vexpand: true
       - type: playback.image
         layout:
-          minHeight: 50
-        tooltip:
-          type: playback.image
-          props:
-            targetSize: 500
-          layout:
-            cssClasses:
-              - ao-popover-transparent
-              - ao-popover-p-none
-              - ao-popover-rounded-md
-              - ao-rounded-md
-              - ao-opacity-80
+          heightRequest: 50
   inspector.defaultPanel:
     type: inspector.panel
   status.defaultBar:
@@ -193,5 +142,57 @@ templates:
       view: workspace.focused
     layout:
       vexpand: true
+  tracks.defaultControlsBar:
+    type: box
+    props:
+      orientation: horizontal
+      spacing: 6
+    layout:
+      cssClasses: ao-track-controls-bar
+    children:
+      - type: track.quickFilter
+        layout:
+          hexpand: true
+      - type: track.presentationButton
   app.defaultLayout:
     type: app.workspaceWithInspector
+  app.defaultContentShell:
+    type: box
+    props:
+      orientation: vertical
+    children:
+      - type: template
+        props:
+          templateId: tracks.defaultControlsBar
+      - type: template
+        props:
+          templateId: app.defaultLayout
+        layout:
+          vexpand: true
+  app.defaultMainPaned:
+    type: split
+    props:
+      orientation: horizontal
+      position: 330
+    layout:
+      vexpand: true
+    children:
+      - id: list-pane
+        type: template
+        props:
+          templateId: library.defaultListPane
+      - type: template
+        props:
+          templateId: app.defaultContentShell
+  app.defaultStatusRegion:
+    type: box
+    props:
+      orientation: horizontal
+    layout:
+      cssClasses: ao-status-region
+    children:
+      - type: template
+        props:
+          templateId: status.defaultBar
+        layout:
+          hexpand: true

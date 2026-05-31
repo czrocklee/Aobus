@@ -30,7 +30,7 @@ namespace ao::gtk
 
   VolumeControl::~VolumeControl() = default;
 
-  void VolumeControl::applyState(ao::uimodel::playback::VolumeViewState const& view)
+  void VolumeControl::applyState(uimodel::playback::VolumeViewState const& view)
   {
     _volumeBar.set_visible(view.visible);
 
@@ -41,5 +41,10 @@ namespace ao::gtk
       _volumeBar.setIsHardwareAssisted(view.isHardwareAssisted);
       _updating = false;
     }
+  }
+
+  void VolumeControl::setOrientation(Gtk::Orientation orientation)
+  {
+    _volumeBar.setOrientation(orientation);
   }
 } // namespace ao::gtk

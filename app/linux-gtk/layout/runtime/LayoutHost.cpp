@@ -3,7 +3,6 @@
 
 #include "layout/runtime/LayoutHost.h"
 
-#include "layout/components/Containers.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
@@ -30,7 +29,6 @@ namespace ao::gtk::layout
 
     if (_activeComponentPtr)
     {
-      applyCommonProps(_activeComponentPtr->widget(), doc.root);
       append(_activeComponentPtr->widget());
     }
   }

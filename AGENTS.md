@@ -22,6 +22,8 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 5. **Design Docs:** Update `doc/design/` when modifying code that affects user-facing behavior. Sync all affected docs.
 6. **Test Coverage:** All changes must include appropriate test coverage.
 7. **Temporary Workspace:** Do not use the repository directory as a scratch or temporary workspace. Generate throwaway files, experiment outputs, and ad hoc test artifacts under `/tmp` or another explicit external workspace, unless the file is an intentional source, test, fixture, or documentation change.
+> [!TIP]
+> This repo is still under heavy development thus has no compatiblity/migration requrements, do suggests the best approach without historical baggage.
 
 ## Build And Validation
 
@@ -31,6 +33,11 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 ./build.sh debug               # Configures and builds with sanitizers, runs tests
 ./build.sh debug --clang       # Clang build in its own cache/build tree
 ./build.sh debug --clean       # Full clean rebuild
+
+# Run specific tests with Catch2 filters (requires existing build)
+./script/run-tests.sh --core "[audio]"         # Run core tests matching [audio]
+./script/run-tests.sh --gtk "[layout],[model]" # Run GTK tests matching [layout] OR [model]
+./script/run-tests.sh --gtk --list "[layout]"  # List GTK tests matching [layout]
 
 # clang-tidy (standalone, via shell script)
 ./script/run-clang-tidy.sh                     # Changed files (default)

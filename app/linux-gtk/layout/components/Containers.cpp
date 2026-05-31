@@ -103,13 +103,13 @@ namespace ao::gtk::layout
     std::int32_t height = -1;
     bool sizeChanged = false;
 
-    if (auto const it = layout.find("minWidth"); it != layout.end())
+    if (auto const it = layout.find("widthRequest"); it != layout.end())
     {
       width = static_cast<std::int32_t>(it->second.asInt());
       sizeChanged = true;
     }
 
-    if (auto const it = layout.find("minHeight"); it != layout.end())
+    if (auto const it = layout.find("heightRequest"); it != layout.end())
     {
       height = static_cast<std::int32_t>(it->second.asInt());
       sizeChanged = true;
@@ -161,12 +161,10 @@ namespace ao::gtk::layout
         _box.set_orientation(orientation);
         _box.set_spacing(static_cast<std::int32_t>(node.getProp<std::int64_t>("spacing", 0)));
         _box.set_homogeneous(node.getProp<bool>("homogeneous", false));
-        applyCommonProps(_box, node);
 
         for (auto const& childNode : node.children)
         {
           auto childPtr = ctx.registry.create(ctx, childNode);
-          applyCommonProps(childPtr->widget(), childNode);
           _box.append(childPtr->widget());
           _children.push_back(std::move(childPtr));
         }
@@ -195,12 +193,10 @@ namespace ao::gtk::layout
         }
 
         _centerBox.set_orientation(orientation);
-        applyCommonProps(_centerBox, node);
 
         for (auto const& childNode : node.children)
         {
           auto childPtr = ctx.registry.create(ctx, childNode);
-          applyCommonProps(childPtr->widget(), childNode);
 
           auto const slot = childNode.getLayout<std::string>("slot", "");
 
@@ -263,11 +259,9 @@ namespace ao::gtk::layout
         _paned.set_orientation(orientation);
 
         _startChildPtr = ctx.registry.create(ctx, node.children[0]);
-        applyCommonProps(_startChildPtr->widget(), node.children[0]);
         _paned.set_start_child(_startChildPtr->widget());
 
         _endChildPtr = ctx.registry.create(ctx, node.children[1]);
-        applyCommonProps(_endChildPtr->widget(), node.children[1]);
         _paned.set_end_child(_endChildPtr->widget());
 
         _paned.set_resize_start_child(node.getProp<bool>("resizeStart", true));
@@ -310,7 +304,6 @@ namespace ao::gtk::layout
         }
 
         _childPtr = ctx.registry.create(ctx, node.children[0]);
-        applyCommonProps(_childPtr->widget(), node.children[0]);
         _sw.set_child(_childPtr->widget());
 
         auto hpolicy = Gtk::PolicyType::AUTOMATIC;
@@ -420,7 +413,6 @@ namespace ao::gtk::layout
         for (auto const& childNode : node.children)
         {
           auto childPtr = ctx.registry.create(ctx, childNode);
-          applyCommonProps(childPtr->widget(), childNode);
 
           auto const title =
             childNode.getLayout<std::string>("title", !childNode.id.empty() ? childNode.id : "[Untitled]");

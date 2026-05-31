@@ -5,7 +5,6 @@
 
 #include <ao/uimodel/playback/VolumeViewModel.h>
 
-#include <cairomm/fontface.h>
 #include <gdkmm/graphene_rect.h>
 #include <gdkmm/rgba.h>
 #include <glibmm/refptr.h>
@@ -27,30 +26,16 @@ namespace ao::gtk
   namespace
   {
     constexpr float kVolumeEpsilon = 0.001F;
-    constexpr float kMinDrawHeight = 2.0F;
+    constexpr float kMinDrawThickness = 2.0F;
     constexpr float kBackgroundOpacity = 0.15F;
-    constexpr float kMinHeightFactor = 0.1F;
-    constexpr float kMaxHeightFactor = 0.9F;
-
-    // Fallback accent color (Nice Blue)
-    constexpr double kFallbackRed = 0.208;
-    constexpr double kFallbackGreen = 0.518;
-    constexpr double kFallbackBlue = 0.894;
-    constexpr double kFallbackAlpha = 1.0;
+    constexpr float kMinThicknessFactor = 0.1F;
+    constexpr float kMaxThicknessFactor = 0.9F;
 
     constexpr double kAngle90 = 0.5 * std::numbers::pi;
     constexpr double kAngle180 = std::numbers::pi;
     constexpr double kAngle270 = 1.5 * std::numbers::pi;
     constexpr double kAngle360 = 2.0 * std::numbers::pi;
     constexpr float kFullOpacity = 1.0F;
-
-    // Hardware-accelerated label colors
-    constexpr double kHardwareLabelRed = 0.6;
-    constexpr double kHardwareLabelGreen = 0.2;
-    constexpr double kHardwareLabelBlue = 0.8;
-
-    constexpr double kHardwareLabelFontSize = 8.0;
-    constexpr double kHardwareLabelYOffset = 6.0;
   }
 
   VolumeBar::VolumeBar()
@@ -59,15 +44,16 @@ namespace ao::gtk
     set_focusable(true);
     set_can_target(true);
 
-    // Drag: Uses offsets relative to start
+    // Drag
     auto const dragPtr = Gtk::GestureDrag::create();
     dragPtr->signal_drag_begin().connect([this](double, double) { _dragStartVolume = _volume; });
-    dragPtr->signal_drag_update().connect([this](double offsetX, double) { handleDragUpdate(offsetX); });
+    dragPtr->signal_drag_update().connect([this](double posX, double posY) { handleDragUpdate(posX, posY); });
     add_controller(dragPtr);
 
-    // Click: Immediate jump to position
+    // Click
     auto const clickPtr = Gtk::GestureClick::create();
-    clickPtr->signal_pressed().connect([this](std::int32_t, double offsetX, double) { handleAbsoluteClick(offsetX); });
+    clickPtr->signal_pressed().connect([this](std::int32_t, double posX, double posY)
+                                       { handleAbsoluteClick(posX, posY); });
     add_controller(clickPtr);
 
     // Scroll
@@ -112,6 +98,20 @@ namespace ao::gtk
     queue_draw();
   }
 
+  void VolumeBar::setOrientation(Gtk::Orientation orientation)
+  {
+    if (_orientation != orientation)
+    {
+      _orientation = orientation;
+      queue_resize();
+    }
+  }
+
+  Gtk::Orientation VolumeBar::orientation() const
+  {
+    return _orientation;
+  }
+
   void VolumeBar::updateTooltip()
   {
     auto const percent = std::clamp(static_cast<std::int32_t>(std::round(_volume * 100.0F)), 0, 100);
@@ -132,7 +132,8 @@ namespace ao::gtk
 
   Gtk::SizeRequestMode VolumeBar::get_request_mode_vfunc() const
   {
-    return Gtk::SizeRequestMode::WIDTH_FOR_HEIGHT;
+    return (_orientation == Gtk::Orientation::HORIZONTAL) ? Gtk::SizeRequestMode::WIDTH_FOR_HEIGHT
+                                                          : Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH;
   }
 
   void VolumeBar::measure_vfunc(Gtk::Orientation orientation,
@@ -142,24 +143,52 @@ namespace ao::gtk
                                 int& /*minimumBaseline*/,
                                 int& /*naturalBaseline*/) const
   {
-    static constexpr double kAspectRatio = std::numbers::phi + 1;
-    static constexpr int kMinHeight = 24;
-    static constexpr int kMinWidth = static_cast<std::int32_t>(kMinHeight * kAspectRatio);
+    static constexpr double kAspectRatio = std::numbers::phi + 1; // ~2.618
+    static constexpr int kMinThickness = 8;
+    static constexpr int kMinLength = 20;
 
+    static constexpr std::int32_t kDefaultThickness = 24;
+    static constexpr std::int32_t kDefaultNaturalLength = 50;
+
+    // RULE: Minimums must be small and constant to avoid GTK measurement contradictions
+    // and prevent 'forcing' the container to grow.
     if (orientation == Gtk::Orientation::HORIZONTAL)
     {
-      minimum = kMinWidth;
-      natural = (forSize > 0)
-                  ? std::max(kMinWidth, static_cast<std::int32_t>(static_cast<double>(forSize) * kAspectRatio))
-                  : kMinWidth;
+      minimum = kMinLength;
+
+      if (_orientation == Gtk::Orientation::HORIZONTAL)
+      {
+        // Horizontal bar asking for WIDTH. forSize is HEIGHT.
+        natural = (forSize >= 0)
+                    ? static_cast<std::int32_t>(std::round(static_cast<double>(forSize) * kAspectRatio))
+                    : static_cast<std::int32_t>(std::round(static_cast<double>(kDefaultThickness) * kAspectRatio));
+      }
+      else
+      {
+        // Vertical bar asking for WIDTH. forSize is HEIGHT.
+        natural = (forSize >= 0) ? static_cast<std::int32_t>(std::round(static_cast<double>(forSize) / kAspectRatio))
+                                 : kMinThickness;
+      }
     }
-    else
+    else // VERTICAL
     {
-      minimum = kMinHeight;
-      natural = (forSize > 0)
-                  ? std::max(kMinHeight, static_cast<std::int32_t>(static_cast<double>(forSize) / kAspectRatio))
-                  : kMinHeight;
+      minimum = kMinThickness;
+
+      if (_orientation == Gtk::Orientation::VERTICAL)
+      {
+        // Vertical bar asking for HEIGHT. forSize is WIDTH.
+        natural = (forSize >= 0) ? static_cast<std::int32_t>(std::round(static_cast<double>(forSize) * kAspectRatio))
+                                 : kDefaultNaturalLength;
+      }
+      else
+      {
+        // Horizontal bar asking for HEIGHT. forSize is WIDTH.
+        natural = (forSize >= 0) ? static_cast<std::int32_t>(std::round(static_cast<double>(forSize) / kAspectRatio))
+                                 : kDefaultThickness;
+      }
     }
+
+    natural = std::max(natural, minimum);
   }
 
   void VolumeBar::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot)
@@ -176,121 +205,172 @@ namespace ao::gtk
 
     float const vPadding = static_cast<float>(cssPadding.get_top());
     float const hPadding = static_cast<float>(cssPadding.get_left());
-    float const drawHeight = std::max(kMinDrawHeight, static_cast<float>(height) - (2.0F * vPadding));
-    float const yOffset = vPadding;
-
     float const drawWidth = std::max(0.0F, static_cast<float>(width) - (2.0F * hPadding));
+    float const drawHeight = std::max(kMinDrawThickness, static_cast<float>(height) - (2.0F * vPadding));
 
-    // 1. Calculate base segment width based on Soul proportion
-    // Note: AobusSoul uses the full raw widget height for scaling, so we must do the same to match exactly.
     static constexpr float kSoulStrokeRatio = 9.0F / 89.124F;
-    float const segmentWidth = static_cast<float>(height) * kSoulStrokeRatio;
+    float const thickness = (_orientation == Gtk::Orientation::HORIZONTAL) ? drawHeight : drawWidth;
+    float const length = (_orientation == Gtk::Orientation::HORIZONTAL) ? drawWidth : drawHeight;
 
-    // 2. Determine how many segments fit
-    // Use a balanced gap (e.g. 0.6x the bar width, minimum 1.5px) for the perfect density.
-    float const minGap = std::max(1.5F, segmentWidth * 0.6F);
+    float const segmentThickness = thickness * kSoulStrokeRatio;
+    float const minGap = std::max(1.5F, segmentThickness * 0.6F);
 
     std::int32_t numSegments = 1;
     float segmentGap = 0.0F;
 
-    if (drawWidth > segmentWidth)
+    if (length > segmentThickness)
     {
-      float const rawSegments = (drawWidth + minGap) / (segmentWidth + minGap);
+      float const rawSegments = (length + minGap) / (segmentThickness + minGap);
       numSegments = std::max<std::int32_t>(1, static_cast<std::int32_t>(std::floor(rawSegments)));
 
       if (numSegments > 1)
       {
         segmentGap =
-          (drawWidth - (static_cast<float>(numSegments) * segmentWidth)) / static_cast<float>(numSegments - 1);
+          (length - (static_cast<float>(numSegments) * segmentThickness)) / static_cast<float>(numSegments - 1);
       }
     }
 
-    float const segmentRadius = segmentWidth * 0.08F;
+    float const segmentRadius = segmentThickness * 0.08F;
 
-    // Dynamically lookup the theme's accent/selection color
     auto activeColor = Gdk::RGBA{};
 
     if (!contextPtr->lookup_color("accent_color", activeColor))
     {
-      if (!contextPtr->lookup_color("theme_selected_bg_color", activeColor))
-      {
-        // Fallback to a nice blue if theme doesn't provide named colors
-        activeColor.set_rgba(kFallbackRed, kFallbackGreen, kFallbackBlue, kFallbackAlpha);
-      }
+      contextPtr->lookup_color("theme_selected_bg_color", activeColor);
     }
 
-    // 1. Create the clipping path (10 rounded segments)
-    // This defines the "containers" that will slice our triangle
     crPtr->save();
     crPtr->begin_new_path();
 
     for (std::int32_t idx = 0; idx < numSegments; ++idx)
     {
-      float const segmentX = hPadding + (static_cast<float>(idx) * (segmentWidth + segmentGap));
+      float const pos = (static_cast<float>(idx) * (segmentThickness + segmentGap));
       crPtr->begin_new_sub_path();
-      crPtr->arc(segmentX + segmentRadius, yOffset + segmentRadius, segmentRadius, kAngle180, kAngle270);
-      crPtr->arc(segmentX + segmentWidth - segmentRadius, yOffset + segmentRadius, segmentRadius, kAngle270, kAngle360);
-      crPtr->arc(
-        segmentX + segmentWidth - segmentRadius, yOffset + drawHeight - segmentRadius, segmentRadius, 0, kAngle90);
-      crPtr->arc(segmentX + segmentRadius, yOffset + drawHeight - segmentRadius, segmentRadius, kAngle90, kAngle180);
+
+      if (_orientation == Gtk::Orientation::HORIZONTAL)
+      {
+        float const segmentX = hPadding + pos;
+        crPtr->arc(segmentX + segmentRadius, vPadding + segmentRadius, segmentRadius, kAngle180, kAngle270);
+        crPtr->arc(
+          segmentX + segmentThickness - segmentRadius, vPadding + segmentRadius, segmentRadius, kAngle270, kAngle360);
+        crPtr->arc(segmentX + segmentThickness - segmentRadius,
+                   vPadding + drawHeight - segmentRadius,
+                   segmentRadius,
+                   0,
+                   kAngle90);
+        crPtr->arc(segmentX + segmentRadius, vPadding + drawHeight - segmentRadius, segmentRadius, kAngle90, kAngle180);
+      }
+      else
+      {
+        float const segmentY = vPadding + drawHeight - pos - segmentThickness;
+        crPtr->arc(hPadding + segmentRadius, segmentY + segmentRadius, segmentRadius, kAngle180, kAngle270);
+        crPtr->arc(hPadding + drawWidth - segmentRadius, segmentY + segmentRadius, segmentRadius, kAngle270, kAngle360);
+        crPtr->arc(hPadding + drawWidth - segmentRadius,
+                   segmentY + segmentThickness - segmentRadius,
+                   segmentRadius,
+                   0,
+                   kAngle90);
+        crPtr->arc(
+          hPadding + segmentRadius, segmentY + segmentThickness - segmentRadius, segmentRadius, kAngle90, kAngle180);
+      }
+
       crPtr->close_path();
     }
 
     crPtr->clip();
 
-    // 2. Define the "Perfect Triangle" path (a trapezoid from 10% to 100% height)
-    auto const drawTrapezoid = [&](float currentWidth)
+    auto const drawRamp = [&](float progress)
     {
       crPtr->begin_new_path();
-      crPtr->move_to(0, yOffset + drawHeight);            // Bottom Left
-      crPtr->line_to(currentWidth, yOffset + drawHeight); // Bottom Right
-      float const hAtW =
-        drawHeight * (kMinHeightFactor + kMaxHeightFactor * (currentWidth / static_cast<float>(width)));
-      crPtr->line_to(currentWidth, yOffset + drawHeight - hAtW);
-      crPtr->line_to(0, yOffset + drawHeight - (drawHeight * kMinHeightFactor));
+
+      if (_orientation == Gtk::Orientation::HORIZONTAL)
+      {
+        float const currentWidth = drawWidth * progress;
+        crPtr->move_to(hPadding, vPadding + drawHeight);
+        crPtr->line_to(hPadding + currentWidth, vPadding + drawHeight);
+        float const hAtW = drawHeight * (kMinThicknessFactor + kMaxThicknessFactor * (currentWidth / drawWidth));
+        crPtr->line_to(hPadding + currentWidth, vPadding + drawHeight - hAtW);
+        crPtr->line_to(hPadding, vPadding + drawHeight - (drawHeight * kMinThicknessFactor));
+      }
+      else
+      {
+        float const currentHeight = drawHeight * progress;
+        crPtr->rectangle(hPadding, vPadding + drawHeight - currentHeight, drawWidth, currentHeight);
+      }
+
       crPtr->close_path();
     };
 
-    // 3. Draw Background (Inactive)
-    drawTrapezoid(static_cast<float>(width));
     crPtr->set_source_rgba(color.get_red(), color.get_green(), color.get_blue(), kBackgroundOpacity);
+    drawRamp(1.0F);
     crPtr->fill();
 
-    // 4. Draw Foreground (Active) - Clipped horizontally by volume
     if (_volume > 0.0F)
     {
-      drawTrapezoid(static_cast<float>(width) * _volume);
-      // Use the dynamically discovered theme color
       crPtr->set_source_rgba(activeColor.get_red(), activeColor.get_green(), activeColor.get_blue(), kFullOpacity);
+      drawRamp(_volume);
       crPtr->fill();
-    }
-
-    // 5. Draw HW Indicator
-    if (_isHardwareAssisted)
-    {
-      crPtr->set_source_rgba(kHardwareLabelRed, kHardwareLabelGreen, kHardwareLabelBlue, kFullOpacity);
-      crPtr->select_font_face("sans-serif", Cairo::ToyFontFace::Slant::NORMAL, Cairo::ToyFontFace::Weight::BOLD);
-      crPtr->set_font_size(kHardwareLabelFontSize);
-      crPtr->move_to(0, yOffset + kHardwareLabelYOffset);
-      crPtr->show_text("HW");
     }
 
     crPtr->restore();
   }
 
-  void VolumeBar::handleAbsoluteClick(double offsetX)
+  void VolumeBar::handleAbsoluteClick(double posX, double posY)
   {
-    float const vol = ao::uimodel::playback::VolumeViewModel::resolveVolumeOffset(get_width(), offsetX, 0.0F);
-    setVolume(vol);
+    float const hPadding = static_cast<float>(get_style_context()->get_padding().get_left());
+    float const vPadding = static_cast<float>(get_style_context()->get_padding().get_top());
+
+    if (_orientation == Gtk::Orientation::HORIZONTAL)
+    {
+      float const drawWidth = static_cast<float>(get_width()) - (2.0F * hPadding);
+
+      if (drawWidth > 0)
+      {
+        _volume = std::clamp(static_cast<float>(posX - hPadding) / drawWidth, 0.0F, 1.0F);
+      }
+    }
+    else
+    {
+      float const drawHeight = static_cast<float>(get_height()) - (2.0F * vPadding);
+
+      if (drawHeight > 0)
+      {
+        _volume = std::clamp(1.0F - (static_cast<float>(posY - vPadding) / drawHeight), 0.0F, 1.0F);
+      }
+    }
+
     _volumeChanged.emit(_volume);
+    updateTooltip();
+    queue_draw();
   }
 
-  void VolumeBar::handleDragUpdate(double offsetX)
+  void VolumeBar::handleDragUpdate(double posX, double posY)
   {
-    float const vol =
-      ao::uimodel::playback::VolumeViewModel::resolveVolumeOffset(get_width(), offsetX, _dragStartVolume);
-    setVolume(vol);
+    float const hPadding = static_cast<float>(get_style_context()->get_padding().get_left());
+    float const vPadding = static_cast<float>(get_style_context()->get_padding().get_top());
+
+    if (_orientation == Gtk::Orientation::HORIZONTAL)
+    {
+      float const drawWidth = static_cast<float>(get_width()) - (2.0F * hPadding);
+
+      if (drawWidth > 0)
+      {
+        _volume = std::clamp(_dragStartVolume + (static_cast<float>(posX) / drawWidth), 0.0F, 1.0F);
+      }
+    }
+    else
+    {
+      float const drawHeight = static_cast<float>(get_height()) - (2.0F * vPadding);
+
+      if (drawHeight > 0)
+      {
+        _volume = std::clamp(_dragStartVolume - (static_cast<float>(posY) / drawHeight), 0.0F, 1.0F);
+      }
+    }
+
     _volumeChanged.emit(_volume);
+    updateTooltip();
+    queue_draw();
   }
 
   void VolumeBar::handleScroll(double /*dx*/, double dy)

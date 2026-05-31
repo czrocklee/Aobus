@@ -7,9 +7,6 @@ root:
   layout:
     cssClasses: ao-layout-preset-modern
   children:
-    - type: app.menuBar
-
-    # === Main content (no top playback strip) ===
     - id: main-paned
       type: split
       props:
@@ -48,6 +45,7 @@ root:
                     cssClasses: ao-modern-section-title-button
                 - type: track.quickFilter
                   layout:
+                    widthRequest: 320
                     slot: center
                     halign: center
                     cssClasses: ao-modern-search-pill
@@ -65,6 +63,8 @@ root:
     - type: template
       props:
         templateId: playback.modernBar
+      layout:
+        valign: end
 
 templates:
   playback.modernBar:
@@ -79,6 +79,7 @@ templates:
         layout:
           cssClasses: ao-seekbar-modern-full
           hexpand: true
+          valign: center
       - type: centerBox
         layout:
           cssClasses: ao-modern-bottom-bar-content
@@ -98,6 +99,10 @@ templates:
                   targetSize: 48
                   forceSquare: true
                 layout:
+                  widthRequest: 48
+                  vexpand: true
+                  halign: center
+                  valign: fill
                   cssClasses: ao-nowplaying-image-thumb
                 tooltip:
                   type: playback.image
@@ -133,8 +138,6 @@ templates:
               orientation: horizontal
               spacing: 16
             layout:
-              cssClasses: ao-modern-center-group
-              halign: center
               slot: center
               valign: center
             children:
@@ -142,57 +145,76 @@ templates:
                 props:
                   mode: elapsed
                 layout:
+                  valign: center
                   cssClasses: ao-modern-time-label
               - type: box
                 props:
                   orientation: horizontal
-                  spacing: 12
+                  spacing: 16
                 layout:
                   valign: center
                 children:
                   - type: playback.shuffleButton
-                    props:
-                      size: normal
                   - type: playback.previousButton
-                    props:
-                      size: large
                   - type: playback.soulPlayPauseButton
                     props:
-                      size: 64
                       strokeWidth: 5.0
                       glyphScale: 0.85
                     layout:
+                      widthRequest: 64
+                      heightRequest: 64
+                      halign: center
+                      valign: center
                       cssClasses: ao-play-button-prominent
                     tooltip:
                       type: playback.audioPipelinePanel
                       props:
                         variant: tooltip
                   - type: playback.nextButton
-                    props:
-                      size: large
                   - type: playback.repeatButton
-                    props:
-                      size: normal
               - type: playback.timeLabel
                 props:
                   mode: duration
                 layout:
+                  valign: center
                   cssClasses: ao-modern-time-label
+              - type: playback.volumeControl
+                props:
+                  orientation: vertical
+                layout:
+                  widthRequest: 12
+                  heightRequest: 48
+                  halign: center
+                  valign: center
           - type: box
             props:
               orientation: horizontal
-              spacing: 12
+              spacing: 16
             layout:
-              halign: end
               slot: end
               valign: center
             children:
-              - type: playback.volumeControl
-              - type: playback.soulButton
+              - type: status.statusSlot
+                layout:
+                  halign: end
+                  valign: center
+              - type: playback.qualityIndicator
+                layout:
+                  valign: center
+              - type: separator
                 props:
-                  size: 48
-                  strokeWidth: 9.0
-                  glyph: none
-                  primaryAction: playback.showAudioDeviceSelector
-                  secondaryAction: shell.showSystemMenu
-                  secondaryLongPressAction: shell.showSoul
+                  orientation: vertical
+                layout:
+                  heightRequest: 24
+                  valign: center
+                  cssClasses: ao-separator-subtle
+              - type: app.actionButton
+                props:
+                  icon: open-menu-symbolic
+                  style: flat
+                  primaryAction: shell.showSystemMenu
+                layout:
+                  widthRequest: 28
+                  heightRequest: 28
+                  halign: center
+                  valign: center

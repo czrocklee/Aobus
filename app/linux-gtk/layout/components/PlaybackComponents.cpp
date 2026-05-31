@@ -54,7 +54,6 @@ namespace ao::gtk::layout
     using uimodel::layout::slotBit;
 
     constexpr std::int32_t kThumbnailSize = 56;
-    constexpr std::int32_t kDefaultButtonSize = 48;
     constexpr double kDefaultStrokeWidth = 9.0;
 
     /**
@@ -156,12 +155,6 @@ namespace ao::gtk::layout
 
         auto const targetSize = node.getProp<std::int64_t>("targetSize", kThumbnailSize);
         _imageWidgetPtr->setTargetSize(static_cast<std::int32_t>(targetSize));
-
-        if (node.getProp<bool>("forceSquare", false))
-        {
-          _imageWidgetPtr->set_size_request(
-            static_cast<std::int32_t>(targetSize), static_cast<std::int32_t>(targetSize));
-        }
 
         if (auto const it = node.props.find("opacity"); it != node.props.end())
         {
@@ -291,9 +284,15 @@ namespace ao::gtk::layout
     class VolumeControlComponent final : public ILayoutComponent
     {
     public:
-      VolumeControlComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      VolumeControlComponent(LayoutContext& ctx, LayoutNode const& node)
         : _control{ctx.runtime.playback()}
       {
+        auto const orient = node.getProp<std::string>("orientation", "horizontal");
+
+        if (orient == "vertical")
+        {
+          _control.setOrientation(Gtk::Orientation::VERTICAL);
+        }
       }
 
       Gtk::Widget& widget() override { return _control.widget(); }
@@ -439,8 +438,8 @@ namespace ao::gtk::layout
         _button.set_valign(Gtk::Align::CENTER);
         _button.set_halign(Gtk::Align::CENTER);
 
-        auto const size = node.getProp<std::int64_t>("size", kDefaultButtonSize);
-        _soul.set_size_request(static_cast<std::int32_t>(size), static_cast<std::int32_t>(size));
+        _soul.set_halign(Gtk::Align::FILL);
+        _soul.set_valign(Gtk::Align::FILL);
 
         if (auto const strokeWidth = node.getProp<double>("strokeWidth", 0.0); strokeWidth > 0.0)
         {
@@ -514,8 +513,8 @@ namespace ao::gtk::layout
         _button.add_css_class("ao-soul-button");
         _button.set_child(_soul);
 
-        auto const size = node.getProp<std::int64_t>("size", kDefaultButtonSize);
-        _soul.set_size_request(static_cast<std::int32_t>(size), static_cast<std::int32_t>(size));
+        _soul.set_halign(Gtk::Align::FILL);
+        _soul.set_valign(Gtk::Align::FILL);
 
         if (auto const strokeWidth = node.getProp<double>("strokeWidth", 0.0); strokeWidth > 0.0)
         {
@@ -662,16 +661,14 @@ namespace ao::gtk::layout
        .displayName = "Soul Play/Pause Button",
        .category = "Playback",
        .container = false,
-       .props =
-         {{.name = "size", .kind = PropertyKind::Int, .label = "Size", .defaultValue = LayoutValue{kDefaultButtonSize}},
-          {.name = "strokeWidth",
-           .kind = PropertyKind::Double,
-           .label = "Stroke Width",
-           .defaultValue = LayoutValue{kDefaultStrokeWidth}},
-          {.name = "glyphScale",
-           .kind = PropertyKind::Double,
-           .label = "Glyph Scale",
-           .defaultValue = LayoutValue{1.0}}},
+       .props = {{.name = "strokeWidth",
+                  .kind = PropertyKind::Double,
+                  .label = "Stroke Width",
+                  .defaultValue = LayoutValue{kDefaultStrokeWidth}},
+                 {.name = "glyphScale",
+                  .kind = PropertyKind::Double,
+                  .label = "Glyph Scale",
+                  .defaultValue = LayoutValue{1.0}}},
        .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0,
@@ -680,35 +677,32 @@ namespace ao::gtk::layout
                                              .defaultActionIds = {{ActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
       createSoulPlayPauseButton);
 
-    registry.registerComponent(
-      {.type = "playback.soulButton",
-       .displayName = "Soul Button",
-       .category = "Playback",
-       .container = false,
-       .props =
-         {{.name = "size", .kind = PropertyKind::Int, .label = "Size", .defaultValue = LayoutValue{kDefaultButtonSize}},
-          {.name = "strokeWidth",
-           .kind = PropertyKind::Double,
-           .label = "Stroke Width",
-           .defaultValue = LayoutValue{kDefaultStrokeWidth}},
-          {.name = "glyph",
-           .kind = PropertyKind::Enum,
-           .label = "Glyph",
-           .defaultValue = LayoutValue{"none"},
-           .enumValues = {"none", "sigil", "seal"}},
-          {.name = "glyphScale",
-           .kind = PropertyKind::Double,
-           .label = "Glyph Scale",
-           .defaultValue = LayoutValue{1.0}},
-          {.name = "showFullLogo",
-           .kind = PropertyKind::Bool,
-           .label = "Show Full Logo",
-           .defaultValue = LayoutValue{false}}},
-       .layoutProps = {},
-       .minChildren = 0,
-       .optMaxChildren = 0,
-       .actionPolicy = kAllExternalActions},
-      createSoulButton);
+    registry.registerComponent({.type = "playback.soulButton",
+                                .displayName = "Soul Button",
+                                .category = "Playback",
+                                .container = false,
+                                .props = {{.name = "strokeWidth",
+                                           .kind = PropertyKind::Double,
+                                           .label = "Stroke Width",
+                                           .defaultValue = LayoutValue{kDefaultStrokeWidth}},
+                                          {.name = "glyph",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Glyph",
+                                           .defaultValue = LayoutValue{"none"},
+                                           .enumValues = {"none", "sigil", "seal"}},
+                                          {.name = "glyphScale",
+                                           .kind = PropertyKind::Double,
+                                           .label = "Glyph Scale",
+                                           .defaultValue = LayoutValue{1.0}},
+                                          {.name = "showFullLogo",
+                                           .kind = PropertyKind::Bool,
+                                           .label = "Show Full Logo",
+                                           .defaultValue = LayoutValue{false}}},
+                                .layoutProps = {},
+                                .minChildren = 0,
+                                .optMaxChildren = 0,
+                                .actionPolicy = kAllExternalActions},
+                               createSoulButton);
 
     registry.registerComponent(
       {.type = "playback.playPauseButton",

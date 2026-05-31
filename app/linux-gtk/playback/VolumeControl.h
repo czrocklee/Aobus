@@ -7,6 +7,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/VolumeViewModel.h>
 
+#include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
 
 namespace ao::gtk
@@ -24,6 +25,8 @@ namespace ao::gtk
     VolumeControl& operator=(VolumeControl const&) = delete;
     VolumeControl(VolumeControl&&) = delete;
     VolumeControl& operator=(VolumeControl&&) = delete;
+
+    void setOrientation(Gtk::Orientation orientation);
 
     Gtk::Widget& widget() { return _volumeBar; }
 

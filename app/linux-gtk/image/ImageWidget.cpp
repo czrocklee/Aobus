@@ -10,11 +10,18 @@
 #include <ao/rt/ProjectionTypes.h>
 
 #include <gdkmm/pixbuf.h>
+#include <gdkmm/surface.h> // NOLINT(misc-include-cleaner)
+#include <gdkmm/texture.h>
 #include <giomm/memoryinputstream.h>
 #include <glibmm/error.h>
+#include <glibmm/main.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/native.h>
+#include <gtkmm/picture.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -25,19 +32,75 @@
 
 namespace ao::gtk
 {
+  namespace detail
+  {
+    constexpr std::int32_t kMinimumRefreshDelta = 2;
+    constexpr double kRefreshDeltaRatio = 0.05;
+
+    RenderTarget fitSourceIntoTarget(RenderTarget const source, RenderTarget const target)
+    {
+      if (source.width <= 0 || source.height <= 0 || target.width <= 0 || target.height <= 0)
+      {
+        return {.width = 0, .height = 0};
+      }
+
+      // Never upscale beyond the source image if the source is smaller than the requested target.
+      if (source.width <= target.width && source.height <= target.height)
+      {
+        return source;
+      }
+
+      double const scale = std::min(static_cast<double>(target.width) / static_cast<double>(source.width),
+                                    static_cast<double>(target.height) / static_cast<double>(source.height));
+
+      return {.width = std::max(1, static_cast<std::int32_t>(std::round(static_cast<double>(source.width) * scale))),
+              .height = std::max(1, static_cast<std::int32_t>(std::round(static_cast<double>(source.height) * scale)))};
+    }
+
+    bool shouldRefresh(RenderTarget const current, RenderTarget const next)
+    {
+      if (current.width <= 0 || current.height <= 0)
+      {
+        return next.width > 0 && next.height > 0;
+      }
+
+      auto const widthDiff = std::abs(current.width - next.width);
+      auto const heightDiff = std::abs(current.height - next.height);
+
+      auto const widthThreshold =
+        std::max(kMinimumRefreshDelta,
+                 static_cast<std::int32_t>(std::ceil(static_cast<double>(current.width) * kRefreshDeltaRatio)));
+      auto const heightThreshold =
+        std::max(kMinimumRefreshDelta,
+                 static_cast<std::int32_t>(std::ceil(static_cast<double>(current.height) * kRefreshDeltaRatio)));
+
+      return widthDiff >= widthThreshold || heightDiff >= heightThreshold;
+    }
+  } // namespace detail
+
   ImageWidget::ImageWidget(library::MusicLibrary& library, ImageCache& cache)
     : _library{library}, _cache{cache}
   {
-    set_keep_aspect_ratio(true);
+    set_content_fit(Gtk::ContentFit::CONTAIN);
     set_can_shrink(true);
     set_alternative_text("No cover art");
+
+    signal_map().connect(std::bind_front(&ImageWidget::queueRefresh, this));
+    property_scale_factor().signal_changed().connect(std::bind_front(&ImageWidget::queueRefresh, this));
   }
 
-  ImageWidget::~ImageWidget() = default;
+  ImageWidget::~ImageWidget()
+  {
+    _refreshConnection.disconnect();
+  }
 
   void ImageWidget::setTargetSize(std::int32_t size)
   {
-    _targetSize = size;
+    if (_targetSize != size)
+    {
+      _targetSize = size;
+      queueRefresh();
+    }
   }
 
   void ImageWidget::bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr)
@@ -62,6 +125,11 @@ namespace ao::gtk
     if (coverArtId == kInvalidResourceId)
     {
       clearImage();
+      return;
+    }
+
+    if (_currentCoverId == coverArtId && _sourcePixbufPtr)
+    {
       return;
     }
 
@@ -94,7 +162,9 @@ namespace ao::gtk
       }
     }
 
-    setImagePixbuf(cachedPtr);
+    _currentCoverId = coverArtId;
+    _sourcePixbufPtr = cachedPtr;
+    queueRefresh();
   }
 
   void ImageWidget::setImageFromBytes(std::span<std::byte const> bytes)
@@ -109,7 +179,9 @@ namespace ao::gtk
     {
       auto const memStreamPtr = Gio::MemoryInputStream::create();
       memStreamPtr->add_data(bytes.data(), std::ssize(bytes), nullptr);
-      setImagePixbuf(Gdk::Pixbuf::create_from_stream(memStreamPtr));
+      _currentCoverId = kInvalidResourceId;
+      _sourcePixbufPtr = Gdk::Pixbuf::create_from_stream(memStreamPtr);
+      queueRefresh();
     }
     catch (Glib::Error const&)
     {
@@ -117,38 +189,152 @@ namespace ao::gtk
     }
   }
 
-  Glib::RefPtr<Gdk::Pixbuf> ImageWidget::scalePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf) const
-  {
-    if (!pixbuf || _targetSize <= 0)
-    {
-      return pixbuf;
-    }
-
-    std::int32_t const width = pixbuf->get_width();
-    std::int32_t const height = pixbuf->get_height();
-
-    if (width <= _targetSize && height <= _targetSize)
-    {
-      return pixbuf; // Already small enough
-    }
-
-    double const scale = std::min(static_cast<double>(_targetSize) / static_cast<double>(width),
-                                  static_cast<double>(_targetSize) / static_cast<double>(height));
-
-    std::int32_t const newWidth = std::max(1, static_cast<std::int32_t>(static_cast<double>(width) * scale));
-    std::int32_t const newHeight = std::max(1, static_cast<std::int32_t>(static_cast<double>(height) * scale));
-
-    return pixbuf->scale_simple(newWidth, newHeight, Gdk::InterpType::BILINEAR);
-  }
-
   void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
   {
-    auto const scaledPtr = scalePixbuf(pixbuf);
-    scaledPtr ? set_pixbuf(scaledPtr) : clearImage();
+    _currentCoverId = kInvalidResourceId;
+    _sourcePixbufPtr = pixbuf;
+    queueRefresh();
   }
 
   void ImageWidget::clearImage()
   {
-    set_pixbuf({});
+    _sourcePixbufPtr.reset();
+    _currentCoverId = kInvalidResourceId;
+
+    _renderedSourcePixbufPtr.reset();
+    _renderedCoverId = kInvalidResourceId;
+    _renderedTargetPixelWidth = 0;
+    _renderedTargetPixelHeight = 0;
+    _renderedPixelWidth = 0;
+    _renderedPixelHeight = 0;
+
+    set_paintable({});
   }
-}
+
+  void ImageWidget::size_allocate_vfunc(int width, int height, int baseline)
+  {
+    Gtk::Picture::size_allocate_vfunc(width, height, baseline);
+
+    _allocatedWidth = std::max(0, width);
+    _allocatedHeight = std::max(0, height);
+
+    queueRefresh();
+  }
+
+  void ImageWidget::queueRefresh()
+  {
+    if (_refreshQueued)
+    {
+      return;
+    }
+
+    _refreshQueued = true;
+    _refreshConnection = Glib::signal_idle().connect(
+      [this]
+      {
+        _refreshQueued = false;
+        refreshRenderedImage();
+        return false;
+      });
+  }
+
+  void ImageWidget::refreshRenderedImage()
+  {
+    if (!_sourcePixbufPtr)
+    {
+      if (_renderedSourcePixbufPtr || _renderedCoverId != kInvalidResourceId)
+      {
+        clearImage();
+      }
+
+      return;
+    }
+
+    auto const target = requestedRenderTarget();
+
+    if (target.width <= 0 || target.height <= 0)
+    {
+      return;
+    }
+
+    bool const sourceChanged = (_sourcePixbufPtr != _renderedSourcePixbufPtr) || (_currentCoverId != _renderedCoverId);
+    bool const sizeChanged =
+      detail::shouldRefresh({.width = _renderedTargetPixelWidth, .height = _renderedTargetPixelHeight}, target);
+
+    if (!sourceChanged && !sizeChanged)
+    {
+      return;
+    }
+
+    auto const fitTarget = detail::fitSourceIntoTarget(
+      {.width = _sourcePixbufPtr->get_width(), .height = _sourcePixbufPtr->get_height()}, target);
+
+    auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+
+    if (fitTarget.width == _sourcePixbufPtr->get_width() && fitTarget.height == _sourcePixbufPtr->get_height())
+    {
+      renderedPixbufPtr = _sourcePixbufPtr;
+    }
+    else
+    {
+      renderedPixbufPtr = _sourcePixbufPtr->scale_simple(fitTarget.width, fitTarget.height, Gdk::InterpType::HYPER);
+    }
+
+    _renderedSourcePixbufPtr = _sourcePixbufPtr;
+    _renderedCoverId = _currentCoverId;
+    _renderedTargetPixelWidth = target.width;
+    _renderedTargetPixelHeight = target.height;
+    _renderedPixelWidth = fitTarget.width;
+    _renderedPixelHeight = fitTarget.height;
+
+    set_paintable(Gdk::Texture::create_for_pixbuf(renderedPixbufPtr));
+  }
+
+  ImageWidget::RenderTarget ImageWidget::requestedRenderTarget() const
+  {
+    double const scale = currentDisplayScale();
+    std::int32_t logicalWidth = 0;
+    std::int32_t logicalHeight = 0;
+
+    auto const widgetWidth = std::max(_allocatedWidth, get_width());
+    auto const widgetHeight = std::max(_allocatedHeight, get_height());
+
+    // 1. Prefer actual widget size if available.
+    if (widgetWidth > 0 && widgetHeight > 0)
+    {
+      logicalWidth = widgetWidth;
+      logicalHeight = widgetHeight;
+    }
+    // 2. Fall back to targetSize hint (useful before first allocation).
+    else if (_targetSize > 0)
+    {
+      logicalWidth = _targetSize;
+      logicalHeight = _targetSize;
+    }
+    // 3. Last resort: use source dimensions (not recommended for large images, but better than 0).
+    else if (_sourcePixbufPtr)
+    {
+      logicalWidth = _sourcePixbufPtr->get_width();
+      logicalHeight = _sourcePixbufPtr->get_height();
+    }
+
+    // Ensure we are rounding UP to the nearest physical pixel to maintain sharpness.
+    return {.width = std::max(static_cast<std::int32_t>(1),
+                              static_cast<std::int32_t>(std::ceil(static_cast<double>(logicalWidth) * scale))),
+            .height = std::max(static_cast<std::int32_t>(1),
+                               static_cast<std::int32_t>(std::ceil(static_cast<double>(logicalHeight) * scale)))};
+  }
+
+  double ImageWidget::currentDisplayScale() const
+  {
+    if (auto const* const nativePtr = get_native(); nativePtr != nullptr)
+    {
+      if (auto const surfacePtr = nativePtr->get_surface(); surfacePtr)
+      {
+        return std::max(1.0, surfacePtr->get_scale());
+      }
+    }
+
+    return std::max(1.0, static_cast<double>(get_scale_factor()));
+  }
+} // namespace ao::gtk

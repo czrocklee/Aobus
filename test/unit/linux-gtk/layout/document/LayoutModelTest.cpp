@@ -34,7 +34,11 @@ namespace ao::gtk::layout::test
       CHECK(decoded.version == 1);
       CHECK(decoded.root.type == "box");
       REQUIRE(!decoded.root.children.empty());
-      CHECK(decoded.root.children[0].type == "app.menuBar");
+
+      // Verify menu bar is a template
+      auto const& menuBar = decoded.root.children[0];
+      CHECK(menuBar.type == "template");
+      CHECK(menuBar.getProp<std::string>("templateId", "") == "app.defaultMenuBar");
 
       // Verify playback row is a template
       REQUIRE(decoded.root.children.size() > 1);
@@ -43,15 +47,18 @@ namespace ao::gtk::layout::test
       CHECK(playbackRow.type == "template");
       CHECK(playbackRow.getProp<std::string>("templateId", "") == "playback.defaultBar");
 
-      // Verify status bar is a template inside a box
+      // Verify main paned area is a template
+      REQUIRE(decoded.root.children.size() > 2);
+      auto const& mainPaned = decoded.root.children[2];
+      CHECK(mainPaned.id == "main-paned");
+      CHECK(mainPaned.type == "template");
+      CHECK(mainPaned.getProp<std::string>("templateId", "") == "app.defaultMainPaned");
+
+      // Verify status bar region is a template
       REQUIRE(decoded.root.children.size() > 3);
       auto const& statusRegion = decoded.root.children[3];
-      CHECK(statusRegion.type == "box");
-      CHECK(statusRegion.getLayout<std::string>("cssClasses", "") == "ao-status-region");
-      REQUIRE(!statusRegion.children.empty());
-      auto const& statusTemplate = statusRegion.children[0];
-      CHECK(statusTemplate.type == "template");
-      CHECK(statusTemplate.getProp<std::string>("templateId", "") == "status.defaultBar");
+      CHECK(statusRegion.type == "template");
+      CHECK(statusRegion.getProp<std::string>("templateId", "") == "app.defaultStatusRegion");
     }
 
     SECTION("LayoutDocument round-trip preserves layout props and child order")

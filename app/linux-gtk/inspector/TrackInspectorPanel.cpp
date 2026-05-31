@@ -5,7 +5,6 @@
 
 #include "image/ImageCache.h"
 #include <ao/Type.h>
-#include <ao/library/ResourceStore.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/ProjectionTypes.h>
@@ -14,8 +13,6 @@
 #include <ao/rt/ViewService.h>
 #include <ao/utility/Log.h>
 
-#include <gdkmm/pixbuf.h>
-#include <giomm/memoryinputstream.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 #include <gtkmm/box.h>
@@ -28,10 +25,8 @@
 
 #include <chrono>
 #include <cstdint>
-#include <exception>
 #include <format>
 #include <functional>
-#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -43,7 +38,6 @@ namespace ao::gtk
   {
     constexpr int kSectionSpacing = 24;
     constexpr int kMetadataSpacing = 12;
-    constexpr int kHeroImageSize = 280;
     constexpr float kLabelOpacity = 0.6F;
     constexpr float kHeaderOpacity = 0.5F;
 
@@ -104,6 +98,7 @@ namespace ao::gtk
     , _mutation{mutation}
     , _sources{sources}
     , _imageCache{imageCache}
+    , _coverImage{library, imageCache}
   {
     setupUi();
   }
@@ -137,7 +132,6 @@ namespace ao::gtk
     _heroBox.add_css_class("ao-hero-section");
     _heroBox.set_halign(Gtk::Align::CENTER);
 
-    _coverImage.set_size_request(kHeroImageSize, kHeroImageSize);
     _coverImage.add_css_class("ao-hero-cover");
 
     _heroBox.append(_coverImage);
@@ -362,53 +356,15 @@ namespace ao::gtk
   {
     if (snap.singleCoverArtId == kInvalidResourceId)
     {
+      _coverImage.clearImage();
       _coverImage.set_visible(false);
       _noCoverLabel.set_visible(true);
       return;
     }
 
-    auto const pixbufPtr = _imageCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()));
-
-    if (!pixbufPtr)
-    {
-      auto const loadedPixbufPtr = loadImageFromLibrary(snap.singleCoverArtId);
-
-      if (loadedPixbufPtr)
-      {
-        _imageCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.raw()), loadedPixbufPtr);
-      }
-    }
-
-    if (pixbufPtr)
-    {
-      _coverImage.set_pixbuf(pixbufPtr);
-      _coverImage.set_visible(true);
-      _noCoverLabel.set_visible(false);
-    }
-  }
-
-  Glib::RefPtr<Gdk::Pixbuf> TrackInspectorPanel::loadImageFromLibrary(ResourceId resourceId)
-  {
-    auto const txn = _library.readTransaction();
-    auto const reader = _library.resources().reader(txn);
-    auto const optData = reader.get(static_cast<std::uint32_t>(resourceId.raw()));
-
-    if (!optData)
-    {
-      return {};
-    }
-
-    try
-    {
-      auto const memStreamPtr = Gio::MemoryInputStream::create();
-      memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
-      return Gdk::Pixbuf::create_from_stream(memStreamPtr);
-    }
-    catch (std::exception const& ex)
-    {
-      APP_LOG_ERROR("Failed to load cover art: {}", ex.what());
-      return {};
-    }
+    _coverImage.loadImage(snap.singleCoverArtId);
+    _coverImage.set_visible(true);
+    _noCoverLabel.set_visible(false);
   }
 
   void TrackInspectorPanel::updateAudioMetadata(rt::TrackDetailSnapshot const& snap)

@@ -1032,13 +1032,13 @@ namespace ao::gtk::layout::editor
                  .label = "Vertical Align",
                  .defaultValue = LayoutValue{std::string{"fill"}},
                  .enumValues = {"fill", "start", "end", "center"}});
-      addCommon({.name = "minWidth",
+      addCommon({.name = "widthRequest",
                  .kind = PropertyKind::Int,
-                 .label = "Min Width",
+                 .label = "Width Request",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
-      addCommon({.name = "minHeight",
+      addCommon({.name = "heightRequest",
                  .kind = PropertyKind::Int,
-                 .label = "Min Height",
+                 .label = "Height Request",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
       addCommon({.name = "x",
                  .kind = PropertyKind::Int,

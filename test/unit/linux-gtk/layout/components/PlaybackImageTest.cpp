@@ -121,11 +121,11 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(widget.get_hexpand());
       CHECK_FALSE(widget.get_vexpand());
 
-      std::int32_t width = -1;
-      std::int32_t height = -1;
+      std::int32_t width = 0;
+      std::int32_t height = 0;
       picture->get_size_request(width, height);
-      CHECK(width == 56);
-      CHECK(height == 56);
+      CHECK(width == -1);
+      CHECK(height == -1);
       CHECK(button->get_opacity() == Catch::Approx{0.5}.margin(0.01));
     }
   }

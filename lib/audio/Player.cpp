@@ -48,10 +48,11 @@ namespace ao::audio
 
     ~Impl()
     {
-      // Order matters: stop PipeWire threads before their callback targets are destroyed.
-      graphSubscription.reset(); // 1. remove subscription from PipeWireMonitor (still alive)
-      enginePtr.reset();         // 2. stop PipeWire playback thread
-      providers.clear();         // 3. stop PipeWire monitor thread
+      // Order matters: stop discovery callbacks and join their threads before stopping the engine,
+      // as callbacks (like handleDevicesChanged) might access the engine.
+      graphSubscription.reset();
+      providers.clear(); // This joins provider threads
+      enginePtr.reset(); // Now safe to stop playback thread
     }
 
     std::uint64_t playbackGeneration = 1;

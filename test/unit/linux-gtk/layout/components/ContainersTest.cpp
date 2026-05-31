@@ -549,15 +549,15 @@ namespace ao::gtk::layout::test
       CHECK(spacer->has_css_class("another"));
     }
 
-    SECTION("minWidth/minHeight set size request")
+    SECTION("widthRequest/heightRequest set size request")
     {
       auto doc = LayoutDocument{};
       doc.root.type = "box";
 
       auto child = LayoutNode{};
       child.type = "spacer";
-      child.layout["minWidth"] = LayoutValue{static_cast<std::int64_t>(200)};
-      child.layout["minHeight"] = LayoutValue{static_cast<std::int64_t>(100)};
+      child.layout["widthRequest"] = LayoutValue{static_cast<std::int64_t>(200)};
+      child.layout["heightRequest"] = LayoutValue{static_cast<std::int64_t>(100)};
       doc.root.children.push_back(child);
 
       auto const compPtr = layoutRuntime.build(ctx, doc);
