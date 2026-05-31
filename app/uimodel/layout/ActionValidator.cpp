@@ -7,8 +7,11 @@
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
+#include <algorithm>
+#include <array>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::uimodel::layout
@@ -74,6 +77,30 @@ namespace ao::uimodel::layout
         for (auto const& propDesc : optCompDesc->props)
         {
           validateActionProperty(node, propDesc, actions, resolveBindingContext, diagnostics);
+        }
+
+        // Phase 1: Diagnose disallowed global action properties
+        static constexpr auto kGlobalActionProps = std::to_array<std::string_view>(
+          {kPrimaryActionProp, kSecondaryActionProp, kPrimaryLongPressActionProp, kSecondaryLongPressActionProp});
+
+        for (auto const propName : kGlobalActionProps)
+        {
+          if (node.props.contains(propName))
+          {
+            bool const supported =
+              std::any_of(optCompDesc->props.begin(),
+                          optCompDesc->props.end(),
+                          [propName](PropertyDescriptor const& prop) { return prop.name == propName; });
+
+            if (!supported)
+            {
+              diagnostics.push_back(
+                LayoutDiagnostic{.componentId = node.id.empty() ? node.type : node.id,
+                                 .propertyName = std::string{propName},
+                                 .actionId = "",
+                                 .message = "Action slot is not supported by this component policy"});
+            }
+          }
         }
       }
 

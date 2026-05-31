@@ -117,7 +117,7 @@ namespace ao::uimodel::layout::test
   TEST_CASE("LayoutDocument round-trip preserves action-id props", "[layout][unit][model]")
   {
     auto doc = LayoutDocument{};
-    doc.root.type = "playback.outputButton";
+    doc.root.type = "playback.qualityIndicator";
     doc.root.props["primaryAction"] = LayoutValue{std::string{"playback.playPause"}};
     doc.root.props["secondaryAction"] = LayoutValue{std::string{"shell.showSystemMenu"}};
 
@@ -127,7 +127,7 @@ namespace ao::uimodel::layout::test
     auto decoded = LayoutDocument{};
     REQUIRE(rt::yaml::read(tree.rootref(), decoded));
 
-    CHECK(decoded.root.type == "playback.outputButton");
+    CHECK(decoded.root.type == "playback.qualityIndicator");
     CHECK(decoded.root.props.at("primaryAction").asString() == "playback.playPause");
     CHECK(decoded.root.props.at("secondaryAction").asString() == "shell.showSystemMenu");
   }
@@ -135,7 +135,7 @@ namespace ao::uimodel::layout::test
   TEST_CASE("LayoutDocument round-trip preserves tooltip", "[layout][unit][model]")
   {
     auto doc = LayoutDocument{};
-    doc.root.type = "playback.outputButton";
+    doc.root.type = "playback.qualityIndicator";
 
     auto tooltipNode = LayoutNode{};
     tooltipNode.type = "playback.audioPipelinePanel";
@@ -149,7 +149,7 @@ namespace ao::uimodel::layout::test
     auto decoded = LayoutDocument{};
     REQUIRE(rt::yaml::read(tree.rootref(), decoded));
 
-    CHECK(decoded.root.type == "playback.outputButton");
+    CHECK(decoded.root.type == "playback.qualityIndicator");
     REQUIRE(decoded.root.optTooltip.has_value());
     REQUIRE(decoded.root.optTooltip->nodePtr != nullptr);
     CHECK(decoded.root.optTooltip->nodePtr->type == "playback.audioPipelinePanel");

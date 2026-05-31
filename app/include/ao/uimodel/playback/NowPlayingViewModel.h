@@ -60,6 +60,8 @@ namespace ao::uimodel::playback
     audio::flow::Graph flow{};
     audio::Quality quality = audio::Quality::Unknown;
     std::vector<audio::NodeQualityAssessment> assessments{};
+    std::string deviceName{};
+    std::string deviceIconName{};
     std::string plainTextFallback{};
   };
 

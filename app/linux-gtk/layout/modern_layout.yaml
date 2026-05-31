@@ -156,11 +156,17 @@ templates:
                   - type: playback.previousButton
                     props:
                       size: large
-                  - type: playback.playPauseButton
+                  - type: playback.soulPlayPauseButton
                     props:
-                      size: large
+                      size: 64
+                      strokeWidth: 5.0
+                      glyphScale: 0.85
                     layout:
                       cssClasses: ao-play-button-prominent
+                    tooltip:
+                      type: playback.audioPipelinePanel
+                      props:
+                        variant: tooltip
                   - type: playback.nextButton
                     props:
                       size: large
@@ -182,12 +188,11 @@ templates:
               valign: center
             children:
               - type: playback.volumeControl
-              - type: playback.outputButton
+              - type: playback.soulButton
                 props:
+                  size: 48
+                  strokeWidth: 9.0
+                  glyph: none
                   primaryAction: playback.showAudioDeviceSelector
                   secondaryAction: shell.showSystemMenu
                   secondaryLongPressAction: shell.showSoul
-                tooltip:
-                  type: playback.audioPipelinePanel
-                  props:
-                    variant: tooltip

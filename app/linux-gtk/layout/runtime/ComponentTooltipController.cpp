@@ -8,7 +8,6 @@
 #include <glibmm/main.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollermotion.h>
-#include <gtkmm/settings.h>
 #include <gtkmm/widget.h>
 
 #include <cstdint>

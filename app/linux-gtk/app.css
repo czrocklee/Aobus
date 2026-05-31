@@ -375,6 +375,11 @@ listboxrow:first-child .ao-menu-header {
   color: #EF4444;
 }
 
+.ao-pipeline-title {
+  color: @theme_fg_color;
+  opacity: 0.9;
+}
+
 /* InspectorPanel */
 .ao-inspector-content {
   padding: var(--ao-spacing-xl);
@@ -610,6 +615,32 @@ columnview row.ao-missing-row label {
   transform: scale(0.96);
 }
 
+/* Soul-specific interactive button */
+.ao-soul-button,
+.ao-soul-button.ao-play-button-prominent {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  transition: transform 200ms ease-out, filter 200ms ease-out;
+}
+
+.ao-soul-button:hover {
+  transform: scale(1.08);
+  /* A subtle glow that enhances the Soul's own aura */
+  filter: drop-shadow(0 0 8px alpha(@theme_selected_bg_color, 0.4));
+}
+
+.ao-soul-button:active {
+  transform: scale(0.92);
+  transition-duration: 50ms;
+}
+
+.ao-soul-button:disabled {
+  opacity: 0.4;
+  filter: grayscale(100%);
+}
+
 /* Small circular secondary control buttons */
 .ao-play-button-circular {
   min-width: 36px;
@@ -664,8 +695,8 @@ columnview row.ao-missing-row label {
 
 /* Popover shell utilities */
 popover.ao-popover-transparent,
-popover.ao-popover-transparent > contents,
-popover.ao-popover-transparent > arrow {
+popover.ao-popover-transparent>contents,
+popover.ao-popover-transparent>arrow {
   background-color: rgba(0, 0, 0, 0);
   background-image: none;
   border: none;
@@ -674,11 +705,11 @@ popover.ao-popover-transparent > arrow {
   outline: none;
 }
 
-popover.ao-popover-p-none > contents {
+popover.ao-popover-p-none>contents {
   padding: 0;
 }
 
-popover.ao-popover-rounded-md > contents {
+popover.ao-popover-rounded-md>contents {
   border-radius: var(--ao-radius-md);
 }
 
@@ -988,7 +1019,7 @@ popover.ao-popover-rounded-md > contents {
 
 /* Modern Track Section (Album) separation */
 .ao-layout-preset-modern .ao-track-section-box {
-  padding-top: 32px;
+  padding-top: 16px;
   /* Use padding instead of margin to fix Gtk-CRITICAL */
   padding-bottom: 16px;
   padding-left: 16px;

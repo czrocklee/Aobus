@@ -72,8 +72,8 @@ namespace ao::gtk::test
 
     widget.apply(view);
 
-    // Title + 1 Node + Separator + Conclusion
-    CHECK(peer.getChildCount() == 4);
+    // Header + Separator + 1 Node + Separator + Conclusion
+    CHECK(peer.getChildCount() == 5);
   }
 
   TEST_CASE("AudioPipelinePanel - Variant Styling", "[linux-gtk][playback]")

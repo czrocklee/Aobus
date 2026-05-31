@@ -201,6 +201,8 @@ add_executable(ao_test_gtk
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
       unit/linux-gtk/layout/runtime/ActionBinderTest.cpp
       unit/linux-gtk/layout/runtime/ActionValidatorTest.cpp
+      unit/linux-gtk/layout/runtime/ComponentInteractionControllerTest.cpp
+      unit/linux-gtk/layout/runtime/ComponentRegistryInjectionTest.cpp
       unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp
       unit/linux-gtk/layout/components/ContainersTest.cpp
       unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
@@ -213,7 +215,6 @@ add_executable(ao_test_gtk
     unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
     unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp
     unit/linux-gtk/playback/NowPlayingStatusLabelTest.cpp
-    unit/linux-gtk/playback/OutputSelectorTest.cpp
     unit/linux-gtk/playback/OutputListItemsTest.cpp
     unit/linux-gtk/playback/TransportButtonTest.cpp
     unit/linux-gtk/playback/TimeLabelTest.cpp

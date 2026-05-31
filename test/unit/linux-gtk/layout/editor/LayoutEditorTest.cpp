@@ -154,18 +154,20 @@ namespace ao::gtk::layout::editor::test
       CHECK(hasProp("size"));
     }
 
-    SECTION("playback.outputButton has gesture action props")
+    SECTION("playback.qualityIndicator has gesture action props")
     {
-      auto const optDesc = registry.descriptor("playback.outputButton");
+      auto const optDesc = registry.descriptor("playback.qualityIndicator");
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->category == "Playback");
 
       auto const hasProp = [&](std::string const& name)
-      { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
+      {
+        return std::any_of(optDesc->props.begin(), optDesc->props.end(), [&](auto const& p) { return p.name == name; });
+      };
 
-      CHECK(hasProp("primaryAction"));
-      CHECK(hasProp("primaryLongPressAction"));
+      CHECK_FALSE(hasProp("primaryAction"));
+      CHECK_FALSE(hasProp("primaryLongPressAction"));
       CHECK(hasProp("secondaryAction"));
       CHECK(hasProp("secondaryLongPressAction"));
     }
@@ -211,7 +213,7 @@ namespace ao::gtk::layout::editor::test
                                                           "playback.timeLabel",
                                                           "playback.playButton",
                                                           "playback.pauseButton",
-                                                          "playback.outputButton",
+                                                          "playback.qualityIndicator",
                                                           "playback.qualityIndicator",
                                                           "status.messageLabel",
                                                           "library.listTree",
@@ -396,7 +398,7 @@ namespace ao::gtk::layout::editor::test
       CHECK(bar.children.size() == expectedChildren);
       CHECK(bar.children[0].type == "box");
       CHECK(bar.children[0].children.size() == 2);
-      CHECK(bar.children[0].children[0].type == "playback.outputButton");
+      CHECK(bar.children[0].children[0].type == "playback.soulButton");
       CHECK(bar.children[0].children[1].type == "template");
       CHECK(bar.children[0].children[1].getProp<std::string>("templateId", "") == "playback.transportGroup");
       CHECK(bar.children[1].type == "playback.seekSlider");

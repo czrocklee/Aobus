@@ -13,7 +13,6 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/AudioPipelinePanel.h"
 #include "playback/NowPlayingFieldLabel.h"
-#include "playback/OutputSelector.h"
 #include "playback/SeekControl.h"
 #include "playback/TimeLabel.h"
 #include "playback/TransportButton.h"
@@ -26,9 +25,12 @@
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
 #include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/TransportViewModel.h>
 #include <ao/utility/Log.h>
 
 #include <gdkmm/cursor.h>
@@ -47,7 +49,13 @@ namespace ao::gtk::layout
 {
   namespace
   {
+    using uimodel::layout::ComponentActionPolicy;
+    using uimodel::layout::kAllExternalActions;
+    using uimodel::layout::slotBit;
+
     constexpr std::int32_t kThumbnailSize = 56;
+    constexpr std::int32_t kDefaultButtonSize = 48;
+    constexpr double kDefaultStrokeWidth = 9.0;
 
     /**
      * @brief Helper to get the transport button callback.
@@ -343,33 +351,6 @@ namespace ao::gtk::layout
     };
 
     /**
-     * @brief playback.outputButton
-     */
-    class OutputButtonComponent final : public ILayoutComponent
-    {
-    public:
-      OutputButtonComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _selector{ctx.runtime.playback()}
-      {
-        auto const binder = ActionBinder{ctx.actionRegistry, ctx.runtime, ctx.parentWindow};
-        _selector.setActions(OutputSelector::Actions{
-          .onPrimaryClick = binder.bind(
-            node, "primaryAction", "playback.showAudioDeviceSelector", ActionSlot::PrimaryClick, _selector.widget()),
-          .onPrimaryLongPress =
-            binder.bind(node, "primaryLongPressAction", "none", ActionSlot::PrimaryLongPress, _selector.widget()),
-          .onSecondaryClick = binder.bind(
-            node, "secondaryAction", "shell.showSystemMenu", ActionSlot::SecondaryClick, _selector.widget()),
-          .onSecondaryLongPress = binder.bind(
-            node, "secondaryLongPressAction", "shell.showSoul", ActionSlot::SecondaryLongPress, _selector.widget())});
-      }
-
-      Gtk::Widget& widget() override { return _selector.widget(); }
-
-    private:
-      OutputSelector _selector;
-    };
-
-    /**
      * @brief playback.qualityIndicator
      */
     class QualityIndicatorComponent final : public ILayoutComponent
@@ -433,6 +414,150 @@ namespace ao::gtk::layout
       AudioPipelinePanel _panel;
       uimodel::playback::NowPlayingViewModel _viewModel;
     };
+
+    /**
+     * @brief playback.soulPlayPauseButton
+     */
+    class SoulTransportButtonComponent final : public ILayoutComponent
+    {
+    public:
+      SoulTransportButtonComponent(LayoutContext& ctx, LayoutNode const& node)
+        : _transportController{ctx.runtime.playback(),
+                               ctx.playback.queueModel,
+                               TransportButton::Action::PlayPause,
+                               getTransportCallback(ctx, TransportButton::Action::PlayPause),
+                               false,
+                               [this](uimodel::playback::TransportViewState const& state)
+                               { applyTransportState(state); }}
+        , _soulController{ctx.runtime.playback(),
+                          [this](uimodel::playback::AobusSoulViewState const& state) { applySoulState(state); }}
+        , _hasComplexTooltip{static_cast<bool>(node.optTooltip)}
+      {
+        _button.set_child(_soul);
+        _button.set_has_frame(false);
+        _button.add_css_class("ao-soul-button");
+        _button.set_valign(Gtk::Align::CENTER);
+        _button.set_halign(Gtk::Align::CENTER);
+
+        auto const size = node.getProp<std::int64_t>("size", kDefaultButtonSize);
+        _soul.set_size_request(static_cast<std::int32_t>(size), static_cast<std::int32_t>(size));
+
+        if (auto const strokeWidth = node.getProp<double>("strokeWidth", 0.0); strokeWidth > 0.0)
+        {
+          _soul.setBaseStrokeWidth(static_cast<float>(strokeWidth));
+        }
+
+        if (auto const glyphScale = node.getProp<double>("glyphScale", 0.0); glyphScale > 0.0)
+        {
+          _soul.setInnerGlyphScale(static_cast<float>(glyphScale));
+        }
+
+        _button.signal_clicked().connect([this] { _transportController.handleClick(); });
+      }
+
+      Gtk::Widget& widget() override { return _button; }
+
+    private:
+      void applyTransportState(uimodel::playback::TransportViewState const& view)
+      {
+        using Icon = uimodel::playback::TransportIcon;
+
+        if (view.icon == Icon::Pause)
+        {
+          _soul.setInnerGlyph(AobusSoul::InnerGlyph::Seal);
+        }
+        else if (view.icon == Icon::Play)
+        {
+          _soul.setInnerGlyph(AobusSoul::InnerGlyph::Sigil);
+        }
+        else
+        {
+          _soul.setInnerGlyph(AobusSoul::InnerGlyph::None);
+        }
+
+        _button.set_sensitive(view.enabled);
+
+        if (!_hasComplexTooltip)
+        {
+          _button.set_tooltip_text(view.tooltip);
+        }
+      }
+
+      void applySoulState(uimodel::playback::AobusSoulViewState const& view)
+      {
+        _soul.breathe(view.isBreathing);
+        _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
+      }
+
+      Gtk::Button _button;
+      AobusSoul _soul;
+      uimodel::playback::TransportViewModel _transportController;
+      uimodel::playback::AobusSoulViewModel _soulController;
+      bool _hasComplexTooltip = false;
+    };
+
+    /**
+     * @brief playback.soulButton
+     */
+    class SoulButtonComponent final : public ILayoutComponent
+    {
+    public:
+      SoulButtonComponent(LayoutContext& ctx, LayoutNode const& node)
+        : _soulController{ctx.runtime.playback(),
+                          [this](uimodel::playback::AobusSoulViewState const& state)
+                          {
+                            _soul.breathe(state.isBreathing);
+                            _soul.setAura(AobusSoul::mapAuraColor(state.auraColor));
+                          }}
+      {
+        _button.set_has_frame(false);
+        _button.add_css_class("ao-soul-button");
+        _button.set_child(_soul);
+
+        auto const size = node.getProp<std::int64_t>("size", kDefaultButtonSize);
+        _soul.set_size_request(static_cast<std::int32_t>(size), static_cast<std::int32_t>(size));
+
+        if (auto const strokeWidth = node.getProp<double>("strokeWidth", 0.0); strokeWidth > 0.0)
+        {
+          _soul.setBaseStrokeWidth(static_cast<float>(strokeWidth));
+        }
+
+        if (auto const glyphScale = node.getProp<double>("glyphScale", 0.0); glyphScale > 0.0)
+        {
+          _soul.setInnerGlyphScale(static_cast<float>(glyphScale));
+        }
+
+        auto const glyph = node.getProp<std::string>("glyph", "none");
+
+        if (glyph == "sigil")
+        {
+          _soul.setInnerGlyph(AobusSoul::InnerGlyph::Sigil);
+        }
+        else if (glyph == "seal")
+        {
+          _soul.setInnerGlyph(AobusSoul::InnerGlyph::Seal);
+        }
+
+        _soul.setShowFullLogo(node.getProp<bool>("showFullLogo", false));
+      }
+
+      Gtk::Widget& widget() override { return _button; }
+
+    private:
+      Gtk::Button _button;
+      AobusSoul _soul;
+      uimodel::playback::AobusSoulViewModel _soulController;
+    };
+
+    std::unique_ptr<ILayoutComponent> createSoulPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<SoulTransportButtonComponent>(ctx, node);
+    }
+
+    std::unique_ptr<ILayoutComponent> createSoulButton(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<SoulButtonComponent>(ctx, node);
+    }
 
     std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)
     {
@@ -499,11 +624,6 @@ namespace ao::gtk::layout
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Pause);
     }
 
-    std::unique_ptr<ILayoutComponent> createOutputButton(LayoutContext& ctx, LayoutNode const& node)
-    {
-      return std::make_unique<OutputButtonComponent>(ctx, node);
-    }
-
     std::unique_ptr<ILayoutComponent> createQualityIndicator(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<QualityIndicatorComponent>(ctx, node);
@@ -533,8 +653,62 @@ namespace ao::gtk::layout
                                            .enumValues = {"none", "jumpToAlbum"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .optMaxChildren = 0},
+                                .optMaxChildren = 0,
+                                .actionPolicy = uimodel::layout::kExternalSecondaryActions},
                                createPlaybackImage);
+
+    registry.registerComponent(
+      {.type = "playback.soulPlayPauseButton",
+       .displayName = "Soul Play/Pause Button",
+       .category = "Playback",
+       .container = false,
+       .props =
+         {{.name = "size", .kind = PropertyKind::Int, .label = "Size", .defaultValue = LayoutValue{kDefaultButtonSize}},
+          {.name = "strokeWidth",
+           .kind = PropertyKind::Double,
+           .label = "Stroke Width",
+           .defaultValue = LayoutValue{kDefaultStrokeWidth}},
+          {.name = "glyphScale",
+           .kind = PropertyKind::Double,
+           .label = "Glyph Scale",
+           .defaultValue = LayoutValue{1.0}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0,
+       .actionPolicy = ComponentActionPolicy{.slotMask = slotBit(ActionSlot::SecondaryClick) |
+                                                         slotBit(ActionSlot::SecondaryLongPress),
+                                             .defaultActionIds = {{ActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
+      createSoulPlayPauseButton);
+
+    registry.registerComponent(
+      {.type = "playback.soulButton",
+       .displayName = "Soul Button",
+       .category = "Playback",
+       .container = false,
+       .props =
+         {{.name = "size", .kind = PropertyKind::Int, .label = "Size", .defaultValue = LayoutValue{kDefaultButtonSize}},
+          {.name = "strokeWidth",
+           .kind = PropertyKind::Double,
+           .label = "Stroke Width",
+           .defaultValue = LayoutValue{kDefaultStrokeWidth}},
+          {.name = "glyph",
+           .kind = PropertyKind::Enum,
+           .label = "Glyph",
+           .defaultValue = LayoutValue{"none"},
+           .enumValues = {"none", "sigil", "seal"}},
+          {.name = "glyphScale",
+           .kind = PropertyKind::Double,
+           .label = "Glyph Scale",
+           .defaultValue = LayoutValue{1.0}},
+          {.name = "showFullLogo",
+           .kind = PropertyKind::Bool,
+           .label = "Show Full Logo",
+           .defaultValue = LayoutValue{false}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0,
+       .actionPolicy = kAllExternalActions},
+      createSoulButton);
 
     registry.registerComponent(
       {.type = "playback.playPauseButton",
@@ -735,40 +909,18 @@ namespace ao::gtk::layout
       createPauseButton);
 
     registry.registerComponent(
-      {.type = "playback.outputButton",
-       .displayName = "Output Button",
+      {.type = "playback.qualityIndicator",
+       .displayName = "Quality Indicator",
        .category = "Playback",
        .container = false,
-       .props = {{.name = "primaryAction",
-                  .kind = PropertyKind::Enum,
-                  .label = "Primary Action",
-                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryClick}},
-                 {.name = "primaryLongPressAction",
-                  .kind = PropertyKind::Enum,
-                  .label = "Primary Long Press",
-                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryLongPress}},
-                 {.name = "secondaryAction",
-                  .kind = PropertyKind::Enum,
-                  .label = "Secondary Action",
-                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::SecondaryClick}},
-                 {.name = "secondaryLongPressAction",
-                  .kind = PropertyKind::Enum,
-                  .label = "Secondary Long Press",
-                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::SecondaryLongPress}}},
+       .props = {},
        .layoutProps = {},
        .minChildren = 0,
-       .optMaxChildren = 0},
-      createOutputButton);
-
-    registry.registerComponent({.type = "playback.qualityIndicator",
-                                .displayName = "Quality Indicator",
-                                .category = "Playback",
-                                .container = false,
-                                .props = {},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               createQualityIndicator);
+       .optMaxChildren = 0,
+       .actionPolicy = ComponentActionPolicy{.slotMask = slotBit(ActionSlot::SecondaryClick) |
+                                                         slotBit(ActionSlot::SecondaryLongPress),
+                                             .defaultActionIds = {{ActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
+      createQualityIndicator);
 
     registry.registerComponent(
       {.type = "playback.audioPipelinePanel",

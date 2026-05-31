@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "layout/runtime/ComponentInteractionController.h"
 #include "layout/runtime/ComponentTooltipController.h"
 #include "layout/runtime/ILayoutComponent.h"
 
@@ -16,7 +17,8 @@ namespace ao::gtk::layout
   {
   public:
     DecoratedLayoutComponent(std::unique_ptr<ILayoutComponent> contentPtr,
-                             std::unique_ptr<ILayoutComponent> tooltipPtr);
+                             std::unique_ptr<ILayoutComponent> tooltipPtr,
+                             std::unique_ptr<ComponentInteractionController> interactionPtr = nullptr);
     ~DecoratedLayoutComponent() override = default;
 
     DecoratedLayoutComponent(DecoratedLayoutComponent const&) = delete;
@@ -30,5 +32,6 @@ namespace ao::gtk::layout
     std::unique_ptr<ILayoutComponent> _contentPtr;
     std::unique_ptr<ILayoutComponent> _tooltipPtr;
     ComponentTooltipController _tooltipController;
+    std::unique_ptr<ComponentInteractionController> _interactionPtr;
   };
 } // namespace ao::gtk::layout

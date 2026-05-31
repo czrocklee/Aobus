@@ -108,8 +108,11 @@ templates:
           valign: center
           cssClasses: ao-grouping-region
         children:
-          - type: playback.outputButton
+          - type: playback.soulButton
             props:
+              size: 48
+              strokeWidth: 9.0
+              glyph: none
               primaryAction: playback.showAudioDeviceSelector
               secondaryAction: shell.showSystemMenu
               secondaryLongPressAction: shell.showSoul

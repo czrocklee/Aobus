@@ -10,6 +10,7 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
 
+#include <cstdint>
 #include <memory>
 #include <numbers>
 
@@ -26,7 +27,17 @@ namespace ao::gtk
     AobusSoul(AobusSoul&&) = delete;
     AobusSoul& operator=(AobusSoul&&) = delete;
 
+    enum class InnerGlyph : std::uint8_t
+    {
+      None,
+      Sigil, // Kinetic (Triangle/Play)
+      Seal   // Balanced (Bars/Pause)
+    };
+
     void breathe(bool breathing);
+    void setInnerGlyph(InnerGlyph glyph);
+    void setBaseStrokeWidth(float width);
+    void setInnerGlyphScale(float scale);
     void setAura(Gdk::RGBA const& aura);
     void setShowFullLogo(bool show);
 

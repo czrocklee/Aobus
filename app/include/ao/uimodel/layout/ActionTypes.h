@@ -79,6 +79,13 @@ namespace ao::uimodel::layout
     Shortcut
   };
 
+  using ActionSlotMask = std::uint32_t;
+
+  constexpr ActionSlotMask slotBit(ActionSlot const slot)
+  {
+    return 1U << static_cast<std::uint8_t>(slot);
+  }
+
   struct ActionBindingProperty final
   {
     ActionSlot slot = ActionSlot::PrimaryClick;

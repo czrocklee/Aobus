@@ -17,14 +17,19 @@
 #include <gtkmm/separator.h>
 
 #include <algorithm>
+#include <format>
 
 namespace ao::gtk
 {
+  namespace
+  {
+    constexpr int kPanelSpacing = 6;
+  }
+
   AudioPipelinePanel::AudioPipelinePanel(AudioPipelinePanelVariant variant)
     : Gtk::Box{Gtk::Orientation::VERTICAL}, _variant{variant}
   {
-    constexpr int kSpacing = 6;
-    set_spacing(kSpacing);
+    set_spacing(kPanelSpacing);
     add_css_class("ao-quality-panel");
 
     setVariant(variant);
@@ -69,11 +74,30 @@ namespace ao::gtk
       set_visible(true);
     }
 
-    // Title label
-    auto* titleLabel = Gtk::make_managed<Gtk::Label>("Audio Pipeline", Gtk::Align::START);
-    titleLabel->add_css_class("dim-label");
-    titleLabel->set_margin_bottom(4);
-    append(*titleLabel);
+    // Title / Header
+    auto* headerBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    headerBox->set_spacing(kPanelSpacing);
+    headerBox->set_margin_bottom(4);
+
+    auto const iconName = view.deviceIconName.empty() ? "audio-card-symbolic" : view.deviceIconName;
+    auto* icon = Gtk::make_managed<Gtk::Image>();
+    icon->set_from_icon_name(iconName);
+    icon->set_pixel_size(16);
+    headerBox->append(*icon);
+
+    auto const title = view.deviceName.empty() ? "Audio Pipeline" : view.deviceName;
+    auto* titleLabel = Gtk::make_managed<Gtk::Label>();
+    titleLabel->set_markup(std::format("<b>{}</b>", title));
+    titleLabel->set_halign(Gtk::Align::START);
+    titleLabel->add_css_class("ao-pipeline-title");
+    headerBox->append(*titleLabel);
+
+    append(*headerBox);
+
+    // Separator after title
+    auto* topSeparator = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
+    topSeparator->set_margin_bottom(2);
+    append(*topSeparator);
 
     auto const path = uimodel::playback::playbackPath(view.flow);
 

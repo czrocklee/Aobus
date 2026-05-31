@@ -119,9 +119,32 @@ namespace ao::uimodel::playback
         std::format_to(std::back_inserter(plainTextFallback), "\n{}", conclusionText);
       }
 
+      auto deviceName = std::string{};
+      auto deviceIconName = std::string{};
+
+      for (auto const& backend : state.availableOutputs)
+      {
+        for (auto const& device : backend.devices)
+        {
+          if (device.id == state.selectedOutput.deviceId)
+          {
+            deviceName = device.displayName;
+            deviceIconName = backend.iconName;
+            break;
+          }
+        }
+
+        if (!deviceName.empty())
+        {
+          break;
+        }
+      }
+
       view.audioPipeline = AudioPipelineView{.flow = state.flow,
                                              .quality = state.quality,
                                              .assessments = state.qualityAssessments,
+                                             .deviceName = std::move(deviceName),
+                                             .deviceIconName = std::move(deviceIconName),
                                              .plainTextFallback = plainTextFallback};
 
       view.isActive = (state.quality != audio::Quality::Unknown);

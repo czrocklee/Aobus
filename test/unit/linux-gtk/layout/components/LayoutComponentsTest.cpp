@@ -179,53 +179,48 @@ namespace ao::gtk::layout::test
       CHECK(compPtr->widget().get_visible() == false);
     }
 
-    SECTION("outputButton creates Gtk::Button with AobusSoul child")
-    {
-      auto const node = LayoutNode{.type = "playback.outputButton"};
-      auto const compPtr = registry.create(ctx, node);
-
-      REQUIRE(compPtr != nullptr);
-
-      auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
-      REQUIRE(btn != nullptr);
-      CHECK(btn->has_css_class("ao-output-logo"));
-
-      // CSS controls the hit-target size; no explicit set_size_request.
-      std::int32_t buttonWidth = -1;
-      std::int32_t buttonHeight = -1;
-      btn->get_size_request(buttonWidth, buttonHeight);
-      CHECK(buttonWidth == -1);
-      CHECK(buttonHeight == -1);
-
-      auto* const child = btn->get_child();
-      REQUIRE(child != nullptr);
-      CHECK(child->has_css_class("ao-soul"));
-
-      // CSS controls the glyph size; no explicit set_size_request.
-      std::int32_t childWidth = -1;
-      std::int32_t childHeight = -1;
-      child->get_size_request(childWidth, childHeight);
-      CHECK(childWidth == -1);
-      CHECK(childHeight == -1);
-    }
-
     SECTION("qualityIndicator creates AobusSoul widget")
     {
       auto const node = LayoutNode{.type = "playback.qualityIndicator"};
       auto const compPtr = registry.create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
-      CHECK(compPtr->widget().has_css_class("ao-soul"));
+
+      auto& widget = compPtr->widget();
+      CHECK(widget.has_css_class("ao-soul"));
 
       // CSS controls the glyph size; no explicit set_size_request.
-      std::int32_t width = -1;
-      std::int32_t height = -1;
-      compPtr->widget().get_size_request(width, height);
-      CHECK(width == -1);
-      CHECK(height == -1);
+      std::int32_t widgetWidth = -1;
+      std::int32_t widgetHeight = -1;
+      widget.get_size_request(widgetWidth, widgetHeight);
+      CHECK(widgetWidth == -1);
+      CHECK(widgetHeight == -1);
     }
 
-    SECTION("all 11 playback types register and instantiate")
+    SECTION("soulButton creates Gtk::Button with AobusSoul")
+    {
+      auto const node = LayoutNode{.type = "playback.soulButton"};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      CHECK(button->get_has_frame() == false);
+      CHECK(button->has_css_class("ao-soul-button"));
+
+      auto* const soul = button->get_child();
+      REQUIRE(soul != nullptr);
+      CHECK(soul->has_css_class("ao-soul"));
+
+      std::int32_t soulWidth = -1;
+      std::int32_t soulHeight = -1;
+      soul->get_size_request(soulWidth, soulHeight);
+      CHECK(soulWidth == 48);
+      CHECK(soulHeight == 48);
+    }
+
+    SECTION("all 12 playback types register and instantiate")
     {
       auto const types = std::to_array<std::string_view>({"playback.playPauseButton",
                                                           "playback.stopButton",
@@ -236,8 +231,9 @@ namespace ao::gtk::layout::test
                                                           "playback.timeLabel",
                                                           "playback.playButton",
                                                           "playback.pauseButton",
-                                                          "playback.outputButton",
-                                                          "playback.qualityIndicator"});
+                                                          "playback.qualityIndicator",
+                                                          "playback.soulPlayPauseButton",
+                                                          "playback.soulButton"});
 
       for (auto const type : types)
       {
@@ -576,7 +572,7 @@ namespace ao::gtk::layout::test
         orientation: horizontal
         spacing: 4
       children:
-        - type: playback.outputButton
+        - type: playback.qualityIndicator
         - type: playback.playPauseButton
         - type: playback.stopButton
         - type: playback.seekSlider

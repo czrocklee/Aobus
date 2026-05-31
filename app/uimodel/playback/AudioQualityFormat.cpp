@@ -128,11 +128,11 @@ namespace ao::uimodel::playback
     switch (quality)
     {
       case Quality::BitwisePerfect:
-      case Quality::LosslessPadded: return "Conclusion: Bit-perfect output";
-      case Quality::LosslessFloat: return "Conclusion: Lossless Conversion";
-      case Quality::LinearIntervention: return "Conclusion: Linear intervention (Resampled/Mixed/Vol)";
-      case Quality::LossySource: return "Conclusion: Lossy source format";
-      case Quality::Clipped: return "Conclusion: Signal clipping detected";
+      case Quality::LosslessPadded: return "Bit-perfect output";
+      case Quality::LosslessFloat: return "Lossless Conversion";
+      case Quality::LinearIntervention: return "Linear intervention (Resampled/Mixed/Vol)";
+      case Quality::LossySource: return "Lossy source format";
+      case Quality::Clipped: return "Signal clipping detected";
       case Quality::Unknown: return "";
     }
 

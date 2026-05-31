@@ -41,16 +41,14 @@ namespace ao::gtk
     constexpr double kRotationPeriodSec = kBreathingPeriodSec * AobusSoul::kGoldenRatio;
     constexpr double kOpacityPeriodSec = kRotationPeriodSec * AobusSoul::kGoldenRatio;
     constexpr double kHuePeriodSec = kOpacityPeriodSec * AobusSoul::kGoldenRatio;
-    constexpr double kStrokeWidthBase = 9.0;
-    constexpr double kStrokeWidthVariance = kStrokeWidthBase * (AobusSoul::kGoldenRatio - 1.0);
     constexpr float kRefHeight = 65.0F;
     constexpr float kUnitRadius = 30.0F / kRefHeight;
-    constexpr float kMaxStrokeWidth = static_cast<float>(kStrokeWidthBase + kStrokeWidthVariance);
-    constexpr float kMaxNormalizedStrokeWidth = kMaxStrokeWidth / kRefHeight;
-    constexpr float kSoulOuterRadius = kUnitRadius + kMaxNormalizedStrokeWidth;
     constexpr float kLogoXOffset = 43.5F / kRefHeight;
     constexpr float kStrokeWidthA = 10.0F;
     constexpr float kPhaseShift = 0.5F;
+    constexpr float kCos60 = 0.5F;
+    constexpr float kSin60 = 0.866F;
+    constexpr float kEpsilon = 0.001F;
   } // namespace
 
   struct AobusSoul::Impl final
@@ -64,14 +62,22 @@ namespace ao::gtk
     bool isStopped = true;
     bool showFullLogo = false;
 
+    float baseStrokeWidth = 9.0F;
+    float innerGlyphScale = 1.0F;
+
     std::int64_t firstFrameTime = 0;
     std::uint32_t tickId = 0;
     bool isBreathing = false;
+
+    std::unique_ptr<::GskPath, PathDeleter> pathSigilPtr{};
+    std::unique_ptr<::GskPath, PathDeleter> pathSealPtr{};
+    InnerGlyph currentGlyph = InnerGlyph::None;
 
     std::unique_ptr<::GskPath, PathDeleter> unitPathOPtr{};
     std::unique_ptr<::GskPath, PathDeleter> unitPathAPtr{};
     std::unique_ptr<::GskStroke, StrokeDeleter> cachedStrokePtr{};
     std::unique_ptr<::GskStroke, StrokeDeleter> cachedStrokeAPtr{};
+    std::unique_ptr<::GskStroke, StrokeDeleter> cachedStrokeGlyphPtr{};
   };
 
   AobusSoul::AobusSoul()
@@ -83,9 +89,12 @@ namespace ao::gtk
 
     _implPtr->cachedStrokePtr.reset(::gsk_stroke_new(1.0F));
     _implPtr->cachedStrokeAPtr.reset(::gsk_stroke_new(kStrokeWidthA / kRefHeight));
+    _implPtr->cachedStrokeGlyphPtr.reset(::gsk_stroke_new(_implPtr->baseStrokeWidth / kRefHeight));
 
     ::gsk_stroke_set_line_cap(_implPtr->cachedStrokePtr.get(), GSK_LINE_CAP_ROUND);
     ::gsk_stroke_set_line_cap(_implPtr->cachedStrokeAPtr.get(), GSK_LINE_CAP_ROUND);
+    ::gsk_stroke_set_line_cap(_implPtr->cachedStrokeGlyphPtr.get(), GSK_LINE_CAP_ROUND);
+    ::gsk_stroke_set_line_join(_implPtr->cachedStrokeGlyphPtr.get(), GSK_LINE_JOIN_ROUND);
 
     static constexpr float kRefRadius = 30.0F;
     static constexpr float kNormalizedRadius = kRefRadius / kRefHeight;
@@ -106,6 +115,26 @@ namespace ao::gtk
     ::gsk_path_builder_move_to(aBuilder, kNormalizedRadius, kRefStemY1);
     ::gsk_path_builder_line_to(aBuilder, kNormalizedRadius, kRefStemY2);
     _implPtr->unitPathAPtr.reset(::gsk_path_builder_free_to_path(aBuilder));
+
+    static constexpr float kInnerGlyphRadius = 14.0F / kRefHeight;
+
+    // Sigil (Kinetic Triangle)
+    auto* const sigilBuilder = ::gsk_path_builder_new();
+    ::gsk_path_builder_move_to(sigilBuilder, kInnerGlyphRadius, 0.0F);
+    ::gsk_path_builder_line_to(sigilBuilder, -kInnerGlyphRadius * kCos60, -kInnerGlyphRadius * kSin60);
+    ::gsk_path_builder_line_to(sigilBuilder, -kInnerGlyphRadius * kCos60, kInnerGlyphRadius * kSin60);
+    ::gsk_path_builder_close(sigilBuilder);
+    _implPtr->pathSigilPtr.reset(::gsk_path_builder_free_to_path(sigilBuilder));
+
+    // Seal (Balanced Bars)
+    auto* const sealBuilder = ::gsk_path_builder_new();
+    float const barX = kInnerGlyphRadius * 0.4F;
+    float const barY = kInnerGlyphRadius * 0.7F;
+    ::gsk_path_builder_move_to(sealBuilder, -barX, -barY);
+    ::gsk_path_builder_line_to(sealBuilder, -barX, barY);
+    ::gsk_path_builder_move_to(sealBuilder, barX, -barY);
+    ::gsk_path_builder_line_to(sealBuilder, barX, barY);
+    _implPtr->pathSealPtr.reset(::gsk_path_builder_free_to_path(sealBuilder));
 
     _implPtr->tickId = add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
@@ -156,6 +185,44 @@ namespace ao::gtk
       _implPtr->firstFrameTime = 0;
     }
 
+    queue_draw();
+  }
+
+  void AobusSoul::setInnerGlyph(InnerGlyph const glyph)
+  {
+    if (_implPtr->currentGlyph == glyph)
+    {
+      return;
+    }
+
+    _implPtr->currentGlyph = glyph;
+    queue_draw();
+  }
+
+  void AobusSoul::setBaseStrokeWidth(float const width)
+  {
+    if (std::abs(_implPtr->baseStrokeWidth - width) < kEpsilon)
+    {
+      return;
+    }
+
+    _implPtr->baseStrokeWidth = width;
+
+    _implPtr->cachedStrokeGlyphPtr.reset(::gsk_stroke_new(_implPtr->baseStrokeWidth / kRefHeight));
+    ::gsk_stroke_set_line_cap(_implPtr->cachedStrokeGlyphPtr.get(), GSK_LINE_CAP_ROUND);
+    ::gsk_stroke_set_line_join(_implPtr->cachedStrokeGlyphPtr.get(), GSK_LINE_JOIN_ROUND);
+
+    queue_draw();
+  }
+
+  void AobusSoul::setInnerGlyphScale(float const scale)
+  {
+    if (std::abs(_implPtr->innerGlyphScale - scale) < kEpsilon)
+    {
+      return;
+    }
+
+    _implPtr->innerGlyphScale = scale;
     queue_draw();
   }
 
@@ -334,8 +401,14 @@ namespace ao::gtk
     }
 
     auto const aura = Gdk::RGBA{_implPtr->isStopped ? _implPtr->cyan : _implPtr->aura};
-    float const horizontalRadius = _implPtr->showFullLogo ? (kLogoXOffset + kSoulOuterRadius) : kSoulOuterRadius;
-    float const drawingScale = std::min(width / (horizontalRadius * 2.0F), height / (kSoulOuterRadius * 2.0F));
+
+    float const strokeWidthVariance = _implPtr->baseStrokeWidth * (static_cast<float>(AobusSoul::kGoldenRatio) - 1.0F);
+    float const maxStrokeWidth = _implPtr->baseStrokeWidth + strokeWidthVariance;
+    float const maxNormalizedStrokeWidth = maxStrokeWidth / kRefHeight;
+    float const soulOuterRadius = kUnitRadius + maxNormalizedStrokeWidth;
+
+    float const horizontalRadius = _implPtr->showFullLogo ? (kLogoXOffset + soulOuterRadius) : soulOuterRadius;
+    float const drawingScale = std::min(width / (horizontalRadius * 2.0F), height / (soulOuterRadius * 2.0F));
 
     float const centerX = width / 2.0F;
     float const centerY = height / 2.0F;
@@ -367,7 +440,7 @@ namespace ao::gtk
 
     // 2. Draw 'o' (Soul)
     float rotationAngle = 0.0F;
-    float currentStrokeBase = static_cast<float>(kStrokeWidthBase);
+    float currentStrokeBase = _implPtr->baseStrokeWidth;
     float currentOpacity = 1.0F;
 
     if (!_implPtr->isStopped)
@@ -377,7 +450,7 @@ namespace ao::gtk
       double const breathingPhase =
         std::fmod(_implPtr->timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
       currentStrokeBase = static_cast<float>(
-        kStrokeWidthBase + (kStrokeWidthVariance * ((std::sin(breathingPhase) * kPhaseShift) + kPhaseShift)));
+        _implPtr->baseStrokeWidth + (strokeWidthVariance * ((std::sin(breathingPhase) * kPhaseShift) + kPhaseShift)));
 
       double const opacityPhase =
         std::fmod(_implPtr->timeSec * (2.0 * std::numbers::pi / kOpacityPeriodSec), 2.0 * std::numbers::pi);
@@ -439,6 +512,35 @@ namespace ao::gtk
     ::gtk_snapshot_append_linear_gradient(
       snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());
     ::gtk_snapshot_pop(snapshot->gobj());
+
+    // 3. Draw Inner Glyph if present
+    if (_implPtr->currentGlyph != InnerGlyph::None)
+    {
+      auto* const glyphPath =
+        (_implPtr->currentGlyph == InnerGlyph::Sigil) ? _implPtr->pathSigilPtr.get() : _implPtr->pathSealPtr.get();
+
+      // Glyphs are drawn without the Soul's rotation to remain readable, but they follow the breathing scale/opacity
+      snapshot->save();
+      snapshot->rotate(-rotationAngle); // Counter-rotate to stay upright
+      snapshot->scale(_implPtr->innerGlyphScale, _implPtr->innerGlyphScale);
+
+      if (_implPtr->currentGlyph == InnerGlyph::Sigil)
+      {
+        ::gtk_snapshot_push_stroke(snapshot->gobj(), glyphPath, _implPtr->cachedStrokeGlyphPtr.get());
+        ::gtk_snapshot_append_linear_gradient(
+          snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());
+        ::gtk_snapshot_pop(snapshot->gobj());
+      }
+      else
+      {
+        // Seal (Bars) looks better with a solid indicator color or slightly different gradient
+        ::gtk_snapshot_push_stroke(snapshot->gobj(), glyphPath, _implPtr->cachedStrokeGlyphPtr.get());
+        ::gtk_snapshot_append_color(snapshot->gobj(), shiftedAura.gobj(), &gradientBounds);
+        ::gtk_snapshot_pop(snapshot->gobj());
+      }
+
+      snapshot->restore();
+    }
 
     if (currentOpacity < kOpacityThreshold)
     {

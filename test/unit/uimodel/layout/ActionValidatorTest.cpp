@@ -161,5 +161,22 @@ namespace ao::uimodel::layout::test
       auto const diagnostics = validateActions(doc, components, actions, nullResolver);
       CHECK(diagnostics.empty());
     }
+
+    SECTION("detects unsupported action slots (disallowed by policy)")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "test.button";
+      doc.root.id = "my-btn";
+      // test.button only allows PrimaryClick in makeCompCatalog (via explicit props for now)
+      // Actually makeCompCatalog doesn't set actionPolicy, so it defaults to kNoExternalActions.
+      // But it has an explicit primaryAction prop.
+      doc.root.props["secondaryAction"] = LayoutValue{std::string{"valid.action"}};
+
+      auto const diagnostics = validateActions(doc, components, actions, permissiveResolver);
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].componentId == "my-btn");
+      CHECK(diagnostics[0].propertyName == "secondaryAction");
+      CHECK(diagnostics[0].message == "Action slot is not supported by this component policy");
+    }
   }
 }

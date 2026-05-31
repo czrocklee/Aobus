@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <cstddef>
@@ -30,6 +31,11 @@ namespace ao::uimodel::layout
     Size
   };
 
+  inline constexpr std::string_view kPrimaryActionProp = "primaryAction";
+  inline constexpr std::string_view kSecondaryActionProp = "secondaryAction";
+  inline constexpr std::string_view kPrimaryLongPressActionProp = "primaryLongPressAction";
+  inline constexpr std::string_view kSecondaryLongPressActionProp = "secondaryLongPressAction";
+
   struct PropertyDescriptor final
   {
     std::string name;
@@ -38,6 +44,7 @@ namespace ao::uimodel::layout
     LayoutValue defaultValue = {};
     std::vector<std::string> enumValues = {};
     std::optional<ActionBindingProperty> optActionBinding = {};
+    std::optional<std::string> optDefaultActionId = {};
   };
 
   enum class SurfaceCapability : std::uint8_t
@@ -59,6 +66,7 @@ namespace ao::uimodel::layout
     std::size_t minChildren = 0;
     std::optional<std::size_t> optMaxChildren = {};
     SurfaceCapabilityMask surfaces = static_cast<SurfaceCapabilityMask>(SurfaceCapability::Main);
+    ComponentActionPolicy actionPolicy = kNoExternalActions;
   };
 
   class ComponentCatalog final

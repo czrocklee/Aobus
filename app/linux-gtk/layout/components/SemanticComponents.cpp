@@ -21,11 +21,11 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/layout/ComponentActionPolicy.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/gesturelongpress.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/popovermenubar.h>
@@ -130,7 +130,7 @@ namespace ao::gtk::layout
     class ActionButtonComponent final : public ILayoutComponent
     {
     public:
-      ActionButtonComponent(LayoutContext& ctx, LayoutNode const& node)
+      ActionButtonComponent(LayoutContext& /*ctx*/, LayoutNode const& node)
       {
         if (auto const label = node.getProp<std::string>("label", ""); !label.empty())
         {
@@ -171,48 +171,12 @@ namespace ao::gtk::layout
         {
           _button.add_css_class("playback-button-large");
         }
-
-        auto const binder = ActionBinder{ctx.actionRegistry, ctx.runtime, ctx.parentWindow};
-
-        auto const primaryActionCb = binder.bind(node, "primaryAction", "none", ActionSlot::PrimaryClick, _button);
-
-        if (primaryActionCb)
-        {
-          _button.signal_clicked().connect(
-            [this, primaryActionCb]
-            {
-              if (_longPressPtrHandled)
-              {
-                _longPressPtrHandled = false;
-                return;
-              }
-
-              primaryActionCb();
-            });
-        }
-
-        auto const primaryLongPressCb =
-          binder.bind(node, "primaryLongPressAction", "none", ActionSlot::PrimaryLongPress, _button);
-
-        if (primaryLongPressCb)
-        {
-          _longPressPtr = Gtk::GestureLongPress::create();
-          _longPressPtr->signal_pressed().connect(
-            [this, primaryLongPressCb](double /*x*/, double /*y*/)
-            {
-              _longPressPtrHandled = true;
-              primaryLongPressCb();
-            });
-          _button.add_controller(_longPressPtr);
-        }
       }
 
       Gtk::Widget& widget() override { return _button; }
 
     private:
       Gtk::Button _button;
-      Glib::RefPtr<Gtk::GestureLongPress> _longPressPtr;
-      bool _longPressPtrHandled = false;
     };
 
     /**
@@ -408,36 +372,28 @@ namespace ao::gtk::layout
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<LabelComponent>(ctx, node); });
 
-    registry.registerComponent(
-      {.type = "app.actionButton",
-       .displayName = "Action Button",
-       .category = "Generic",
-       .container = false,
-       .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"},
-                 {.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
-                 {.name = "primaryAction",
-                  .kind = PropertyKind::Enum,
-                  .label = "Primary Action",
-                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryClick}},
-                 {.name = "primaryLongPressAction",
-                  .kind = PropertyKind::Enum,
-                  .label = "Long Press",
-                  .optActionBinding = ActionBindingProperty{.slot = ActionSlot::PrimaryLongPress}},
-                 {.name = "size",
-                  .kind = PropertyKind::Enum,
-                  .label = "Size",
-                  .defaultValue = LayoutValue{"normal"},
-                  .enumValues = {"small", "normal", "large"}},
-                 {.name = "style",
-                  .kind = PropertyKind::Enum,
-                  .label = "Style",
-                  .defaultValue = LayoutValue{"flat"},
-                  .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}},
-       .layoutProps = {},
-       .minChildren = 0,
-       .optMaxChildren = 0},
-      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<ActionButtonComponent>(ctx, node); });
+    registry.registerComponent({.type = "app.actionButton",
+                                .displayName = "Action Button",
+                                .category = "Generic",
+                                .container = false,
+                                .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"},
+                                          {.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
+                                          {.name = "size",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Size",
+                                           .defaultValue = LayoutValue{"normal"},
+                                           .enumValues = {"small", "normal", "large"}},
+                                          {.name = "style",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Style",
+                                           .defaultValue = LayoutValue{"flat"},
+                                           .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}},
+                                .layoutProps = {},
+                                .minChildren = 0,
+                                .optMaxChildren = 0,
+                                .actionPolicy = uimodel::layout::kExternalPrimaryActions},
+                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               { return std::make_unique<ActionButtonComponent>(ctx, node); });
 
     registry.registerComponent({.type = "library.listTree",
                                 .displayName = "Library Tree",

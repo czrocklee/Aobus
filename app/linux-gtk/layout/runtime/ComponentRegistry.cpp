@@ -4,15 +4,20 @@
 #include "layout/runtime/ComponentRegistry.h"
 
 #include "layout/components/Containers.h"
+#include "layout/runtime/ActionRegistry.h"
+#include "layout/runtime/ComponentInteractionController.h"
 #include "layout/runtime/DecoratedLayoutComponent.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
+#include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/utility/Log.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +29,71 @@ namespace ao::gtk::layout
 {
   namespace
   {
+    void injectActionDescriptors(uimodel::layout::ComponentDescriptor& descriptor)
+    {
+      using namespace uimodel::layout;
+
+      auto const& descriptorPolicy = descriptor.actionPolicy;
+
+      auto const inject = [&descriptor, &descriptorPolicy](
+                            std::string_view name, std::string_view label, ActionSlot slot)
+      {
+        if (auto it = std::ranges::find_if(
+              descriptor.props, [name](PropertyDescriptor const& prop) { return prop.name == name; });
+            it != descriptor.props.end())
+        {
+          // Existing property found — validate it matches expected semantics
+          if (it->kind != PropertyKind::Enum || !it->optActionBinding || it->optActionBinding->slot != slot)
+          {
+            APP_LOG_ERROR("component",
+                          "Incompatible manual property declaration '{}' in component '{}'. "
+                          "Action system features may not function correctly for this slot.",
+                          name,
+                          descriptor.type);
+          }
+
+          return;
+        }
+
+        auto optDefaultId = std::optional<std::string>{};
+
+        if (auto const id = descriptorPolicy.getDefault(slot); !id.empty())
+        {
+          optDefaultId = std::string{id};
+        }
+
+        descriptor.props.push_back({.name = std::string{name},
+                                    .kind = PropertyKind::Enum,
+                                    .label = std::string{label},
+                                    .defaultValue = LayoutValue{""},
+                                    .enumValues = {},
+                                    .optActionBinding = ActionBindingProperty{.slot = slot},
+                                    .optDefaultActionId = std::move(optDefaultId)});
+      };
+
+      auto const policy = descriptor.actionPolicy;
+
+      if (policy.allows(ActionSlot::PrimaryClick))
+      {
+        inject(kPrimaryActionProp, "Primary Action", ActionSlot::PrimaryClick);
+      }
+
+      if (policy.allows(ActionSlot::PrimaryLongPress))
+      {
+        inject(kPrimaryLongPressActionProp, "Primary Long Press", ActionSlot::PrimaryLongPress);
+      }
+
+      if (policy.allows(ActionSlot::SecondaryClick))
+      {
+        inject(kSecondaryActionProp, "Secondary Action", ActionSlot::SecondaryClick);
+      }
+
+      if (policy.allows(ActionSlot::SecondaryLongPress))
+      {
+        inject(kSecondaryLongPressActionProp, "Secondary Long Press", ActionSlot::SecondaryLongPress);
+      }
+    }
+
     class ErrorComponent final : public ILayoutComponent
     {
     public:
@@ -44,6 +114,7 @@ namespace ao::gtk::layout
 
   void ComponentRegistry::registerComponent(uimodel::layout::ComponentDescriptor descriptor, ComponentFactory factory)
   {
+    injectActionDescriptors(descriptor);
     auto const type = std::string{descriptor.type};
     _factories[type] = factory;
     _catalog.registerComponentDescriptor(std::move(descriptor));
@@ -53,6 +124,7 @@ namespace ao::gtk::layout
                                                               uimodel::layout::LayoutNode const& node) const
   {
     auto componentPtr = std::unique_ptr<ILayoutComponent>{};
+    auto const optCompDesc = descriptor(node.type);
 
     if (auto const it = _factories.find(node.type); it != _factories.end())
     {
@@ -62,6 +134,50 @@ namespace ao::gtk::layout
     {
       componentPtr = std::make_unique<ErrorComponent>("Unknown component type: " + node.type);
     }
+
+    if (!componentPtr)
+    {
+      return nullptr;
+    }
+
+    // Phase 2: Automatic interaction controller attachment
+    auto interactionControllerPtr = std::unique_ptr<ComponentInteractionController>{};
+
+    if (optCompDesc && ctx.surface != LayoutSurface::Tooltip)
+    {
+      auto const& policy = optCompDesc->actionPolicy;
+
+      bool hasActions = false;
+
+      auto const check = [&](std::string_view propName, ActionSlot slot)
+      {
+        if (!policy.allows(slot))
+        {
+          return false;
+        }
+
+        if (node.props.contains(std::string{propName}))
+        {
+          return true;
+        }
+
+        return !policy.getDefault(slot).empty();
+      };
+
+      using namespace uimodel::layout;
+      hasActions = check(kPrimaryActionProp, ActionSlot::PrimaryClick) ||
+                   check(kPrimaryLongPressActionProp, ActionSlot::PrimaryLongPress) ||
+                   check(kSecondaryActionProp, ActionSlot::SecondaryClick) ||
+                   check(kSecondaryLongPressActionProp, ActionSlot::SecondaryLongPress);
+
+      if (hasActions)
+      {
+        interactionControllerPtr = std::make_unique<ComponentInteractionController>();
+        interactionControllerPtr->attach(ctx, node, componentPtr->widget(), policy);
+      }
+    }
+
+    auto tooltipComponentPtr = std::unique_ptr<ILayoutComponent>{};
 
     if (node.optTooltip && node.optTooltip->nodePtr)
     {
@@ -100,8 +216,15 @@ namespace ao::gtk::layout
 
       if (tooltipComponentPtr)
       {
-        return std::make_unique<DecoratedLayoutComponent>(std::move(componentPtr), std::move(tooltipComponentPtr));
+        return std::make_unique<DecoratedLayoutComponent>(
+          std::move(componentPtr), std::move(tooltipComponentPtr), std::move(interactionControllerPtr));
       }
+    }
+
+    if (interactionControllerPtr)
+    {
+      return std::make_unique<DecoratedLayoutComponent>(
+        std::move(componentPtr), std::move(tooltipComponentPtr), std::move(interactionControllerPtr));
     }
 
     return componentPtr;
