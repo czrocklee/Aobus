@@ -391,18 +391,25 @@ namespace ao::gtk::layout
         setSize(_currentSize);
 
         // Layout assembly
+        _gutterBox.set_orientation(_orientation);
+        _gutterBox.set_cursor(resizeCursor());
+
         if (_collapseSide == Side::Start)
         {
+          _gutterBox.append(_toggleButton);
+          _gutterBox.append(_resizeGrip);
+
           _container.append(_revealer);
-          _container.append(_toggleButton);
-          _container.append(_resizeGrip);
+          _container.append(_gutterBox);
           _container.append(_endChildPtr->widget());
         }
         else
         {
+          _gutterBox.append(_resizeGrip);
+          _gutterBox.append(_toggleButton);
+
           _container.append(_startChildPtr->widget());
-          _container.append(_resizeGrip);
-          _container.append(_toggleButton);
+          _container.append(_gutterBox);
           _container.append(_revealer);
         }
 
@@ -415,7 +422,7 @@ namespace ao::gtk::layout
         _dragGesturePtr->signal_drag_begin().connect(
           [this](double startX, double startY)
           {
-            _dragAccepted = dragStartedInResizeGrip(startX, startY);
+            _dragAccepted = dragStartedInGutter(startX, startY);
 
             if (!_dragAccepted)
             {
@@ -515,17 +522,33 @@ namespace ao::gtk::layout
         return Gdk::Cursor::create(_orientation == Gtk::Orientation::HORIZONTAL ? "col-resize" : "row-resize");
       }
 
-      bool dragStartedInResizeGrip(double containerX, double containerY)
+      bool dragStartedInGutter(double containerX, double containerY)
       {
-        double gripX = 0.0;
-        double gripY = 0.0;
+        double gutterX = 0.0;
+        double gutterY = 0.0;
 
-        if (!_container.translate_coordinates(_resizeGrip, containerX, containerY, gripX, gripY))
+        if (!_container.translate_coordinates(_gutterBox, containerX, containerY, gutterX, gutterY))
         {
           return false;
         }
 
-        return _resizeGrip.contains(gripX, gripY);
+        if (!_gutterBox.contains(gutterX, gutterY))
+        {
+          return false;
+        }
+
+        double btnX = 0.0;
+        double btnY = 0.0;
+
+        if (_container.translate_coordinates(_toggleButton, containerX, containerY, btnX, btnY))
+        {
+          if (_toggleButton.contains(btnX, btnY))
+          {
+            return false;
+          }
+        }
+
+        return true;
       }
 
       void applyDragCursor()
@@ -584,6 +607,7 @@ namespace ao::gtk::layout
       }
 
       Gtk::Box _container;
+      Gtk::Box _gutterBox;
       Gtk::Box _resizeGrip;
       Gtk::Button _toggleButton;
       Gtk::Revealer _revealer;

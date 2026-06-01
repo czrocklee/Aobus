@@ -317,7 +317,11 @@ namespace ao::gtk::layout::test
       REQUIRE(workspace != nullptr);
       CHECK(workspace->get_hexpand() == true);
 
-      auto* const resizeGrip = workspace->get_next_sibling();
+      auto* const gutterBox = workspace->get_next_sibling();
+      REQUIRE(gutterBox != nullptr);
+      CHECK(dynamic_cast<Gtk::Box*>(gutterBox) != nullptr);
+
+      auto* const resizeGrip = gutterBox->get_first_child();
       REQUIRE(resizeGrip != nullptr);
       CHECK(resizeGrip->has_css_class("ao-detail-resize-grip"));
 
@@ -325,7 +329,7 @@ namespace ao::gtk::layout::test
       REQUIRE(handleWidget != nullptr);
       CHECK(dynamic_cast<Gtk::Button*>(handleWidget) != nullptr);
 
-      auto* const revealer = dynamic_cast<Gtk::Revealer*>(handleWidget->get_next_sibling());
+      auto* const revealer = dynamic_cast<Gtk::Revealer*>(gutterBox->get_next_sibling());
       REQUIRE(revealer != nullptr);
       CHECK(revealer->get_reveal_child() == false);
       CHECK(revealer->get_transition_type() == Gtk::RevealerTransitionType::SLIDE_LEFT);
@@ -365,7 +369,11 @@ namespace ao::gtk::layout::test
       CHECK(revealer->get_reveal_child() == true);
       CHECK(revealer->get_transition_type() == Gtk::RevealerTransitionType::SLIDE_DOWN);
 
-      auto* const handleWidget = revealer->get_next_sibling();
+      auto* const gutterBox = revealer->get_next_sibling();
+      REQUIRE(gutterBox != nullptr);
+      CHECK(dynamic_cast<Gtk::Box*>(gutterBox) != nullptr);
+
+      auto* const handleWidget = gutterBox->get_first_child();
       REQUIRE(handleWidget != nullptr);
       CHECK(dynamic_cast<Gtk::Button*>(handleWidget) != nullptr);
 
@@ -403,13 +411,10 @@ namespace ao::gtk::layout::test
       auto* const workspace = box->get_first_child();
       REQUIRE(workspace != nullptr);
 
-      auto* const resizeGrip = workspace->get_next_sibling();
-      REQUIRE(resizeGrip != nullptr);
+      auto* const gutterBox = workspace->get_next_sibling();
+      REQUIRE(gutterBox != nullptr);
 
-      auto* const handleWidget = resizeGrip->get_next_sibling();
-      REQUIRE(handleWidget != nullptr);
-
-      auto* const revealer = dynamic_cast<Gtk::Revealer*>(handleWidget->get_next_sibling());
+      auto* const revealer = dynamic_cast<Gtk::Revealer*>(gutterBox->get_next_sibling());
       REQUIRE(revealer != nullptr);
 
       auto* const paneSizer = revealer->get_child();
