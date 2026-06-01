@@ -101,7 +101,6 @@ namespace ao::gtk::layout::editor
                             bool isLayoutProp);
     void dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp);
 
-    void onAddChild();
     void addComponent(std::string type);
     void wrapNode(std::string containerType);
 
@@ -116,6 +115,7 @@ namespace ao::gtk::layout::editor
     bool validateDocument();
 
     LayoutNode* findParentOf(LayoutNode* root, LayoutNode* target);
+    LayoutNode* selectedNonRootNode() const;
 
     ComponentRegistry const& _registry;
     ActionRegistry const& _actionRegistry;

@@ -43,11 +43,39 @@
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::gtk::layout
 {
+  namespace
+  {
+    std::optional<Gtk::Align> parseAlign(std::string_view alignment)
+    {
+      if (alignment == "fill")
+      {
+        return Gtk::Align::FILL;
+      }
+
+      if (alignment == "start")
+      {
+        return Gtk::Align::START;
+      }
+
+      if (alignment == "end")
+      {
+        return Gtk::Align::END;
+      }
+
+      if (alignment == "center")
+      {
+        return Gtk::Align::CENTER;
+      }
+
+      return std::nullopt;
+    }
+  }
   /**
    * @brief Apply common layout properties to a GTK widget.
    */
@@ -67,41 +95,17 @@ namespace ao::gtk::layout
 
     if (auto const it = layout.find("halign"); it != layout.end())
     {
-      if (auto const alignment = it->second.asString(); alignment == "fill")
+      if (auto const optAlignment = parseAlign(it->second.asString()); optAlignment)
       {
-        widget.set_halign(Gtk::Align::FILL);
-      }
-      else if (alignment == "start")
-      {
-        widget.set_halign(Gtk::Align::START);
-      }
-      else if (alignment == "end")
-      {
-        widget.set_halign(Gtk::Align::END);
-      }
-      else if (alignment == "center")
-      {
-        widget.set_halign(Gtk::Align::CENTER);
+        widget.set_halign(*optAlignment);
       }
     }
 
     if (auto const it = layout.find("valign"); it != layout.end())
     {
-      if (auto const alignment = it->second.asString(); alignment == "fill")
+      if (auto const optAlignment = parseAlign(it->second.asString()); optAlignment)
       {
-        widget.set_valign(Gtk::Align::FILL);
-      }
-      else if (alignment == "start")
-      {
-        widget.set_valign(Gtk::Align::START);
-      }
-      else if (alignment == "end")
-      {
-        widget.set_valign(Gtk::Align::END);
-      }
-      else if (alignment == "center")
-      {
-        widget.set_valign(Gtk::Align::CENTER);
+        widget.set_valign(*optAlignment);
       }
     }
 
@@ -1055,6 +1059,31 @@ namespace ao::gtk::layout
                std::abs(mouseY - static_cast<double>(cornerY)) <= kCornerHitRadius;
       }
 
+      ResizeCorner detectResizeCorner(std::int32_t width, std::int32_t height, double relX, double relY) const
+      {
+        if (hitCorner(0, 0, relX, relY))
+        {
+          return ResizeCorner::TopLeft;
+        }
+
+        if (hitCorner(width, 0, relX, relY))
+        {
+          return ResizeCorner::TopRight;
+        }
+
+        if (hitCorner(0, height, relX, relY))
+        {
+          return ResizeCorner::BottomLeft;
+        }
+
+        if (hitCorner(width, height, relX, relY))
+        {
+          return ResizeCorner::BottomRight;
+        }
+
+        return ResizeCorner::None;
+      }
+
       bool onKeyPressed(guint keyval)
       {
         if (_selectedId.empty())
@@ -1149,22 +1178,7 @@ namespace ao::gtk::layout
             queue_draw();
 
             // Detect corner for resize
-            if (hitCorner(0, 0, posX - child.posX, posY - child.posY))
-            {
-              _resizeCorner = ResizeCorner::TopLeft;
-            }
-            else if (hitCorner(width, 0, posX - child.posX, posY - child.posY))
-            {
-              _resizeCorner = ResizeCorner::TopRight;
-            }
-            else if (hitCorner(0, height, posX - child.posX, posY - child.posY))
-            {
-              _resizeCorner = ResizeCorner::BottomLeft;
-            }
-            else if (hitCorner(width, height, posX - child.posX, posY - child.posY))
-            {
-              _resizeCorner = ResizeCorner::BottomRight;
-            }
+            _resizeCorner = detectResizeCorner(width, height, posX - child.posX, posY - child.posY);
 
             break;
           }

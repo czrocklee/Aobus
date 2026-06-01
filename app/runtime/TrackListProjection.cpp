@@ -467,6 +467,20 @@ namespace ao::rt
     std::vector<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>> subscribers;
     bool sourceDestroyed = false;
 
+    OrderEntry buildOrderEntry(TrackId id, library::TrackView const& view, library::DictionaryStore& dict)
+    {
+      auto entry = OrderEntry{.trackId = id};
+      fillSortKeys(entry.keys, view, dict, sortBy, normCache, stringPool);
+
+      if (groupBy != TrackGroupKey::None)
+      {
+        ensureGroupSortKeys(entry.keys, view, dict, groupBy, normCache);
+        fillGroupMetadata(entry, view, dict, groupBy, stringPool);
+      }
+
+      return entry;
+    }
+
     void rebuildGroups()
     {
       if (groupBy == TrackGroupKey::None || orderIndex.empty())
@@ -560,16 +574,7 @@ namespace ao::rt
 
         if (auto const optView = reader.get(trackId, loadMode); optView)
         {
-          auto entry = OrderEntry{.trackId = trackId};
-          fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
-
-          if (groupBy != TrackGroupKey::None)
-          {
-            ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
-            fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
-          }
-
-          orderIndex.push_back(entry);
+          orderIndex.push_back(buildOrderEntry(trackId, *optView, dict));
         }
       }
 
@@ -636,14 +641,7 @@ namespace ao::rt
         return;
       }
 
-      auto entry = OrderEntry{.trackId = trackId};
-      fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
-
-      if (groupBy != TrackGroupKey::None)
-      {
-        ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
-        fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
-      }
+      auto entry = buildOrderEntry(trackId, *optView, dict);
 
       std::size_t pos = 0;
 
@@ -709,16 +707,7 @@ namespace ao::rt
       {
         if (auto const optView = reader.get(id, loadMode); optView)
         {
-          auto entry = OrderEntry{.trackId = id};
-          fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
-
-          if (groupBy != TrackGroupKey::None)
-          {
-            ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
-            fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
-          }
-
-          sortedNew.push_back(entry);
+          sortedNew.push_back(buildOrderEntry(id, *optView, dict));
         }
       }
 

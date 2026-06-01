@@ -319,16 +319,9 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onRaiseZ()
   {
-    auto const row = _treeView.get_selection()->get_selected();
+    auto* const node = selectedNonRootNode();
 
-    if (!row)
-    {
-      return;
-    }
-
-    auto* const node = row->get_value(_columns.nodePtr);
-
-    if (node == nullptr || node == &_document.root)
+    if (node == nullptr)
     {
       return;
     }
@@ -349,16 +342,9 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onLowerZ()
   {
-    auto row = _treeView.get_selection()->get_selected();
+    auto* const node = selectedNonRootNode();
 
-    if (!row)
-    {
-      return;
-    }
-
-    auto* const node = row->get_value(_columns.nodePtr);
-
-    if (node == nullptr || node == &_document.root)
+    if (node == nullptr)
     {
       return;
     }
@@ -454,24 +440,32 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  void LayoutEditorDialog::onAddChild()
+  LayoutNode* LayoutEditorDialog::selectedNonRootNode() const
   {
-  } // no-op, removed usage
-
-  void LayoutEditorDialog::onRemoveNode()
-  {
-    auto row = _treeView.get_selection()->get_selected();
+    auto const row = _treeView.get_selection()->get_selected();
 
     if (!row)
     {
-      return;
+      return nullptr;
     }
 
-    auto* const targetNode = row->get_value(_columns.nodePtr);
+    auto* const node = row->get_value(_columns.nodePtr);
 
-    if (targetNode == nullptr || targetNode == &_document.root)
+    if (node == nullptr || node == &_document.root)
     {
-      return; // Cannot remove root
+      return nullptr;
+    }
+
+    return node;
+  }
+
+  void LayoutEditorDialog::onRemoveNode()
+  {
+    auto* const targetNode = selectedNonRootNode();
+
+    if (targetNode == nullptr)
+    {
+      return;
     }
 
     auto* const parentNode = findParentOf(&_document.root, targetNode);
@@ -492,16 +486,9 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onMoveUp()
   {
-    auto row = _treeView.get_selection()->get_selected();
+    auto* const targetNode = selectedNonRootNode();
 
-    if (!row)
-    {
-      return;
-    }
-
-    auto* const targetNode = row->get_value(_columns.nodePtr);
-
-    if (targetNode == nullptr || targetNode == &_document.root)
+    if (targetNode == nullptr)
     {
       return;
     }
@@ -524,16 +511,9 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onMoveDown()
   {
-    auto row = _treeView.get_selection()->get_selected();
+    auto* const targetNode = selectedNonRootNode();
 
-    if (!row)
-    {
-      return;
-    }
-
-    auto* const targetNode = row->get_value(_columns.nodePtr);
-
-    if (targetNode == nullptr || targetNode == &_document.root)
+    if (targetNode == nullptr)
     {
       return;
     }
