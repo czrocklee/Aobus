@@ -14,6 +14,7 @@ BUILD_DIR="/tmp/build/debug"
 SUITE="all"
 TEST_FILTER=""
 LIST_ONLY="false"
+DO_BUILD="true"
 
 usage() {
     cat <<'EOF'
@@ -29,11 +30,15 @@ Note: Use quotes around your filter to avoid shell globbing, e.g., "[layout],[mo
   --core                Shortcut for --suite core
   --gtk                 Shortcut for --suite gtk
   -l, --list            List matching tests instead of running them
+  -n, --no-build        Skip incremental build before running tests
   -h, --help            Show this help
 
 === Examples ===
-  # Run all tests
+  # Build and run all tests
   ./script/run-tests.sh
+
+  # Run without building (faster if you know binaries are current)
+  ./script/run-tests.sh -n
 
   # Run only GTK tests with specific tags (OR logic)
   ./script/run-tests.sh --gtk "[layout],[presets]"
@@ -54,12 +59,25 @@ while [[ $# -gt 0 ]]; do
         --core) SUITE="core"; shift ;;
         --gtk) SUITE="gtk"; shift ;;
         -l|--list) LIST_ONLY="true"; shift ;;
+        -n|--no-build) DO_BUILD="false"; shift ;;
         -h|--help) usage ;;
         --) shift; TEST_FILTER="$*"; break ;;
         -*) echo "Unknown option: $1"; usage ;;
         *) TEST_FILTER="$*"; break ;;
     esac
 done
+
+if [[ "$DO_BUILD" == "true" ]]; then
+    if [[ ! -d "$BUILD_DIR" ]]; then
+        echo "Error: Build directory $BUILD_DIR does not exist."
+        echo "Please run ./build.sh debug first to configure the project."
+        exit 1
+    fi
+    echo "====================================="
+    echo "Building tests in $BUILD_DIR..."
+    echo "====================================="
+    cmake --build "$BUILD_DIR" --parallel --target ao_test ao_test_gtk
+fi
 
 run_core() {
     local CORE_TEST_BIN="$BUILD_DIR/test/ao_test"

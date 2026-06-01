@@ -15,10 +15,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
+#include <gtkmm/button.h>
 #include <gtkmm/centerbox.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/paned.h>
+#include <gtkmm/revealer.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/stack.h>
@@ -292,6 +294,134 @@ namespace ao::gtk::layout::test
       CHECK(paned->get_position() == expectedPos);
       CHECK(paned->get_resize_start_child() == false);
       CHECK(paned->get_shrink_end_child() == true);
+    }
+
+    SECTION("collapsibleSplit wraps the collapsible child in a revealer sizing pane")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "collapsibleSplit";
+      doc.root.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      doc.root.props["position"] = LayoutValue{static_cast<std::int64_t>(420)};
+      doc.root.props["revealed"] = LayoutValue{false};
+
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
+
+      REQUIRE(box != nullptr);
+      CHECK(box->get_orientation() == Gtk::Orientation::HORIZONTAL);
+
+      auto* const workspace = box->get_first_child();
+      REQUIRE(workspace != nullptr);
+      CHECK(workspace->get_hexpand() == true);
+
+      auto* const resizeGrip = workspace->get_next_sibling();
+      REQUIRE(resizeGrip != nullptr);
+      CHECK(resizeGrip->has_css_class("ao-detail-resize-grip"));
+
+      auto* const handleWidget = resizeGrip->get_next_sibling();
+      REQUIRE(handleWidget != nullptr);
+      CHECK(dynamic_cast<Gtk::Button*>(handleWidget) != nullptr);
+
+      auto* const revealer = dynamic_cast<Gtk::Revealer*>(handleWidget->get_next_sibling());
+      REQUIRE(revealer != nullptr);
+      CHECK(revealer->get_reveal_child() == false);
+      CHECK(revealer->get_transition_type() == Gtk::RevealerTransitionType::SLIDE_LEFT);
+
+      auto* const paneSizer = revealer->get_child();
+      REQUIRE(paneSizer != nullptr);
+
+      std::int32_t width = -1;
+      std::int32_t height = -1;
+      paneSizer->get_size_request(width, height);
+
+      int const expectedWidth = 420;
+      CHECK(width == expectedWidth);
+      CHECK(height == -1);
+    }
+
+    SECTION("collapsibleSplit start side places the revealer before the handle")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "collapsibleSplit";
+      doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
+      doc.root.props["collapseSide"] = LayoutValue{std::string{"start"}};
+      doc.root.props["position"] = LayoutValue{static_cast<std::int64_t>(180)};
+      doc.root.props["revealed"] = LayoutValue{true};
+
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
+
+      REQUIRE(box != nullptr);
+      CHECK(box->get_orientation() == Gtk::Orientation::VERTICAL);
+
+      auto* const revealer = dynamic_cast<Gtk::Revealer*>(box->get_first_child());
+      REQUIRE(revealer != nullptr);
+      CHECK(revealer->get_reveal_child() == true);
+      CHECK(revealer->get_transition_type() == Gtk::RevealerTransitionType::SLIDE_DOWN);
+
+      auto* const handleWidget = revealer->get_next_sibling();
+      REQUIRE(handleWidget != nullptr);
+      CHECK(dynamic_cast<Gtk::Button*>(handleWidget) != nullptr);
+
+      auto* const resizeGrip = handleWidget->get_next_sibling();
+      REQUIRE(resizeGrip != nullptr);
+      CHECK(resizeGrip->has_css_class("ao-detail-resize-grip"));
+
+      auto* const paneSizer = revealer->get_child();
+      REQUIRE(paneSizer != nullptr);
+
+      std::int32_t width = -1;
+      std::int32_t height = -1;
+      paneSizer->get_size_request(width, height);
+
+      int const expectedHeight = 180;
+      CHECK(width == -1);
+      CHECK(height == expectedHeight);
+    }
+
+    SECTION("collapsibleSplit invalid position falls back to default detail size")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "collapsibleSplit";
+      doc.root.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      doc.root.props["position"] = LayoutValue{static_cast<std::int64_t>(-1)};
+
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
+
+      REQUIRE(box != nullptr);
+
+      auto* const workspace = box->get_first_child();
+      REQUIRE(workspace != nullptr);
+
+      auto* const resizeGrip = workspace->get_next_sibling();
+      REQUIRE(resizeGrip != nullptr);
+
+      auto* const handleWidget = resizeGrip->get_next_sibling();
+      REQUIRE(handleWidget != nullptr);
+
+      auto* const revealer = dynamic_cast<Gtk::Revealer*>(handleWidget->get_next_sibling());
+      REQUIRE(revealer != nullptr);
+
+      auto* const paneSizer = revealer->get_child();
+      REQUIRE(paneSizer != nullptr);
+
+      std::int32_t width = -1;
+      std::int32_t height = -1;
+      paneSizer->get_size_request(width, height);
+
+      int const expectedDefaultWidth = 300;
+      CHECK(width == expectedDefaultWidth);
+      CHECK(height == -1);
     }
 
     SECTION("centerBox with 3 children builds Gtk::CenterBox")

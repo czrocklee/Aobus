@@ -23,10 +23,12 @@ namespace ao::gtk
   class TrackRowCache;
   class ImageCache;
   class TagEditController;
+
   namespace portal
   {
     class ImportExportCoordinator;
   }
+
   class TrackPageHost;
   class ListNavigationController;
 } // namespace ao::gtk
@@ -40,12 +42,14 @@ namespace ao::gtk::layout
 {
   class ComponentRegistry;
   class ActionRegistry;
+  class ITrackDetailScope;
 
   struct TrackUiContext final
   {
     TrackPageHost* pageHost = nullptr;
     uimodel::track::TrackPresentationViewModel* presentationStore = nullptr;
     TrackRowCache* trackRowCache = nullptr;
+    ITrackDetailScope* detailScope = nullptr;
   };
 
   struct ListUiContext final
@@ -58,7 +62,7 @@ namespace ao::gtk::layout
     uimodel::playback::PlaybackQueueModel* queueModel = nullptr;
   };
 
-  struct InspectorUiContext final
+  struct DetailUiContext final
   {
     ImageCache* imageCache = nullptr;
   };
@@ -95,7 +99,7 @@ namespace ao::gtk::layout
     TrackUiContext track{};
     ListUiContext list{};
     PlaybackUiContext playback{};
-    InspectorUiContext inspector{};
+    DetailUiContext detail{};
     TagUiContext tag{};
     ShellUiContext shell{};
     PortalContext portal{};
@@ -110,7 +114,7 @@ namespace ao::gtk::layout
       track.trackRowCache = services.trackRowCache;
       list.navigationController = services.listNavigationController;
       playback.queueModel = services.playbackQueueModel;
-      inspector.imageCache = services.imageCache;
+      detail.imageCache = services.imageCache;
       tag.editController = services.tagEditController;
       portal.coordinator = services.importExportCoordinator;
     }

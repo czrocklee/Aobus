@@ -85,8 +85,18 @@ namespace ao::gtk
     set_can_shrink(true);
     set_alternative_text("No cover art");
 
-    signal_map().connect(std::bind_front(&ImageWidget::queueRefresh, this));
-    property_scale_factor().signal_changed().connect(std::bind_front(&ImageWidget::queueRefresh, this));
+    signal_map().connect(
+      [this]
+      {
+        invalidateRenderedImage();
+        queueRefresh();
+      });
+    property_scale_factor().signal_changed().connect(
+      [this]
+      {
+        invalidateRenderedImage();
+        queueRefresh();
+      });
   }
 
   ImageWidget::~ImageWidget()
@@ -128,11 +138,6 @@ namespace ao::gtk
       return;
     }
 
-    if (_currentCoverId == coverArtId && _sourcePixbufPtr)
-    {
-      return;
-    }
-
     auto const rid = static_cast<std::uint64_t>(coverArtId.raw());
     auto cachedPtr = _cache.get(rid);
 
@@ -164,6 +169,7 @@ namespace ao::gtk
 
     _currentCoverId = coverArtId;
     _sourcePixbufPtr = cachedPtr;
+    invalidateRenderedImage();
     queueRefresh();
   }
 
@@ -181,6 +187,7 @@ namespace ao::gtk
       memStreamPtr->add_data(bytes.data(), std::ssize(bytes), nullptr);
       _currentCoverId = kInvalidResourceId;
       _sourcePixbufPtr = Gdk::Pixbuf::create_from_stream(memStreamPtr);
+      invalidateRenderedImage();
       queueRefresh();
     }
     catch (Glib::Error const&)
@@ -191,8 +198,15 @@ namespace ao::gtk
 
   void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
   {
+    if (!pixbuf)
+    {
+      clearImage();
+      return;
+    }
+
     _currentCoverId = kInvalidResourceId;
     _sourcePixbufPtr = pixbuf;
+    invalidateRenderedImage();
     queueRefresh();
   }
 
@@ -201,14 +215,19 @@ namespace ao::gtk
     _sourcePixbufPtr.reset();
     _currentCoverId = kInvalidResourceId;
 
+    invalidateRenderedImage();
+
+    set_paintable({});
+  }
+
+  void ImageWidget::invalidateRenderedImage()
+  {
     _renderedSourcePixbufPtr.reset();
     _renderedCoverId = kInvalidResourceId;
     _renderedTargetPixelWidth = 0;
     _renderedTargetPixelHeight = 0;
     _renderedPixelWidth = 0;
     _renderedPixelHeight = 0;
-
-    set_paintable({});
   }
 
   void ImageWidget::size_allocate_vfunc(int width, int height, int baseline)
@@ -257,17 +276,23 @@ namespace ao::gtk
       return;
     }
 
-    bool const sourceChanged = (_sourcePixbufPtr != _renderedSourcePixbufPtr) || (_currentCoverId != _renderedCoverId);
-    bool const sizeChanged =
-      detail::shouldRefresh({.width = _renderedTargetPixelWidth, .height = _renderedTargetPixelHeight}, target);
+    auto const fitTarget = detail::fitSourceIntoTarget(
+      {.width = _sourcePixbufPtr->get_width(), .height = _sourcePixbufPtr->get_height()}, target);
 
-    if (!sourceChanged && !sizeChanged)
+    if (fitTarget.width <= 0 || fitTarget.height <= 0)
     {
       return;
     }
 
-    auto const fitTarget = detail::fitSourceIntoTarget(
-      {.width = _sourcePixbufPtr->get_width(), .height = _sourcePixbufPtr->get_height()}, target);
+    bool const sourceChanged = (_sourcePixbufPtr != _renderedSourcePixbufPtr) || (_currentCoverId != _renderedCoverId);
+    bool const sizeChanged =
+      detail::shouldRefresh({.width = _renderedTargetPixelWidth, .height = _renderedTargetPixelHeight}, target);
+    bool const renderedTooSmall = _renderedPixelWidth < fitTarget.width || _renderedPixelHeight < fitTarget.height;
+
+    if (!sourceChanged && !sizeChanged && !renderedTooSmall)
+    {
+      return;
+    }
 
     auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
 
@@ -296,8 +321,8 @@ namespace ao::gtk
     std::int32_t logicalWidth = 0;
     std::int32_t logicalHeight = 0;
 
-    auto const widgetWidth = std::max(_allocatedWidth, get_width());
-    auto const widgetHeight = std::max(_allocatedHeight, get_height());
+    auto const widgetWidth = _allocatedWidth > 0 ? _allocatedWidth : get_width();
+    auto const widgetHeight = _allocatedHeight > 0 ? _allocatedHeight : get_height();
 
     // 1. Prefer actual widget size if available.
     if (widgetWidth > 0 && widgetHeight > 0)

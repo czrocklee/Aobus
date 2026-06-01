@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -43,9 +44,9 @@ namespace ao::gtk::layout::editor::test
 
     auto const& descriptors = registry.descriptors();
 
-    SECTION("all 21 component types have descriptors")
+    SECTION("all 26 component types have descriptors")
     {
-      REQUIRE(descriptors.size() >= 21);
+      REQUIRE(descriptors.size() >= 26);
     }
 
     SECTION("all descriptors have non-empty type")
@@ -193,7 +194,6 @@ namespace ao::gtk::layout::editor::test
       CHECK(categories.contains("Status"));
       CHECK(categories.contains("Library"));
       CHECK(categories.contains("Tracks"));
-      CHECK(categories.contains("Inspector"));
     }
 
     SECTION("all 20 types individually retrievable")
@@ -219,10 +219,14 @@ namespace ao::gtk::layout::editor::test
                                                           "library.listTree",
                                                           "tracks.table",
                                                           "library.openLibraryButton",
-                                                          "inspector.image",
-                                                          "inspector.panel",
                                                           "app.menuBar",
-                                                          "app.workspaceWithInspector"});
+                                                          "track.detailScope",
+                                                          "track.selectionRegion",
+                                                          "track.coverArt",
+                                                          "track.metadataField",
+                                                          "track.audioProperty",
+                                                          "track.editLock",
+                                                          "track.tagEditor"});
 
       for (auto const& type : types)
       {
@@ -364,12 +368,13 @@ namespace ao::gtk::layout::editor::test
       CHECK(templates.contains("playback.transportGroup"));
       CHECK(templates.contains("playback.defaultBar"));
       CHECK(templates.contains("library.defaultListPane"));
-      CHECK(templates.contains("inspector.defaultPanel"));
+      CHECK(templates.contains("track.defaultDetailPane"));
       CHECK(templates.contains("status.defaultBar"));
       CHECK(templates.contains("tracks.defaultWorkspace"));
       CHECK(templates.contains("app.defaultLayout"));
+      CHECK(templates.contains("track.selectionDetailPane"));
 
-      int const expectedCount = 8;
+      int const expectedCount = 9;
       CHECK(templates.size() >= expectedCount);
     }
 
@@ -423,6 +428,39 @@ namespace ao::gtk::layout::editor::test
       // 7 children: playbackDetails, spacer, nowPlaying, spacer, statusSlot, separator, trackCount
       int const expectedChildren = 7;
       CHECK(bar.children.size() == expectedChildren);
+    }
+
+    SECTION("track.selectionDetailPane contains metadata fields and properties action")
+    {
+      auto const templates = getBuiltInTemplates();
+      auto const& pane = templates.at("track.selectionDetailPane");
+
+      auto metadataFieldCount = 0;
+      auto hasPropertiesAction = false;
+
+      auto visit = std::function<void(LayoutNode const&)>{};
+      visit = [&](LayoutNode const& node)
+      {
+        if (node.type == "track.metadataField")
+        {
+          ++metadataFieldCount;
+        }
+
+        if (node.type == "app.actionButton" && node.getProp<std::string>("primaryAction", "") == "track.showProperties")
+        {
+          hasPropertiesAction = true;
+        }
+
+        for (auto const& child : node.children)
+        {
+          visit(child);
+        }
+      };
+
+      visit(pane);
+
+      CHECK(metadataFieldCount == 3);
+      CHECK(hasPropertiesAction);
     }
 
     SECTION("template expansion via expandNode in build")

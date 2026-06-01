@@ -11,7 +11,9 @@ description: >-
 Use this skill before performing any git operation in Aobus.
 
 ## 1. Targeted Formatting
-When a user asks to commit, run a targeted `clang-format` pass on modified or created C++ files only. Do not use global formatting scripts.
+Do not run `clang-format` during normal implementation, debugging, validation, or final response prep. Formatting before the commit step makes diffs noisy and makes later patches harder to apply correctly.
+
+Run formatting only when the user explicitly asks for formatting or when creating a commit. For commits, run one targeted `clang-format` pass on modified or created C++ files only, immediately before staging/committing. Do not use global formatting scripts.
 
 Run this command before performing any commit:
 ```bash
@@ -35,7 +37,7 @@ This form preserves spaces in filenames and handles rename/copy entries correctl
 Action required: report the command output in your response so the user can see exactly which files were formatted.
 
 ## 2. Scoped Validation
-After formatting and before staging or committing, validate only the relevant changed code unless the user asked for broader cleanup.
+Before staging or committing, validate only the relevant changed code unless the user asked for broader cleanup. If the commit flow includes a formatting pass, validate after that pass.
 
 For C++ changes:
 
@@ -50,11 +52,12 @@ If the user asks whether a change is ready, safe, or worth merging, load `code-r
 
 ## 3. Commit Procedure
 1. Review the repo state with `git status`, `git diff HEAD`, and `git log -n 3`.
-2. Format changed `.cpp`, `.h`, and `.hpp` files with the targeted command above and report its output.
-3. Run scoped validation for the relevant changed code and report pass/fail before staging or committing.
-4. Stage only the intended changes.
-5. Use an imperative commit message such as `perf: optimize TrackRow memory usage`. Focus on the primary technical contribution and substantive logic changes. Avoid generic labels like "style" or "chore" if the commit introduces new features, bug fixes, or significant refactorings; emphasize the core "what" and "why" over secondary stylistic cleanup. Do not reference project plans, design docs, or internal task IDs (e.g., avoid "implement phase 2 of plan X"). Do not append "Co-Authored-By" or any AI signatures.
-6. Run `git status` after the commit and do not conclude until the working tree is clean or only unrelated user changes remain.
+2. Confirm implementation and debugging are complete.
+3. Format changed `.cpp`, `.h`, and `.hpp` files once with the targeted command above and report its output.
+4. Run scoped validation for the relevant changed code and report pass/fail before staging or committing.
+5. Stage only the intended changes.
+6. Use an imperative commit message such as `perf: optimize TrackRow memory usage`. Focus on the primary technical contribution and substantive logic changes. Avoid generic labels like "style" or "chore" if the commit introduces new features, bug fixes, or significant refactorings; emphasize the core "what" and "why" over secondary stylistic cleanup. Do not reference project plans, design docs, or internal task IDs (e.g., avoid "implement phase 2 of plan X"). Do not append "Co-Authored-By" or any AI signatures.
+7. Run `git status` after the commit and do not conclude until the working tree is clean or only unrelated user changes remain.
 
 ## 4. Scope And Safety
 

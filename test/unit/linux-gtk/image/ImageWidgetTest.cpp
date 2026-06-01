@@ -235,5 +235,55 @@ namespace ao::gtk::test
       CHECK(paintablePtr->get_intrinsic_width() == expectedSize);
       CHECK(paintablePtr->get_intrinsic_height() == expectedSize);
     }
+
+    SECTION("same resource reload refreshes rendered image")
+    {
+      auto const scaleFactor = widget.get_scale_factor();
+      auto const resourceId = ResourceId{42};
+      auto const smallPixbufPtr = makePixbuf(40, 40);
+      auto const largePixbufPtr = makePixbuf(200, 200);
+
+      imageCache.put(resourceId.raw(), smallPixbufPtr);
+      widget.setTargetSize(56);
+      widget.loadImage(resourceId);
+      drainGtkEvents();
+
+      auto paintablePtr = widget.get_paintable();
+      REQUIRE(paintablePtr);
+      CHECK(paintablePtr->get_intrinsic_width() == 40);
+      CHECK(paintablePtr->get_intrinsic_height() == 40);
+
+      imageCache.put(resourceId.raw(), largePixbufPtr);
+      widget.loadImage(resourceId);
+      drainGtkEvents();
+
+      paintablePtr = widget.get_paintable();
+      REQUIRE(paintablePtr);
+      CHECK(paintablePtr->get_intrinsic_width() == 56 * scaleFactor);
+      CHECK(paintablePtr->get_intrinsic_height() == 56 * scaleFactor);
+    }
+
+    SECTION("small target growth refreshes undersized render")
+    {
+      auto const scaleFactor = widget.get_scale_factor();
+      auto const sourcePixbufPtr = makePixbuf(200, 200);
+
+      widget.setTargetSize(56);
+      widget.setImagePixbuf(sourcePixbufPtr);
+      drainGtkEvents();
+
+      auto paintablePtr = widget.get_paintable();
+      REQUIRE(paintablePtr);
+      CHECK(paintablePtr->get_intrinsic_width() == 56 * scaleFactor);
+      CHECK(paintablePtr->get_intrinsic_height() == 56 * scaleFactor);
+
+      widget.setTargetSize(58);
+      drainGtkEvents();
+
+      paintablePtr = widget.get_paintable();
+      REQUIRE(paintablePtr);
+      CHECK(paintablePtr->get_intrinsic_width() == 58 * scaleFactor);
+      CHECK(paintablePtr->get_intrinsic_height() == 58 * scaleFactor);
+    }
   }
 } // namespace ao::gtk::test

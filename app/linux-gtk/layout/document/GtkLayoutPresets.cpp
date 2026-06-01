@@ -62,7 +62,18 @@ namespace ao::gtk::layout
     switch (presetId)
     {
       case GtkLayoutPresetId::Classic: return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
-      case GtkLayoutPresetId::Modern: return loadBuiltInLayout("/org/aobus/layout/modern_layout.yaml");
+      case GtkLayoutPresetId::Modern:
+      {
+        auto doc = loadBuiltInLayout("/org/aobus/layout/modern_layout.yaml");
+        auto const defaultDoc = loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
+
+        for (auto const& [name, templateNode] : defaultDoc.templates)
+        {
+          doc.templates.try_emplace(name, templateNode);
+        }
+
+        return doc;
+      }
     }
 
     return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");

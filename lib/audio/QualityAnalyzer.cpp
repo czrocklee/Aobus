@@ -37,12 +37,12 @@ namespace ao::audio
 
         if (dst.bitDepth == 32)
         {
-          return srcBits <= 24; // NOLINT(readability-magic-numbers)
+          return srcBits <= 24;
         }
 
         if (dst.bitDepth == 64)
         {
-          return srcBits <= 32; // NOLINT(readability-magic-numbers)
+          return srcBits <= 32;
         }
       }
 
@@ -204,25 +204,7 @@ namespace ao::audio
 
   Quality worseQuality(Quality lhs, Quality rhs) noexcept
   {
-    auto const rank = [](Quality quality) -> std::uint8_t
-    {
-      // NOLINTBEGIN(readability-magic-numbers)
-      switch (quality)
-      {
-        case Quality::Unknown: return 0;
-        case Quality::BitwisePerfect: return 1;
-        case Quality::LosslessPadded: return 2;
-        case Quality::LosslessFloat: return 3;
-        case Quality::LinearIntervention: return 4;
-        case Quality::LossySource: return 5;
-        case Quality::Clipped: return 6;
-      }
-      // NOLINTEND(readability-magic-numbers)
-
-      return 0;
-    };
-
-    return (rank(lhs) > rank(rhs)) ? lhs : rhs;
+    return (static_cast<std::uint8_t>(lhs) > static_cast<std::uint8_t>(rhs)) ? lhs : rhs;
   }
 
   QualityResult analyzeAudioQuality(flow::Graph const& graph)

@@ -54,10 +54,21 @@ root:
                     slot: end
                     halign: end
                     cssClasses: ao-modern-header-stats
-            - id: workspace-with-inspector
-              type: app.workspaceWithInspector
+            - id: main-workspace-split
+              type: collapsibleSplit
+              props:
+                orientation: horizontal
+                position: 850
+                revealed: true
               layout:
                 vexpand: true
+              children:
+                - type: template
+                  props:
+                    templateId: tracks.defaultWorkspace
+                - type: template
+                  props:
+                    templateId: track.defaultDetailPane
 
     # === Modern bottom bar ===
     - type: template

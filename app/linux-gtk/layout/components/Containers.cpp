@@ -10,17 +10,23 @@
 
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>
+#include <gdkmm/cursor.h>
 #include <gdkmm/enums.h>
 #include <gdkmm/graphene_rect.h>
 #include <glib.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
+#include <gtkmm/button.h>
 #include <gtkmm/centerbox.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerkey.h>
+#include <gtkmm/gesture.h>
 #include <gtkmm/gesturedrag.h>
 #include <gtkmm/label.h>
+#include <gtkmm/native.h>
 #include <gtkmm/paned.h>
+#include <gtkmm/revealer.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/snapshot.h>
@@ -143,6 +149,11 @@ namespace ao::gtk::layout
 
   namespace
   {
+    constexpr std::int32_t kDefaultCollapsibleSplitSize = 300;
+    constexpr std::int32_t kMinCollapsibleSplitSize = 50;
+    constexpr std::int32_t kResizeGripThickness = 4;
+    constexpr double kCollapsibleSplitDragThreshold = 3.0;
+
     /**
      * @brief A box container component.
      */
@@ -282,6 +293,306 @@ namespace ao::gtk::layout
 
     private:
       Gtk::Paned _paned;
+      std::unique_ptr<Gtk::Label> _errorPtr;
+      std::unique_ptr<ILayoutComponent> _startChildPtr;
+      std::unique_ptr<ILayoutComponent> _endChildPtr;
+    };
+
+    /**
+     * @brief A resizable and collapsible split container.
+     */
+    class CollapsibleSplitComponent final : public ILayoutComponent
+    {
+    public:
+      enum class Side : std::uint8_t
+      {
+        Start,
+        End
+      };
+
+      CollapsibleSplitComponent(LayoutContext& ctx, LayoutNode const& node)
+      {
+        if (node.children.size() != 2)
+        {
+          _errorPtr = std::make_unique<Gtk::Label>();
+          _errorPtr->set_markup(
+            "<span foreground='red'><b>[Layout Error]</b> collapsibleSplit requires exactly 2 children</span>");
+          _errorPtr->add_css_class("ao-layout-error");
+          return;
+        }
+
+        auto const orientationStr = node.getProp<std::string>("orientation", "horizontal");
+        _orientation = (orientationStr == "vertical") ? Gtk::Orientation::VERTICAL : Gtk::Orientation::HORIZONTAL;
+        _collapseSide = (node.getProp<std::string>("collapseSide", "end") == "start") ? Side::Start : Side::End;
+
+        _container.set_orientation(_orientation);
+        _paneSizer.set_orientation(_orientation);
+
+        // Build children
+        _startChildPtr = ctx.registry.create(ctx, node.children[0]);
+        _endChildPtr = ctx.registry.create(ctx, node.children[1]);
+
+        bool const initiallyRevealed = node.getProp<bool>("revealed", true);
+        _revealer.set_reveal_child(initiallyRevealed);
+
+        _resizeGrip.add_css_class("ao-detail-resize-grip");
+        _resizeGrip.set_can_target(true);
+        _resizeGrip.set_cursor(resizeCursor());
+
+        _toggleButton.add_css_class("ao-detail-handle");
+        _toggleButton.set_valign(Gtk::Align::CENTER);
+        _toggleButton.set_focus_on_click(false);
+        _toggleButton.set_cursor(Gdk::Cursor::create("pointer"));
+
+        if (_orientation == Gtk::Orientation::HORIZONTAL)
+        {
+          _resizeGrip.set_size_request(kResizeGripThickness, -1);
+          _resizeGrip.set_vexpand(true);
+        }
+        else
+        {
+          _resizeGrip.set_size_request(-1, kResizeGripThickness);
+          _resizeGrip.set_hexpand(true);
+        }
+
+        // Setup expansion
+        if (_collapseSide == Side::End)
+        {
+          _startChildPtr->widget().set_hexpand(_orientation == Gtk::Orientation::HORIZONTAL);
+          _startChildPtr->widget().set_vexpand(_orientation == Gtk::Orientation::VERTICAL);
+          _collapsibleWidget = &_endChildPtr->widget();
+        }
+        else
+        {
+          _endChildPtr->widget().set_hexpand(_orientation == Gtk::Orientation::HORIZONTAL);
+          _endChildPtr->widget().set_vexpand(_orientation == Gtk::Orientation::VERTICAL);
+          _collapsibleWidget = &_startChildPtr->widget();
+        }
+
+        _collapsibleWidget->set_hexpand(true);
+        _collapsibleWidget->set_vexpand(true);
+
+        _paneSizer.append(*_collapsibleWidget);
+        _paneSizer.set_hexpand(_orientation == Gtk::Orientation::VERTICAL);
+        _paneSizer.set_vexpand(_orientation == Gtk::Orientation::HORIZONTAL);
+
+        _revealer.set_child(_paneSizer);
+        _revealer.set_hexpand(_orientation == Gtk::Orientation::VERTICAL);
+        _revealer.set_vexpand(_orientation == Gtk::Orientation::HORIZONTAL);
+        _revealer.set_transition_type(getTransitionType());
+
+        // Initial size from "position" (we treat it as the fixed size of the collapsible panel)
+        auto const requestedSize = node.getProp<std::int64_t>("position", kDefaultCollapsibleSplitSize);
+        _currentSize = requestedSize > 0 ? static_cast<std::int32_t>(requestedSize) : kDefaultCollapsibleSplitSize;
+        setSize(_currentSize);
+
+        // Layout assembly
+        if (_collapseSide == Side::Start)
+        {
+          _container.append(_revealer);
+          _container.append(_toggleButton);
+          _container.append(_resizeGrip);
+          _container.append(_endChildPtr->widget());
+        }
+        else
+        {
+          _container.append(_startChildPtr->widget());
+          _container.append(_resizeGrip);
+          _container.append(_toggleButton);
+          _container.append(_revealer);
+        }
+
+        // Drag logic
+        _dragGesturePtr = Gtk::GestureDrag::create();
+        _dragGesturePtr->set_button(1);
+        _dragGesturePtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+        _container.add_controller(_dragGesturePtr);
+
+        _dragGesturePtr->signal_drag_begin().connect(
+          [this](double startX, double startY)
+          {
+            _dragAccepted = dragStartedInResizeGrip(startX, startY);
+
+            if (!_dragAccepted)
+            {
+              _dragGesturePtr->set_state(Gtk::EventSequenceState::DENIED);
+              return;
+            }
+
+            _dragGesturePtr->set_state(Gtk::EventSequenceState::CLAIMED);
+            _startSizeOnDrag =
+              (_orientation == Gtk::Orientation::HORIZONTAL) ? _paneSizer.get_width() : _paneSizer.get_height();
+            applyDragCursor();
+          });
+
+        _dragGesturePtr->signal_drag_update().connect(
+          [this](double offsetX, double offsetY)
+          {
+            if (!_dragAccepted)
+            {
+              return;
+            }
+
+            double const delta = (_orientation == Gtk::Orientation::HORIZONTAL) ? offsetX : offsetY;
+
+            if (double const absDelta = std::abs(delta); absDelta < kCollapsibleSplitDragThreshold)
+            {
+              return;
+            }
+
+            if (!_revealer.get_reveal_child())
+            {
+              return;
+            }
+
+            std::int32_t newSize = _startSizeOnDrag;
+
+            if (_collapseSide == Side::End)
+            {
+              newSize -= static_cast<std::int32_t>(delta);
+            }
+            else
+            {
+              newSize += static_cast<std::int32_t>(delta);
+            }
+
+            _currentSize = std::max(kMinCollapsibleSplitSize, newSize);
+            setSize(_currentSize);
+          });
+
+        _dragGesturePtr->signal_drag_end().connect(
+          [this](double, double)
+          {
+            if (_dragAccepted)
+            {
+              restoreDragCursor();
+            }
+
+            _dragAccepted = false;
+          });
+
+        _toggleButton.signal_clicked().connect([this] { toggleRevealed(); });
+
+        updateHandleIcon();
+      }
+
+      Gtk::Widget& widget() override
+      {
+        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_container);
+      }
+
+    private:
+      Gtk::RevealerTransitionType getTransitionType()
+      {
+        if (_orientation == Gtk::Orientation::HORIZONTAL)
+        {
+          return (_collapseSide == Side::Start) ? Gtk::RevealerTransitionType::SLIDE_RIGHT
+                                                : Gtk::RevealerTransitionType::SLIDE_LEFT;
+        }
+
+        return (_collapseSide == Side::Start) ? Gtk::RevealerTransitionType::SLIDE_DOWN
+                                              : Gtk::RevealerTransitionType::SLIDE_UP;
+      }
+
+      void setSize(std::int32_t size)
+      {
+        if (_orientation == Gtk::Orientation::HORIZONTAL)
+        {
+          _paneSizer.set_size_request(size, -1);
+        }
+        else
+        {
+          _paneSizer.set_size_request(-1, size);
+        }
+      }
+
+      Glib::RefPtr<Gdk::Cursor> resizeCursor() const
+      {
+        return Gdk::Cursor::create(_orientation == Gtk::Orientation::HORIZONTAL ? "col-resize" : "row-resize");
+      }
+
+      bool dragStartedInResizeGrip(double containerX, double containerY)
+      {
+        double gripX = 0.0;
+        double gripY = 0.0;
+
+        if (!_container.translate_coordinates(_resizeGrip, containerX, containerY, gripX, gripY))
+        {
+          return false;
+        }
+
+        return _resizeGrip.contains(gripX, gripY);
+      }
+
+      void applyDragCursor()
+      {
+        if (auto* const nativePtr = _container.get_native(); nativePtr != nullptr)
+        {
+          if (auto const surfacePtr = nativePtr->get_surface(); surfacePtr)
+          {
+            surfacePtr->set_cursor(resizeCursor());
+          }
+        }
+      }
+
+      void restoreDragCursor()
+      {
+        if (auto* const nativePtr = _container.get_native(); nativePtr != nullptr)
+        {
+          if (auto const surfacePtr = nativePtr->get_surface(); surfacePtr)
+          {
+            surfacePtr->set_cursor();
+          }
+        }
+      }
+
+      void toggleRevealed()
+      {
+        bool const revealed = !_revealer.get_reveal_child();
+        _revealer.set_reveal_child(revealed);
+        updateHandleIcon();
+      }
+
+      void updateHandleIcon()
+      {
+        if (bool const revealed = _revealer.get_reveal_child(); _orientation == Gtk::Orientation::HORIZONTAL)
+        {
+          if (_collapseSide == Side::Start)
+          {
+            _toggleButton.set_icon_name(revealed ? "pan-start-symbolic" : "pan-end-symbolic");
+          }
+          else
+          {
+            _toggleButton.set_icon_name(revealed ? "pan-end-symbolic" : "pan-start-symbolic");
+          }
+        }
+        else
+        {
+          if (_collapseSide == Side::Start)
+          {
+            _toggleButton.set_icon_name(revealed ? "pan-up-symbolic" : "pan-down-symbolic");
+          }
+          else
+          {
+            _toggleButton.set_icon_name(revealed ? "pan-down-symbolic" : "pan-up-symbolic");
+          }
+        }
+      }
+
+      Gtk::Box _container;
+      Gtk::Box _resizeGrip;
+      Gtk::Button _toggleButton;
+      Gtk::Revealer _revealer;
+      Gtk::Box _paneSizer;
+      Gtk::Orientation _orientation;
+      Side _collapseSide;
+      Glib::RefPtr<Gtk::GestureDrag> _dragGesturePtr;
+
+      std::int32_t _currentSize = kDefaultCollapsibleSplitSize;
+      std::int32_t _startSizeOnDrag = kDefaultCollapsibleSplitSize;
+      bool _dragAccepted = false;
+
+      Gtk::Widget* _collapsibleWidget = nullptr;
       std::unique_ptr<Gtk::Label> _errorPtr;
       std::unique_ptr<ILayoutComponent> _startChildPtr;
       std::unique_ptr<ILayoutComponent> _endChildPtr;
@@ -1137,6 +1448,37 @@ namespace ao::gtk::layout
        .minChildren = 2,
        .optMaxChildren = 2},
       createSplit);
+
+    auto createCollapsibleSplit = [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+    { return std::make_unique<CollapsibleSplitComponent>(ctx, node); };
+
+    registry.registerComponent(
+      {.type = "collapsibleSplit",
+       .displayName = "Collapsible Split",
+       .category = "Containers",
+       .container = true,
+       .props = {{.name = "orientation",
+                  .kind = PropertyKind::Enum,
+                  .label = "Orientation",
+                  .defaultValue = LayoutValue{"vertical"},
+                  .enumValues = {"vertical", "horizontal"}},
+                 {.name = "position",
+                  .kind = PropertyKind::Int,
+                  .label = "Position",
+                  .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCollapsibleSplitSize)}},
+                 {.name = "collapseSide",
+                  .kind = PropertyKind::Enum,
+                  .label = "Collapse Side",
+                  .defaultValue = LayoutValue{"end"},
+                  .enumValues = {"start", "end"}},
+                 {.name = "revealed",
+                  .kind = PropertyKind::Bool,
+                  .label = "Initially Revealed",
+                  .defaultValue = LayoutValue{true}}},
+       .layoutProps = {},
+       .minChildren = 2,
+       .optMaxChildren = 2},
+      createCollapsibleSplit);
 
     registry.registerComponent({.type = "scroll",
                                 .displayName = "Scroll Window",

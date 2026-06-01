@@ -14,10 +14,13 @@
 #include "layout/runtime/LayoutRuntime.h"
 #include "playback/AobusSoulWindow.h"
 #include "playback/AudioDeviceSelector.h"
+#include "tag/TagEditController.h"
+#include <ao/Type.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackDetailProjection.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/async/Runtime.h>
 #include <ao/rt/async/Task.h>
@@ -95,6 +98,7 @@ namespace ao::gtk
     registerPlaybackActions(registerAction, hasActiveQueue);
     registerShellActions(registerAction);
     registerWorkspaceActions(registerAction, hasActiveQueue);
+    registerTrackActions(registerAction);
   }
 
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction,
@@ -291,6 +295,65 @@ namespace ao::gtk
       layout::ActionCapability::None,
       [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().revealPlayingTrack(); },
       hasActiveQueue);
+  }
+
+  void ShellLayoutController::registerTrackActions(RegisterActionFn const& registerAction)
+  {
+    registerAction(
+      "track.showProperties",
+      "Properties",
+      "Tracks",
+      layout::ActionCapability::None,
+      [this](layout::ActionActivationContext& ctx)
+      {
+        if (auto* tagController = _context.tag.editController; tagController != nullptr)
+        {
+          auto const target = rt::FocusedViewTarget{};
+          auto proj = rt::TrackDetailProjection{
+            target, ctx.runtime.views(), ctx.runtime.musicLibrary(), ctx.runtime.workspace(), ctx.runtime.mutation()};
+
+          if (auto const snap = proj.snapshot(); !snap.trackIds.empty())
+          {
+            tagController->showProperties(
+              TrackSelectionContext{.listId = kInvalidListId, .selectedIds = snap.trackIds});
+          }
+        }
+      },
+      [](layout::ActionActivationContext const& ctx) -> layout::ActionState
+      {
+        auto const target = rt::FocusedViewTarget{};
+        auto proj = rt::TrackDetailProjection{
+          target, ctx.runtime.views(), ctx.runtime.musicLibrary(), ctx.runtime.workspace(), ctx.runtime.mutation()};
+        return layout::ActionState{.enabled = !proj.snapshot().trackIds.empty(), .disabledReason = ""};
+      });
+
+    registerAction(
+      "track.editTags",
+      "Edit Tags",
+      "Tracks",
+      layout::ActionCapability::RequiresAnchor | layout::ActionCapability::PresentsMenu,
+      [this](layout::ActionActivationContext& ctx)
+      {
+        if (auto* tagController = _context.tag.editController; tagController != nullptr)
+        {
+          auto const target = rt::FocusedViewTarget{};
+          auto proj = rt::TrackDetailProjection{
+            target, ctx.runtime.views(), ctx.runtime.musicLibrary(), ctx.runtime.workspace(), ctx.runtime.mutation()};
+
+          if (auto const snap = proj.snapshot(); !snap.trackIds.empty())
+          {
+            tagController->showTagEditor(
+              TrackSelectionContext{.listId = kInvalidListId, .selectedIds = snap.trackIds}, ctx.anchorWidget);
+          }
+        }
+      },
+      [](layout::ActionActivationContext const& ctx) -> layout::ActionState
+      {
+        auto const target = rt::FocusedViewTarget{};
+        auto proj = rt::TrackDetailProjection{
+          target, ctx.runtime.views(), ctx.runtime.musicLibrary(), ctx.runtime.workspace(), ctx.runtime.mutation()};
+        return layout::ActionState{.enabled = !proj.snapshot().trackIds.empty(), .disabledReason = ""};
+      });
   }
 
   void ShellLayoutController::attachToWindow()

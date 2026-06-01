@@ -111,8 +111,89 @@ templates:
       - type: playback.image
         layout:
           heightRequest: 50
-  inspector.defaultPanel:
-    type: inspector.panel
+  track.defaultDetailPane:
+    type: template
+    props:
+      templateId: track.selectionDetailPane
+  track.selectionDetailPane:
+    type: track.detailScope
+    layout:
+      vexpand: true
+    children:
+      - type: track.selectionRegion
+        props:
+          showWhen: any
+        layout:
+          vexpand: true
+        children:
+          - type: scroll
+            props:
+              vscrollPolicy: automatic
+            layout:
+              vexpand: true
+            children:
+              - type: box
+                props:
+                  orientation: vertical
+                  spacing: 12
+                layout:
+                  vexpand: true
+                  cssClasses:
+                    - ao-detail-pane
+                    - ao-p-4
+                children:
+                  - type: box
+                    props:
+                      orientation: horizontal
+                      spacing: 8
+                    layout:
+                      halign: end
+                    children:
+                      - type: track.editLock
+                      - type: app.actionButton
+                        props:
+                          label: Properties
+                          icon: document-properties-symbolic
+                          primaryAction: track.showProperties
+                  - type: track.coverArt
+                    props:
+                      forceSquare: true
+                    layout:
+                      widthRequest: 250
+                      heightRequest: 250
+                      halign: center
+                  - type: track.metadataField
+                    props:
+                      field: title
+                      label: Title
+                  - type: track.metadataField
+                    props:
+                      field: artist
+                      label: Artist
+                  - type: track.metadataField
+                    props:
+                      field: album
+                      label: Album
+                  - type: track.audioProperty
+                    props:
+                      property: format
+                      label: Format
+                  - type: track.audioProperty
+                    props:
+                      property: sampleRate
+                      label: Sample Rate
+                  - type: track.audioProperty
+                    props:
+                      property: channels
+                      label: Channels
+                  - type: track.audioProperty
+                    props:
+                      property: bitDepth
+                      label: Bit Depth
+                  - type: spacer
+                    layout:
+                      vexpand: true
+                  - type: track.tagEditor
   status.defaultBar:
     type: box
     props:
@@ -155,7 +236,20 @@ templates:
           hexpand: true
       - type: track.presentationButton
   app.defaultLayout:
-    type: app.workspaceWithInspector
+    type: collapsibleSplit
+    props:
+      orientation: horizontal
+      position: 850
+      revealed: false
+    layout:
+      vexpand: true
+    children:
+      - type: template
+        props:
+          templateId: tracks.defaultWorkspace
+      - type: template
+        props:
+          templateId: track.defaultDetailPane
   app.defaultContentShell:
     type: box
     props:

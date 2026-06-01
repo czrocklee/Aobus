@@ -4,7 +4,6 @@
 #include "SemanticComponents.h"
 
 #include "image/ImageWidget.h"
-#include "inspector/TrackInspectorPanel.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ActionBinder.h"
 #include "layout/runtime/ActionRegistry.h"
@@ -15,10 +14,7 @@
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackViewPage.h"
-#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
@@ -204,78 +200,69 @@ namespace ao::gtk::layout
     };
 
     /**
-     * @brief inspector.image
+     * @brief app.workspaceWithDetailPane
+     *
+     * Transitional composite that replicates the current stack + detail handle + revealer.
      */
-    class ImageComponent final : public ILayoutComponent
+    class WorkspaceWithDetailPaneComponent final : public ILayoutComponent
     {
     public:
-      ImageComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      WorkspaceWithDetailPaneComponent(LayoutContext& ctx, LayoutNode const& node)
       {
-        if (ctx.inspector.imageCache == nullptr)
+        if (ctx.track.pageHost == nullptr)
         {
-          _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
+          _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageHost missing"));
           return;
         }
 
-        _widgetPtr = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
-        _widgetPtr->bindToDetailProjection(ctx.runtime.views().detailProjection(
-          rt::FocusedViewTarget{}, ctx.runtime.workspace(), ctx.runtime.mutation()));
-      }
+        _container.set_orientation(Gtk::Orientation::HORIZONTAL);
+        _container.set_hexpand(true);
+        _container.set_vexpand(true);
 
-      Gtk::Widget& widget() override
-      {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widgetPtr);
-      }
+        auto& stack = ctx.track.pageHost->stack();
+        stack.set_hexpand(true);
+        stack.set_vexpand(true);
+        _container.append(stack);
 
-    private:
-      std::unique_ptr<ImageWidget> _widgetPtr;
-      Gtk::Label* _error = nullptr;
-    };
+        // Handle
+        _handle.set_icon_name("pan-start-symbolic");
+        _handle.add_css_class("ao-detail-handle");
+        _handle.set_valign(Gtk::Align::CENTER);
+        _handle.set_focus_on_click(false);
+        _container.append(_handle);
 
-    /**
-     * @brief inspector.panel
-     */
-    class InspectorPanelComponent final : public ILayoutComponent
-    {
-    public:
-      InspectorPanelComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-      {
-        if (ctx.inspector.imageCache == nullptr)
+        if (!node.children.empty())
         {
-          _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
-          return;
+          _detailPtr = ctx.registry.create(ctx, node.children.front());
         }
 
-        _widgetPtr = std::make_unique<TrackInspectorPanel>(
-          ctx.runtime.musicLibrary(), ctx.runtime.mutation(), ctx.runtime.sources(), *ctx.inspector.imageCache);
-        _widgetPtr->bindToDetailProjection(ctx.runtime.views().detailProjection(
-          rt::FocusedViewTarget{}, ctx.runtime.workspace(), ctx.runtime.mutation()));
-
-        if (ctx.tag.editController != nullptr)
+        if (_detailPtr)
         {
-          _widgetPtr->signalTagEditRequested().connect(
-            [ctx](std::vector<TrackId> const& ids, Gtk::Widget* relativeTo)
-            {
-              if (relativeTo != nullptr)
-              {
-                auto const listId =
-                  (ctx.track.pageHost != nullptr) ? ctx.track.pageHost->activeListId() : rt::kAllTracksListId;
-
-                auto const selection = TrackSelectionContext{.listId = listId, .selectedIds = ids};
-                ctx.tag.editController->showTagEditor(selection, *relativeTo);
-              }
-            });
+          _detailPtr->widget().set_vexpand(true);
+          _revealer.set_transition_type(Gtk::RevealerTransitionType::SLIDE_LEFT);
+          _revealer.set_child(_detailPtr->widget());
+          _revealer.set_reveal_child(false);
+          _revealer.set_hexpand(false);
+          _revealer.set_vexpand(true);
+          _container.append(_revealer);
         }
+
+        _handle.signal_toggled().connect(
+          [this]
+          {
+            bool const active = _handle.get_active();
+            _revealer.set_reveal_child(active);
+            _handle.set_icon_name(active ? "pan-end-symbolic" : "pan-start-symbolic");
+          });
       }
 
-      Gtk::Widget& widget() override
-      {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widgetPtr);
-      }
+      Gtk::Widget& widget() override { return _container; }
 
     private:
-      std::unique_ptr<TrackInspectorPanel> _widgetPtr;
-      Gtk::Label* _error = nullptr;
+      Gtk::Box _container;
+      Gtk::ToggleButton _handle;
+      Gtk::Revealer _revealer;
+      std::unique_ptr<ILayoutComponent> _detailPtr;
     };
 
     /**
@@ -328,67 +315,6 @@ namespace ao::gtk::layout
 
     private:
       Gtk::PopoverMenuBar _menuBar;
-    };
-
-    /**
-     * @brief app.workspaceWithInspector
-     *
-     * Transitional composite that replicates the current stack + inspector handle + revealer.
-     */
-    class WorkspaceWithInspectorComponent final : public ILayoutComponent
-    {
-    public:
-      WorkspaceWithInspectorComponent(LayoutContext& ctx, LayoutNode const& node)
-      {
-        if (ctx.track.pageHost == nullptr)
-        {
-          _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageHost missing"));
-          return;
-        }
-
-        _container.set_orientation(Gtk::Orientation::HORIZONTAL);
-        _container.set_hexpand(true);
-        _container.set_vexpand(true);
-
-        auto& stack = ctx.track.pageHost->stack();
-        stack.set_hexpand(true);
-        stack.set_vexpand(true);
-        _container.append(stack);
-
-        // Handle
-        _handle.set_icon_name("pan-start-symbolic");
-        _handle.add_css_class("ao-inspector-handle");
-        _handle.set_valign(Gtk::Align::CENTER);
-        _handle.set_focus_on_click(false);
-        _container.append(_handle);
-
-        // Inspector side panel.
-        // Matching original MainWindow setupLayout order and properties.
-        _inspectorPtr = std::make_unique<InspectorPanelComponent>(ctx, node);
-        _inspectorPtr->widget().set_vexpand(true);
-        _revealer.set_transition_type(Gtk::RevealerTransitionType::SLIDE_LEFT);
-        _revealer.set_child(_inspectorPtr->widget());
-        _revealer.set_reveal_child(false);
-        _revealer.set_hexpand(false);
-        _revealer.set_vexpand(true);
-        _container.append(_revealer);
-
-        _handle.signal_toggled().connect(
-          [this]
-          {
-            bool const active = _handle.get_active();
-            _revealer.set_reveal_child(active);
-            _handle.set_icon_name(active ? "pan-end-symbolic" : "pan-start-symbolic");
-          });
-      }
-
-      Gtk::Widget& widget() override { return _container; }
-
-    private:
-      Gtk::Box _container;
-      Gtk::ToggleButton _handle;
-      Gtk::Revealer _revealer;
-      std::unique_ptr<ILayoutComponent> _inspectorPtr;
     };
   } // namespace
 
@@ -464,28 +390,6 @@ namespace ao::gtk::layout
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<OpenLibraryButton>(ctx, node); });
 
-    registry.registerComponent({.type = "inspector.image",
-                                .displayName = "Cover Art",
-                                .category = "Inspector",
-                                .container = false,
-                                .props = {},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<ImageComponent>(ctx, node); });
-
-    registry.registerComponent({.type = "inspector.panel",
-                                .displayName = "Inspector Panel",
-                                .category = "Inspector",
-                                .container = false,
-                                .props = {},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<InspectorPanelComponent>(ctx, node); });
-
     registry.registerComponent({.type = "app.menuBar",
                                 .displayName = "Menu Bar",
                                 .category = "Application",
@@ -512,16 +416,5 @@ namespace ao::gtk::layout
                                 .optMaxChildren = 0},
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<MenuButtonComponent>(ctx, node); });
-
-    registry.registerComponent({.type = "app.workspaceWithInspector",
-                                .displayName = "Workspace w/ Inspector",
-                                .category = "Application",
-                                .container = false,
-                                .props = {},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<WorkspaceWithInspectorComponent>(ctx, node); });
   }
 } // namespace ao::gtk::layout

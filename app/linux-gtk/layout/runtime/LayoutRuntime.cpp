@@ -8,6 +8,8 @@
 #include "layout/components/SemanticComponents.h"
 #include "layout/components/StatusComponents.h"
 #include "layout/components/TrackComponents.h"
+#include "layout/components/TrackDetailComponents.h"
+#include "layout/components/TrackEditorComponents.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
@@ -29,6 +31,8 @@ namespace ao::gtk::layout
     registerPlaybackComponents(registry);
     registerSemanticComponents(registry);
     registerTrackComponents(registry);
+    registerTrackDetailComponents(registry);
+    registerTrackEditorComponents(registry);
     registerStatusComponents(registry);
   }
 

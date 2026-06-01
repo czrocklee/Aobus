@@ -68,7 +68,6 @@ add_library(aobus-gtk-lib STATIC
     playback/SeekControl.cpp
     playback/VolumeBar.cpp
 
-    inspector/TrackInspectorPanel.cpp
     image/ImageCache.cpp
     image/ImageWidget.cpp
 
@@ -96,6 +95,8 @@ add_library(aobus-gtk-lib STATIC
     layout/components/SemanticComponents.cpp
     layout/components/StatusComponents.cpp
     layout/components/TrackComponents.cpp
+    layout/components/TrackDetailComponents.cpp
+    layout/components/TrackEditorComponents.cpp
     layout/editor/LayoutEditorDialog.cpp
 )
 

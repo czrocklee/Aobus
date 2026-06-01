@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "linux-gtk/app/GtkControlExecutor.h"
 #include "test/unit/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
@@ -42,18 +43,6 @@ namespace ao::gtk::test
       collectScrolledWindows(*child, result);
     }
   }
-
-  /**
-   * ImmediateExecutor - Standalone test double for IControlExecutor.
-   * Executes tasks immediately on the caller's thread.
-   */
-  class ImmediateExecutor final : public rt::IControlExecutor
-  {
-  public:
-    bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
-    void defer(std::move_only_function<void()> task) override { task(); }
-  };
 
   /**
    * ensureGtkApplication - Ensures a Gtk::Application instance exists for the test.
@@ -149,7 +138,7 @@ namespace ao::gtk::test
       auto configStorePtr = std::make_unique<rt::ConfigStore>(configPath);
 
       _runtimePtr = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
-        .executorPtr = std::make_unique<ImmediateExecutor>(),
+        .executorPtr = std::make_unique<GtkControlExecutor>(),
         .musicRoot = musicRoot,
         .databasePath = databasePath,
         .workspaceConfigStorePtr = std::move(configStorePtr),
@@ -157,21 +146,20 @@ namespace ao::gtk::test
     }
 
     rt::AppRuntime& runtime() { return *_runtimePtr; }
-    ao::test::TempDir& tempDir() { return _tempDir; } // NOLINT(aobus-readability-redundant-namespace-qualification)
+    ao::test::TempDir& tempDir() { return _tempDir; }
 
   private:
-    ao::test::TempDir _tempDir; // NOLINT(aobus-readability-redundant-namespace-qualification)
+    ao::test::TempDir _tempDir;
     std::unique_ptr<rt::AppRuntime> _runtimePtr;
   };
 
   /**
-   * @brief Creates an AppRuntime backed by a temporary directory with an ImmediateExecutor.
+   * @brief Creates an AppRuntime backed by a temporary directory with a GtkControlExecutor.
    */
-  inline auto makeRuntime(
-    ao::test::TempDir const& tempDir) // NOLINT(aobus-readability-redundant-namespace-qualification)
+  inline auto makeRuntime(ao::test::TempDir const& tempDir)
   {
     return rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executorPtr = std::make_unique<ImmediateExecutor>(),
+      .executorPtr = std::make_unique<GtkControlExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
       .workspaceConfigStorePtr =

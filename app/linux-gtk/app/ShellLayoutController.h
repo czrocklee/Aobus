@@ -56,6 +56,7 @@ namespace ao::gtk
     void registerShellActions(RegisterActionFn const& registerAction);
     void registerWorkspaceActions(RegisterActionFn const& registerAction,
                                   layout::ActionStateProvider const& hasActiveQueue);
+    void registerTrackActions(RegisterActionFn const& registerAction);
 
     static void setupCss();
 

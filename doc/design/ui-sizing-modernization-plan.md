@@ -225,7 +225,7 @@ Keep as control affordance or reset:
 Candidates to move to YAML or component layout config:
 
 - structural sidebar or navigation widths,
-- inspector pane and hero cover structural dimensions,
+- detail pane and hero cover structural dimensions,
 - popover or selector widths that define layout structure rather than control drawing.
 
 Do not remove reset rules just because they use `min-width` or `min-height`; those rules often counter GTK or Adwaita defaults and are not structural layout requests.

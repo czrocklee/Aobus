@@ -181,6 +181,18 @@ namespace ao::gtk
     dialog->present();
   }
 
+  void TagEditController::showProperties(TrackSelectionContext const& selection)
+  {
+    if (selection.selectedIds.empty() || _dataProvider == nullptr)
+    {
+      return;
+    }
+
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, selection.selectedIds);
+    dialog->present();
+  }
+
   void TagEditController::showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)
   {
     if (selection.selectedIds.empty())
@@ -220,8 +232,13 @@ namespace ao::gtk
       return;
     }
 
-    auto& selection = *_optActiveSelection;
+    submitTagChanges(*_optActiveSelection, tagsToAdd, tagsToRemove);
+  }
 
+  void TagEditController::submitTagChanges(TrackSelectionContext const& selection,
+                                           std::span<std::string const> tagsToAdd,
+                                           std::span<std::string const> tagsToRemove)
+  {
     auto request = ao::uimodel::tag::TagEditRequest{};
     request.selectedIds = selection.selectedIds;
     request.tagsToAdd.assign(tagsToAdd.begin(), tagsToAdd.end());

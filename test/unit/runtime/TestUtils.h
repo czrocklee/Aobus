@@ -122,7 +122,7 @@ namespace ao::rt::test
     TrackId addTrack(std::string_view title) { return addTrack(TrackSpec{.title = std::string{title}}); }
 
   private:
-    ao::test::TempDir _tempDir; // NOLINT(aobus-readability-redundant-namespace-qualification)
+    ao::test::TempDir _tempDir;
     library::MusicLibrary _library;
   };
 
@@ -228,8 +228,7 @@ namespace ao::rt::test
   /**
    * @brief Creates an AppRuntime backed by a temporary directory with a MockExecutor.
    */
-  inline auto makeRuntime(
-    ao::test::TempDir const& tempDir) // NOLINT(aobus-readability-redundant-namespace-qualification)
+  inline auto makeRuntime(ao::test::TempDir const& tempDir)
   {
     return AppRuntime{AppRuntimeDependencies{
       .executorPtr = std::make_unique<MockExecutor>(),

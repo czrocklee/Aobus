@@ -67,6 +67,11 @@ namespace ao::gtk
     void showTrackContextMenu(TrackViewPage& page, TrackSelectionContext const& selection, double posX, double posY);
 
     void showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo);
+    void showProperties(TrackSelectionContext const& selection);
+
+    void submitTagChanges(TrackSelectionContext const& selection,
+                          std::span<std::string const> tagsToAdd,
+                          std::span<std::string const> tagsToRemove);
 
   private:
     friend class TagEditControllerTestPeer;

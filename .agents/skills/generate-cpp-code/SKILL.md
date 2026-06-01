@@ -13,7 +13,8 @@ Follow these procedures to ensure architectural consistency and adherence to Aob
 2.  **Context Discovery**: Read a sibling file in the target directory to match existing error handling, logging, and namespace patterns. Prefer the closest neighbor over the reference files when they differ.
 3.  **Error Contract Check**: When adding or changing a fallible API, read `../../../doc/design/error-handling.md` and choose `ao::Result<T>`, `std::optional<T>`, or an exception according to that design before writing code.
 4.  **Implement**: Generate code following the exact conventions observed in the snippet references and nearby project code.
-5.  **Verify**: If modifying logic, identify relevant tests in `test/` and match the test style shown in the test snippets.
+5.  **Defer Formatting**: Do not run `clang-format` during normal implementation, debugging, validation, or final response prep. Keep edits manually style-aware while iterating. Run formatting only when the user explicitly asks for formatting or when creating a commit.
+6.  **Verify**: If modifying logic, identify relevant tests in `test/` and match the test style shown in the test snippets.
 
 ## Snippet References
 

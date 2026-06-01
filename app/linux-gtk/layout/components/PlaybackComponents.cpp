@@ -143,14 +143,14 @@ namespace ao::gtk::layout
       PlaybackImageComponent(LayoutContext& ctx, LayoutNode const& node)
         : _runtime{ctx.runtime}
       {
-        if (ctx.inspector.imageCache == nullptr)
+        if (ctx.detail.imageCache == nullptr)
         {
           APP_LOG_ERROR("[PID {}] PlaybackImage: FAILED to create - imageCache is NULL in context!", getpid());
           _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
           return;
         }
 
-        _imageWidgetPtr = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.inspector.imageCache);
+        _imageWidgetPtr = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.detail.imageCache);
         _imageWidgetPtr->set_overflow(Gtk::Overflow::HIDDEN);
 
         auto const targetSize = node.getProp<std::int64_t>("targetSize", kThumbnailSize);

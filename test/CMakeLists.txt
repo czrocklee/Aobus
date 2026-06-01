@@ -172,7 +172,6 @@ add_executable(ao_test_gtk
     unit/linux-gtk/list/QueryExpressionBoxTest.cpp
     unit/linux-gtk/list/SmartListDialogTest.cpp
     unit/linux-gtk/list/ListNavigationControllerTest.cpp
-    unit/linux-gtk/inspector/TrackInspectorPanelTest.cpp
     unit/linux-gtk/tag/TagEditorTest.cpp
     unit/linux-gtk/tag/TagEditControllerTest.cpp
     unit/linux-gtk/tag/TagPopoverTest.cpp

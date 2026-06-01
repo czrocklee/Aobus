@@ -384,7 +384,7 @@ listboxrow:first-child .ao-menu-header {
   opacity: 0.9;
 }
 
-.ao-inspector-content {
+.ao-detail-content {
   padding: var(--ao-spacing-xl);
 }
 
@@ -394,8 +394,21 @@ listboxrow:first-child .ao-menu-header {
 }
 
 /* ShellLayoutController */
-.ao-inspector-handle {
+.ao-detail-resize-grip {
+  min-width: 4px;
+  min-height: 4px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+}
+
+.ao-detail-resize-grip:hover {
+  background: alpha(currentColor, 0.14);
+}
+
+.ao-detail-handle {
   min-width: 14px;
+  min-height: 14px;
   padding: 0;
   margin: 0;
   border: none;
@@ -404,16 +417,16 @@ listboxrow:first-child .ao-menu-header {
   transition: background 0.2s;
 }
 
-.ao-inspector-handle:hover {
+.ao-detail-handle:hover {
   background: alpha(currentColor, 0.08);
 }
 
-.ao-inspector-handle image {
+.ao-detail-handle image {
   opacity: 0.4;
   transition: opacity 0.2s;
 }
 
-.ao-inspector-handle:hover image {
+.ao-detail-handle:hover image {
   opacity: 1.0;
 }
 

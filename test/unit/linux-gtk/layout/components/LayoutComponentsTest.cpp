@@ -310,48 +310,6 @@ namespace ao::gtk::layout::test
       REQUIRE(label != nullptr);
       CHECK(label->get_label().find("trackPageHost missing") != std::string::npos);
     }
-
-    SECTION("inspector.image shows error when imageCache missing")
-    {
-      auto const node = LayoutNode{.type = "inspector.image"};
-      auto const compPtr = registry.create(ctx, node);
-
-      REQUIRE(compPtr != nullptr);
-
-      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
-      REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("imageCache missing") != std::string::npos);
-    }
-
-    SECTION("inspector.panel shows error when imageCache missing")
-    {
-      auto const node = LayoutNode{.type = "inspector.panel"};
-      auto const compPtr = registry.create(ctx, node);
-
-      REQUIRE(compPtr != nullptr);
-
-      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
-      REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("imageCache missing") != std::string::npos);
-    }
-
-    SECTION("app.workspaceWithInspector shows error when trackPageGraph missing")
-    {
-      auto const node = LayoutNode{.type = "app.workspaceWithInspector"};
-      auto const compPtr = registry.create(ctx, node);
-
-      REQUIRE(compPtr != nullptr);
-
-      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
-      REQUIRE(box != nullptr);
-
-      auto* const child = box->get_first_child();
-      REQUIRE(child != nullptr);
-
-      auto* const label = dynamic_cast<Gtk::Label*>(child);
-      REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("trackPageHost missing") != std::string::npos);
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -379,7 +337,7 @@ namespace ao::gtk::layout::test
                              .actionRegistry = actionRegistry,
                              .runtime = runtime,
                              .parentWindow = window,
-                             .inspector = {.imageCache = imageCachePtr.get()},
+                             .detail = {.imageCache = imageCachePtr.get()},
                              .shell = {.menuModelPtr = menuModelPtr}};
 
     [[maybe_unused]] auto layoutRuntime = LayoutRuntime{registry};
@@ -442,27 +400,68 @@ namespace ao::gtk::layout::test
       CHECK(dynamic_cast<Gtk::PopoverMenuBar*>(&compPtr->widget()) != nullptr);
     }
 
-    SECTION("inspector.image creates ImageWidget when cache available")
+    SECTION("track.detailScope creates box and acts as scope provider")
     {
-      auto const node = LayoutNode{.type = "inspector.image"};
+      auto const node = LayoutNode{.type = "track.detailScope"};
       auto const compPtr = registry.create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
-
-      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
-      CHECK(label == nullptr);
+      CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
+      CHECK(ctx.track.detailScope == nullptr); // Ensure context is restored
     }
 
-    SECTION("inspector.panel creates TrackInspectorPanel when cache available")
+    SECTION("track.selectionRegion creates box container")
     {
-      auto const node = LayoutNode{.type = "inspector.panel"};
+      auto const node = LayoutNode{.type = "track.selectionRegion"};
       auto const compPtr = registry.create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
+      CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
+    }
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
-      CHECK(label == nullptr);
-      CHECK(compPtr->widget().has_css_class("ao-inspector-pane"));
+    SECTION("track.coverArt creates image widget container")
+    {
+      auto const node = LayoutNode{.type = "track.coverArt"};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
+    }
+
+    SECTION("track.metadataField creates label and editable label")
+    {
+      auto const node = LayoutNode{.type = "track.metadataField"};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
+    }
+
+    SECTION("track.audioProperty creates row with title and value labels")
+    {
+      auto const node = LayoutNode{.type = "track.audioProperty"};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
+    }
+
+    SECTION("track.editLock creates button")
+    {
+      auto const node = LayoutNode{.type = "track.editLock"};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      CHECK(dynamic_cast<Gtk::Button*>(&compPtr->widget()) != nullptr);
+    }
+
+    SECTION("track.tagEditor creates tag editor container")
+    {
+      auto const node = LayoutNode{.type = "track.tagEditor"};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      CHECK(!compPtr->widget().get_name().empty());
     }
   }
 
@@ -483,21 +482,26 @@ namespace ao::gtk::layout::test
     auto actionRegistry = ActionRegistry{};
     auto ctx = makeContext(registry, actionRegistry, runtime, window);
 
-    SECTION("all 13 status and semantic types")
+    SECTION("all 20 status and semantic types")
     {
       auto const types = std::to_array<std::string_view>({"status.messageLabel",
                                                           "library.listTree",
                                                           "tracks.table",
                                                           "library.openLibraryButton",
-                                                          "inspector.image",
-                                                          "inspector.panel",
                                                           "app.menuBar",
-                                                          "app.workspaceWithInspector",
                                                           "status.playbackDetails",
                                                           "status.nowPlaying",
                                                           "status.importProgress",
                                                           "status.notification",
-                                                          "status.trackCount"});
+                                                          "status.trackCount",
+                                                          "track.detailScope",
+                                                          "track.selectionRegion",
+                                                          "track.coverArt",
+                                                          "track.metadataField",
+                                                          "track.audioProperty",
+                                                          "track.editLock",
+                                                          "track.tagEditor",
+                                                          "track.quickFilter"});
 
       for (auto const type : types)
       {
@@ -671,6 +675,28 @@ namespace ao::gtk::layout::test
 
       CHECK(doc.version == 1);
       CHECK(doc.root.children.size() == 4);
+
+      auto layoutRuntime = LayoutRuntime{registry};
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+
+      REQUIRE(compPtr != nullptr);
+    }
+
+    SECTION("track.selectionDetailPane template round-trip then build")
+    {
+      auto const* const yaml = R"(
+      version: 1
+      root:
+        type: template
+        props:
+          templateId: track.selectionDetailPane
+    )";
+
+      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
+      auto doc = LayoutDocument{};
+      doc.templates = getBuiltInTemplates();
+      REQUIRE(rt::yaml::read(tree.rootref(), doc));
 
       auto layoutRuntime = LayoutRuntime{registry};
       auto const compPtr = layoutRuntime.build(ctx, doc);

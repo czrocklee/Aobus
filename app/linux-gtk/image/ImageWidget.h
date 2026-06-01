@@ -67,6 +67,7 @@ namespace ao::gtk
 
   private:
     void onDetailSnapshot(rt::TrackDetailSnapshot const& snap);
+    void invalidateRenderedImage();
     void refreshRenderedImage();
     void queueRefresh();
     RenderTarget requestedRenderTarget() const;

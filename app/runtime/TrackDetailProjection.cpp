@@ -108,6 +108,15 @@ namespace ao::rt
 
         if constexpr (std::is_same_v<T, FocusedViewTarget>)
         {
+          auto const layout = _implPtr->workspace.layoutState();
+          _implPtr->trackedViewId = layout.activeViewId;
+
+          if (_implPtr->trackedViewId != rt::kInvalidViewId)
+          {
+            auto const state = _implPtr->views.trackListState(_implPtr->trackedViewId);
+            _implPtr->cachedSnapshot = buildSnapshot(state.selection);
+          }
+
           _implPtr->focusSub = _implPtr->workspace.onFocusedViewChanged(
             [this](ViewId viewId)
             {
@@ -115,6 +124,8 @@ namespace ao::rt
 
               if (viewId == rt::kInvalidViewId)
               {
+                _implPtr->cachedSnapshot = {};
+                publishSnapshot();
                 return;
               }
 

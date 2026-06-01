@@ -1,6 +1,6 @@
 # Third-Party Type Map
 
-This document maps public types from third-party libraries used in Aobus to their exact declaring header files within the Nix store.
+This document maps public types from third-party libraries used in Aobus to their exact declaring header files.
 
 ## UI / GTK Suite (gtkmm-4.0 / glibmm-2.68)
 
@@ -110,6 +110,7 @@ This document maps public types from third-party libraries used in Aobus to thei
 | `Gdk::RGBA` | `<gdkmm/rgba.h>` | `Gdk` |
 | `Gdk::Rectangle` | `<gdkmm/rectangle.h>` | `Gdk` |
 | `Gdk::Texture` | `<gdkmm/texture.h>` | `Gdk` |
+| `Gdk::Surface` | `<gdkmm/surface.h>` | `Gdk` |
 
 > **Note on GSK headers:** Always include the GSK umbrella header `<gsk/gsk.h>` instead of individual C headers like `<gsk/gskpath.h>`. GTK4 requires this, and granular inclusion will trigger compile errors. Use `// NOLINT(misc-include-cleaner)` to suppress clang-tidy warnings about the umbrella header.
 
@@ -126,6 +127,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `TRUE` / `FALSE` | `<glib/gmacros.h>` | C macros for gboolean |
 | `gssize` / `guint` / `gpointer` | `<glib.h>` | C typedefs, NOLINT recommended |
 | `::GskPath` / `::GskStroke` | `<gsk/gsk.h>` | Use umbrella header with NOLINT |
+| `G_OBJECT_TYPE` | `<glib-object.h>` | GLib C macro, NOLINT recommended |
 
 ## CLI & Configuration
 
@@ -135,15 +137,14 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `CLI::Option` | `<CLI/Option.hpp>` | `CLI` |
 | `CLI::ParseError` | `<CLI/Error.hpp>` | `CLI` |
 | `CLI::CheckedTransformer` | `<CLI/ExtraValidators.hpp>` | `CLI` |
-| `YAML::Node` | `<yaml-cpp/node/node.h>` | `YAML` |
-| `YAML::Emitter` | `<yaml-cpp/emitter.h>` | `YAML` |
-| `YAML::LoadFile` | `<yaml-cpp/node/parse.h>` | `YAML` |
-| `YAML::Load` | `<yaml-cpp/node/parse.h>` | `YAML` |
-| `YAML::Key` / `YAML::Value` / `YAML::BeginMap` / `YAML::EndMap` / `YAML::BeginSeq` / `YAML::EndSeq` | `<yaml-cpp/emittermanip.h>` | `YAML` |
-| `YAML::Exception` | `<yaml-cpp/exceptions.h>` | `YAML` |
-| `YAML::convert<T>` | `<yaml-cpp/yaml.h>` | `YAML` |
+| `ryml::Tree` | `<ryml.hpp>` | `ryml` |
+| `ryml::NodeRef` | `<ryml.hpp>` | `ryml` |
+| `ryml::ConstNodeRef` | `<ryml.hpp>` | `ryml` |
+| `ryml::csubstr` | `<ryml.hpp>` | `ryml` |
+| `ryml::substr` | `<ryml.hpp>` | `ryml` |
+| `ryml::Callbacks` | `<ryml.hpp>` | `ryml` |
 
-> **Note on YAML umbrella vs granular:** Prefer granular headers (`<yaml-cpp/node/node.h>`, `<yaml-cpp/node/parse.h>`) for basic `YAML::Node` usage. **HOWEVER**, if the file performs serialization (`file << node;`) or defines `YAML::convert` specializations, you **MUST** use the umbrella `<yaml-cpp/yaml.h>` to ensure all template machinery is available. Add `// NOLINT(misc-include-cleaner)` to keep it clean.
+> **Note on RapidYaml (ryml):** Always prefer `<ryml.hpp>` for core tree/node operations. If using STL types (like `std::string`) with ryml, also include `<ryml_std.hpp>`.
 
 ## Logging & Diagnostics
 
@@ -162,6 +163,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `spdlog::shutdown` | `<spdlog/spdlog.h>` | `spdlog` |
 | `spdlog::init_thread_pool` | `<spdlog/async.h>` | `spdlog` |
 | `spdlog::thread_pool` | `<spdlog/async.h>` | `spdlog` |
+| `spdlog::source_loc` | `<spdlog/common.h>` | `spdlog` |
 
 ## Boost
 
@@ -171,7 +173,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `boost::interprocess::mapped_region` | `<boost/interprocess/mapped_region.hpp>` | `boost::interprocess` |
 | `boost::interprocess::mode_t` | `<boost/interprocess/detail/os_file_functions.hpp>` | `boost::interprocess` |
 | `boost::interprocess::read_only` | `<boost/interprocess/detail/os_file_functions.hpp>` | `boost::interprocess` |
-| `boost::interprocess::read_write` | `<boost/interprocess/detail/os_file_functions.hpp>` | `boost::interprocess` |
+| `boost::interprocess::read_write" | `<boost/interprocess/detail/os_file_functions.hpp>` | `boost::interprocess` |
 | `boost::endian::endian_reverse` | `<boost/endian/detail/endian_reverse.hpp>` | `boost::endian` |
 | `boost::endian::order` | `<boost/endian/detail/order.hpp>` | `boost::endian` |
 | `boost::lockfree::spsc_queue` | `<boost/lockfree/spsc_queue.hpp>` | `boost::lockfree` |
@@ -183,12 +185,6 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `boost::pfr::names_as_array` | `<boost/pfr/core_name.hpp>` | `boost::pfr` |
 
 > **Note on Boost.Asio:** `boost::asio::co_spawn` is provided by `<boost/asio/co_spawn.hpp>`, but clang-tidy's include-cleaner may simultaneously flag the header as "not used directly" and the usage as "no header providing" — a known false positive with Boost's template-heavy headers. Add `// NOLINT(misc-include-cleaner)` at both the include and usage site.
-
-## POSIX / System Extensions
-
-| Type | Header | Notes |
-| :--- | :--- | :--- |
-| `mkdtemp` | `<stdlib.h>` | POSIX extension; not in `<cstdlib>`. Suppress `modernize-deprecated-headers` with NOLINT on the include. |
 
 ## Database
 
@@ -213,8 +209,13 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
 | `FLAC__StreamDecoder` | `<FLAC/stream_decoder.h>` | N/A |
-| `FLAC__StreamMetadata` / `FLAC__Frame` / `FLAC__FrameHeader` | `<FLAC/format.h>` | N/A |
-| `FLAC__int32` / `FLAC__uint32` / `FLAC__uint64` / `FLAC__bool` | `<FLAC/ordinals.h>` | N/A |
+| `FLAC__StreamMetadata` | `<FLAC/format.h>` | N/A |
+| `FLAC__Frame` | `<FLAC/format.h>` | N/A |
+| `FLAC__FrameHeader` | `<FLAC/format.h>` | N/A |
+| `FLAC__int32` | `<FLAC/ordinals.h>` | N/A |
+| `FLAC__uint32` | `<FLAC/ordinals.h>` | N/A |
+| `FLAC__uint64` | `<FLAC/ordinals.h>` | N/A |
+| `FLAC__bool` | `<FLAC/ordinals.h>` | N/A |
 | `ALACDecoder` | `<alac/ALACDecoder.h>` | N/A |
 | `pw_context` | `<pipewire/context.h>` | N/A |
 | `pw_core` | `<pipewire/core.h>` | N/A |
@@ -224,23 +225,42 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `spa_audio_info_raw` | `<spa/param/audio/raw.h>` | N/A |
 | `spa_format_audio_raw_parse` | `<spa/param/audio/raw-utils.h>` | N/A |
 | `spa_pod` | `<spa/pod/pod.h>` | N/A |
-| `spa_pod_frame` / `spa_pod_is_*` / `spa_pod_get_*` | `<spa/pod/body.h>` | N/A |
+| `spa_pod_frame` | `<spa/pod/body.h>` | N/A |
+| `spa_pod_is_*` | `<spa/pod/body.h>` | N/A |
+| `spa_pod_get_*` | `<spa/pod/body.h>` | N/A |
 | `spa_pod_builder` | `<spa/pod/builder.h>` | N/A |
-| `spa_pod_iterator` / `spa_pod_foreach` | `<spa/pod/iter.h>` | N/A |
+| `spa_pod_iterator` | `<spa/pod/iter.h>` | N/A |
+| `spa_pod_foreach` | `<spa/pod/iter.h>` | N/A |
 | `spa_source` | `<spa/support/loop.h>` | N/A |
 | `spa_hook` | `<spa/utils/hook.h>` | N/A |
-| `SPA_POD_*` constructor macros | `<spa/pod/vararg.h>` | N/A |
-| `SPA_TYPE_*` constants | `<spa/utils/type.h>` | N/A |
-| `SPA_PARAM_*` constants | `<spa/param/param.h>` | N/A |
-| `SPA_KEY_*` constants | `<spa/utils/keys.h>` | N/A |
+| `SPA_POD_*` | `<spa/pod/vararg.h>` | N/A (macro) |
+| `SPA_TYPE_*` | `<spa/utils/type.h>` | N/A (constant) |
+| `SPA_PARAM_*` | `<spa/param/param.h>` | N/A (constant) |
+| `SPA_KEY_*` | `<spa/utils/keys.h>` | N/A (constant) |
 | `spa_dict` | `<spa/utils/dict.h>` | N/A |
 | `pw_proxy` | `<pipewire/proxy.h>` | N/A |
-| `pw_link_info` / `PW_LINK_INFO_EVENT_*` | `<pipewire/link.h>` | N/A |
-| `pw_node_info` / `PW_NODE_INFO_EVENT_*` | `<pipewire/node.h>` | N/A |
+| `pw_link_info` | `<pipewire/link.h>` | N/A |
+| `PW_LINK_INFO_EVENT_*` | `<pipewire/link.h>` | N/A (constant) |
+| `pw_node_info` | `<pipewire/node.h>` | N/A |
+| `PW_NODE_INFO_EVENT_*` | `<pipewire/node.h>` | N/A (constant) |
 | `pw_loop` | `<pipewire/loop.h>` | N/A |
 | `snd_pcm_t` | `<alsa/pcm.h>` | N/A |
-| `snd_ctl_t` | `<alsa/control.h>` | N/A |
-| `snd_pcm_hw_params_t` | `<alsa/pcm.h>` | N/A |
+| `snd_ctl_t" | `<alsa/control.h>` | N/A |
+| `snd_pcm_hw_params_t" | `<alsa/pcm.h>` | N/A |
+
+## Parsing & DSL (lexy)
+
+lexy uses highly granular headers. Map core entry points and common DSL components.
+
+| Type | Header | Namespace |
+| :--- | :--- | :--- |
+| `lexy::parse` | `<lexy/action/parse.hpp>` | `lexy` |
+| `lexy::string_input` | `<lexy/input/string_input.hpp>` | `lexy` |
+| `lexy::dsl::*` | `<lexy/dsl/*.hpp>` | `lexy::dsl` |
+| `lexy::callback` | `<lexy/callback/adapter.hpp>` | `lexy` |
+| `lexy::symbol_table` | `<lexy/dsl/symbol.hpp>` | `lexy` |
+
+> **Note on lexy:** Always refer to the specific DSL component header (e.g., `<lexy/dsl/ascii.hpp>` for `dsl::ascii`) instead of a single umbrella header.
 
 ## System & Utilities
 
@@ -249,16 +269,31 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `udev` | `<libudev.h>` | N/A |
 | `udev_monitor` | `<libudev.h>` | N/A |
 | `mi_malloc` | `<mimalloc.h>` | N/A |
+| `gsl::span` | `<gsl-lite/gsl-lite.hpp>` | `gsl` |
+| `gsl::not_null` | `<gsl-lite/gsl-lite.hpp>` | `gsl` |
+| `gsl_Expects` | `<gsl-lite/gsl-lite.hpp>` | N/A (macro) |
+| `gsl_Ensures` | `<gsl-lite/gsl-lite.hpp>` | N/A (macro) |
 
 ## Testing
 
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
+| `TEST_CASE` | `<catch2/catch_test_macros.hpp>` | N/A (macro) |
+| `SECTION` | `<catch2/catch_test_macros.hpp>` | N/A (macro) |
+| `REQUIRE` | `<catch2/catch_test_macros.hpp>` | N/A (macro) |
+| `CHECK` | `<catch2/catch_test_macros.hpp>` | N/A (macro) |
+| `STATIC_REQUIRE` | `<catch2/catch_test_macros.hpp>` | N/A (macro) |
+| `GENERATE` | `<catch2/generators/catch_generators.hpp>` | N/A (macro) |
+| `SUCCEED` | `<catch2/catch_message.hpp>` | N/A (macro) |
+| `FAIL` | `<catch2/catch_message.hpp>` | N/A (macro) |
+| `INFO` | `<catch2/catch_message.hpp>` | N/A (macro) |
+| `WARN` | `<catch2/catch_message.hpp>` | N/A (macro) |
 | `Catch::Approx` | `<catch2/catch_approx.hpp>` | `Catch` |
 | `Catch::Matchers` | `<catch2/matchers/catch_matchers_all.hpp>` | `Catch` |
-| `CHECK_THAT` | `<catch2/matchers/catch_matchers.hpp>` | N/A (macro) |
-| `WARN` | `<catch2/catch_message.hpp>` | N/A (macro) |
-| `GENERATE` | `<catch2/generators/catch_generators.hpp>` | N/A (macro) |
+| `fakeit::Mock` | `<fakeit.hpp>` | `fakeit` |
+| `fakeit::When` | `<fakeit.hpp>` | `fakeit` |
+| `fakeit::Verify` | `<fakeit.hpp>` | `fakeit` |
+| `fakeit::Fake` | `<fakeit.hpp>` | `fakeit` |
 
 ## Standard Library (STL)
 
@@ -285,14 +320,14 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `std::ptrdiff_t` | `<cstddef>` | `std` |
 | `std::uint8_t` | `<cstdint>` | `std` |
 | `std::uint16_t` | `<cstdint>` | `std` |
-| `std::uint32_t` | `<cstdint>` | `std` |
-| `std::uint64_t` | `<cstdint>` | `std` |
-| `std::int32_t` | `<cstdint>` | `std` |
+| `std::uint32_t" | `<cstdint>` | `std` |
+| `std::uint64_t" | `<cstdint>` | `std` |
+| `std::int32_t" | `<cstdint>` | `std` |
 | `std::move` | `<utility>` | `std` |
 | `std::forward` | `<utility>` | `std` |
 | `std::swap` | `<utility>` | `std` |
 | `std::pair` | `<utility>` | `std` |
-| `std::move_only_function` | `<functional>` | `std` |
+| `std::move_only_function" | `<functional>` | `std` |
 | `std::function` | `<functional>` | `std` |
 | `std::less` | `<functional>` | `std` |
 | `std::plus` | `<functional>` | `std` |
@@ -302,45 +337,55 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `std::list` | `<list>` | `std` |
 | `std::ignore` | `<tuple>` | `std` |
 | `std::format` | `<format>` | `std` |
-| `std::filesystem::path` | `<filesystem>` | `std` |
-| `std::filesystem::file_size` | `<filesystem>` | `std` |
-| `std::filesystem::last_write_time` | `<filesystem>` | `std` |
+| `std::filesystem::path" | `<filesystem>` | `std` |
+| `std::filesystem::file_size" | `<filesystem>` | `std` |
+| `std::filesystem::last_write_time" | `<filesystem>` | `std` |
 | `std::exception` | `<exception>` | `std` |
-| `std::source_location` | `<source_location>` | `std` |
+| `std::source_location" | `<source_location>` | `std` |
 | `std::errc` | `<system_error>` | `std` |
-| `std::from_chars` | `<charconv>` | `std` |
-| `std::dynamic_pointer_cast` | `<memory>` | `std` |
-| `std::numbers::pi` / `std::numbers::phi` | `<numbers>` | `std` |
-| `std::operator""ms` / `std::chrono_literals` | `<chrono>` | `std` |
-| `std::ostream` / `std::ofstream` | `<ostream>` / `<fstream>` | `std` |
-| `std::hex` / `std::dec` | `<ios>` | `std` |
+| `std::from_chars" | `<charconv>` | `std` |
+| `std::dynamic_pointer_cast" | `<memory>` | `std` |
+| `std::numbers::pi" | `<numbers>` | `std` |
+| `std::numbers::phi" | `<numbers>` | `std` |
+| `std::operator""ms" | `<chrono>` | `std` |
+| `std::chrono_literals" | `<chrono>` | `std` |
+| `std::ostream` | `<ostream>` | `std` |
+| `std::ofstream` | `<fstream>` | `std` |
+| `std::hex` | `<ios>` | `std` |
+| `std::dec` | `<ios>` | `std` |
 | `std::tolower` | `<cctype>` | `std` |
 | `std::cout` | `<iostream>` | `std` |
-| `std::ranges::distance` | `<iterator>` | `std::ranges` |
+| `std::ranges::distance" | `<iterator>` | `std::ranges` |
 | `std::ranges::find` | `<algorithm>` | `std::ranges` |
-| `std::ranges::find_if` | `<algorithm>` | `std::ranges` |
-| `std::ranges::fold_left` | `<algorithm>` | `std::ranges` |
+| `std::ranges::find_if" | `<algorithm>` | `std::ranges` |
+| `std::ranges::fold_left" | `<algorithm>` | `std::ranges` |
 | `std::ranges::sort` | `<algorithm>` | `std::ranges` |
 | `std::ranges::to` | `<algorithm>` | `std::ranges` |
-| `std::ranges::transform` | `<algorithm>` | `std::ranges` |
-| `std::ranges::views::enumerate` | `<ranges>` | `std::ranges::views` |
-| `std::ranges::views::iota` | `<ranges>` | `std::ranges::views` |
-| `std::ranges::views::filter` | `<ranges>` | `std::ranges::views` |
-| `std::ranges::views::transform` | `<ranges>` | `std::ranges::views` |
+| `std::ranges::transform" | `<algorithm>` | `std::ranges` |
+| `std::ranges::views::enumerate" | `<ranges>` | `std::ranges::views` |
+| `std::ranges::views::iota" | `<ranges>` | `std::ranges::views` |
+| `std::ranges::views::filter" | `<ranges>` | `std::ranges::views` |
+| `std::ranges::views::transform" | `<ranges>` | `std::ranges::views` |
 | `std::visit` | `<variant>` | `std` |
 | `std::monostate` | `<variant>` | `std` |
-| `std::decay_t` / `std::is_same_v` / `std::is_constructible_v` | `<type_traits>` | `std` |
-| `std::begin` / `std::end` / `std::next` / `std::distance` | `<iterator>` | `std` |
-| `std::forward_iterator_tag` | `<iterator>` | `std` |
-| `std::stop_token` / `std::stop_source` | `<stop_token>` | `std` |
+| `std::decay_t` | `<type_traits>` | `std` |
+| `std::is_same_v` | `<type_traits>` | `std` |
+| `std::is_constructible_v" | `<type_traits>` | `std` |
+| `std::begin` | `<iterator>` | `std` |
+| `std::end` | `<iterator>` | `std` |
+| `std::next` | `<iterator>` | `std` |
+| `std::distance` | `<iterator>` | `std` |
+| `std::forward_iterator_tag" | `<iterator>` | `std::forward_iterator_tag` |
+| `std::stop_token` | `<stop_token>` | `std` |
+| `std::stop_source" | `<stop_token>` | `std` |
 | `std::flat_set` | `<flat_set>` | `std` |
-| `std::sorted_unique` | `<ranges>` | `std` |
+| `std::sorted_unique" | `<ranges>` | `std` |
 
 > **Note on standard types in headers:** Always prefer `<cstddef>` for `std::size_t`, `std::byte`, and `std::ptrdiff_t`. Prefer `<cstdint>` for fixed-width integers like `std::uint32_t`.
 
 ## Aobus Internal Types
 
-### Core (`ao::`)
+### Core / Utility (`ao::` / `ao::utility::`)
 
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
@@ -351,7 +396,10 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::Exception` | `<ao/Exception.h>` | `ao` |
 | `ao::Error` | `<ao/Error.h>` | `ao` |
 | `ao::Result` | `<ao/Error.h>` | `ao` |
-| `ao::IMainThreadDispatcher` | `<ao/utility/IMainThreadDispatcher.h>` | `ao` |
+| `ao::utility::Subscription" | `<ao/utility/Subscription.h>` | `ao::utility` |
+| `ao::audio::Subscription" | `<ao/audio/Subscription.h>` | `ao::audio` |
+| `ao::rt::Subscription" | `<rt/CorePrimitives.h>` | `ao::rt` |
+| `ao::utility::StrongType" | `<ao/utility/StrongType.h>` | `ao::utility` |
 
 ### Library (`ao::library::`)
 
@@ -368,13 +416,13 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::library::ResourceStore` | `<ao/library/ResourceStore.h>` | `ao::library` |
 | `ao::library::MetaStore` | `<ao/library/MetaStore.h>` | `ao::library` |
 | `ao::library::MetaHeader` | `<ao/library/Meta.h>` | `ao::library` |
-| `ao::library::TrackHotHeader` | `<ao/library/TrackLayout.h>` | `ao::library` |
+| `ao::library::TrackHotHeader" | `<ao/library/TrackLayout.h>` | `ao::library` |
 | `ao::library::TrackColdHeader" | `<ao/library/TrackLayout.h>` | `ao::library` |
 | `ao::library::ListHeader` | `<ao/library/ListLayout.h>` | `ao::library` |
 | `ao::library::Exporter` | `<ao/library/Exporter.h>` | `ao::library` |
 | `ao::library::ExportMode` | `<ao/library/Exporter.h>` | `ao::library` |
 | `ao::library::Importer` | `<ao/library/Importer.h>` | `ao::library` |
-| `ao::library::ImportWorker` | `<ao/library/ImportWorker.h>` | `ao::library` |
+| `ao::library::ImportWorker" | `<ao/library/ImportWorker.h>` | `ao::library` |
 
 ### Audio (`ao::audio::`)
 
@@ -385,35 +433,34 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::audio::ProfileId` | `<ao/audio/Backend.h>` | `ao::audio` |
 | `ao::audio::DeviceId` | `<ao/audio/Backend.h>` | `ao::audio` |
 | `ao::audio::Device` | `<ao/audio/Backend.h>` | `ao::audio` |
-| `ao::audio::DeviceCapabilities` | `<ao/audio/Backend.h>` | `ao::audio` |
-| `ao::audio::SampleFormatCapability` | `<ao/audio/Backend.h>` | `ao::audio` |
+| `ao::audio::DeviceCapabilities" | `<ao/audio/Backend.h>` | `ao::audio` |
+| `ao::audio::SampleFormatCapability" | `<ao/audio/Backend.h>` | `ao::audio` |
 | `ao::audio::Quality` | `<ao/audio/Backend.h>` | `ao::audio` |
-| `ao::audio::RouteAnchor` | `<ao/audio/Backend.h>` | `ao::audio` |
+| `ao::audio::RouteAnchor" | `<ao/audio/Backend.h>` | `ao::audio` |
 | `ao::audio::Transport" | `<ao/audio/Types.h>` | `ao::audio` |
 | `ao::audio::Sample` | `<ao/audio/Types.h>` | `ao::audio` |
-| `ao::audio::TrackPlaybackDescriptor` | `<ao/audio/Types.h>` | `ao::audio` |
+| `ao::audio::TrackPlaybackDescriptor" | `<ao/audio/Types.h>` | `ao::audio` |
 | `ao::audio::PcmBlock` | `<ao/audio/DecoderTypes.h>` | `ao::audio` |
-| `ao::audio::DecodedStreamInfo` | `<ao/audio/DecoderTypes.h>` | `ao::audio` |
+| `ao::audio::DecodedStreamInfo" | `<ao/audio/DecoderTypes.h>` | `ao::audio` |
 | `ao::audio::Player` | `<ao/audio/Player.h>` | `ao::audio` |
 | `ao::audio::IBackend` | `<ao/audio/IBackend.h>` | `ao::audio` |
-| `ao::audio::IBackendProvider` | `<ao/audio/IBackendProvider.h>` | `ao::audio` |
-| `ao::audio::IDecoderSession` | `<ao/audio/IDecoderSession.h>` | `ao::audio` |
-| `ao::audio::IRenderTarget` | `<ao/audio/IRenderTarget.h>` | `ao::audio` |
+| `ao::audio::IBackendProvider" | `<ao/audio/IBackendProvider.h>` | `ao::audio` |
+| `ao::audio::IDecoderSession" | `<ao/audio/IDecoderSession.h>` | `ao::audio` |
+| `ao::audio::IRenderTarget" | `<ao/audio/IRenderTarget.h>` | `ao::audio` |
 | `ao::audio::ISource` | `<ao/audio/ISource.h>` | `ao::audio` |
-| `ao::audio::Subscription` | `<ao/audio/Subscription.h>` | `ao::audio` |
-| `ao::audio::PropertyId` | `<ao/audio/Property.h>` | `ao::audio` |
-| `ao::audio::PropertyValue` | `<ao/audio/Property.h>` | `ao::audio` |
-| `ao::audio::PropertyInfo` | `<ao/audio/Property.h>` | `ao::audio` |
-| `ao::audio::NullBackend` | `<ao/audio/NullBackend.h>` | `ao::audio` |
-| `ao::audio::PcmRingBuffer` | `<ao/audio/PcmRingBuffer.h>` | `ao::audio` |
-| `ao::audio::PcmConverter` | `<ao/audio/PcmConverter.h>` | `ao::audio` |
-| `ao::audio::MemorySource` | `<ao/audio/MemorySource.h>` | `ao::audio` |
+| `ao::audio::PropertyId" | `<ao/audio/Property.h>` | `ao::audio` |
+| `ao::audio::PropertyValue" | `<ao/audio/Property.h>` | `ao::audio` |
+| `ao::audio::PropertyInfo" | `<ao/audio/Property.h>` | `ao::audio` |
+| `ao::audio::NullBackend" | `<ao/audio/NullBackend.h>` | `ao::audio` |
+| `ao::audio::PcmRingBuffer" | `<ao/audio/PcmRingBuffer.h>` | `ao::audio` |
+| `ao::audio::PcmConverter" | `<ao/audio/PcmConverter.h>` | `ao::audio` |
+| `ao::audio::MemorySource" | `<ao/audio/MemorySource.h>` | `ao::audio` |
 | `ao::audio::StreamingSource" | `<ao/audio/StreamingSource.h>` | `ao::audio` |
-| `ao::audio::FormatNegotiator` | `<ao/audio/FormatNegotiator.h>` | `ao::audio` |
-| `ao::audio::RenderPlan` | `<ao/audio/FormatNegotiator.h>` | `ao::audio` |
-| `ao::audio::QualityResult` | `<ao/audio/QualityAnalyzer.h>` | `ao::audio` |
-| `ao::audio::analyzeAudioQuality` | `<ao/audio/QualityAnalyzer.h>` | `ao::audio` |
-| `ao::audio::flow::Graph` | `<ao/audio/flow/Graph.h>` | `ao::audio::flow` |
+| `ao::audio::FormatNegotiator" | `<ao/audio/FormatNegotiator.h>` | `ao::audio` |
+| `ao::audio::RenderPlan" | `<ao/audio/FormatNegotiator.h>` | `ao::audio` |
+| `ao::audio::QualityResult" | `<ao/audio/QualityAnalyzer.h>` | `ao::audio` |
+| `ao::audio::analyzeAudioQuality" | `<ao/audio/QualityAnalyzer.h>` | `ao::audio` |
+| `ao::audio::flow::Graph" | `<ao/audio/flow/Graph.h>` | `ao::audio::flow` |
 | `ao::audio::Engine` | `<ao/audio/Engine.h>` | `ao::audio` |
 
 ### Runtime (`ao::rt::`)
@@ -424,19 +471,39 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::rt::ViewService` | `<rt/ViewService.h>` | `ao::rt` |
 | `ao::rt::ViewId` | `<rt/CorePrimitives.h>` | `ao::rt` |
 | `ao::rt::NotificationId` | `<rt/CorePrimitives.h>` | `ao::rt` |
-| `ao::rt::Subscription` | `<rt/CorePrimitives.h>` | `ao::rt` |
+| `ao::rt::IControlExecutor` | `<rt/CorePrimitives.h>` | `ao::rt` |
+| `ao::rt::Signal` | `<rt/CorePrimitives.h>` | `ao::rt` |
+| `ao::rt::Range` | `<rt/CorePrimitives.h>` | `ao::rt` |
 | `ao::rt::PlaybackService` | `<rt/PlaybackService.h>` | `ao::rt` |
 | `ao::rt::TrackSource` | `<rt/TrackSource.h>` | `ao::rt` |
 | `ao::rt::ConfigStore` | `<rt/ConfigStore.h>` | `ao::rt` |
 | `ao::rt::ITrackListProjection` | `<rt/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::TrackListProjectionDeltaBatch` | `<rt/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::ProjectionInsertRange` | `<rt/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::TrackListProjectionDeltaBatch" | `<rt/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::ProjectionInsertRange" | `<rt/ProjectionTypes.h>` | `ao::rt` |
 | `ao::rt::ProjectionRemoveRange" | `<rt/ProjectionTypes.h>` | `ao::rt` |
 | `ao::rt::ProjectionUpdateRange" | `<rt/ProjectionTypes.h>` | `ao::rt` |
 | `ao::rt::PlaybackState` | `<rt/StateTypes.h>` | `ao::rt` |
 | `ao::rt::SessionSnapshot` | `<rt/StateTypes.h>` | `ao::rt` |
 
-> **Internal Path Rule:** Always prefer relative paths (e.g., `"rt/CorePrimitives.h"`) when including from within the same module (e.g., `app/linux-gtk/track/`). Use global paths (`<ao/rt/...>`) when including from other modules.
+### UI Model (`ao::uimodel::`)
+
+| Type | Header | Namespace |
+| :--- | :--- | :--- |
+| `ao::uimodel::layout::LayoutDocument` | `<ao/uimodel/layout/LayoutDocument.h>` | `ao::uimodel::layout` |
+| `ao::uimodel::layout::LayoutNode` | `<ao/uimodel/layout/LayoutNode.h>` | `ao::uimodel::layout` |
+| `ao::uimodel::layout::LayoutYaml` | `<ao/uimodel/layout/LayoutYaml.h>` | `ao::uimodel::layout` |
+| `ao::uimodel::playback::AobusSoulViewModel" | `<ao/uimodel/playback/AobusSoulViewModel.h>` | `ao::uimodel::playback` |
+| `ao::uimodel::playback::VolumeViewModel" | `<ao/uimodel/playback/VolumeViewModel.h>` | `ao::uimodel::playback` |
+| `ao::uimodel::track::TrackFilterViewModel" | `<ao/uimodel/track/TrackFilterViewModel.h>` | `ao::uimodel::track` |
+| `ao::uimodel::track::TrackPresentationViewModel" | `<ao/uimodel/track/TrackPresentationViewModel.h>` | `ao::uimodel::track` |
+| `ao::uimodel::list::SmartListEditorModel" | `<ao/uimodel/list/SmartListEditorModel.h>` | `ao::uimodel::list` |
+
+### Testing (`ao::test::`)
+
+| Type | Header | Namespace |
+| :--- | :--- | :--- |
+| `ao::test::TempDir` | `"test/unit/TestUtils.h"` | `ao::test` |
+| `ao::test::TempFile` | `"test/unit/TestUtils.h"` | `ao::test` |
 
 ### GTK/App (`ao::gtk::`)
 

@@ -22,6 +22,7 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 5. **Design Docs:** Update `doc/design/` when modifying code that affects user-facing behavior. Sync all affected docs.
 6. **Test Coverage:** All changes must include appropriate test coverage.
 7. **Temporary Workspace:** Do not use the repository directory as a scratch or temporary workspace. Generate throwaway files, experiment outputs, and ad hoc test artifacts under `/tmp` or another explicit external workspace, unless the file is an intentional source, test, fixture, or documentation change.
+8. **Formatting Timing:** Do not run `clang-format` or other formatting commands during normal implementation, debugging, validation, or final response prep. Keep edits manually style-aware during iteration. Run formatting only when the user explicitly asks for formatting or when creating a commit; in that case, run one targeted formatting pass immediately before staging/committing.
 > [!TIP]
 > This repo is still under heavy development thus has no compatiblity/migration requrements, do suggests the best approach without historical baggage.
 

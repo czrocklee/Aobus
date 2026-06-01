@@ -19,7 +19,7 @@ workspace navigation snapshots.
 
 - Persist navigation history across app restarts.
 - Record quick-filter typing.
-- Record inspector/panel toggles.
+- Record sidebar/panel toggles.
 - Record scroll-only actions such as reveal-current-track.
 - Store destroyed view ids in history. History stores restoreable view
   snapshots, not object identity.

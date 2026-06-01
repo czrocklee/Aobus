@@ -168,12 +168,31 @@ namespace ao::rt::test
 
     // Change focus away
     env.workspace.closeView(reply1.viewId);
+    CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
+
     // Unsubscribe
     sub = {};
 
     // Now trigger a selection change in the old view, should NOT update because it's no longer focused
     env.views.setSelection(reply1.viewId, {id1});
-    CHECK(projPtr->snapshot().title.optValue.value() == "Song B");
+    CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
+  }
+
+  TEST_CASE("TrackDetailProjection with FocusedViewTarget initializes from active view", "[projection][unit]")
+  {
+    auto env = Env{};
+    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Already Selected"});
+
+    auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
+    env.workspace.setFocusedView(reply.viewId);
+    env.views.setSelection(reply.viewId, {id1});
+
+    auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.mutation);
+    auto const snap = projPtr->snapshot();
+
+    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    REQUIRE(snap.title.optValue.has_value());
+    CHECK(snap.title.optValue.value() == "Already Selected");
   }
 
   TEST_CASE("TrackDetailProjection with non-existent track", "[projection][unit]")

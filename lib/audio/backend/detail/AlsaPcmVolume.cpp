@@ -2,12 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
+#include <ao/utility/ByteView.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
+#include <utility>
 
 namespace ao::audio::backend::detail
 {
@@ -25,46 +28,32 @@ namespace ao::audio::backend::detail
 
     void applyS16(std::span<std::byte> pcm, float gain) noexcept
     {
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — ALSA PCM byte buffer to typed view
-      auto* samples = reinterpret_cast<std::int16_t*>(pcm.data());
-      std::size_t const count = pcm.size() / sizeof(std::int16_t);
+      auto const samples = utility::layout::viewArrayMutable<std::int16_t>(pcm);
 
-      for (std::size_t i = 0; i < count; ++i)
+      for (auto& sample : samples)
       {
-        samples[i] = scaleSample(samples[i], gain);
+        sample = scaleSample(sample, gain);
       }
     }
 
     void applyS32(std::span<std::byte> pcm, float gain, std::uint8_t validBits) noexcept
     {
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — ALSA PCM byte buffer to typed view
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) — ALSA PCM byte buffer to typed view
-      auto* samples = reinterpret_cast<std::int32_t*>(
-        pcm.data()); // NOLINT(aobus-readability-use-if-init-statement) — used in both branches
-      // NOLINTNEXTLINE(aobus-readability-use-if-init-statement) — used in both branches
-      std::size_t const count = pcm.size() / sizeof(std::int32_t);
+      auto const samples = utility::layout::viewArrayMutable<std::int32_t>(pcm);
+      auto const [limitMin, limitMax] = [validBits] -> std::pair<std::int64_t, std::int64_t>
+      {
+        if (validBits == 24)
+        {
+          return {kS24Min, kS24Max};
+        }
 
-      if (validBits == 24)
+        return {std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max()};
+      }();
+
+      for (auto& sample : samples)
       {
-        for (std::size_t i = 0; i < count; ++i)
-        {
-          // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions) — intentional int64
-          // from double round
-          std::int64_t const scaled =
-            static_cast<std::int64_t>(std::round(static_cast<double>(samples[i]) * static_cast<double>(gain)));
-          samples[i] = static_cast<std::int32_t>(std::clamp<std::int64_t>(scaled, kS24Min, kS24Max));
-        }
-      }
-      else
-      {
-        for (std::size_t i = 0; i < count; ++i)
-        {
-          // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions) — intentional int64
-          // from double round
-          std::int64_t const scaled =
-            static_cast<std::int64_t>(std::round(static_cast<double>(samples[i]) * static_cast<double>(gain)));
-          samples[i] = static_cast<std::int32_t>(std::clamp<std::int64_t>(scaled, INT32_MIN, INT32_MAX));
-        }
+        std::int64_t const scaled =
+          static_cast<std::int64_t>(std::round(static_cast<double>(sample) * static_cast<double>(gain)));
+        sample = static_cast<std::int32_t>(std::clamp<std::int64_t>(scaled, limitMin, limitMax));
       }
     }
 

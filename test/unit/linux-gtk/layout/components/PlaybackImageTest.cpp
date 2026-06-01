@@ -76,7 +76,7 @@ namespace ao::gtk::layout::test
                              .actionRegistry = actionRegistry,
                              .runtime = runtime,
                              .parentWindow = window,
-                             .inspector = {.imageCache = imageCachePtr.get()}};
+                             .detail = {.imageCache = imageCachePtr.get()}};
 
     SECTION("default image has no extra styling")
     {

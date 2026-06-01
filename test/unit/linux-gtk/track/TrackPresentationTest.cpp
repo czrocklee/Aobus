@@ -81,7 +81,7 @@ namespace ao::gtk::test
 
   TEST_CASE("GtkLayoutConfig persists column layouts to gtk_layout.yaml", "[app][unit][presentation]")
   {
-    auto const tempDir = ao::test::TempDir{}; // NOLINT(aobus-readability-redundant-namespace-qualification)
+    auto const tempDir = ao::test::TempDir{};
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
     auto const configPath = configDir / "gtk_layout.yaml";
 
