@@ -54,8 +54,8 @@
   --ao-card-radius: 4px;
   --ao-card-padding: 8px;
 
-  --ao-row-min-height: 36px;
-  --ao-list-row-min-height: 32px;
+  --ao-row-min-height: 44px;
+  --ao-list-row-min-height: 28px;
   --ao-row-radius: 2px;
   --ao-row-hover-bg: alpha(currentColor, 0.04);
   --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.2);
