@@ -45,9 +45,9 @@ namespace ao::gtk::layout
       TrackPresentationButtonComponent(LayoutContext& ctx, LayoutNode const& node)
         : _widget{ctx.runtime}
       {
-        if (ctx.track.pageHost != nullptr)
+        if (ctx.track.presentationStore != nullptr)
         {
-          _widget.setPresentationStore(&ctx.track.pageHost->presentationStore());
+          _widget.setPresentationStore(ctx.track.presentationStore, ctx.theme.themeController);
         }
 
         if (auto const it = node.props.find("variant"); it != node.props.end())

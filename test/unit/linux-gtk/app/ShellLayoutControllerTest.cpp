@@ -4,6 +4,7 @@
 #include "app/ShellLayoutController.h"
 
 #include "app/AppConfig.h"
+#include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -22,7 +23,8 @@ namespace ao::gtk::test
     auto window = Gtk::ApplicationWindow{};
     window.set_application(appPtr);
 
-    auto controller = ShellLayoutController{runtime, window, nullptr};
+    auto themeController = ThemeCoordinator{};
+    auto controller = ShellLayoutController{runtime, window, nullptr, themeController};
 
     SECTION("initial state")
     {

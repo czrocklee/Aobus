@@ -30,6 +30,7 @@ namespace ao::gtk
 {
   class TrackRowCache;
   class ListNavigationPanel;
+  class ThemeCoordinator;
 
   class ListNavigationController final
   {
@@ -42,7 +43,10 @@ namespace ao::gtk
       std::function<std::optional<std::string>(ListId)> getListPresentation;
     };
 
-    ListNavigationController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks);
+    ListNavigationController(Gtk::Window& parent,
+                             rt::AppRuntime& runtime,
+                             Callbacks callbacks,
+                             ThemeCoordinator& themeController);
     ~ListNavigationController();
 
     // Not copyable or movable
@@ -78,6 +82,7 @@ namespace ao::gtk
     Gtk::Window& _parent;
     Callbacks _callbacks;
     rt::AppRuntime& _runtime;
+    ThemeCoordinator& _themeController;
     TrackRowCache* _dataProvider = nullptr;
 
     std::unique_ptr<ListNavigationPanel> _panelPtr;

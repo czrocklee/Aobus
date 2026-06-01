@@ -3,6 +3,7 @@
 
 #include "track/TrackPageHost.h"
 
+#include "app/ThemeCoordinator.h"
 #include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
@@ -34,11 +35,12 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto stack = Gtk::Stack{};
+    auto themeController = ThemeCoordinator{};
     auto tagEditCallbacks = TagEditController::Callbacks{};
-    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks)};
+    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeController};
 
     auto navCallbacks = ListNavigationController::Callbacks{};
-    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks)};
+    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
 
     auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
     auto queueModel = uimodel::playback::PlaybackQueueModel{

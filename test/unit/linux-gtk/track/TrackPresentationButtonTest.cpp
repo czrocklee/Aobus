@@ -3,6 +3,7 @@
 
 #include "track/TrackPresentationButton.h"
 
+#include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
@@ -19,11 +20,12 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
+    auto themeController = ThemeCoordinator{};
     auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
 
     auto window = Gtk::Window{};
     auto button = TrackPresentationButton{runtime};
-    button.setPresentationStore(&presentationStore);
+    button.setPresentationStore(&presentationStore, &themeController);
     window.set_child(button);
 
     SECTION("initial state")

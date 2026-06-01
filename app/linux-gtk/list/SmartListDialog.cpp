@@ -309,7 +309,7 @@ namespace ao::gtk
     _previewScrolledWindow.set_min_content_height(kPreviewMinContentHeight);
     _previewScrolledWindow.set_max_content_width(kPreviewMaxContentWidth);
     _previewScrolledWindow.set_max_content_height(kPreviewMaxContentHeight);
-    _previewScrolledWindow.add_css_class("ao-modern-content-shell"); // Reuse shell styling
+    _previewScrolledWindow.add_css_class("ao-content-shell-modern"); // Reuse shell styling
     _previewColumnView.set_show_row_separators(true);
     _previewScrolledWindow.set_child(_previewColumnView);
     _rightPanel.append(_previewScrolledWindow);

@@ -3,6 +3,7 @@
 
 #include "tag/TagEditController.h"
 
+#include "app/ThemeCoordinator.h"
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"
@@ -38,8 +39,11 @@ namespace ao::gtk
   {
   }
 
-  TagEditController::TagEditController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks)
-    : _callbacks{std::move(callbacks)}, _runtime{runtime}, _parent{parent}
+  TagEditController::TagEditController(Gtk::Window& parent,
+                                       rt::AppRuntime& runtime,
+                                       Callbacks callbacks,
+                                       ThemeCoordinator& themeController)
+    : _callbacks{std::move(callbacks)}, _runtime{runtime}, _parent{parent}, _themeController{themeController}
   {
     setupActions();
   }
@@ -178,6 +182,7 @@ namespace ao::gtk
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
       _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, _optActiveSelection->selectedIds);
+    _themeController.registerToplevel(*dialog);
     dialog->present();
   }
 
@@ -190,6 +195,7 @@ namespace ao::gtk
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
       _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, selection.selectedIds);
+    _themeController.registerToplevel(*dialog);
     dialog->present();
   }
 

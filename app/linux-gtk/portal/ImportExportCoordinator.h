@@ -28,6 +28,11 @@ namespace ao::rt
 
 namespace ao::gtk
 {
+  class ThemeCoordinator;
+}
+
+namespace ao::gtk
+{
   class AppDialog;
 }
 
@@ -49,7 +54,10 @@ namespace ao::gtk::portal
   class ImportExportCoordinator final
   {
   public:
-    ImportExportCoordinator(Gtk::Window& parent, rt::AppRuntime& runtime, ImportExportCallbacks callbacks);
+    ImportExportCoordinator(Gtk::Window& parent,
+                            rt::AppRuntime& runtime,
+                            ImportExportCallbacks callbacks,
+                            ThemeCoordinator& themeController);
     ~ImportExportCoordinator();
 
     // Not copyable or movable due to GTK and runtime references/subscriptions
@@ -82,6 +90,7 @@ namespace ao::gtk::portal
     Gtk::Window& _parent;
     rt::AppRuntime& _runtime;
     ImportExportCallbacks _callbacks;
+    ThemeCoordinator& _themeController;
 
     rt::Subscription _libraryTaskProgressSub;
     rt::Subscription _libraryTaskCompletedSub;

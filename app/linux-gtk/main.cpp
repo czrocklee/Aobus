@@ -3,8 +3,8 @@
 
 #include "app/AppConfig.h"
 #include "app/GtkControlExecutor.h"
+#include "app/GtkStyleRuntime.h"
 #include "app/MainWindow.h"
-#include "app/StyleManager.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
@@ -236,7 +236,7 @@ namespace
 
   void onAppActivate(Glib::RefPtr<Gtk::Application>& app, std::vector<Glib::RefPtr<MainWindow>>& windows)
   {
-    StyleManager::instance().initialize();
+    GtkStyleRuntime::instance().initialize();
 
     auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
     auto appConfigPtr = std::make_shared<AppConfig>(globalConfigPath);

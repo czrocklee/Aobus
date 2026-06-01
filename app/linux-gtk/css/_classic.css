@@ -1,0 +1,21 @@
+/* Playback strip */
+.ao-playback-strip-classic {
+  padding-top: var(--ao-spacing-xs);
+  padding-bottom: var(--ao-spacing-xs);
+  padding-left: var(--ao-spacing-lg);
+  padding-right: var(--ao-spacing-lg);
+}
+
+/* StatusBar */
+.ao-status-bar-classic {
+  min-height: 24px;
+  padding: var(--ao-spacing-sm) 12px;
+}
+
+/* Track Controls Bar */
+.ao-track-controls-bar-classic {
+  padding-left: var(--ao-spacing-xl);
+  padding-right: var(--ao-spacing-xl);
+  padding-top: 0;
+  padding-bottom: 0;
+}

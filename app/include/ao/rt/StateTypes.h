@@ -249,6 +249,12 @@ namespace ao::rt
     ViewId viewId{};
   };
 
+  enum class ThemePresetId : std::uint8_t
+  {
+    Classic,
+    Modern,
+  };
+
   struct AppPrefsState final
   {
     std::string lastLibraryPath;
@@ -256,6 +262,7 @@ namespace ao::rt
     std::string lastProfile;
     std::string lastOutputDeviceId;
     std::string lastLayoutPreset;
+    std::string lastThemePreset;
   };
 
   struct SessionState final

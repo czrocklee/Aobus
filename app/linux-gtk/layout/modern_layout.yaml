@@ -4,8 +4,6 @@ root:
   type: box
   props:
     orientation: vertical
-  layout:
-    cssClasses: ao-layout-preset-modern
   children:
     - id: main-paned
       type: split
@@ -20,7 +18,7 @@ root:
           props:
             orientation: vertical
           layout:
-            cssClasses: ao-modern-list-pane
+            cssClasses: ao-list-pane-modern
           children:
             - type: library.listTree
               layout:
@@ -29,11 +27,11 @@ root:
           props:
             orientation: vertical
           layout:
-            cssClasses: ao-modern-content-shell
+            cssClasses: ao-content-shell-modern
           children:
             - type: centerBox
               layout:
-                cssClasses: ao-modern-track-controls-bar
+                cssClasses: ao-track-controls-bar-modern
                 hexpand: true
               children:
                 - type: track.presentationButton
@@ -42,18 +40,18 @@ root:
                   layout:
                     slot: start
                     halign: start
-                    cssClasses: ao-modern-section-title-button
+                    cssClasses: ao-section-title-modern-button
                 - type: track.quickFilter
                   layout:
                     widthRequest: 320
                     slot: center
                     halign: center
-                    cssClasses: ao-modern-search-pill
+                    cssClasses: ao-search-pill-modern
                 - type: status.trackCount
                   layout:
                     slot: end
                     halign: end
-                    cssClasses: ao-modern-header-stats
+                    cssClasses: ao-header-stats-modern
             - id: main-workspace-split
               type: collapsibleSplit
               props:
@@ -63,15 +61,18 @@ root:
               layout:
                 vexpand: true
               children:
-                - type: template
+                - id: workspace
+                  type: template
                   props:
                     templateId: tracks.defaultWorkspace
-                - type: template
+                - id: detail-pane
+                  type: template
                   props:
                     templateId: track.defaultDetailPane
 
     # === Modern bottom bar ===
-    - type: template
+    - id: modern-bar
+      type: template
       props:
         templateId: playback.modernBar
       layout:
@@ -83,17 +84,17 @@ templates:
     props:
       orientation: vertical
     layout:
-      cssClasses: ao-modern-bottom-bar-wrapper
+      cssClasses: ao-bottom-bar-wrapper-modern
       hexpand: true
     children:
       - type: playback.seekSlider
         layout:
-          cssClasses: ao-seekbar-modern-full
+          cssClasses: ao-seekbar-full-modern
           hexpand: true
           valign: center
       - type: centerBox
         layout:
-          cssClasses: ao-modern-bottom-bar-content
+          cssClasses: ao-bottom-bar-content-modern
           hexpand: true
         children:
           - type: box
@@ -157,7 +158,7 @@ templates:
                   mode: elapsed
                 layout:
                   valign: center
-                  cssClasses: ao-modern-time-label
+                  cssClasses: ao-time-label-modern
               - type: box
                 props:
                   orientation: horizontal
@@ -188,7 +189,7 @@ templates:
                   mode: duration
                 layout:
                   valign: center
-                  cssClasses: ao-modern-time-label
+                  cssClasses: ao-time-label-modern
               - type: playback.volumeControl
                 props:
                   orientation: vertical

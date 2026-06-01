@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "app/StyleManager.h"
+#include "app/GtkStyleRuntime.h"
 
 #include <ao/utility/Log.h>
 
@@ -60,7 +60,7 @@ namespace ao::gtk
     }
   } // namespace
 
-  void StyleManager::initialize()
+  void GtkStyleRuntime::initialize()
   {
     if (_initialized)
     {
@@ -78,7 +78,7 @@ namespace ao::gtk
     setupSignalHandler();
   }
 
-  void StyleManager::reload()
+  void GtkStyleRuntime::reload()
   {
     _reloadDebounceConnection.disconnect();
     _reloadDebounceConnection = Glib::signal_timeout().connect(
@@ -94,31 +94,31 @@ namespace ao::gtk
       kReloadDebounceMs);
   }
 
-  sigc::signal<void()>& StyleManager::signalRefreshed()
+  sigc::signal<void()>& GtkStyleRuntime::signalRefreshed()
   {
     return _refreshedSignal;
   }
 
-  void StyleManager::registerWidgetProvider(Gtk::Widget& widget,
+  void GtkStyleRuntime::addProviderForDisplayOf(Gtk::Widget& widget,
                                             Glib::RefPtr<Gtk::CssProvider> providerPtr,
                                             guint priority)
   {
     Gtk::StyleContext::add_provider_for_display(widget.get_display(), providerPtr, priority);
   }
 
-  void StyleManager::unregisterWidgetProvider(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& provider)
+  void GtkStyleRuntime::removeProviderForDisplayOf(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& provider)
   {
     Gtk::StyleContext::remove_provider_for_display(widget.get_display(), provider);
   }
 
-  Glib::RefPtr<Gtk::CssProvider> const& StyleManager::appProvider() const
+  Glib::RefPtr<Gtk::CssProvider> const& GtkStyleRuntime::appProvider() const
   {
     return _appProviderPtr;
   }
 
-  StyleManager& StyleManager::instance()
+  GtkStyleRuntime& GtkStyleRuntime::instance()
   {
-    static StyleManager manager;
+    static GtkStyleRuntime manager;
     return manager;
   }
 
@@ -126,7 +126,7 @@ namespace ao::gtk
   // Private
   // --------------------------------------------------------------------------
 
-  void StyleManager::loadAppCss()
+  void GtkStyleRuntime::loadAppCss()
   {
     auto const displayPtr = Gdk::Display::get_default();
 
@@ -135,27 +135,19 @@ namespace ao::gtk
       return;
     }
 
-    // Load CSS from GResource
-    auto appCss = Glib::ustring{};
-
+    _appProviderPtr = Gtk::CssProvider::create();
     try
     {
-      auto const dataPtr = Gio::Resource::lookup_data_global("/org/aobus/app.css");
-      gsize size = 0;
-      auto const* const buf = static_cast<char const*>(dataPtr->get_data(size));
-      appCss = std::string{buf, size};
+      _appProviderPtr->load_from_resource("/org/aobus/app.css");
     }
     catch (Glib::Error const& err)
     {
-      APP_LOG_ERROR("StyleManager: Failed to load app.css from GResource: {}", err.what());
+      APP_LOG_ERROR("GtkStyleRuntime: Failed to load app.css from GResource: {}", err.what());
     }
-
-    _appProviderPtr = Gtk::CssProvider::create();
-    _appProviderPtr->load_from_data(appCss);
     Gtk::StyleContext::add_provider_for_display(displayPtr, _appProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }
 
-  void StyleManager::loadUserCss()
+  void GtkStyleRuntime::loadUserCss()
   {
     auto const displayPtr = Gdk::Display::get_default();
 
@@ -180,11 +172,11 @@ namespace ao::gtk
     }
     catch (Glib::Error const& err)
     {
-      APP_LOG_ERROR("StyleManager: Failed to load user.css: {}", err.what());
+      APP_LOG_ERROR("GtkStyleRuntime: Failed to load user.css: {}", err.what());
     }
   }
 
-  void StyleManager::reloadUserCss()
+  void GtkStyleRuntime::reloadUserCss()
   {
     auto const displayPtr = Gdk::Display::get_default();
 
@@ -215,11 +207,11 @@ namespace ao::gtk
     }
     catch (Glib::Error const& err)
     {
-      APP_LOG_ERROR("StyleManager: Failed to reload user.css: {}", err.what());
+      APP_LOG_ERROR("GtkStyleRuntime: Failed to reload user.css: {}", err.what());
     }
   }
 
-  void StyleManager::syncGtkSettings()
+  void GtkStyleRuntime::syncGtkSettings()
   {
     auto const settingsPath = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0" / "settings.ini";
 
@@ -278,11 +270,11 @@ namespace ao::gtk
     }
     catch (Glib::Error const& err)
     {
-      APP_LOG_DEBUG("StyleManager: Could not read settings.ini: {}", err.what());
+      APP_LOG_DEBUG("GtkStyleRuntime: Could not read settings.ini: {}", err.what());
     }
   }
 
-  void StyleManager::reloadGtkUserCss()
+  void GtkStyleRuntime::reloadGtkUserCss()
   {
     auto const displayPtr = Gdk::Display::get_default();
 
@@ -313,11 +305,11 @@ namespace ao::gtk
     }
     catch (Glib::Error const& err)
     {
-      APP_LOG_ERROR("StyleManager: Failed to reload gtk.css: {}", err.what());
+      APP_LOG_ERROR("GtkStyleRuntime: Failed to reload gtk.css: {}", err.what());
     }
   }
 
-  void StyleManager::setupGtkConfigMonitor()
+  void GtkStyleRuntime::setupGtkConfigMonitor()
   {
     auto const configDir = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0";
     auto const configFilePtr = Gio::File::create_for_path(configDir.string());
@@ -335,14 +327,14 @@ namespace ao::gtk
         {
           if (auto const name = file->get_basename(); name == "settings.ini" || name == "gtk.css")
           {
-            APP_LOG_DEBUG("StyleManager: gtk-4.0 change detected ({}), scheduling reload...", name);
+            APP_LOG_DEBUG("GtkStyleRuntime: gtk-4.0 change detected ({}), scheduling reload...", name);
             reload();
           }
         }
       });
   }
 
-  void StyleManager::setupAobusConfigMonitor()
+  void GtkStyleRuntime::setupAobusConfigMonitor()
   {
     auto const aobusDir = std::filesystem::path{Glib::get_user_config_dir()} / "aobus";
 
@@ -362,7 +354,7 @@ namespace ao::gtk
         {
           if (file->get_basename() == "user.css")
           {
-            APP_LOG_DEBUG("StyleManager: user.css change detected, reloading...");
+            APP_LOG_DEBUG("GtkStyleRuntime: user.css change detected, reloading...");
             reloadUserCss();
             _refreshedSignal.emit();
           }
@@ -370,13 +362,13 @@ namespace ao::gtk
       });
   }
 
-  void StyleManager::setupFileMonitors()
+  void GtkStyleRuntime::setupFileMonitors()
   {
     setupGtkConfigMonitor();
     setupAobusConfigMonitor();
   }
 
-  void StyleManager::setupDBusMonitor()
+  void GtkStyleRuntime::setupDBusMonitor()
   {
     try
     {
@@ -390,7 +382,7 @@ namespace ao::gtk
                  Glib::ustring const& /*path*/,
                  Glib::VariantContainerBase const& /*parameters*/)
           {
-            APP_LOG_DEBUG("StyleManager: DBus theme change detected via Portal, reloading...");
+            APP_LOG_DEBUG("GtkStyleRuntime: DBus theme change detected via Portal, reloading...");
             reload();
           },
           "org.freedesktop.portal.Desktop",
@@ -401,18 +393,18 @@ namespace ao::gtk
     }
     catch (Glib::Error const& ex)
     {
-      APP_LOG_WARN("StyleManager: Failed to subscribe to DBus theme signals: {}", ex.what());
+      APP_LOG_WARN("GtkStyleRuntime: Failed to subscribe to DBus theme signals: {}", ex.what());
     }
   }
 
-  void StyleManager::setupSignalHandler()
+  void GtkStyleRuntime::setupSignalHandler()
   {
     _sigusr1SourceId = ::g_unix_signal_add(
       SIGUSR1,
       [](void* data) -> ::gboolean
       {
-        APP_LOG_DEBUG("StyleManager: Received SIGUSR1, scheduling theme refresh...");
-        static_cast<StyleManager*>(data)->reload();
+        APP_LOG_DEBUG("GtkStyleRuntime: Received SIGUSR1, scheduling theme refresh...");
+        static_cast<GtkStyleRuntime*>(data)->reload();
         return TRUE;
       },
       this);

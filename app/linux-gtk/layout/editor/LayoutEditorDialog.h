@@ -40,7 +40,8 @@ namespace ao::gtk::layout::editor
                        ComponentRegistry const& registry,
                        ActionRegistry const& actionRegistry,
                        LayoutDocument initialLayout,
-                       std::string initialPresetId);
+                       std::string initialPresetId,
+                       std::string initialThemeId);
     ~LayoutEditorDialog() override;
 
     LayoutEditorDialog(LayoutEditorDialog const&) = delete;
@@ -50,8 +51,10 @@ namespace ao::gtk::layout::editor
 
     LayoutDocument const& document() const { return _document; }
     std::string selectedPresetId() const { return _comboPresets.get_active_id(); }
+    std::string selectedThemeId() const { return _comboThemePresets.get_active_id(); }
 
     sigc::signal<void(LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
+    sigc::signal<void(std::string_view)>& signalThemePreview() { return _signalThemePreview; }
     sigc::signal<void(LayoutDocument const&)>& signalSaveRequest() { return _signalSaveRequest; }
 
     void updateNodePosition(std::string_view nodeId, std::int32_t posX, std::int32_t posY);
@@ -80,26 +83,26 @@ namespace ao::gtk::layout::editor
     void applyPropertyChange(LayoutNode* node, std::string_view propName, LayoutValue const& value, bool isLayoutProp);
     void notifyPreview();
 
-    void renderIdSection(LayoutNode* node);
+    Gtk::Widget* renderIdSection(LayoutNode* node);
     void addSectionTitle(std::string_view text);
-    void renderBoolEditor(LayoutNode* node,
-                          PropertyDescriptor const& prop,
-                          LayoutValue const& currentVal,
-                          bool isLayoutProp);
-    void renderIntEditor(LayoutNode* node,
-                         PropertyDescriptor const& prop,
-                         LayoutValue const& currentVal,
-                         bool isLayoutProp);
-    void renderEnumEditor(LayoutNode* node,
-                          PropertyDescriptor const& prop,
-                          LayoutValue const& currentVal,
-                          bool isLayoutProp);
+    Gtk::Widget* renderBoolEditor(LayoutNode* node,
+                                  PropertyDescriptor const& prop,
+                                  LayoutValue const& currentVal,
+                                  bool isLayoutProp);
+    Gtk::Widget* renderIntEditor(LayoutNode* node,
+                                 PropertyDescriptor const& prop,
+                                 LayoutValue const& currentVal,
+                                 bool isLayoutProp);
+    Gtk::Widget* renderEnumEditor(LayoutNode* node,
+                                  PropertyDescriptor const& prop,
+                                  LayoutValue const& currentVal,
+                                  bool isLayoutProp);
     void populateActionComboBox(Gtk::ComboBoxText* combo, LayoutNode* node, PropertyDescriptor const& prop);
-    void renderStringEditor(LayoutNode* node,
-                            PropertyDescriptor const& prop,
-                            LayoutValue const& currentVal,
-                            bool isLayoutProp);
-    void dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp);
+    Gtk::Widget* renderStringEditor(LayoutNode* node,
+                                    PropertyDescriptor const& prop,
+                                    LayoutValue const& currentVal,
+                                    bool isLayoutProp);
+    Gtk::Widget* dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp);
 
     void addComponent(std::string type);
     void wrapNode(std::string containerType);
@@ -107,8 +110,6 @@ namespace ao::gtk::layout::editor
     void onRemoveNode();
     void onMoveUp();
     void onMoveDown();
-    void onRaiseZ();
-    void onLowerZ();
     void onResetDefault();
     void onPresetChanged();
 
@@ -133,12 +134,11 @@ namespace ao::gtk::layout::editor
     Gtk::MenuButton _btnAdd;
     Gtk::MenuButton _btnWrap;
     Gtk::Button _btnRemove{"Remove"};
-    Gtk::Button _btnUp{"Up"};
-    Gtk::Button _btnDown{"Down"};
-    Gtk::Button _btnRaiseZ{"Raise Z"};
-    Gtk::Button _btnLowerZ{"Lower Z"};
+    Gtk::Button _btnUp;
+    Gtk::Button _btnDown;
     Gtk::Button _btnReset{"Reset Default"};
     Gtk::ComboBoxText _comboPresets;
+    Gtk::ComboBoxText _comboThemePresets;
 
     Gtk::PopoverMenu _addPopover;
     Gtk::PopoverMenu _wrapPopover;
@@ -151,6 +151,7 @@ namespace ao::gtk::layout::editor
     Gtk::Paned _paned{Gtk::Orientation::HORIZONTAL};
 
     sigc::signal<void(LayoutDocument const&)> _signalApplyPreview;
+    sigc::signal<void(std::string_view)> _signalThemePreview;
     sigc::signal<void(LayoutDocument const&)> _signalSaveRequest;
   };
 } // namespace ao::gtk::layout::editor

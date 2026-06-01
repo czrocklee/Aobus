@@ -180,7 +180,7 @@ add_executable(ao_test_gtk
     unit/linux-gtk/image/ImageCacheTest.cpp
     unit/linux-gtk/app/AppDialogTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
-    unit/linux-gtk/app/StyleManagerTest.cpp
+    unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/AppConfigTest.cpp
     unit/linux-gtk/app/ShellLayoutControllerTest.cpp
     unit/linux-gtk/app/GtkLayoutConfigTest.cpp

@@ -62,6 +62,8 @@ namespace ao::gtk::test
 
       auto savePrefs = rt::AppPrefsState{};
       savePrefs.lastBackend = "test-backend";
+      savePrefs.lastLayoutPreset = "modern";
+      savePrefs.lastThemePreset = "modern";
       config.saveAppPrefs(savePrefs);
 
       auto const config2 = AppConfig{configPath};
@@ -69,6 +71,8 @@ namespace ao::gtk::test
       config2.loadAppPrefs(loadPrefs);
 
       CHECK(loadPrefs.lastBackend == "test-backend");
+      CHECK(loadPrefs.lastLayoutPreset == "modern");
+      CHECK(loadPrefs.lastThemePreset == "modern");
     }
 
     SECTION("Save and load LayoutDocument")

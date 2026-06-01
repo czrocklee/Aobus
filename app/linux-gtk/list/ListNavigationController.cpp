@@ -3,6 +3,7 @@
 
 #include "list/ListNavigationController.h"
 
+#include "app/ThemeCoordinator.h"
 #include "list/ListNavigationPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
@@ -35,8 +36,11 @@
 
 namespace ao::gtk
 {
-  ListNavigationController::ListNavigationController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks)
-    : _parent{parent}, _callbacks{std::move(callbacks)}, _runtime{runtime}
+  ListNavigationController::ListNavigationController(Gtk::Window& parent,
+                                                     rt::AppRuntime& runtime,
+                                                     Callbacks callbacks,
+                                                     ThemeCoordinator& themeController)
+    : _parent{parent}, _callbacks{std::move(callbacks)}, _runtime{runtime}, _themeController{themeController}
   {
     auto panelCallbacks = ListNavigationPanel::Callbacks{
       .onSelectionChanged = [this](ListId listId) { onSelectionChanged(listId); },
@@ -164,6 +168,7 @@ namespace ao::gtk
     }
 
     auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, parentListId, *_dataProvider);
+    _themeController.registerToplevel(*dialog);
 
     if (!initialExpression.empty())
     {
@@ -221,6 +226,7 @@ namespace ao::gtk
     {
       auto const optPres = _callbacks.getListPresentation ? _callbacks.getListPresentation(listId) : std::nullopt;
       auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optView->parentId(), *_dataProvider);
+      _themeController.registerToplevel(*dialog);
       dialog->populate(listId, *optView, optPres);
       dialog->signal_response().connect(
         [this, dialog, listId](std::int32_t responseId)

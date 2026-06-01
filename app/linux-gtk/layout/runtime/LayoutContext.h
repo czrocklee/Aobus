@@ -82,6 +82,11 @@ namespace ao::gtk::layout
     portal::ImportExportCoordinator* coordinator = nullptr;
   };
 
+  struct ThemeUiContext final
+  {
+    ThemeCoordinator* themeController = nullptr;
+  };
+
   enum class LayoutSurface : std::uint8_t
   {
     Main,
@@ -103,6 +108,7 @@ namespace ao::gtk::layout
     TagUiContext tag{};
     ShellUiContext shell{};
     PortalContext portal{};
+    ThemeUiContext theme{};
 
     std::function<void(std::string const& nodeId, std::int32_t posX, std::int32_t posY)> onNodeMoved{};
     bool editMode = false;
@@ -117,6 +123,7 @@ namespace ao::gtk::layout
       detail.imageCache = services.imageCache;
       tag.editController = services.tagEditController;
       portal.coordinator = services.importExportCoordinator;
+      theme.themeController = services.themeController;
     }
   };
 } // namespace ao::gtk::layout

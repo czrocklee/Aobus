@@ -4,6 +4,8 @@
 #include "ShellLayoutController.h"
 
 #include "AppConfig.h"
+#include "app/ThemeCoordinator.h"
+#include "app/ThemePreset.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/ActionRegistry.h"
@@ -41,16 +43,15 @@
 namespace ao::gtk
 {
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
-                                               Gtk::Window& parentWindow,
-                                               std::shared_ptr<AppConfig> configPtr)
+                                               Gtk::Window& window,
+                                               std::shared_ptr<AppConfig> configPtr,
+                                               ThemeCoordinator& themeCoordinator)
     : _registry{}
     , _actionRegistry{}
-    , _context{.registry = _registry,
-               .actionRegistry = _actionRegistry,
-               .runtime = runtime,
-               .parentWindow = parentWindow}
+    , _context{.registry = _registry, .actionRegistry = _actionRegistry, .runtime = runtime, .parentWindow = window}
     , _host{_registry}
     , _configPtr{std::move(configPtr)}
+    , _themeCoordinator{themeCoordinator}
   {
     layout::LayoutRuntime::registerStandardComponents(_registry);
 
@@ -435,10 +436,18 @@ namespace ao::gtk
     config.loadAppPrefs(prefs);
 
     auto const initialPresetId = _activePresetId.empty() ? "classic" : _activePresetId;
+    auto const initialThemeId = std::string{themePresetToString(_themeCoordinator.activeTheme())};
 
-    auto const dialogPtr = std::make_shared<layout::editor::LayoutEditorDialog>(
-      dynamic_cast<Gtk::Window&>(_context.parentWindow), _registry, _actionRegistry, _activeLayout, initialPresetId);
+    auto const dialogPtr =
+      std::make_shared<layout::editor::LayoutEditorDialog>(dynamic_cast<Gtk::Window&>(_context.parentWindow),
+                                                           _registry,
+                                                           _actionRegistry,
+                                                           _activeLayout,
+                                                           initialPresetId,
+                                                           initialThemeId);
     auto* const dialogRaw = dialogPtr.get();
+
+    _themeCoordinator.registerToplevel(*dialogRaw);
 
     _context.editMode = true;
     _context.onNodeMoved = [dialogRaw](std::string const& nodeId, std::int32_t posX, std::int32_t posY)
@@ -448,6 +457,9 @@ namespace ao::gtk
 
     dialogRaw->signalApplyPreview().connect([this](layout::LayoutDocument const& doc)
                                             { _host.setLayout(_context, doc); });
+
+    dialogRaw->signalThemePreview().connect([this](std::string_view themeId)
+                                            { _themeCoordinator.setTheme(themePresetFromString(themeId)); });
 
     dialogRaw->signalSaveRequest().connect(
       [this, sharedDialogPtr = dialogPtr, &config](layout::LayoutDocument const& doc)
@@ -470,18 +482,34 @@ namespace ao::gtk
       });
 
     dialogRaw->signal_hide().connect(
-      [this, sharedDialogPtr = dialogPtr]
+      [this, sharedDialogPtr = dialogPtr, oldTheme = _themeCoordinator.activeTheme()]
       {
         _context.editMode = false;
         _context.onNodeMoved = nullptr;
+        _themeCoordinator.unregisterToplevel(*sharedDialogPtr);
       });
 
     dialogRaw->signal_response().connect(
-      [this, sharedDialogPtr = dialogPtr](std::int32_t responseId)
+      [this, sharedDialogPtr = dialogPtr, oldTheme = _themeCoordinator.activeTheme()](std::int32_t responseId)
       {
         if (responseId == Gtk::ResponseType::CANCEL)
         {
           _host.setLayout(_context, _activeLayout);
+          _themeCoordinator.setTheme(oldTheme);
+        }
+        else if (responseId == Gtk::ResponseType::OK)
+        {
+          if (auto const themeIdStr = sharedDialogPtr->selectedThemeId(); !themeIdStr.empty())
+          {
+            _themeCoordinator.setTheme(themePresetFromString(themeIdStr));
+            auto prefsUpdate = rt::AppPrefsState{};
+            if (_configPtr)
+            {
+              _configPtr->loadAppPrefs(prefsUpdate);
+              prefsUpdate.lastThemePreset = themeIdStr;
+              _configPtr->saveAppPrefs(prefsUpdate);
+            }
+          }
         }
       });
 

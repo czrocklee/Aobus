@@ -3,6 +3,7 @@
 
 #include "list/ListNavigationController.h"
 
+#include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/library/ListBuilder.h>
@@ -32,7 +33,8 @@ namespace ao::gtk::test
                                           .onListPresentationSaved = {},
                                           .getListPresentation = {}};
 
-    auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks)};
+    auto themeController = ThemeCoordinator{};
+    auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks), themeController};
     window.set_child(controller.widget());
 
     SECTION("rebuildTree populates the navigation panel")

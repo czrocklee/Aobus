@@ -32,6 +32,7 @@ namespace ao::gtk
   class TagEditController;
   class ListNavigationController;
   class TrackPageHost;
+  class ThemeCoordinator;
   namespace portal
   {
     class ImportExportCoordinator;
@@ -66,6 +67,7 @@ namespace ao::gtk
     TrackPageHost* trackPageHost();
     ListNavigationController* listNavigationController();
     uimodel::track::TrackPresentationViewModel* trackPresentationStore();
+    ThemeCoordinator* themeController();
 
     portal::ImportExportCoordinator& importExport();
 

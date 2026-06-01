@@ -5,10 +5,11 @@ root:
   props:
     orientation: vertical
   children:
-    - type: template
+    - id: menu-bar
+      type: template
       props:
         templateId: app.defaultMenuBar
-    - id: playback-row
+    - id: playback-bar
       type: template
       props:
         templateId: playback.defaultBar
@@ -18,9 +19,10 @@ root:
       type: template
       props:
         templateId: app.defaultMainPaned
-    - type: template
+    - id: status-bar
+      type: template
       props:
-        templateId: app.defaultStatusRegion
+        templateId: status.defaultBar
 
 templates:
   app.defaultMenuBar:
@@ -53,7 +55,7 @@ templates:
       orientation: horizontal
       spacing: 6
     layout:
-      cssClasses: ao-playback-strip
+      cssClasses: ao-playback-strip-classic
     children:
       - type: box
         props:
@@ -78,7 +80,8 @@ templates:
               heightRequest: 32
               halign: start
               valign: center
-          - type: template
+          - id: transport-group
+            type: template
             props:
               templateId: playback.transportGroup
       - type: playback.seekSlider
@@ -112,6 +115,7 @@ templates:
         layout:
           heightRequest: 50
   track.defaultDetailPane:
+    id: detail-pane
     type: template
     props:
       templateId: track.selectionDetailPane
@@ -140,7 +144,6 @@ templates:
                   vexpand: true
                   cssClasses:
                     - ao-detail-pane
-                    - ao-p-4
                 children:
                   - type: box
                     props:
@@ -199,7 +202,7 @@ templates:
     props:
       orientation: horizontal
     layout:
-      cssClasses: ao-status-bar
+      cssClasses: ao-status-bar-classic
       hexpand: true
     children:
       - type: status.playbackDetails
@@ -229,7 +232,7 @@ templates:
       orientation: horizontal
       spacing: 6
     layout:
-      cssClasses: ao-track-controls-bar
+      cssClasses: ao-track-controls-bar-classic
     children:
       - type: track.quickFilter
         layout:
@@ -244,10 +247,12 @@ templates:
     layout:
       vexpand: true
     children:
-      - type: template
+      - id: workspace
+        type: template
         props:
           templateId: tracks.defaultWorkspace
-      - type: template
+      - id: detail-pane
+        type: template
         props:
           templateId: track.defaultDetailPane
   app.defaultContentShell:
@@ -255,10 +260,12 @@ templates:
     props:
       orientation: vertical
     children:
-      - type: template
+      - id: controls-bar
+        type: template
         props:
           templateId: tracks.defaultControlsBar
-      - type: template
+      - id: layout
+        type: template
         props:
           templateId: app.defaultLayout
         layout:
@@ -275,18 +282,8 @@ templates:
         type: template
         props:
           templateId: library.defaultListPane
-      - type: template
+      - id: content-shell
+        type: template
         props:
           templateId: app.defaultContentShell
-  app.defaultStatusRegion:
-    type: box
-    props:
-      orientation: horizontal
-    layout:
-      cssClasses: ao-status-region
-    children:
-      - type: template
-        props:
-          templateId: status.defaultBar
-        layout:
-          hexpand: true
+

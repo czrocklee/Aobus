@@ -2,6 +2,11 @@
 <gresources>
   <gresource prefix="/org/aobus">
     <file>app.css</file>
+    <file>css/_variables.css</file>
+    <file>css/_utilities.css</file>
+    <file>css/_common.css</file>
+    <file>css/_classic.css</file>
+    <file>css/_modern.css</file>
     <file>layout/default_layout.yaml</file>
     <file>layout/modern_layout.yaml</file>
   </gresource>

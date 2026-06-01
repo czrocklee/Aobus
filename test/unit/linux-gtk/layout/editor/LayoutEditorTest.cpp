@@ -252,7 +252,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("Dialog constructs without crash")
     {
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
       REQUIRE(dialogPtr != nullptr);
 
       auto width = 0;
@@ -273,7 +273,7 @@ namespace ao::gtk::layout::editor::test
         CHECK(scrolledWindow->get_propagate_natural_width());
         CHECK(scrolledWindow->get_propagate_natural_height());
 
-        if (scrolledWindow->get_min_content_width() == 300)
+        if (scrolledWindow->get_min_content_width() == 220)
         {
           foundTreeScroll = true;
           CHECK(scrolledWindow->get_min_content_height() == 460);
@@ -294,7 +294,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("document returns the initial document on construction")
     {
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
       auto const& returned = dialogPtr->document();
 
       CHECK(returned.root.type == doc.root.type);
@@ -309,7 +309,8 @@ namespace ao::gtk::layout::editor::test
       auto modified = LayoutDocument{};
       modified.root.type = "spacer";
 
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, modified, "classic");
+      auto dialogPtr =
+        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, modified, "classic", "modern");
 
       // The dialog copies the document, so modifications to the dialog's copy
       // are reflected. Just verify the initial copy is correct.
@@ -324,7 +325,8 @@ namespace ao::gtk::layout::editor::test
       invalidDoc.root.type = "app.actionButton";
       invalidDoc.root.props["primaryAction"] = LayoutValue{"this.does.not.exist"};
 
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, invalidDoc, "classic");
+      auto dialogPtr =
+        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, invalidDoc, "classic", "modern");
 
       // Attempting to save an invalid document should fail validation and keep dialog open
       dialogPtr->response(Gtk::ResponseType::OK);
@@ -336,7 +338,8 @@ namespace ao::gtk::layout::editor::test
       validDoc.root.type = "app.actionButton";
       validDoc.root.props["primaryAction"] = LayoutValue{"none"};
 
-      auto dialogValidPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, validDoc, "classic");
+      auto dialogValidPtr =
+        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, validDoc, "classic", "modern");
 
       // Attempting to save a valid document should succeed and close the dialog
       dialogValidPtr->response(Gtk::ResponseType::OK);
@@ -344,7 +347,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("signalApplyPreview is emitted on document changes")
     {
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic");
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
       std::int32_t count = 0;
 
       dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });

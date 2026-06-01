@@ -1,0 +1,355 @@
+.ao-theme-modern {
+  /* Premium Emotion Visual Environment */
+  --ao-surface-bg: alpha(@theme_base_color, 0.50);
+  --ao-surface-border-color: transparent;
+  --ao-surface-shadow: 0 8px 24px alpha(black, 0.08);
+
+  --ao-card-radius: 16px;
+  --ao-card-padding: 20px;
+
+  --ao-row-min-height: 52px;
+  --ao-list-row-min-height: 36px;
+  --ao-row-radius: 6px;
+  --ao-row-hover-bg: alpha(currentColor, 0.04);
+  --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.1);
+
+  --ao-control-radius: 100px;
+  --ao-control-hover-scale: 1.05;
+}
+
+/* ===== Modern Bottom Bar ===== */
+
+/* Glass-morphism background for the entire bottom bar */
+.ao-bottom-bar-wrapper-modern {
+  background: alpha(@view_bg_color, 0.92);
+  border-top: 1px solid alpha(currentColor, 0.08);
+}
+
+.ao-bottom-bar-content-modern {
+  padding: 8px 16px;
+  min-height: 60px;
+}
+
+/* Prominent circular play button */
+.ao-play-button-prominent {
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 50%;
+  background: @accent_bg_color;
+  color: @accent_fg_color;
+  padding: 0;
+  transition: transform 150ms, box-shadow 150ms;
+  -gtk-icon-size: 28px;
+  /* Slightly larger icon */
+}
+
+/* Force absolute centering of the image within the button */
+.ao-play-button-prominent image {
+  margin: 0;
+  padding: 0;
+}
+
+/* The play triangle in the screenshot was too high and too far left. 
+   Push it down and right to compensate for the visual weight. 
+   This applies when NOT playing (showing the start/triangle icon) */
+.ao-play-button-prominent:not(.is-playing) image {
+  margin-left: 3px;
+  margin-top: 2px;
+}
+
+/* Pause icon is vertically balanced, but check horizontal.
+   This applies when IS playing (showing the pause icon) */
+.ao-play-button-prominent.is-playing image {
+  margin-left: 0;
+  margin-top: 0;
+}
+
+.ao-play-button-prominent:active {
+  transform: scale(0.96);
+}
+
+/* Soul-specific interactive button */
+.ao-soul-button,
+.ao-soul-button.ao-play-button-prominent {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  transition: transform 200ms ease-out, filter 200ms ease-out;
+}
+
+.ao-soul-button:hover {
+  transform: scale(1.08);
+  /* A subtle glow that enhances the Soul's own aura */
+  filter: drop-shadow(0 0 8px alpha(@theme_selected_bg_color, 0.4));
+}
+
+.ao-soul-button:active {
+  transform: scale(0.92);
+  transition-duration: 50ms;
+}
+
+.ao-soul-button:disabled {
+  opacity: 0.4;
+  filter: grayscale(100%);
+}
+
+/* Small circular secondary control buttons */
+.ao-play-button-circular {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  padding: 0;
+}
+
+/* Playback Image Button — ZERO visual/spatial footprint outside its child */
+.ao-image-button,
+.ao-image-button:hover,
+.ao-image-button:active,
+.ao-image-button:checked {
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-width: 0;
+  box-shadow: none;
+  outline: none;
+  background: transparent;
+  background-color: transparent;
+  background-image: none;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ao-image-button image,
+.ao-image-button picture {
+  border-radius: inherit;
+  margin: 0;
+  padding: 0;
+}
+
+/* ===== Modern Shell & Table Scoping ===== */
+
+.ao-theme-modern .ao-list-pane-modern {
+  background: alpha(@theme_bg_color, 0.4);
+}
+
+/* Navigation Rail (Modern) */
+.ao-theme-modern .ao-list-pane-modern listview {
+  background: transparent;
+}
+
+.ao-theme-modern .ao-list-pane-modern listview>row {
+  border-radius: var(--ao-row-radius);
+  margin: 2px 8px;
+  border: 1px solid transparent;
+}
+
+/* padding handled by --ao-row-min-height globally */
+
+/* Hover handled by tokens */
+
+.ao-theme-modern .ao-list-pane-modern listview>row:selected {
+  border-color: alpha(@theme_selected_bg_color, 0.05);
+  color: inherit;
+}
+
+.ao-theme-modern .ao-list-pane-modern listview>row:selected:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.14);
+}
+
+.ao-theme-modern .ao-list-pane-modern listview>row:selected label:not(.ao-list-filter-label) {
+  color: @theme_selected_bg_color;
+  font-weight: 600;
+}
+
+/* Modern Content Shell (the card surface) */
+.ao-theme-modern .ao-content-shell-modern {
+  background: alpha(@theme_base_color, 0.5);
+  border-radius: var(--ao-radius-md);
+  margin: var(--ao-spacing-md);
+  border: 1px solid alpha(currentColor, 0.05);
+}
+
+/* Modern Track Controls Bar (The Header Island) */
+.ao-theme-modern .ao-track-controls-bar-modern {
+  padding: 24px 20px 12px 20px;
+  border-bottom: none;
+}
+
+.ao-theme-modern .ao-section-title-modern {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: @theme_fg_color;
+  opacity: 0.9;
+}
+
+/* Dynamic Presentation Title Button */
+.ao-section-title-modern-button button {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: @theme_fg_color;
+  opacity: 0.9;
+  transition: opacity 200ms ease, color 200ms ease;
+}
+
+.ao-section-title-modern-button button:hover {
+  opacity: 1.0;
+  color: @theme_selected_bg_color;
+  background: transparent;
+}
+
+/* Hide the arrow icon on the title variant */
+.ao-variant-title button>box>image {
+  opacity: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ao-variant-title button>box {
+  padding: 0;
+  margin: 0;
+}
+
+/* Elastic Search Pill (The precision tool) */
+.ao-theme-modern .ao-track-controls-bar-modern entry {
+  border-radius: var(--ao-radius-full);
+  background-color: alpha(@theme_fg_color, 0.08);
+  border: 1px solid alpha(@theme_fg_color, 0.1);
+  box-shadow: none;
+  padding: 0 14px;
+  min-height: 36px;
+  /* Reliable centered width */
+  transition: all 200ms ease;
+}
+
+.ao-theme-modern .ao-track-controls-bar-modern entry:focus {
+  background-color: @theme_base_color;
+  border-color: alpha(@accent_color, 0.5);
+  box-shadow: 0 8px 20px -6px alpha(black, 0.15);
+}
+
+/* Header Metadata/Stats on the right */
+.ao-header-stats-modern {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: @theme_fg_color;
+  opacity: 0.45;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Ensure entry text is always visible against its background */
+.ao-theme-modern .ao-track-controls-bar-modern entry text {
+  color: @theme_fg_color;
+}
+
+/* Specific styling for the primary search icon */
+.ao-theme-modern .ao-track-controls-bar-modern entry image.left {
+  opacity: 0.6;
+  margin-left: 4px;
+}
+
+.ao-theme-modern .ao-track-controls-bar-modern entry:focus image.left {
+  opacity: 1.0;
+  color: @theme_selected_bg_color;
+}
+
+/* Modern View/Presentation Button (The Ghost Icon) */
+.ao-theme-modern .ao-view-button-modern {
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 50%;
+  padding: 0;
+  background: alpha(currentColor, 0.04);
+  border: 1px solid alpha(currentColor, 0.05);
+  color: alpha(currentColor, 0.6);
+  transition: all 200ms ease;
+}
+
+.ao-theme-modern .ao-view-button-modern:hover {
+  background: alpha(@theme_selected_bg_color, 0.1);
+  color: @theme_selected_bg_color;
+  border-color: alpha(@theme_selected_bg_color, 0.2);
+}
+
+.ao-theme-modern .ao-view-button-modern label {
+  opacity: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ao-theme-modern .ao-view-button-modern image {
+  margin: 0;
+}
+
+/* Modern Table row polish */
+.ao-theme-modern columnview {
+  background: transparent;
+}
+
+.ao-theme-modern columnview row {
+  margin: 0 8px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+}
+
+/* Hover handled by token */
+
+.ao-theme-modern columnview>listview>row:selected {
+  border-color: alpha(@theme_selected_bg_color, 0.05);
+  color: inherit;
+}
+
+.ao-theme-modern columnview>listview>row:selected:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.14);
+}
+
+.ao-theme-modern columnview>listview>row:selected label {
+  color: @theme_selected_bg_color;
+  font-weight: 600;
+}
+
+/* Specific styling for the playing row in Modern mode */
+.ao-theme-modern columnview row.ao-playing-row {
+  background-image: linear-gradient(to right,
+      alpha(@warning_bg_color, 0.15) 0%,
+      alpha(@warning_bg_color, 0.05) var(--ao-title-x, 35%),
+      transparent 100%);
+  background-color: transparent;
+  border-left: 3px solid @warning_bg_color;
+  border-radius: 2px 6px 6px 2px;
+}
+
+.ao-theme-modern .ao-playing-title {
+  color: @warning_bg_color;
+  font-weight: 800;
+}
+
+/* Modern Track Section (Album) separation */
+/* .ao-track-section-box styling handled by tokens */
+
+/* First section in a list shouldn't have such a large top padding */
+listview>row:first-child .ao-track-section-box {
+  padding-top: 16px;
+}
+
+.ao-theme-modern .ao-track-section-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: @theme_fg_color;
+  letter-spacing: -0.01em;
+}
+
+.ao-theme-modern .ao-track-section-subtitle {
+  color: @theme_fg_color;
+  opacity: 0.7;
+}
+
+/* .ao-track-section-cover styling handled by tokens */

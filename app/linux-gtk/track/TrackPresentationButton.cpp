@@ -3,6 +3,7 @@
 
 #include "track/TrackPresentationButton.h"
 
+#include "app/ThemeCoordinator.h"
 #include "track/TrackCustomViewDialog.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
@@ -46,9 +47,11 @@ namespace ao::gtk
 
   TrackPresentationButton::~TrackPresentationButton() = default;
 
-  void TrackPresentationButton::setPresentationStore(uimodel::track::TrackPresentationViewModel* store)
+  void TrackPresentationButton::setPresentationStore(uimodel::track::TrackPresentationViewModel* store,
+                                                     ThemeCoordinator* themeController)
   {
     _presentationStore = store;
+    _themeController = themeController;
     populatePresentationOptions();
   }
 
@@ -222,6 +225,10 @@ namespace ao::gtk
 
     auto const label = std::string{_button.get_label()} + " Copy";
     auto dialog = TrackCustomViewDialog{*parentWindow, spec, label};
+    if (_themeController != nullptr)
+    {
+      _themeController->registerToplevel(dialog);
+    }
 
     if (auto const optResult = dialog.runDialog(); optResult)
     {

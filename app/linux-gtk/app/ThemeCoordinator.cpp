@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+#include "app/ThemeCoordinator.h"
+
+#include "app/AppConfig.h"
+#include "app/ThemePreset.h"
+#include <ao/rt/StateTypes.h>
+
+#include <algorithm>
+#include <string>
+#include <string_view>
+
+namespace ao::gtk
+{
+  void ThemeCoordinator::load(AppConfig const& config)
+  {
+    auto prefs = rt::AppPrefsState{};
+    config.loadAppPrefs(prefs);
+    _activePreset = themePresetFromString(prefs.lastThemePreset);
+  }
+
+  void ThemeCoordinator::save(AppConfig& config) const
+  {
+    auto prefs = rt::AppPrefsState{};
+    config.loadAppPrefs(prefs);
+    prefs.lastThemePreset = std::string{themePresetToString(_activePreset)};
+    config.saveAppPrefs(prefs);
+  }
+
+  void ThemeCoordinator::setTheme(rt::ThemePresetId preset)
+  {
+    if (_activePreset == preset)
+    {
+      return;
+    }
+
+    auto const oldPreset = _activePreset;
+    _activePreset = preset;
+
+    for (auto* const window : _registeredWindows)
+    {
+      if (window)
+      {
+        removeThemeClass(*window, oldPreset);
+        applyThemeClass(*window, preset);
+      }
+    }
+  }
+
+  rt::ThemePresetId ThemeCoordinator::activeTheme() const noexcept
+  {
+    return _activePreset;
+  }
+
+  void ThemeCoordinator::applyTo(Gtk::Widget& root) const
+  {
+    applyThemeClass(root, _activePreset);
+  }
+
+  void ThemeCoordinator::registerToplevel(Gtk::Window& window)
+  {
+    if (std::ranges::find(_registeredWindows, &window) == _registeredWindows.end())
+    {
+      _registeredWindows.push_back(&window);
+      applyThemeClass(window, _activePreset);
+    }
+  }
+
+  void ThemeCoordinator::unregisterToplevel(Gtk::Window& window)
+  {
+    std::erase(_registeredWindows, &window);
+    removeThemeClass(window, _activePreset);
+  }
+
+  void ThemeCoordinator::applyThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const
+  {
+    widget.add_css_class(std::string{themeCssClass(preset)});
+  }
+
+  void ThemeCoordinator::removeThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const
+  {
+    widget.remove_css_class(std::string{themeCssClass(preset)});
+  }
+} // namespace ao::gtk

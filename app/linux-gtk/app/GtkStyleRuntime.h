@@ -13,7 +13,7 @@
 
 namespace ao::gtk
 {
-  class StyleManager final
+  class GtkStyleRuntime final
   {
   public:
     // Idempotent — safe to call multiple times.
@@ -24,15 +24,15 @@ namespace ao::gtk
 
     sigc::signal<void()>& signalRefreshed();
 
-    void registerWidgetProvider(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> providerPtr, guint priority);
-    void unregisterWidgetProvider(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& provider);
+    void addProviderForDisplayOf(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> providerPtr, guint priority);
+    void removeProviderForDisplayOf(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& provider);
 
     Glib::RefPtr<Gtk::CssProvider> const& appProvider() const;
 
-    static StyleManager& instance();
+    static GtkStyleRuntime& instance();
 
   private:
-    StyleManager() = default;
+    GtkStyleRuntime() = default;
 
     void loadAppCss();
     void loadUserCss();

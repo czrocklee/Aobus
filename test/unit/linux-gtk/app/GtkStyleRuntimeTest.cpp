@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/StyleManager.h"
+#include "app/GtkStyleRuntime.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
@@ -14,15 +14,15 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("StyleManager - initialization and reloading", "[gtk][app][style]")
+  TEST_CASE("GtkStyleRuntime - initialization and reloading", "[gtk][app][style]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto& manager = StyleManager::instance();
+    auto& manager = GtkStyleRuntime::instance();
 
     SECTION("singleton instance exists")
     {
-      CHECK(&manager == &StyleManager::instance());
+      CHECK(&manager == &GtkStyleRuntime::instance());
     }
 
     SECTION("initialize is idempotent")
@@ -60,8 +60,8 @@ namespace ao::gtk::test
       auto label = Gtk::Label{"Styled Label"};
       auto providerPtr = Gtk::CssProvider::create();
 
-      manager.registerWidgetProvider(label, providerPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-      manager.unregisterWidgetProvider(label, providerPtr);
+      manager.addProviderForDisplayOf(label, providerPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+      manager.removeProviderForDisplayOf(label, providerPtr);
     }
   }
 } // namespace ao::gtk::test

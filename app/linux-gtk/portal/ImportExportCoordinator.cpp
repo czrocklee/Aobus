@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
+#include "app/ThemeCoordinator.h"
 #include "layout/LayoutConstants.h"
 #include "portal/LibraryTaskProgressDialog.h"
 #include <ao/Exception.h>
@@ -46,8 +47,9 @@ namespace ao::gtk::portal
 {
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
-                                                   ImportExportCallbacks callbacks)
-    : _parent{parent}, _runtime{runtime}, _callbacks{std::move(callbacks)}
+                                                   ImportExportCallbacks callbacks,
+                                                   ThemeCoordinator& themeController)
+    : _parent{parent}, _runtime{runtime}, _callbacks{std::move(callbacks)}, _themeController{themeController}
   {
   }
 
@@ -110,9 +112,12 @@ namespace ao::gtk::portal
 
         APP_LOG_INFO("Scan plan: {} new, {} changed, {} missing", newCount, changedCount, missingCount);
 
-        // 2. Execute Plan with progress dialog
-        self->_libraryTaskDialogPtr =
-          std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), self->_parent);
+        if (self->_libraryTaskDialogPtr == nullptr)
+        {
+          self->_libraryTaskDialogPtr =
+            std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), self->_parent);
+          self->_themeController.registerToplevel(*self->_libraryTaskDialogPtr);
+        }
         auto* const dialogPtr = self->_libraryTaskDialogPtr.get();
         self->_libraryTaskDialogPtr->signal_response().connect([dialogPtr](std::int32_t /*responseId*/)
                                                                { dialogPtr->close(); });

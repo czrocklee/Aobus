@@ -18,6 +18,7 @@ namespace ao::gtk
   }
   class TrackPageHost;
   class ListNavigationController;
+  class ThemeCoordinator;
 } // namespace ao::gtk
 namespace ao::uimodel::track
 {
@@ -39,5 +40,6 @@ namespace ao::gtk
     TrackPageHost* trackPageHost = nullptr;
     uimodel::track::TrackPresentationViewModel* trackPresentationStore = nullptr;
     ListNavigationController* listNavigationController = nullptr;
+    ThemeCoordinator* themeController = nullptr;
   };
 } // namespace ao::gtk

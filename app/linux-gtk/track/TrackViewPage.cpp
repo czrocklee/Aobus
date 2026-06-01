@@ -3,7 +3,7 @@
 
 #include "track/TrackViewPage.h"
 
-#include "app/StyleManager.h"
+#include "app/GtkStyleRuntime.h"
 #include "image/ImageCache.h"
 #include "image/ImageWidget.h"
 #include "layout/LayoutConstants.h"
@@ -226,7 +226,7 @@ namespace ao::gtk
     _presentationStore.setActiveListId(_listId);
     _viewHostPtr->setupSelectionActivation();
 
-    _themeRefreshConnection = StyleManager::instance().signalRefreshed().connect(
+    _themeRefreshConnection = GtkStyleRuntime::instance().signalRefreshed().connect(
       [this]
       {
         APP_LOG_INFO("Executing theme refresh for TrackViewPage...");

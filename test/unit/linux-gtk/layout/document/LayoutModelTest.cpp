@@ -42,10 +42,10 @@ namespace ao::gtk::layout::test
 
       // Verify playback row is a template
       REQUIRE(decoded.root.children.size() > 1);
-      auto const& playbackRow = decoded.root.children[1];
-      CHECK(playbackRow.id == "playback-row");
-      CHECK(playbackRow.type == "template");
-      CHECK(playbackRow.getProp<std::string>("templateId", "") == "playback.defaultBar");
+      auto const& playbackBar = decoded.root.children[1];
+      CHECK(playbackBar.id == "playback-bar");
+      CHECK(playbackBar.type == "template");
+      CHECK(playbackBar.getProp<std::string>("templateId", "") == "playback.defaultBar");
 
       // Verify main paned area is a template
       REQUIRE(decoded.root.children.size() > 2);
@@ -56,9 +56,9 @@ namespace ao::gtk::layout::test
 
       // Verify status bar region is a template
       REQUIRE(decoded.root.children.size() > 3);
-      auto const& statusRegion = decoded.root.children[3];
-      CHECK(statusRegion.type == "template");
-      CHECK(statusRegion.getProp<std::string>("templateId", "") == "app.defaultStatusRegion");
+      auto const& statusBar = decoded.root.children[3];
+      CHECK(statusBar.type == "template");
+      CHECK(statusBar.getProp<std::string>("templateId", "") == "status.defaultBar");
     }
 
     SECTION("LayoutDocument round-trip preserves layout props and child order")
@@ -254,32 +254,6 @@ namespace ao::gtk::layout::test
     {
       auto const doc = createDefaultLayout();
       CHECK(doc.root.getLayout<std::string>("cssClasses", "") != "ao-layout-preset-modern");
-    }
-
-    SECTION("Modern preset has correct root and list pane classes")
-    {
-      auto const doc = createBuiltInLayout(LayoutPresetId::Modern);
-      CHECK(doc.root.getLayout<std::string>("cssClasses", "") == "ao-layout-preset-modern");
-
-      // Find list pane - it's inside the main-paned split
-      bool foundListPane = false;
-
-      for (auto const& child : doc.root.children)
-      {
-        if (child.id == "main-paned")
-        {
-          for (auto const& splitChild : child.children)
-          {
-            if (splitChild.id == "list-pane")
-            {
-              CHECK(splitChild.getLayout<std::string>("cssClasses", "") == "ao-modern-list-pane");
-              foundListPane = true;
-            }
-          }
-        }
-      }
-
-      CHECK(foundListPane);
     }
   }
 

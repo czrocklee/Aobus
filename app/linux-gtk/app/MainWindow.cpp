@@ -26,7 +26,7 @@ namespace ao::gtk
     : _runtime{runtime}
     , _configPtr{std::move(configPtr)}
     , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configPtr)}
-    , _shellLayout{_runtime, *this, _configPtr}
+    , _shellLayout{_runtime, *this, _configPtr, *_mainWindowCoordinatorPtr->themeController()}
   {
     set_title("Aobus");
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);

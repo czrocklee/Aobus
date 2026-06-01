@@ -25,6 +25,7 @@
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
+#include <gtkmm/listbox.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/messagedialog.h>
 #include <gtkmm/object.h>
@@ -32,6 +33,7 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/spinbutton.h>
+#include <gtkmm/switch.h>
 #include <gtkmm/treestore.h>
 #include <gtkmm/treeview.h>
 #include <gtkmm/widget.h>
@@ -54,7 +56,7 @@ namespace ao::gtk::layout::editor
 {
   namespace
   {
-    constexpr int kTreeMinContentWidth = 300;
+    constexpr int kTreeMinContentWidth = 220;
     constexpr int kTreeMinContentHeight = 460;
     constexpr int kPropertiesMinContentWidth = 420;
     constexpr int kPropertiesMaxContentWidth = 560;
@@ -65,11 +67,13 @@ namespace ao::gtk::layout::editor
                                          ComponentRegistry const& registry,
                                          ActionRegistry const& actionRegistry,
                                          LayoutDocument initialLayout,
-                                         std::string initialPresetId)
+                                         std::string initialPresetId,
+                                         std::string initialThemeId)
     : AppDialog{}
     , _registry{registry}
     , _actionRegistry{actionRegistry}
     , _document{std::move(initialLayout)}
+    , _columns{}
     , _treeStorePtr{Gtk::TreeStore::create(_columns)}
     , _actionGroupPtr{Gio::SimpleActionGroup::create()}
   {
@@ -104,17 +108,38 @@ namespace ao::gtk::layout::editor
         }
       });
 
-    if (!initialPresetId.empty())
-    {
-      _comboPresets.set_active_id(initialPresetId);
-    }
+    _comboPresets.set_active_id(initialPresetId);
+    _comboThemePresets.set_active_id(initialThemeId);
 
-    _comboPresets.signal_changed().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onPresetChanged));
+    _comboPresets.signal_changed().connect(
+      [this]
+      {
+        if (auto const id = _comboPresets.get_active_id(); !id.empty())
+        {
+          auto const presetId = (id.raw() == "modern") ? LayoutPresetId::Modern : LayoutPresetId::Classic;
+          _document = createBuiltInLayout(presetId);
+          populateTree();
+          _signalApplyPreview.emit(_document);
+        }
+      });
+
+    _comboThemePresets.signal_changed().connect(
+      [this]
+      {
+        if (auto const id = _comboThemePresets.get_active_id(); !id.empty())
+        {
+          _signalThemePreview.emit(id.raw());
+        }
+      });
 
     populateTree();
   }
 
-  LayoutEditorDialog::~LayoutEditorDialog() = default;
+  LayoutEditorDialog::~LayoutEditorDialog()
+  {
+    headerBar().remove(_comboPresets);
+    headerBar().remove(_btnReset);
+  }
 
   void LayoutEditorDialog::setupUi()
   {
@@ -135,18 +160,22 @@ namespace ao::gtk::layout::editor
     _treeScroll.set_vexpand(true);
 
     _toolbar.set_spacing(2);
+    _toolbar.add_css_class("ao-editor-toolbar");
     _toolbar.append(_btnAdd);
     _toolbar.append(_btnWrap);
     _toolbar.append(_btnRemove);
     _toolbar.append(_btnUp);
     _toolbar.append(_btnDown);
-    _toolbar.append(_btnRaiseZ);
-    _toolbar.append(_btnLowerZ);
-    _toolbar.append(_btnReset);
 
-    _comboPresets.append("classic", "Classic");
-    _comboPresets.append("modern", "Modern");
-    _toolbar.append(_comboPresets);
+    headerBar().pack_end(_comboPresets);
+    headerBar().pack_end(_comboThemePresets);
+    headerBar().pack_end(_btnReset);
+
+    _comboPresets.append("classic", "Classic Layout");
+    _comboPresets.append("modern", "Modern Layout");
+
+    _comboThemePresets.append("classic", "Classic Theme");
+    _comboThemePresets.append("modern", "Modern Theme");
 
     _btnReset.set_tooltip_text("Reset to selected preset's default layout");
 
@@ -181,16 +210,26 @@ namespace ao::gtk::layout::editor
       }
     }
 
-    _btnAdd.set_label("Add Child");
+    _btnAdd.set_icon_name("list-add-symbolic");
+    _btnAdd.set_tooltip_text("Add Child");
     _btnAdd.set_menu_model(addMenuPtr);
 
+    _btnWrap.set_icon_name("object-group-symbolic");
+    _btnWrap.set_tooltip_text("Wrap Node");
     _btnWrap.set_menu_model(wrapMenuPtr);
 
+    _btnRemove.set_icon_name("user-trash-symbolic");
+    _btnRemove.set_tooltip_text("Remove Node");
     _btnRemove.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onRemoveNode));
+
+    _btnUp.set_icon_name("go-up-symbolic");
+    _btnUp.set_tooltip_text("Move Up");
     _btnUp.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onMoveUp));
+
+    _btnDown.set_icon_name("go-down-symbolic");
+    _btnDown.set_tooltip_text("Move Down");
     _btnDown.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onMoveDown));
-    _btnRaiseZ.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onRaiseZ));
-    _btnLowerZ.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onLowerZ));
+
     _btnReset.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onResetDefault));
 
     _treeBox.append(_toolbar);
@@ -212,7 +251,7 @@ namespace ao::gtk::layout::editor
     _paned.set_start_child(_treeBox);
     _paned.set_end_child(_propertiesScroll);
 
-    int const panedPosition = 300;
+    int const panedPosition = 220;
     _paned.set_position(panedPosition);
 
     _paned.set_vexpand(true);
@@ -226,7 +265,21 @@ namespace ao::gtk::layout::editor
     auto row = *(_treeStorePtr->append());
     auto const optDescriptor = _registry.descriptor(_document.root.type);
 
-    row[_columns.displayName] = optDescriptor ? optDescriptor->displayName : _document.root.id;
+    auto displayName = _document.root.id;
+    if (displayName.empty())
+    {
+      displayName = optDescriptor ? optDescriptor->displayName : _document.root.type;
+    }
+
+    if (_document.root.type == "template")
+    {
+      if (auto const templateId = _document.root.getProp<std::string>("templateId", ""); !templateId.empty())
+      {
+        displayName += " [" + templateId + "]";
+      }
+    }
+
+    row[_columns.displayName] = displayName;
     row[_columns.type] = _document.root.type;
     row[_columns.nodePtr] = &_document.root;
 
@@ -247,6 +300,14 @@ namespace ao::gtk::layout::editor
     if (displayName.empty())
     {
       displayName = optDescriptor ? optDescriptor->displayName : node->type;
+    }
+
+    if (node->type == "template")
+    {
+      if (auto const templateId = node->getProp<std::string>("templateId", ""); !templateId.empty())
+      {
+        displayName += " [" + templateId + "]";
+      }
     }
 
     row[_columns.displayName] = displayName;
@@ -315,53 +376,6 @@ namespace ao::gtk::layout::editor
 
       notifyPreview();
     }
-  }
-
-  void LayoutEditorDialog::onRaiseZ()
-  {
-    auto* const node = selectedNonRootNode();
-
-    if (node == nullptr)
-    {
-      return;
-    }
-
-    auto const currentZ = node->getLayout<std::int64_t>("zIndex", 0);
-    node->layout["zIndex"] = LayoutValue{static_cast<std::int64_t>(currentZ + 1)};
-
-    if (auto const selection = _treeView.get_selection()->get_selected(); selection)
-    {
-      if (selection->get_value(_columns.nodePtr) == node)
-      {
-        updatePropertiesPanel(node);
-      }
-    }
-
-    notifyPreview();
-  }
-
-  void LayoutEditorDialog::onLowerZ()
-  {
-    auto* const node = selectedNonRootNode();
-
-    if (node == nullptr)
-    {
-      return;
-    }
-
-    auto const currentZ = node->getLayout<std::int64_t>("zIndex", 0);
-    node->layout["zIndex"] =
-      LayoutValue{static_cast<std::int64_t>(std::max(static_cast<std::int64_t>(0), currentZ - 1))};
-
-    if (auto const selection = _treeView.get_selection()->get_selected(); selection)
-    {
-      if (selection->get_value(_columns.nodePtr) == node)
-      {
-        updatePropertiesPanel(node);
-      }
-    }
-
-    notifyPreview();
   }
 
   void LayoutEditorDialog::addComponent(std::string type)
@@ -676,7 +690,19 @@ namespace ao::gtk::layout::editor
       auto* const labelWidget = Gtk::make_managed<Gtk::Label>(label);
       labelWidget->set_halign(Gtk::Align::START);
       labelWidget->set_size_request(100, -1);
+
+      // If it's a switch or something we want right-aligned, let it expand?
+      // Actually we can just let editor set its own halign.
+      editor.set_valign(Gtk::Align::CENTER);
+
       hbox->append(*labelWidget);
+
+      // Let the editor expand if it's an entry
+      if (dynamic_cast<Gtk::Entry*>(&editor) != nullptr)
+      {
+        editor.set_hexpand(true);
+      }
+
       hbox->append(editor);
       return hbox;
     }
@@ -691,9 +717,9 @@ namespace ao::gtk::layout::editor
     _propertiesBox.append(*label);
   }
 
-  void LayoutEditorDialog::renderIdSection(LayoutNode* node)
+  Gtk::Widget* LayoutEditorDialog::renderIdSection(LayoutNode* node)
   {
-    auto* const hbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kSpacingLarge);
+    auto* const hbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 10);
 
     auto* const label = Gtk::make_managed<Gtk::Label>("ID");
     label->set_halign(Gtk::Align::START);
@@ -702,6 +728,7 @@ namespace ao::gtk::layout::editor
     auto* const entry = Gtk::make_managed<Gtk::Entry>();
     entry->set_text(node->id);
     entry->set_hexpand(true);
+    entry->add_css_class("flat-entry");
 
     auto const debounceConnPtr = std::make_shared<sigc::connection>();
     constexpr int kDebounceMs = 500;
@@ -747,36 +774,40 @@ namespace ao::gtk::layout::editor
 
     hbox->append(*label);
     hbox->append(*entry);
-    _propertiesBox.append(*hbox);
+    return hbox;
   }
 
-  void LayoutEditorDialog::renderBoolEditor(LayoutNode* node,
-                                            PropertyDescriptor const& prop,
-                                            LayoutValue const& currentVal,
-                                            bool isLayoutProp)
+  Gtk::Widget* LayoutEditorDialog::renderBoolEditor(LayoutNode* node,
+                                                    PropertyDescriptor const& prop,
+                                                    LayoutValue const& currentVal,
+                                                    bool isLayoutProp)
   {
-    auto* const check = Gtk::make_managed<Gtk::CheckButton>();
+    auto* const check = Gtk::make_managed<Gtk::Switch>();
+    check->set_halign(Gtk::Align::END);
+    check->set_hexpand(true);
     check->set_active(currentVal.asBool());
-    check->signal_toggled().connect(
+    check->property_active().signal_changed().connect(
       [this, node, prop, check, isLayoutProp]
       { applyPropertyChange(node, prop.name, LayoutValue{check->get_active()}, isLayoutProp); });
-    _propertiesBox.append(*createPropertyRow(prop.label, *check));
+    return createPropertyRow(prop.label, *check);
   }
 
-  void LayoutEditorDialog::renderIntEditor(LayoutNode* node,
-                                           PropertyDescriptor const& prop,
-                                           LayoutValue const& currentVal,
-                                           bool isLayoutProp)
+  Gtk::Widget* LayoutEditorDialog::renderIntEditor(LayoutNode* node,
+                                                   PropertyDescriptor const& prop,
+                                                   LayoutValue const& currentVal,
+                                                   bool isLayoutProp)
   {
     auto* const spin = Gtk::make_managed<Gtk::SpinButton>(
       Gtk::Adjustment::create(static_cast<double>(currentVal.asInt()), -9999, 9999, 1));
+    spin->set_halign(Gtk::Align::END);
+    spin->set_hexpand(true);
     spin->signal_value_changed().connect(
       [this, node, prop, spin, isLayoutProp]
       {
         applyPropertyChange(
           node, prop.name, LayoutValue{static_cast<std::int64_t>(spin->get_value_as_int())}, isLayoutProp);
       });
-    _propertiesBox.append(*createPropertyRow(prop.label, *spin));
+    return createPropertyRow(prop.label, *spin);
   }
 
   void LayoutEditorDialog::populateActionComboBox(Gtk::ComboBoxText* combo,
@@ -847,12 +878,14 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  void LayoutEditorDialog::renderEnumEditor(LayoutNode* node,
-                                            PropertyDescriptor const& prop,
-                                            LayoutValue const& currentVal,
-                                            bool isLayoutProp)
+  Gtk::Widget* LayoutEditorDialog::renderEnumEditor(LayoutNode* node,
+                                                    PropertyDescriptor const& prop,
+                                                    LayoutValue const& currentVal,
+                                                    bool isLayoutProp)
   {
     auto* const combo = Gtk::make_managed<Gtk::ComboBoxText>();
+    combo->set_halign(Gtk::Align::END);
+    combo->set_hexpand(true);
 
     if (prop.optActionBinding)
     {
@@ -887,17 +920,18 @@ namespace ao::gtk::layout::editor
       rowBox->append(*warning);
     }
 
-    _propertiesBox.append(*rowBox);
+    return rowBox;
   }
 
-  void LayoutEditorDialog::renderStringEditor(LayoutNode* node,
-                                              PropertyDescriptor const& prop,
-                                              LayoutValue const& currentVal,
-                                              bool isLayoutProp)
+  Gtk::Widget* LayoutEditorDialog::renderStringEditor(LayoutNode* node,
+                                                      PropertyDescriptor const& prop,
+                                                      LayoutValue const& currentVal,
+                                                      bool isLayoutProp)
   {
     auto* const entry = Gtk::make_managed<Gtk::Entry>();
     entry->set_text(currentVal.asString());
     entry->set_hexpand(true);
+    entry->add_css_class("flat-entry");
 
     auto const debounceConnPtr = std::make_shared<sigc::connection>();
     constexpr int kDebounceMs = 500;
@@ -919,10 +953,10 @@ namespace ao::gtk::layout::editor
           kDebounceMs);
       });
 
-    _propertiesBox.append(*createPropertyRow(prop.label, *entry));
+    return createPropertyRow(prop.label, *entry);
   }
 
-  void LayoutEditorDialog::dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp)
+  Gtk::Widget* LayoutEditorDialog::dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp)
   {
     auto currentVal = LayoutValue{prop.defaultValue};
     auto const& propertyMap = isLayoutProp ? node->layout : node->props;
@@ -934,14 +968,14 @@ namespace ao::gtk::layout::editor
 
     switch (prop.kind)
     {
-      case PropertyKind::Bool: renderBoolEditor(node, prop, currentVal, isLayoutProp); break;
-      case PropertyKind::Int: renderIntEditor(node, prop, currentVal, isLayoutProp); break;
-      case PropertyKind::Enum: renderEnumEditor(node, prop, currentVal, isLayoutProp); break;
-      case PropertyKind::String: renderStringEditor(node, prop, currentVal, isLayoutProp); break;
+      case PropertyKind::Bool: return renderBoolEditor(node, prop, currentVal, isLayoutProp);
+      case PropertyKind::Int: return renderIntEditor(node, prop, currentVal, isLayoutProp);
+      case PropertyKind::Enum: return renderEnumEditor(node, prop, currentVal, isLayoutProp);
+      case PropertyKind::String: return renderStringEditor(node, prop, currentVal, isLayoutProp);
       default:
       {
         auto* const placeholder = Gtk::make_managed<Gtk::Label>("(Unsupported editor)");
-        _propertiesBox.append(*createPropertyRow(prop.label, *placeholder));
+        return createPropertyRow(prop.label, *placeholder);
       }
     }
   }
@@ -969,21 +1003,35 @@ namespace ao::gtk::layout::editor
 
     auto const optDescriptorOption = _registry.descriptor(node->type);
 
-    // 1. ID editor
-    renderIdSection(node);
+    auto appendToListBox = [&](Gtk::ListBox* list, Gtk::Widget* rowContent)
+    {
+      if (!rowContent) return;
+      auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
+      rowContent->set_margin(4);
+      row->set_child(*rowContent);
+      row->set_activatable(false);
+      row->set_selectable(false);
+      list->append(*row);
+    };
 
-    // 2. Component properties
+    // 1. General Section (ID + Component properties)
+    addSectionTitle("General");
+    auto* const generalList = Gtk::make_managed<Gtk::ListBox>();
+    generalList->add_css_class("ao-boxed-list");
+
+    appendToListBox(generalList, renderIdSection(node));
+
     if (optDescriptorOption && !optDescriptorOption->props.empty())
     {
-      addSectionTitle("Properties");
-
       for (auto const& prop : optDescriptorOption->props)
       {
-        dispatchEditor(node, prop, false);
+        appendToListBox(generalList, dispatchEditor(node, prop, false));
       }
     }
 
-    // 3. Layout properties (component-specific + common)
+    _propertiesBox.append(*generalList);
+
+    // 2. Layout properties (component-specific + common)
     {
       auto layoutProps = optDescriptorOption ? optDescriptorOption->layoutProps : std::vector<PropertyDescriptor>{};
       auto const addCommon = [&](PropertyDescriptor prop)
@@ -1044,11 +1092,15 @@ namespace ao::gtk::layout::editor
       if (!layoutProps.empty())
       {
         addSectionTitle("Layout Properties");
+        auto* const layoutList = Gtk::make_managed<Gtk::ListBox>();
+        layoutList->add_css_class("ao-boxed-list");
 
         for (auto const& prop : layoutProps)
         {
-          dispatchEditor(node, prop, true);
+          appendToListBox(layoutList, dispatchEditor(node, prop, true));
         }
+
+        _propertiesBox.append(*layoutList);
       }
     }
 

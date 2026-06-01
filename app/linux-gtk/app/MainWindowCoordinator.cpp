@@ -7,6 +7,7 @@
 #include "app/GtkLayoutConfig.h"
 #include "app/GtkUiServices.h"
 #include "app/MainWindow.h"
+#include "app/ThemeCoordinator.h"
 #include "app/UIState.h"
 #include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
@@ -51,7 +52,7 @@ namespace ao::gtk
       , trackRowCache{runtime.musicLibrary()}
       , imageCache{100}
       , playbackQueueModel{runtime.playback(), [this](TrackId id) { return trackRowCache.playbackDescriptor(id); }}
-      , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}}
+      , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeController}
       , listNavigationController{window,
                                  runtime,
                                  ListNavigationController::Callbacks{
@@ -74,7 +75,8 @@ namespace ao::gtk
                                      }
 
                                      return std::nullopt;
-                                   }}}
+                                   }},
+                                 themeController}
       , trackPresentationStore{runtime.workspace()}
       , trackPageHost{stack,
                       runtime,
@@ -95,7 +97,8 @@ namespace ao::gtk
                                     auto const txn = runtime.musicLibrary().readTransaction();
                                     coordinator->rebuildListPages(txn);
                                   },
-                                  .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }}}
+                                  .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }},
+                                themeController}
     {
       tagEditController.setDataProvider(&trackRowCache);
     }
@@ -141,6 +144,7 @@ namespace ao::gtk
     }
 
     GtkLayoutConfig layoutConfig;
+    ThemeCoordinator themeController;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
     uimodel::playback::PlaybackQueueModel playbackQueueModel;
@@ -251,6 +255,7 @@ namespace ao::gtk
     prefs.lastBackend = pb.selectedOutput.backendId.raw();
     prefs.lastOutputDeviceId = pb.selectedOutput.deviceId.raw();
     prefs.lastProfile = pb.selectedOutput.profileId.raw();
+    _implPtr->themeController.save(*_configPtr);
     _configPtr->saveAppPrefs(prefs);
 
     _runtime.workspace().saveSession(_runtime.configStore());
@@ -285,6 +290,9 @@ namespace ao::gtk
                                     audio::DeviceId{prefs.lastOutputDeviceId},
                                     audio::ProfileId{prefs.lastProfile});
     }
+
+    _implPtr->themeController.load(*_configPtr);
+    _implPtr->themeController.registerToplevel(_window);
   }
 
   GtkUiServices MainWindowCoordinator::uiServices()
@@ -296,7 +304,8 @@ namespace ao::gtk
                          .importExportCoordinator = &_implPtr->importExportCoordinator,
                          .trackPageHost = &_implPtr->trackPageHost,
                          .trackPresentationStore = &_implPtr->trackPresentationStore,
-                         .listNavigationController = &_implPtr->listNavigationController};
+                         .listNavigationController = &_implPtr->listNavigationController,
+                         .themeController = &_implPtr->themeController};
   }
 
   void MainWindowCoordinator::rebuildListPages(lmdb::ReadTransaction const& txn)
@@ -349,6 +358,10 @@ namespace ao::gtk
   uimodel::track::TrackPresentationViewModel* MainWindowCoordinator::trackPresentationStore()
   {
     return &_implPtr->trackPresentationStore;
+  }
+  ThemeCoordinator* MainWindowCoordinator::themeController()
+  {
+    return &_implPtr->themeController;
   }
   portal::ImportExportCoordinator& MainWindowCoordinator::importExport()
   {

@@ -1,0 +1,126 @@
+/* Generic widget utilities */
+.ao-p-none {
+  padding: 0;
+}
+
+.ao-m-none {
+  margin: 0;
+}
+
+.ao-rounded-md {
+  border-radius: var(--ao-radius-md);
+}
+
+.ao-opacity-dim {
+  opacity: var(--ao-opacity-dim);
+}
+
+.ao-opacity-muted {
+  opacity: var(--ao-opacity-muted);
+}
+
+.ao-opacity-80 {
+  opacity: 0.8;
+}
+
+/* Popover shell utilities */
+popover.ao-popover-transparent,
+popover.ao-popover-transparent>contents,
+popover.ao-popover-transparent>arrow {
+  background-color: rgba(0, 0, 0, 0);
+  background-image: none;
+  border: none;
+  border-width: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+popover.ao-popover-p-none>contents {
+  padding: 0;
+}
+
+popover.ao-popover-rounded-md>contents {
+  border-radius: var(--ao-radius-md);
+}
+
+/* Now-playing artwork thumbnail in control bar */
+.ao-nowplaying-image-thumb {
+  border-radius: 4px;
+  min-width: 48px;
+  min-height: 24px;
+  box-shadow: 0 1px 4px alpha(black, 0.15);
+}
+
+/* Modern full-width seekbar */
+.ao-seekbar-full-modern {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  margin: 0;
+  /* Pull it up to cover the border exactly */
+  margin-top: -11px;
+  /* Cancel bottom padding to not push other elements down */
+  margin-bottom: -10px;
+}
+
+.ao-seekbar-full-modern trough {
+  margin: 0;
+  border-radius: 0;
+  min-height: 2px;
+  background: transparent;
+}
+
+.ao-seekbar-full-modern:hover trough {
+  min-height: 6px;
+}
+
+.ao-seekbar-full-modern highlight {
+  border-radius: 0;
+  background: @accent_color;
+}
+
+.ao-seekbar-full-modern slider {
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 150ms;
+  margin: -8px;
+  /* Center slider on the trough */
+}
+
+.ao-seekbar-full-modern:hover slider {
+  opacity: 1;
+}
+
+/* Now-playing text group in bottom bar */
+.ao-nowplaying-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.ao-nowplaying-artist {
+  font-size: 0.9rem;
+  opacity: 0.7;
+}
+
+.ao-center-group-modern {}
+
+.ao-time-label {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  font-feature-settings: "tnum";
+}
+
+.ao-clickable {}
+
+.ao-clickable:hover {
+  opacity: 0.8;
+}
+
+
+/* Bottom bar right-side status */
+
+.ao-bottom-bar-status {
+  font-size: 0.8rem;
+  opacity: 0.55;
+}

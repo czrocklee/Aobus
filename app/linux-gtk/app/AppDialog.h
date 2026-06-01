@@ -59,6 +59,11 @@ namespace ao::gtk
      */
     Gtk::Button* addCancelAction(std::string const& label, std::int32_t responseId);
 
+    /**
+     * Provides access to the underlying header bar to add custom widgets.
+     */
+    Gtk::HeaderBar& headerBar() { return _headerBar; }
+
   private:
     Gtk::HeaderBar _headerBar;
     Gtk::Box _rootBox{Gtk::Orientation::VERTICAL};

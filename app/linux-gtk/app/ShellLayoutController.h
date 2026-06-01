@@ -23,6 +23,7 @@
 namespace ao::gtk
 {
   class AppConfig;
+  class ThemeCoordinator;
 
   class ShellLayoutController final : public layout::IActionContextProvider
   {
@@ -34,7 +35,10 @@ namespace ao::gtk
                                                 layout::ActionHandler,
                                                 layout::ActionStateProvider)>;
 
-    ShellLayoutController(rt::AppRuntime& runtime, Gtk::Window& parentWindow, std::shared_ptr<AppConfig> configPtr);
+    ShellLayoutController(rt::AppRuntime& runtime,
+                          Gtk::Window& parentWindow,
+                          std::shared_ptr<AppConfig> configPtr,
+                          ThemeCoordinator& themeCoordinator);
 
     layout::ComponentRegistry& registry() { return _registry; }
     layout::LayoutContext& context() { return _context; }
@@ -69,6 +73,7 @@ namespace ao::gtk
     layout::LayoutDocument _activeLayout;
     std::string _activePresetId;
     std::shared_ptr<AppConfig> _configPtr;
+    ThemeCoordinator& _themeCoordinator;
     bool _isCustomized = false;
     rt::async::LifetimeScope _tasks;
   };

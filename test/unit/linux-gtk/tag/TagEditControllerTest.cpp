@@ -3,10 +3,12 @@
 
 #include "tag/TagEditController.h"
 
+#include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleactiongroup.h>
+#include <gtkmm/application.h>
 #include <gtkmm/window.h>
 
 #include <memory>
@@ -20,9 +22,10 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
 
+    auto themeController = ThemeCoordinator{};
     auto callbacks = TagEditController::Callbacks{.onTagsMutated = [] {}};
 
-    auto controller = TagEditController{window, fixture.runtime(), std::move(callbacks)};
+    auto controller = TagEditController{window, fixture.runtime(), std::move(callbacks), themeController};
 
     SECTION("setup and addActionsTo does not crash")
     {

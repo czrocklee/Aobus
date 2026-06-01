@@ -24,7 +24,9 @@ add_library(aobus-gtk-lib STATIC
     app/MainWindow.cpp
     app/MenuController.cpp
     app/ShellLayoutController.cpp
-    app/StyleManager.cpp
+    app/GtkStyleRuntime.cpp
+    app/ThemeCoordinator.cpp
+    app/ThemePreset.cpp
     app/MainWindowCoordinator.cpp
     app/AppConfig.cpp
     app/GtkLayoutConfig.cpp

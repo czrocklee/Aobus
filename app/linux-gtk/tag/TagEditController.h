@@ -29,6 +29,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class TrackRowCache;
+  class ThemeCoordinator;
 }
 
 namespace ao::gtk
@@ -50,7 +51,10 @@ namespace ao::gtk
       std::function<void()> onTagsMutated;
     };
 
-    TagEditController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks);
+    TagEditController(Gtk::Window& parent,
+                      rt::AppRuntime& runtime,
+                      Callbacks callbacks,
+                      ThemeCoordinator& themeController);
     ~TagEditController();
 
     // Not copyable or movable
@@ -89,6 +93,7 @@ namespace ao::gtk
     rt::AppRuntime& _runtime;
     TrackRowCache* _dataProvider = nullptr;
     Gtk::Window& _parent;
+    ThemeCoordinator& _themeController;
 
     // The explicit selection to apply the tags to
     std::optional<TrackSelectionContext> _optActiveSelection;

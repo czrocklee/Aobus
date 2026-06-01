@@ -1,0 +1,67 @@
+/* ===== Aobus Design Tokens ===== */
+:root {
+  /* Box spacing (Gap) - Although GTK CSS does not support the gap property,
+     defining variables here can serve as a reference for user.css,
+     or be used in supported scenarios like Grid.
+     Note: C++ layouts still use kGap* from LayoutConstants.h
+  */
+  --ao-gap-none: 0px;
+  --ao-gap-sm: 4px;
+  --ao-gap-md: 6px;
+  --ao-gap-lg: 8px;
+  --ao-gap-xl: 12px;
+
+  /* Margin/Padding spacing - All margin controls should be done via these variables in CSS */
+  --ao-spacing-xs: 2px;
+  --ao-spacing-sm: 4px;
+  --ao-spacing-md: 6px;
+  --ao-spacing-lg: 8px;
+  --ao-spacing-xl: 12px;
+  --ao-spacing-xxl: 24px;
+
+  /* Border Radius */
+  --ao-radius-sm: 4px;
+  --ao-radius-md: 8px;
+  --ao-radius-full: 100px;
+
+  /* Audio Quality Semantic Colors */
+  --ao-quality-perfect: #A855F7;
+  --ao-quality-lossless: #10B981;
+  --ao-quality-intervention: #F59E0B;
+  --ao-quality-lossy: #6B7280;
+  --ao-quality-clipped: #EF4444;
+
+  /* Opacity */
+  --ao-opacity-dim: 0.4;
+  --ao-opacity-muted: 0.7;
+
+  /* Animation Transitions */
+  --ao-transition-fast: 200ms;
+  --ao-transition-normal: 250ms;
+
+  /* Progress Bar */
+  --ao-seek-trough-height: 6px;
+  --ao-seek-slider-size: 14px;
+
+  /* Font Size */
+  --ao-font-size-sm: 0.85rem;
+  /* Semantic Tokens - Default/Classic Theme */
+  --ao-surface-bg: @theme_base_color;
+  --ao-surface-border-color: alpha(currentColor, 0.10);
+  --ao-surface-border-width: 1px;
+  --ao-surface-shadow: none;
+
+  --ao-card-radius: 4px;
+  --ao-card-padding: 8px;
+
+  --ao-row-min-height: 36px;
+  --ao-list-row-min-height: 32px;
+  --ao-row-radius: 2px;
+  --ao-row-hover-bg: alpha(currentColor, 0.04);
+  --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.2);
+
+  --ao-control-radius: 4px;
+  --ao-control-hover-scale: 1.0;
+  
+  --ao-transition-base: 150ms ease;
+}

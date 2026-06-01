@@ -154,10 +154,10 @@ namespace ao::gtk::layout::test
       auto* const rootBox = dynamic_cast<Gtk::Box*>(&fullLayoutPtr->widget());
       REQUIRE(rootBox != nullptr);
 
-      // Child order: 0=menuBar, 1=playback-row (expanded template), 2=split, 3=status region
-      auto* const playbackRow = rootBox->get_first_child()->get_next_sibling();
-      REQUIRE(playbackRow != nullptr);
-      auto* const barBox = dynamic_cast<Gtk::Box*>(playbackRow);
+      // Child order: 0=menuBar, 1=playback-bar (expanded template), 2=split, 3=status bar
+      auto* const playbackBar = rootBox->get_first_child()->get_next_sibling();
+      REQUIRE(playbackBar != nullptr);
+      auto* const barBox = dynamic_cast<Gtk::Box*>(playbackBar);
       REQUIRE(barBox != nullptr);
 
       auto* const leftChild = barBox->get_first_child();
