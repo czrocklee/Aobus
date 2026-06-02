@@ -49,7 +49,7 @@ ao::Result<PcmBlock> readNextBlock()
 - Use `ao::makeError(code, message)` for concise error results, or `std::unexpected(ao::Error{...})` when explicit construction is clearer.
 - Preserve `Error::Code` when adding context unless the current layer intentionally maps the error category.
 - Do not use `bool` + `lastError()`, empty strings, `std::optional`, or `std::error_code` for new recoverable error reporting.
-- Do not add `[[nodiscard]]`; Aobus forbids ad hoc nodiscard annotations and relies on lint/review for ignored returns.
+- Do not add `[[nodiscard]]` to functions or regular classes. RAII classes that manage scope or resource handles MUST include `[[nodiscard]]`. This is enforced via lint for classes with the following suffixes: `Guard`, `Subscription`, `Scope`, `Session`, `Lock`, `Transaction`, `Timer`, `Writer`, `Handle`, `Token`, `TempDir`, `TempFile`.
 
 ## Optional means absence (3.2.1, 5.1.3, 5.3)
 

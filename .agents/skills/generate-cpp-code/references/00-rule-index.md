@@ -46,7 +46,7 @@ Use this checklist when auditing generated code against `CONTRIBUTING.md`:
 - 2.8.1-2.8.2: no C-style casts; use `static_cast` for numeric conversions in logs/format strings.
 - 2.9.1-2.9.2: prefer `'\n'`; use project logging for diagnostics.
 - 3.1.1-3.1.8: concepts, `std::format`, `std::span`, `std::ranges`, `[[no_unique_address]]`, `starts_with`/`ends_with`, designated initializers, `std::jthread`/`std::stop_token`.
-- 3.2.1-3.2.8.2: optional-for-absence with `opt` prefix and concise checks; variant; string_view; if constexpr; structured bindings; init-statements; no `[[nodiscard]]`; unused parameters as comments and conditional unused values as `[[maybe_unused]]`.
+- 3.2.1-3.2.8.2: optional-for-absence with `opt` prefix and concise checks; variant; string_view; if constexpr; structured bindings; init-statements; `[[nodiscard]]` only on RAII classes; unused parameters as comments and conditional unused values as `[[maybe_unused]]`.
 - 3.3.1: `ao::Result<T>`/`ao::Result<>` for recoverable failures; no bool+lastError, optional failure, or `std::error_code` for new code.
 - 3.4.1-3.4.7: RAII/custom deleters, `override` without repeated `virtual`, brace member initialization, `noexcept`, project initialization style, traditional return types, no empty lambda parameter list.
 - 4.1.1: trivial one-line getters/setters inline in headers.

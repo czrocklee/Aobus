@@ -14,7 +14,7 @@
 
 namespace ao::audio
 {
-  class AlacDecoderSession final : public IDecoderSession
+  class [[nodiscard]] AlacDecoderSession final : public IDecoderSession
   {
   public:
     explicit AlacDecoderSession(Format outputFormat);

@@ -16,7 +16,7 @@ namespace ao::gtk
 {
   class ThemeCoordinator;
 
-  class ThemeRegistrationToken final
+  class [[nodiscard]] ThemeRegistrationToken final
   {
   public:
     ThemeRegistrationToken() = default;

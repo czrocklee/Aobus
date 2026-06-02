@@ -8,14 +8,14 @@
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Basic/LLVM.h>
 
-namespace clang::tidy::readability
+namespace clang::tidy::modernize
 {
-  /// Enforces Rule 3.2.7: do not use [[nodiscard]].  Rely on the unused-return
-  /// diagnostic instead.
-  class ForbidNodiscardCheck : public ClangTidyCheck
+  /// Enforces Aobus nodiscard usage policy: [[nodiscard]] is forbidden on
+  /// functions and non-RAII classes, but required on RAII classes.
+  class NodiscardUsageCheck : public ClangTidyCheck
   {
   public:
-    ForbidNodiscardCheck(StringRef name, ClangTidyContext* context)
+    NodiscardUsageCheck(StringRef name, ClangTidyContext* context)
       : ClangTidyCheck{name, context}
     {
     }
@@ -23,4 +23,4 @@ namespace clang::tidy::readability
     void registerMatchers(ast_matchers::MatchFinder* finder) override;
     void check(ast_matchers::MatchFinder::MatchResult const& result) override;
   };
-} // namespace clang::tidy::readability
+} // namespace clang::tidy::modernize

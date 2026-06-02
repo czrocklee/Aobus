@@ -20,7 +20,7 @@ namespace ao::rt::async
     bool isAlive{true};
   };
 
-  class LifetimeScope final
+  class [[nodiscard]] LifetimeScope final
   {
   public:
     LifetimeScope();

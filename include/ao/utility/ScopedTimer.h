@@ -11,7 +11,7 @@
 
 namespace ao::utility
 {
-  class ScopedTimer final
+  class [[nodiscard]] ScopedTimer final
   {
   public:
     using Clock = std::chrono::steady_clock;

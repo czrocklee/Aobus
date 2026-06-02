@@ -32,7 +32,7 @@ namespace ao::audio::backend::test
 
   namespace
   {
-    struct DummySinkGuard final
+    struct [[nodiscard]] DummySinkGuard final
     {
       PipeWireEnvironmentGuard envGuard;
       PwThreadLoopPtr threadLoopPtr;

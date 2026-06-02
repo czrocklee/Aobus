@@ -5,7 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono> // IWYU pragma: keep
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <variant>
@@ -17,10 +17,11 @@ namespace ao::uimodel::track::test
 
   TEST_CASE("TrackFieldFormatter - duration formatting", "[uimodel][track][formatter]")
   {
-    REQUIRE(formatDuration(0ms).empty());
-    REQUIRE(formatDuration(1000ms) == "0:01");
-    REQUIRE(formatDuration(61000ms) == "1:01");
-    REQUIRE(formatDuration(3600000ms) == "1:0:00"); // 60 minutes
+    using std::chrono::milliseconds;
+    REQUIRE(formatDuration(milliseconds{0}).empty());
+    REQUIRE(formatDuration(milliseconds{1000}) == "0:01");
+    REQUIRE(formatDuration(milliseconds{61000}) == "1:01");
+    REQUIRE(formatDuration(milliseconds{3600000}) == "1:0:00"); // 60 minutes
   }
 
   TEST_CASE("TrackFieldFormatter - uint16 formatting", "[uimodel][track][formatter]")

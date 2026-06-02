@@ -18,7 +18,7 @@ namespace ao::test
   /**
    * RAII temporary directory for test files.
    */
-  class TempDir final
+  class [[nodiscard]] TempDir final
   {
   public:
     TempDir()
@@ -53,7 +53,7 @@ namespace ao::test
     std::filesystem::path _path;
   };
 
-  struct TempFile final
+  struct [[nodiscard]] TempFile final
   {
     std::filesystem::path path;
 

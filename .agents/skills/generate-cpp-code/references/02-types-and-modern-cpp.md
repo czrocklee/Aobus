@@ -150,7 +150,7 @@ if (auto const result = openDevice(id); !result)
 }
 ```
 
-Do not add `[[nodiscard]]`. For unused values, use anonymous parameter comments when a parameter is never used, and `[[maybe_unused]]` when a value is conditionally used:
+Do not add `[[nodiscard]]` to functions or regular classes. Only RAII classes with user-provided destructors and deleted copy constructors must use it. For unused values, use anonymous parameter comments when a parameter is never used, and `[[maybe_unused]]` when a value is conditionally used:
 
 ```cpp
 void onDeviceRemoved(DeviceId const& /*id*/)

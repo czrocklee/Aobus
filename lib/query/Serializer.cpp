@@ -17,7 +17,7 @@ namespace ao::query
 {
   namespace
   {
-    struct ParenthesisGuard final
+    struct [[nodiscard]] ParenthesisGuard final
     {
       ParenthesisGuard(std::ostringstream& oss, bool apply)
         : oss{oss}, apply{apply}

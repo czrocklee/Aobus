@@ -150,7 +150,7 @@ namespace ao::lmdb
   /**
    * Database::Writer - Write access to a database within a transaction.
    */
-  class Database::Writer final
+  class [[nodiscard]] Database::Writer final
   {
   public:
     ~Writer() noexcept;

@@ -8,7 +8,7 @@
 
 namespace ao::utility
 {
-  class Subscription final
+  class [[nodiscard]] Subscription final
   {
   public:
     Subscription() = default;

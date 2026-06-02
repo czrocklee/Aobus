@@ -15,7 +15,7 @@ add_library(AobusLintPlugin MODULE
   check/ConcreteFinalCheck.cpp
   check/ControlBlockSpacingCheck.cpp
   check/IncludeConventionCheck.cpp
-  check/ForbidNodiscardCheck.cpp
+  check/NodiscardUsageCheck.cpp
   check/ForbidTrailingReturnCheck.cpp
   check/IdentifierNamingExtensionsCheck.cpp
   check/ImplicitBoolConversionInInitCheck.cpp

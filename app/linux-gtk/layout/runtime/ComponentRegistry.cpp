@@ -183,7 +183,7 @@ namespace ao::gtk::layout
 
     if (node.optTooltip && node.optTooltip->nodePtr)
     {
-      struct SurfaceGuard
+      struct [[nodiscard]] SurfaceGuard
       {
         LayoutContext& ctx;
         LayoutSurface saved;

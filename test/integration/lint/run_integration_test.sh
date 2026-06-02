@@ -25,7 +25,7 @@ get_check_alias() {
         CApiGlobalQualificationCheckFixture.cpp) echo "aobus-readability-c-api-global-qualification" ;;
         ConcreteFinalCheckFixture.cpp) echo "aobus-modernize-concrete-final" ;;
         ControlBlockSpacingCheckFixture.cpp) echo "aobus-readability-control-block-spacing" ;;
-        ForbidNodiscardCheckFixture.cpp) echo "aobus-modernize-forbid-nodiscard" ;;
+        NodiscardUsageCheckFixture.cpp) echo "aobus-modernize-nodiscard-usage" ;;
         ForbidTrailingReturnCheckFixture.cpp) echo "aobus-modernize-forbid-trailing-return" ;;
         IdentifierNamingExtensionsCheckFixture.cpp) echo "aobus-readability-identifier-naming-extensions" ;;
         LambdaParamsCheckFixture.cpp) echo "aobus-modernize-lambda-params" ;;

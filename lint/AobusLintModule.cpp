@@ -5,7 +5,6 @@
 #include "check/CApiGlobalQualificationCheck.h"
 #include "check/ConcreteFinalCheck.h"
 #include "check/ControlBlockSpacingCheck.h"
-#include "check/ForbidNodiscardCheck.h"
 #include "check/ForbidTrailingReturnCheck.h"
 #include "check/IdentifierNamingExtensionsCheck.h"
 #include "check/ImplicitBoolConversionInInitCheck.h"
@@ -14,6 +13,7 @@
 #include "check/LocalInitializationStyleCheck.h"
 #include "check/ManagedPointerSuffixCheck.h"
 #include "check/MemberOrderCheck.h"
+#include "check/NodiscardUsageCheck.h"
 #include "check/OptionalNamingAndUsageCheck.h"
 #include "check/RedundantNamespaceQualificationCheck.h"
 #include "check/RedundantUsingDirectiveCheck.h"
@@ -44,7 +44,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<CApiGlobalQualificationCheck>("aobus-readability-c-api-global-qualification");
       checkFactories.registerCheck<ConcreteFinalCheck>("aobus-modernize-concrete-final");
       checkFactories.registerCheck<ControlBlockSpacingCheck>("aobus-readability-control-block-spacing");
-      checkFactories.registerCheck<ForbidNodiscardCheck>("aobus-modernize-forbid-nodiscard");
+      checkFactories.registerCheck<modernize::NodiscardUsageCheck>("aobus-modernize-nodiscard-usage");
       checkFactories.registerCheck<ForbidTrailingReturnCheck>("aobus-modernize-forbid-trailing-return");
       checkFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");
       checkFactories.registerCheck<aobus::ImplicitBoolConversionInInitCheck>("aobus-implicit-bool-conversion-in-init");

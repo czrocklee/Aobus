@@ -29,7 +29,7 @@ namespace ao::rt
 {
   namespace
   {
-    class ReplayScope final
+    class [[nodiscard]] ReplayScope final
     {
     public:
       explicit ReplayScope(bool& replaying)

@@ -257,8 +257,8 @@ add_library(ao_lint_fixture OBJECT EXCLUDE_FROM_ALL
     integration/lint/fixture/BracedInitializationCheckFixture.cpp
     integration/lint/fixture/CApiGlobalQualificationCheckFixture.cpp
     integration/lint/fixture/ConcreteFinalCheckFixture.cpp
-    integration/lint/fixture/ControlBlockSpacingCheckFixture.cpp
-    integration/lint/fixture/ForbidNodiscardCheckFixture.cpp
+    integration/lint/fixture/IncludeConventionCheckFixture.cpp
+    integration/lint/fixture/NodiscardUsageCheckFixture.cpp
     integration/lint/fixture/ForbidTrailingReturnCheckFixture.cpp
     integration/lint/fixture/IdentifierNamingExtensionsCheckFixture.cpp
     integration/lint/fixture/LambdaParamsCheckFixture.cpp

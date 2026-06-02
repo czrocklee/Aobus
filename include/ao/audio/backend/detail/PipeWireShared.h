@@ -72,7 +72,7 @@ namespace ao::audio::backend::detail
 
   using SpaSourcePtr = std::unique_ptr<::spa_source, SpaSourceDeleter>;
 
-  class SpaHookGuard final
+  class [[nodiscard]] SpaHookGuard final
   {
   public:
     SpaHookGuard() noexcept
@@ -103,7 +103,7 @@ namespace ao::audio::backend::detail
     ::spa_hook _hook;
   };
 
-  class PwThreadLoopGuard final
+  class [[nodiscard]] PwThreadLoopGuard final
   {
   public:
     explicit PwThreadLoopGuard(::pw_thread_loop* loop) noexcept
@@ -133,7 +133,7 @@ namespace ao::audio::backend::detail
     ::pw_thread_loop* _loop;
   };
 
-  class PipeWireEnvironmentGuard final
+  class [[nodiscard]] PipeWireEnvironmentGuard final
   {
   public:
     PipeWireEnvironmentGuard();
