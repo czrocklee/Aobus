@@ -129,10 +129,11 @@ namespace clang::tidy::readability
     finder->addMatcher(declStmt(hasParent(compoundStmt().bind("block"))).bind("decl"), this);
 
     // Matcher 2: Implicit condition variable inside if
-    finder->addMatcher(ifStmt(hasConditionVariableStatement(declStmt(hasSingleDecl(varDecl().bind("condVar"))).bind("condDecl")),
-                              unless(hasInitStatement(anything())))
-                         .bind("implicitIf"),
-                       this);
+    finder->addMatcher(
+      ifStmt(hasConditionVariableStatement(declStmt(hasSingleDecl(varDecl().bind("condVar"))).bind("condDecl")),
+             unless(hasInitStatement(anything())))
+        .bind("implicitIf"),
+      this);
   }
 
   void UseIfInitStatementCheck::check(MatchFinder::MatchResult const& result)
@@ -169,7 +170,8 @@ namespace clang::tidy::readability
 
     if (isPointer)
     {
-      diag(condVar->getBeginLoc(), "prefer explicit init-statement style with pointer syntax: if (auto* var = expr; var != nullptr)");
+      diag(condVar->getBeginLoc(),
+           "prefer explicit init-statement style with pointer syntax: if (auto* var = expr; var != nullptr)");
     }
     else
     {

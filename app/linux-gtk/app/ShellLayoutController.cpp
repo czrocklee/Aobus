@@ -447,7 +447,7 @@ namespace ao::gtk
                                                            initialThemeId);
     auto* const dialogRaw = dialogPtr.get();
 
-    _themeCoordinator.registerToplevel(*dialogRaw);
+    _optEditorThemeToken = _themeCoordinator.registerToplevel(*dialogRaw);
 
     _context.editMode = true;
     _context.onNodeMoved = [dialogRaw](std::string const& nodeId, std::int32_t posX, std::int32_t posY)
@@ -477,6 +477,15 @@ namespace ao::gtk
           config.saveAppPrefs(prefsUpdate);
         }
 
+        if (auto const themeIdStr = sharedDialogPtr->selectedThemeId(); !themeIdStr.empty())
+        {
+          _themeCoordinator.setTheme(themePresetFromString(themeIdStr));
+          auto prefsUpdate = rt::AppPrefsState{};
+          config.loadAppPrefs(prefsUpdate);
+          prefsUpdate.lastThemePreset = themeIdStr;
+          config.saveAppPrefs(prefsUpdate);
+        }
+
         _host.setLayout(_context, _activeLayout);
         config.saveShellLayout(_activeLayout, _activePresetId);
       });
@@ -486,7 +495,7 @@ namespace ao::gtk
       {
         _context.editMode = false;
         _context.onNodeMoved = nullptr;
-        _themeCoordinator.unregisterToplevel(*sharedDialogPtr);
+        _optEditorThemeToken.reset();
       });
 
     dialogRaw->signal_response().connect(
@@ -496,20 +505,6 @@ namespace ao::gtk
         {
           _host.setLayout(_context, _activeLayout);
           _themeCoordinator.setTheme(oldTheme);
-        }
-        else if (responseId == Gtk::ResponseType::OK)
-        {
-          if (auto const themeIdStr = sharedDialogPtr->selectedThemeId(); !themeIdStr.empty())
-          {
-            _themeCoordinator.setTheme(themePresetFromString(themeIdStr));
-            auto prefsUpdate = rt::AppPrefsState{};
-            if (_configPtr)
-            {
-              _configPtr->loadAppPrefs(prefsUpdate);
-              prefsUpdate.lastThemePreset = themeIdStr;
-              _configPtr->saveAppPrefs(prefsUpdate);
-            }
-          }
         }
       });
 

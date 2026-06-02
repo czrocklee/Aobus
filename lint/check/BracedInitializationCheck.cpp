@@ -242,7 +242,8 @@ namespace clang::tidy::readability
 
       if (construct == nullptr)
       {
-        if (auto const* bind = dyn_cast_or_null<CXXBindTemporaryExpr>(cast->getSubExpr()->IgnoreImplicit()); bind != nullptr)
+        if (auto const* bind = dyn_cast_or_null<CXXBindTemporaryExpr>(cast->getSubExpr()->IgnoreImplicit());
+            bind != nullptr)
         {
           construct = dyn_cast_or_null<CXXConstructExpr>(bind->getSubExpr()->IgnoreImplicit());
         }

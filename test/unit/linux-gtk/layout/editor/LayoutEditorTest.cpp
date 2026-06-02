@@ -345,6 +345,23 @@ namespace ao::gtk::layout::editor::test
       dialogValidPtr->response(Gtk::ResponseType::OK);
     }
 
+    SECTION("invalid save does not emit save request")
+    {
+      auto invalidDoc = LayoutDocument{};
+      invalidDoc.root.type = "app.actionButton";
+      invalidDoc.root.props["primaryAction"] = LayoutValue{std::string{"this.does.not.exist"}};
+
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern"};
+
+      auto saveCount = 0;
+      dialog.signalSaveRequest().connect([&](LayoutDocument const&) { ++saveCount; });
+
+      dialog.response(Gtk::ResponseType::OK);
+
+      CHECK(saveCount == 0);
+      dialog.close();
+    }
+
     SECTION("signalApplyPreview is emitted on document changes")
     {
       auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
@@ -355,6 +372,18 @@ namespace ao::gtk::layout::editor::test
       CHECK(count == 0);
 
       dialogPtr->close();
+    }
+
+    SECTION("destroys cleanly with header preset widgets")
+    {
+      {
+        auto dialogPtr =
+          std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
+        dialogPtr->present();
+        dialogPtr->close();
+        dialogPtr.reset();
+      }
+      SUCCEED(); // Reaching here without crash or GTK warnings (in a real display session) is the goal
     }
   }
 

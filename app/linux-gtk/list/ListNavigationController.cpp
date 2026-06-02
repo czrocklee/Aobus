@@ -168,7 +168,7 @@ namespace ao::gtk
     }
 
     auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, parentListId, *_dataProvider);
-    _themeController.registerToplevel(*dialog);
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
 
     if (!initialExpression.empty())
     {
@@ -176,7 +176,7 @@ namespace ao::gtk
     }
 
     dialog->signal_response().connect(
-      [this, dialog](std::int32_t responseId)
+      [this, dialog, tokenPtr](std::int32_t responseId)
       {
         if (responseId == Gtk::ResponseType::OK)
         {
@@ -226,10 +226,10 @@ namespace ao::gtk
     {
       auto const optPres = _callbacks.getListPresentation ? _callbacks.getListPresentation(listId) : std::nullopt;
       auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optView->parentId(), *_dataProvider);
-      _themeController.registerToplevel(*dialog);
+      auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
       dialog->populate(listId, *optView, optPres);
       dialog->signal_response().connect(
-        [this, dialog, listId](std::int32_t responseId)
+        [this, dialog, listId, tokenPtr](std::int32_t responseId)
         {
           if (responseId == Gtk::ResponseType::OK)
           {

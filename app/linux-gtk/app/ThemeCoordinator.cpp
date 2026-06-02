@@ -6,12 +6,30 @@
 #include "app/ThemePreset.h"
 #include <ao/rt/StateTypes.h>
 
+#include <gtkmm/widget.h>
+#include <gtkmm/window.h>
+
 #include <algorithm>
 #include <string>
-#include <string_view>
 
 namespace ao::gtk
 {
+  ThemeRegistrationToken::~ThemeRegistrationToken()
+  {
+    reset();
+  }
+
+  void ThemeRegistrationToken::reset()
+  {
+    if (_coordinator != nullptr && _window != nullptr)
+    {
+      _coordinator->unregisterToplevel(*_window);
+    }
+
+    _coordinator = nullptr;
+    _window = nullptr;
+  }
+
   void ThemeCoordinator::load(AppConfig const& config)
   {
     auto prefs = rt::AppPrefsState{};
@@ -39,7 +57,7 @@ namespace ao::gtk
 
     for (auto* const window : _registeredWindows)
     {
-      if (window)
+      if (window != nullptr)
       {
         removeThemeClass(*window, oldPreset);
         applyThemeClass(*window, preset);
@@ -57,13 +75,15 @@ namespace ao::gtk
     applyThemeClass(root, _activePreset);
   }
 
-  void ThemeCoordinator::registerToplevel(Gtk::Window& window)
+  ThemeRegistrationToken ThemeCoordinator::registerToplevel(Gtk::Window& window)
   {
-    if (std::ranges::find(_registeredWindows, &window) == _registeredWindows.end())
+    if (!std::ranges::contains(_registeredWindows, &window))
     {
       _registeredWindows.push_back(&window);
       applyThemeClass(window, _activePreset);
     }
+
+    return ThemeRegistrationToken{this, &window};
   }
 
   void ThemeCoordinator::unregisterToplevel(Gtk::Window& window)

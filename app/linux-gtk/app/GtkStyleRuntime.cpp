@@ -100,8 +100,8 @@ namespace ao::gtk
   }
 
   void GtkStyleRuntime::addProviderForDisplayOf(Gtk::Widget& widget,
-                                            Glib::RefPtr<Gtk::CssProvider> providerPtr,
-                                            guint priority)
+                                                Glib::RefPtr<Gtk::CssProvider> providerPtr,
+                                                guint priority)
   {
     Gtk::StyleContext::add_provider_for_display(widget.get_display(), providerPtr, priority);
   }
@@ -136,6 +136,7 @@ namespace ao::gtk
     }
 
     _appProviderPtr = Gtk::CssProvider::create();
+
     try
     {
       _appProviderPtr->load_from_resource("/org/aobus/app.css");
@@ -144,6 +145,7 @@ namespace ao::gtk
     {
       APP_LOG_ERROR("GtkStyleRuntime: Failed to load app.css from GResource: {}", err.what());
     }
+
     Gtk::StyleContext::add_provider_for_display(displayPtr, _appProviderPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }
 

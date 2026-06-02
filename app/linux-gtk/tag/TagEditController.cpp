@@ -182,7 +182,8 @@ namespace ao::gtk
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
       _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, _optActiveSelection->selectedIds);
-    _themeController.registerToplevel(*dialog);
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
+    dialog->signal_hide().connect([tokenPtr] {});
     dialog->present();
   }
 
@@ -195,7 +196,8 @@ namespace ao::gtk
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
       _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, selection.selectedIds);
-    _themeController.registerToplevel(*dialog);
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
+    dialog->signal_hide().connect([tokenPtr] {});
     dialog->present();
   }
 

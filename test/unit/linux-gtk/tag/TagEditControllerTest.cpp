@@ -8,7 +8,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleactiongroup.h>
-#include <gtkmm/application.h>
 #include <gtkmm/window.h>
 
 #include <memory>

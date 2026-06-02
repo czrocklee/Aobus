@@ -538,9 +538,8 @@ namespace ao::gtk::layout
         }
 
         double btnX = 0.0;
-        double btnY = 0.0;
 
-        if (_container.translate_coordinates(_toggleButton, containerX, containerY, btnX, btnY))
+        if (double btnY = 0.0; _container.translate_coordinates(_toggleButton, containerX, containerY, btnX, btnY))
         {
           if (_toggleButton.contains(btnX, btnY))
           {

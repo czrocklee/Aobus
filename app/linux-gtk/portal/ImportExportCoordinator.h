@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/ThemeCoordinator.h"
 #include "portal/LibraryTaskProgressDialog.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryYamlExporter.h>
@@ -19,6 +20,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace ao::rt
@@ -92,6 +94,7 @@ namespace ao::gtk::portal
     ImportExportCallbacks _callbacks;
     ThemeCoordinator& _themeController;
 
+    std::optional<ThemeRegistrationToken> _optLibraryTaskThemeToken;
     rt::Subscription _libraryTaskProgressSub;
     rt::Subscription _libraryTaskCompletedSub;
     rt::async::LifetimeScope _tasks;

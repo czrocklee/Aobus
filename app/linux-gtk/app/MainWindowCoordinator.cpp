@@ -8,6 +8,7 @@
 #include "app/GtkUiServices.h"
 #include "app/MainWindow.h"
 #include "app/ThemeCoordinator.h"
+#include "app/ThemePreset.h"
 #include "app/UIState.h"
 #include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
@@ -250,12 +251,15 @@ namespace ao::gtk
 
     // App prefs (including playback state and last library)
     auto prefs = rt::AppPrefsState{};
+    _configPtr->loadAppPrefs(prefs);
+
     prefs.lastLibraryPath = _runtime.musicLibrary().rootPath().string();
     auto const& pb = _runtime.playback().state();
     prefs.lastBackend = pb.selectedOutput.backendId.raw();
     prefs.lastOutputDeviceId = pb.selectedOutput.deviceId.raw();
     prefs.lastProfile = pb.selectedOutput.profileId.raw();
-    _implPtr->themeController.save(*_configPtr);
+    prefs.lastThemePreset = std::string{themePresetToString(_implPtr->themeController.activeTheme())};
+
     _configPtr->saveAppPrefs(prefs);
 
     _runtime.workspace().saveSession(_runtime.configStore());
@@ -292,7 +296,7 @@ namespace ao::gtk
     }
 
     _implPtr->themeController.load(*_configPtr);
-    _implPtr->themeController.registerToplevel(_window);
+    _optThemeToken = _implPtr->themeController.registerToplevel(_window);
   }
 
   GtkUiServices MainWindowCoordinator::uiServices()

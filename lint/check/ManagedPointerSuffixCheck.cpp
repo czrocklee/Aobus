@@ -13,9 +13,8 @@ namespace clang::tidy::readability
 {
   void ManagedPointerSuffixCheck::registerMatchers(MatchFinder* finder)
   {
-    auto const managedPointerType =
-      hasType(qualType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(
-        cxxRecordDecl(hasAnyName("::std::shared_ptr", "::std::unique_ptr", "::std::weak_ptr", "::Glib::RefPtr")))))));
+    auto const managedPointerType = hasType(qualType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(
+      cxxRecordDecl(hasAnyName("::std::shared_ptr", "::std::unique_ptr", "::std::weak_ptr", "::Glib::RefPtr")))))));
 
     finder->addMatcher(declaratorDecl(managedPointerType, unless(matchesName(".*Ptr$"))).bind("root"), this);
   }
@@ -29,8 +28,6 @@ namespace clang::tidy::readability
       return;
     }
 
-    diag(declNode->getLocation(), "managed pointer variable '%0' should end with 'Ptr'")
-      << declNode->getName();
+    diag(declNode->getLocation(), "managed pointer variable '%0' should end with 'Ptr'") << declNode->getName();
   }
-
 } // namespace clang::tidy::readability

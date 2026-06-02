@@ -4,9 +4,9 @@
 #pragma once
 
 #include <clang-tidy/ClangTidyCheck.h>
+#include <clang-tidy/ClangTidyDiagnosticConsumer.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Basic/LLVM.h>
-#include <clang-tidy/ClangTidyDiagnosticConsumer.h>
 
 namespace clang::tidy::readability
 {

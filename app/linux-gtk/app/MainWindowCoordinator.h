@@ -4,10 +4,12 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
+#include "app/ThemeCoordinator.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 
 #include <memory>
+#include <optional>
 
 namespace ao::lmdb
 {
@@ -33,6 +35,7 @@ namespace ao::gtk
   class ListNavigationController;
   class TrackPageHost;
   class ThemeCoordinator;
+
   namespace portal
   {
     class ImportExportCoordinator;
@@ -79,6 +82,8 @@ namespace ao::gtk
     std::shared_ptr<AppConfig> _configPtr;
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
+
+    std::optional<ThemeRegistrationToken> _optThemeToken;
 
     rt::Subscription _tracksMutatedSubscription;
     rt::Subscription _libraryTaskProgressSubscription;

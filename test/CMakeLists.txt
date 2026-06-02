@@ -179,6 +179,9 @@ add_executable(ao_test_gtk
     unit/linux-gtk/image/ImageWidgetTest.cpp
     unit/linux-gtk/image/ImageCacheTest.cpp
     unit/linux-gtk/app/AppDialogTest.cpp
+    unit/linux-gtk/app/ThemeCoordinatorTest.cpp
+    unit/linux-gtk/app/ThemePresetTest.cpp
+    unit/linux-gtk/app/MainWindowCoordinatorTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/AppConfigTest.cpp

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/ThemeCoordinator.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -16,6 +17,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -74,6 +76,7 @@ namespace ao::gtk
     std::string _activePresetId;
     std::shared_ptr<AppConfig> _configPtr;
     ThemeCoordinator& _themeCoordinator;
+    std::optional<ThemeRegistrationToken> _optEditorThemeToken;
     bool _isCustomized = false;
     rt::async::LifetimeScope _tasks;
   };

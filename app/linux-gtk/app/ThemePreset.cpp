@@ -3,6 +3,10 @@
 
 #include "app/ThemePreset.h"
 
+#include <ao/rt/StateTypes.h>
+
+#include <string_view>
+
 namespace ao::gtk
 {
   std::string_view themePresetToString(rt::ThemePresetId preset)
@@ -21,6 +25,7 @@ namespace ao::gtk
     {
       return rt::ThemePresetId::Modern;
     }
+
     return rt::ThemePresetId::Classic;
   }
 

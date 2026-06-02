@@ -3,7 +3,6 @@
 
 #include "LayoutEditorDialog.h"
 
-#include "../LayoutConstants.h"
 #include "app/AppDialog.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
@@ -19,13 +18,13 @@
 #include <glibmm/ustring.h>
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
-#include <gtkmm/checkbutton.h>
 #include <gtkmm/comboboxtext.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/messagedialog.h>
 #include <gtkmm/object.h>
@@ -138,6 +137,7 @@ namespace ao::gtk::layout::editor
   LayoutEditorDialog::~LayoutEditorDialog()
   {
     headerBar().remove(_comboPresets);
+    headerBar().remove(_comboThemePresets);
     headerBar().remove(_btnReset);
   }
 
@@ -266,6 +266,7 @@ namespace ao::gtk::layout::editor
     auto const optDescriptor = _registry.descriptor(_document.root.type);
 
     auto displayName = _document.root.id;
+
     if (displayName.empty())
     {
       displayName = optDescriptor ? optDescriptor->displayName : _document.root.type;
@@ -1005,7 +1006,11 @@ namespace ao::gtk::layout::editor
 
     auto appendToListBox = [&](Gtk::ListBox* list, Gtk::Widget* rowContent)
     {
-      if (!rowContent) return;
+      if (!rowContent)
+      {
+        return;
+      }
+
       auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
       rowContent->set_margin(4);
       row->set_child(*rowContent);

@@ -116,8 +116,9 @@ namespace ao::gtk::portal
         {
           self->_libraryTaskDialogPtr =
             std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), self->_parent);
-          self->_themeController.registerToplevel(*self->_libraryTaskDialogPtr);
+          self->_optLibraryTaskThemeToken = self->_themeController.registerToplevel(*self->_libraryTaskDialogPtr);
         }
+
         auto* const dialogPtr = self->_libraryTaskDialogPtr.get();
         self->_libraryTaskDialogPtr->signal_response().connect([dialogPtr](std::int32_t /*responseId*/)
                                                                { dialogPtr->close(); });
@@ -185,7 +186,9 @@ namespace ao::gtk::portal
     dialog->addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
     dialog->addPrimaryAction("Next", Gtk::ResponseType::OK);
 
-    dialog->signal_response().connect([this, modeCombo, dialog](std::int32_t responseId)
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
+
+    dialog->signal_response().connect([this, modeCombo, dialog, tokenPtr](std::int32_t responseId)
                                       { onExportModeConfirmed(responseId, modeCombo, dialog); });
     dialog->show();
   }

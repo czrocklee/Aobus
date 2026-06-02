@@ -22,6 +22,7 @@
 #include <gtkmm/window.h>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -225,9 +226,12 @@ namespace ao::gtk
 
     auto const label = std::string{_button.get_label()} + " Copy";
     auto dialog = TrackCustomViewDialog{*parentWindow, spec, label};
+    // NOLINTNEXTLINE(aobus-readability-use-if-init-statement) — RAII: must outlive if-block to keep dialog themed
+    auto optToken = std::optional<ThemeRegistrationToken>{};
+
     if (_themeController != nullptr)
     {
-      _themeController->registerToplevel(dialog);
+      optToken = _themeController->registerToplevel(dialog);
     }
 
     if (auto const optResult = dialog.runDialog(); optResult)
