@@ -23,6 +23,7 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 6. **Test Coverage:** All changes must include appropriate test coverage.
 7. **Temporary Workspace:** Do not use the repository directory as a scratch or temporary workspace. Generate throwaway files, experiment outputs, and ad hoc test artifacts under `/tmp` or another explicit external workspace, unless the file is an intentional source, test, fixture, or documentation change.
 8. **Formatting Timing:** Do not run `clang-format` or other formatting commands during normal implementation, debugging, validation, or final response prep. Keep edits manually style-aware during iteration. Run formatting only when the user explicitly asks for formatting or when creating a commit; in that case, run one targeted formatting pass immediately before staging/committing.
+9. **clang-tidy Opt-In:** Do not run clang-tidy, `./script/run-clang-tidy.sh`, or lint-only validation during a session unless the user explicitly asks for linting, clang-tidy, or lint cleanup in that session. Prefer build and targeted test validation by default. If the user explicitly requests clang-tidy/lint work, use the repository script rather than invoking clang-tidy directly.
 > [!TIP]
 > This repo is still under heavy development thus has no compatiblity/migration requrements, do suggests the best approach without historical baggage.
 
@@ -40,7 +41,7 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 ./script/run-tests.sh --gtk "[layout],[model]" # Run GTK tests matching [layout] OR [model]
 ./script/run-tests.sh --gtk --list "[layout]"  # List GTK tests matching [layout]
 
-# clang-tidy (standalone, via shell script)
+# clang-tidy (standalone, via shell script; run only when explicitly requested)
 ./script/run-clang-tidy.sh                     # Changed files (default)
 ./script/run-clang-tidy.sh --all               # Check entire repo
 ./script/run-clang-tidy.sh --folder test       # Check test folder

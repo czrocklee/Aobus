@@ -553,3 +553,17 @@ columnview row.ao-missing-row label {
   font-size: var(--ao-font-size-sm);
   margin-bottom: var(--ao-spacing-xs);
 }
+
+.ao-detail-pane .ao-property-editable-active {
+  padding: 1px var(--ao-spacing-sm);
+  border: 1px solid alpha(@theme_selected_bg_color, 0.45);
+  border-radius: var(--ao-radius-sm);
+  background: alpha(@theme_selected_bg_color, 0.08);
+}
+
+.ao-detail-pane .ao-property-editable-active:hover,
+.ao-detail-pane .ao-property-editable-active:focus,
+.ao-detail-pane .ao-property-editable-active:focus-within {
+  border-color: alpha(@theme_selected_bg_color, 0.75);
+  background: alpha(@theme_selected_bg_color, 0.14);
+}

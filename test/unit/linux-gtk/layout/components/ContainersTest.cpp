@@ -37,6 +37,21 @@ namespace ao::gtk::layout::test
   namespace
   {
     using namespace ao::lmdb::test;
+
+    struct WidgetMeasure final
+    {
+      std::int32_t minimum = 0;
+      std::int32_t natural = 0;
+      std::int32_t minimumBaseline = -1;
+      std::int32_t naturalBaseline = -1;
+    };
+
+    WidgetMeasure measureWidget(Gtk::Widget& widget, Gtk::Orientation orientation)
+    {
+      auto result = WidgetMeasure{};
+      widget.measure(orientation, -1, result.minimum, result.natural, result.minimumBaseline, result.naturalBaseline);
+      return result;
+    }
   } // namespace
 
   TEST_CASE("LayoutRuntime building", "[layout][unit][containers]")
@@ -337,13 +352,47 @@ namespace ao::gtk::layout::test
       auto* const paneSizer = revealer->get_child();
       REQUIRE(paneSizer != nullptr);
 
-      std::int32_t width = -1;
-      std::int32_t height = -1;
-      paneSizer->get_size_request(width, height);
-
       int const expectedWidth = 420;
-      CHECK(width == expectedWidth);
-      CHECK(height == -1);
+      auto const horizontalMeasure = measureWidget(*paneSizer, Gtk::Orientation::HORIZONTAL);
+      CHECK(horizontalMeasure.minimum == expectedWidth);
+      CHECK(horizontalMeasure.natural == expectedWidth);
+    }
+
+    SECTION("collapsibleSplit pane size is not expanded by child minimum width")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "collapsibleSplit";
+      doc.root.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      doc.root.props["position"] = LayoutValue{static_cast<std::int64_t>(120)};
+
+      auto workspaceNode = LayoutNode{.type = "spacer"};
+      auto detailNode = LayoutNode{.type = "spacer"};
+      detailNode.layout["widthRequest"] = LayoutValue{static_cast<std::int64_t>(900)};
+      doc.root.children.push_back(workspaceNode);
+      doc.root.children.push_back(detailNode);
+
+      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
+
+      REQUIRE(box != nullptr);
+
+      auto* const workspace = box->get_first_child();
+      REQUIRE(workspace != nullptr);
+
+      auto* const gutterBox = workspace->get_next_sibling();
+      REQUIRE(gutterBox != nullptr);
+
+      auto* const revealer = dynamic_cast<Gtk::Revealer*>(gutterBox->get_next_sibling());
+      REQUIRE(revealer != nullptr);
+
+      auto* const paneSizer = revealer->get_child();
+      REQUIRE(paneSizer != nullptr);
+
+      int const expectedWidth = 120;
+      auto const horizontalMeasure = measureWidget(*paneSizer, Gtk::Orientation::HORIZONTAL);
+      CHECK(horizontalMeasure.minimum == expectedWidth);
+      CHECK(horizontalMeasure.natural == expectedWidth);
+      CHECK(paneSizer->get_overflow() == Gtk::Overflow::HIDDEN);
     }
 
     SECTION("collapsibleSplit start side places the revealer before the handle")
@@ -384,13 +433,10 @@ namespace ao::gtk::layout::test
       auto* const paneSizer = revealer->get_child();
       REQUIRE(paneSizer != nullptr);
 
-      std::int32_t width = -1;
-      std::int32_t height = -1;
-      paneSizer->get_size_request(width, height);
-
       int const expectedHeight = 180;
-      CHECK(width == -1);
-      CHECK(height == expectedHeight);
+      auto const verticalMeasure = measureWidget(*paneSizer, Gtk::Orientation::VERTICAL);
+      CHECK(verticalMeasure.minimum == expectedHeight);
+      CHECK(verticalMeasure.natural == expectedHeight);
     }
 
     SECTION("collapsibleSplit invalid position falls back to default detail size")
@@ -420,13 +466,10 @@ namespace ao::gtk::layout::test
       auto* const paneSizer = revealer->get_child();
       REQUIRE(paneSizer != nullptr);
 
-      std::int32_t width = -1;
-      std::int32_t height = -1;
-      paneSizer->get_size_request(width, height);
-
       int const expectedDefaultWidth = 300;
-      CHECK(width == expectedDefaultWidth);
-      CHECK(height == -1);
+      auto const horizontalMeasure = measureWidget(*paneSizer, Gtk::Orientation::HORIZONTAL);
+      CHECK(horizontalMeasure.minimum == expectedDefaultWidth);
+      CHECK(horizontalMeasure.natural == expectedDefaultWidth);
     }
 
     SECTION("centerBox with 3 children builds Gtk::CenterBox")

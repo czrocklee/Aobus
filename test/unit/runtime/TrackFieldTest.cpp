@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -53,6 +54,19 @@ namespace ao::rt::test
       INFO("Duplicate field value: " << static_cast<int>(raw));
       CHECK(seen.insert(raw).second);
     }
+  }
+
+  TEST_CASE("trackFieldArrayAt indexes fixed arrays by TrackField", "[runtime][unit][trackfield]")
+  {
+    auto labels = std::array<std::string_view, kTrackFieldCount>{};
+
+    trackFieldArrayAt(labels, TrackField::Title) = "title";
+    trackFieldArrayAt(labels, TrackField::Quality) = "quality";
+
+    auto const& constLabels = labels;
+
+    CHECK(trackFieldArrayAt(constLabels, TrackField::Title) == "title");
+    CHECK(trackFieldArrayAt(constLabels, TrackField::Quality) == "quality");
   }
 
   TEST_CASE("trackFieldId round-trips through trackFieldFromId for all fields", "[runtime][unit][trackfield]")

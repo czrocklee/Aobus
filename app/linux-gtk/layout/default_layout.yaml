@@ -132,6 +132,7 @@ templates:
         children:
           - type: scroll
             props:
+              hscrollPolicy: never
               vscrollPolicy: automatic
             layout:
               vexpand: true
@@ -161,38 +162,12 @@ templates:
                   - type: track.coverArt
                     props:
                       forceSquare: true
+                      targetSize: 250
                     layout:
-                      widthRequest: 250
-                      heightRequest: 250
                       halign: center
-                  - type: track.metadataField
+                  - type: track.fieldGrid
                     props:
-                      field: title
-                      label: Title
-                  - type: track.metadataField
-                    props:
-                      field: artist
-                      label: Artist
-                  - type: track.metadataField
-                    props:
-                      field: album
-                      label: Album
-                  - type: track.audioProperty
-                    props:
-                      property: format
-                      label: Format
-                  - type: track.audioProperty
-                    props:
-                      property: sampleRate
-                      label: Sample Rate
-                  - type: track.audioProperty
-                    props:
-                      property: channels
-                      label: Channels
-                  - type: track.audioProperty
-                    props:
-                      property: bitDepth
-                      label: Bit Depth
+                      categories: ["metadata", "technical"]
                   - type: spacer
                     layout:
                       vexpand: true
@@ -242,7 +217,7 @@ templates:
     type: collapsibleSplit
     props:
       orientation: horizontal
-      position: 850
+      position: 300
       revealed: false
     layout:
       vexpand: true
@@ -286,4 +261,3 @@ templates:
         type: template
         props:
           templateId: app.defaultContentShell
-

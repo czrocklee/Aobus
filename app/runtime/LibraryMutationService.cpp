@@ -118,6 +118,23 @@ namespace ao::rt
         result.changedCold = true;
       }
 
+      for (auto const& [key, optValue] : patch.customUpdates)
+      {
+        if (key.empty())
+        {
+          continue;
+        }
+
+        builder.custom().remove(key);
+
+        if (optValue)
+        {
+          builder.custom().add(key, *optValue);
+        }
+
+        result.changedCold = true;
+      }
+
       return result;
     }
   }

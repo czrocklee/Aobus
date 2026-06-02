@@ -20,6 +20,7 @@ add_library(ao_app_runtime STATIC
     runtime/SmartListSource.cpp
     runtime/TrackPresentation.cpp
     runtime/TrackField.cpp
+    runtime/TrackFieldReader.cpp
     runtime/TrackListProjection.cpp
     runtime/TrackDetailProjection.cpp
     runtime/TrackSource.cpp

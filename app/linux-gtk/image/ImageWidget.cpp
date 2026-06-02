@@ -113,6 +113,16 @@ namespace ao::gtk
     }
   }
 
+  void ImageWidget::setMaxRenderSize(std::int32_t width, std::int32_t height)
+  {
+    if (_maxRenderWidth != width || _maxRenderHeight != height)
+    {
+      _maxRenderWidth = width;
+      _maxRenderHeight = height;
+      queueRefresh();
+    }
+  }
+
   void ImageWidget::bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr)
   {
     _detailProjectionPtr = std::move(projectionPtr);
@@ -341,6 +351,17 @@ namespace ao::gtk
     {
       logicalWidth = _sourcePixbufPtr->get_width();
       logicalHeight = _sourcePixbufPtr->get_height();
+    }
+
+    // Clamp to max render size when set.
+    if (_maxRenderWidth > 0 && logicalWidth > _maxRenderWidth)
+    {
+      logicalWidth = _maxRenderWidth;
+    }
+
+    if (_maxRenderHeight > 0 && logicalHeight > _maxRenderHeight)
+    {
+      logicalHeight = _maxRenderHeight;
     }
 
     // Ensure we are rounding UP to the nearest physical pixel to maintain sharpness.

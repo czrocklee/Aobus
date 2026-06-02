@@ -81,7 +81,7 @@ For a focused iteration after the test binary already exists:
 nix-shell --run "/tmp/build/debug/test/ao_test \"Component - behavior\""
 ```
 
-When adding or changing C++ tests, also run clang-tidy on changed files when practical:
+Do not run clang-tidy for test changes unless the user explicitly asks for linting, clang-tidy, or lint cleanup in the current session. If explicitly requested, use:
 
 ```bash
 ./script/run-clang-tidy.sh

@@ -223,8 +223,7 @@ namespace ao::gtk::layout::editor::test
                                                           "track.detailScope",
                                                           "track.selectionRegion",
                                                           "track.coverArt",
-                                                          "track.metadataField",
-                                                          "track.audioProperty",
+                                                          "track.fieldGrid",
                                                           "track.editLock",
                                                           "track.tagEditor"});
 
@@ -462,20 +461,20 @@ namespace ao::gtk::layout::editor::test
       CHECK(bar.children.size() == expectedChildren);
     }
 
-    SECTION("track.selectionDetailPane contains metadata fields and properties action")
+    SECTION("track.selectionDetailPane contains field grid and properties action")
     {
       auto const templates = getBuiltInTemplates();
       auto const& pane = templates.at("track.selectionDetailPane");
 
-      auto metadataFieldCount = 0;
+      auto hasFieldGrid = false;
       auto hasPropertiesAction = false;
 
       auto visit = std::function<void(LayoutNode const&)>{};
       visit = [&](LayoutNode const& node)
       {
-        if (node.type == "track.metadataField")
+        if (node.type == "track.fieldGrid")
         {
-          ++metadataFieldCount;
+          hasFieldGrid = true;
         }
 
         if (node.type == "app.actionButton" && node.getProp<std::string>("primaryAction", "") == "track.showProperties")
@@ -491,7 +490,7 @@ namespace ao::gtk::layout::editor::test
 
       visit(pane);
 
-      CHECK(metadataFieldCount == 3);
+      CHECK(hasFieldGrid);
       CHECK(hasPropertiesAction);
     }
 

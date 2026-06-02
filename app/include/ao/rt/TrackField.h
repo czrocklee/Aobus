@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -82,6 +83,18 @@ namespace ao::rt
   };
 
   constexpr auto kTrackFieldCount = static_cast<std::size_t>(TrackField::Quality) + 1;
+
+  template<typename Value>
+  Value& trackFieldArrayAt(std::array<Value, kTrackFieldCount>& values, TrackField const field)
+  {
+    return values.at(static_cast<std::size_t>(field));
+  }
+
+  template<typename Value>
+  Value const& trackFieldArrayAt(std::array<Value, kTrackFieldCount> const& values, TrackField const field)
+  {
+    return values.at(static_cast<std::size_t>(field));
+  }
 
   enum class TrackFieldCategory : std::uint8_t
   {

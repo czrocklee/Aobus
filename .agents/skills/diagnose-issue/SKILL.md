@@ -14,7 +14,7 @@ Use this skill when the user reports a failure or asks to debug behavior. The go
 
 Stay focused on the failing behavior. Do not start documentation updates, formatting passes, lint cleanup, include cleanup, coverage work, dependency upgrades, broad refactors, or unrelated test rewrites while diagnosing. Do those only when they directly unblock the fix or the user explicitly asks.
 
-If the fix touches C++ files, also load `generate-cpp-code` before editing. If the issue is specifically a clang-tidy failure, use `use-clang-tidy`; otherwise defer linting until the failure is fixed and validated.
+If the fix touches C++ files, also load `generate-cpp-code` before editing. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
 
 ## Debugging Loop
 
@@ -96,4 +96,4 @@ Use the narrowest passing check first, then widen according to risk:
 - Threading fix: rerun the reproducer repeatedly or under the relevant sanitizer when available.
 - Shared core behavior: run `./build.sh debug` after the focused check passes.
 
-Run formatting, clang-tidy, docs, or broad coverage only after the functional issue is fixed, and only when required by the user's requested deliverable.
+Run formatting, docs, or broad coverage only after the functional issue is fixed, and only when required by the user's requested deliverable. Run clang-tidy only when the user explicitly asks for linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session.

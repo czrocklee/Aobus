@@ -23,18 +23,27 @@ Gtk::Box
 ```
 
 The non-collapsible child expands along the split orientation. The collapsible
-child is wrapped in `paneSizer`, and only that wrapper receives explicit size
-requests. The resize grip and toggle button are distinct widgets so drag and
-click handling do not share the same GTK event target.
+child is wrapped in `paneSizer`, and only that wrapper reports the pane size
+along the split orientation. The resize grip and toggle button are distinct
+widgets so drag and click handling do not share the same GTK event target.
 
 ## Behavior
 
 - `position` is the remembered size of the collapsible pane, not a `Gtk::Paned`
   divider coordinate.
+- Built-in track detail panes set `position` to `50`, matching the current
+  minimum resize size, so the detail pane starts compact and can be expanded
+  deliberately.
 - Invalid or non-positive `position` values fall back to the default pane size.
 - Clicking the toggle button toggles `Gtk::Revealer::set_reveal_child()`.
-- Dragging the resize grip updates `paneSizer.set_size_request()` along the split
+- Dragging the resize grip updates the paneSizer size along the split
   orientation.
+- The collapsible child is allocated inside that remembered pane size even when
+  its contents request a larger minimum size. Content updates, including track
+  selection changes in the detail panel, must not override the user's last
+  dragged size.
+- The pane wrapper clips overflow so oversized child content does not draw past
+  the remembered pane boundary.
 - The drag controller is attached to the outer container, not the resize grip.
   This keeps drag offsets in a stable coordinate space while resizing moves the
   grip itself.

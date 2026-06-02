@@ -15,6 +15,8 @@
 #include <array>
 #include <cstddef>
 #include <functional>
+#include <iterator>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -64,6 +66,57 @@ namespace ao::rt::test
 
     auto const result = service.updateMetadata(targetIds, patch);
     REQUIRE(result.has_value());
+  }
+
+  TEST_CASE("LibraryMutationService - updateMetadata custom metadata", "[app][unit][runtime][mutation]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto const trackId = testLib.addTrack("Track");
+    auto executor = MockExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto service = LibraryMutationService{runtime, testLib.library()};
+
+    auto const targetIds = std::array{trackId};
+
+    SECTION("Add/Update custom key")
+    {
+      auto patch = MetadataPatch{};
+      patch.customUpdates["MyKey"] = "MyValue";
+      service.updateMetadata(targetIds, patch);
+
+      auto const txn = testLib.library().readTransaction();
+      auto const optView =
+        testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      auto const custom = optView->custom();
+      CHECK(std::ranges::distance(custom) == 1);
+      auto const first = *custom.begin();
+      CHECK(testLib.library().dictionary().get(first.first) == "MyKey");
+      CHECK(first.second == "MyValue");
+    }
+
+    SECTION("Remove custom key")
+    {
+      // First add it
+      {
+        auto patch = MetadataPatch{};
+        patch.customUpdates["ToDelete"] = "Value";
+        service.updateMetadata(targetIds, patch);
+      }
+
+      // Then remove it
+      {
+        auto patch = MetadataPatch{};
+        patch.customUpdates["ToDelete"] = std::nullopt;
+        service.updateMetadata(targetIds, patch);
+      }
+
+      auto const txn = testLib.library().readTransaction();
+      auto const optView =
+        testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      CHECK(std::ranges::distance(optView->custom()) == 0);
+    }
   }
 
   TEST_CASE("LibraryMutationService - editTags full operation", "[app][unit][runtime][mutation]")

@@ -20,6 +20,11 @@ namespace ao::gtk::layout::test
 {
   namespace yaml = ao::rt::yaml;
 
+  namespace
+  {
+    constexpr std::int64_t kMinimumDetailPaneSize = 300;
+  }
+
   TEST_CASE("Layout model GTK serialization", "[layout][unit][gtk][model]")
   {
     SECTION("LayoutDocument round-trip via createDefaultLayout")
@@ -59,6 +64,29 @@ namespace ao::gtk::layout::test
       auto const& statusBar = decoded.root.children[3];
       CHECK(statusBar.type == "template");
       CHECK(statusBar.getProp<std::string>("templateId", "") == "status.defaultBar");
+    }
+
+    SECTION("built-in detail panes start at the minimum split size")
+    {
+      auto const classicDoc = createBuiltInLayout(LayoutPresetId::Classic);
+      auto const classicDetailSplit = classicDoc.templates.at("app.defaultLayout");
+
+      CHECK(classicDetailSplit.type == "collapsibleSplit");
+      CHECK(classicDetailSplit.getProp<std::int64_t>("position", -1) == kMinimumDetailPaneSize);
+
+      auto const modernDoc = createBuiltInLayout(LayoutPresetId::Modern);
+      REQUIRE(!modernDoc.root.children.empty());
+
+      auto const& mainPaned = modernDoc.root.children[0];
+      REQUIRE(mainPaned.children.size() == 2);
+
+      auto const& contentShell = mainPaned.children[1];
+      REQUIRE(contentShell.children.size() >= 2);
+
+      auto const& modernDetailSplit = contentShell.children[1];
+      CHECK(modernDetailSplit.id == "main-workspace-split");
+      CHECK(modernDetailSplit.type == "collapsibleSplit");
+      CHECK(modernDetailSplit.getProp<std::int64_t>("position", -1) == kMinimumDetailPaneSize);
     }
 
     SECTION("LayoutDocument round-trip preserves layout props and child order")

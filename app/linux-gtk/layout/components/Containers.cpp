@@ -158,6 +158,108 @@ namespace ao::gtk::layout
     constexpr std::int32_t kResizeGripThickness = 4;
     constexpr double kCollapsibleSplitDragThreshold = 3.0;
 
+    class FixedSplitPane final : public Gtk::Widget
+    {
+    public:
+      FixedSplitPane() { set_overflow(Gtk::Overflow::HIDDEN); }
+
+      ~FixedSplitPane() override
+      {
+        if (_childPtr != nullptr)
+        {
+          _childPtr->unparent();
+        }
+      }
+
+      FixedSplitPane(FixedSplitPane const&) = delete;
+      FixedSplitPane& operator=(FixedSplitPane const&) = delete;
+      FixedSplitPane(FixedSplitPane&&) = delete;
+      FixedSplitPane& operator=(FixedSplitPane&&) = delete;
+
+      void setChild(Gtk::Widget& child)
+      {
+        clearChild();
+
+        _childPtr = &child;
+        child.set_parent(*this);
+      }
+
+      void clearChild()
+      {
+        if (_childPtr == nullptr)
+        {
+          return;
+        }
+
+        _childPtr->unparent();
+        _childPtr = nullptr;
+      }
+
+      void setSplitOrientation(Gtk::Orientation orientation)
+      {
+        if (_orientation == orientation)
+        {
+          return;
+        }
+
+        _orientation = orientation;
+        queue_resize();
+      }
+
+      void setPaneSize(std::int32_t size)
+      {
+        if (_paneSize == size)
+        {
+          return;
+        }
+
+        _paneSize = size;
+        queue_resize();
+      }
+
+    protected:
+      void measure_vfunc(Gtk::Orientation orientation,
+                         int forSize,
+                         int& minimum,
+                         int& natural,
+                         int& minimumBaseline,
+                         int& naturalBaseline) const override
+      {
+        if (orientation == _orientation)
+        {
+          minimum = _paneSize;
+          natural = _paneSize;
+          minimumBaseline = -1;
+          naturalBaseline = -1;
+          return;
+        }
+
+        if (_childPtr != nullptr)
+        {
+          _childPtr->measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
+          return;
+        }
+
+        minimum = 0;
+        natural = 0;
+        minimumBaseline = -1;
+        naturalBaseline = -1;
+      }
+
+      void size_allocate_vfunc(int width, int height, int baseline) override
+      {
+        if (_childPtr != nullptr)
+        {
+          _childPtr->size_allocate({0, 0, width, height}, baseline);
+        }
+      }
+
+    private:
+      Gtk::Widget* _childPtr = nullptr;
+      Gtk::Orientation _orientation = Gtk::Orientation::HORIZONTAL;
+      std::int32_t _paneSize = kDefaultCollapsibleSplitSize;
+    };
+
     /**
      * @brief A box container component.
      */
@@ -330,7 +432,7 @@ namespace ao::gtk::layout
         _collapseSide = (node.getProp<std::string>("collapseSide", "end") == "start") ? Side::Start : Side::End;
 
         _container.set_orientation(_orientation);
-        _paneSizer.set_orientation(_orientation);
+        _paneSizer.setSplitOrientation(_orientation);
 
         // Build children
         _startChildPtr = ctx.registry.create(ctx, node.children[0]);
@@ -376,7 +478,7 @@ namespace ao::gtk::layout
         _collapsibleWidget->set_hexpand(true);
         _collapsibleWidget->set_vexpand(true);
 
-        _paneSizer.append(*_collapsibleWidget);
+        _paneSizer.setChild(*_collapsibleWidget);
         _paneSizer.set_hexpand(_orientation == Gtk::Orientation::VERTICAL);
         _paneSizer.set_vexpand(_orientation == Gtk::Orientation::HORIZONTAL);
 
@@ -487,6 +589,13 @@ namespace ao::gtk::layout
         updateHandleIcon();
       }
 
+      ~CollapsibleSplitComponent() override { _paneSizer.clearChild(); }
+
+      CollapsibleSplitComponent(CollapsibleSplitComponent const&) = delete;
+      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent const&) = delete;
+      CollapsibleSplitComponent(CollapsibleSplitComponent&&) = delete;
+      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent&&) = delete;
+
       Gtk::Widget& widget() override
       {
         return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_container);
@@ -505,17 +614,7 @@ namespace ao::gtk::layout
                                               : Gtk::RevealerTransitionType::SLIDE_UP;
       }
 
-      void setSize(std::int32_t size)
-      {
-        if (_orientation == Gtk::Orientation::HORIZONTAL)
-        {
-          _paneSizer.set_size_request(size, -1);
-        }
-        else
-        {
-          _paneSizer.set_size_request(-1, size);
-        }
-      }
+      void setSize(std::int32_t size) { _paneSizer.setPaneSize(size); }
 
       Glib::RefPtr<Gdk::Cursor> resizeCursor() const
       {
@@ -610,7 +709,7 @@ namespace ao::gtk::layout
       Gtk::Box _resizeGrip;
       Gtk::Button _toggleButton;
       Gtk::Revealer _revealer;
-      Gtk::Box _paneSizer;
+      FixedSplitPane _paneSizer;
       Gtk::Orientation _orientation;
       Side _collapseSide;
       Glib::RefPtr<Gtk::GestureDrag> _dragGesturePtr;

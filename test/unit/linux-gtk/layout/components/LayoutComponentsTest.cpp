@@ -19,10 +19,12 @@
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/grid.h>
 #include <gtkmm/label.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/scale.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
 #include <algorithm>
@@ -39,6 +41,14 @@ namespace ao::gtk::layout::test
 
   namespace
   {
+    struct WidgetMeasure final
+    {
+      std::int32_t minimum = 0;
+      std::int32_t natural = 0;
+      std::int32_t minimumBaseline = -1;
+      std::int32_t naturalBaseline = -1;
+    };
+
     LayoutContext makeContext(ComponentRegistry& registry,
                               ActionRegistry& actionRegistry,
                               rt::AppRuntime& runtime,
@@ -46,6 +56,14 @@ namespace ao::gtk::layout::test
     {
       return LayoutContext{
         .registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    }
+
+    WidgetMeasure measureWidget(Gtk::Widget& widget, Gtk::Orientation orientation, std::int32_t forSize)
+    {
+      auto result = WidgetMeasure{};
+      widget.measure(
+        orientation, forSize, result.minimum, result.natural, result.minimumBaseline, result.naturalBaseline);
+      return result;
     }
   } // namespace
 
@@ -419,31 +437,60 @@ namespace ao::gtk::layout::test
       CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
     }
 
-    SECTION("track.coverArt creates image widget container")
+    SECTION("track.coverArt creates a stable responsive square slot")
     {
-      auto const node = LayoutNode{.type = "track.coverArt"};
+      auto node = LayoutNode{.type = "track.coverArt"};
+      node.props["targetSize"] = LayoutValue{static_cast<std::int64_t>(250)};
       auto const compPtr = registry.create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
-      CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
+
+      auto& widget = compPtr->widget();
+      CHECK(widget.get_overflow() == Gtk::Overflow::HIDDEN);
+      CHECK(widget.get_first_child() != nullptr);
+
+      auto const horizontalMeasure = measureWidget(widget, Gtk::Orientation::HORIZONTAL, -1);
+      CHECK(horizontalMeasure.minimum == 0);
+      CHECK(horizontalMeasure.natural == 250);
+
+      auto const heightConstrainedHorizontalMeasure = measureWidget(widget, Gtk::Orientation::HORIZONTAL, 233);
+      CHECK(heightConstrainedHorizontalMeasure.minimum == 0);
+      CHECK(heightConstrainedHorizontalMeasure.natural == 233);
+
+      auto const unconstrainedVerticalMeasure = measureWidget(widget, Gtk::Orientation::VERTICAL, -1);
+      CHECK(unconstrainedVerticalMeasure.minimum == 0);
+      CHECK(unconstrainedVerticalMeasure.natural == 250);
+
+      auto const narrowVerticalMeasure = measureWidget(widget, Gtk::Orientation::VERTICAL, 180);
+      CHECK(narrowVerticalMeasure.minimum == 0);
+      CHECK(narrowVerticalMeasure.natural == 180);
+
+      auto const wideVerticalMeasure = measureWidget(widget, Gtk::Orientation::VERTICAL, 320);
+      CHECK(wideVerticalMeasure.minimum == 0);
+      CHECK(wideVerticalMeasure.natural == 250);
+
+      auto* const imageWidget = widget.get_first_child();
+      REQUIRE(imageWidget != nullptr);
+      window.set_child(widget);
+      widget.set_visible(true);
+      imageWidget->set_visible(true);
+
+      widget.size_allocate(Gtk::Allocation{0, 0, 180, 300}, -1);
+      CHECK(widget.get_width() == 180);
+
+      window.unset_child();
     }
 
-    SECTION("track.metadataField creates label and editable label")
+    SECTION("track.fieldGrid creates grid and acts as scope subscriber")
     {
-      auto const node = LayoutNode{.type = "track.metadataField"};
+      auto const node = LayoutNode{.type = "track.fieldGrid"};
       auto const compPtr = registry.create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
-      CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
-    }
-
-    SECTION("track.audioProperty creates row with title and value labels")
-    {
-      auto const node = LayoutNode{.type = "track.audioProperty"};
-      auto const compPtr = registry.create(ctx, node);
-
-      REQUIRE(compPtr != nullptr);
-      CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
+      // Now returns a responsive wrapper containing the Grid
+      auto& widget = compPtr->widget();
+      CHECK(widget.get_first_child() != nullptr);
+      CHECK(dynamic_cast<Gtk::Grid*>(widget.get_first_child()) != nullptr);
     }
 
     SECTION("track.editLock creates button")
@@ -497,8 +544,7 @@ namespace ao::gtk::layout::test
                                                           "track.detailScope",
                                                           "track.selectionRegion",
                                                           "track.coverArt",
-                                                          "track.metadataField",
-                                                          "track.audioProperty",
+                                                          "track.fieldGrid",
                                                           "track.editLock",
                                                           "track.tagEditor",
                                                           "track.quickFilter"});

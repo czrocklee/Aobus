@@ -8,85 +8,113 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
+#include "track/TrackFieldUi.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackDetailProjection.h>
+#include <ao/rt/TrackField.h>
 #include <ao/utility/Log.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
+#include <glib.h>
+#include <glibmm/main.h>
 #include <glibmm/refptr.h>
-#include <gtkmm/adjustment.h> // NOLINT(misc-include-cleaner)
+#include <glibmm/ustring.h>
+#include <glibmm/utility.h>
+#include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/editablelabel.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerkey.h>
+#include <gtkmm/grid.h>
+#include <gtkmm/image.h>
 #include <gtkmm/label.h>
+#include <gtkmm/object.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/separator.h>
 #include <gtkmm/widget.h>
+#include <pangomm/layout.h>
 #include <sigc++/functors/mem_fun.h>
 #include <sigc++/signal.h>
 
-#include <chrono>
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
-#include <format>
+#include <deque>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::gtk::layout
 {
+  namespace detail
+  {
+    namespace
+    {
+      constexpr std::int32_t kDefaultCoverArtTargetSize = 250;
+      constexpr std::int32_t kStandardWidthThreshold = 550;
+    }
+
+    LayoutMode computeLayoutMode(int const width)
+    {
+      if (width < kStandardWidthThreshold)
+      {
+        return LayoutMode::Standard;
+      }
+
+      return LayoutMode::Wide;
+    }
+
+    std::int32_t coverArtSideForWidth(std::int32_t const width, std::int32_t const targetSize)
+    {
+      if (targetSize <= 0)
+      {
+        return 0;
+      }
+
+      if (width <= 0)
+      {
+        return targetSize;
+      }
+
+      return std::clamp(width, 1, targetSize);
+    }
+  }
+
   namespace
   {
     constexpr float kLabelOpacity = 0.6F;
-    constexpr std::uint16_t kCodecIdFlac = 3;
-    constexpr std::uint16_t kCodecIdMp3 = 0x55;
-    constexpr double kKhzMultiplier = 1000.0;
-    constexpr int kSecondsPerHour = 3600;
-    constexpr int kSecondsPerMinute = 60;
 
-    Glib::ustring formatCodecId(std::uint16_t codecId)
+    std::string validUtf8Text(std::string_view text)
     {
-      switch (codecId)
+      if (text.empty())
       {
-        case kCodecIdFlac: return "FLAC";
-        case kCodecIdMp3: return "MP3";
-        default: return codecId == 0 ? "Unknown" : std::format("Codec (0x{:02x})", codecId);
-      }
-    }
-
-    Glib::ustring formatSampleRate(std::uint32_t rate)
-    {
-      if (rate == 0)
-      {
-        return "Unknown";
+        return {};
       }
 
-      if (rate % 1000 == 0)
+      if (::g_utf8_validate(text.data(), static_cast<gssize>(text.size()), nullptr) != 0)
       {
-        return std::format("{} kHz", rate / 1000);
+        return std::string{text};
       }
 
-      return std::format("{:.1f} kHz", rate / kKhzMultiplier);
-    }
+      auto validPtr = Glib::make_unique_ptr_gfree(::g_utf8_make_valid(text.data(), static_cast<gssize>(text.size())));
 
-    std::string formatDuration(std::chrono::milliseconds ms)
-    {
-      auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(ms).count();
-      auto const minutes = (totalSeconds % kSecondsPerHour) / kSecondsPerMinute;
-      auto const seconds = totalSeconds % kSecondsPerMinute;
-
-      if (totalSeconds >= kSecondsPerHour)
+      if (!validPtr)
       {
-        return std::format("{}:{:02}:{:02}", totalSeconds / kSecondsPerHour, minutes, seconds);
+        return {};
       }
 
-      return std::format("{}:{:02}", minutes, seconds);
+      return std::string{validPtr.get()};
     }
 
     // Helper to walk widget tree and reset scrolled windows
@@ -99,7 +127,7 @@ namespace ao::gtk::layout
 
       if (auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(widget); sw != nullptr)
       {
-        if (auto const vadjPtr = sw->get_vadjustment(); vadjPtr != nullptr)
+        if (Glib::RefPtr<Gtk::Adjustment> const vadjPtr = sw->get_vadjustment(); vadjPtr != nullptr)
         {
           vadjPtr->set_value(vadjPtr->get_lower());
         }
@@ -262,28 +290,123 @@ namespace ao::gtk::layout
     class TrackCoverArtComponent final : public ILayoutComponent
     {
     public:
-      TrackCoverArtComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _box{Gtk::Orientation::VERTICAL, 0}, _imageWidget{ctx.runtime.musicLibrary(), *ctx.detail.imageCache}
+      class CoverArtSlot final : public Gtk::Widget
       {
-        _box.append(_imageWidget);
+      public:
+        explicit CoverArtSlot(ImageWidget& imageWidget)
+          : _imageWidget{imageWidget}
+        {
+          set_overflow(Gtk::Overflow::HIDDEN);
+          _imageWidget.set_parent(*this);
+        }
 
-        std::int32_t width = -1;
-        std::int32_t height = -1;
+        ~CoverArtSlot() override { _imageWidget.unparent(); }
+
+        CoverArtSlot(CoverArtSlot const&) = delete;
+        CoverArtSlot& operator=(CoverArtSlot const&) = delete;
+        CoverArtSlot(CoverArtSlot&&) = delete;
+        CoverArtSlot& operator=(CoverArtSlot&&) = delete;
+
+        void setTargetSize(std::int32_t targetSize)
+        {
+          targetSize = std::max(0, targetSize);
+
+          if (_targetSize == targetSize)
+          {
+            return;
+          }
+
+          _targetSize = targetSize;
+          _imageWidget.setTargetSize(_targetSize);
+          _imageWidget.setMaxRenderSize(_targetSize, _targetSize);
+          queue_resize();
+        }
+
+      protected:
+        Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH; }
+
+        void measure_vfunc(Gtk::Orientation orientation,
+                           int forSize,
+                           int& minimum,
+                           int& natural,
+                           int& minimumBaseline,
+                           int& naturalBaseline) const override
+        {
+          minimumBaseline = -1;
+          naturalBaseline = -1;
+
+          if (orientation == Gtk::Orientation::HORIZONTAL)
+          {
+            minimum = 0;
+            natural = forSize > 0 ? detail::coverArtSideForWidth(forSize, _targetSize) : _targetSize;
+            return;
+          }
+
+          if (forSize < 0)
+          {
+            minimum = 0;
+            natural = _targetSize;
+            return;
+          }
+
+          auto const side = detail::coverArtSideForWidth(forSize, _targetSize);
+          minimum = 0;
+          natural = side;
+        }
+
+        void size_allocate_vfunc(int width, int height, int baseline) override
+        {
+          auto side = detail::coverArtSideForWidth(width, _targetSize);
+
+          if (height > 0)
+          {
+            side = std::min(side, height);
+          }
+
+          auto const childX = std::max(0, (width - side) / 2);
+          auto const childY = std::max(0, (height - side) / 2);
+          measureImageForAllocation(side);
+          _imageWidget.size_allocate({childX, childY, side, side}, baseline);
+        }
+
+      private:
+        void measureImageForAllocation(int const side) const
+        {
+          auto minimum = 0;
+          auto natural = 0;
+          auto minimumBaseline = -1;
+          auto naturalBaseline = -1;
+          _imageWidget.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+          _imageWidget.measure(Gtk::Orientation::VERTICAL, side, minimum, natural, minimumBaseline, naturalBaseline);
+        }
+
+        ImageWidget& _imageWidget;
+        std::int32_t _targetSize = 0;
+      };
+
+      TrackCoverArtComponent(LayoutContext& ctx, LayoutNode const& node)
+        : _imageWidget{ctx.runtime.musicLibrary(), *ctx.detail.imageCache}, _slot{_imageWidget}
+      {
+        _imageWidget.set_halign(Gtk::Align::CENTER);
+        _imageWidget.set_valign(Gtk::Align::CENTER);
+        _imageWidget.set_expand(false);
+        _imageWidget.set_overflow(Gtk::Overflow::HIDDEN);
+
+        auto targetSize =
+          static_cast<std::int32_t>(node.getProp<std::int64_t>("targetSize", detail::kDefaultCoverArtTargetSize));
 
         if (auto const it = node.layout.find("widthRequest"); it != node.layout.end())
         {
-          width = static_cast<std::int32_t>(it->second.asInt());
+          targetSize = static_cast<std::int32_t>(it->second.asInt());
         }
 
         if (auto const it = node.layout.find("heightRequest"); it != node.layout.end())
         {
-          height = static_cast<std::int32_t>(it->second.asInt());
+          auto const height = static_cast<std::int32_t>(it->second.asInt());
+          targetSize = targetSize > 0 ? std::min(targetSize, height) : height;
         }
 
-        if (width != -1 || height != -1)
-        {
-          _imageWidget.set_size_request(width, height);
-        }
+        _slot.setTargetSize(targetSize);
 
         if (auto const it = node.layout.find("cssClasses"); it != node.layout.end())
         {
@@ -308,7 +431,7 @@ namespace ao::gtk::layout
         }
       }
 
-      Gtk::Widget& widget() override { return _box; }
+      Gtk::Widget& widget() override { return _slot; }
 
     private:
       void updateImage(rt::TrackDetailSnapshot const& snap)
@@ -316,7 +439,7 @@ namespace ao::gtk::layout
         if (snap.singleCoverArtId == kInvalidResourceId)
         {
           _imageWidget.clearImage();
-          _imageWidget.set_visible(false);
+          _imageWidget.set_visible(true);
         }
         else
         {
@@ -325,98 +448,603 @@ namespace ao::gtk::layout
         }
       }
 
-      Gtk::Box _box;
       ImageWidget _imageWidget;
+      CoverArtSlot _slot;
       sigc::connection _scopeConn;
     };
 
-    class TrackMetadataFieldComponent final : public ILayoutComponent
+    class TrackFieldGridComponent final : public ILayoutComponent
     {
     public:
-      TrackMetadataFieldComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _box{Gtk::Orientation::VERTICAL, 4}
-        , _mutation{ctx.runtime.mutation()}
-        , _scope{ctx.track.detailScope}
-        , _field{node.getProp<std::string>("field", "title")}
+      class ResponsiveGridBox final : public Gtk::Widget
       {
-        _titleLabel.set_text(node.getProp<std::string>("label", ""));
-        _titleLabel.set_halign(Gtk::Align::START);
-        _titleLabel.add_css_class("ao-property-label");
-        _titleLabel.set_opacity(kLabelOpacity);
+      public:
+        explicit ResponsiveGridBox(TrackFieldGridComponent& owner)
+          : _owner{owner}
+        {
+          set_overflow(Gtk::Overflow::HIDDEN);
+        }
 
-        _editable.set_halign(Gtk::Align::START);
-        _editable.set_hexpand(true);
-        _editable.set_vexpand(false);
-        _editable.add_css_class("ao-property-editable");
-
-        _box.append(_titleLabel);
-        _box.append(_editable);
-
-        _editable.property_editing().signal_changed().connect(
-          sigc::mem_fun(*this, &TrackMetadataFieldComponent::onEdited));
-
-        auto const keyPtr = Gtk::EventControllerKey::create();
-        keyPtr->signal_key_pressed().connect(
-          [this](guint keyval, guint, Gdk::ModifierType) -> bool
+        ~ResponsiveGridBox() override
+        {
+          if (_gridPtr != nullptr)
           {
-            if (keyval == GDK_KEY_Escape)
-            {
-              if (_editable.get_editing())
-              {
-                _editable.stop_editing(false);
-              }
+            _gridPtr->unparent();
+          }
+        }
 
-              if (_scope != nullptr)
-              {
-                updateValue(_scope->snapshot());
-              }
+        ResponsiveGridBox(ResponsiveGridBox const&) = delete;
+        ResponsiveGridBox& operator=(ResponsiveGridBox const&) = delete;
+        ResponsiveGridBox(ResponsiveGridBox&&) = delete;
+        ResponsiveGridBox& operator=(ResponsiveGridBox&&) = delete;
 
-              return true;
-            }
+        void setGrid(Gtk::Grid& grid)
+        {
+          _gridPtr = &grid;
+          grid.set_parent(*this);
+        }
 
-            return false;
-          },
-          false);
-        _editable.add_controller(keyPtr);
+      protected:
+        Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH; }
+
+        void measure_vfunc(Gtk::Orientation orientation,
+                           int forSize,
+                           int& minimum,
+                           int& natural,
+                           int& minimumBaseline,
+                           int& naturalBaseline) const override
+        {
+          minimumBaseline = -1;
+          naturalBaseline = -1;
+
+          if (_gridPtr == nullptr)
+          {
+            minimum = 0;
+            natural = 0;
+            return;
+          }
+
+          if (orientation == Gtk::Orientation::HORIZONTAL)
+          {
+            minimum = 0;
+            natural = 0;
+            return;
+          }
+
+          auto const requestedWidth = forSize > 0 ? forSize : _lastAllocatedWidth;
+          auto const width = std::max(requestedWidth, gridMinimumWidth());
+
+          if (width > 0)
+          {
+            _gridPtr->measure(orientation, width, minimum, natural, minimumBaseline, naturalBaseline);
+          }
+          else
+          {
+            _gridPtr->measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
+          }
+        }
+
+        void size_allocate_vfunc(int width, int height, int baseline) override
+        {
+          _lastAllocatedWidth = std::max(0, width);
+
+          if (_gridPtr != nullptr)
+          {
+            auto const gridWidth = std::max(_lastAllocatedWidth, gridMinimumWidth());
+            _gridPtr->size_allocate({0, 0, gridWidth, height}, baseline);
+          }
+
+          _owner.onResize(width);
+        }
+
+      private:
+        std::int32_t gridMinimumWidth() const
+        {
+          if (_gridPtr == nullptr)
+          {
+            return 0;
+          }
+
+          auto minimum = 0;
+          auto natural = 0;
+          auto minimumBaseline = -1;
+          auto naturalBaseline = -1;
+          _gridPtr->measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+
+          return std::max(0, minimum);
+        }
+
+        TrackFieldGridComponent& _owner;
+        Gtk::Grid* _gridPtr = nullptr;
+        std::int32_t _lastAllocatedWidth = 0;
+      };
+
+      TrackFieldGridComponent(LayoutContext& ctx, LayoutNode const& node)
+        : _mutation{ctx.runtime.mutation()}
+        , _scope{ctx.track.detailScope}
+        , _addVBox{Gtk::Orientation::VERTICAL, 8}
+        , _wrapper{*this}
+      {
+        _wrapper.setGrid(_grid);
+        _grid.set_column_spacing(kGridColumnSpacing);
+        _grid.set_row_spacing(8);
+        _grid.set_valign(Gtk::Align::START);
+
+        auto const requestedCategories =
+          node.getProp<std::vector<std::string>>("categories", {"metadata", "technical"});
+
+        for (auto const& def : rt::trackFieldDefinitions())
+        {
+          if (def.synthetic || def.category == rt::TrackFieldCategory::Tag || !def.presentable)
+          {
+            continue;
+          }
+
+          auto const isMeta = (def.category == rt::TrackFieldCategory::Metadata);
+
+          if (auto const* const catStr = isMeta ? "metadata" : "technical";
+              !std::ranges::contains(requestedCategories, catStr))
+          {
+            continue;
+          }
+
+          if (isMeta)
+          {
+            _metadataRows.emplace_back(def.field);
+            setupBuiltInRow(_metadataRows.back());
+          }
+          else
+          {
+            _technicalRows.emplace_back(def.field);
+            setupBuiltInRow(_technicalRows.back());
+          }
+        }
+
+        setupAddPropertyUi();
+        buildGrid();
 
         if (_scope != nullptr)
         {
-          _scopeConn = _scope->signalSnapshotChanged().connect([this](auto const& snap) { updateValue(snap); });
-          _lockConn = _scope->signalEditLockChanged().connect([this](bool locked) { updateLock(locked); });
-          updateValue(_scope->snapshot());
-          updateLock(_scope->isEditLocked());
+          _scopeConn = _scope->signalSnapshotChanged().connect([this](auto const& snap) { onSnapshot(snap); });
+          _lockConn = _scope->signalEditLockChanged().connect([this](bool locked) { onEditLockChanged(locked); });
+          onSnapshot(_scope->snapshot());
+          onEditLockChanged(_scope->isEditLocked());
         }
       }
 
-      Gtk::Widget& widget() override { return _box; }
+      ~TrackFieldGridComponent() override
+      {
+        _layoutRebuildConn.disconnect();
+        _addPopover.unparent();
+      }
+
+      TrackFieldGridComponent(TrackFieldGridComponent const&) = delete;
+      TrackFieldGridComponent& operator=(TrackFieldGridComponent const&) = delete;
+      TrackFieldGridComponent(TrackFieldGridComponent&&) = delete;
+      TrackFieldGridComponent& operator=(TrackFieldGridComponent&&) = delete;
+
+      Gtk::Widget& widget() override { return _wrapper; }
 
     private:
-      void updateValue(rt::TrackDetailSnapshot const& snap)
+      struct ChildMeasure final
       {
-        if (_editable.get_editing())
+        std::int32_t minimum = 0;
+        std::int32_t natural = 0;
+        std::int32_t minimumBaseline = -1;
+        std::int32_t naturalBaseline = -1;
+      };
+
+      class CustomRowWidget final : public Gtk::Widget
+      {
+      public:
+        CustomRowWidget(Gtk::Widget& label, Gtk::Widget& value, Gtk::Widget& partialIcon, Gtk::Widget& deleteButton)
+          : _label{label}, _value{value}, _partialIcon{partialIcon}, _deleteButton{deleteButton}
+        {
+          set_overflow(Gtk::Overflow::HIDDEN);
+          _label.set_parent(*this);
+          _value.set_parent(*this);
+          _partialIcon.set_parent(*this);
+          _deleteButton.set_parent(*this);
+        }
+
+        ~CustomRowWidget() override
+        {
+          _deleteButton.unparent();
+          _partialIcon.unparent();
+          _value.unparent();
+          _label.unparent();
+        }
+
+        CustomRowWidget(CustomRowWidget const&) = delete;
+        CustomRowWidget& operator=(CustomRowWidget const&) = delete;
+        CustomRowWidget(CustomRowWidget&&) = delete;
+        CustomRowWidget& operator=(CustomRowWidget&&) = delete;
+
+      protected:
+        Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH; }
+
+        void measure_vfunc(Gtk::Orientation orientation,
+                           int forSize,
+                           int& minimum,
+                           int& natural,
+                           int& minimumBaseline,
+                           int& naturalBaseline) const override
+        {
+          minimumBaseline = -1;
+          naturalBaseline = -1;
+
+          if (orientation == Gtk::Orientation::HORIZONTAL)
+          {
+            minimum = 0;
+            natural = 0;
+            return;
+          }
+
+          auto const labelMeasure = measureChild(_label, Gtk::Orientation::VERTICAL, forSize);
+          auto const valueMeasure = measureChild(_value, Gtk::Orientation::VERTICAL, forSize);
+          auto const partialMeasure = measureChild(_partialIcon, Gtk::Orientation::VERTICAL, forSize);
+          auto const deleteMeasure = measureChild(_deleteButton, Gtk::Orientation::VERTICAL, forSize);
+          minimum =
+            std::max({labelMeasure.minimum, valueMeasure.minimum, partialMeasure.minimum, deleteMeasure.minimum});
+          natural =
+            std::max({labelMeasure.natural, valueMeasure.natural, partialMeasure.natural, deleteMeasure.natural});
+        }
+
+        void size_allocate_vfunc(int width, int height, int baseline) override
+        {
+          auto right = std::max(0, width);
+          allocateTrailingChild(_deleteButton, right, height, baseline);
+          allocateTrailingChild(_partialIcon, right, height, baseline);
+
+          auto const available = std::max(0, right);
+          auto const labelMeasure = measureChild(_label, Gtk::Orientation::HORIZONTAL, -1);
+          auto const valueSpacing = available > 0 ? kCustomRowSpacing : 0;
+          auto const labelLimit = std::max(0, (available - valueSpacing) / 2);
+          auto const labelWidth = std::min(labelMeasure.natural, labelLimit);
+          auto const valueX = labelWidth + valueSpacing;
+          auto const valueWidth = std::max(0, available - valueX);
+
+          allocateChild(_label, 0, 0, labelWidth, height, baseline);
+          allocateChild(_value, valueX, 0, valueWidth, height, baseline);
+        }
+
+      private:
+        static ChildMeasure measureChild(Gtk::Widget& widget, Gtk::Orientation orientation, std::int32_t forSize)
+        {
+          auto result = ChildMeasure{};
+
+          if (!widget.get_visible())
+          {
+            return result;
+          }
+
+          widget.measure(
+            orientation, forSize, result.minimum, result.natural, result.minimumBaseline, result.naturalBaseline);
+          return result;
+        }
+
+        static void allocateChild(Gtk::Widget& widget,
+                                  std::int32_t const xPos,
+                                  std::int32_t const yPos,
+                                  std::int32_t const width,
+                                  std::int32_t const height,
+                                  std::int32_t const baseline)
+        {
+          if (!widget.get_visible())
+          {
+            return;
+          }
+
+          auto minimum = 0;
+          auto natural = 0;
+          auto minimumBaseline = -1;
+          auto naturalBaseline = -1;
+          widget.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+          widget.measure(Gtk::Orientation::VERTICAL, width, minimum, natural, minimumBaseline, naturalBaseline);
+          widget.size_allocate({xPos, yPos, width, height}, baseline);
+        }
+
+        static void allocateTrailingChild(Gtk::Widget& widget,
+                                          std::int32_t& right,
+                                          std::int32_t const height,
+                                          std::int32_t const baseline)
+        {
+          if (!widget.get_visible())
+          {
+            return;
+          }
+
+          auto const measure = measureChild(widget, Gtk::Orientation::HORIZONTAL, -1);
+          auto const childWidth = std::min(measure.natural, std::max(0, right));
+          auto const xPos = std::max(0, right - childWidth);
+          allocateChild(widget, xPos, 0, childWidth, height, baseline);
+          right = std::max(0, xPos - kCustomRowSpacing);
+        }
+
+        Gtk::Widget& _label;
+        Gtk::Widget& _value;
+        Gtk::Widget& _partialIcon;
+        Gtk::Widget& _deleteButton;
+
+        static constexpr std::int32_t kCustomRowSpacing = 8;
+      };
+
+      class ValueClipWidget final : public Gtk::Widget
+      {
+      public:
+        explicit ValueClipWidget(Gtk::Widget& child)
+          : _child{child}
+        {
+          set_halign(Gtk::Align::FILL);
+          set_hexpand(true);
+          set_overflow(Gtk::Overflow::HIDDEN);
+          set_size_request(0, -1);
+          _child.set_parent(*this);
+        }
+
+        ~ValueClipWidget() override { _child.unparent(); }
+
+        ValueClipWidget(ValueClipWidget const&) = delete;
+        ValueClipWidget& operator=(ValueClipWidget const&) = delete;
+        ValueClipWidget(ValueClipWidget&&) = delete;
+        ValueClipWidget& operator=(ValueClipWidget&&) = delete;
+
+      protected:
+        Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH; }
+
+        void measure_vfunc(Gtk::Orientation orientation,
+                           int forSize,
+                           int& minimum,
+                           int& natural,
+                           int& minimumBaseline,
+                           int& naturalBaseline) const override
+        {
+          minimumBaseline = -1;
+          naturalBaseline = -1;
+
+          if (orientation == Gtk::Orientation::HORIZONTAL)
+          {
+            minimum = 0;
+            natural = 0;
+            return;
+          }
+
+          auto const childWidth = childWidthFor(std::max(0, forSize));
+          _child.measure(orientation, childWidth, minimum, natural, minimumBaseline, naturalBaseline);
+        }
+
+        void size_allocate_vfunc(int width, int height, int baseline) override
+        {
+          auto const childWidth = childWidthFor(width);
+          measureChildForAllocation(childWidth);
+          _child.size_allocate({0, 0, childWidth, height}, baseline);
+        }
+
+      private:
+        std::int32_t childWidthFor(std::int32_t const width) const
+        {
+          auto minimum = 0;
+          auto natural = 0;
+          auto minimumBaseline = -1;
+          auto naturalBaseline = -1;
+          _child.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+
+          return std::max({0, width, minimum});
+        }
+
+        void measureChildForAllocation(int const width) const
+        {
+          auto minimum = 0;
+          auto natural = 0;
+          auto minimumBaseline = -1;
+          auto naturalBaseline = -1;
+          _child.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+          _child.measure(Gtk::Orientation::VERTICAL, width, minimum, natural, minimumBaseline, naturalBaseline);
+        }
+
+        Gtk::Widget& _child;
+      };
+
+      struct BuiltInRow final
+      {
+        rt::TrackField field;
+        Gtk::Label label{};
+        Gtk::Box valueBox{Gtk::Orientation::HORIZONTAL, 0};
+        Gtk::EditableLabel valueEditable{};
+        ValueClipWidget valueClip;
+        bool editable = false;
+        bool discardNextEdit = false;
+
+        explicit BuiltInRow(rt::TrackField field)
+          : field{field}, valueClip{valueEditable}
+        {
+        }
+      };
+
+      struct CustomRow final
+      {
+        std::string key;
+        Gtk::Label label{};
+        Gtk::Box valueBox{Gtk::Orientation::HORIZONTAL, 0};
+        Gtk::EditableLabel editable{};
+        ValueClipWidget valueClip;
+        Gtk::Image partialIcon{};
+        Gtk::Button deleteButton{};
+        CustomRowWidget widget;
+        bool discardNextEdit = false;
+
+        explicit CustomRow(std::string key)
+          : key{std::move(key)}, valueClip{editable}, widget{label, valueBox, partialIcon, deleteButton}
+        {
+        }
+      };
+
+      void onSnapshot(rt::TrackDetailSnapshot const& snap)
+      {
+        for (auto& row : _metadataRows)
+        {
+          updateBuiltInRow(row, snap);
+        }
+
+        for (auto& row : _technicalRows)
+        {
+          updateBuiltInRow(row, snap);
+        }
+
+        updateCustomRows(snap);
+      }
+
+      void onEditLockChanged(bool locked)
+      {
+        _editLocked = locked;
+
+        for (auto& row : _metadataRows)
+        {
+          auto const active = !locked && row.editable;
+          row.valueEditable.set_editable(active);
+          setEditableAffordance(row.valueEditable, active);
+
+          if (locked && row.valueEditable.get_editing())
+          {
+            row.valueEditable.stop_editing(true);
+          }
+        }
+
+        for (auto& row : _technicalRows)
+        {
+          auto const active = !locked && row.editable;
+          row.valueEditable.set_editable(active);
+          setEditableAffordance(row.valueEditable, active);
+
+          if (locked && row.valueEditable.get_editing())
+          {
+            row.valueEditable.stop_editing(true);
+          }
+        }
+
+        for (auto& row : _customRows)
+        {
+          auto const active = !locked;
+          row.editable.set_editable(active);
+          setEditableAffordance(row.editable, active);
+
+          if (locked && row.editable.get_editing())
+          {
+            row.editable.stop_editing(true);
+          }
+
+          row.deleteButton.set_sensitive(!locked);
+        }
+
+        _addBtn.set_sensitive(!locked);
+        _addBtn.set_visible(!locked);
+        _addLabel.set_visible(!locked);
+      }
+
+      void setupBuiltInRow(BuiltInRow& row)
+      {
+        auto const* def = rt::trackFieldDefinition(row.field);
+        row.label.set_text(std::string{def != nullptr ? def->label : ""});
+        configureKeyLabel(row.label);
+        row.label.set_opacity(kLabelOpacity);
+        row.label.add_css_class("ao-property-label");
+
+        configureValueBox(row.valueBox);
+        configureValueEditable(row.valueEditable);
+        row.valueEditable.add_css_class("ao-property-value");
+        row.valueBox.append(row.valueClip);
+
+        if (auto const* uiDef = trackFieldUiDefinition(row.field);
+            uiDef != nullptr && uiDef->parseInlineEdit != nullptr && uiDef->writePatch != nullptr)
+        {
+          row.editable = true;
+          row.valueEditable.add_css_class("ao-property-editable");
+          row.valueEditable.property_editing().signal_changed().connect([this, field = row.field]
+                                                                        { onBuiltInEditingChanged(field); });
+
+          auto const keyPtr = Gtk::EventControllerKey::create();
+          keyPtr->signal_key_pressed().connect(
+            [this, field = row.field](guint keyval, guint, Gdk::ModifierType) -> bool
+            {
+              if (keyval == GDK_KEY_Escape)
+              {
+                if (auto* rowPtr = findBuiltInRow(field); rowPtr != nullptr)
+                {
+                  rowPtr->discardNextEdit = true;
+                  rowPtr->valueEditable.stop_editing(false);
+
+                  if (_scope != nullptr)
+                  {
+                    updateBuiltInRow(*rowPtr, _scope->snapshot());
+                  }
+                }
+
+                return true;
+              }
+
+              return false;
+            },
+            false);
+          row.valueEditable.add_controller(keyPtr);
+        }
+      }
+
+      void updateBuiltInRow(BuiltInRow& row, rt::TrackDetailSnapshot const& snap)
+      {
+        auto const& agg = rt::trackFieldArrayAt(snap.fields, row.field);
+        auto const* uiDef = trackFieldUiDefinition(row.field);
+        auto const* def = rt::trackFieldDefinition(row.field);
+
+        if (row.valueEditable.get_editing())
         {
           return;
         }
 
-        if (_field == "title")
+        auto text = std::string{};
+
+        if (agg.mixed)
         {
-          _editable.set_text(snap.title.mixed ? "<Multiple Values>" : snap.title.optValue.value_or(""));
+          text = "<Multiple Values>";
         }
-        else if (_field == "artist")
+        else if (!agg.optValue)
         {
-          _editable.set_text(snap.artist.mixed ? "<Multiple Values>" : snap.artist.optValue.value_or(""));
+          text = (def != nullptr && def->category == rt::TrackFieldCategory::Technical) ? "Unknown" : "";
         }
-        else if (_field == "album")
+        else if (uiDef != nullptr && uiDef->formatValue != nullptr)
         {
-          _editable.set_text(snap.album.mixed ? "<Multiple Values>" : snap.album.optValue.value_or(""));
+          text = uiDef->formatValue(*agg.optValue);
         }
+
+        auto const displayText = validUtf8Text(text);
+        row.valueEditable.set_text(displayText);
+        row.valueEditable.set_tooltip_text(displayText);
       }
 
-      void updateLock(bool locked) { _editable.set_editable(!locked); }
-
-      void onEdited()
+      void onBuiltInEditingChanged(rt::TrackField field)
       {
-        if (_editable.get_editing() || _scope == nullptr)
+        auto* row = findBuiltInRow(field);
+
+        if (row == nullptr || !row->editable || row->valueEditable.get_editing())
+        {
+          return;
+        }
+
+        auto const discardEdit = row->discardNextEdit;
+        row->discardNextEdit = false;
+
+        if (discardEdit)
+        {
+          return;
+        }
+
+        onBuiltInEdited(field);
+      }
+
+      void onBuiltInEdited(rt::TrackField field)
+      {
+        auto* row = findBuiltInRow(field);
+
+        if (row == nullptr || !row->editable || row->valueEditable.get_editing() || _scope == nullptr)
         {
           return;
         }
@@ -428,7 +1056,187 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const newValue = _editable.get_text().raw();
+        auto const newValue = row->valueEditable.get_text().raw();
+
+        if (newValue == "<Multiple Values>")
+        {
+          return;
+        }
+
+        auto const* uiDef = trackFieldUiDefinition(field);
+
+        if (uiDef == nullptr || uiDef->parseInlineEdit == nullptr || uiDef->writePatch == nullptr)
+        {
+          return;
+        }
+
+        auto const editValResult = uiDef->parseInlineEdit(newValue);
+
+        if (!editValResult)
+        {
+          APP_LOG_ERROR(
+            "Failed to parse edit value for {}: {}", rt::trackFieldId(field), editValResult.error().message);
+          updateBuiltInRow(*row, snap);
+          return;
+        }
+
+        auto patch = rt::MetadataPatch{};
+        uiDef->writePatch({.patch = patch, .value = *editValResult});
+
+        auto const result = _mutation.updateMetadata(snap.trackIds, patch);
+
+        if (!result)
+        {
+          APP_LOG_ERROR("Failed to update {}: {}", rt::trackFieldId(field), result.error().message);
+          updateBuiltInRow(*row, snap);
+        }
+      }
+
+      void updateCustomRows(rt::TrackDetailSnapshot const& snap)
+      {
+        bool keysChanged = (snap.customMetadata.size() != _customRows.size());
+
+        if (!keysChanged)
+        {
+          for (auto i = 0U; i < snap.customMetadata.size(); ++i)
+          {
+            if (snap.customMetadata[i].key != _customRows[i].key)
+            {
+              keysChanged = true;
+              break;
+            }
+          }
+        }
+
+        if (keysChanged)
+        {
+          _customRows.clear();
+
+          for (auto const& item : snap.customMetadata)
+          {
+            _customRows.emplace_back(item.key);
+            setupCustomRow(_customRows.back());
+          }
+
+          buildGrid();
+          onEditLockChanged(_scope != nullptr ? _scope->isEditLocked() : true);
+        }
+
+        for (auto i = 0U; i < snap.customMetadata.size(); ++i)
+        {
+          updateCustomRow(_customRows[i], snap.customMetadata[i]);
+        }
+      }
+
+      void setupCustomRow(CustomRow& row)
+      {
+        row.label.set_text(validUtf8Text(row.key));
+        configureKeyLabel(row.label);
+        row.label.set_ellipsize(Pango::EllipsizeMode::END);
+        row.label.set_width_chars(0);
+        row.label.set_max_width_chars(24);
+        row.label.set_opacity(kLabelOpacity);
+        row.label.add_css_class("ao-property-label");
+
+        configureValueBox(row.valueBox);
+        configureValueEditable(row.editable);
+        row.editable.add_css_class("ao-property-value");
+        row.editable.add_css_class("ao-property-editable");
+        row.editable.property_editing().signal_changed().connect([this, key = row.key]
+                                                                 { onCustomEditingChanged(key); });
+
+        auto const keyPtr = Gtk::EventControllerKey::create();
+        keyPtr->signal_key_pressed().connect(
+          [this, key = row.key](guint keyval, guint, Gdk::ModifierType) -> bool
+          {
+            if (keyval == GDK_KEY_Escape)
+            {
+              if (auto* rowPtr = findCustomRow(key); rowPtr != nullptr)
+              {
+                rowPtr->discardNextEdit = true;
+                rowPtr->editable.stop_editing(false);
+
+                if (_scope != nullptr)
+                {
+                  updateCustomRows(_scope->snapshot());
+                }
+              }
+
+              return true;
+            }
+
+            return false;
+          },
+          false);
+        row.editable.add_controller(keyPtr);
+        row.valueBox.append(row.valueClip);
+
+        row.deleteButton.set_icon_name("user-trash-symbolic");
+        row.deleteButton.set_has_frame(false);
+        row.deleteButton.add_css_class("ao-icon-button");
+        row.deleteButton.set_tooltip_text("Delete Property");
+        row.deleteButton.signal_clicked().connect([this, key = row.key] { onCustomDeleted(key); });
+
+        row.partialIcon.set_from_icon_name("dialog-warning-symbolic");
+        row.partialIcon.set_opacity(kLabelOpacity);
+        row.partialIcon.set_tooltip_text("Missing on some tracks");
+      }
+
+      void updateCustomRow(CustomRow& row, rt::CustomMetadataItem const& item)
+      {
+        if (row.editable.get_editing())
+        {
+          return;
+        }
+
+        auto text = std::string{};
+
+        if (item.value.mixed)
+        {
+          text = "<Multiple Values>";
+        }
+        else
+        {
+          text = item.value.optValue.value_or("");
+        }
+
+        auto const displayText = validUtf8Text(text);
+        row.editable.set_text(displayText);
+        row.editable.set_tooltip_text(displayText);
+        row.partialIcon.set_visible(!item.presentOnAll);
+      }
+
+      void onCustomEditingChanged(std::string const& key)
+      {
+        auto* row = findCustomRow(key);
+
+        if (row == nullptr || row->editable.get_editing())
+        {
+          return;
+        }
+
+        auto const discardEdit = row->discardNextEdit;
+        row->discardNextEdit = false;
+
+        if (discardEdit)
+        {
+          return;
+        }
+
+        onCustomEdited(key);
+      }
+
+      void onCustomEdited(std::string const& key)
+      {
+        auto* row = findCustomRow(key);
+
+        if (row == nullptr || row->editable.get_editing() || _scope == nullptr)
+        {
+          return;
+        }
+
+        auto const snap = _scope->snapshot();
+        auto const newValue = row->editable.get_text().raw();
 
         if (newValue == "<Multiple Values>")
         {
@@ -436,110 +1244,344 @@ namespace ao::gtk::layout
         }
 
         auto patch = rt::MetadataPatch{};
-
-        if (_field == "title")
-        {
-          patch.optTitle = newValue;
-        }
-        else if (_field == "artist")
-        {
-          patch.optArtist = newValue;
-        }
-        else if (_field == "album")
-        {
-          patch.optAlbum = newValue;
-        }
+        patch.customUpdates[key] = newValue;
 
         auto const result = _mutation.updateMetadata(snap.trackIds, patch);
 
         if (!result)
         {
-          APP_LOG_ERROR("Failed to update {}: {}", _field, result.error().message);
-          updateValue(snap);
+          APP_LOG_ERROR("Failed to update custom property {}: {}", key, result.error().message);
         }
       }
 
-      Gtk::Box _box;
-      Gtk::Label _titleLabel;
-      Gtk::EditableLabel _editable;
-
-      rt::LibraryMutationService& _mutation;
-      ITrackDetailScope* _scope;
-      std::string _field;
-      sigc::connection _scopeConn;
-      sigc::connection _lockConn;
-    };
-
-    class TrackAudioPropertyComponent final : public ILayoutComponent
-    {
-    public:
-      TrackAudioPropertyComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _row{Gtk::Orientation::HORIZONTAL, 8}, _property{node.getProp<std::string>("property", "")}
+      void onCustomDeleted(std::string const& key)
       {
-        _title.set_text(node.getProp<std::string>("label", ""));
-        _title.set_halign(Gtk::Align::START);
-        _title.set_opacity(kLabelOpacity);
-        _title.add_css_class("ao-technical-label");
-
-        _value.set_halign(Gtk::Align::END);
-        _value.set_hexpand(true);
-        _value.add_css_class("ao-technical-value");
-
-        _row.append(_title);
-        _row.append(_value);
-
-        if (ctx.track.detailScope != nullptr)
+        if (_scope == nullptr)
         {
-          _scopeConn =
-            ctx.track.detailScope->signalSnapshotChanged().connect([this](auto const& snap) { updateValue(snap); });
-          updateValue(ctx.track.detailScope->snapshot());
+          return;
+        }
+
+        auto const snap = _scope->snapshot();
+
+        auto patch = rt::MetadataPatch{};
+        patch.customUpdates[key] = std::nullopt;
+
+        auto const result = _mutation.updateMetadata(snap.trackIds, patch);
+
+        if (!result)
+        {
+          APP_LOG_ERROR("Failed to delete custom property {}: {}", key, result.error().message);
         }
       }
 
-      Gtk::Widget& widget() override { return _row; }
-
-    private:
-      void updateValue(rt::TrackDetailSnapshot const& snap)
+      void buildGrid()
       {
-        auto const setLabel = [this](auto const& property, auto const& formatter)
+        clearGrid();
+        std::int32_t rowIdx = 0;
+
+        attachBuiltInGroup(_metadataRows, rowIdx);
+        attachCustomRows(rowIdx);
+        attachAddPropertyRow(rowIdx);
+        attachTechnicalSeparator(rowIdx);
+        attachBuiltInGroup(_technicalRows, rowIdx);
+      }
+
+      void clearGrid()
+      {
+        while (auto* child = _grid.get_first_child())
         {
-          if (property.optValue && !property.mixed)
+          _grid.remove(*child);
+        }
+      }
+
+      void attachBuiltInRow(BuiltInRow& row, std::int32_t const rowNum)
+      {
+        _grid.attach(row.label, 0, rowNum, 1, 1);
+        _grid.attach(row.valueBox, 1, rowNum, kValueColWidth, 1);
+      }
+
+      void attachBuiltInRowsWide(std::deque<BuiltInRow>& rows, std::int32_t& rowIdx)
+      {
+        std::size_t index = 0;
+
+        for (auto& row : rows)
+        {
+          auto const col = static_cast<std::int32_t>((index % 2) * 2);
+          auto const rowNum = rowIdx + static_cast<std::int32_t>(index / 2);
+          _grid.attach(row.label, col, rowNum, 1, 1);
+          _grid.attach(row.valueBox, col + 1, rowNum, 1, 1);
+          index++;
+        }
+
+        rowIdx += static_cast<std::int32_t>((rows.size() + 1) / 2);
+      }
+
+      void attachBuiltInGroup(std::deque<BuiltInRow>& rows, std::int32_t& rowIdx)
+      {
+        if (_layoutMode == LayoutMode::Wide)
+        {
+          attachBuiltInRowsWide(rows, rowIdx);
+          return;
+        }
+
+        for (auto& row : rows)
+        {
+          attachBuiltInRow(row, rowIdx);
+          rowIdx++;
+        }
+      }
+
+      void attachCustomRows(std::int32_t& rowIdx)
+      {
+        for (auto& row : _customRows)
+        {
+          _grid.attach(row.widget, 0, rowIdx, 4, 1);
+          rowIdx++;
+        }
+      }
+
+      void attachAddPropertyRow(std::int32_t& rowIdx)
+      {
+        _grid.attach(_addLabel, 0, rowIdx, kValueColWidth, 1);
+        _grid.attach(_addBtn, kActionColumn, rowIdx, 1, 1);
+        rowIdx++;
+      }
+
+      void attachTechnicalSeparator(std::int32_t& rowIdx)
+      {
+        if (_technicalRows.empty() || (_metadataRows.empty() && _customRows.empty()))
+        {
+          return;
+        }
+
+        auto* sep = Gtk::make_managed<Gtk::Separator>();
+        sep->set_margin_top(4);
+        sep->set_margin_bottom(4);
+        _grid.attach(*sep, 0, rowIdx, 4, 1);
+        rowIdx++;
+      }
+
+      void configureValueBox(Gtk::Box& box)
+      {
+        box.set_halign(Gtk::Align::FILL);
+        box.set_hexpand(true);
+        box.set_overflow(Gtk::Overflow::HIDDEN);
+        box.set_size_request(0, -1);
+      }
+
+      void configureKeyLabel(Gtk::Label& label)
+      {
+        label.set_halign(Gtk::Align::START);
+        label.set_xalign(0.0F);
+        label.set_hexpand(false);
+        label.set_overflow(Gtk::Overflow::HIDDEN);
+        label.set_size_request(0, -1);
+        label.set_ellipsize(Pango::EllipsizeMode::NONE);
+        label.set_wrap(false);
+        label.set_lines(1);
+      }
+
+      void configureValueEditable(Gtk::EditableLabel& editable)
+      {
+        editable.set_halign(Gtk::Align::FILL);
+        editable.set_hexpand(true);
+        editable.set_overflow(Gtk::Overflow::HIDDEN);
+        editable.set_size_request(0, -1);
+        editable.set_width_chars(0);
+        editable.set_max_width_chars(1);
+        editable.set_editable(false);
+      }
+
+      static void setEditableAffordance(Gtk::EditableLabel& editable, bool const active)
+      {
+        if (active)
+        {
+          editable.add_css_class("ao-property-editable-active");
+          return;
+        }
+
+        editable.remove_css_class("ao-property-editable-active");
+      }
+
+      void setupAddPropertyUi()
+      {
+        _addLabel.set_text("Add Property");
+        configureKeyLabel(_addLabel);
+        _addLabel.set_opacity(kLabelOpacity);
+        _addLabel.add_css_class("ao-property-label");
+
+        _addBtn.set_icon_name("list-add-symbolic");
+        _addBtn.set_halign(Gtk::Align::CENTER);
+        _addBtn.set_has_frame(false);
+        _addBtn.add_css_class("ao-icon-button");
+        _addBtn.set_tooltip_text("Add Custom Property");
+        _addBtn.signal_clicked().connect(sigc::mem_fun(_addPopover, &Gtk::Popover::popup));
+
+        _addVBox.set_margin(8);
+
+        _addKeyEntry.set_placeholder_text("Property Name");
+        _addVBox.append(_addKeyEntry);
+
+        _addValEntry.set_placeholder_text("Value");
+        _addVBox.append(_addValEntry);
+
+        _addHintLabel.set_halign(Gtk::Align::START);
+        _addHintLabel.set_opacity(kLabelOpacity);
+        _addHintLabel.add_css_class("ao-property-hint");
+        _addHintLabel.set_visible(false);
+        _addVBox.append(_addHintLabel);
+
+        _addSubmitBtn.set_label("Add");
+        _addSubmitBtn.add_css_class("suggested-action");
+        _addVBox.append(_addSubmitBtn);
+
+        _addPopover.set_child(_addVBox);
+        _addPopover.set_parent(_addBtn);
+
+        auto const onAdd = [this]
+        {
+          auto key = std::string{_addKeyEntry.get_text().raw()};
+          auto val = std::string{_addValEntry.get_text().raw()};
+
+          // Trim key
+          key.erase(0, key.find_first_not_of(" \t\n\r\f\v"));
+          key.erase(key.find_last_not_of(" \t\n\r\f\v") + 1);
+
+          if (key.empty() || _scope == nullptr)
           {
-            _value.set_text(formatter(*property.optValue));
+            return;
           }
-          else
+
+          auto const& snap = _scope->snapshot();
+
+          for (auto const& item : snap.customMetadata)
           {
-            _value.set_text(property.mixed ? "Mixed" : "Unknown");
+            if (item.key == key)
+            {
+              _addHintLabel.set_text("Property already exists");
+              _addHintLabel.set_visible(true);
+              return;
+            }
           }
+
+          if (auto const optField = rt::trackFieldFromId(key); optField)
+          {
+            _addHintLabel.set_text("Reserved for built-in field");
+            _addHintLabel.set_visible(true);
+            return;
+          }
+
+          auto patch = rt::MetadataPatch{};
+          patch.customUpdates[key] = val;
+          auto const result = _mutation.updateMetadata(snap.trackIds, patch);
+
+          if (!result)
+          {
+            APP_LOG_ERROR("Failed to add custom property {}: {}", key, result.error().message);
+            return;
+          }
+
+          _addPopover.popdown();
+          _addKeyEntry.set_text("");
+          _addValEntry.set_text("");
+          _addHintLabel.set_visible(false);
         };
 
-        if (_property == "format")
+        _addSubmitBtn.signal_clicked().connect(onAdd);
+        _addKeyEntry.signal_activate().connect(onAdd);
+        _addValEntry.signal_activate().connect(onAdd);
+
+        _addKeyEntry.property_text().signal_changed().connect([this] { _addHintLabel.set_visible(false); });
+      }
+
+      BuiltInRow* findBuiltInRow(rt::TrackField field)
+      {
+        for (auto& row : _metadataRows)
         {
-          setLabel(snap.audio.codecId, [](auto id) { return formatCodecId(id); });
+          if (row.field == field)
+          {
+            return &row;
+          }
         }
-        else if (_property == "sampleRate")
+
+        for (auto& row : _technicalRows)
         {
-          setLabel(snap.audio.sampleRate, [](auto rate) { return formatSampleRate(rate); });
+          if (row.field == field)
+          {
+            return &row;
+          }
         }
-        else if (_property == "channels")
+
+        return nullptr;
+      }
+
+      CustomRow* findCustomRow(std::string const& key)
+      {
+        for (auto& row : _customRows)
         {
-          setLabel(snap.audio.channels, [](auto ch) { return std::format("{} Ch", ch); });
+          if (row.key == key)
+          {
+            return &row;
+          }
         }
-        else if (_property == "duration")
+
+        return nullptr;
+      }
+
+      void onResize(int const width)
+      {
+        if (auto const nextMode = detail::computeLayoutMode(width); nextMode != _layoutMode)
         {
-          setLabel(snap.audio.durationMs, [](auto ms) { return formatDuration(std::chrono::milliseconds{ms}); });
-        }
-        else if (_property == "bitDepth")
-        {
-          setLabel(snap.audio.bitDepth, [](auto depth) { return std::format("{} bit", depth); });
+          _layoutMode = nextMode;
+          scheduleRebuild();
         }
       }
 
-      Gtk::Box _row;
-      Gtk::Label _title;
-      Gtk::Label _value;
-      std::string _property;
+      void scheduleRebuild()
+      {
+        if (_layoutRebuildPending)
+        {
+          return;
+        }
+
+        _layoutRebuildPending = true;
+        _layoutRebuildConn = Glib::signal_idle().connect(
+          [this]
+          {
+            _layoutRebuildPending = false;
+            buildGrid();
+            return false;
+          });
+      }
+
+      static constexpr std::int32_t kGridColumnSpacing = 12;
+      static constexpr std::int32_t kValueColWidth = 3;
+      static constexpr std::int32_t kActionColumn = 3;
+
+      Gtk::Grid _grid;
+      rt::LibraryMutationService& _mutation;
+      ITrackDetailScope* _scope;
+      std::deque<BuiltInRow> _metadataRows;
+      std::deque<BuiltInRow> _technicalRows;
+      std::deque<CustomRow> _customRows;
+
+      Gtk::Label _addLabel;
+      Gtk::Button _addBtn;
+      Gtk::Popover _addPopover;
+      Gtk::Box _addVBox;
+      Gtk::Entry _addKeyEntry;
+      Gtk::Entry _addValEntry;
+      Gtk::Label _addHintLabel;
+      Gtk::Button _addSubmitBtn;
+
       sigc::connection _scopeConn;
+      sigc::connection _lockConn;
+
+      LayoutMode _layoutMode = LayoutMode::Standard;
+      bool _editLocked = true;
+      bool _layoutRebuildPending = false;
+      sigc::connection _layoutRebuildConn;
+      ResponsiveGridBox _wrapper;
     };
 
     class TrackEditLockComponent final : public ILayoutComponent
@@ -618,7 +1660,14 @@ namespace ao::gtk::layout
        .displayName = "Cover Art",
        .category = "Tracks",
        .container = false,
-       .props = {},
+       .props = {{.name = "targetSize",
+                  .kind = PropertyKind::Int,
+                  .label = "Target Size",
+                  .defaultValue = LayoutValue{static_cast<std::int64_t>(detail::kDefaultCoverArtTargetSize)}},
+                 {.name = "forceSquare",
+                  .kind = PropertyKind::Bool,
+                  .label = "Force Square",
+                  .defaultValue = LayoutValue{true}}},
        .layoutProps = {{.name = "widthRequest", .kind = PropertyKind::Int, .label = "Width Request"},
                        {.name = "heightRequest", .kind = PropertyKind::Int, .label = "Height Request"},
                        {.name = "cssClasses", .kind = PropertyKind::String, .label = "CSS Classes"}},
@@ -627,29 +1676,17 @@ namespace ao::gtk::layout
       [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
       { return std::make_unique<TrackCoverArtComponent>(ctx, node); });
 
-    registry.registerComponent({.type = "track.metadataField",
-                                .displayName = "Metadata Field",
-                                .category = "Tracks",
-                                .container = false,
-                                .props = {{.name = "field", .kind = PropertyKind::String, .label = "Field"},
-                                          {.name = "label", .kind = PropertyKind::String, .label = "Label"}},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<TrackMetadataFieldComponent>(ctx, node); });
-
-    registry.registerComponent({.type = "track.audioProperty",
-                                .displayName = "Audio Property",
-                                .category = "Tracks",
-                                .container = false,
-                                .props = {{.name = "property", .kind = PropertyKind::String, .label = "Property"},
-                                          {.name = "label", .kind = PropertyKind::String, .label = "Label"}},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0},
-                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<TrackAudioPropertyComponent>(ctx, node); });
+    registry.registerComponent(
+      {.type = "track.fieldGrid",
+       .displayName = "Field Grid",
+       .category = "Tracks",
+       .container = false,
+       .props = {{.name = "categories", .kind = PropertyKind::StringList, .label = "Categories"}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0},
+      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+      { return std::make_unique<TrackFieldGridComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "track.editLock",
@@ -664,4 +1701,4 @@ namespace ao::gtk::layout
       [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
       { return std::make_unique<TrackEditLockComponent>(ctx, node); });
   }
-}
+} // namespace ao::gtk::layout

@@ -4,10 +4,13 @@
 #pragma once
 
 #include "CorePrimitives.h"
+#include "TrackField.h"
+#include "TrackFieldReader.h"
 #include "TrackPresentation.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -115,13 +118,12 @@ namespace ao::rt
     bool mixed = false;
   };
 
-  struct AudioPropertySnapshot final
+  struct CustomMetadataItem final
   {
-    AggregateValue<std::uint16_t> codecId{};
-    AggregateValue<std::uint32_t> sampleRate{};
-    AggregateValue<std::uint8_t> channels{};
-    AggregateValue<std::uint8_t> bitDepth{};
-    AggregateValue<std::uint32_t> durationMs{};
+    std::string key{};
+    AggregateValue<std::string> value{};
+    bool presentOnAll = false;
+    bool presentOnAny = false;
   };
 
   struct TrackDetailSnapshot final
@@ -130,12 +132,9 @@ namespace ao::rt
     std::vector<TrackId> trackIds{};
     std::uint64_t revision = 0;
 
-    AggregateValue<std::string> title{};
-    AggregateValue<std::string> artist{};
-    AggregateValue<std::string> album{};
-
-    ResourceId singleCoverArtId{};
-    AudioPropertySnapshot audio{};
+    ResourceId singleCoverArtId{kInvalidResourceId};
+    std::array<AggregateValue<TrackFieldRawValue>, kTrackFieldCount> fields{};
+    std::vector<CustomMetadataItem> customMetadata{};
     std::vector<DictionaryId> commonTagIds{};
   };
 

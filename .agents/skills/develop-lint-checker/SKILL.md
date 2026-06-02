@@ -5,6 +5,8 @@ description: Guides the development of custom Clang-Tidy lint checkers for Aobus
 
 # Developing Lint Checkers in Aobus
 
+This skill is an explicit linting workflow. It is the exception to the repository's session-level clang-tidy opt-in rule because the user has asked to create, debug, or extend lint behavior.
+
 This guide provides the mandatory workflow and debugging strategies for developing custom Clang-Tidy lint checks in the Aobus codebase. Aobus relies heavily on custom AST matchers to enforce C++26 standards and Modern C++ paradigms.
 
 ## 1. Test-Driven Development (TDD) Workflow

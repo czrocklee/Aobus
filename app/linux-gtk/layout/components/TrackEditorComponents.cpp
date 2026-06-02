@@ -19,6 +19,7 @@
 #include <ao/rt/TrackSource.h>
 
 #include <gtkmm/widget.h>
+#include <sigc++/scoped_connection.h>
 
 #include <memory>
 #include <vector>
@@ -43,7 +44,7 @@ namespace ao::gtk::layout
         _tagEditor.signalTagsChanged().connect(
           [this, &ctx](auto const& toAdd, auto const& toRemove)
           {
-            if (ctx.tag.editController)
+            if (ctx.tag.editController != nullptr)
             {
               ctx.tag.editController->submitTagChanges(
                 TrackSelectionContext{.listId = kInvalidListId, .selectedIds = _currentTrackIds}, toAdd, toRemove);
@@ -58,6 +59,12 @@ namespace ao::gtk::layout
             }
           });
       }
+
+      ~TrackTagEditorComponent() override = default;
+      TrackTagEditorComponent(TrackTagEditorComponent const&) = delete;
+      TrackTagEditorComponent& operator=(TrackTagEditorComponent const&) = delete;
+      TrackTagEditorComponent(TrackTagEditorComponent&&) = delete;
+      TrackTagEditorComponent& operator=(TrackTagEditorComponent&&) = delete;
 
       Gtk::Widget& widget() override { return _tagEditor; }
 
@@ -80,9 +87,9 @@ namespace ao::gtk::layout
       rt::LibraryMutationService& _mutation;
       rt::ListSourceStore& _sources;
       std::vector<TrackId> _currentTrackIds;
-      sigc::connection _scopeConn;
+      sigc::scoped_connection _scopeConn;
     };
-  }
+  } // namespace
 
   void registerTrackEditorComponents(ComponentRegistry& registry)
   {
@@ -97,4 +104,4 @@ namespace ao::gtk::layout
                                [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<TrackTagEditorComponent>(ctx, node); });
   }
-}
+} // namespace ao::gtk::layout

@@ -53,6 +53,8 @@ namespace ao::gtk
 
     void setTargetSize(std::int32_t size);
 
+    void setMaxRenderSize(std::int32_t width, std::int32_t height);
+
     void setImageFromBytes(std::span<std::byte const> bytes);
     void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
     void clearImage();
@@ -82,6 +84,8 @@ namespace ao::gtk
     Glib::RefPtr<Gdk::Pixbuf> _sourcePixbufPtr;
     ResourceId _currentCoverId = kInvalidResourceId;
     std::int32_t _targetSize = 0;
+    std::int32_t _maxRenderWidth = 0;
+    std::int32_t _maxRenderHeight = 0;
 
     // Last rendered state (to avoid redundant resampling)
     Glib::RefPtr<Gdk::Pixbuf> _renderedSourcePixbufPtr;

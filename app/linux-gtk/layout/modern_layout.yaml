@@ -56,7 +56,7 @@ root:
               type: collapsibleSplit
               props:
                 orientation: horizontal
-                position: 850
+                position: 300
                 revealed: true
               layout:
                 vexpand: true

@@ -8,6 +8,8 @@
 
 #include <sigc++/signal.h>
 
+#include <cstdint>
+
 namespace ao::gtk::layout
 {
   class ITrackDetailScope
@@ -27,6 +29,18 @@ namespace ao::gtk::layout
     virtual sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() = 0;
     virtual sigc::signal<void(bool)>& signalEditLockChanged() = 0;
   };
+
+  enum class LayoutMode : std::uint8_t
+  {
+    Standard,
+    Wide
+  };
+
+  namespace detail
+  {
+    LayoutMode computeLayoutMode(std::int32_t width);
+    std::int32_t coverArtSideForWidth(std::int32_t width, std::int32_t targetSize);
+  }
 
   /**
    * @brief Register track detail layout components.

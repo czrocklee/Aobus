@@ -11,6 +11,8 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackDetailProjection.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackFieldReader.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/async/Runtime.h>
@@ -18,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -28,6 +31,18 @@ namespace ao::rt::test
 {
   namespace
   {
+    using F = TrackField;
+
+    std::string getString(AggregateValue<TrackFieldRawValue> const& agg)
+    {
+      if (!agg.optValue)
+      {
+        return {};
+      }
+
+      return std::get<std::string>(*agg.optValue);
+    }
+
     struct Env final
     {
       TestMusicLibrary lib;
@@ -66,8 +81,9 @@ namespace ao::rt::test
 
     auto snap = projPtr->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
-    REQUIRE(snap.title.optValue.has_value());
-    CHECK(snap.title.optValue.value() == "Before");
+    auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
+    REQUIRE(titleAgg.optValue.has_value());
+    CHECK(getString(titleAgg) == "Before");
 
     // Mutate the track in the library using the service
     {
@@ -79,7 +95,7 @@ namespace ao::rt::test
     // Mutation service already published the signal
 
     snap = projPtr->snapshot();
-    CHECK(snap.title.optValue.value() == "After");
+    CHECK(getString(snap.fields[static_cast<std::size_t>(F::Title)]) == "After");
   }
 
   TEST_CASE("TrackDetailProjection ignores non-intersecting TracksMutated", "[projection][unit]")
@@ -120,15 +136,16 @@ namespace ao::rt::test
     REQUIRE(snap.selectionKind == SelectionKind::Multiple);
 
     // Titles differ
-    CHECK(snap.title.mixed);
+    CHECK(snap.fields[static_cast<std::size_t>(F::Title)].mixed);
 
     // Artists are the same
-    CHECK_FALSE(snap.artist.mixed);
-    REQUIRE(snap.artist.optValue.has_value());
-    CHECK(snap.artist.optValue.value() == "Same");
+    auto const& artistAgg = snap.fields[static_cast<std::size_t>(F::Artist)];
+    CHECK_FALSE(artistAgg.mixed);
+    REQUIRE(artistAgg.optValue.has_value());
+    CHECK(getString(artistAgg) == "Same");
 
     // Albums differ
-    CHECK(snap.album.mixed);
+    CHECK(snap.fields[static_cast<std::size_t>(F::Album)].mixed);
   }
 
   TEST_CASE("TrackDetailProjection with ExplicitSelectionTarget", "[projection][unit]")
@@ -139,7 +156,7 @@ namespace ao::rt::test
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.mutation);
     auto const snap = projPtr->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
-    CHECK(snap.title.optValue.value() == "Song A");
+    CHECK(getString(snap.fields[static_cast<std::size_t>(F::Title)]) == "Song A");
   }
 
   TEST_CASE("TrackDetailProjection with FocusedViewTarget", "[projection][unit]")
@@ -160,11 +177,11 @@ namespace ao::rt::test
     env.workspace.navigateTo(GlobalViewKind::AllTracks); // Should trigger onFocusedViewChanged
 
     CHECK(callCount >= 2);
-    CHECK(projPtr->snapshot().title.optValue.value() == "Song A");
+    CHECK(getString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
 
     // Change selection in the focused view
     env.views.setSelection(reply1.viewId, {id2});
-    CHECK(projPtr->snapshot().title.optValue.value() == "Song B");
+    CHECK(getString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
 
     // Change focus away
     env.workspace.closeView(reply1.viewId);
@@ -191,8 +208,9 @@ namespace ao::rt::test
     auto const snap = projPtr->snapshot();
 
     REQUIRE(snap.selectionKind == SelectionKind::Single);
-    REQUIRE(snap.title.optValue.has_value());
-    CHECK(snap.title.optValue.value() == "Already Selected");
+    auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
+    REQUIRE(titleAgg.optValue.has_value());
+    CHECK(getString(titleAgg) == "Already Selected");
   }
 
   TEST_CASE("TrackDetailProjection with non-existent track", "[projection][unit]")
@@ -202,7 +220,7 @@ namespace ao::rt::test
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.mutation);
     auto const snap = projPtr->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
-    CHECK_FALSE(snap.title.optValue.has_value());
+    CHECK_FALSE(snap.fields[static_cast<std::size_t>(F::Title)].optValue.has_value());
   }
 
   TEST_CASE("TrackDetailProjection with tags", "[projection][unit]")
@@ -220,5 +238,82 @@ namespace ao::rt::test
     auto const snap = projPtr->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
     CHECK(snap.commonTagIds.size() == 1);
+  }
+
+  TEST_CASE("TrackDetailProjection aggregates custom metadata", "[projection][unit]")
+  {
+    auto env = Env{};
+
+    auto const id1 = env.lib.addTrack("Song 1");
+    auto const id2 = env.lib.addTrack("Song 2");
+
+    // Add custom metadata to id1
+    {
+      auto patch = MetadataPatch{};
+      patch.customUpdates["Key1"] = "Value1";
+      patch.customUpdates["Shared"] = "Same";
+      patch.customUpdates["Mixed"] = "One";
+      env.mutation.updateMetadata(std::vector{id1}, patch);
+    }
+
+    // Add custom metadata to id2
+    {
+      auto patch = MetadataPatch{};
+      patch.customUpdates["Key2"] = "Value2";
+      patch.customUpdates["Shared"] = "Same";
+      patch.customUpdates["Mixed"] = "Two";
+      env.mutation.updateMetadata(std::vector{id2}, patch);
+    }
+
+    auto const projPtr =
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1, id2}}, env.workspace, env.mutation);
+    auto const snap = projPtr->snapshot();
+
+    REQUIRE(snap.customMetadata.size() == 4); // Key1, Key2, Shared, Mixed (sorted by key)
+
+    auto const findCustom = [&](std::string_view key) -> CustomMetadataItem const*
+    {
+      for (auto const& item : snap.customMetadata)
+      {
+        if (item.key == key)
+        {
+          return &item;
+        }
+      }
+
+      return nullptr;
+    };
+
+    SECTION("Key1 is partial")
+    {
+      auto const* item = findCustom("Key1");
+      REQUIRE(item);
+      CHECK(item->presentOnAny);
+      CHECK_FALSE(item->presentOnAll);
+      CHECK_FALSE(item->value.mixed);
+      REQUIRE(item->value.optValue);
+      CHECK(*item->value.optValue == "Value1");
+    }
+
+    SECTION("Shared is present on all and not mixed")
+    {
+      auto const* item = findCustom("Shared");
+      REQUIRE(item);
+      CHECK(item->presentOnAny);
+      CHECK(item->presentOnAll);
+      CHECK_FALSE(item->value.mixed);
+      REQUIRE(item->value.optValue);
+      CHECK(*item->value.optValue == "Same");
+    }
+
+    SECTION("Mixed is present on all and mixed")
+    {
+      auto const* item = findCustom("Mixed");
+      REQUIRE(item);
+      CHECK(item->presentOnAny);
+      CHECK(item->presentOnAll);
+      CHECK(item->value.mixed);
+      CHECK_FALSE(item->value.optValue.has_value());
+    }
   }
 } // namespace ao::rt::test

@@ -1,9 +1,13 @@
 ---
 name: use-clang-tidy
-description: Runs Aobus clang-tidy checks through ./script/run-clang-tidy.sh and fixes reported C++ warnings. Use when linting C++ changes, resolving clang-tidy findings, or checking Aobus C++ style/conformance.
+description: Runs Aobus clang-tidy checks through ./script/run-clang-tidy.sh and fixes reported C++ warnings. Use only when the user explicitly asks for linting, clang-tidy, lint cleanup, or resolving clang-tidy findings in the current session.
 ---
 
 # Use clang-tidy
+
+## Session Opt-In
+
+Do not activate this skill or run `./script/run-clang-tidy.sh` unless the user explicitly asks for linting, clang-tidy, lint cleanup, or resolving clang-tidy findings in the current session. Build and targeted tests are the default validation path for ordinary C++ changes.
 
 Use `./script/run-clang-tidy.sh` as the single entry point for clang-tidy in Aobus. Do not call `clang-tidy` directly or invent alternate check lists; the script owns file discovery, strict/relaxed modes, the custom plugin, include paths, and diagnostic de-duplication.
 

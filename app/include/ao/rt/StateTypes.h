@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -232,6 +233,8 @@ namespace ao::rt
     std::optional<std::uint16_t> optTotalTracks{};
     std::optional<std::uint16_t> optDiscNumber{};
     std::optional<std::uint16_t> optTotalDiscs{};
+
+    std::map<std::string, std::optional<std::string>> customUpdates{};
   };
 
   struct UpdateTrackMetadataReply final

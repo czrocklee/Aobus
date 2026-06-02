@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
-
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
@@ -11,14 +11,19 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackDetailProjection.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackFieldReader.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <type_traits>
@@ -60,6 +65,7 @@ namespace ao::rt
         if (values[i] != *result.optValue)
         {
           result.mixed = true;
+          result.optValue = std::nullopt;
           break;
         }
       }
@@ -230,41 +236,64 @@ namespace ao::rt
     }
 
     auto const txn = _implPtr->library.readTransaction();
-    auto const reader = _implPtr->library.tracks().reader(txn);
-    auto codecIds = std::vector<std::uint16_t>{};
-    auto sampleRates = std::vector<std::uint32_t>{};
-    auto channelss = std::vector<std::uint8_t>{};
-    auto bitDepths = std::vector<std::uint8_t>{};
-    auto durations = std::vector<std::uint32_t>{};
+    auto const trackReader = _implPtr->library.tracks().reader(txn);
+    auto const manifestReader = _implPtr->library.manifest().reader(txn);
+    auto const& dict = _implPtr->library.dictionary();
 
-    auto titles = std::vector<std::string>{};
-    auto artists = std::vector<std::string>{};
-    auto albums = std::vector<std::string>{};
+    auto fieldValues = std::array<std::vector<TrackFieldRawValue>, kTrackFieldCount>{};
+
+    struct CustomAggregationState
+    {
+      std::size_t presentCount = 0;
+      std::optional<std::string> optFirstValue{};
+      bool mixed = false;
+    };
+    auto customMap = std::map<std::string, CustomAggregationState>{};
+    std::size_t loadedCount = 0;
 
     for (auto const trackId : ids)
     {
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      auto const optView = trackReader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
       {
         continue;
       }
 
-      codecIds.push_back(optView->property().codecId());
-      sampleRates.push_back(optView->property().sampleRate());
-      channelss.push_back(optView->property().channels());
-      bitDepths.push_back(optView->property().bitDepth());
-      durations.push_back(optView->property().durationMs());
+      loadedCount++;
 
-      titles.emplace_back(optView->metadata().title());
+      for (auto const& def : trackFieldDefinitions())
+      {
+        if (def.synthetic || def.category == TrackFieldCategory::Tag)
+        {
+          continue;
+        }
 
-      auto const artistId = optView->metadata().artistId();
-      artists.push_back(artistId != kInvalidDictionaryId ? std::string{_implPtr->library.dictionary().get(artistId)}
-                                                         : std::string{});
+        auto val = readTrackFieldRawValue(def.field, *optView, dict, &manifestReader);
+        trackFieldArrayAt(fieldValues, def.field).push_back(std::move(val));
+      }
 
-      auto const albumId = optView->metadata().albumId();
-      albums.push_back(albumId != kInvalidDictionaryId ? std::string{_implPtr->library.dictionary().get(albumId)}
-                                                       : std::string{});
+      for (auto const& [dictId, value] : optView->custom())
+      {
+        auto key = std::string{dict.getOrDefault(dictId)};
+
+        if (key.empty())
+        {
+          continue;
+        }
+
+        auto& state = customMap[key];
+        state.presentCount++;
+
+        if (!state.optFirstValue)
+        {
+          state.optFirstValue = std::string{value};
+        }
+        else if (value != *state.optFirstValue)
+        {
+          state.mixed = true;
+        }
+      }
 
       if (ids.size() == 1)
       {
@@ -277,15 +306,29 @@ namespace ao::rt
       }
     }
 
-    snap.audio.codecId = aggregate(codecIds);
-    snap.audio.sampleRate = aggregate(sampleRates);
-    snap.audio.channels = aggregate(channelss);
-    snap.audio.bitDepth = aggregate(bitDepths);
-    snap.audio.durationMs = aggregate(durations);
+    if (loadedCount == 0)
+    {
+      return snap;
+    }
 
-    snap.title = aggregate(titles);
-    snap.artist = aggregate(artists);
-    snap.album = aggregate(albums);
+    auto fieldIter = snap.fields.begin();
+
+    for (auto const& values : fieldValues)
+    {
+      *fieldIter = aggregate(values);
+      ++fieldIter;
+    }
+
+    for (auto const& [key, state] : customMap)
+    {
+      auto item = CustomMetadataItem{
+        .key = key,
+        .value = {.optValue = state.mixed ? std::nullopt : state.optFirstValue, .mixed = state.mixed},
+        .presentOnAll = (state.presentCount == loadedCount),
+        .presentOnAny = true,
+      };
+      snap.customMetadata.push_back(std::move(item));
+    }
 
     return snap;
   }

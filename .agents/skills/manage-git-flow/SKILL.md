@@ -42,8 +42,8 @@ Before staging or committing, validate only the relevant changed code unless the
 For C++ changes:
 
 - Load `generate-cpp-code` before editing `.cpp`, `.h`, or `.hpp` files.
-- Load `use-clang-tidy` when linting C++ changes or resolving clang-tidy findings.
-- Use `./script/run-clang-tidy.sh` through that skill. For a commit covering the current change set, run it with no arguments; for a partial commit or unrelated worktree changes, pass the intended files explicitly.
+- Do not run clang-tidy or load `use-clang-tidy` during the session unless the user explicitly asks for linting, clang-tidy, lint cleanup, or resolving clang-tidy findings in that session.
+- If the user explicitly requests lint validation, use `./script/run-clang-tidy.sh` through `use-clang-tidy`. For a commit covering the current change set, run it with no arguments; for a partial commit or unrelated worktree changes, pass the intended files explicitly.
 - Fix warnings by improving code first. Use narrow, check-specific `NOLINT` only for justified tool/API boundaries.
 
 For any code change, run the narrowest meaningful build or test. Use `./build.sh debug` when there is no safer focused check.
