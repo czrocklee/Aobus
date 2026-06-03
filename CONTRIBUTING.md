@@ -20,6 +20,10 @@ Rules are numbered for easy reference in reviews and tooling.
     - 2.2.4. Non-static data members of classes use `_camelCase` (e.g., `_handle`, `_tracks`); members of structs (PODs, Impl, helper records) use plain `camelCase` (e.g., `trackId`, `year`)
     - 2.2.5. Constants use `kCamelCase`: `kMaxSize`, `kDefaultFlags`
     - 2.2.6. Enum values follow their scope: scoped enums use `PascalCase` (`Code::IoError`), unscoped constants use `kCamelCase`
+    - 2.2.7. Pointers follow semantic ownership naming:
+      - Managed pointers (`std::shared_ptr`, `std::unique_ptr`, `std::weak_ptr`, `Glib::RefPtr`) MUST end with the `Ptr` suffix (e.g., `trackPtr`).
+      - Raw pointers (`T*`) MUST NOT use the `Ptr` suffix, as they represent non-owning observers or iterators.
+      - Hungarian notation is prohibited for all pointer types (e.g., avoid `pBuffer`, `_pRow`). Use semantic names like `bufferData` or `_activeRow`.
   - 2.3. Headers
     - 2.3.1. Use `#pragma once`
   - 2.4. Includes

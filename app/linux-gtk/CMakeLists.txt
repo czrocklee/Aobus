@@ -100,8 +100,10 @@ add_library(aobus-gtk-lib STATIC
     layout/component/track/TrackDetailScope.cpp
     layout/component/track/TrackSelectionRegionComponent.cpp
     layout/component/track/TrackCoverArtComponent.cpp
+    layout/component/track/TrackFieldGridCustomControls.cpp
     layout/component/track/TrackFieldGridComponent.cpp
-    layout/component/track/TrackEditLockComponent.cpp
+    layout/component/track/TrackFieldGridRows.cpp
+    layout/component/track/TrackFieldGridWidgets.cpp
     layout/component/track/TrackTagEditorComponent.cpp
     layout/component/playback/AudioPipelinePanelComponent.cpp
     layout/component/playback/NowPlayingFieldComponent.cpp

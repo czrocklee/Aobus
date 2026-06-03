@@ -208,7 +208,7 @@ add_executable(ao_test_gtk
       unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp
       unit/linux-gtk/layout/components/ContainersTest.cpp
       unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
-      unit/linux-gtk/layout/components/TrackDetailResponsiveTest.cpp
+      unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp
       unit/linux-gtk/layout/components/PlaybackImageTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp

@@ -405,7 +405,7 @@ namespace ao::gtk
     float const strokeWidthVariance = _implPtr->baseStrokeWidth * (static_cast<float>(AobusSoul::kGoldenRatio) - 1.0F);
     float const maxStrokeWidth = _implPtr->baseStrokeWidth + strokeWidthVariance;
     float const maxNormalizedStrokeWidth = maxStrokeWidth / kRefHeight;
-    float const soulOuterRadius = kUnitRadius + maxNormalizedStrokeWidth;
+    float const soulOuterRadius = kUnitRadius + (maxNormalizedStrokeWidth / 2.0F);
 
     float const horizontalRadius = _implPtr->showFullLogo ? (kLogoXOffset + soulOuterRadius) : soulOuterRadius;
     float const drawingScale = std::min(width / (horizontalRadius * 2.0F), height / (soulOuterRadius * 2.0F));

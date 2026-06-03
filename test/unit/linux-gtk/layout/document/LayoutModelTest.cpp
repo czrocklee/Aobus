@@ -52,16 +52,16 @@ namespace ao::gtk::layout::test
       CHECK(playbackBar.type == "template");
       CHECK(playbackBar.getProp<std::string>("templateId", "") == "playback.defaultBar");
 
-      // Verify main paned area is a template
-      REQUIRE(decoded.root.children.size() > 2);
-      auto const& mainPaned = decoded.root.children[2];
+      // Verify main paned area is a template (shifted to index 3 due to separator)
+      REQUIRE(decoded.root.children.size() > 3);
+      auto const& mainPaned = decoded.root.children[3];
       CHECK(mainPaned.id == "main-paned");
       CHECK(mainPaned.type == "template");
       CHECK(mainPaned.getProp<std::string>("templateId", "") == "app.defaultMainPaned");
 
-      // Verify status bar region is a template
-      REQUIRE(decoded.root.children.size() > 3);
-      auto const& statusBar = decoded.root.children[3];
+      // Verify status bar region is a template (shifted to index 5 due to separator)
+      REQUIRE(decoded.root.children.size() > 5);
+      auto const& statusBar = decoded.root.children[5];
       CHECK(statusBar.type == "template");
       CHECK(statusBar.getProp<std::string>("templateId", "") == "status.defaultBar");
     }
@@ -87,6 +87,30 @@ namespace ao::gtk::layout::test
       CHECK(modernDetailSplit.id == "main-workspace-split");
       CHECK(modernDetailSplit.type == "collapsibleSplit");
       CHECK(modernDetailSplit.getProp<std::int64_t>("position", -1) == kMinimumDetailPaneSize);
+    }
+
+    SECTION("modern bottom bar artwork follows the transport row height")
+    {
+      auto const doc = createBuiltInLayout(LayoutPresetId::Modern);
+      auto const& modernBar = doc.templates.at("playback.modernBar");
+
+      REQUIRE(modernBar.children.size() >= 2);
+      auto const& contentBox = modernBar.children[1];
+
+      REQUIRE(!contentBox.children.empty());
+      auto const& startGroup = contentBox.children[0];
+      CHECK(startGroup.getLayout<bool>("vexpand", false) == true);
+      CHECK(startGroup.getLayout<std::string>("valign", "") == "fill");
+
+      REQUIRE(!startGroup.children.empty());
+      auto const& image = startGroup.children[0];
+
+      CHECK(image.type == "playback.image");
+      CHECK(image.getProp<bool>("forceSquare", false) == true);
+      CHECK_FALSE(image.layout.contains("widthRequest"));
+      CHECK_FALSE(image.layout.contains("heightRequest"));
+      CHECK(image.getLayout<bool>("vexpand", false) == true);
+      CHECK(image.getLayout<std::string>("valign", "") == "fill");
     }
 
     SECTION("LayoutDocument round-trip preserves layout props and child order")

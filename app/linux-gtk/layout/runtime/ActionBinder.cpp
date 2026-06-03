@@ -39,16 +39,16 @@ namespace ao::gtk::layout
 
     // Capture pointers to the dependencies to ensure the lambda uses the actual objects,
     // as the ActionBinder instance itself is typically short-lived (local to component ctor).
-    return [registryPtr = &_registry,
-            runtimePtr = &_runtime,
-            parentWindowPtr = &_parentWindow,
+    return [registry = &_registry,
+            runtime = &_runtime,
+            parentWindow = &_parentWindow,
             actionId,
-            anchorPtr = &anchorWidget,
+            anchor = &anchorWidget,
             nodeId = node.id]
     {
       auto actionCtx = ActionActivationContext{
-        .runtime = *runtimePtr, .parentWindow = *parentWindowPtr, .anchorWidget = *anchorPtr, .componentId = nodeId};
-      registryPtr->tryActivate(actionId, actionCtx);
+        .runtime = *runtime, .parentWindow = *parentWindow, .anchorWidget = *anchor, .componentId = nodeId};
+      registry->tryActivate(actionId, actionCtx);
     };
   }
 } // namespace ao::gtk::layout

@@ -24,6 +24,7 @@
 #include <gtkmm/menubutton.h>
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/scale.h>
+#include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -63,6 +64,33 @@ namespace ao::gtk::layout::test
       auto result = WidgetMeasure{};
       widget.measure(
         orientation, forSize, result.minimum, result.natural, result.minimumBaseline, result.naturalBaseline);
+      return result;
+    }
+
+    void walkWidgets(Gtk::Widget& root, auto const& visit)
+    {
+      visit(root);
+
+      for (auto* child = root.get_first_child(); child != nullptr; child = child->get_next_sibling())
+      {
+        walkWidgets(*child, visit);
+      }
+    }
+
+    template<typename WidgetT>
+    WidgetT* findWidget(Gtk::Widget& root)
+    {
+      WidgetT* result = nullptr;
+
+      walkWidgets(root,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (result == nullptr)
+                    {
+                      result = dynamic_cast<WidgetT*>(&widget);
+                    }
+                  });
+
       return result;
     }
   } // namespace
@@ -505,19 +533,12 @@ namespace ao::gtk::layout::test
       auto const compPtr = registry.create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
-      // Now returns a responsive wrapper containing the Grid
-      auto& widget = compPtr->widget();
-      CHECK(widget.get_first_child() != nullptr);
-      CHECK(dynamic_cast<Gtk::Grid*>(widget.get_first_child()) != nullptr);
-    }
-
-    SECTION("track.editLock creates button")
-    {
-      auto const node = LayoutNode{.type = "track.editLock"};
-      auto const compPtr = registry.create(ctx, node);
-
-      REQUIRE(compPtr != nullptr);
-      CHECK(dynamic_cast<Gtk::Button*>(&compPtr->widget()) != nullptr);
+      // Returns a main box containing: [fixed viewport [scroll [constrained wrapper [Grid]]], undo bar]
+      auto& root = compPtr->widget();
+      auto* const scrolled = findWidget<Gtk::ScrolledWindow>(root);
+      auto* const grid = findWidget<Gtk::Grid>(root);
+      CHECK(scrolled != nullptr);
+      CHECK(grid != nullptr);
     }
 
     SECTION("track.tagEditor creates tag editor container")
@@ -563,7 +584,6 @@ namespace ao::gtk::layout::test
                                                           "track.selectionRegion",
                                                           "track.coverArt",
                                                           "track.fieldGrid",
-                                                          "track.editLock",
                                                           "track.tagEditor",
                                                           "track.quickFilter"});
 

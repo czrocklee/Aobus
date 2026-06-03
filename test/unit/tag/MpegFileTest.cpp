@@ -188,8 +188,8 @@ namespace ao::tag::mpeg::test
     auto header = id3v2::HeaderLayout{};
     std::memcpy(header.id.data(), "ID3", 3);
     header.majorVersion = 2;
-    auto const* hdrPtr = reinterpret_cast<std::uint8_t const*>(&header);
-    data.insert(data.end(), hdrPtr, hdrPtr + sizeof(header));
+    auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
+    data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
     data.resize(data.size() + 100, 0);
 
     auto const temp = TempFile{data};
@@ -207,8 +207,8 @@ namespace ao::tag::mpeg::test
       std::memcpy(header.id.data(), "ID3", 3);
       header.majorVersion = 3;
       header.size.data[3] = 100;
-      auto const* hdrPtr = reinterpret_cast<std::uint8_t const*>(&header);
-      data.insert(data.end(), hdrPtr, hdrPtr + sizeof(header));
+      auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
+      data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
       // Give it only 10 bytes instead of 100
       data.resize(data.size() + 10, 0);
 
@@ -225,15 +225,15 @@ namespace ao::tag::mpeg::test
       std::memcpy(header.id.data(), "ID3", 3);
       header.majorVersion = 3;
       header.size.data[3] = 20;
-      auto const* hdrPtr = reinterpret_cast<std::uint8_t const*>(&header);
-      data.insert(data.end(), hdrPtr, hdrPtr + sizeof(header));
+      auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
+      data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
 
       auto titleFrame = id3v2::V23TextFrameLayout{};
       std::memcpy(titleFrame.common.id.data(), "TIT2", 4);
       titleFrame.common.size = 500; // Claims 500 bytes, but body is only 20
       titleFrame.encoding = id3v2::Encoding::Latin1;
-      auto const* framePtr = reinterpret_cast<std::uint8_t const*>(&titleFrame);
-      data.insert(data.end(), framePtr, framePtr + sizeof(titleFrame));
+      auto const* frameAddr = reinterpret_cast<std::uint8_t const*>(&titleFrame);
+      data.insert(data.end(), frameAddr, frameAddr + sizeof(titleFrame));
       data.resize(sizeof(header) + 20, 0); // Fill to exactly 20 bytes body
 
       auto const temp = TempFile{data};

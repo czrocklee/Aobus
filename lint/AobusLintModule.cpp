@@ -11,10 +11,10 @@
 #include "check/IncludeConventionCheck.h"
 #include "check/LambdaParamsCheck.h"
 #include "check/LocalInitializationStyleCheck.h"
-#include "check/ManagedPointerSuffixCheck.h"
 #include "check/MemberOrderCheck.h"
 #include "check/NodiscardUsageCheck.h"
 #include "check/OptionalNamingAndUsageCheck.h"
+#include "check/PointerNamingConventionCheck.h"
 #include "check/RedundantNamespaceQualificationCheck.h"
 #include "check/RedundantUsingDirectiveCheck.h"
 #include "check/SpdxLicenseHeaderCheck.h"
@@ -49,7 +49,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");
       checkFactories.registerCheck<aobus::ImplicitBoolConversionInInitCheck>("aobus-implicit-bool-conversion-in-init");
       checkFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");
-      checkFactories.registerCheck<ManagedPointerSuffixCheck>("aobus-readability-managed-pointer-suffix");
+      checkFactories.registerCheck<PointerNamingConventionCheck>("aobus-readability-pointer-naming-convention");
       checkFactories.registerCheck<LocalInitializationStyleCheck>("aobus-modernize-local-initialization-style");
       checkFactories.registerCheck<BracedInitializationCheck>("aobus-modernize-braced-initialization");
       checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");

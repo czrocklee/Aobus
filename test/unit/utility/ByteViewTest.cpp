@@ -141,18 +141,18 @@ namespace ao::utility::test
     SECTION("unsafeDowncast")
     {
       auto d = Derived{};
-      Base* basePtr = &d;
+      Base* base = &d;
       Base& baseRef = d;
-      void* voidPtr = &d;
+      void* voidAddr = &d;
 
-      Derived const* dPtr = unsafeDowncast<Derived>(basePtr);
-      CHECK(dPtr == &d);
+      Derived const* derived = unsafeDowncast<Derived>(base);
+      CHECK(derived == &d);
 
       Derived& dRef = unsafeDowncast<Derived>(baseRef);
       CHECK(&dRef == &d);
 
-      Derived const* dvPtr = unsafeDowncast<Derived>(voidPtr);
-      CHECK(dvPtr == &d);
+      Derived const* derivedFromVoid = unsafeDowncast<Derived>(voidAddr);
+      CHECK(derivedFromVoid == &d);
     }
   }
 } // namespace ao::utility::test

@@ -803,9 +803,8 @@ namespace ao::audio::backend
         bindingPtr->proxyPtr.get(), utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
       ::pw_node_enum_params(bindingPtr->proxyPtr.get(), 1, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
       ::pw_node_enum_params(bindingPtr->proxyPtr.get(), 2, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
-      auto* rawBindingPtr = bindingPtr.get();
-      ::pw_node_add_listener(
-        rawBindingPtr->proxyPtr.get(), rawBindingPtr->listener.get(), &streamNodeEvents, rawBindingPtr);
+      auto* binding = bindingPtr.get();
+      ::pw_node_add_listener(binding->proxyPtr.get(), binding->listener.get(), &streamNodeEvents, binding);
       streamNodeBindings[streamId] = std::move(bindingPtr);
     }
   }
@@ -838,9 +837,9 @@ namespace ao::audio::backend
             bindingPtr->proxyPtr.get(), kEnumFormatSequence, SPA_PARAM_EnumFormat, 0, UINT32_MAX, nullptr);
           ::pw_node_enum_params(bindingPtr->proxyPtr.get(), kPropsSequence, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
 
-          auto* rawSinkBindingPtr = bindingPtr.get();
+          auto* sinkBinding = bindingPtr.get();
           ::pw_node_add_listener(
-            rawSinkBindingPtr->proxyPtr.get(), rawSinkBindingPtr->listener.get(), &sinkNodeEvents, rawSinkBindingPtr);
+            sinkBinding->proxyPtr.get(), sinkBinding->listener.get(), &sinkNodeEvents, sinkBinding);
           sinkNodeBindings[id] = std::move(bindingPtr);
         }
       }

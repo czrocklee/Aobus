@@ -4,12 +4,15 @@
   --ao-surface-border-color: transparent;
   --ao-surface-shadow: 0 8px 24px alpha(black, 0.08);
 
+  /* Unify Geometry: Softer, larger corners for everything */
+  --ao-radius-sm: 8px;   /* 原本是 4px，提升到 8px 让悬浮项更圆润 */
+  --ao-radius-md: 12px;  /* 原本是 8px，提升到 12px */
   --ao-card-radius: 16px;
   --ao-card-padding: 20px;
 
   --ao-row-min-height: 52px;
   --ao-list-row-min-height: 36px;
-  --ao-row-radius: 6px;
+  --ao-row-radius: 8px; /* 进一步柔化列表行边缘 */
   --ao-row-hover-bg: alpha(currentColor, 0.04);
   --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.1);
 
@@ -26,7 +29,7 @@
 }
 
 .ao-bottom-bar-content-modern {
-  padding: 8px 16px;
+  padding: 12px 16px;
   min-height: 60px;
 }
 
@@ -38,6 +41,7 @@
   background: @accent_bg_color;
   color: @accent_fg_color;
   padding: 0;
+  margin: 0;
   transition: transform 150ms, box-shadow 150ms;
   -gtk-icon-size: 28px;
   /* Slightly larger icon */
@@ -75,6 +79,7 @@
   border: none;
   box-shadow: none;
   padding: 0;
+  margin: 0;
   transition: transform 200ms ease-out, filter 200ms ease-out;
 }
 
@@ -127,6 +132,38 @@
   padding: 0;
 }
 
+/* Modern Popover Unified Aesthetics */
+.ao-theme-modern popover > contents,
+.ao-theme-modern popover.menu > contents {
+  border-radius: 16px;
+  background: alpha(@view_bg_color, 0.95);
+  box-shadow: 0 12px 32px alpha(black, 0.15);
+  border: 1px solid alpha(currentColor, 0.08);
+}
+
+/* Tooltip Unified Aesthetics (匹配 Popover 的悬浮玻璃质感) */
+.ao-theme-modern tooltip {
+  background: alpha(@view_bg_color, 0.95);
+  border: 1px solid alpha(currentColor, 0.08);
+  box-shadow: 0 8px 24px alpha(black, 0.15);
+  border-radius: 12px; /* 比 Popover 稍微精巧一点的圆角 */
+  color: @theme_fg_color; /* 强制覆盖 GTK 默认的白字/黑字，保持与 Popover 一致的色系 */
+  padding: 6px 10px;
+}
+
+.ao-theme-modern popover > arrow {
+  background: alpha(@view_bg_color, 0.95);
+  border: none;
+}
+
+/* Ensure components inside popovers don't block the glassmorphism */
+.ao-theme-modern popover scrolledwindow,
+.ao-theme-modern popover scrolledwindow > viewport,
+.ao-theme-modern popover list,
+.ao-theme-modern popover listview {
+  background: transparent;
+}
+
 /* ===== Modern Shell & Table Scoping ===== */
 
 .ao-theme-modern .ao-list-pane-modern {
@@ -134,30 +171,63 @@
 }
 
 /* Navigation Rail (Modern) */
+.ao-theme-modern .ao-list-pane-modern {
+  /* 营造极其柔和的下沉物理景深感：减弱透明度，去掉突兀的锐化效果，增加晕染面积 */
+  box-shadow: inset -2px 0 12px 0 alpha(black, 0.05);
+  border-right: none;
+}
+
+/* 隐藏 GTK 默认的 Paned (Split) 分割线，让阴影成为唯一的空间分割 */
+.ao-theme-modern paned > separator {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+}
+
 .ao-theme-modern .ao-list-pane-modern listview {
   background: transparent;
+  padding-right: 4px; /* 稍微推开一点，避免高亮药丸被右侧阴影覆盖 */
 }
 
 .ao-theme-modern .ao-list-pane-modern listview>row {
   border-radius: var(--ao-row-radius);
   margin: 2px 8px;
   border: 1px solid transparent;
+  transition: all 200ms ease;
 }
 
 /* padding handled by --ao-row-min-height globally */
 
+/* 优雅地隐藏过长的过滤代码，仅在 Hover 或选中时显示 */
+.ao-theme-modern .ao-list-pane-modern .ao-list-filter-label {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.ao-theme-modern .ao-list-pane-modern listview>row:hover .ao-list-filter-label,
+.ao-theme-modern .ao-list-pane-modern listview>row:focus-within .ao-list-filter-label,
+.ao-theme-modern .ao-list-pane-modern listview>row:selected .ao-list-filter-label {
+  opacity: 0.35;
+}
+
 /* Hover handled by tokens */
 
+/* 高级悬浮药丸 (Floating Pill) 态 - 类 macOS / iOS 侧边栏 */
 .ao-theme-modern .ao-list-pane-modern listview>row:selected {
-  border-color: alpha(@theme_selected_bg_color, 0.05);
+  background-image: none;
+  background-color: alpha(@theme_selected_bg_color, 0.15);
+  border-color: transparent; /* 防止跳动 */
+  border-radius: 8px; /* 恢复饱满的圆角 */
   color: inherit;
 }
 
 .ao-theme-modern .ao-list-pane-modern listview>row:selected:hover {
-  background-color: alpha(@theme_selected_bg_color, 0.14);
+  background-color: alpha(@theme_selected_bg_color, 0.22);
 }
 
-.ao-theme-modern .ao-list-pane-modern listview>row:selected label:not(.ao-list-filter-label) {
+.ao-theme-modern .ao-list-pane-modern listview>row:selected label:not(.ao-list-filter-label),
+.ao-theme-modern .ao-list-pane-modern listview>row:selected image.ao-list-icon {
   color: @theme_selected_bg_color;
   font-weight: 600;
 }
@@ -167,7 +237,7 @@
   background: alpha(@theme_base_color, 0.5);
   border-radius: var(--ao-radius-md);
   margin: var(--ao-spacing-md);
-  border: 1px solid alpha(currentColor, 0.05);
+  border: none; /* 去掉突兀的物理边框，依靠色彩对和右侧的景深阴影自然分割 */
 }
 
 /* Modern Track Controls Bar (The Header Island) */
@@ -318,13 +388,10 @@
 
 /* Specific styling for the playing row in Modern mode */
 .ao-theme-modern columnview row.ao-playing-row {
-  background-image: linear-gradient(to right,
-      alpha(@warning_bg_color, 0.15) 0%,
-      alpha(@warning_bg_color, 0.05) var(--ao-title-x, 35%),
-      transparent 100%);
-  background-color: transparent;
-  border-left: 3px solid @warning_bg_color;
-  border-radius: 2px 6px 6px 2px;
+  background-image: none;
+  background-color: alpha(@warning_bg_color, 0.08); /* 极低透明度的环境光背景 */
+  border-color: transparent; /* 绝对不能用 border: none，否则会吃掉系统默认的 1px 边框宽度导致跳帧！ */
+  border-radius: 8px; /* 统一为饱满的圆角药丸 */
 }
 
 .ao-theme-modern .ao-playing-title {
@@ -395,7 +462,6 @@ listview>row:first-child .ao-track-section-box {
   border-width: 0;
   box-shadow: none;
   outline: none;
-  -gtk-outline-radius: 50%;
   /* Keep the button container size perfectly static to prevent jitter */
   transition: background 150ms ease, color 150ms ease;
 }
@@ -421,15 +487,15 @@ listview>row:first-child .ao-track-section-box {
 
 /* Eliminate the standard GTK button shadow/border nodes */
 .ao-volume-button-modern > border {
-  display: none;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
 }
 
-.ao-volume-popover,
-.ao-volume-popover contents {
+.ao-volume-popover > contents {
   padding: 4px;
-  border-radius: 16px;
-  background: alpha(@view_bg_color, 0.95);
-  box-shadow: 0 12px 32px alpha(black, 0.15);
   border: none;
 }
 
@@ -527,3 +593,26 @@ listview>row:first-child .ao-track-section-box {
 }
 
 /* .ao-track-section-cover styling handled by tokens */
+
+/* ===== Detail Panel (Floating Card) ===== */
+.ao-theme-modern .ao-detail-pane {
+  background: alpha(@theme_base_color, 0.85); 
+  margin: 12px 12px 12px 0;
+  border-radius: 16px;
+  border: 1px solid alpha(currentColor, 0.06); 
+}
+
+/* 统一 Detail Pane 内的编辑框风格为圆润拟态 */
+.ao-theme-modern .ao-detail-pane .ao-inline-editor-entry {
+  border-radius: 8px;
+  background: alpha(currentColor, 0.04); /* 放弃纯底色，改用轻度玻璃质感 */
+  border: 1px solid alpha(currentColor, 0.06);
+  padding: 4px 8px;
+  transition: all 200ms ease;
+}
+
+.ao-theme-modern .ao-detail-pane .ao-inline-editor-entry:focus {
+  background: @theme_base_color;
+  border-color: alpha(@accent_color, 0.5);
+  box-shadow: 0 4px 12px alpha(black, 0.1);
+}

@@ -43,8 +43,8 @@ namespace ao::tag::flac::test
       addBlockHeader(data, MetadataBlockType::StreamInfo, false, 34);
       auto si = StreamInfoLayout{};
       si.packedFields = (44100ULL << 44) | (1ULL << 41) | (15ULL << 36) | 44100ULL;
-      auto const* siPtr = reinterpret_cast<std::uint8_t const*>(&si);
-      data.insert(data.end(), siPtr, siPtr + 34);
+      auto const* siAddr = reinterpret_cast<std::uint8_t const*>(&si);
+      data.insert(data.end(), siAddr, siAddr + 34);
 
       // Vorbis Comment block
       auto vc = std::vector<std::uint8_t>{};
@@ -132,8 +132,8 @@ namespace ao::tag::flac::test
       // 1. Valid StreamInfo block
       addBlockHeader(data, MetadataBlockType::StreamInfo, false, 34);
       auto si = StreamInfoLayout{};
-      auto const* siPtr = reinterpret_cast<std::uint8_t const*>(&si);
-      data.insert(data.end(), siPtr, siPtr + 34);
+      auto const* siAddr = reinterpret_cast<std::uint8_t const*>(&si);
+      data.insert(data.end(), siAddr, siAddr + 34);
 
       // 2. Out-of-bounds VorbisComment block (not the last block so increment runs)
       addBlockHeader(data, MetadataBlockType::VorbisComment, false, 1000);

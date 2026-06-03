@@ -103,21 +103,11 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _box; }
 
       rt::TrackDetailSnapshot const& snapshot() const override { return _currentSnap; }
-      bool isEditLocked() const override { return _editLocked; }
-      void setEditLocked(bool locked) override
-      {
-        if (_editLocked != locked)
-        {
-          _editLocked = locked;
-          _signalEditLockChanged.emit(_editLocked);
-        }
-      }
 
       sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() override
       {
         return _signalSnapshotChanged;
       }
-      sigc::signal<void(bool)>& signalEditLockChanged() override { return _signalEditLockChanged; }
 
     private:
       void onSnapshot(rt::TrackDetailSnapshot const& snap)
@@ -138,10 +128,8 @@ namespace ao::gtk::layout
       rt::TrackDetailProjection _projection;
       rt::Subscription _sub;
       rt::TrackDetailSnapshot _currentSnap;
-      bool _editLocked = true;
 
       sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;
-      sigc::signal<void(bool)> _signalEditLockChanged;
     };
 
     std::unique_ptr<ILayoutComponent> createTrackDetailScope(LayoutContext& ctx, LayoutNode const& node)

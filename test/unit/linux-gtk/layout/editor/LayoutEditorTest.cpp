@@ -224,7 +224,6 @@ namespace ao::gtk::layout::editor::test
                                                           "track.selectionRegion",
                                                           "track.coverArt",
                                                           "track.fieldGrid",
-                                                          "track.editLock",
                                                           "track.tagEditor"});
 
       for (auto const& type : types)
@@ -461,13 +460,12 @@ namespace ao::gtk::layout::editor::test
       CHECK(bar.children.size() == expectedChildren);
     }
 
-    SECTION("track.selectionDetailPane contains field grid and properties action")
+    SECTION("track.selectionDetailPane contains field grid")
     {
       auto const templates = getBuiltInTemplates();
       auto const& pane = templates.at("track.selectionDetailPane");
 
       auto hasFieldGrid = false;
-      auto hasPropertiesAction = false;
 
       auto visit = std::function<void(LayoutNode const&)>{};
       visit = [&](LayoutNode const& node)
@@ -475,11 +473,6 @@ namespace ao::gtk::layout::editor::test
         if (node.type == "track.fieldGrid")
         {
           hasFieldGrid = true;
-        }
-
-        if (node.type == "app.actionButton" && node.getProp<std::string>("primaryAction", "") == "track.showProperties")
-        {
-          hasPropertiesAction = true;
         }
 
         for (auto const& child : node.children)
@@ -491,7 +484,6 @@ namespace ao::gtk::layout::editor::test
       visit(pane);
 
       CHECK(hasFieldGrid);
-      CHECK(hasPropertiesAction);
     }
 
     SECTION("template expansion via expandNode in build")

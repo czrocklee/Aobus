@@ -15,10 +15,12 @@ root:
         templateId: playback.defaultBar
       layout:
         valign: start
+    - type: separator
     - id: main-paned
       type: template
       props:
         templateId: app.defaultMainPaned
+    - type: separator
     - id: status-bar
       type: template
       props:
@@ -130,48 +132,32 @@ templates:
         layout:
           vexpand: true
         children:
-          - type: scroll
+          - type: box
             props:
-              hscrollPolicy: never
-              vscrollPolicy: automatic
+              orientation: vertical
+              spacing: 12
             layout:
               vexpand: true
+              cssClasses:
+                - ao-detail-pane
             children:
-              - type: box
+              - type: track.coverArt
                 props:
-                  orientation: vertical
-                  spacing: 12
+                  forceSquare: true
+                  targetSize: 320
+                layout:
+                  halign: center
+              - type: scroll
+                props:
+                  hscrollPolicy: never
+                  vscrollPolicy: automatic
                 layout:
                   vexpand: true
-                  cssClasses:
-                    - ao-detail-pane
                 children:
-                  - type: box
-                    props:
-                      orientation: horizontal
-                      spacing: 8
-                    layout:
-                      halign: end
-                    children:
-                      - type: track.editLock
-                      - type: app.actionButton
-                        props:
-                          label: Properties
-                          icon: document-properties-symbolic
-                          primaryAction: track.showProperties
-                  - type: track.coverArt
-                    props:
-                      forceSquare: true
-                      targetSize: 250
-                    layout:
-                      halign: center
                   - type: track.fieldGrid
                     props:
                       categories: ["metadata", "technical"]
-                  - type: spacer
-                    layout:
-                      vexpand: true
-                  - type: track.tagEditor
+              - type: track.tagEditor
   status.defaultBar:
     type: box
     props:
@@ -249,7 +235,7 @@ templates:
     type: split
     props:
       orientation: horizontal
-      position: 330
+      position: 250
     layout:
       vexpand: true
     children:

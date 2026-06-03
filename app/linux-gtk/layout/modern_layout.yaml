@@ -9,7 +9,7 @@ root:
       type: split
       props:
         orientation: horizontal
-        position: 330
+        position: 250
       layout:
         vexpand: true
       children:
@@ -103,15 +103,15 @@ templates:
               spacing: 12
             layout:
               slot: start
-              valign: center
+              vexpand: true
+              valign: fill
             children:
               - type: playback.image
                 props:
                   action: jumpToAlbum
-                  targetSize: 48
+                  targetSize: 58
                   forceSquare: true
                 layout:
-                  widthRequest: 48
                   vexpand: true
                   halign: center
                   valign: fill
@@ -155,7 +155,7 @@ templates:
             children:
               - type: playback.outputSelector
                 layout:
-                  widthRequest: 56
+                  widthRequest: 30
                   valign: center
                   cssClasses: ao-output-selector-modern
               - type: playback.timeLabel
@@ -178,8 +178,8 @@ templates:
                       strokeWidth: 5.0
                       glyphScale: 0.85
                     layout:
-                      widthRequest: 64
-                      heightRequest: 64
+                      widthRequest: 60
+                      heightRequest: 60
                       halign: center
                       valign: center
                       cssClasses: ao-play-button-prominent
@@ -197,8 +197,8 @@ templates:
                   cssClasses: ao-time-label-modern
               - type: playback.volumeControl
                 layout:
-                  widthRequest: 32
-                  heightRequest: 32
+                  widthRequest: 30
+                  heightRequest: 30
                   valign: center
           - type: box
             props:

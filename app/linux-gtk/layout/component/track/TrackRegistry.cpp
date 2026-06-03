@@ -20,7 +20,6 @@ namespace ao::gtk::layout
     registerTrackSelectionRegionComponent(registry);
     registerTrackCoverArtComponent(registry);
     registerTrackFieldGridComponent(registry);
-    registerTrackEditLockComponent(registry);
   }
 
   void registerTrackEditorComponents(ComponentRegistry& registry)

@@ -11,18 +11,21 @@
 
 #include <glibmm/regex.h>
 #include <gtkmm/box.h>
+#include <gtkmm/button.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollerfocus.h>
+#include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/flowbox.h>
 #include <gtkmm/flowboxchild.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
-#include <gtkmm/togglebutton.h>
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <utility>
@@ -35,15 +38,160 @@ namespace ao::gtk
     constexpr int kBoxSpacing = layout::kSpacingLarge;  // 8
     constexpr int kChipSpacing = layout::kSpacingSmall; // 4
     constexpr std::size_t kMaxAvailableTags = 50;
+
+    struct MeasureResult final
+    {
+      std::int32_t minimum = 0;
+      std::int32_t natural = 0;
+    };
+
+    MeasureResult measureWidget(Gtk::Widget const& widget, Gtk::Orientation orientation, std::int32_t forSize)
+    {
+      auto result = MeasureResult{};
+      auto minimumBaseline = -1;
+      auto naturalBaseline = -1;
+      widget.measure(orientation, forSize, result.minimum, result.natural, minimumBaseline, naturalBaseline);
+      return result;
+    }
+
+    class TagChip final : public Gtk::Widget
+    {
+    public:
+      explicit TagChip(std::string const& tag)
+        : _label{tag}
+      {
+        set_overflow(Gtk::Overflow::HIDDEN);
+        _label.set_parent(*this);
+
+        _removeBtn.set_icon_name("window-close-symbolic");
+        _removeBtn.set_has_frame(false);
+        _removeBtn.add_css_class("ao-tag-chip-remove");
+        _removeBtn.set_parent(*this);
+        _removeBtn.set_visible(false);
+
+        add_css_class("ao-tag-chip");
+        add_css_class("ao-tag-chip-current");
+
+        auto motionPtr = Gtk::EventControllerMotion::create();
+        motionPtr->signal_enter().connect([this](double, double) { updateHover(true); });
+        motionPtr->signal_leave().connect([this] { updateHover(false); });
+        add_controller(motionPtr);
+
+        auto focusPtr = Gtk::EventControllerFocus::create();
+        focusPtr->signal_enter().connect([this] { updateHover(true); });
+        focusPtr->signal_leave().connect([this] { updateHover(false); });
+        add_controller(focusPtr);
+      }
+
+      ~TagChip() override
+      {
+        _removeBtn.unparent();
+        _label.unparent();
+      }
+
+      TagChip(TagChip const&) = delete;
+      TagChip& operator=(TagChip const&) = delete;
+      TagChip(TagChip&&) = delete;
+      TagChip& operator=(TagChip&&) = delete;
+
+      void updateHover(bool hovered) { _removeBtn.set_visible(hovered || _removeBtn.has_focus()); }
+
+      auto signal_remove() { return _removeBtn.signal_clicked(); }
+
+    protected:
+      Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::CONSTANT_SIZE; }
+
+      void measure_vfunc(Gtk::Orientation orientation,
+                         int forSize,
+                         int& minimum,
+                         int& natural,
+                         int& minimumBaseline,
+                         int& naturalBaseline) const override
+      {
+        minimumBaseline = -1;
+        naturalBaseline = -1;
+
+        _label.measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
+
+        if (orientation == Gtk::Orientation::HORIZONTAL)
+        {
+          minimum += kLabelHorizontalPadding;
+          natural += kLabelHorizontalPadding;
+        }
+        else
+        {
+          minimum = std::max(minimum + kVerticalPadding, kMinimumVerticalHeight);
+          natural = std::max(natural + kVerticalPadding, kMinimumVerticalHeight);
+        }
+      }
+
+      void size_allocate_vfunc(int width, int height, int baseline) override
+      {
+        _label.size_allocate({kLabelLeftMargin, 0, std::max(0, width - kLabelRightReserve), height}, baseline);
+        _removeBtn.size_allocate(
+          {width - kRemoveBtnRightOffset, (height - kRemoveBtnSize) / 2, kRemoveBtnSize, kRemoveBtnSize}, baseline);
+      }
+
+    private:
+      static constexpr std::int32_t kLabelHorizontalPadding = 28;
+      static constexpr std::int32_t kLabelRightReserve = 28;
+      static constexpr std::int32_t kLabelLeftMargin = 8;
+      static constexpr std::int32_t kRemoveBtnRightOffset = 24;
+      static constexpr std::int32_t kRemoveBtnSize = 20;
+      static constexpr std::int32_t kVerticalPadding = 4;
+      static constexpr std::int32_t kMinimumVerticalHeight = 24;
+
+      Gtk::Label _label;
+      Gtk::Button _removeBtn;
+    };
   }
 
   TagEditor::TagEditor()
-    : Gtk::Box{Gtk::Orientation::VERTICAL, kBoxSpacing}
   {
+    set_overflow(Gtk::Overflow::HIDDEN);
+    _box.set_spacing(kBoxSpacing);
+    _box.set_overflow(Gtk::Overflow::HIDDEN);
+    _box.set_parent(*this);
     setupUi();
   }
 
-  TagEditor::~TagEditor() = default;
+  TagEditor::~TagEditor()
+  {
+    _box.unparent();
+  }
+
+  Gtk::SizeRequestMode TagEditor::get_request_mode_vfunc() const
+  {
+    return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH;
+  }
+
+  void TagEditor::measure_vfunc(Gtk::Orientation orientation,
+                                int forSize,
+                                int& minimum,
+                                int& natural,
+                                int& minimumBaseline,
+                                int& naturalBaseline) const
+  {
+    minimumBaseline = -1;
+    naturalBaseline = -1;
+
+    if (orientation == Gtk::Orientation::HORIZONTAL)
+    {
+      auto const measured = measureWidget(_box, orientation, forSize);
+      minimum = 0;
+      natural = measured.natural;
+      return;
+    }
+
+    auto const boxMinWidth = measureWidget(_box, Gtk::Orientation::HORIZONTAL, -1).minimum;
+    _box.measure(orientation, std::max({0, forSize, boxMinWidth}), minimum, natural, minimumBaseline, naturalBaseline);
+  }
+
+  void TagEditor::size_allocate_vfunc(int width, int height, int baseline)
+  {
+    auto const measured = measureWidget(_box, Gtk::Orientation::HORIZONTAL, -1);
+    _box.size_allocate({0, 0, std::max(width, measured.minimum), height}, baseline);
+  }
 
   void TagEditor::setup(library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds)
   {
@@ -58,6 +206,7 @@ namespace ao::gtk
   void TagEditor::setupUi()
   {
     add_css_class("ao-tag-editor");
+    _box.add_css_class("ao-tag-editor");
 
     _searchEntry.set_placeholder_text("Search or add tags...");
     _searchEntry.add_css_class("ao-tags-entry");
@@ -80,34 +229,36 @@ namespace ao::gtk
       },
       false);
 
-    append(_searchEntry);
+    _box.append(_searchEntry);
 
     _currentLabel.set_markup("<span size='small' weight='bold'>CURRENT TAGS</span>");
     _currentLabel.set_halign(Gtk::Align::START);
     _currentLabel.add_css_class("dim-label");
 
-    append(_currentLabel);
+    _box.append(_currentLabel);
 
     _currentTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _currentTagsBox.set_halign(Gtk::Align::START);
     _currentTagsBox.set_valign(Gtk::Align::START);
     _currentTagsBox.set_row_spacing(kChipSpacing);
     _currentTagsBox.set_column_spacing(kChipSpacing);
+    _currentTagsBox.add_css_class("ao-tag-editor-current-box");
 
-    append(_currentTagsBox);
-    append(_separator);
+    _box.append(_currentTagsBox);
+    _box.append(_separator);
 
     _availableLabel.set_markup("<span size='small' weight='bold'>AVAILABLE TAGS</span>");
     _availableLabel.set_halign(Gtk::Align::START);
     _availableLabel.add_css_class("dim-label");
 
-    append(_availableLabel);
+    _box.append(_availableLabel);
 
     _availableTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _availableTagsBox.set_halign(Gtk::Align::START);
     _availableTagsBox.set_valign(Gtk::Align::START);
     _availableTagsBox.set_row_spacing(kChipSpacing);
     _availableTagsBox.set_column_spacing(kChipSpacing);
+    _availableTagsBox.add_css_class("ao-tag-editor-available-box");
 
     _availableTagsBox.set_filter_func(
       [this](Gtk::FlowBoxChild* child) -> bool
@@ -129,7 +280,7 @@ namespace ao::gtk
         return lowerTag.find(lowerSearch) != std::string::npos;
       });
 
-    append(_availableTagsBox);
+    _box.append(_availableTagsBox);
   }
 
   void TagEditor::collectTagData()
@@ -219,12 +370,8 @@ namespace ao::gtk
 
     auto const addChip = [this](std::string const& tag)
     {
-      auto* const chip = Gtk::make_managed<Gtk::ToggleButton>(tag);
-
-      chip->set_active(true);
-      setChipStyle(*chip, true);
-      chip->signal_toggled().connect([this, chip, tag] { onTagChipToggled(chip, tag, true); });
-
+      auto* const chip = Gtk::make_managed<TagChip>(tag);
+      chip->signal_remove().connect([this, tag] { onTagRemoveClicked(tag); });
       _currentTagsBox.append(*chip);
     };
 
@@ -252,15 +399,23 @@ namespace ao::gtk
       _availableTagsBox.remove(*child);
     }
 
+    auto const addAvailableChip = [this](std::string const& tag, bool isHighlighted)
+    {
+      auto* const btn = Gtk::make_managed<Gtk::Button>(tag);
+      btn->add_css_class("ao-tag-chip");
+
+      if (!isHighlighted)
+      {
+        btn->add_css_class("dim-label");
+      }
+
+      btn->signal_clicked().connect([this, tag] { onAvailableTagClicked(tag); });
+      _availableTagsBox.append(*btn);
+    };
+
     for (auto const& tag : _pendingRemoves)
     {
-      auto* const chip = Gtk::make_managed<Gtk::ToggleButton>(tag);
-
-      chip->set_active(false);
-      setChipStyle(*chip, false);
-      chip->signal_toggled().connect([this, chip, tag] { onTagChipToggled(chip, tag, false); });
-
-      _availableTagsBox.append(*chip);
+      addAvailableChip(tag, false);
     }
 
     for (auto const& [tag, freq] : _availableTagsByFrequency)
@@ -271,48 +426,35 @@ namespace ao::gtk
         continue;
       }
 
-      auto* const chip = Gtk::make_managed<Gtk::ToggleButton>(tag);
-
-      chip->set_active(false);
-      setChipStyle(*chip, false);
-      chip->signal_toggled().connect([this, chip, tag] { onTagChipToggled(chip, tag, false); });
-
-      _availableTagsBox.append(*chip);
+      addAvailableChip(tag, false);
     }
 
     _availableTagsBox.invalidate_filter();
   }
 
-  void TagEditor::onTagChipToggled(Gtk::ToggleButton* button, std::string const& tag, bool isCurrentSection)
+  void TagEditor::onTagRemoveClicked(std::string const& tag)
   {
-    if (isCurrentSection)
+    if (!std::ranges::contains(_pendingRemoves, tag))
     {
-      if (!button->get_active())
-      {
-        if (!std::ranges::contains(_pendingRemoves, tag))
-        {
-          _pendingRemoves.push_back(tag);
-        }
-
-        std::erase(_pendingAdds, tag);
-      }
+      _pendingRemoves.push_back(tag);
     }
-    else
+
+    std::erase(_pendingAdds, tag);
+
+    rebuildCurrentTags();
+    rebuildAvailableTags();
+
+    _tagsChanged.emit(_pendingAdds, _pendingRemoves);
+  }
+
+  void TagEditor::onAvailableTagClicked(std::string const& tag)
+  {
+    if (!std::ranges::contains(_pendingAdds, tag))
     {
-      if (button->get_active())
-      {
-        if (!std::ranges::contains(_pendingAdds, tag))
-        {
-          _pendingAdds.push_back(tag);
-        }
-
-        std::erase(_pendingRemoves, tag);
-      }
-      else
-      {
-        std::erase(_pendingAdds, tag);
-      }
+      _pendingAdds.push_back(tag);
     }
+
+    std::erase(_pendingRemoves, tag);
 
     rebuildCurrentTags();
     rebuildAvailableTags();
@@ -353,23 +495,11 @@ namespace ao::gtk
       return {};
     }
 
-    auto* const chip = dynamic_cast<Gtk::ToggleButton*>(child->get_child());
-
-    if (chip != nullptr)
+    if (auto* const btn = dynamic_cast<Gtk::Button*>(child->get_child()); btn != nullptr)
     {
-      return chip->get_label();
+      return btn->get_label();
     }
 
     return "";
-  }
-
-  void TagEditor::setChipStyle(Gtk::ToggleButton& chip, bool isHighlighted)
-  {
-    chip.add_css_class("ao-tag-chip");
-
-    if (!isHighlighted)
-    {
-      chip.add_css_class("dim-label");
-    }
   }
 } // namespace ao::gtk

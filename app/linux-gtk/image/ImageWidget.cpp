@@ -36,6 +36,42 @@ namespace ao::gtk
   {
     constexpr std::int32_t kMinimumRefreshDelta = 2;
     constexpr double kRefreshDeltaRatio = 0.05;
+
+    Glib::RefPtr<Gdk::Pixbuf> centerCropToAspect(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr, RenderTarget const target)
+    {
+      if (!pixbufPtr || target.width <= 0 || target.height <= 0)
+      {
+        return pixbufPtr;
+      }
+
+      auto const sourceWidth = pixbufPtr->get_width();
+      auto const sourceHeight = pixbufPtr->get_height();
+
+      if (sourceWidth <= 0 || sourceHeight <= 0)
+      {
+        return pixbufPtr;
+      }
+
+      auto const targetRatio = static_cast<double>(target.width) / static_cast<double>(target.height);
+      auto const sourceRatio = static_cast<double>(sourceWidth) / static_cast<double>(sourceHeight);
+
+      auto cropWidth = sourceWidth;
+      auto cropHeight = sourceHeight;
+
+      if (sourceRatio > targetRatio)
+      {
+        cropWidth = std::max(1, static_cast<std::int32_t>(std::round(static_cast<double>(sourceHeight) * targetRatio)));
+      }
+      else if (sourceRatio < targetRatio)
+      {
+        cropHeight = std::max(1, static_cast<std::int32_t>(std::round(static_cast<double>(sourceWidth) / targetRatio)));
+      }
+
+      auto const cropX = std::max(0, (sourceWidth - cropWidth) / 2);
+      auto const cropY = std::max(0, (sourceHeight - cropHeight) / 2);
+
+      return Gdk::Pixbuf::create_subpixbuf(pixbufPtr, cropX, cropY, cropWidth, cropHeight);
+    }
   }
 
   RenderTarget fitSourceIntoTarget(RenderTarget const source, RenderTarget const target)
@@ -119,6 +155,15 @@ namespace ao::gtk
     {
       _maxRenderWidth = width;
       _maxRenderHeight = height;
+      queueRefresh();
+    }
+  }
+
+  void ImageWidget::setForceSquareTarget(bool forceSquare)
+  {
+    if (_forceSquareTarget != forceSquare)
+    {
+      _forceSquareTarget = forceSquare;
       queueRefresh();
     }
   }
@@ -286,8 +331,19 @@ namespace ao::gtk
       return;
     }
 
-    auto const fitTarget =
-      fitSourceIntoTarget({.width = _sourcePixbufPtr->get_width(), .height = _sourcePixbufPtr->get_height()}, target);
+    auto sourcePixbufPtr = _sourcePixbufPtr;
+    auto fitTarget = RenderTarget{};
+
+    if (_forceSquareTarget)
+    {
+      sourcePixbufPtr = centerCropToAspect(_sourcePixbufPtr, target);
+      fitTarget = target;
+    }
+    else
+    {
+      fitTarget =
+        fitSourceIntoTarget({.width = sourcePixbufPtr->get_width(), .height = sourcePixbufPtr->get_height()}, target);
+    }
 
     if (fitTarget.width <= 0 || fitTarget.height <= 0)
     {
@@ -306,13 +362,13 @@ namespace ao::gtk
 
     auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
 
-    if (fitTarget.width == _sourcePixbufPtr->get_width() && fitTarget.height == _sourcePixbufPtr->get_height())
+    if (fitTarget.width == sourcePixbufPtr->get_width() && fitTarget.height == sourcePixbufPtr->get_height())
     {
-      renderedPixbufPtr = _sourcePixbufPtr;
+      renderedPixbufPtr = sourcePixbufPtr;
     }
     else
     {
-      renderedPixbufPtr = _sourcePixbufPtr->scale_simple(fitTarget.width, fitTarget.height, Gdk::InterpType::HYPER);
+      renderedPixbufPtr = sourcePixbufPtr->scale_simple(fitTarget.width, fitTarget.height, Gdk::InterpType::HYPER);
     }
 
     _renderedSourcePixbufPtr = _sourcePixbufPtr;
@@ -353,6 +409,13 @@ namespace ao::gtk
       logicalHeight = _sourcePixbufPtr->get_height();
     }
 
+    if (_forceSquareTarget && logicalWidth > 0 && logicalHeight > 0)
+    {
+      auto const side = std::min(logicalWidth, logicalHeight);
+      logicalWidth = side;
+      logicalHeight = side;
+    }
+
     // Clamp to max render size when set.
     if (_maxRenderWidth > 0 && logicalWidth > _maxRenderWidth)
     {
@@ -373,9 +436,9 @@ namespace ao::gtk
 
   double ImageWidget::currentDisplayScale() const
   {
-    if (auto const* const nativePtr = get_native(); nativePtr != nullptr)
+    if (auto const* const native = get_native(); native != nullptr)
     {
-      if (auto const surfacePtr = nativePtr->get_surface(); surfacePtr)
+      if (auto const surfacePtr = native->get_surface(); surfacePtr)
       {
         return std::max(1.0, surfacePtr->get_scale());
       }

@@ -27,12 +27,16 @@ The grid is driven by the `TrackDetailSnapshot`, which aggregates field values a
 - **Mixed Values**: When selected tracks have different values for a field, the grid displays `<Multiple Values>`.
 - **Unknown Values**: For technical fields, missing data is displayed as `Unknown`. For metadata fields, missing data is displayed as an empty string.
 
-### Editing
+### Editing and Interaction
 
-- **Edit Lock**: Editable rows are guarded by the global `track.editLock`. When locked, fields are read-only.
-- **Inline Editing**: Metadata and custom fields use `Gtk::EditableLabel` for immediate, inline editing.
-- **Technical Fields**: Technical fields (e.g., Sample Rate, Bitrate, File Path) are always read-only.
+The Track Details panel uses an invisible interaction model. Editable controls appear only where the pointer or keyboard focus indicates intent.
+
+- **Built-in Metadata**: Editable inline. They appear as plain text until hovered or focused, at which point an edit hint (`document-edit-symbolic`) and subtle background highlight appear. Built-in metadata cannot be removed, only cleared (set to empty string).
+- **Custom Metadata**: Editable inline and removable. Like built-in metadata, the value shows an edit hint on hover/focus. The row itself also shows a delete button (`user-trash-symbolic`) at the right edge when the row is hovered or receives focus.
+- **Technical Fields**: Objective read-only properties (e.g., Sample Rate, Bitrate, File Path). They are styled slightly dimmer than editable fields and have no hover, focus, or cursor affordances.
+- **Inline Editing**: Metadata and custom fields use a detail-field inline editor that displays as an ellipsizing label and switches to an entry while editing. Pressing `Enter` commits the change, while `Esc` cancels it. The UI refuses to save literal `<Multiple Values>`.
 - **Add Property**: An "Add Property" button allows users to define new custom metadata keys and values. Duplicate keys already present in the selection are rejected.
+- **Delete Undo**: Deleting a custom metadata property shows a temporary (5-second) snackbar/undo bar at the bottom of the grid. Clicking "Undo" restores the property. Currently, this is only fully supported and presented when the deleted property had the same value across all selected tracks (not mixed).
 
 ## Layout Configuration
 
@@ -45,36 +49,37 @@ Example:
     categories: ["metadata", "technical"]
 ```
 
-## Responsive Behavior
+## Constrained Layout Behavior
 
-The field grid adapts its layout automatically to the allocated panel width. The layout mode is driven only by panel width, not by track content. Selecting a different track never changes the structural layout mode.
+The field grid uses a fixed one-field-per-row layout at every panel width.
+Selecting a different track or resizing the split pane never changes the
+structural row layout.
 
-### Breakpoints
+All rows use a 4-column `Gtk::Grid` so labels, values, warning icons, delete
+buttons, separator rows, and add-property rows have stable coordinates.
 
-| Mode       | Width            |
-|------------|------------------|
-| Standard   | `< 550px`        |
-| Wide       | `>= 550px`       |
+The grid is hosted in a scroll viewport with a fixed natural height. The
+viewport shows eight field rows by default and uses a vertical scrollbar when
+more fields are present. The field grid is vertically expandable, so it can use
+extra space that the parent layout assigns to it, but adding or removing custom
+metadata changes only the scrollable grid content. It does not change the
+field section's requested height and therefore does not push cover art or
+sibling detail widgets.
 
-All modes use a 4-column `Gtk::Grid` so custom rows, warning icons, delete buttons, separator rows, and add-property rows have stable coordinates.
-
-### Standard
+### Rows
 
 Built-in rows are side-by-side: label occupies column 0, value occupies columns 1–3. Each row consumes 1 grid row.
 
 Custom rows are single-row: label at column 0, editable value at column 1, partial-presence icon at column 2, delete button at column 3.
 
-### Wide
+The add-property row mirrors the key/value split: the key entry occupies column
+0, while the value entry and add action occupy columns 1–3. Separator rows span
+all 4 columns.
 
-Built-in metadata and technical rows are packed two items per grid row:
-- Item A: label at column 0, value at column 1
-- Item B: label at column 2, value at column 3
-
-Row count is `(count + 1) / 2`, so an odd count leaves the second slot empty on the last row.
-
-Custom rows remain single-item rows (same as Standard) because they need warning/delete controls.
-
-The add-property row and separator row span all 4 columns (same as Standard).
+Every grid cell is hosted by a clipped fixed-height slot. Row height is stable
+across field values and font metrics; if a child widget internally asks for more
+height, it is allocated enough height inside the clipped slot instead of
+changing the row rhythm.
 
 ### Ordering
 
@@ -84,15 +89,16 @@ Content is always ordered: metadata rows, custom rows, add-property row, separat
 
 ### Value Widgets
 
-Metadata, custom metadata, and technical property values use `Gtk::EditableLabel`
-as their single value widget. Editable fields become editable when the detail
-scope is unlocked; read-only technical values keep the same widget contract but
-remain non-editable. This keeps display and editing width behavior identical and
-avoids measuring a different widget when editing starts or ends.
+Metadata, custom metadata, and technical property values use a local detail-field
+inline editor. In display mode it allocates an ellipsizing `Gtk::Label` to the
+visible value width, so long values shorten inside the panel instead of raising
+the grid's minimum width. Editable fields (metadata and custom) switch to a
+`Gtk::Entry` only while editing; read-only technical values keep the display-only
+contract.
 
-When editing is unlocked, editable values receive an active editor affordance
-with a subtle background and border. Locked values and read-only technical
-values do not show that affordance.
+When hovered or focused, editable values receive an active editor affordance
+with a subtle background and border, indicating they can be clicked to edit.
+Read-only technical values do not show any hover affordance.
 
 Text loaded from tags or custom metadata is normalized at the GTK display
 boundary before it is passed to Pango. Invalid UTF-8 bytes are shown with Unicode
@@ -102,6 +108,10 @@ left untouched unless the user edits and saves the value.
 All value widgets expose their full display text via tooltip.
 
 Column expansion is managed through `hexpand` rules that are stable across track changes, preventing value length changes from resizing columns or shifting layout.
+Key-column slots and cross-column separators do not request horizontal expansion,
+and the add-property key entry uses only a one-character natural-width hint so it
+fills the existing key column without making that column compete with values
+during split-pane resize.
 
 The field grid wrapper treats the detail panel allocation as the hard horizontal
 limit. It does not report the grid's content-driven minimum or natural width to
@@ -110,6 +120,15 @@ overflow. Long values can ellipsize inside the panel, but they cannot widen the
 detail pane. Field labels keep their natural-width preference, but their GTK
 minimum width is allowed to shrink so the grid can be allocated to the panel
 width without pushing action controls outside the clipped area.
+Key labels and action rows are hosted by zero-minimum clipped wrappers. The
+labels, add-property button, warning icon, and delete action can keep their own
+internal minimums, but those minimums do not raise the grid's minimum width or
+force the grid to be allocated wider than the panel.
+
+Sibling detail widgets must also avoid raising the pane minimum width. The tag
+editor reports a zero horizontal minimum to its parent and clips its own internal
+controls under extreme split resizing, so the field grid still receives the
+actual panel width and can ellipsize values against the visible allocation.
 
 Value widgets are configured with zero horizontal size request, hidden overflow,
 and a one-character maximum natural width hint so value content cannot force a

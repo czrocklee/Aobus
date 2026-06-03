@@ -95,9 +95,9 @@ namespace clang::tidy::aobus
     }
 
     auto const desugared = type.getDesugaredType(context);
-    auto const* typePtr = desugared.getTypePtr();
+    auto const* underlyingType = desugared.getTypePtr();
 
-    auto const* recordDecl = typePtr->getAsCXXRecordDecl();
+    auto const* recordDecl = underlyingType->getAsCXXRecordDecl();
 
     if (recordDecl == nullptr)
     {

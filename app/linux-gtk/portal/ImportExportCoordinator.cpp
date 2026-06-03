@@ -119,19 +119,19 @@ namespace ao::gtk::portal
           self->_optLibraryTaskThemeToken = self->_themeController.registerToplevel(*self->_libraryTaskDialogPtr);
         }
 
-        auto* const dialogPtr = self->_libraryTaskDialogPtr.get();
-        self->_libraryTaskDialogPtr->signal_response().connect([dialogPtr](std::int32_t /*responseId*/)
-                                                               { dialogPtr->close(); });
+        auto* const dialog = self->_libraryTaskDialogPtr.get();
+        self->_libraryTaskDialogPtr->signal_response().connect([dialog](std::int32_t /*responseId*/)
+                                                               { dialog->close(); });
 
         self->_libraryTaskProgressSub = self->_runtime.mutation().onLibraryTaskProgress(
-          [dialogPtr](auto const& ev) { dialogPtr->updateProgress(ev.message, ev.fraction); });
+          [dialog](auto const& ev) { dialog->updateProgress(ev.message, ev.fraction); });
 
         self->_libraryTaskDialogPtr->show();
 
         try
         {
           co_await self->_runtime.mutation().applyScanPlanAsync(std::move(plan));
-          dialogPtr->ready();
+          dialog->ready();
           self->onImportFinished();
         }
         catch (std::exception const& e)

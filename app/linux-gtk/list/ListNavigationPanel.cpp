@@ -18,6 +18,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/object.h>
@@ -167,6 +168,12 @@ namespace ao::gtk
     auto* expander = Gtk::make_managed<Gtk::TreeExpander>();
     rowBox->append(*expander);
 
+    auto* icon = Gtk::make_managed<Gtk::Image>();
+    icon->set_pixel_size(16);
+    icon->add_css_class("ao-list-icon");
+    icon->set_margin_end(8);
+    rowBox->append(*icon);
+
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     rowBox->append(*label);
@@ -228,7 +235,8 @@ namespace ao::gtk
 
     auto* box = dynamic_cast<Gtk::Box*>(listItem->get_child());
     auto* expander = box != nullptr ? dynamic_cast<Gtk::TreeExpander*>(box->get_first_child()) : nullptr;
-    auto* label = expander != nullptr ? dynamic_cast<Gtk::Label*>(expander->get_next_sibling()) : nullptr;
+    auto* icon = expander != nullptr ? dynamic_cast<Gtk::Image*>(expander->get_next_sibling()) : nullptr;
+    auto* label = icon != nullptr ? dynamic_cast<Gtk::Label*>(icon->get_next_sibling()) : nullptr;
     auto* filterLabel = label != nullptr ? dynamic_cast<Gtk::Label*>(label->get_next_sibling()) : nullptr;
 
     if (expander != nullptr)
@@ -249,6 +257,39 @@ namespace ao::gtk
     }
 
     label->set_text(rowPtr->name());
+
+    if (icon != nullptr)
+    {
+      auto iconName = Glib::ustring{"folder-saved-search-symbolic"};
+
+      if (auto const nameLower = rowPtr->name().lowercase(); nodePtr->hasChildren())
+      {
+        iconName = "folder-symbolic";
+      }
+      else if (auto const filterLower = rowPtr->filter().lowercase();
+               nameLower.find("favorite") != Glib::ustring::npos || filterLower.find("#fav") != Glib::ustring::npos)
+      {
+        iconName = "emblem-favorite-symbolic";
+      }
+      else if (nameLower.find("all tracks") != Glib::ustring::npos || nameLower.find("songs") != Glib::ustring::npos)
+      {
+        iconName = "library-music-symbolic";
+      }
+      else if (nameLower.find("hi-res") != Glib::ustring::npos)
+      {
+        iconName = "audio-speakers-symbolic";
+      }
+      else if (nameLower.find("classic") != Glib::ustring::npos || nameLower.find("bach") != Glib::ustring::npos)
+      {
+        iconName = "audio-x-generic-symbolic";
+      }
+      else if (!rowPtr->isSmart())
+      {
+        iconName = "media-playlist-symbolic";
+      }
+
+      icon->set_from_icon_name(iconName);
+    }
 
     if (filterLabel == nullptr)
     {

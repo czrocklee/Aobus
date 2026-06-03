@@ -32,16 +32,16 @@ namespace ao::gtk::test
     {
     public:
       explicit AllocationHost(Gtk::Widget& child)
-        : _childPtr{&child}
+        : _child{&child}
       {
-        _childPtr->set_parent(*this);
+        _child->set_parent(*this);
       }
 
       ~AllocationHost() override
       {
-        if (_childPtr != nullptr)
+        if (_child != nullptr)
         {
-          _childPtr->unparent();
+          _child->unparent();
         }
       }
 
@@ -90,7 +90,7 @@ namespace ao::gtk::test
 
       void size_allocate_vfunc(int width, int height, int /*baseline*/) override
       {
-        if (_childPtr == nullptr)
+        if (_child == nullptr)
         {
           return;
         }
@@ -99,8 +99,8 @@ namespace ao::gtk::test
         std::int32_t natural = 0;
         std::int32_t minimumBaseline = -1;
         std::int32_t naturalBaseline = -1;
-        _childPtr->measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
-        _childPtr->measure(Gtk::Orientation::VERTICAL, width, minimum, natural, minimumBaseline, naturalBaseline);
+        _child->measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+        _child->measure(Gtk::Orientation::VERTICAL, width, minimum, natural, minimumBaseline, naturalBaseline);
 
         auto allocation = Gtk::Allocation{};
         allocation.set_x(0);
@@ -108,11 +108,11 @@ namespace ao::gtk::test
         allocation.set_width(width);
         allocation.set_height(height);
 
-        _childPtr->size_allocate(allocation, -1);
+        _child->size_allocate(allocation, -1);
       }
 
     private:
-      Gtk::Widget* _childPtr = nullptr;
+      Gtk::Widget* _child = nullptr;
       std::int32_t _width = 0;
       std::int32_t _height = 0;
     };
@@ -188,7 +188,7 @@ namespace ao::gtk::test
     SECTION("bind to projection updates image")
     {
       auto mockProjPtr = std::make_unique<ManualTrackDetailMock>();
-      auto* mockRawPtr = mockProjPtr.get();
+      auto* mock = mockProjPtr.get();
 
       auto snapshot = rt::TrackDetailSnapshot{};
       snapshot.selectionKind = rt::SelectionKind::Single;
@@ -197,7 +197,7 @@ namespace ao::gtk::test
 
       widget.bindToDetailProjection(std::move(mockProjPtr));
 
-      mockRawPtr->emit(snapshot);
+      mock->emit(snapshot);
       drainGtkEvents();
 
       // Since we don't have a real resource with ID 123, it won't actually load an image,
@@ -226,6 +226,34 @@ namespace ao::gtk::test
 
       REQUIRE(widget.get_width() > 0);
       REQUIRE(widget.get_height() > 0);
+
+      auto const expectedSize = std::min(widget.get_width(), widget.get_height()) * scaleFactor;
+      paintablePtr = widget.get_paintable();
+      REQUIRE(paintablePtr);
+      CHECK(paintablePtr->get_intrinsic_width() == expectedSize);
+      CHECK(paintablePtr->get_intrinsic_height() == expectedSize);
+    }
+
+    SECTION("force square target follows the allocated short side")
+    {
+      auto const scaleFactor = widget.get_scale_factor();
+      auto const sourcePixbufPtr = makePixbuf(400, 300);
+
+      widget.setTargetSize(48);
+      widget.setForceSquareTarget(true);
+      widget.setImagePixbuf(sourcePixbufPtr);
+      drainGtkEvents();
+
+      auto paintablePtr = widget.get_paintable();
+      REQUIRE(paintablePtr);
+      CHECK(paintablePtr->get_intrinsic_width() == 48 * scaleFactor);
+      CHECK(paintablePtr->get_intrinsic_height() == 48 * scaleFactor);
+
+      auto allocationHost = AllocationHost{widget};
+      allocationHost.allocateChild(64, 80);
+
+      widget.setImagePixbuf(sourcePixbufPtr);
+      drainGtkEvents();
 
       auto const expectedSize = std::min(widget.get_width(), widget.get_height()) * scaleFactor;
       paintablePtr = widget.get_paintable();

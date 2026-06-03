@@ -24,6 +24,7 @@
 #include <gtkmm/widget.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -32,7 +33,64 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    constexpr std::int32_t kThumbnailSize = 56;
+    constexpr std::int32_t kThumbnailSize = 64;
+
+    class PassiveImageSlot final : public Gtk::Widget
+    {
+    public:
+      PassiveImageSlot(ImageWidget& imageWidget, std::int32_t widthHint)
+        : _imageWidget{imageWidget}, _widthHint{std::max(0, widthHint)}
+      {
+        _imageWidget.set_parent(*this);
+      }
+
+      ~PassiveImageSlot() override { _imageWidget.unparent(); }
+
+      PassiveImageSlot(PassiveImageSlot const&) = delete;
+      PassiveImageSlot& operator=(PassiveImageSlot const&) = delete;
+      PassiveImageSlot(PassiveImageSlot&&) = delete;
+      PassiveImageSlot& operator=(PassiveImageSlot&&) = delete;
+
+    protected:
+      Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::CONSTANT_SIZE; }
+
+      void measure_vfunc(Gtk::Orientation orientation,
+                         int /*forSize*/,
+                         int& minimum,
+                         int& natural,
+                         int& minimumBaseline,
+                         int& naturalBaseline) const override
+      {
+        minimum = orientation == Gtk::Orientation::HORIZONTAL ? _widthHint : 0;
+        natural = minimum;
+        minimumBaseline = -1;
+        naturalBaseline = -1;
+      }
+
+      void size_allocate_vfunc(int width, int height, int baseline) override
+      {
+        auto const side = _widthHint > 0 ? std::min({width, height, _widthHint}) : std::min(width, height);
+        auto const offsetX = (width - side) / 2;
+        auto const offsetY = (height - side) / 2;
+
+        measureImageForAllocation(side);
+        _imageWidget.size_allocate(Gtk::Allocation{offsetX, offsetY, side, side}, baseline);
+      }
+
+    private:
+      void measureImageForAllocation(int const side) const
+      {
+        auto minimum = 0;
+        auto natural = 0;
+        auto minimumBaseline = -1;
+        auto naturalBaseline = -1;
+        _imageWidget.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+        _imageWidget.measure(Gtk::Orientation::VERTICAL, side, minimum, natural, minimumBaseline, naturalBaseline);
+      }
+
+      ImageWidget& _imageWidget;
+      std::int32_t _widthHint = 0;
+    };
 
     /**
      * @brief playback.image
@@ -61,6 +119,12 @@ namespace ao::gtk::layout
 
         auto const targetSize = node.getProp<std::int64_t>("targetSize", kThumbnailSize);
         _imageWidgetPtr->setTargetSize(static_cast<std::int32_t>(targetSize));
+        auto const forceSquare = node.getProp<bool>("forceSquare", false);
+
+        if (forceSquare)
+        {
+          _imageWidgetPtr->setForceSquareTarget(true);
+        }
 
         if (auto const it = node.props.find("opacity"); it != node.props.end())
         {
@@ -83,7 +147,16 @@ namespace ao::gtk::layout
           return Action::None;
         }();
 
-        _button.set_child(*_imageWidgetPtr);
+        if (forceSquare)
+        {
+          _passiveSlotPtr = std::make_unique<PassiveImageSlot>(*_imageWidgetPtr, static_cast<std::int32_t>(targetSize));
+          _button.set_child(*_passiveSlotPtr);
+        }
+        else
+        {
+          _button.set_child(*_imageWidgetPtr);
+        }
+
         _button.set_has_frame(false); // Make it flat
         _button.set_overflow(Gtk::Overflow::HIDDEN);
         _button.add_css_class("ao-image-button");
@@ -176,6 +249,7 @@ namespace ao::gtk::layout
       rt::AppRuntime& _runtime;
       Action _action = Action::None;
       std::unique_ptr<ImageWidget> _imageWidgetPtr;
+      std::unique_ptr<PassiveImageSlot> _passiveSlotPtr;
       Gtk::Button _button;
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
@@ -196,7 +270,15 @@ namespace ao::gtk::layout
                                 .displayName = "Playback Cover Art",
                                 .category = "Playback",
                                 .container = false,
-                                .props = {{.name = "action",
+                                .props = {{.name = "targetSize",
+                                           .kind = PropertyKind::Int,
+                                           .label = "Target Size",
+                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(kThumbnailSize)}},
+                                          {.name = "forceSquare",
+                                           .kind = PropertyKind::Bool,
+                                           .label = "Force Square",
+                                           .defaultValue = LayoutValue{false}},
+                                          {.name = "action",
                                            .kind = PropertyKind::Enum,
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},

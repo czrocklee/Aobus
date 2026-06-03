@@ -451,10 +451,10 @@ namespace ao::audio::backend
     ::snd_pcm_format_t alsaFormat = SND_PCM_FORMAT_S16_LE;
     bool is3Byte24Bit = false;
 
-    detail::AlsaGraphRegistry* graphRegistryPtr = nullptr;
+    detail::AlsaGraphRegistry* graphRegistry = nullptr;
 
-    explicit Impl(std::string name, detail::AlsaGraphRegistry* graphRegistry)
-      : deviceName{std::move(name)}, graphRegistryPtr{graphRegistry}
+    explicit Impl(std::string name, detail::AlsaGraphRegistry* graphRegistryArg)
+      : deviceName{std::move(name)}, graphRegistry{graphRegistryArg}
     {
     }
 
@@ -641,7 +641,7 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::Impl::publishGraphState() const
   {
-    if (graphRegistryPtr == nullptr)
+    if (graphRegistry == nullptr)
     {
       return;
     }
@@ -661,9 +661,8 @@ namespace ao::audio::backend
       muted = mixer.softwareMuted();
     }
 
-    graphRegistryPtr->publish({.routeAnchor = deviceName, .volume = vol, .muted = muted, .volumeMode = mode});
+    graphRegistry->publish({.routeAnchor = deviceName, .volume = vol, .muted = muted, .volumeMode = mode});
   }
-
   Result<> AlsaExclusiveBackend::Impl::setVolumeProperty(PropertyValue const& value)
   {
     mixer.setVolume(std::get<float>(value));
@@ -973,9 +972,9 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::close()
   {
-    if (_implPtr->graphRegistryPtr != nullptr)
+    if (_implPtr->graphRegistry != nullptr)
     {
-      _implPtr->graphRegistryPtr->clear(_implPtr->deviceName);
+      _implPtr->graphRegistry->clear(_implPtr->deviceName);
     }
 
     stop();

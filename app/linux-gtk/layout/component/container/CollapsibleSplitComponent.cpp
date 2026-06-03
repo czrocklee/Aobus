@@ -42,9 +42,9 @@ namespace ao::gtk::layout
 
       ~FixedSplitPane() override
       {
-        if (_childPtr != nullptr)
+        if (_child != nullptr)
         {
-          _childPtr->unparent();
+          _child->unparent();
         }
       }
 
@@ -57,19 +57,19 @@ namespace ao::gtk::layout
       {
         clearChild();
 
-        _childPtr = &child;
+        _child = &child;
         child.set_parent(*this);
       }
 
       void clearChild()
       {
-        if (_childPtr == nullptr)
+        if (_child == nullptr)
         {
           return;
         }
 
-        _childPtr->unparent();
-        _childPtr = nullptr;
+        _child->unparent();
+        _child = nullptr;
       }
 
       void setSplitOrientation(Gtk::Orientation orientation)
@@ -111,9 +111,9 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (_childPtr != nullptr)
+        if (_child != nullptr)
         {
-          _childPtr->measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
+          _child->measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
           return;
         }
 
@@ -125,14 +125,14 @@ namespace ao::gtk::layout
 
       void size_allocate_vfunc(int width, int height, int baseline) override
       {
-        if (_childPtr != nullptr)
+        if (_child != nullptr)
         {
-          _childPtr->size_allocate({0, 0, width, height}, baseline);
+          _child->size_allocate({0, 0, width, height}, baseline);
         }
       }
 
     private:
-      Gtk::Widget* _childPtr = nullptr;
+      Gtk::Widget* _child = nullptr;
       Gtk::Orientation _orientation = Gtk::Orientation::HORIZONTAL;
       std::int32_t _paneSize = kDefaultCollapsibleSplitSize;
     };
@@ -384,9 +384,9 @@ namespace ao::gtk::layout
 
       void applyDragCursor()
       {
-        if (auto* const nativePtr = _container.get_native(); nativePtr != nullptr)
+        if (auto* const native = _container.get_native(); native != nullptr)
         {
-          if (auto const surfacePtr = nativePtr->get_surface(); surfacePtr)
+          if (auto const surfacePtr = native->get_surface(); surfacePtr)
           {
             surfacePtr->set_cursor(resizeCursor());
           }
@@ -395,9 +395,9 @@ namespace ao::gtk::layout
 
       void restoreDragCursor()
       {
-        if (auto* const nativePtr = _container.get_native(); nativePtr != nullptr)
+        if (auto* const native = _container.get_native(); native != nullptr)
         {
-          if (auto const surfacePtr = nativePtr->get_surface(); surfacePtr)
+          if (auto const surfacePtr = native->get_surface(); surfacePtr)
           {
             surfacePtr->set_cursor();
           }

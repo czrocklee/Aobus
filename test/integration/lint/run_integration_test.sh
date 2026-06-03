@@ -48,7 +48,8 @@ get_check_alias() {
         IncludeConventionCheckFixture.cpp) echo "aobus-include-convention" ;;
         SpdxLicenseHeaderCheckFixture.cpp) echo "aobus-license-header" ;;
         SpdxLicenseHeaderCheckMissingFixture.cpp) echo "aobus-license-header" ;;
-        UseCtadCheckFixture.cpp) echo "aobus-modernize-use-ctad" ;;     
+        UseCtadCheckFixture.cpp) echo "aobus-modernize-use-ctad" ;;
+        PointerNamingConventionFixture.cpp) echo "aobus-readability-pointer-naming-convention" ;;
         *) return 1 ;;
     esac
 }

@@ -138,13 +138,13 @@ namespace ao::rt
           continue;
         }
 
-        auto* const parentPtr = parentSourceOf(*childSource);
+        auto* const parent = parentSourceOf(*childSource);
 
         for (auto const id : toErase)
         {
           if (auto const it = _sources.find(id); it != _sources.end())
           {
-            if (parentPtr == it->second.get())
+            if (parent == it->second.get())
             {
               toErase.push_back(childId);
               foundNew = true;

@@ -13,7 +13,7 @@
 #include <gtkmm/flowboxchild.h>
 #include <gtkmm/label.h>
 #include <gtkmm/separator.h>
-#include <gtkmm/togglebutton.h>
+#include <gtkmm/widget.h>
 #include <sigc++/signal.h>
 
 #include <cstddef>
@@ -28,7 +28,7 @@ namespace ao::gtk
   /**
    * @brief TagEditor is a reusable widget for viewing and editing track tags.
    */
-  class TagEditor final : public Gtk::Box
+  class TagEditor final : public Gtk::Widget
   {
   public:
     using TagsChangedSignal = sigc::signal<void(std::span<std::string const>, std::span<std::string const>)>;
@@ -46,23 +46,32 @@ namespace ao::gtk
     // Signals
     TagsChangedSignal& signalTagsChanged() { return _tagsChanged; }
 
-  private:
-    friend class TagEditorTestPeer;
+  protected:
+    Gtk::SizeRequestMode get_request_mode_vfunc() const override;
+    void measure_vfunc(Gtk::Orientation orientation,
+                       int forSize,
+                       int& minimum,
+                       int& natural,
+                       int& minimumBaseline,
+                       int& naturalBaseline) const override;
+    void size_allocate_vfunc(int width, int height, int baseline) override;
 
+  private:
     void setupUi();
     void collectTagData();
     void rebuildCurrentTags();
     void rebuildAvailableTags();
 
-    void onTagChipToggled(Gtk::ToggleButton* button, std::string const& tag, bool isCurrentSection);
+    void onTagRemoveClicked(std::string const& tag);
+    void onAvailableTagClicked(std::string const& tag);
     void onEntryActivated();
 
     std::string tagNameFromChild(Gtk::FlowBoxChild* child);
-    void setChipStyle(Gtk::ToggleButton& chip, bool isHighlighted);
 
     library::MusicLibrary* _musicLibrary = nullptr;
     std::vector<TrackId> _selectedTrackIds;
 
+    Gtk::Box _box{Gtk::Orientation::VERTICAL};
     Gtk::Entry _searchEntry;
     Gtk::Label _currentLabel;
     Gtk::FlowBox _currentTagsBox;

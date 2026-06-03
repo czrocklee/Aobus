@@ -10,10 +10,10 @@
 
 namespace clang::tidy::readability
 {
-  class ManagedPointerSuffixCheck : public ClangTidyCheck
+  class PointerNamingConventionCheck : public ClangTidyCheck
   {
   public:
-    ManagedPointerSuffixCheck(StringRef name, ClangTidyContext* context)
+    PointerNamingConventionCheck(StringRef name, ClangTidyContext* context)
       : ClangTidyCheck{name, context}
     {
     }

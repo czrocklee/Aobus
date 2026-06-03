@@ -190,9 +190,9 @@ namespace
   {
     auto const handler = [](void* data) -> ::gboolean
     {
-      auto* appPtr = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
+      auto* appCtx = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
       APP_LOG_INFO("Received termination signal, shutting down...");
-      (*appPtr)->quit();
+      (*appCtx)->quit();
       return FALSE;
     };
     ::g_unix_signal_add(SIGINT, handler, &app);

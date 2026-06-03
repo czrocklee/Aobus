@@ -8,16 +8,6 @@
 
 namespace ao::gtk::layout
 {
-  LayoutMode computeLayoutMode(int const width)
-  {
-    if (width < kStandardWidthThreshold)
-    {
-      return LayoutMode::Standard;
-    }
-
-    return LayoutMode::Wide;
-  }
-
   std::int32_t coverArtSideForWidth(std::int32_t const width, std::int32_t const targetSize)
   {
     if (targetSize <= 0)

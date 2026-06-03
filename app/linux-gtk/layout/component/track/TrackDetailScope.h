@@ -23,10 +23,7 @@ namespace ao::gtk::layout
     ITrackDetailScope& operator=(ITrackDetailScope&&) = delete;
 
     virtual rt::TrackDetailSnapshot const& snapshot() const = 0;
-    virtual bool isEditLocked() const = 0;
-    virtual void setEditLocked(bool locked) = 0;
 
     virtual sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() = 0;
-    virtual sigc::signal<void(bool)>& signalEditLockChanged() = 0;
   };
 } // namespace ao::gtk::layout

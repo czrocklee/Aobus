@@ -224,7 +224,7 @@ namespace clang::tidy::readability
     {
       BuiltinTypeLoc builtinLoc;
       SourceLocation loc;
-      Type const* typePtr;
+      Type const* type;
       Decl const* contextDecl;
       bool isCast;
     };
@@ -261,7 +261,7 @@ namespace clang::tidy::readability
 
         return MatchContext{.builtinLoc = builtinLoc,
                             .loc = builtinLoc.getBeginLoc(),
-                            .typePtr = builtinLoc.getTypePtr(),
+                            .type = builtinLoc.getTypePtr(),
                             .contextDecl = contextDecl,
                             .isCast = false};
       }
@@ -276,7 +276,7 @@ namespace clang::tidy::readability
           {
             return MatchContext{.builtinLoc = builtinLoc,
                                 .loc = builtinLoc.getBeginLoc(),
-                                .typePtr = builtinLoc.getTypePtr(),
+                                .type = builtinLoc.getTypePtr(),
                                 .contextDecl = nullptr,
                                 .isCast = true};
           }
@@ -330,7 +330,7 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const kind = optMatch->typePtr->getAs<BuiltinType>()->getKind();
+    auto const kind = optMatch->type->getAs<BuiltinType>()->getKind();
     auto replacement = StringRef{};
     bool isLong = false;
 
@@ -357,13 +357,13 @@ namespace clang::tidy::readability
     {
       diag(optMatch->loc,
            "prefer explicit sized integer types over '%0' (avoid auto-fix to prevent breaking external C APIs)")
-        << optMatch->typePtr->getAs<BuiltinType>()->getName(result.Context->getPrintingPolicy());
+        << optMatch->type->getAs<BuiltinType>()->getName(result.Context->getPrintingPolicy());
       return;
     }
 
     auto diagBuilder = diag(optMatch->loc, "prefer explicit sized integer type '%0' over '%1'")
                        << replacement
-                       << optMatch->typePtr->getAs<BuiltinType>()->getName(result.Context->getPrintingPolicy());
+                       << optMatch->type->getAs<BuiltinType>()->getName(result.Context->getPrintingPolicy());
 
     auto const charRange = CharSourceRange::getTokenRange(optMatch->builtinLoc.getSourceRange());
     diagBuilder << FixItHint::CreateReplacement(charRange, replacement);

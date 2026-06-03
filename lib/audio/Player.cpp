@@ -286,16 +286,16 @@ namespace ao::audio
     auto recordPtr = std::make_unique<Impl::ProviderRecord>();
     recordPtr->providerPtr = std::move(providerPtr);
 
-    auto* const rawProviderPtr = recordPtr->providerPtr.get();
-    auto* const rawRecordPtr = recordPtr.get();
+    auto* const provider = recordPtr->providerPtr.get();
+    auto* const record = recordPtr.get();
 
     _implPtr->providers.push_back(std::move(recordPtr));
 
-    rawRecordPtr->subscription = rawProviderPtr->subscribeDevices(
-      [this, rawProviderPtr, rawRecordPtr](std::vector<Device> const& devices)
+    record->subscription = provider->subscribeDevices(
+      [this, provider, record](std::vector<Device> const& devices)
       {
-        rawRecordPtr->devices = devices;
-        _implPtr->handleDevicesChanged(this, rawProviderPtr, devices);
+        record->devices = devices;
+        _implPtr->handleDevicesChanged(this, provider, devices);
         return true;
       });
   }

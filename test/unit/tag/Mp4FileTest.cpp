@@ -25,8 +25,8 @@ namespace ao::tag::mp4::test
       std::uint32_t const length = 8 + static_cast<std::uint32_t>(body.size());
       auto lenBuf = boost::endian::big_uint32_buf_t{};
       lenBuf = length;
-      auto const* lenPtr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
-      buffer.insert(buffer.end(), lenPtr, lenPtr + 4);
+      auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
+      buffer.insert(buffer.end(), lenAddr, lenAddr + 4);
       buffer.push_back(type[0]);
       buffer.push_back(type[1]);
       buffer.push_back(type[2]);
@@ -48,8 +48,8 @@ namespace ao::tag::mp4::test
         dataLayout.common.length = static_cast<std::uint32_t>(16 + text.size());
         std::memcpy(dataLayout.common.type.data(), "data", 4);
         dataLayout.type = 1; // Text
-        auto const* dlPtr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
-        namData.insert(namData.end(), dlPtr + 8, dlPtr + 24);
+        auto const* dlAddr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
+        namData.insert(namData.end(), dlAddr + 8, dlAddr + 24);
         namData.insert(namData.end(), text.begin(), text.end());
         auto atom = std::vector<std::uint8_t>{};
         addAtom(atom, type, namData);
@@ -89,8 +89,8 @@ namespace ao::tag::mp4::test
         dataLayout.common.length = 16 + 2;
         std::memcpy(dataLayout.common.type.data(), "data", 4);
         dataLayout.type = 13; // JPEG
-        auto const* dlPtr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
-        covrData.insert(covrData.end(), dlPtr + 8, dlPtr + 24);
+        auto const* dlAddr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
+        covrData.insert(covrData.end(), dlAddr + 8, dlAddr + 24);
         covrData.push_back(0xCC);
         covrData.push_back(0xDD);
         auto atom = std::vector<std::uint8_t>{};
@@ -152,9 +152,9 @@ namespace ao::tag::mp4::test
       std::memcpy(mdhd.common.type.data(), "mdhd", 4);
       mdhd.timescale = 44100;
       mdhd.duration = 44100; // 1 second
-      auto const* mdhdPtr = reinterpret_cast<std::uint8_t const*>(&mdhd);
+      auto const* mdhdAddr = reinterpret_cast<std::uint8_t const*>(&mdhd);
       auto mdhdBody = std::vector<std::uint8_t>{};
-      mdhdBody.insert(mdhdBody.end(), mdhdPtr + 8, mdhdPtr + sizeof(MdhdAtomLayout));
+      mdhdBody.insert(mdhdBody.end(), mdhdAddr + 8, mdhdAddr + sizeof(MdhdAtomLayout));
 
       auto mdhdAtom = std::vector<std::uint8_t>{};
       addAtom(mdhdAtom, "mdhd", mdhdBody);
@@ -166,9 +166,9 @@ namespace ao::tag::mp4::test
       mp4a.channelCount = 2;
       mp4a.sampleSize = 16;
       mp4a.sampleRate = (44100 << 16);
-      auto const* mp4aPtr = reinterpret_cast<std::uint8_t const*>(&mp4a);
+      auto const* mp4aAddr = reinterpret_cast<std::uint8_t const*>(&mp4a);
       auto mp4aBody = std::vector<std::uint8_t>{};
-      mp4aBody.insert(mp4aBody.end(), mp4aPtr + 8, mp4aPtr + sizeof(AudioSampleEntryLayout));
+      mp4aBody.insert(mp4aBody.end(), mp4aAddr + 8, mp4aAddr + sizeof(AudioSampleEntryLayout));
 
       auto mp4aAtom = std::vector<std::uint8_t>{};
       addAtom(mp4aAtom, "mp4a", mp4aBody);
@@ -271,8 +271,8 @@ namespace ao::tag::mp4::test
       std::uint32_t const length = 500;
       auto lenBuf = boost::endian::big_uint32_buf_t{};
       lenBuf = length;
-      auto const* lenPtr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
-      data.insert(data.end(), lenPtr, lenPtr + 4);
+      auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
+      data.insert(data.end(), lenAddr, lenAddr + 4);
       data.push_back('m');
       data.push_back('o');
       data.push_back('o');
@@ -293,8 +293,8 @@ namespace ao::tag::mp4::test
       std::uint32_t const length = 0;
       auto lenBuf = boost::endian::big_uint32_buf_t{};
       lenBuf = length;
-      auto const* lenPtr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
-      data.insert(data.end(), lenPtr, lenPtr + 4);
+      auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
+      data.insert(data.end(), lenAddr, lenAddr + 4);
       data.push_back('m');
       data.push_back('o');
       data.push_back('o');
@@ -312,8 +312,8 @@ namespace ao::tag::mp4::test
       std::uint32_t const length = 4; // Too small for header
       auto lenBuf = boost::endian::big_uint32_buf_t{};
       lenBuf = length;
-      auto const* lenPtr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
-      data.insert(data.end(), lenPtr, lenPtr + 4);
+      auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
+      data.insert(data.end(), lenAddr, lenAddr + 4);
       data.push_back('m');
       data.push_back('o');
       data.push_back('o');

@@ -49,6 +49,7 @@ namespace ao::gtk
     void setTargetSize(std::int32_t size);
 
     void setMaxRenderSize(std::int32_t width, std::int32_t height);
+    void setForceSquareTarget(bool forceSquare);
 
     void setImageFromBytes(std::span<std::byte const> bytes);
     void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
@@ -95,5 +96,6 @@ namespace ao::gtk
     std::int32_t _allocatedHeight = 0;
     sigc::connection _refreshConnection;
     bool _refreshQueued = false;
+    bool _forceSquareTarget = false;
   };
 } // namespace ao::gtk

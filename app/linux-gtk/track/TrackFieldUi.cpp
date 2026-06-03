@@ -51,9 +51,9 @@ namespace ao::gtk
 
     TrackFieldEditValue readStringEditValue(TrackRowObject const& row, rt::TrackField field)
     {
-      if (auto const* stringPtr = row.stringField(field); stringPtr != nullptr)
+      if (auto const* stringValue = row.stringField(field); stringValue != nullptr)
       {
-        return TrackFieldEditValue{std::in_place_type<std::string>, std::string{stringPtr->raw()}};
+        return TrackFieldEditValue{std::in_place_type<std::string>, std::string{stringValue->raw()}};
       }
 
       return TrackFieldEditValue{};

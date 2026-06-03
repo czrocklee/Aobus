@@ -47,6 +47,9 @@ Only when a component's XML structure in `modern_layout.yaml` differs significan
 - Example: The Modern layout uses a completely different bottom bar structure. Therefore, it uses `.ao-bottom-bar-wrapper-modern`.
 - Example: The Classic layout uses a simple strip for playback controls. Therefore, it uses `.ao-playback-strip-classic`.
 
+### 5. Bottom Bar Artwork Sizing
+Bottom bar cover art must not allow the loaded image paintable to define the bar height. The modern bottom bar height is set by the transport row controls, especially `playback.soulPlayPauseButton`. Presets that render now-playing artwork as a compact control-bar thumbnail should use `playback.image` with `forceSquare: true` and a concrete `targetSize`, while leaving height to the parent row via `vexpand` / `valign: fill`. The component uses the target size as a horizontal layout hint only, reports zero natural height, and center-crops to the square target implied by the actual parent allocation.
+
 ## CSS Transition Rules
 - **Do not use `transition: all`**. It makes debugging difficult by inadvertently animating layout dimensions, colors, shadows, and transforms simultaneously.
 - Always specify target properties: `transition: background-color var(--ao-transition-base), transform var(--ao-transition-base);`.

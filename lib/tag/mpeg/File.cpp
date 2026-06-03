@@ -40,17 +40,17 @@ namespace ao::tag::mpeg
     // 2. Fallback to estimation from file size if Xing/Info not present or failed
     if (durationMs == 0 && frame.bitrate() > 0)
     {
-      auto const* firstFramePtr = static_cast<std::uint8_t const*>(frame.data());
-      auto const* lastBytePtr = static_cast<std::uint8_t const*>(address()) + size();
+      auto const* frameStart = static_cast<std::uint8_t const*>(frame.data());
+      auto const* bufferEnd = static_cast<std::uint8_t const*>(address()) + size();
 
       if (hasId3v1)
       {
-        lastBytePtr -= kId3v1TagSize;
+        bufferEnd -= kId3v1TagSize;
       }
 
-      if (lastBytePtr > firstFramePtr)
+      if (bufferEnd > frameStart)
       {
-        std::uint64_t const actualAudioBytes = static_cast<std::uint64_t>(lastBytePtr - firstFramePtr);
+        std::uint64_t const actualAudioBytes = static_cast<std::uint64_t>(bufferEnd - frameStart);
         durationMs = static_cast<std::uint32_t>((actualAudioBytes * kMsPerSecond * kBitsPerByte) / frame.bitrate());
       }
     }

@@ -82,9 +82,9 @@ namespace ao::uimodel::track::test
   TEST_CASE("TrackFieldFormatter - text editing", "[uimodel][track][formatter]")
   {
     auto const editVal = makeTextEditValue(" Test ");
-    auto const* strPtr = std::get_if<std::string>(&editVal);
-    REQUIRE(strPtr != nullptr);
-    REQUIRE(*strPtr == " Test "); // Keeps whitespace for generic text
+    auto const* str = std::get_if<std::string>(&editVal);
+    REQUIRE(str != nullptr);
+    REQUIRE(*str == " Test "); // Keeps whitespace for generic text
   }
 
   TEST_CASE("TrackFieldFormatter - uint16 parsing", "[uimodel][track][formatter]")

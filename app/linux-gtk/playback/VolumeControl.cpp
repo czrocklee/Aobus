@@ -25,6 +25,7 @@ namespace ao::gtk
   {
     _button.set_child(_icon);
     _button.set_valign(Gtk::Align::CENTER);
+    _button.set_has_frame(false);
     _button.add_css_class("ao-volume-button-modern");
 
     // Gesture for clicks

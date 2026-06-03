@@ -53,13 +53,9 @@ popover.ao-popover-rounded-md>contents {
 
 /* Modern full-width seekbar */
 .ao-seekbar-full-modern {
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding: 0;
   margin: 0;
-  /* Pull it up to cover the border exactly */
-  margin-top: -11px;
-  /* Cancel bottom padding to not push other elements down */
-  margin-bottom: -10px;
+  min-height: 2px;
 }
 
 .ao-seekbar-full-modern trough {

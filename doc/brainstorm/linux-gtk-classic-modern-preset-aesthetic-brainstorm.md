@@ -65,7 +65,7 @@ Modern should emphasize:
 - rounded/pill controls
 - subtle accent usage
 - clean side navigation
-- a polished selected-track inspector/details drawer
+- a polished selected-track detail panel
 
 Modern should remain functional at library scale. Do not sacrifice table
 legibility or sorting/filtering affordances for pure decoration.
@@ -105,7 +105,7 @@ Modern's left sidebar can become a calmer navigation rail:
 - minimal borders
 
 The sidebar should read as navigation, not as the primary metadata/artwork area.
-Selected-track image and metadata can live in the inspector/details surface.
+Selected-track image and metadata can live in the detail panel surface.
 
 Potential CSS names:
 
@@ -147,9 +147,9 @@ playing track back to the library:
 This makes the user feel oriented: the bottom bar says what is playing, and the
 library shows where it lives.
 
-### 5. Inspector as a details drawer
+### 5. Detail panel as a selected-track surface
 
-For Modern, the inspector can become the rich selected-track surface:
+For Modern, the detail panel can become the rich selected-track surface:
 
 - larger artwork/image at the top
 - card sections for metadata, tags, and audio details
@@ -162,10 +162,10 @@ handles browsing/tagging details.
 
 Potential CSS names:
 
-- `ao-modern-inspector`
-- `ao-modern-inspector-hero`
-- `ao-modern-inspector-section`
-- `ao-modern-inspector-metadata-row`
+- `ao-modern-detail-pane`
+- `ao-modern-detail-pane-hero`
+- `ao-modern-detail-pane-section`
+- `ao-modern-detail-pane-metadata-row`
 
 ## Smaller Polish Ideas
 
@@ -279,7 +279,7 @@ are:
 2. Main workspace content card/surface
 3. Quick filter/search pill polish
 4. Sidebar navigation rail styling
-5. Inspector/details drawer polish
+5. Detail panel polish
 
 This order should create the largest “modern music player” impression without
 requiring a new layout engine or broad feature work.

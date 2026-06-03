@@ -47,17 +47,62 @@ void testFunction(std::shared_ptr<MyClass> validParamPtr)
   // NEGATIVE
   Glib::RefPtr<MyClass> myRefPtr;
 
-  // NEGATIVE
+  // POSITIVE
   MyClass* rawPtr;
 
   // NEGATIVE
+  MyClass* raw;
+
+  // POSITIVE
+  MyClass const* constPtr;
+
+  // NEGATIVE
   int justAnInt = 0;
+
+  // POSITIVE
+  void (*callbackPtr)() = nullptr;
+
+  // NEGATIVE
+  void (*callback)() = nullptr;
+
+  // POSITIVE
+  MyClass* pBuffer;
+
+  // POSITIVE
+  void* pVoid;
+
+  // POSITIVE
+  std::shared_ptr<MyClass> pManagedPtr;
+
+  // NEGATIVE
+  MyClass* preset; // starts with p but followed by lowercase
+
+  // NEGATIVE
+  MyClass* p; // single p is not Hungarian notation
 }
 
 // POSITIVE
 void testFunctionInvalidParam(std::shared_ptr<MyClass> invalidParam)
 {
 }
+
+// POSITIVE
+void testFunctionRawPtrParam(MyClass* pPtr)
+{
+}
+
+// NEGATIVE
+void testFunctionRawParam(MyClass* p)
+{
+}
+
+typedef MyClass* MyClassHandle;
+
+// POSITIVE
+MyClassHandle handlePtr;
+
+// NEGATIVE
+MyClassHandle handle;
 
 class MyStruct
 {
@@ -73,6 +118,18 @@ public:
 
   // NEGATIVE
   std::shared_ptr<MyClass> _privateMemberPtr;
+
+  // POSITIVE
+  MyClass* m_rawPtr;
+
+  // NEGATIVE
+  MyClass* m_raw;
+
+  // POSITIVE
+  MyClass* _pRow;
+
+  // NEGATIVE
+  MyClass* _row;
 };
 
 // NEGATIVE
