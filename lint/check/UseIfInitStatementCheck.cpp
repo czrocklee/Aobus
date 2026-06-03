@@ -3,6 +3,8 @@
 
 #include "check/UseIfInitStatementCheck.h"
 
+#include "check/RaiiHeuristics.h"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
@@ -96,6 +98,12 @@ namespace clang::tidy::readability
 
       // Rule: Ignore constexpr or static variables (typically config constants)
       if (varDecl->isConstexpr() || varDecl->getStorageClass() == SC_Static)
+      {
+        return false;
+      }
+
+      // Rule: Ignore RAII or scoped types (locks, transactions, etc.)
+      if (aobus::isScopedOrRaiiType(varDecl->getType(), varDecl->getASTContext()))
       {
         return false;
       }

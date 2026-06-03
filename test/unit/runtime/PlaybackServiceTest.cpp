@@ -241,12 +241,23 @@ namespace ao::rt::test
 
     SECTION("Volume and Muted controls update state")
     {
+      bool mutedChangedFired = false;
+      bool lastMutedState = false;
+      auto sub = playbackService.onMutedChanged(
+        [&](bool const muted)
+        {
+          mutedChangedFired = true;
+          lastMutedState = muted;
+        });
+
       playbackService.setVolume(0.5F);
       CHECK(playbackService.state().volume == 0.5F);
       CHECK(playbackService.state().volumeIsHardwareAssisted == true);
 
       playbackService.setMuted(true);
       CHECK(playbackService.state().muted == true);
+      CHECK(mutedChangedFired);
+      CHECK(lastMutedState == true);
     }
 
     SECTION("Reveal track requests")

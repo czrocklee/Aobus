@@ -4,17 +4,11 @@
 #pragma once
 
 #include "layout/document/LayoutNode.h"
-#include "layout/runtime/ComponentRegistry.h"
 
 #include <gtkmm/widget.h>
 
 namespace ao::gtk::layout
 {
-  /**
-   * @brief Register the built-in container components (box, split, scroll, spacer).
-   */
-  void registerContainerComponents(ComponentRegistry& registry);
-
   /**
    * @brief Apply common layout properties (align, sizing, etc.) to a widget.
    */

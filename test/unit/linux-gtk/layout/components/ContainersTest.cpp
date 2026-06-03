@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "app/linux-gtk/layout/components/Containers.h"
-
 #include "../../GtkTestSupport.h"
+#include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"

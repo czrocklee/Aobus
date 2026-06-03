@@ -244,7 +244,24 @@ namespace ao::gtk::layout::test
       CHECK(soul->get_valign() == Gtk::Align::FILL);
     }
 
-    SECTION("all 12 playback types register and instantiate")
+    SECTION("outputSelector creates Gtk::Button with Label")
+    {
+      auto const node = LayoutNode{.type = "playback.outputSelector"};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      CHECK(button->get_has_frame() == false);
+      CHECK(button->has_css_class("ao-output-selector-modern"));
+
+      auto* const label = dynamic_cast<Gtk::Label*>(button->get_child());
+      REQUIRE(label != nullptr);
+      CHECK(label->get_text() == "--"); // Default backend summary
+    }
+
+    SECTION("all 13 playback types register and instantiate")
     {
       auto const types = std::to_array<std::string_view>({"playback.playPauseButton",
                                                           "playback.stopButton",
@@ -257,7 +274,8 @@ namespace ao::gtk::layout::test
                                                           "playback.pauseButton",
                                                           "playback.qualityIndicator",
                                                           "playback.soulPlayPauseButton",
-                                                          "playback.soulButton"});
+                                                          "playback.soulButton",
+                                                          "playback.outputSelector"});
 
       for (auto const type : types)
       {

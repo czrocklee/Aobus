@@ -53,7 +53,7 @@ namespace ao::gtk
       rt::TrackField field;
       Gtk::Widget* widget = nullptr;
       bool mixed = false;
-      detail::TrackFieldRawValue originalRawValue{};
+      TrackFieldRawValue originalRawValue{};
     };
 
     void setupUi();

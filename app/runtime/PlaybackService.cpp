@@ -126,6 +126,7 @@ namespace ao::rt
     Signal<> devicesChangedSignal;
     Signal<PlaybackService::QualityChanged const&> qualityChangedSignal;
     Signal<float> volumeChangedSignal;
+    Signal<bool> mutedChangedSignal;
     Signal<PlaybackService::RevealTrackRequested const&> revealTrackRequestedSignal;
     Signal<PlaybackService::SeekUpdate const&> seekUpdateSignal;
     Signal<PlaybackService::ShuffleModeChanged const&> shuffleModeChangedSignal;
@@ -306,6 +307,11 @@ namespace ao::rt
     return _implPtr->volumeChangedSignal.connect(std::move(handler));
   }
 
+  Subscription PlaybackService::onMutedChanged(std::move_only_function<void(bool)> handler)
+  {
+    return _implPtr->mutedChangedSignal.connect(std::move(handler));
+  }
+
   Subscription PlaybackService::onRevealTrackRequested(
     std::move_only_function<void(RevealTrackRequested const&)> handler)
   {
@@ -478,6 +484,7 @@ namespace ao::rt
   {
     _implPtr->playerPtr->setMuted(muted);
     _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
+    _implPtr->mutedChangedSignal.emit(_implPtr->state.muted);
   }
 
   void PlaybackService::revealPlayingTrack()

@@ -1,0 +1,129 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#include "ContainerComponentRegistrations.h"
+#include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutContext.h"
+
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/widget.h>
+
+#include <cstdint>
+#include <memory>
+#include <string>
+
+namespace ao::gtk::layout
+{
+  namespace
+  {
+    /**
+     * @brief A scrollable container component (Gtk::ScrolledWindow).
+     */
+    class ScrollComponent final : public ILayoutComponent
+    {
+    public:
+      ScrollComponent(LayoutContext& ctx, LayoutNode const& node)
+      {
+        if (node.children.size() != 1)
+        {
+          _errorPtr = std::make_unique<Gtk::Label>();
+          _errorPtr->set_markup("<span foreground='red'><b>[Layout Error]</b> scroll requires exactly 1 child</span>");
+          _errorPtr->add_css_class("ao-layout-error");
+          return;
+        }
+
+        _childPtr = ctx.registry.create(ctx, node.children[0]);
+        _sw.set_child(_childPtr->widget());
+
+        auto hpolicy = Gtk::PolicyType::AUTOMATIC;
+        auto const hscrollPolicy = node.getProp<std::string>("hscrollPolicy", "");
+
+        if (hscrollPolicy == "never")
+        {
+          hpolicy = Gtk::PolicyType::NEVER;
+        }
+        else if (hscrollPolicy == "always")
+        {
+          hpolicy = Gtk::PolicyType::ALWAYS;
+        }
+
+        auto vpolicy = Gtk::PolicyType::AUTOMATIC;
+        auto const vscrollPolicy = node.getProp<std::string>("vscrollPolicy", "");
+
+        if (vscrollPolicy == "never")
+        {
+          vpolicy = Gtk::PolicyType::NEVER;
+        }
+        else if (vscrollPolicy == "always")
+        {
+          vpolicy = Gtk::PolicyType::ALWAYS;
+        }
+
+        _sw.set_policy(hpolicy, vpolicy);
+
+        _sw.set_min_content_width(static_cast<std::int32_t>(node.getProp<std::int64_t>("minContentWidth", -1)));
+        _sw.set_min_content_height(static_cast<std::int32_t>(node.getProp<std::int64_t>("minContentHeight", -1)));
+
+        _sw.set_propagate_natural_width(node.getProp<bool>("propagateNaturalWidth", false));
+        _sw.set_propagate_natural_height(node.getProp<bool>("propagateNaturalHeight", false));
+      }
+
+      Gtk::Widget& widget() override
+      {
+        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_sw);
+      }
+
+    private:
+      Gtk::ScrolledWindow _sw;
+      std::unique_ptr<Gtk::Label> _errorPtr;
+      std::unique_ptr<ILayoutComponent> _childPtr;
+    };
+
+    std::unique_ptr<ILayoutComponent> createScroll(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<ScrollComponent>(ctx, node);
+    }
+  } // namespace
+
+  void registerScrollComponent(ComponentRegistry& registry)
+  {
+    registry.registerComponent({.type = "scroll",
+                                .displayName = "Scroll Window",
+                                .category = "Containers",
+                                .container = true,
+                                .props = {{.name = "hscrollPolicy",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "H. Scroll Policy",
+                                           .defaultValue = LayoutValue{"automatic"},
+                                           .enumValues = {"automatic", "always", "never"}},
+                                          {.name = "vscrollPolicy",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "V. Scroll Policy",
+                                           .defaultValue = LayoutValue{"automatic"},
+                                           .enumValues = {"automatic", "always", "never"}},
+                                          {.name = "minContentWidth",
+                                           .kind = PropertyKind::Int,
+                                           .label = "Min Content Width",
+                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
+                                          {.name = "minContentHeight",
+                                           .kind = PropertyKind::Int,
+                                           .label = "Min Content Height",
+                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
+                                          {.name = "propagateNaturalWidth",
+                                           .kind = PropertyKind::Bool,
+                                           .label = "Propagate Nat. Width",
+                                           .defaultValue = LayoutValue{false}},
+                                          {.name = "propagateNaturalHeight",
+                                           .kind = PropertyKind::Bool,
+                                           .label = "Propagate Nat. Height",
+                                           .defaultValue = LayoutValue{false}}},
+                                .layoutProps = {},
+                                .minChildren = 1,
+                                .optMaxChildren = 1},
+                               createScroll);
+  }
+} // namespace ao::gtk::layout

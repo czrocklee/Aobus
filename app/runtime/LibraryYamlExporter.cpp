@@ -455,12 +455,15 @@ namespace ao::rt
 
     auto const metadata = view.metadata();
     auto optBaseline = std::optional<library::TrackBuilder>{};
+    auto tagFilePtr = std::unique_ptr<tag::TagFile>{};
 
     if (mode == ExportMode::Delta)
     {
       if (auto const fullPath = ml.rootPath() / property.uri(); std::filesystem::exists(fullPath))
       {
-        if (auto tagFilePtr = tag::TagFile::open(fullPath); tagFilePtr)
+        tagFilePtr = tag::TagFile::open(fullPath);
+
+        if (tagFilePtr)
         {
           optBaseline = tagFilePtr->loadTrack();
         }

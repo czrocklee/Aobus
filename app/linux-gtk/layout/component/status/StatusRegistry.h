@@ -8,13 +8,7 @@
 namespace ao::gtk::layout
 {
   /**
-   * Registers all status-related layout components:
-   * - status.playbackDetails
-   * - status.nowPlaying
-   * - status.libraryTaskProgress
-   * - status.notification (includes selection info)
-   * - status.trackCount
-   * - status.messageLabel
+   * @brief Register status-related layout components.
    */
   void registerStatusComponents(ComponentRegistry& registry);
 } // namespace ao::gtk::layout

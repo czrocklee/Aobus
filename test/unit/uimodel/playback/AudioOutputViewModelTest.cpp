@@ -228,5 +228,46 @@ namespace ao::uimodel::playback::test
       CHECK(rows[3].kind == AudioOutputRow::Kind::BackendHeader);
       CHECK(rows[3].title == "ALSA");
     }
+
+    SECTION("summary fields for PipeWire shared output")
+    {
+      playback.addProvider(std::make_unique<FakeOutputProvider>(buildFakeStatus()));
+      playback.setOutput(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+      viewModel.refresh();
+
+      auto const& view = log.last();
+      CHECK(view.hasActiveOutput == true);
+      CHECK(view.backendSummary == "PW");
+      CHECK(view.outputStatus == "PipeWire: Built-in Audio");
+    }
+
+    SECTION("summary fields for ALSA exclusive output")
+    {
+      auto status = buildFakeStatus();
+      status.metadata.id = audio::BackendId{"alsa"};
+      status.metadata.name = "ALSA";
+      status.devices[0].backendId = audio::BackendId{"alsa"};
+      status.devices[0].displayName = "USB DAC";
+
+      playback.addProvider(std::make_unique<FakeOutputProvider>(std::move(status)));
+      playback.setOutput(audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+      viewModel.refresh();
+
+      auto const& view = log.last();
+      CHECK(view.hasActiveOutput == true);
+      CHECK(view.backendSummary == "ALSA");
+      CHECK(view.outputStatus == "ALSA: USB DAC (Exclusive Mode)");
+    }
+
+    SECTION("summary fields when no output is selected")
+    {
+      // No provider added, so no output can be selected
+      viewModel.refresh();
+
+      auto const& view = log.last();
+      CHECK(view.hasActiveOutput == false);
+      CHECK(view.backendSummary == "--");
+      CHECK(view.outputStatus.empty());
+    }
   }
 } // namespace ao::uimodel::playback::test

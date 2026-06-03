@@ -8,6 +8,7 @@
 #include <giomm/liststore.h>
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
@@ -27,7 +28,7 @@ namespace ao::gtk
     AudioDeviceSelector(AudioDeviceSelector&&) = delete;
     AudioDeviceSelector& operator=(AudioDeviceSelector&&) = delete;
 
-    explicit AudioDeviceSelector(rt::PlaybackService& playback);
+    explicit AudioDeviceSelector(rt::PlaybackService& playback, Gtk::PositionType position = Gtk::PositionType::BOTTOM);
     ~AudioDeviceSelector() override;
 
   private:

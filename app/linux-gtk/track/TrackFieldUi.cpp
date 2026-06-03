@@ -30,8 +30,6 @@ namespace ao::gtk
 {
   namespace
   {
-    using namespace detail;
-
     // ---- Formatting helpers ----
 
     constexpr std::int32_t kWidthArtist = 150;
@@ -252,19 +250,14 @@ namespace ao::gtk
     }
   } // namespace
 
-  namespace detail
+  bool canInlineEdit(TrackFieldUiDefinition const& def)
   {
-    bool canInlineEdit(TrackFieldUiDefinition const& def)
-    {
-      return def.parseInlineEdit != nullptr && def.readRowEditValue != nullptr && def.applyRowEditValue != nullptr &&
-             def.writePatch != nullptr;
-    }
-  } // namespace detail
+    return def.parseInlineEdit != nullptr && def.readRowEditValue != nullptr && def.applyRowEditValue != nullptr &&
+           def.writePatch != nullptr;
+  }
 
   namespace
   {
-    using namespace detail;
-
     using F = rt::TrackField;
 
     // fmt helpers for conciseness

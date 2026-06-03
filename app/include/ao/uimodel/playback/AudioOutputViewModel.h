@@ -35,6 +35,9 @@ namespace ao::uimodel::playback
   struct AudioOutputViewState final
   {
     std::vector<AudioOutputRow> rows;
+    std::string backendSummary;
+    std::string outputStatus;
+    bool hasActiveOutput = false;
   };
 
   class AudioOutputViewModel final

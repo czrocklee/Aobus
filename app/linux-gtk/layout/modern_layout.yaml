@@ -153,6 +153,11 @@ templates:
               slot: center
               valign: center
             children:
+              - type: playback.outputSelector
+                layout:
+                  widthRequest: 56
+                  valign: center
+                  cssClasses: ao-output-selector-modern
               - type: playback.timeLabel
                 props:
                   mode: elapsed
@@ -191,12 +196,9 @@ templates:
                   valign: center
                   cssClasses: ao-time-label-modern
               - type: playback.volumeControl
-                props:
-                  orientation: vertical
                 layout:
-                  widthRequest: 12
-                  heightRequest: 48
-                  halign: center
+                  widthRequest: 32
+                  heightRequest: 32
                   valign: center
           - type: box
             props:

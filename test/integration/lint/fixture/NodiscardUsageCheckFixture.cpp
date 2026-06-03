@@ -92,3 +92,22 @@ public:
   ~SomeResourceToken() {}
   SomeResourceToken(SomeResourceToken const&) = delete;
 };
+
+namespace ao::tag
+{
+  // POSITIVE
+  class TagFile
+  {
+  public:
+    ~TagFile() {}
+    TagFile(TagFile const&) = delete;
+  };
+} // namespace ao::tag
+
+// POSITIVE
+class WriteTransaction
+{
+public:
+  ~WriteTransaction() {}
+  WriteTransaction(WriteTransaction const&) = delete;
+};

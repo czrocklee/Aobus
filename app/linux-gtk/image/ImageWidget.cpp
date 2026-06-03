@@ -32,51 +32,51 @@
 
 namespace ao::gtk
 {
-  namespace detail
+  namespace
   {
     constexpr std::int32_t kMinimumRefreshDelta = 2;
     constexpr double kRefreshDeltaRatio = 0.05;
+  }
 
-    RenderTarget fitSourceIntoTarget(RenderTarget const source, RenderTarget const target)
+  RenderTarget fitSourceIntoTarget(RenderTarget const source, RenderTarget const target)
+  {
+    if (source.width <= 0 || source.height <= 0 || target.width <= 0 || target.height <= 0)
     {
-      if (source.width <= 0 || source.height <= 0 || target.width <= 0 || target.height <= 0)
-      {
-        return {.width = 0, .height = 0};
-      }
-
-      // Never upscale beyond the source image if the source is smaller than the requested target.
-      if (source.width <= target.width && source.height <= target.height)
-      {
-        return source;
-      }
-
-      double const scale = std::min(static_cast<double>(target.width) / static_cast<double>(source.width),
-                                    static_cast<double>(target.height) / static_cast<double>(source.height));
-
-      return {.width = std::max(1, static_cast<std::int32_t>(std::round(static_cast<double>(source.width) * scale))),
-              .height = std::max(1, static_cast<std::int32_t>(std::round(static_cast<double>(source.height) * scale)))};
+      return {.width = 0, .height = 0};
     }
 
-    bool shouldRefresh(RenderTarget const current, RenderTarget const next)
+    // Never upscale beyond the source image if the source is smaller than the requested target.
+    if (source.width <= target.width && source.height <= target.height)
     {
-      if (current.width <= 0 || current.height <= 0)
-      {
-        return next.width > 0 && next.height > 0;
-      }
-
-      auto const widthDiff = std::abs(current.width - next.width);
-      auto const heightDiff = std::abs(current.height - next.height);
-
-      auto const widthThreshold =
-        std::max(kMinimumRefreshDelta,
-                 static_cast<std::int32_t>(std::ceil(static_cast<double>(current.width) * kRefreshDeltaRatio)));
-      auto const heightThreshold =
-        std::max(kMinimumRefreshDelta,
-                 static_cast<std::int32_t>(std::ceil(static_cast<double>(current.height) * kRefreshDeltaRatio)));
-
-      return widthDiff >= widthThreshold || heightDiff >= heightThreshold;
+      return source;
     }
-  } // namespace detail
+
+    double const scale = std::min(static_cast<double>(target.width) / static_cast<double>(source.width),
+                                  static_cast<double>(target.height) / static_cast<double>(source.height));
+
+    return {.width = std::max(1, static_cast<std::int32_t>(std::round(static_cast<double>(source.width) * scale))),
+            .height = std::max(1, static_cast<std::int32_t>(std::round(static_cast<double>(source.height) * scale)))};
+  }
+
+  bool shouldRefresh(RenderTarget const current, RenderTarget const next)
+  {
+    if (current.width <= 0 || current.height <= 0)
+    {
+      return next.width > 0 && next.height > 0;
+    }
+
+    auto const widthDiff = std::abs(current.width - next.width);
+    auto const heightDiff = std::abs(current.height - next.height);
+
+    auto const widthThreshold =
+      std::max(kMinimumRefreshDelta,
+               static_cast<std::int32_t>(std::ceil(static_cast<double>(current.width) * kRefreshDeltaRatio)));
+    auto const heightThreshold =
+      std::max(kMinimumRefreshDelta,
+               static_cast<std::int32_t>(std::ceil(static_cast<double>(current.height) * kRefreshDeltaRatio)));
+
+    return widthDiff >= widthThreshold || heightDiff >= heightThreshold;
+  }
 
   ImageWidget::ImageWidget(library::MusicLibrary& library, ImageCache& cache)
     : _library{library}, _cache{cache}
@@ -286,8 +286,8 @@ namespace ao::gtk
       return;
     }
 
-    auto const fitTarget = detail::fitSourceIntoTarget(
-      {.width = _sourcePixbufPtr->get_width(), .height = _sourcePixbufPtr->get_height()}, target);
+    auto const fitTarget =
+      fitSourceIntoTarget({.width = _sourcePixbufPtr->get_width(), .height = _sourcePixbufPtr->get_height()}, target);
 
     if (fitTarget.width <= 0 || fitTarget.height <= 0)
     {
@@ -296,7 +296,7 @@ namespace ao::gtk
 
     bool const sourceChanged = (_sourcePixbufPtr != _renderedSourcePixbufPtr) || (_currentCoverId != _renderedCoverId);
     bool const sizeChanged =
-      detail::shouldRefresh({.width = _renderedTargetPixelWidth, .height = _renderedTargetPixelHeight}, target);
+      shouldRefresh({.width = _renderedTargetPixelWidth, .height = _renderedTargetPixelHeight}, target);
     bool const renderedTooSmall = _renderedPixelWidth < fitTarget.width || _renderedPixelHeight < fitTarget.height;
 
     if (!sourceChanged && !sizeChanged && !renderedTooSmall)
@@ -325,7 +325,7 @@ namespace ao::gtk
     set_paintable(Gdk::Texture::create_for_pixbuf(renderedPixbufPtr));
   }
 
-  ImageWidget::RenderTarget ImageWidget::requestedRenderTarget() const
+  RenderTarget ImageWidget::requestedRenderTarget() const
   {
     double const scale = currentDisplayScale();
     std::int32_t logicalWidth = 0;

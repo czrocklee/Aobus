@@ -6,7 +6,8 @@
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "layout/components/TrackDetailComponents.h"
+#include "layout/component/track/TrackDetailScope.h"
+#include "layout/component/track/TrackDetailSizing.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
@@ -96,23 +97,23 @@ namespace ao::gtk::layout::test
   {
     using enum LayoutMode;
 
-    CHECK(detail::computeLayoutMode(299) == Standard);
-    CHECK(detail::computeLayoutMode(300) == Standard);
-    CHECK(detail::computeLayoutMode(549) == Standard);
-    CHECK(detail::computeLayoutMode(550) == Wide);
-    CHECK(detail::computeLayoutMode(1000) == Wide);
+    CHECK(computeLayoutMode(299) == Standard);
+    CHECK(computeLayoutMode(300) == Standard);
+    CHECK(computeLayoutMode(549) == Standard);
+    CHECK(computeLayoutMode(550) == Wide);
+    CHECK(computeLayoutMode(1000) == Wide);
   }
 
   TEST_CASE("TrackDetail cover art sizing", "[layout][components]")
   {
     int const targetSize = 250;
 
-    CHECK(detail::coverArtSideForWidth(-1, targetSize) == targetSize);
-    CHECK(detail::coverArtSideForWidth(0, targetSize) == targetSize);
-    CHECK(detail::coverArtSideForWidth(80, targetSize) == 80);
-    CHECK(detail::coverArtSideForWidth(250, targetSize) == targetSize);
-    CHECK(detail::coverArtSideForWidth(400, targetSize) == targetSize);
-    CHECK(detail::coverArtSideForWidth(180, 0) == 0);
+    CHECK(coverArtSideForWidth(-1, targetSize) == targetSize);
+    CHECK(coverArtSideForWidth(0, targetSize) == targetSize);
+    CHECK(coverArtSideForWidth(80, targetSize) == 80);
+    CHECK(coverArtSideForWidth(250, targetSize) == targetSize);
+    CHECK(coverArtSideForWidth(400, targetSize) == targetSize);
+    CHECK(coverArtSideForWidth(180, 0) == 0);
   }
 
   TEST_CASE("TrackFieldGrid responsive behavior", "[layout][components][responsive]")

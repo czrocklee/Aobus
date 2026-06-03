@@ -3,7 +3,7 @@
 
 #include "layout/runtime/ComponentRegistry.h"
 
-#include "layout/components/Containers.h"
+#include "layout/component/common/CommonLayoutProps.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentInteractionController.h"
 #include "layout/runtime/DecoratedLayoutComponent.h"

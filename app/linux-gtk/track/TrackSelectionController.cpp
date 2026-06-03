@@ -45,7 +45,7 @@ namespace ao::gtk
     {
       for (auto const* current = widget; current != nullptr; current = current->get_parent())
       {
-        if (current->has_css_class(detail::kTagsCellCssClass))
+        if (current->has_css_class(kTagsCellCssClass))
         {
           return true;
         }

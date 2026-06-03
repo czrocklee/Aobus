@@ -51,15 +51,13 @@ namespace ao::gtk
     constexpr int kMaxScrollContentWidth = 640;
     constexpr int kMaxScrollContentHeight = 520;
 
-    bool shouldShowEditableMetadataRow(rt::TrackFieldDefinition const& rtDef,
-                                       detail::TrackFieldUiDefinition const& uiDef)
+    bool shouldShowEditableMetadataRow(rt::TrackFieldDefinition const& rtDef, TrackFieldUiDefinition const& uiDef)
     {
       return rtDef.category == rt::TrackFieldCategory::Metadata && rtDef.editable &&
              rtDef.field != rt::TrackField::Tags && uiDef.writePatch != nullptr;
     }
 
-    bool shouldShowReadonlyPropertyRow(rt::TrackFieldDefinition const& rtDef,
-                                       detail::TrackFieldUiDefinition const& uiDef)
+    bool shouldShowReadonlyPropertyRow(rt::TrackFieldDefinition const& rtDef, TrackFieldUiDefinition const& uiDef)
     {
       return rtDef.category == rt::TrackFieldCategory::Technical && !rtDef.synthetic &&
              uiDef.readViewRawValue != nullptr && uiDef.formatValue != nullptr;
@@ -347,20 +345,20 @@ namespace ao::gtk
         continue;
       }
 
-      auto rawValue = detail::TrackFieldRawValue{};
-      auto editValue = detail::TrackFieldEditValue{};
+      auto rawValue = TrackFieldRawValue{};
+      auto editValue = TrackFieldEditValue{};
 
       if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget); entry != nullptr)
       {
         auto const text = entry->get_text().raw();
-        rawValue = detail::TrackFieldRawValue{std::in_place_type<std::string>, text};
-        editValue = detail::TrackFieldEditValue{std::in_place_type<std::string>, std::move(text)};
+        rawValue = TrackFieldRawValue{std::in_place_type<std::string>, text};
+        editValue = TrackFieldEditValue{std::in_place_type<std::string>, std::move(text)};
       }
       else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget); spin != nullptr)
       {
         auto const value = static_cast<std::uint16_t>(spin->get_value_as_int());
-        rawValue = detail::TrackFieldRawValue{std::in_place_type<std::uint16_t>, value};
-        editValue = detail::TrackFieldEditValue{std::in_place_type<std::uint16_t>, value};
+        rawValue = TrackFieldRawValue{std::in_place_type<std::uint16_t>, value};
+        editValue = TrackFieldEditValue{std::in_place_type<std::uint16_t>, value};
       }
       else
       {
@@ -372,7 +370,7 @@ namespace ao::gtk
         continue;
       }
 
-      auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = editValue};
+      auto const ctx = TrackFieldEditContext{.patch = patch, .value = editValue};
       def->writePatch(ctx);
     }
 

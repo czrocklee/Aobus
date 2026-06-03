@@ -88,6 +88,7 @@ namespace ao::rt
     Subscription onDevicesChanged(std::move_only_function<void()> handler);
     Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
     Subscription onVolumeChanged(std::move_only_function<void(float)> handler);
+    Subscription onMutedChanged(std::move_only_function<void(bool)> handler);
     Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
     Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
     Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);

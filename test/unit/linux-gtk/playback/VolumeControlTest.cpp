@@ -3,10 +3,10 @@
 
 #include "playback/VolumeControl.h"
 
-#include "playback/VolumeBar.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/button.h>
 #include <gtkmm/window.h>
 
 namespace ao::gtk::test
@@ -19,10 +19,11 @@ namespace ao::gtk::test
     auto& playback = fixture.runtime().playback();
 
     auto control = VolumeControl{playback};
-    auto& bar = dynamic_cast<VolumeBar&>(control.widget());
+    auto* btn = dynamic_cast<Gtk::Button*>(&control.widget());
+    REQUIRE(btn != nullptr);
 
     auto window = Gtk::Window{};
-    window.set_child(bar);
+    window.set_child(*btn);
     window.set_default_size(100, 20);
 
     drainGtkEvents();

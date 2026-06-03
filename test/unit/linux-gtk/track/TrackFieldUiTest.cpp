@@ -23,9 +23,9 @@ namespace ao::gtk::test
 
   namespace
   {
-    using Raw = detail::TrackFieldRawValue;
-    using Edit = detail::TrackFieldEditValue;
-    using Dur = detail::Duration;
+    using Raw = TrackFieldRawValue;
+    using Edit = TrackFieldEditValue;
+    using Dur = Duration;
 
     auto const kAllFields = trackFieldDefinitions();
   } // namespace
@@ -288,7 +288,7 @@ namespace ao::gtk::test
 
     auto patch = MetadataPatch{};
     auto const value = Edit{std::in_place_type<std::string>, "New Title"};
-    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
+    auto const ctx = TrackFieldEditContext{.patch = patch, .value = value};
 
     def->writePatch(ctx);
 
@@ -305,7 +305,7 @@ namespace ao::gtk::test
 
     auto patch = MetadataPatch{};
     auto const value = Edit{std::in_place_type<std::string>, "New Artist"};
-    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
+    auto const ctx = TrackFieldEditContext{.patch = patch, .value = value};
 
     def->writePatch(ctx);
 
@@ -322,7 +322,7 @@ namespace ao::gtk::test
 
     auto patch = MetadataPatch{};
     auto const value = Edit{std::in_place_type<std::string>, "New Album"};
-    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
+    auto const ctx = TrackFieldEditContext{.patch = patch, .value = value};
 
     def->writePatch(ctx);
 
@@ -339,7 +339,7 @@ namespace ao::gtk::test
 
     auto patch = MetadataPatch{};
     auto const value = Edit{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(1999)};
-    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
+    auto const ctx = TrackFieldEditContext{.patch = patch, .value = value};
 
     def->writePatch(ctx);
 
@@ -356,7 +356,7 @@ namespace ao::gtk::test
 
     auto patch = MetadataPatch{};
     auto const value = Edit{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(7)};
-    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
+    auto const ctx = TrackFieldEditContext{.patch = patch, .value = value};
 
     def->writePatch(ctx);
 
@@ -373,7 +373,7 @@ namespace ao::gtk::test
 
     auto patch = MetadataPatch{};
     auto const value = Edit{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(2)};
-    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = value};
+    auto const ctx = TrackFieldEditContext{.patch = patch, .value = value};
 
     def->writePatch(ctx);
 

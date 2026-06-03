@@ -92,13 +92,54 @@ add_library(aobus-gtk-lib STATIC
     layout/runtime/ActionValidator.cpp
     layout/runtime/ActionBinder.cpp
     layout/runtime/LayoutHost.cpp
-    layout/components/Containers.cpp
-    layout/components/PlaybackComponents.cpp
-    layout/components/SemanticComponents.cpp
-    layout/components/StatusComponents.cpp
-    layout/components/TrackComponents.cpp
-    layout/components/TrackDetailComponents.cpp
-    layout/components/TrackEditorComponents.cpp
+    layout/component/common/CommonLayoutProps.cpp
+    layout/component/track/TrackDetailSizing.cpp
+    layout/component/track/TrackRegistry.cpp
+    layout/component/track/TrackQuickFilterComponent.cpp
+    layout/component/track/TrackPresentationButtonComponent.cpp
+    layout/component/track/TrackDetailScope.cpp
+    layout/component/track/TrackSelectionRegionComponent.cpp
+    layout/component/track/TrackCoverArtComponent.cpp
+    layout/component/track/TrackFieldGridComponent.cpp
+    layout/component/track/TrackEditLockComponent.cpp
+    layout/component/track/TrackTagEditorComponent.cpp
+    layout/component/playback/AudioPipelinePanelComponent.cpp
+    layout/component/playback/NowPlayingFieldComponent.cpp
+    layout/component/playback/OutputSelectorComponent.cpp
+    layout/component/playback/PlaybackImageComponent.cpp
+    layout/component/playback/PlaybackRegistry.cpp
+    layout/component/playback/QualityIndicatorComponent.cpp
+    layout/component/playback/SeekSliderComponent.cpp
+    layout/component/playback/SoulButtonComponent.cpp
+    layout/component/playback/SoulTransportButtonComponent.cpp
+    layout/component/playback/TimeLabelComponent.cpp
+    layout/component/playback/TransportButtonComponent.cpp
+    layout/component/playback/VolumeControlComponent.cpp
+    layout/component/semantic/ActionButtonComponent.cpp
+    layout/component/semantic/LabelComponent.cpp
+    layout/component/semantic/ListTreeComponent.cpp
+    layout/component/semantic/MenuBarComponent.cpp
+    layout/component/semantic/MenuButtonComponent.cpp
+    layout/component/semantic/OpenLibraryButtonComponent.cpp
+    layout/component/semantic/SemanticRegistry.cpp
+    layout/component/semantic/TracksTableComponent.cpp
+    layout/component/semantic/WorkspaceWithDetailPaneComponent.cpp
+    layout/component/container/AbsoluteCanvasComponent.cpp
+    layout/component/container/BoxComponent.cpp
+    layout/component/container/CenterBoxComponent.cpp
+    layout/component/container/CollapsibleSplitComponent.cpp
+    layout/component/container/ContainerRegistry.cpp
+    layout/component/container/ScrollComponent.cpp
+    layout/component/container/SeparatorComponent.cpp
+    layout/component/container/SpacerComponent.cpp
+    layout/component/container/TabsComponent.cpp
+    layout/component/container/SplitComponent.cpp
+    layout/component/status/LibraryTrackCountComponent.cpp
+    layout/component/status/NowPlayingStatusComponent.cpp
+    layout/component/status/PlaybackDetailsComponent.cpp
+    layout/component/status/StatusMessageLabelComponent.cpp
+    layout/component/status/StatusRegistry.cpp
+    layout/component/status/StatusSlotComponent.cpp
     layout/editor/LayoutEditorDialog.cpp
 )
 

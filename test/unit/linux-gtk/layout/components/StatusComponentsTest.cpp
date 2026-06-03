@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/layout/components/StatusComponents.h"
-
 #include "../../GtkTestSupport.h"
+#include "app/linux-gtk/layout/component/status/StatusRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/playback/NowPlayingStatusLabel.h"
 #include "app/linux-gtk/playback/PlaybackDetailsWidget.h"

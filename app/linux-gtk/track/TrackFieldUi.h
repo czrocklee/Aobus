@@ -29,51 +29,48 @@ namespace ao::gtk
   class TrackRowObject;
   class TrackRowCache;
 
-  namespace detail
+  using Duration = std::chrono::milliseconds;
+
+  using TrackFieldRawValue =
+    std::variant<std::monostate, std::string, std::uint16_t, std::uint32_t, std::uint64_t, Duration>;
+
+  using TrackFieldEditValue = uimodel::track::TrackFieldEditValue;
+
+  struct TrackFieldEditContext final
   {
-    using Duration = std::chrono::milliseconds;
+    rt::MetadataPatch& patch;
+    TrackFieldEditValue const& value;
+  };
 
-    using TrackFieldRawValue =
-      std::variant<std::monostate, std::string, std::uint16_t, std::uint32_t, std::uint64_t, Duration>;
+  constexpr auto kTagsCellCssClass = "ao-track-tags-cell";
 
-    using TrackFieldEditValue = uimodel::track::TrackFieldEditValue;
+  using TrackRowTextReader = std::string (*)(TrackRowObject const&, TrackRowCache const&);
+  using TrackViewRawReader = TrackFieldRawValue (*)(library::TrackView const&,
+                                                    library::DictionaryStore const&,
+                                                    library::FileManifestStore::Reader const*);
+  using TrackFieldFormatter = std::string (*)(TrackFieldRawValue const&);
+  using TrackInlineEditParser = Result<TrackFieldEditValue> (*)(std::string_view);
+  using TrackRowEditReader = TrackFieldEditValue (*)(TrackRowObject const&, rt::TrackField);
+  using TrackRowEditApplier = bool (*)(TrackRowObject&, TrackFieldEditValue const&, rt::TrackField);
+  using TrackFieldPatchWriter = void (*)(TrackFieldEditContext const&);
 
-    struct TrackFieldEditContext final
-    {
-      rt::MetadataPatch& patch;
-      TrackFieldEditValue const& value;
-    };
+  struct TrackFieldUiDefinition final
+  {
+    rt::TrackField field = rt::TrackField::Title;
 
-    constexpr auto kTagsCellCssClass = "ao-track-tags-cell";
+    TrackRowTextReader readRowText = nullptr;
+    TrackViewRawReader readViewRawValue = nullptr;
+    TrackFieldFormatter formatValue = nullptr;
+    TrackInlineEditParser parseInlineEdit = nullptr;
+    TrackRowEditReader readRowEditValue = nullptr;
+    TrackRowEditApplier applyRowEditValue = nullptr;
+    TrackFieldPatchWriter writePatch = nullptr;
+  };
 
-    using TrackRowTextReader = std::string (*)(TrackRowObject const&, TrackRowCache const&);
-    using TrackViewRawReader = TrackFieldRawValue (*)(library::TrackView const&,
-                                                      library::DictionaryStore const&,
-                                                      library::FileManifestStore::Reader const*);
-    using TrackFieldFormatter = std::string (*)(TrackFieldRawValue const&);
-    using TrackInlineEditParser = Result<TrackFieldEditValue> (*)(std::string_view);
-    using TrackRowEditReader = TrackFieldEditValue (*)(TrackRowObject const&, rt::TrackField);
-    using TrackRowEditApplier = bool (*)(TrackRowObject&, TrackFieldEditValue const&, rt::TrackField);
-    using TrackFieldPatchWriter = void (*)(TrackFieldEditContext const&);
+  bool canInlineEdit(TrackFieldUiDefinition const& def);
 
-    struct TrackFieldUiDefinition final
-    {
-      rt::TrackField field = rt::TrackField::Title;
-
-      TrackRowTextReader readRowText = nullptr;
-      TrackViewRawReader readViewRawValue = nullptr;
-      TrackFieldFormatter formatValue = nullptr;
-      TrackInlineEditParser parseInlineEdit = nullptr;
-      TrackRowEditReader readRowEditValue = nullptr;
-      TrackRowEditApplier applyRowEditValue = nullptr;
-      TrackFieldPatchWriter writePatch = nullptr;
-    };
-
-    bool canInlineEdit(TrackFieldUiDefinition const& def);
-  } // namespace detail
-
-  std::span<detail::TrackFieldUiDefinition const> trackFieldUiDefinitions();
-  detail::TrackFieldUiDefinition const* trackFieldUiDefinition(rt::TrackField field);
+  std::span<TrackFieldUiDefinition const> trackFieldUiDefinitions();
+  TrackFieldUiDefinition const* trackFieldUiDefinition(rt::TrackField field);
 
   std::int32_t defaultWidthForField(rt::TrackField field);
   bool fieldIsVisibleByDefault(rt::TrackField field);

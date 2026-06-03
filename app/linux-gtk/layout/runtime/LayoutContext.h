@@ -38,11 +38,12 @@ namespace ao::uimodel::track
   class TrackPresentationViewModel;
 }
 
+#include "layout/component/track/TrackDetailScope.h"
+
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
   class ActionRegistry;
-  class ITrackDetailScope;
 
   struct TrackUiContext final
   {

@@ -24,25 +24,20 @@ namespace ao::library
 
 namespace ao::gtk
 {
-  namespace detail
+  struct RenderTarget final
   {
-    struct RenderTarget final
-    {
-      std::int32_t width;
-      std::int32_t height;
-    };
+    std::int32_t width;
+    std::int32_t height;
+  };
 
-    RenderTarget fitSourceIntoTarget(RenderTarget source, RenderTarget target);
-    bool shouldRefresh(RenderTarget current, RenderTarget next);
-  } // namespace detail
+  RenderTarget fitSourceIntoTarget(RenderTarget source, RenderTarget target);
+  bool shouldRefresh(RenderTarget current, RenderTarget next);
 
   class ImageCache;
 
   class ImageWidget final : public Gtk::Picture
   {
   public:
-    using RenderTarget = detail::RenderTarget;
-
     ImageWidget(library::MusicLibrary& library, ImageCache& cache);
     ~ImageWidget() override;
 

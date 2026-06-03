@@ -481,7 +481,7 @@ namespace ao::gtk
 
     auto const& editValue = *editValueResult;
     auto patch = rt::MetadataPatch{};
-    auto const ctx = detail::TrackFieldEditContext{.patch = patch, .value = editValue};
+    auto const ctx = TrackFieldEditContext{.patch = patch, .value = editValue};
     uiDef->writePatch(ctx);
 
     auto const oldEditValue = uiDef->readRowEditValue(*row, field);

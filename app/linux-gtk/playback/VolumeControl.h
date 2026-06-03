@@ -3,12 +3,18 @@
 
 #pragma once
 
-#include "playback/VolumeBar.h"
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/VolumeViewModel.h>
 
+#include <gtkmm/button.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/image.h>
+#include <gtkmm/label.h>
+#include <gtkmm/popover.h>
+#include <gtkmm/scale.h>
+#include <gtkmm/togglebutton.h>
 #include <gtkmm/widget.h>
+#include <sigc++/connection.h>
 
 namespace ao::gtk
 {
@@ -28,12 +34,22 @@ namespace ao::gtk
 
     void setOrientation(Gtk::Orientation orientation);
 
-    Gtk::Widget& widget() { return _volumeBar; }
+    Gtk::Widget& widget() { return _button; }
 
   private:
     void applyState(uimodel::playback::VolumeViewState const& view);
 
-    VolumeBar _volumeBar;
+    Gtk::Button _button;
+    Gtk::Image _icon;
+    Gtk::Popover _popover;
+    Gtk::Scale _scale{Gtk::Orientation::VERTICAL};
+    Gtk::Label _valueLabel;
+    Gtk::ToggleButton _muteButton;
+    Gtk::Popover _scrollBubble;
+    Gtk::Label _scrollBubbleLabel;
+
+    sigc::connection _scrollBubbleTimeout;
+
     bool _updating = false;
     uimodel::playback::VolumeViewModel _controller;
   };

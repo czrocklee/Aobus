@@ -213,7 +213,7 @@ namespace ao::gtk
 
           if (field == rt::TrackField::Tags)
           {
-            label->add_css_class(detail::kTagsCellCssClass);
+            label->add_css_class(kTagsCellCssClass);
           }
 
           listItem->set_child(*label);

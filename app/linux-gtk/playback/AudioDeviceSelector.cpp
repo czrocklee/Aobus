@@ -22,13 +22,12 @@
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 
-#include <format>
 #include <memory>
 #include <utility>
 
 namespace ao::gtk
 {
-  AudioDeviceSelector::AudioDeviceSelector(rt::PlaybackService& playback)
+  AudioDeviceSelector::AudioDeviceSelector(rt::PlaybackService& playback, Gtk::PositionType position)
     : _playback{playback}
     , _outputController{_playback,
                         [this](ao::uimodel::playback::AudioOutputViewState const& view)
@@ -50,9 +49,8 @@ namespace ao::gtk
                                 .backendId = row.backendId,
                               };
 
-                              auto const displayName = row.isExclusive ? std::format("{} [E]", row.title) : row.title;
                               auto const itemPtr =
-                                DeviceItem::create(row.backendId, audioDevice, row.profileId, displayName);
+                                DeviceItem::create(row.backendId, audioDevice, row.profileId, row.title);
                               itemPtr->setActive(row.isActive);
                               _storePtr->append(itemPtr);
                             }
@@ -60,14 +58,14 @@ namespace ao::gtk
                         }}
   {
     set_autohide(true);
-    set_position(Gtk::PositionType::BOTTOM);
+    set_position(position);
 
     auto* const scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
     scrolled->set_child(_listBox);
     scrolled->set_propagate_natural_height(true);
 
-    int const minPopoverWidth = 300;
-    int const minPopoverHeight = 300;
+    int const minPopoverWidth = 360;
+    int const minPopoverHeight = 320;
 
     scrolled->set_min_content_height(minPopoverHeight);
     scrolled->set_min_content_width(minPopoverWidth);
@@ -120,6 +118,20 @@ namespace ao::gtk
       rowBox->set_valign(Gtk::Align::CENTER);
       rowBox->add_css_class("ao-device-row");
 
+      auto* const checkIcon = Gtk::make_managed<Gtk::Image>();
+      checkIcon->set_pixel_size(16);
+      auto constexpr kCheckIconWidth = 20;
+      checkIcon->set_size_request(kCheckIconWidth, -1);
+      checkIcon->add_css_class("ao-output-check");
+
+      if (deviceItemPtr->active())
+      {
+        checkIcon->set_from_icon_name("object-select-symbolic");
+        rowBox->add_css_class("ao-output-selected-row");
+      }
+
+      rowBox->append(*checkIcon);
+
       auto* const textBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
       textBox->set_spacing(0);
       textBox->set_hexpand(true);
@@ -141,13 +153,11 @@ namespace ao::gtk
 
       rowBox->append(*textBox);
 
-      if (deviceItemPtr->active())
+      if (deviceItemPtr->profileId() == audio::kProfileExclusive)
       {
-        auto* const checkIcon = Gtk::make_managed<Gtk::Image>();
-        checkIcon->set_from_icon_name("object-select-symbolic");
-        checkIcon->set_pixel_size(16);
-        rowBox->append(*checkIcon);
-        rowBox->add_css_class("ao-output-selected-row");
+        auto* const badge = Gtk::make_managed<Gtk::Label>("[E]");
+        badge->add_css_class("ao-output-exclusive-badge");
+        rowBox->append(*badge);
       }
 
       return rowBox;

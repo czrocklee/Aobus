@@ -3,6 +3,8 @@
 
 #include "check/NodiscardUsageCheck.h"
 
+#include "check/RaiiHeuristics.h"
+
 #include <clang/AST/Attr.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
@@ -19,61 +21,21 @@ using namespace clang::ast_matchers;
 
 namespace clang::tidy::modernize
 {
-  namespace
-  {
-    struct IsRAIIMatcher final : public internal::MatcherInterface<CXXRecordDecl>
-    {
-      bool matches(CXXRecordDecl const& node,
-                   internal::ASTMatchFinder* /*finder*/,
-                   internal::BoundNodesTreeBuilder* /*builder*/) const override
-      {
-        bool hasUserProvidedDtor = false;
-        bool hasDeletedCopyCtor = false;
-
-        for (auto const* method : node.methods())
-        {
-          if (auto const* dtor = llvm::dyn_cast<CXXDestructorDecl>(method); dtor != nullptr)
-          {
-            if (dtor->isUserProvided())
-            {
-              hasUserProvidedDtor = true;
-            }
-          }
-        }
-
-        for (auto const* ctor : node.ctors())
-        {
-          if (ctor->isCopyConstructor() && ctor->isDeleted())
-          {
-            hasDeletedCopyCtor = true;
-          }
-        }
-
-        return hasUserProvidedDtor && hasDeletedCopyCtor;
-      }
-    };
-
-    inline internal::Matcher<CXXRecordDecl> isRAII()
-    {
-      return internal::Matcher{new IsRAIIMatcher{}};
-    }
-  } // namespace
-
   void NodiscardUsageCheck::registerMatchers(MatchFinder* finder)
   {
     // Match functions with [[nodiscard]]
     finder->addMatcher(functionDecl(hasAttr(attr::WarnUnusedResult)).bind("func_nodiscard"), this);
 
-    // Define whitelist for classes that MUST be [[nodiscard]] if they are RAII
-    auto isWhitelistedRaii = matchesName(
-      "::.*(Guard|Subscription|Scope|Session|Lock|Transaction|Timer|Writer|Handle|TempDir|TempFile|Token)$");
+    // Use shared RAII logic from aobus namespace
+    auto isWhitelistedRaii = aobus::isWhitelistedRaiiName();
+    auto isRAII = aobus::isRAII();
 
     // Match RAII classes that match the whitelist
-    finder->addMatcher(cxxRecordDecl(isDefinition(), isRAII(), isWhitelistedRaii).bind("raii_class"), this);
+    finder->addMatcher(cxxRecordDecl(isDefinition(), isRAII, isWhitelistedRaii).bind("raii_class"), this);
 
     // Match anything else that HAS [[nodiscard]] but is NOT in our RAII whitelist
     finder->addMatcher(
-      cxxRecordDecl(isDefinition(), hasAttr(attr::WarnUnusedResult), unless(allOf(isRAII(), isWhitelistedRaii)))
+      cxxRecordDecl(isDefinition(), hasAttr(attr::WarnUnusedResult), unless(allOf(isRAII, isWhitelistedRaii)))
         .bind("non_raii_nodiscard"),
       this);
   }

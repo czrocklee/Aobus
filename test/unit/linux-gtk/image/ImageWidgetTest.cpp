@@ -120,8 +120,6 @@ namespace ao::gtk::test
 
   TEST_CASE("ImageWidget - rendering math", "[gtk][image]")
   {
-    using namespace ao::gtk::detail;
-
     SECTION("fitSourceIntoTarget - aspect ratio and upscaling")
     {
       // Source 1000x500 (landscape), target 200x200 -> 200x100

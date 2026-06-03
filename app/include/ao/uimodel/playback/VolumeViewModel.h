@@ -7,6 +7,7 @@
 #include <ao/rt/PlaybackService.h>
 
 #include <functional>
+#include <string>
 
 namespace ao::uimodel::playback
 {
@@ -15,6 +16,9 @@ namespace ao::uimodel::playback
     bool visible = false;
     float volume = 1.0F;
     bool isHardwareAssisted = false;
+    bool muted = false;
+    std::string iconName{};
+    std::string tooltip{};
   };
 
   class VolumeViewModel final
@@ -30,9 +34,14 @@ namespace ao::uimodel::playback
     ~VolumeViewModel() = default;
 
     void handleVolumeChanged(float volume);
+    void handleMutedChanged(bool muted);
+    void toggleMuted();
+    void handleScroll(double scrollDy);
 
     static float resolveVolumeOffset(double widgetWidth, double offsetX, float currentDragStartVolume = 0.0F);
     static float resolveVolumeScroll(float currentVolume, double scrollDy);
+    static std::string resolveIconName(float volume, bool muted);
+    static std::string resolveTooltip(float volume, bool muted, bool isHardwareAssisted);
 
   private:
     void refresh();
@@ -43,5 +52,6 @@ namespace ao::uimodel::playback
     rt::Subscription _outputSub;
     rt::Subscription _startedSub;
     rt::Subscription _volumeSub;
+    rt::Subscription _mutedSub;
   };
 } // namespace ao::uimodel::playback

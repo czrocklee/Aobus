@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/components/TrackDetailComponents.h"
-
-#include "image/ImageWidget.h"
+#include "TrackComponentRegistrations.h"
+#include "layout/component/track/TrackDetailScope.h"
+#include "layout/component/track/TrackDetailSizing.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackFieldUi.h"
-#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/rt/TrackDetailProjection.h>
 #include <ao/rt/TrackField.h>
 #include <ao/utility/Log.h>
 
@@ -22,10 +20,6 @@
 #include <gdkmm/enums.h>
 #include <glib.h>
 #include <glibmm/main.h>
-#include <glibmm/refptr.h>
-#include <glibmm/ustring.h>
-#include <glibmm/utility.h>
-#include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/editablelabel.h>
@@ -37,12 +31,10 @@
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/popover.h>
-#include <gtkmm/scrolledwindow.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 #include <sigc++/functors/mem_fun.h>
-#include <sigc++/signal.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -57,40 +49,6 @@
 
 namespace ao::gtk::layout
 {
-  namespace detail
-  {
-    namespace
-    {
-      constexpr std::int32_t kDefaultCoverArtTargetSize = 250;
-      constexpr std::int32_t kStandardWidthThreshold = 550;
-    }
-
-    LayoutMode computeLayoutMode(int const width)
-    {
-      if (width < kStandardWidthThreshold)
-      {
-        return LayoutMode::Standard;
-      }
-
-      return LayoutMode::Wide;
-    }
-
-    std::int32_t coverArtSideForWidth(std::int32_t const width, std::int32_t const targetSize)
-    {
-      if (targetSize <= 0)
-      {
-        return 0;
-      }
-
-      if (width <= 0)
-      {
-        return targetSize;
-      }
-
-      return std::clamp(width, 1, targetSize);
-    }
-  }
-
   namespace
   {
     constexpr float kLabelOpacity = 0.6F;
@@ -116,342 +74,6 @@ namespace ao::gtk::layout
 
       return std::string{validPtr.get()};
     }
-
-    // Helper to walk widget tree and reset scrolled windows
-    void resetScrollAdjustments(Gtk::Widget* widget)
-    {
-      if (widget == nullptr)
-      {
-        return;
-      }
-
-      if (auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(widget); sw != nullptr)
-      {
-        if (Glib::RefPtr<Gtk::Adjustment> const vadjPtr = sw->get_vadjustment(); vadjPtr != nullptr)
-        {
-          vadjPtr->set_value(vadjPtr->get_lower());
-        }
-      }
-
-      for (auto* child = widget->get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        resetScrollAdjustments(child);
-      }
-    }
-
-    class TrackDetailScopeComponent final
-      : public ILayoutComponent
-      , public ITrackDetailScope
-    {
-    public:
-      TrackDetailScopeComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _box{Gtk::Orientation::VERTICAL, 0}
-        , _projection{rt::FocusedViewTarget{},
-                      ctx.runtime.views(),
-                      ctx.runtime.musicLibrary(),
-                      ctx.runtime.workspace(),
-                      ctx.runtime.mutation()}
-      {
-        _currentSnap = _projection.snapshot();
-
-        // Intercept context
-        auto* previousScope = ctx.track.detailScope;
-        ctx.track.detailScope = this;
-
-        // Build children
-        for (auto const& childNode : node.children)
-        {
-          auto childPtr = ctx.registry.create(ctx, childNode);
-          _box.append(childPtr->widget());
-          _children.push_back(std::move(childPtr));
-        }
-
-        // Restore context
-        ctx.track.detailScope = previousScope;
-
-        // Apply styles
-        if (auto const it = node.layout.find("cssClasses"); it != node.layout.end())
-        {
-          if (auto const* const classes = it->second.getIf<std::vector<std::string>>(); classes != nullptr)
-          {
-            for (auto const& className : *classes)
-            {
-              _box.add_css_class(className);
-            }
-          }
-          else if (auto const className = it->second.asString(); !className.empty())
-          {
-            _box.add_css_class(className);
-          }
-        }
-
-        // Subscribe to projection
-        _sub = _projection.subscribe([this](auto const& snap) { onSnapshot(snap); });
-      }
-
-      Gtk::Widget& widget() override { return _box; }
-
-      rt::TrackDetailSnapshot const& snapshot() const override { return _currentSnap; }
-      bool isEditLocked() const override { return _editLocked; }
-      void setEditLocked(bool locked) override
-      {
-        if (_editLocked != locked)
-        {
-          _editLocked = locked;
-          _signalEditLockChanged.emit(_editLocked);
-        }
-      }
-
-      sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() override
-      {
-        return _signalSnapshotChanged;
-      }
-      sigc::signal<void(bool)>& signalEditLockChanged() override { return _signalEditLockChanged; }
-
-    private:
-      void onSnapshot(rt::TrackDetailSnapshot const& snap)
-      {
-        bool const selectionChanged = _currentSnap.trackIds != snap.trackIds;
-        _currentSnap = snap;
-        _signalSnapshotChanged.emit(snap);
-
-        if (selectionChanged)
-        {
-          resetScrollAdjustments(&_box);
-        }
-      }
-
-      Gtk::Box _box;
-      std::vector<std::unique_ptr<ILayoutComponent>> _children;
-
-      rt::TrackDetailProjection _projection;
-      rt::Subscription _sub;
-      rt::TrackDetailSnapshot _currentSnap;
-      bool _editLocked = true;
-
-      sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;
-      sigc::signal<void(bool)> _signalEditLockChanged;
-    };
-
-    class TrackSelectionRegionComponent final : public ILayoutComponent
-    {
-    public:
-      TrackSelectionRegionComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _box{Gtk::Orientation::VERTICAL, 0}, _showWhen{node.getProp<std::string>("showWhen", "any")}
-      {
-        for (auto const& childNode : node.children)
-        {
-          auto childPtr = ctx.registry.create(ctx, childNode);
-          _box.append(childPtr->widget());
-          _children.push_back(std::move(childPtr));
-        }
-
-        if (ctx.track.detailScope != nullptr)
-        {
-          _scopeConn = ctx.track.detailScope->signalSnapshotChanged().connect([this](auto const& snap)
-                                                                              { updateVisibility(snap); });
-          updateVisibility(ctx.track.detailScope->snapshot());
-        }
-      }
-
-      Gtk::Widget& widget() override { return _box; }
-
-    private:
-      void updateVisibility(rt::TrackDetailSnapshot const& snap)
-      {
-        bool visible = false;
-
-        if (_showWhen == "none")
-        {
-          visible = (snap.selectionKind == rt::SelectionKind::None);
-        }
-        else if (_showWhen == "single")
-        {
-          visible = (snap.selectionKind == rt::SelectionKind::Single);
-        }
-        else if (_showWhen == "multiple")
-        {
-          visible = (snap.selectionKind == rt::SelectionKind::Multiple);
-        }
-        else if (_showWhen == "any")
-        {
-          visible = (snap.selectionKind != rt::SelectionKind::None);
-        }
-
-        _box.set_visible(visible);
-      }
-
-      Gtk::Box _box;
-      std::vector<std::unique_ptr<ILayoutComponent>> _children;
-      std::string _showWhen;
-      sigc::connection _scopeConn;
-    };
-
-    class TrackCoverArtComponent final : public ILayoutComponent
-    {
-    public:
-      class CoverArtSlot final : public Gtk::Widget
-      {
-      public:
-        explicit CoverArtSlot(ImageWidget& imageWidget)
-          : _imageWidget{imageWidget}
-        {
-          set_overflow(Gtk::Overflow::HIDDEN);
-          _imageWidget.set_parent(*this);
-        }
-
-        ~CoverArtSlot() override { _imageWidget.unparent(); }
-
-        CoverArtSlot(CoverArtSlot const&) = delete;
-        CoverArtSlot& operator=(CoverArtSlot const&) = delete;
-        CoverArtSlot(CoverArtSlot&&) = delete;
-        CoverArtSlot& operator=(CoverArtSlot&&) = delete;
-
-        void setTargetSize(std::int32_t targetSize)
-        {
-          targetSize = std::max(0, targetSize);
-
-          if (_targetSize == targetSize)
-          {
-            return;
-          }
-
-          _targetSize = targetSize;
-          _imageWidget.setTargetSize(_targetSize);
-          _imageWidget.setMaxRenderSize(_targetSize, _targetSize);
-          queue_resize();
-        }
-
-      protected:
-        Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH; }
-
-        void measure_vfunc(Gtk::Orientation orientation,
-                           int forSize,
-                           int& minimum,
-                           int& natural,
-                           int& minimumBaseline,
-                           int& naturalBaseline) const override
-        {
-          minimumBaseline = -1;
-          naturalBaseline = -1;
-
-          if (orientation == Gtk::Orientation::HORIZONTAL)
-          {
-            minimum = 0;
-            natural = forSize > 0 ? detail::coverArtSideForWidth(forSize, _targetSize) : _targetSize;
-            return;
-          }
-
-          if (forSize < 0)
-          {
-            minimum = 0;
-            natural = _targetSize;
-            return;
-          }
-
-          auto const side = detail::coverArtSideForWidth(forSize, _targetSize);
-          minimum = 0;
-          natural = side;
-        }
-
-        void size_allocate_vfunc(int width, int height, int baseline) override
-        {
-          auto side = detail::coverArtSideForWidth(width, _targetSize);
-
-          if (height > 0)
-          {
-            side = std::min(side, height);
-          }
-
-          auto const childX = std::max(0, (width - side) / 2);
-          auto const childY = std::max(0, (height - side) / 2);
-          measureImageForAllocation(side);
-          _imageWidget.size_allocate({childX, childY, side, side}, baseline);
-        }
-
-      private:
-        void measureImageForAllocation(int const side) const
-        {
-          auto minimum = 0;
-          auto natural = 0;
-          auto minimumBaseline = -1;
-          auto naturalBaseline = -1;
-          _imageWidget.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
-          _imageWidget.measure(Gtk::Orientation::VERTICAL, side, minimum, natural, minimumBaseline, naturalBaseline);
-        }
-
-        ImageWidget& _imageWidget;
-        std::int32_t _targetSize = 0;
-      };
-
-      TrackCoverArtComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _imageWidget{ctx.runtime.musicLibrary(), *ctx.detail.imageCache}, _slot{_imageWidget}
-      {
-        _imageWidget.set_halign(Gtk::Align::CENTER);
-        _imageWidget.set_valign(Gtk::Align::CENTER);
-        _imageWidget.set_expand(false);
-        _imageWidget.set_overflow(Gtk::Overflow::HIDDEN);
-
-        auto targetSize =
-          static_cast<std::int32_t>(node.getProp<std::int64_t>("targetSize", detail::kDefaultCoverArtTargetSize));
-
-        if (auto const it = node.layout.find("widthRequest"); it != node.layout.end())
-        {
-          targetSize = static_cast<std::int32_t>(it->second.asInt());
-        }
-
-        if (auto const it = node.layout.find("heightRequest"); it != node.layout.end())
-        {
-          auto const height = static_cast<std::int32_t>(it->second.asInt());
-          targetSize = targetSize > 0 ? std::min(targetSize, height) : height;
-        }
-
-        _slot.setTargetSize(targetSize);
-
-        if (auto const it = node.layout.find("cssClasses"); it != node.layout.end())
-        {
-          if (auto const* const classes = it->second.getIf<std::vector<std::string>>(); classes != nullptr)
-          {
-            for (auto const& className : *classes)
-            {
-              _imageWidget.add_css_class(className);
-            }
-          }
-          else if (auto const className = it->second.asString(); !className.empty())
-          {
-            _imageWidget.add_css_class(className);
-          }
-        }
-
-        if (ctx.track.detailScope != nullptr)
-        {
-          _scopeConn =
-            ctx.track.detailScope->signalSnapshotChanged().connect([this](auto const& snap) { updateImage(snap); });
-          updateImage(ctx.track.detailScope->snapshot());
-        }
-      }
-
-      Gtk::Widget& widget() override { return _slot; }
-
-    private:
-      void updateImage(rt::TrackDetailSnapshot const& snap)
-      {
-        if (snap.singleCoverArtId == kInvalidResourceId)
-        {
-          _imageWidget.clearImage();
-          _imageWidget.set_visible(true);
-        }
-        else
-        {
-          _imageWidget.loadImage(snap.singleCoverArtId);
-          _imageWidget.set_visible(true);
-        }
-      }
-
-      ImageWidget _imageWidget;
-      CoverArtSlot _slot;
-      sigc::connection _scopeConn;
-    };
 
     class TrackFieldGridComponent final : public ILayoutComponent
     {
@@ -1530,7 +1152,7 @@ namespace ao::gtk::layout
 
       void onResize(int const width)
       {
-        if (auto const nextMode = detail::computeLayoutMode(width); nextMode != _layoutMode)
+        if (auto const nextMode = computeLayoutMode(width); nextMode != _layoutMode)
         {
           _layoutMode = nextMode;
           scheduleRebuild();
@@ -1584,98 +1206,14 @@ namespace ao::gtk::layout
       ResponsiveGridBox _wrapper;
     };
 
-    class TrackEditLockComponent final : public ILayoutComponent
+    std::unique_ptr<ILayoutComponent> createTrackFieldGrid(LayoutContext& ctx, LayoutNode const& node)
     {
-    public:
-      TrackEditLockComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _scope{ctx.track.detailScope}
-      {
-        _lockedIcon = node.getProp<std::string>("lockedIcon", "changes-prevent-symbolic");
-        _unlockedIcon = node.getProp<std::string>("unlockedIcon", "changes-allow-symbolic");
+      return std::make_unique<TrackFieldGridComponent>(ctx, node);
+    }
+  } // namespace
 
-        _button.set_has_frame(false);
-        _button.add_css_class("ao-icon-button");
-        _button.signal_clicked().connect(
-          [this]
-          {
-            if (_scope != nullptr)
-            {
-              _scope->setEditLocked(!_scope->isEditLocked());
-            }
-          });
-
-        if (_scope != nullptr)
-        {
-          _lockConn = _scope->signalEditLockChanged().connect([this](bool locked) { updateIcon(locked); });
-          updateIcon(_scope->isEditLocked());
-        }
-      }
-
-      Gtk::Widget& widget() override { return _button; }
-
-    private:
-      void updateIcon(bool locked)
-      {
-        _button.set_icon_name(locked ? _lockedIcon : _unlockedIcon);
-        _button.set_tooltip_text(locked ? "Unlock to Edit" : "Lock Editing");
-      }
-
-      Gtk::Button _button;
-      ITrackDetailScope* _scope;
-      std::string _lockedIcon;
-      std::string _unlockedIcon;
-      sigc::connection _lockConn;
-    };
-  }
-
-  void registerTrackDetailComponents(ComponentRegistry& registry)
+  void registerTrackFieldGridComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent(
-      {.type = "track.detailScope",
-       .displayName = "Detail Scope",
-       .category = "Tracks",
-       .container = true,
-       .props = {},
-       .layoutProps = {{.name = "cssClasses", .kind = PropertyKind::String, .label = "CSS Classes"}},
-       .minChildren = 1,
-       .optMaxChildren = 0},
-      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<TrackDetailScopeComponent>(ctx, node); });
-
-    registry.registerComponent(
-      {.type = "track.selectionRegion",
-       .displayName = "Selection Region",
-       .category = "Tracks",
-       .container = true,
-       .props =
-         {{.name = "showWhen", .kind = PropertyKind::String, .label = "Show When", .defaultValue = LayoutValue{"any"}}},
-       .layoutProps = {},
-       .minChildren = 1,
-       .optMaxChildren = 0},
-      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<TrackSelectionRegionComponent>(ctx, node); });
-
-    registry.registerComponent(
-      {.type = "track.coverArt",
-       .displayName = "Cover Art",
-       .category = "Tracks",
-       .container = false,
-       .props = {{.name = "targetSize",
-                  .kind = PropertyKind::Int,
-                  .label = "Target Size",
-                  .defaultValue = LayoutValue{static_cast<std::int64_t>(detail::kDefaultCoverArtTargetSize)}},
-                 {.name = "forceSquare",
-                  .kind = PropertyKind::Bool,
-                  .label = "Force Square",
-                  .defaultValue = LayoutValue{true}}},
-       .layoutProps = {{.name = "widthRequest", .kind = PropertyKind::Int, .label = "Width Request"},
-                       {.name = "heightRequest", .kind = PropertyKind::Int, .label = "Height Request"},
-                       {.name = "cssClasses", .kind = PropertyKind::String, .label = "CSS Classes"}},
-       .minChildren = 0,
-       .optMaxChildren = 0},
-      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<TrackCoverArtComponent>(ctx, node); });
-
     registry.registerComponent(
       {.type = "track.fieldGrid",
        .displayName = "Field Grid",
@@ -1685,20 +1223,6 @@ namespace ao::gtk::layout
        .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0},
-      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<TrackFieldGridComponent>(ctx, node); });
-
-    registry.registerComponent(
-      {.type = "track.editLock",
-       .displayName = "Edit Lock",
-       .category = "Tracks",
-       .container = false,
-       .props = {{.name = "lockedIcon", .kind = PropertyKind::String, .label = "Locked Icon"},
-                 {.name = "unlockedIcon", .kind = PropertyKind::String, .label = "Unlocked Icon"}},
-       .layoutProps = {},
-       .minChildren = 0,
-       .optMaxChildren = 0},
-      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<TrackEditLockComponent>(ctx, node); });
+      createTrackFieldGrid);
   }
 } // namespace ao::gtk::layout

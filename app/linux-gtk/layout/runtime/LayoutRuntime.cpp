@@ -3,13 +3,11 @@
 
 #include "layout/runtime/LayoutRuntime.h"
 
-#include "layout/components/Containers.h"
-#include "layout/components/PlaybackComponents.h"
-#include "layout/components/SemanticComponents.h"
-#include "layout/components/StatusComponents.h"
-#include "layout/components/TrackComponents.h"
-#include "layout/components/TrackDetailComponents.h"
-#include "layout/components/TrackEditorComponents.h"
+#include "layout/component/container/ContainerRegistry.h"
+#include "layout/component/playback/PlaybackRegistry.h"
+#include "layout/component/semantic/SemanticRegistry.h"
+#include "layout/component/status/StatusRegistry.h"
+#include "layout/component/track/TrackRegistry.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"

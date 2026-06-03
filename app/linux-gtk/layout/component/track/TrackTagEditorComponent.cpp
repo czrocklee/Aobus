@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/components/TrackEditorComponents.h"
-
-#include "layout/components/TrackDetailComponents.h"
+#include "TrackComponentRegistrations.h"
+#include "layout/component/track/TrackDetailScope.h"
 #include "layout/document/LayoutNode.h"
-#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "tag/TagEditController.h"
@@ -15,7 +13,6 @@
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/TrackDetailProjection.h>
 #include <ao/rt/TrackSource.h>
 
 #include <gtkmm/widget.h>
@@ -89,9 +86,14 @@ namespace ao::gtk::layout
       std::vector<TrackId> _currentTrackIds;
       sigc::scoped_connection _scopeConn;
     };
+
+    std::unique_ptr<ILayoutComponent> createTrackTagEditor(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<TrackTagEditorComponent>(ctx, node);
+    }
   } // namespace
 
-  void registerTrackEditorComponents(ComponentRegistry& registry)
+  void registerTrackTagEditorComponent(ComponentRegistry& registry)
   {
     registry.registerComponent({.type = "track.tagEditor",
                                 .displayName = "Tag Editor",
@@ -101,7 +103,6 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
-                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<TrackTagEditorComponent>(ctx, node); });
+                               createTrackTagEditor);
   }
 } // namespace ao::gtk::layout
