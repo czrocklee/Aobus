@@ -11,9 +11,30 @@ Do not activate this skill or run `./script/run-clang-tidy.sh` unless the user e
 
 Use `./script/run-clang-tidy.sh` as the single entry point for clang-tidy in Aobus. Do not call `clang-tidy` directly or invent alternate check lists; the script owns file discovery, strict/relaxed modes, the custom plugin, include paths, and diagnostic de-duplication.
 
-## Required Companion Skills
+When editing C++ to fix warnings, follow the conventions in `CONTRIBUTING.md` (the `aobus-*` checks enforce them).
 
-- Load `generate-cpp-code` before editing any `.cpp`, `.h`, or `.hpp` file.
+## Phase Contract — C1 delegation (machine path)
+
+The mechanical subset of this skill can be delegated to a low-cost model (capability **C1**) via the
+runner `script/agent/lint_phase.sh`. The runner enforces the gates below; this contract declares the
+boundaries. The rest of this document is the manual / frontier (**C3**) path for judgement-heavy
+warnings (NOLINT decisions, include-cleaner triage, API-shape calls).
+
+- **Capability:** C1 (bounded, mechanical, validation-gated).
+- **Worker:** per the fleet routing table (pilot default: DeepSeek V4 Flash via opencode).
+- **Inputs:** one target file + its `run-clang-tidy.sh` diagnostics.
+- **Scope:** the target file only.
+- **Validation:** `run-clang-tidy.sh <file>` — zero warnings is the gate (re-run; never trusted from the model).
+- **Iterate to fixpoint:** a fix can surface new warnings (e.g. a named constant must be `kCamelCase`);
+  loop fix → re-tidy → feed back until 0 warnings, or round budget / no-progress → escalate.
+- **Process isolation:** the worker runs in a non-repo scratch cwd (agentic CLIs edit cwd files
+  directly); the patch is taken only from sentinel-fenced stdout; the real tree is changed only by the
+  dispatcher under temporal isolation (apply → validate → keep / rollback).
+- **Deterministic guard (reject → escalate C3):** any change to `include/**`, `*/CMakeLists.txt`,
+  `.clang-tidy`, `script/**`, `doc/design/**`; out-of-scope files; churn over budget.
+- **Escalate to C3 (frontier) when:** a fix needs a public-API/signature change, an error-contract
+  choice, a cross-file refactor, a NOLINT judgement, or the loop cannot reach 0 warnings.
+- **Run:** `script/agent/lint_phase.sh <repo-relative-file>`
 
 ## Default Workflow
 

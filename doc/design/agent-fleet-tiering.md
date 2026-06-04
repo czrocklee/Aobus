@@ -1,0 +1,353 @@
+# Aobus:能力分层工作流与跨 Harness Model 路由设计
+
+> 状态:设计草案 v5 / 讨论用。日期:2026-06-04。
+> 范围:**通用、不绑定任何单一 harness 或厂商**。把工作流阶段抽象成能力等级,再把异构 agent 舰队
+> (Opus / GPT-5.5 / Gemini 3 Pro·Flash / DeepSeek V4 Pro·Flash / …)按等级路由。
+>
+> v4 变更:① 把"低成本模型 token 成本近似可忽略"和"`run-clang-tidy.sh --fix` 禁用"列为事实前提,
+> 不再作为开放问题讨论;② C1 路由允许多低成本模型并行产候选 patch,只把 guard 后最优候选送入慢验证;
+> ③ rollback 从 `git restore` 改为"scope clean check + 反向应用本次 patch";④ eval 改为小样本 0 silent-wrong
+> gate + 滚动统计;⑤ skill 发现不强依赖 harness 自动读取 `.agents/skills/`,packet 可携带展开后的 contract。
+>
+> v5 变更:① 候选排序拆成"确定性优先 + frontier 兜底",并定义"按排名验证至多 K 个再 escalate";
+> ② 补"目标文件需先 clean"运营约束 + out-of-tree build 利好;③ eval 加 rule-of-three 说明 + 生产首次
+> silent-wrong 熔断;④ 把候选并行的速率/延迟纳入"真正成本";⑤ packet 内 contract 由源 skill 生成 + hash 戳。
+
+## 0. 事实前提(非讨论项)
+
+- **低成本模型 token 成本近似可忽略**。本设计的主要成本不是 Gemini Flash / DeepSeek Flash 之类模型的
+  token,而是慢 validation 时间、frontier 审 patch/review 的注意力、状态管理复杂度、静默错修风险,
+  以及候选并行带来的各 CLI 速率/并发/延迟约束(多候选 fan-out 会先撞 rate limit,而不是 token 预算)。
+- **`run-clang-tidy.sh --fix` 不进入自动化路径**。实践已经证明它会损坏文件或生成不可接受的机械改动;
+  v1 只使用 tidy 诊断作为输入,不使用自动 replacement 作为 C0 修复手段。
+
+## 1. 背景:可移植的底座已经存在
+
+Aobus 仓库**已经在走 harness 中立路线**,设计要在此之上扩展而非另起炉灶:
+- **`.agents/skills/`**:vendor-neutral 的 skill 目录(不是 `.claude/skills/`)。现有 6 个 skill:
+  `develop-lint-checker`、`diagnose-issue`、`improve-test-coverage`、`manage-git-flow`、
+  `use-clang-tidy`、`write-unit-test`。
+- **单一指令源 + 多 harness 命名**:`CLAUDE.md` 和 `GEMINI.md` 都是指向 `AGENTS.md` 的符号链接。
+  一份规范,多个 harness 各按自己的约定名去读。
+- **舰队已落盘**:`~/.claude`(Opus)、`~/.codex`(GPT-5.5)、`~/.gemini` + Antigravity
+  (Gemini 3 Pro/Flash)、`~/.config/opencode`(DeepSeek V4)。
+
+**问题**:今天所有阶段——"补一个 clang-format 空行"到"判断该用 `ao::Result` 还是 `std::optional`"
+——都跑在同一个 frontier loop 里。机械苦工稀释了 frontier 的 token/loop;同时舰队里更便宜或更
+合适的 model(Flash 系、DeepSeek)闲置。
+
+**目标**:把阶段抽象成**能力等级(capability class)**,让每一级由最划算的执行体承担——可能是
+零成本脚本,可能是 Gemini Flash,可能是 Opus——且整套机制**任何 harness 都能参与**。
+
+## 2. 两条核心原则
+
+**原则 A:Tier 是能力等级,不是某个 model。**
+按"工作*要求*什么能力"分级,再用一张**路由表**把舰队里的具体 (harness, model) 填进去。换 model、
+加厂商,只改路由表,不改 skill、不改工作流。
+
+**原则 B:Skill 是可移植的契约,编排在 harness 之上。**
+单个 CLI 的 subagent 机制(如 Claude Code 的 `Agent` 工具)**只能拉起本厂商的 model**,无法跨厂商
+路由。所以编排不能依赖任何一家的 tool API,必须落在**所有 harness 的最小公约数**上:
+- 触发:每个 CLI 的**非交互调用**(`claude -p` / `codex exec` / `gemini -p` / `opencode run`);
+- 交接:**YAML 头 + markdown 正文**的 phase packet;
+- 验收:**allowlist validation**(固定命令 ID + 枚举参数 + 退出码),在**一棵已配置的树**里执行
+  (见 §5「为什么验证不能在隔离 worktree 里跑」),不依赖任何 harness 的内建判定。
+
+## 3. 能力等级(vendor-neutral)
+
+按三个判据定级:**可否脚本判对错(确定性)/ 决策需要的上下文范围(局部 vs 全局)/ 错判的语义风险**。
+
+| 等级 | 能力要求 | 典型工作 | 现有 skill |
+|---|---|---|---|
+| **C0 机械·确定性** | 无需推理,脚本可判对错 | format、跑 lint、跑测试、构建、**diff guard、validation 执行、dispatch 路由查表** | `manage-git-flow` 的*执行*面、`build.sh`、`run-clang-tidy.sh` |
+| **C1 有界·机械** | 局部改写,有确定性验收 gate 兜底 | 按报错清单修 tidy 残差、铺测试样板/fixture、生成脚手架 | `use-clang-tidy`(修)、`develop-lint-checker`(脚手架)、测试样板 |
+| **C2 有范围·实现** | 在既定设计内写代码/测试,要能力不要新颖推理 | 实现一个已定方案、补一组边界用例 | `write-unit-test`/`improve-test-coverage` 的实现面 |
+| **C3 前沿·推理** | 全局/语义/架构判断,错判代价高 | plan、root-cause diagnose、design review、**签名/ABI 与语义等价审查**、错误契约选择(§5) | `diagnose-issue`、`code-review`、plan、`develop-lint-checker` 的 matcher 设计 |
+
+你最初的例子落位:"跑 lint" = **C0**,"修 lint 报错" = **C1**,"review/plan/diagnose" = **C3**。
+把"执行"和"修复/判断"切开,是这套模型的主要收益点。
+
+> **注意 C0 包含 dispatch / guard / validation 的*执行*。** 它们是确定性逻辑,只是 v1 里**由 frontier
+> 顺手执行**(见 §6),不代表它们是 C3 工作。这也说明把 dispatcher 抽出 frontier(Step E)不是"降级",
+> 只是把 C0 逻辑挪出 reasoning loop。
+>
+> **C2 是最未验证的一层**:它与 C1(局部机械)、C3(推理)的边界最模糊,deterministic guard 很难裁定。
+> C1 跑通前不要投入 C2,它很可能塌缩成"大 scope 的 C1"或"窄 scope 的 C3"。
+
+## 4. 舰队路由表(把能力等级映射到具体 model)
+
+每级给**首选 + 备选**(跨厂商),按 成本 / 能力 / 延迟 / 上下文窗口 / 工具可用性 取舍。示例:
+
+| 等级 | 首选 | 备选 | 选择理由 |
+|---|---|---|---|
+| C0 | 显式脚本(0 token) | — | 确定性的不该烧任何 model;v1 不做 always-on hook |
+| C1 | Gemini 3 Flash + DeepSeek V4 Flash 多候选 | Haiku / 其他低成本 fast model | token 成本近似可忽略;用多候选提高修对率,但只验证 guard 后最优 patch |
+| C2 | GPT-5.5(Codex)| Gemini 3 Pro / Sonnet | 强 coding、能照设计落地 |
+| C3 | Opus | GPT-5.5(high)/ Gemini 3 Pro / DeepSeek V4 Pro | 深推理、架构与语义判断 |
+
+> 这张表是**唯一需要随舰队变动维护**的东西。skill 与 phase contract 不动。C1 的默认形态不是
+> "首选失败再备选",而是**可并行生成多个候选 patch**;昂贵的部分是后续 validation 和 C3 review,
+> 因此 dispatcher/frontier 必须先用 deterministic guard 和 patch ranking 过滤,不要给每个候选都跑慢验证。
+
+> **实测 headless 调用(Step 0,§9)**:`claude -p` / `codex exec -s read-only` / `gemini -p --approval-mode plan` /
+> `opencode run -m opencode-go/deepseek-v4-flash`。opencode 默认是本地 `ollama/gemma4:31b`,**必须显式钉云端模型**;
+> Pro 档为 `opencode-go/deepseek-v4-pro`。
+
+## 5. Phase Contract(harness-agnostic 阶段契约)
+
+每个可委托 skill 加一段统一头,使它能被**任意 harness 的任意 model**当独立阶段执行:
+
+```
+## Phase Contract
+- Capability:    C0 | C1 | C2 | C3
+- Inputs:        最小输入(diff / 文件清单 / 失败日志 / 设计链接)
+- Scope:         允许动什么、禁止动什么(文件清单)
+- Validation:    allowlist 中的 validation_id + 枚举参数,退出码即判据
+- Output:        patch + 结构化结果(YAML/JSON:status / changed_files /
+                 validation / escalate_reason / residual_risks) + markdown 说明
+- Escalate when: 命中即停并上交更高等级
+                 (需改公共 API / 需选错误契约 / 需改架构 / 验收反复不过)
+```
+
+### 5.1 安全地基:patch + guard + 时间隔离
+
+廉价 model **绝不直接改主 worktree**,只在**隔离 scratch/worktree** 里改文件;**patch 由 dispatcher 用
+`git diff`(scratch vs base)生成,不采信 model 自写的 unified diff**(§9 Step 0 实测:codex 自写 diff 的
+hunk header 损坏、`git apply` 报 corrupt;让 harness 生成可消除整类失败)。**鲁棒做法(Step B 实测确定)**:worker 在一个**隔离 sandbox cwd**
+(只放目标文件的副本)里**就地编辑副本**,dispatcher 直接 `diff` 该副本——既不采信 model 自写 diff
+(codex/ds4f 的 hunk 常损坏),也不依赖 sentinel stdout(agentic CLI 会叙述、或改去 Read/Edit 文件而非回显;
+gemini 把"我的修复计划……"写进文件、ds4f 在隔离 cwd 下试图 Read 真实路径被自身权限拦成 0 输出——都实测到了)。
+sandbox + CLI 自身的 external-dir 权限拦截**双重**保证 worker 碰不到真实树。安全闸门按下面顺序卡:
+
+1. **Deterministic guard(apply 前,跑在 diff 上,不需要 build)** —— 见 §5.2;过滤所有越界候选;
+2. **候选排序(先确定性,后 frontier 兜底)**:对通过 guard 的候选,先用**确定性代理**排序
+   (churn 最小、触及文件最少、最贴合 scope);**仅当多个候选确定性维度并列、难分时**,才由 frontier 做
+   语义排序(最小意图、report 质量)。能确定性排就不烧 frontier 注意力;
+3. **取仓库锁**(同一时刻只允许一个 build 类阶段动主树);
+4. **scope clean check**:patch 触碰的路径在主树中不能有预先存在的 staged/unstaged/untracked 改动;
+5. **把排名最高的候选 apply 到主树**(主树有已配置的 `/tmp/build/...`),记录本次 patch 作为唯一 rollback 单元;
+6. **跑 Validation**(allowlist,§5.3),退出码即判据;
+7. **通过 → 留下**(交 C3 review);**失败 → 反向应用本次 patch 回滚,按排名取下一个候选重试,至多验证 K 个
+   (K 小,如 2,给分钟级慢验证封顶);K 个皆败或命中 escalate → 升级 C3**;
+8. **释放锁、清理临时 worktree(`git worktree remove`)**。
+
+> **禁止裸 `git restore` rollback**。主 worktree 可能已有用户改动;`git restore` 会误删不属于该 phase 的状态。
+> v1 要么要求 patch scope 在 apply 前干净,要么拒绝执行;失败时只用 `git apply -R` 反向应用**本次 patch**。
+> 如果反向应用失败,立即停下交 C3/人工处理,不能扩大回滚范围。
+
+> **运营约束:目标文件需先 clean/committed。** scope clean check 会(正确地)拒绝触碰用户 WIP 文件
+> ——本仓库当前就有十几个未提交的 M 文件,所以 build 依赖的委托阶段在与 WIP 重叠时会直接被拒。这是安全
+> 特性而非 bug;跑 pilot 前先把目标文件 commit 或 stash。**利好**:本仓库 build 是 out-of-tree
+> (`binaryDir: /tmp/build`),validation 的构建产物不落源码树,因此 `git apply -R` 反向回滚是干净的。
+
+> **为什么验证不能在隔离 worktree 里跑(已核实)**:`run-clang-tidy.sh` 把 `BUILD_DIR` 固定为
+> `/tmp/build/debug-clang-tidy`,其 `compile_commands.json` 里全是**指向主源码树绝对路径**的条目。
+> 在另一路径的 worktree 里跑 tidy,会照 compile_commands 去分析**主树未修改的文件**,无视 worktree 改动
+> ——结果是**静默 green(假通过)**,比报错更危险。build/test 同样依赖一棵已 configure 的树。
+> 因此:**模型在哪改(可在 scratch/worktree 产 patch)与验证在哪跑(必须在已配置的主树)解耦。**
+> 隔离靠的是**时间**(apply→验证→留/弃,加锁保证可回滚),不是**空间**(独立 worktree)。
+> 空间 worktree 隔离只对 *build-independent* 的验证(纯格式检查、grep 类)才成立。
+
+### 5.2 Diff guard:确定性部分 vs C3 review 部分(必须分开)
+
+**Deterministic guard(C0,跑在 diff 上,路径 + 体量判定,v1 就做)** —— 命中即拒绝并 escalate:
+- 改动触碰 `include/**`(public header 目录);
+- 改动任何 `*/CMakeLists.txt`、CMake 配置、`.clang-tidy`、lint 配置或 `script/**`;
+- 改动 `doc/design/**`;
+- 出现 packet `scope.files` 之外的文件变更;
+- churn 超阈值:改动行数 / 删除行数 / 触及文件数超过 packet 设定上限(代理"大规模重排")。
+
+**C3 review checklist(语义判断,diff 判不了,交 frontier,别挂在 deterministic guard 名下)**:
+- 是否改变了函数/类型签名或 ABI;
+- 是否引入用户可见行为变化;
+- 改动是否语义等价于"修掉这条诊断"这一最小意图。
+
+**铁律(C1/C2)**:只在 scope 内改 → 只产 patch/report → 过 deterministic guard → 加锁 apply 到主树
+→ 过 allowlist validation 且退出码 0 → 交 C3 review → 才算落定。命中 Escalate 立即停、不自作主张。
+自报 `escalate_reason` 仍保留,但只是**额外信号**;真正的闸门是 deterministic guard + validation + C3 review。
+
+### 5.3 Validation allowlist
+
+packet 不能携带任意 shell 字符串,只能引用固定 ID;**参数也必须枚举或结构化校验**,
+例如 `validation_id: clang_tidy_folder` 的 `folder` 只能从 `{lib, app, include, test, lint}` 取值,
+`clang_tidy_files` 的 `files` 必须落在 repo 内且属于 packet scope。这样注入面不会从命令字符串转移到参数字符串。
+
+> **validation 不是廉价退出码**:`run-clang-tidy.sh` 要建 plugin + 进 nix-shell + 分析,是**分钟级**;
+> `build.sh` 更久。每次 escalate-retry 都要重跑这条慢验证——成本模型(§10)必须把它算进去。
+
+## 6. 编排层:v1 先由 frontier 兼任 Dispatcher
+
+跨厂商无法用任一 CLI 的内建 subagent,因此用两件中立原语。
+
+**Phase Packet(交接单,YAML 头 + markdown 正文)**:
+```
+---
+skill: .agents/skills/use-clang-tidy
+capability: C1
+scope:
+  files:
+    - lib/audio/Foo.cpp
+  max_changed_lines: 80
+inputs:
+  tidy_log: /tmp/aobus-phase/<id>/in/tidy.log
+validation:
+  id: clang_tidy_files
+  files:
+    - lib/audio/Foo.cpp
+artifacts:
+  in: /tmp/aobus-phase/<id>/in/
+  out: /tmp/aobus-phase/<id>/out/     # 模型把 patch + report 写这里
+escalate_to: C3
+---
+
+Markdown body:背景、诊断摘录、允许/禁止事项、期望 done signal。
+```
+
+**v1 编排方式**:frontier 主 loop 直接扮演 dispatcher,不先写独立程序。注意:**dispatch 路由查表、guard、
+validation 本身是 C0 确定性逻辑**,这里只是由 frontier 顺手执行,不是 C3 工作:
+1. 生成 packet 和输入 artifacts(scratch/worktree 仅作模型工作区,产 patch,不在此验证);
+2. frontier 查路由表(§4),用一个或多个低成本目标 harness 的非交互模式调用:
+   `claude -p` / `codex exec` / `gemini -p` / `opencode run`(各家 flag 名不同,路由表里记);
+3. 廉价 model 产出一个或多个 **patch + 结构化 report**(不碰主树);
+4. frontier 跑 **deterministic guard(C0)** on diff,过滤越界候选,再按最小 patch / 最小 churn / report 质量排序;
+5. 加锁 → 确认 patch scope 干净 → apply 最优候选到主树 → 跑 **allowlist validation(C0)**;
+6. 失败即反向应用本次 patch 回滚;通过 → frontier 做 **C3 review**(签名/行为/语义等价)→ 落定或 escalate;
+7. 释放锁、清理临时 worktree。
+
+这样 v1 仍然 **harness 无关**,但不先承担独立 dispatcher、并发执行、队列、锁框架、失败恢复等基础设施成本。
+独立 dispatcher 是第二阶段需求:当流程稳定、需要无人值守或并发运行时再抽出来。
+
+**示例:提交前流程(commit-flow)** —— 每行标注的是**该步需要的能力**,v1 全部由 frontier 编排执行:
+```
+C0  脚本        显式运行 clang-format / build / test                    [0 token]
+C0  脚本        run-clang-tidy.sh(改动文件,仅诊断,不 --fix)→ 报错清单  [0 token]
+C1  Flash*      scratch 中并行产多个 tidy 修复 patch/report(不碰主树)
+C0  脚本/frontier guard + ranking → 加锁 → scope clean → apply 一个候选 → validation → 失败反向 patch
+C3  Opus        签名/行为/语义等价 review + 写 commit message
+```
+
+## 7. 现有 skill 的等级归属与改造
+
+- **manage-git-flow**:把 format / validation 的*执行*下沉为显式 C0 脚本;v1 不做 hook。skill 退化为编排 +
+  commit 规范(仍 BLOCKING)。
+- **use-clang-tidy**:C1;加 Phase Contract,Escalate 覆盖"改公共 API / 选错误契约 / 跨文件重构"。
+  **v1 绝不使用 `run-clang-tidy.sh --fix`(见 §10,已证实会搞烂文件)**。C0 只负责跑 tidy 产出诊断清单;
+  C1 只处理这些诊断中**明确、局部、可验证**的修复,且一律走 patch + guard + validation 流程。
+  **两条 Step B 实测铁律**:(i)**迭代到 fixpoint**——修一轮可能引出新 warning(实测:修 magic-`7`→`constexpr addend`
+  →又触发 `addend` 须为 `kAddend`),必须 修→复跑 tidy→把新诊断喂回→再修,直到 0 warning 或预算/无进展才停;
+  (ii)**进程隔离**——agentic CLI(opencode `run`)会直接 Read/Edit 工作树文件,故 worker 必须在**非仓库的隔离 cwd**
+  跑、patch 只取 sentinel stdout,真实树只由 dispatcher 在时间隔离下改。
+- **write-unit-test / improve-test-coverage**:C3 决定*测什么/边界* + C1/C2 铺样板与 fixture。
+- **diagnose-issue / code-review**:C3;补清晰 Inputs(可复现命令 / 失败日志 / 范围)。
+- **develop-lint-checker**:C3 设计 matcher 逻辑 + C1 生成脚手架/fixture/CMake 接线。
+
+## 8. Skill 跨 harness 可移植性
+
+各 harness 发现 skill 的方式不同(Claude 读 SKILL.md frontmatter;Codex/Gemini 主要读 AGENTS.md;
+OpenCode 另有约定)。v1 不把"自动发现 `.agents/skills/`"当硬依赖:
+- skill body 用**纯 markdown + 标准 Phase Contract 头**,不掺任一 harness 专有语法;
+- packet 可以携带**展开后的 skill contract 摘要**作为主路径,确保任何能读 prompt/文件的 headless CLI 都能执行;
+  该摘要**在 dispatch 时从源 skill `.agents/skills/<name>` 生成并打 version/hash 戳**,而非手抄——单一真相源
+  仍是源 skill,避免 packet 副本漂移;副作用利好:自带 contract 让廉价 model 不必有仓库级 skill 读权限,
+  缩小委托面、利于 sandbox;
+- 沿用现有 **`AGENTS.md` 符号链接**手法:在 `AGENTS.md` 里挂一节"Skills 索引 + Phase Contract 规范",
+  各 harness 经各自的 `*.md` 软链能读到时就作为优化路径;
+- harness 专有的触发元数据(如 Claude 的 SKILL.md frontmatter)作为**薄 adapter**,统一指向
+  `.agents/skills/<name>`,正文不复制。
+
+## 9. 落地路线(增量、可独立验收/回滚)
+
+0. **Step 0:harness headless 能力探针(v1 前置阻塞,先于 eval)**。逐个确认候选 CLI 能否
+   (a)完全无头跑、(b)指向 repo + 工作区、(c)读取 packet 中展开后的 skill contract 或直接读取
+   `.agents/skills/`、(d)在不越 scope 下把 patch 写到 `artifacts.out`、(e)鉴权/速率/上下文窗口可用。
+   任一候选不满足,就从路由表(§4)对应等级移除。
+
+   **Step 0 实测结果(2026-06-04,`/tmp/agent-fleet-pilot/probe.sh`)**:4 个 CLI 均已安装、headless 可调用,
+   实测的非交互入口与 §2 假设一致(claude `-p` / codex `exec` / gemini `-p` / opencode `run`)。
+   任务:headless 修一个 `std::endl → '\n'` 并产 patch:
+   - **gemini**(默认模型,14s):**PASS** —— diff 干净可 apply、in-scope。
+   - **claude**(`-p`,10s):**PASS**。
+   - **codex**(`exec -s read-only`,8s):语义正确,但**自写 unified diff 的 hunk header 损坏**
+     (`@@ -3,5 +3,5 @@` 行数不符 → `git apply` 报 corrupt);改用"model 写文件 + dispatcher `git diff`"即通过。
+     → **设计修正已并入 §5.1:patch 一律由 harness 生成,不采信 model 自写 diff。**
+   - **opencode**(默认 `ollama/gemma4:31b` 本地模型 → 180s 挂起、0 输出;**钉 `-m opencode-go/deepseek-v4-flash`
+     后 3s 返回**):语义正确,但与 codex 同样**自写 diff 的 hunk header 损坏**(`@@ -4,5` 越界)→ harness-diff
+     契约下通过。→ 教训:路由表须为每个 CLI **显式钉云端廉价模型**,默认可能是本地小模型。
+   结论:4 个候选在 **harness-diff 契约**下均可进 C1(gemini/claude 自写 diff 也能用;codex/opencode 必须靠
+   harness 生成 patch);self-diff 在 **2/4 厂商**上损坏,进一步坐实 §5.1 的"patch 一律 harness 生成"。
+1. **Step A:手工 eval(信任边界 gate)**。挑 5–10 条真实 `run-clang-tidy.sh` 诊断,用统一 eval packet 手动喂给
+   候选廉价 CLI。低成本模型 token 近似免费,所以 eval 不是证明"值不值得调用",而是证明"能不能进入自动
+   C1 路由并减少 frontier 手写量"。记录四个指标并设硬 bar:
+   - **修对率 ≥ 80%**(改对且通过 validation);
+   - **小样本 silent wrong = 0**——5–10 条 pilot 中不允许出现 validation 通过(tidy clean + build green)
+     但语义仍错的案例。注意 0/N 不等于"低"(rule of three:0/10 在 95% 置信下真实率仍可能达 ~26%),
+     故小样本 0 只是**准入门槛**,真实风险率由后续滚动统计确立;且滚动统计必须配**熔断**:生产中**首次**
+     出现 silent-wrong 即暂停该候选的 C1 路由并复盘,不能只当看板;
+   - **escalation 率 ≤ 阈值**——若大半诊断都得 escalate C3,C1 这层不省事;
+   - **越 scope 次数 = 0**(被 deterministic guard 拦下不算失败,但应统计模型越界倾向)。
+   任一不达标 → 暂停该候选的 C1 路由,不投入 contract/dispatcher 基建。
+
+   **Step A 实测结果(2026-06-04,种入 9 条真实诊断到 `lib/tag/Open.cpp`,harness-diff 契约,2 候选)**:
+   - **DeepSeek V4 Flash**(`opencode-go/deepseek-v4-flash`):**9/9 清零、0 silent-wrong、in-scope** —— 且
+     **符合 Aobus 习惯**:`int→std::int32_t` 并补 `<cstdint>`、`std::endl→'\n'`、magic `7`→`constexpr kAddend`
+     (k 前缀)、把 optional 声明 + `.has_value()` 一次合并成 `if (const auto optX = std::optional<...>{}; optX)`
+     (一举清掉 use-if-init / const-correctness / local-init / optional 四条)。→ **C1 可用,首选。**
+   - **Gemini 3 Flash**(`gemini-3-flash-preview -p`):**失败,但属契约问题而非能力**。无视"只输出文件"约束,
+     先吐了一段"我的修复计划……"并尝试 `read_file` 工具 → 文件被叙述污染、首行 `I have analyzed…` → 编译 error。
+   → **设计修正(已并入 §5.1)**:整文件输出必须夹在显式 **sentinel**(`<<<BEGIN_FILE>>>`/`<<<END_FILE>>>`)间、
+   harness 只取其间;对 agentic 型 headless CLI(gemini `-p`)还需钉"纯转换、禁叙述/禁工具"的调用形态后复测。
+   **净结论**:cheap-model 做 C1 机械修复在 Aobus 上**可行**(DeepSeek Flash 单 case 全清零且地道);
+   瓶颈不在模型能力,而在**输出契约的鲁棒性**。下一步:加 sentinel 契约,把样本扩到多个 case 跑滚动 silent-wrong。
+2. **Step B:`use-clang-tidy` Phase Contract pilot**。eval 过关后加 Phase Contract;**不用 `--fix`**;
+   C0 只产诊断,C1 只处理明确、局部、可验证的 tidy 修复。
+
+   **Step B 实测结果(2026-06-04,`/tmp/agent-fleet-pilot/lint_phase.sh`,种 9 诊断到 `lib/tag/Open.cpp`,worker=ds4f)**:
+   端到端跑通 C0 诊断 → C1(ds4f,sentinel 输出)→ harness-diff → 确定性 guard → 时间隔离 apply → 复跑 tidy → keep/rollback。
+   两条只有真跑才暴露的修正:
+   - **迭代到 fixpoint**:v1 单轮把 magic-`7` 修成 `constexpr addend`,又触发 `addend→kAddend` 命名告警(1 残留);
+     v2 改成 修→复跑→喂回 的循环,**1 个 fix round 后 0 warning,FIXPOINT**(给"常量 kCamelCase"提示后 ds4f 一轮到位)。
+   - **进程隔离(更关键)**:v1 在仓库 cwd 跑 opencode,`worker.err` 显示它 `Read`+`Edit lib/tag/Open.cpp` **直接改了真实文件**
+     ——prompt 级"只输出 patch"挡不住 agentic CLI。v2 把 worker 关进 `/tmp` 隔离 cwd、patch 只取 sentinel stdout,真实树
+     仅由 dispatcher 在时间隔离下改、失败 rollback;复跑确认 repo 全程干净。
+   **落地(Step B 末)**:runner 进 **`script/agent/lint_phase.sh`**(仓库基础设施,非 skill 内容);skill
+   `use-clang-tidy/SKILL.md` 加 "Phase Contract — C1 delegation" 段引用它(skill = 可移植契约,runner = 执行机制)。
+   worker 机制最终定为 **sandbox 副本就地编辑 + diff 副本**:sentinel-stdout 在隔离 cwd 下被 opencode 的 external-dir
+   权限拦成 0 输出而失败,改用 sandbox-diff 后稳定 1 轮收敛到 0 warning。
+3. **Step C:结构化 packet + validation allowlist**。packet 用 YAML 头 + markdown 正文;validation 只允许固定
+   ID + 枚举参数,不接受任意 shell 字符串。
+4. **Step D:patch + deterministic guard + 时间隔离**。廉价 model 可并行产多个 patch/report;frontier 兼任
+   dispatcher,apply 前跑 diff guard + ranking,只把一个候选送入慢 validation。加锁后确认 scope clean,
+   apply 到主树跑 validation,失败反向应用本次 patch 回滚,通过再做 C3 review。
+5. **Step E:推广与抽象化**。稳定后再推广到 `write-unit-test` / `improve-test-coverage`;当确实需要无人值守、
+   并发或队列化时,再把 dispatcher(本就是 C0 逻辑)独立成脚本/工具。
+
+## 10. 固定事实、成本模型与开放风险
+
+### 10.1 固定事实
+
+- **低成本模型 token 成本近似可忽略**。设计优化目标不是省 Flash/DeepSeek token,而是减少 frontier 手写量,
+  同时控制 validation 次数、review 注意力和静默错修风险。
+- **`--fix` 已证实禁用**:`run-clang-tidy.sh` 确实有 `--fix`(走 `-export-fixes` 批量 apply),但实践证明
+  目前还不成熟,会搞烂文件(批量 overlapping replacement 冲突、破坏未覆盖区域)。**v1 一律不进入任何
+  自动化路径**;只用 tidy 诊断作为输入。即便将来重试,也必须在 patch + deterministic guard + validation +
+  C3 review 的完整流程内,不得旁路。
+
+### 10.2 成本模型
+
+- **真正成本**:`delegate ≈ headless 调用冷启动 + 候选并行的速率/延迟约束 + patch guard/ranking +
+  apply/锁/rollback 管理 + 慢 validation(× 至多 K 次重试) + frontier C3 review + 静默错修风险`。
+  其中低成本模型 token 不是主要项;多候选先受 rate limit 约束,慢 validation 受 K 预算约束。
+- **策略变化**:小批量也可以先让低成本模型产候选 patch,因为生成候选几乎免费;但不能给每个候选都跑
+  `run-clang-tidy.sh` / `build.sh`。必须先 guard + ranking,只验证最小、最可信的候选。
+- **净收益判据**:不是"省了多少低成本 token",而是"候选 patch 是否减少 frontier 手写/搜索时间,且没有增加
+  silent wrong、validation 重跑和人工回滚成本"。pilot 要量这个阈值。
+
+### 10.3 开放风险
+
+- **能力边界要 eval**:Flash/DeepSeek 对 Aobus C++26 规范 + `aobus-*` tidy 的实际修复率,由 Step A 的四个指标
+  量化后才能定 C1 可信边界与备选顺序。
+- **隔离 ≠ 沙箱**:git 时间隔离/worktree 只隔离**git 状态**,不隔离**进程能力**。无头跑的廉价 CLI 若其 harness
+  授予 exec/网络权限,边界拦不住它在树外乱跑。若用不完全信任的模型,真正的沙箱(容器/firejail)是另一层,需单列。
+- **非交互调用与认证**:各 CLI 的 headless flag、鉴权、速率限制、上下文窗口差异在 Step 0 探针中确认并登记进路由表。
+- **可观测性**:phase packet + validation 退出码 + patch/report artifacts 天然可审计;建议每阶段留存便于回溯。
+- **与 RTK 正交叠加**:RTK 压缩*输出* token,本设计压缩*model 用量*,二者可叠加。
