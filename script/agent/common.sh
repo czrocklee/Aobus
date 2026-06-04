@@ -4,9 +4,11 @@
 # Sourced by lint_phase.sh (and any future dispatcher). Pure helpers: sourcing has no side effects
 # beyond defining functions and the AGENT_* path variables below.
 
-# Repo root from this file's location (independent of the caller's cwd).
-AGENT_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-AGENT_DIR="$AGENT_REPO/script/agent"
+# Repo root from this file's location (independent of the caller's cwd). AOBUS_AGENT_REPO overrides it
+# so a runner can be exercised against a throwaway tree in /tmp (the deterministic test seam; same
+# spirit as AOBUS_AGENT_WORK / AOBUS_ROUTING_ENV).
+AGENT_REPO="${AOBUS_AGENT_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+AGENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_WORK="${AOBUS_AGENT_WORK:-/tmp/aobus-agent}"
 
 # Deterministic guard: repo-relative paths a cheap (C1/C2) worker must never edit. A hit means
@@ -46,6 +48,45 @@ agent_arg_safe() {
 agent_validation_fn()     { printf 'v_%s' "${1//-/_}"; }
 agent_validation_exists() { [ "$(type -t "$(agent_validation_fn "$1")" 2>/dev/null)" = "function" ]; }
 
+# Per-arg TYPE -> ERE. A validation's declared arg type (in VALIDATION_ARGSPEC) maps here; this is the
+# enum/type layer on top of the generic agent_arg_safe charset gate. Add a row to introduce a new type
+# (an enum is just a literal alternation, e.g. 'core|gtk').
+agent_argtype_re() {
+  case "$1" in
+    path)   printf '%s' '^[A-Za-z0-9][A-Za-z0-9._/-]*$' ;;                      # a repo-relative path token
+    filter) printf '%s' '^(~?\[[A-Za-z0-9_-]+\])+(,~?\[[A-Za-z0-9_-]+\])*$' ;;  # a Catch2 tag expression
+    any)    printf '%s' '.*' ;;                                                 # no further restriction
+    *)      return 1 ;;                                                         # unknown type = misconfig
+  esac
+}
+
+# agent_validation_args_ok <id> [arg...] ; 0 = the args satisfy the validation's declared contract in
+# VALIDATION_ARGSPEC ("<type> <min> <max>", max '-' = unbounded): arity within [min,max] and every arg of
+# <type>. This is the per-arg enum/type gate that rejects a MISTYPED or MIS-COUNTED packet before any slow
+# validation runs. If no spec is declared for <id> (or VALIDATION_ARGSPEC is absent, e.g. a test mock) it
+# returns 0 — the generic agent_arg_safe charset gate still applies upstream.
+agent_validation_args_ok() {
+  local id="$1"; shift
+  declare -p VALIDATION_ARGSPEC >/dev/null 2>&1 || return 0
+  local spec="${VALIDATION_ARGSPEC[$id]:-}"; [ -n "$spec" ] || return 0
+  local type min max; read -r type min max <<<"$spec"
+  local n=$#
+  if [ "$n" -lt "$min" ]; then
+    echo "agent: validation '$id' needs >= $min arg(s), got $n -> reject" >&2; return 2
+  fi
+  if [ "$max" != "-" ] && [ "$n" -gt "$max" ]; then
+    echo "agent: validation '$id' takes <= $max arg(s), got $n -> reject" >&2; return 2
+  fi
+  local re; re="$(agent_argtype_re "$type")" || {
+    echo "agent: validation '$id' has unknown arg type '$type' -> reject" >&2; return 2; }
+  local a
+  for a in "$@"; do
+    printf '%s' "$a" | grep -Eq "$re" || {
+      echo "agent: validation '$id' arg '$a' is not of type '$type' -> reject" >&2; return 2; }
+  done
+  return 0
+}
+
 # agent_validate <id> [arg...] ; resolve an ALLOWLISTED validation and run it from the repo root.
 # Rejects unknown IDs and unsafe args; never evaluates a shell string from a packet. Returns the
 # validation's exit code (0 = pass).
@@ -59,6 +100,7 @@ agent_validate() {
   for a in "$@"; do
     agent_arg_safe "$a" || { echo "agent: validation arg '$a' is unsafe -> reject" >&2; return 2; }
   done
+  agent_validation_args_ok "$id" "$@" || return 2
   ( cd "$AGENT_REPO" && "$fn" "$@" )
 }
 
@@ -110,6 +152,17 @@ agent_harness_diff() {
   diff -u "$1" "$2" > "$3" || true
   awk '/^[+-]/ && !/^[+-][+-]/ {c++} END{print c+0}' "$3"
 }
+
+# agent_patch_files <patch> ; number of distinct files a unified diff touches (one '+++ ' header per
+# file). A candidate that strays outside its single-file scope shows up as >1 here.
+agent_patch_files() { awk '/^\+\+\+ /{c++} END{print c+0}' "$1"; }
+
+# agent_rank_candidates ; deterministic candidate ranking (§5.1 step 2). Reads "<files> <churn> <id>"
+# lines on stdin and emits the <id>s ranked best-first: fewest files touched, then least churn, then
+# id (so the order is stable and reproducible). The whole point is to pick a winner WITHOUT spending
+# the slow validation or any frontier attention; semantic tie-breaking (when deterministic dimensions
+# are level) is a C3 concern handled upstream, not here.
+agent_rank_candidates() { sort -k1,1n -k2,2n -k3,3 | awk '{print $3}'; }
 
 # agent_emit_packet <out.md> <escalated_from> <target_rel> <reason> <diag_file> [<patch_file>]
 # Writes a self-contained Phase Packet (§6) for a C3 reviewer and echoes its path. The real tree is

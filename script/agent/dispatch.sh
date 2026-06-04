@@ -47,6 +47,27 @@ done
 declare -a gate_args
 if [ "${#vargs[@]}" -gt 0 ]; then gate_args=("${vargs[@]}"); else gate_args=("${inputs[@]}"); fi
 
+# Reject a mistyped / mis-counted validation arg up front, BEFORE the slow runner, per the allowlist's
+# declared contract (per-arg enum/type). The independent gate (agent_validate) re-checks this too.
+if ! agent_validation_args_ok "$valid" "${gate_args[@]}"; then
+  echo "dispatch: validation args do not satisfy the '$valid' contract -> reject" >&2; exit 2
+fi
+
+# A C1 tidy phase edits exactly the packet input files, so its independent tidy gate must cover that
+# same scope. Letting validation_args point elsewhere would validate the wrong file set after a runner
+# mutates the tree. Test phases still use validation_args for Catch2 filters.
+if [ "$skill/$cap" = "use-clang-tidy/C1" ] && [ "${#vargs[@]}" -gt 0 ]; then
+  if [ "${#vargs[@]}" -ne "${#inputs[@]}" ]; then
+    echo "dispatch: C1 tidy validation_args must match inputs exactly -> reject" >&2; exit 2
+  fi
+  for f in "${inputs[@]}"; do
+    found=0
+    for g in "${vargs[@]}"; do [ "$f" = "$g" ] && { found=1; break; }; done
+    [ "$found" -eq 1 ] || {
+      echo "dispatch: C1 tidy validation_args must stay within inputs ('$f' missing) -> reject" >&2; exit 2; }
+  done
+fi
+
 # --- route (skill, capability) -> runner ---
 runner_rc=0
 case "$skill/$cap" in

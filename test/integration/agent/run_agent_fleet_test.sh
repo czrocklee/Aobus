@@ -42,9 +42,53 @@ assert_rc 0 "hyphen id 'build-debug' resolves" agent_validation_exists build-deb
 assert_rc 1 "unknown id does not resolve"     agent_validation_exists no-such-id
 assert_eq "id->fn maps hyphen to underscore" "$(agent_validation_fn test-core)" "v_test_core"
 
+VT="$(mktemp -d)"; mkdir -p "$VT/script"
+vtidy_in() { ( cd "$1" && v_tidy lib/foo.cpp ); }
+printf '#!/usr/bin/env bash\nexit 7\n' > "$VT/script/run-clang-tidy.sh"; chmod +x "$VT/script/run-clang-tidy.sh"
+assert_rc 7 "v_tidy fails when run-clang-tidy exits nonzero" vtidy_in "$VT"
+printf '#!/usr/bin/env bash\necho "warning: fake diagnostic"\n' > "$VT/script/run-clang-tidy.sh"; chmod +x "$VT/script/run-clang-tidy.sh"
+assert_rc 1 "v_tidy fails when tidy emits warnings" vtidy_in "$VT"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$VT/script/run-clang-tidy.sh"; chmod +x "$VT/script/run-clang-tidy.sh"
+assert_rc 0 "v_tidy passes when tidy exits clean with no warnings" vtidy_in "$VT"
+rm -rf "$VT"
+
+echo "== validation arg contract (Step C: per-arg enum/type) =="
+# agent_argtype_re: a repo path token and a Catch2 tag expression are distinguishable types.
+amatch() { printf '%s' "$2" | grep -Eq "$(agent_argtype_re "$1")"; }
+assert_rc 0 "type path matches a repo path"         amatch path "lib/audio/Foo.cpp"
+assert_rc 1 "type path rejects a tag filter"        amatch path "[audio]"
+assert_rc 0 "type filter matches a tag"             amatch filter "[audio]"
+assert_rc 0 "type filter matches OR tags"           amatch filter "[layout],[model]"
+assert_rc 0 "type filter matches an exclude tag"    amatch filter "~[slow]"
+assert_rc 1 "type filter rejects a path"            amatch filter "lib/foo.cpp"
+assert_rc 1 "unknown type is a misconfig"           agent_argtype_re bogus
+# agent_validation_args_ok against the REAL allowlist specs (tidy=path 1 -, test-core=filter 1 1, ...).
+assert_rc 0 "tidy accepts >=1 path"                 agent_validation_args_ok tidy lib/a.cpp app/b.cpp
+assert_rc 2 "tidy rejects 0 args (min 1)"           agent_validation_args_ok tidy
+assert_rc 2 "tidy rejects a filter (wrong type)"    agent_validation_args_ok tidy "[audio]"
+assert_rc 0 "test-core accepts one filter"          agent_validation_args_ok test-core "[audio]"
+assert_rc 2 "test-core rejects a path (wrong type)" agent_validation_args_ok test-core lib/foo.cpp
+assert_rc 2 "test-core rejects two filters (max 1)" agent_validation_args_ok test-core "[a]" "[b]"
+assert_rc 2 "test-core rejects 0 args (min 1)"      agent_validation_args_ok test-core
+assert_rc 0 "build-debug tolerates extra/no args"   agent_validation_args_ok build-debug x y
+assert_rc 0 "unspec'd id falls back to allow"       agent_validation_args_ok no-such-id whatever
+
 echo "== harness diff churn =="
 T="$(mktemp -d)"; printf 'a\nb\nc\n' > "$T/o"; printf 'a\nB\nc\nd\n' > "$T/m"
 assert_eq "churn counts changed body lines" "$(agent_harness_diff "$T/o" "$T/m" "$T/p")" "3"
+
+echo "== candidate ranking (Step D) =="
+# agent_patch_files: one '+++ ' header per file touched
+printf -- '--- a\n+++ b\n@@ -1 +1 @@\n-x\n+y\n'            > "$T/pf1"
+printf -- '--- a\n+++ b\n--- c\n+++ d\n'                   > "$T/pf2"
+assert_eq "patch-files counts single file"  "$(agent_patch_files "$T/pf1")" "1"
+assert_eq "patch-files counts two files"    "$(agent_patch_files "$T/pf2")" "2"
+# agent_rank_candidates: fewest files, then least churn, then id (deterministic, stable)
+ranked="$(printf '1 30 a\n1 10 b\n2 5 c\n1 10 a2\n' | agent_rank_candidates | tr '\n' ' ')"
+assert_eq "rank: files asc, churn asc, id asc" "$ranked" "a2 b a c "
+assert_eq "rank: single candidate is itself"   "$(printf '1 7 only\n' | agent_rank_candidates)" "only"
+# a low-churn winner outranks a correct-but-sprawling rewrite (the whole point of ranking)
+assert_eq "rank: surgical beats rewrite"       "$(printf '1 4 surgical\n1 90 rewrite\n' | agent_rank_candidates | head -1)" "surgical"
 
 echo "== packet schema round-trip =="
 PK="$T/pk.md"

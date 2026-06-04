@@ -21,12 +21,23 @@ boundaries. The rest of this document is the manual / frontier (**C3**) path for
 warnings (NOLINT decisions, include-cleaner triage, API-shape calls).
 
 - **Capability:** C1 (bounded, mechanical, validation-gated).
-- **Worker:** per the fleet routing table `script/agent/routing.env` (`route_c1_worker`; pilot default:
-  DeepSeek V4 Flash via opencode). Swapping the model is a routing.env edit only — this contract and the
-  runner do not change.
+- **Worker(s):** per the fleet routing table `script/agent/routing.env`, the candidate set
+  `ROUTE_C1_CANDIDATES` the runner fans out. The **default is a single worker** (DeepSeek V4 Flash via
+  opencode): lowest latency, no fan-out cost. Multi-candidate fan-out is **opt-in** — uncomment a second
+  source in routing.env, e.g. Gemini 3.5 Flash via `agy` for a genuine cross-vendor candidate, or
+  `route_c1_worker_pro` for a stronger same-vendor mix. Swapping/adding a model is a routing.env edit
+  only — this contract and the runner do not change. (Note: the opt-in agy worker is not hard-FS-sandboxed
+  under steam-run; it relies on path-collision avoidance for a trusted model — see the design doc §10.3 —
+  but every edit is still gated by harness-diff + guard + re-validation.)
 - **Inputs:** one or more target files + their `run-clang-tidy.sh` diagnostics.
 - **Scope:** the named target file(s) only.
 - **Validation:** `run-clang-tidy.sh <file>` — zero warnings is the gate (re-run; never trusted from the model).
+- **Multi-candidate (fan-out → rank → validate top-K):** each round fans the candidate set out **in
+  parallel** (each worker edits only its own sandbox copy), takes each patch by harness-diff, drops no-op /
+  over-churn candidates, then ranks the survivors **deterministically** (fewest files touched, then least
+  churn). Candidate generation is near-free; the slow tidy validation is paid on only the **top-K**
+  (`MAX_VALIDATE`, default 2) in rank order, keeping the first that makes progress. Semantic tie-breaking
+  is a C3 concern, not done in the runner.
 - **Iterate to fixpoint:** a fix can surface new warnings (e.g. a named constant must be `kCamelCase`);
   loop fix → re-tidy → feed back until 0 warnings, or round budget / no-progress → escalate.
 - **Process isolation:** the worker runs in a non-repo sandbox cwd holding only a copy of the target at
@@ -86,8 +97,9 @@ Choose the smallest useful scope, then widen only when needed.
 # Full output to file
 ./script/run-clang-tidy.sh -o /tmp/tidy.log
 
-# Automatic fixes, only when the diagnostics are straightforward and reviewable
-./script/run-clang-tidy.sh --fix lib/audio/Foo.cpp
+# NOTE: `--fix` is intentionally NOT used in this repo. It has been shown to corrupt files and produce
+# unacceptable mechanical edits, so it is never part of the workflow. Apply fixes by hand, then re-run
+# the script to verify.
 
 # Use an alternate build directory or job count
 ./script/run-clang-tidy.sh -p /tmp/build/debug-clang-tidy -j 8 --folder lib
@@ -153,7 +165,7 @@ Common acceptable cases: GTKmm `make_refptr_for_instance(new T)`, GLib/GTK macro
 
 ## Verification
 
-Use `--fix` only for mechanical, reviewable diagnostics in a focused file set. After `--fix`, inspect the changed code before continuing, because generated edits can alter formatting or choose a less idiomatic local pattern. Do not use `--fix --all` unless the user explicitly asked for broad automatic cleanup.
+Do NOT use `run-clang-tidy.sh --fix` (including `--fix --all`). It has been shown to corrupt files and produce unacceptable mechanical edits, so automatic fixing is never part of this workflow. Apply every fix by hand — improve the code per the Warning Policy above — then re-run the script to verify.
 
 After fixing warnings, run the narrowest clang-tidy check that covers the modified C++ files:
 

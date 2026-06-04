@@ -49,6 +49,9 @@ agent_arg_safe "$REL" || { echo "test_phase: unsafe target '$REL' -> reject" >&2
 for a in "${VARGS[@]}"; do
   agent_arg_safe "$a" || { echo "test_phase: unsafe validation arg '$a' -> reject" >&2; exit 2; }
 done
+if ! agent_validation_args_ok "$VALID" "${VARGS[@]}"; then
+  echo "test_phase: validation args do not satisfy the '$VALID' contract -> reject" >&2; exit 2
+fi
 packet_out="$ESC/$(basename "$REL").packet.md"
 if ! agent_guard_path "$REL"; then
   echo "test_phase: GUARD REJECT '$REL' -> escalate C3 (packet: $(agent_emit_packet "$packet_out" C2 \
@@ -67,7 +70,7 @@ for ((round = 1; round <= MAX_ROUNDS; round++)); do
   sandbox="$(mktemp -d)"; sbx="$sandbox/$REL"
   mkdir -p "$(dirname "$sbx")"; cp "$TARGET" "$sbx"
 
-  AGENT_SANDBOX="$sandbox"
+  AGENT_SANDBOX="$sandbox"; AGENT_REL="$REL"   # AGENT_REL: agy-backed workers stage by it (contract)
   if [ -n "$last_err" ]; then
     AGENT_PROMPT="$(printf '%s\n\nThe previous attempt FAILED validation. Correct the edit. Build/test output:\n%s\n' "$PLAN" "$last_err")"
   else
@@ -75,7 +78,7 @@ for ((round = 1; round <= MAX_ROUNDS; round++)); do
   fi
 
   echo "--- C2 worker [$ROUTE_C2_LABEL], round $round, sandbox=$sandbox ---"
-  route_c2_worker > "$WORK/$(basename "$REL").round$round.log" 2>&1
+  "${ROUTE_C2_WORKER:-route_c2_worker}" > "$WORK/$(basename "$REL").round$round.log" 2>&1
 
   patch="$WORK/$(basename "$REL").round$round.patch"
   churn="$(agent_harness_diff "$TARGET" "$sbx" "$patch")"
