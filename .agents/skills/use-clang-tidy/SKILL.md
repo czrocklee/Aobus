@@ -21,20 +21,26 @@ boundaries. The rest of this document is the manual / frontier (**C3**) path for
 warnings (NOLINT decisions, include-cleaner triage, API-shape calls).
 
 - **Capability:** C1 (bounded, mechanical, validation-gated).
-- **Worker:** per the fleet routing table (pilot default: DeepSeek V4 Flash via opencode).
-- **Inputs:** one target file + its `run-clang-tidy.sh` diagnostics.
-- **Scope:** the target file only.
+- **Worker:** per the fleet routing table `script/agent/routing.env` (`route_c1_worker`; pilot default:
+  DeepSeek V4 Flash via opencode). Swapping the model is a routing.env edit only — this contract and the
+  runner do not change.
+- **Inputs:** one or more target files + their `run-clang-tidy.sh` diagnostics.
+- **Scope:** the named target file(s) only.
 - **Validation:** `run-clang-tidy.sh <file>` — zero warnings is the gate (re-run; never trusted from the model).
 - **Iterate to fixpoint:** a fix can surface new warnings (e.g. a named constant must be `kCamelCase`);
   loop fix → re-tidy → feed back until 0 warnings, or round budget / no-progress → escalate.
-- **Process isolation:** the worker runs in a non-repo scratch cwd (agentic CLIs edit cwd files
-  directly); the patch is taken only from sentinel-fenced stdout; the real tree is changed only by the
-  dispatcher under temporal isolation (apply → validate → keep / rollback).
+- **Process isolation:** the worker runs in a non-repo sandbox cwd holding only a copy of the target at
+  its repo-relative path (agentic CLIs edit cwd files directly); the dispatcher takes the patch by
+  diffing that copy (harness-diff — never a model-authored diff) and changes the real tree itself under
+  temporal isolation (apply → re-validate → keep / rollback). Concurrent phases serialize on a repo lock.
 - **Deterministic guard (reject → escalate C3):** any change to `include/**`, `*/CMakeLists.txt`,
-  `.clang-tidy`, `script/**`, `doc/design/**`; out-of-scope files; churn over budget.
+  `.clang-tidy`, `script/**`, `doc/design/**`, `.agents/**`; out-of-scope files; churn over budget.
 - **Escalate to C3 (frontier) when:** a fix needs a public-API/signature change, an error-contract
-  choice, a cross-file refactor, a NOLINT judgement, or the loop cannot reach 0 warnings.
-- **Run:** `script/agent/lint_phase.sh <repo-relative-file>`
+  choice, a cross-file refactor, a NOLINT judgement, or the loop cannot reach 0 warnings. Each escalation
+  writes a Phase Packet (`$AOBUS_AGENT_WORK/lint/escalate/<file>.packet.md`) for the reviewer.
+- **Run:** `script/agent/lint_phase.sh <repo-relative-file>...` or `--changed` for the changed C++ set.
+  Or drive it from a Phase Packet (YAML frontmatter + body) via `script/agent/dispatch.sh <packet>`,
+  which enforces the validation allowlist (`script/agent/validation.env`) and re-validates independently.
 
 ## Default Workflow
 

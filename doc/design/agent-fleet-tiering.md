@@ -85,6 +85,9 @@ Aobus 仓库**已经在走 harness 中立路线**,设计要在此之上扩展而
 | C2 | GPT-5.5(Codex)| Gemini 3 Pro / Sonnet | 强 coding、能照设计落地 |
 | C3 | Opus | GPT-5.5(high)/ Gemini 3 Pro / DeepSeek V4 Pro | 深推理、架构与语义判断 |
 
+> 这张表已**外置为 `script/agent/routing.env`**(每个能力等级一个 `route_<class>_worker` 函数 +
+> `ROUTE_<class>_LABEL`):换 model / 加厂商只改这一个文件,runner 与 phase contract 不动。测试时把
+> `AOBUS_ROUTING_ENV` 指向一个 mock(只替换 `route_c1_worker`)即可,这也正是"换路由表、其余不变"的验证。
 > 这张表是**唯一需要随舰队变动维护**的东西。skill 与 phase contract 不动。C1 的默认形态不是
 > "首选失败再备选",而是**可并行生成多个候选 patch**;昂贵的部分是后续 validation 和 C3 review,
 > 因此 dispatcher/frontier 必须先用 deterministic guard 和 patch ranking 过滤,不要给每个候选都跑慢验证。
@@ -313,11 +316,74 @@ OpenCode 另有约定)。v1 不把"自动发现 `.agents/skills/`"当硬依赖:
    `use-clang-tidy/SKILL.md` 加 "Phase Contract — C1 delegation" 段引用它(skill = 可移植契约,runner = 执行机制)。
    worker 机制最终定为 **sandbox 副本就地编辑 + diff 副本**:sentinel-stdout 在隔离 cwd 下被 opencode 的 external-dir
    权限拦成 0 输出而失败,改用 sandbox-diff 后稳定 1 轮收敛到 0 warning。
-3. **Step C:结构化 packet + validation allowlist**。packet 用 YAML 头 + markdown 正文;validation 只允许固定
-   ID + 枚举参数,不接受任意 shell 字符串。
-4. **Step D:patch + deterministic guard + 时间隔离**。廉价 model 可并行产多个 patch/report;frontier 兼任
-   dispatcher,apply 前跑 diff guard + ranking,只把一个候选送入慢 validation。加锁后确认 scope clean,
-   apply 到主树跑 validation,失败反向应用本次 patch 回滚,通过再做 C3 review。
+
+   **Step C/D 加固实测(2026-06-04,`script/agent/{routing.env,common.sh,lint_phase.sh}`)**:把 pilot runner
+   加固成可复用基础设施,落地 Step C/D 的四个具体项:
+   - **路由外置**:routing 从 runner 抽到 `routing.env`(`route_c1_worker` = ds4f via opencode);`common.sh`
+     提供 `agent_load_routing`/`agent_repo_lock`/`agent_harness_diff`/`agent_emit_packet`/`agent_guard_path`。
+   - **仓库锁(Step D)**:`agent_repo_lock` 用 `flock` 串行化所有改树阶段;并发第二个实例在 `AGENT_LOCK_WAIT`
+     超时后以 exit 4 退出,杜绝两个 phase 互相覆盖。
+   - **多文件 scope**:接收多个文件,或 `--changed` 从 `git status` 推出改动的 C++ 集合;逐文件独立跑 fixpoint
+     与 rollback,汇总 kept/escalated,任一 escalate → 进程 exit 2。
+   - **C3 交接 packet(Step C 雏形)**:每条 escalation(forbidden 路径 / 无进展 / no-op / churn 超限 / 轮次耗尽)
+     都把残留诊断 + 被拒 patch 写成 `escalate/<file>.packet.md` 给 frontier reviewer;真实树先 rollback 再写 packet。
+   - **deterministic guard** 扩到含 `.agents/**`;churn/轮次预算不变。
+   验证矩阵:① mock-good 单文件 → 9 诊断 1 轮收敛 FIXPOINT exit 0、树复原;② 多文件(允许 + forbidden)→
+   1 kept / 1 escalate、packet 落地、forbidden 文件零改动、exit 2;③ mock-noop → no-op 识别 → rollback + escalate;
+   ④ `--changed` 干净树 → nothing-to-do exit 0;⑤ 锁竞争 → exit 4;⑥ **真实 ds4f** 经 routing.env 跑通,1 轮清零 exit 0。
+
+   **Step C 落地实测(2026-06-04,`script/agent/{validation.env,dispatch.sh}` + `common.sh` packet/allowlist)**:
+   - **机读 packet schema**:Phase Packet 定为 **YAML frontmatter + markdown 正文**(`schema: aobus-phase-packet/v1`;
+     字段 `kind/skill/capability/validation/escalate_to/inputs[]`)。`agent_emit_packet` 产出带 frontmatter 的 escalation
+     packet;`agent_packet_scalar`/`agent_packet_list` 解析。**入站请求与出站 escalation 共用同一 schema**。
+   - **validation allowlist**:`validation.env` 把允许的验证登记成 `v_<id>` 函数(`tidy`/`build-debug`/`test-core`/
+     `test-gtk`);packet 的 `validation:` 只能是其中的 **ID**,绝不接受任意 shell 串。`agent_validate <id> [arg...]`
+     校验 ID 存在 + 参数安全(`agent_arg_safe`:拒 flag 注入 `-*`、路径穿越 `..`、shell 元字符;放行 `[],:` 以支持
+     Catch2 tag),并以**带引号的位置参数**调用——参数从不进入 shell 解析,关闭注入面。
+   - **thin dispatcher**(§6):`dispatch.sh <packet>` 读 packet → 校验契约(capability 有 runner、validation 在
+     allowlist、inputs 安全)→ 路由到 runner(`use-clang-tidy/C1` → `lint_phase.sh`)→ **独立**用 allowlist 复跑 gate
+     (不采信 runner 自报)→ keep / escalate。本身是 C0 逻辑,无 model。
+   验证矩阵:① packet 解析(scalar+list)正确;② 注入用例 `validation: rm -rf /` → reject、树零改动;③ flag 注入
+   input `--all` → runner 前 reject;④ 未注册 `write-unit-test/C2` → escalate;⑤ **真实 ds4f 经 dispatch 端到端**:
+   round1 修 9 条但引出新的 include-cleaner 告警 → round2 补 `<cstdint>` → round3 清零 **FIXPOINT(2 轮)**,独立
+   `v_tidy` gate 通过 → PASS exit 0(实测印证"一轮修不完"的迭代必要性)。
+
+   **commit-flow 链落地实测(2026-06-04,`script/agent/commit_flow.sh`)**:把 §6 的 commit-flow 串成一个 C0 编排:
+   `C0 clang-format(改动 C++)` → `C1 lint phase(对改动集生成 Phase Packet → dispatch.sh,修到 fixpoint)` →
+   `C0 dispatch 的独立 tidy gate`。**铁律:commit_flow 绝不提交**——无 `git commit/add/checkout/reset/stash`;
+   过关后只打印交接摘要,提交决定 / commit message / 语义 review 留给 C3(`manage-git-flow`)。它不持仓库锁(format
+   是快且幂等的;重活的串行化由它调用的 `lint_phase` 自己加锁,避免父子进程同文件锁死)。forbidden 路径(如改到
+   `include/**` 头)直接归到 C3-only、不进 C1。实测:① 仅有非 C++ 改动的树 → no-op exit 0;② mock 种 1 个改动 →
+   format + 生成 packet + dispatch 修到 fixpoint + gate 过 → **READY FOR C3 exit 0**、文件复原;③ **真实 ds4f 对真改动**:
+   format → 2 轮 fixpoint(再次 fix→include-cleaner→补 `<cstdint>`)→ gate 过 → `git status` 仍 `M`(改动保留、已格式化且
+   lint-clean、未提交)→ 交 C3。
+
+   **回归覆盖**:`test/integration/agent/run_agent_fleet_test.sh`(39 断言,**离线确定性**,无 model / 无 clang-tidy):
+   覆盖 arg sanitizer、path guard、validation allowlist 拒绝路径 + id 归一化(hyphen→underscore)、harness-diff
+   churn 计数、Phase Packet schema 的 emit→parse 往返(含 validation_args 与 body)。端到端 lint/dispatch/commit/test
+   链针对**真实 worker** 另行验证(见上),不进 CI 离线套件。
+
+   **C2 test phase 落地实测(2026-06-05,`script/agent/test_phase.sh`,worker=codex/GPT-5.5)**:Step E 的第一个推广。
+   - **结构性发现(eval 先行的价值)**:Aobus 测试在 `test/CMakeLists.txt` 里**显式登记**(`add_executable(ao_test …)`,
+     无 glob),故**新建测试文件**必须改 CMakeLists(guarded 路径)→ 是 **C3** 工作,不是 C1/C2。可干净委托给 C2 的是
+     **在已登记的现有测试文件里增补 case**(校验无需动 CMake)。
+   - **C2 eval**:给 codex 一个**上游已定的测试计划**(向 `Base64Test.cpp` 补一个覆盖 Base64 字母表 `+`/`/`(62/63)的
+     SECTION),sandbox 隔离 + harness-diff,apply 后 `run-tests.sh --core [base64]` 真编译真跑:**一轮通过、in-scope
+     (仅 +7 行)、零越界文件、风格地道**(27 assertions all passed)。
+   - **runner + 编排**:`test_phase.sh` 是 **packet 驱动**的 C2 runner(比 lint 富:`inputs[0]`=现有测试文件、
+     `validation`+`validation_args`=Catch2 filter、body=测试计划);迭代信号是"build+run 通过",失败把编译/测试输出喂回
+     worker(round budget)。`dispatch.sh` 加路由 `improve-test-coverage/C2 → test_phase`,并把独立 gate 泛化为"有
+     `validation_args` 用之、否则用 inputs"。`improve-test-coverage/SKILL.md` 加 C2 Phase Contract。
+   - **端到端实测**:`dispatch <packet>` → test_phase → codex 写 SECTION → 内层 `v_test_core [base64]` build+run 通过 →
+     独立 gate 复跑通过 → PASS exit 0、文件保留为可 review 改动。**链上发现并修掉一个真 bug**:validation id 用连字符
+     (`test-core`)但 allowlist 函数是下划线(`v_test_core`),`type -t` 解析失败 → 加 `agent_validation_fn` 归一化
+     (hyphen→underscore)统一到 `agent_validate`/dispatch/test_phase,并补 5 条回归断言。
+3. **Step C:结构化 packet + validation allowlist —— 已落地(见上实测)**。packet = YAML frontmatter + markdown 正文;
+   validation 只允许 allowlist 中的固定 ID + 安全参数(支持 `validation_args`),不接受任意 shell 字符串。dispatcher 的
+   runner 注册表已含 C1(lint)+ C2(test)。**未尽**:validation 的逐参数**枚举/类型约束**(目前是统一字符集白名单)。
+4. **Step D:patch + deterministic guard + 时间隔离**(锁 + guard + 时间隔离 + rollback 已落地,见上)。廉价
+   model 可并行产多个 patch/report;frontier 兼任 dispatcher,apply 前跑 diff guard + ranking,只把一个候选送入慢
+   validation。加锁后确认 scope clean,apply 到主树跑 validation,失败反向应用本次 patch 回滚,通过再做 C3 review。
 5. **Step E:推广与抽象化**。稳定后再推广到 `write-unit-test` / `improve-test-coverage`;当确实需要无人值守、
    并发或队列化时,再把 dispatcher(本就是 C0 逻辑)独立成脚本/工具。
 

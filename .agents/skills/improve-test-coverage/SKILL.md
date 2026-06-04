@@ -9,6 +9,30 @@ This skill provides a systematic workflow for agents to analyze and improve C++ 
 
 It is designed to handle edge cases in coverage, find missing lines efficiently, and write Catch2 tests that simulate complex logic (e.g. batch operations, UI-driven data updates, lambda dispatching).
 
+## Phase Contract — C2 delegation (machine path)
+
+Implementing a decided test plan — adding boundary cases to an **existing, already-registered** Catch2
+file — can be delegated to a mid-tier model (capability **C2**) via `script/agent/test_phase.sh`
+(packet-driven). Deciding *what* to test and *which* boundaries is a **C3** judgement; C2 only
+implements the plan. The rest of this document is the manual / frontier (C3) path for choosing targets.
+
+- **Capability:** C2 (scoped implementation inside a fixed plan, validated by a real build + run).
+- **Worker:** per `script/agent/routing.env` (`route_c2_worker`; pilot default: GPT-5.5 via codex).
+- **Inputs (Phase Packet):** one existing test file (`inputs[0]`), the plan (packet body), and a
+  Catch2 filter (`validation_args`) for the validation.
+- **Validation:** an allowlisted build+run id — `test-core` / `test-gtk` (`script/agent/validation.env`);
+  the filtered suite must build and pass. Re-run by the harness; never trusted from the model.
+- **Iterate:** a failed build/test is fed back to the worker, up to a round budget, then escalate.
+- **Isolation / harness-diff / guard / temporal isolation:** identical to the C1 lint phase — the worker
+  edits a sandbox copy; the dispatcher takes the patch by diff, applies, validates, keeps or rolls back.
+- **Scope limit (structural):** this **augments an existing, registered** test file only. A **new** test
+  file needs a `test/CMakeLists.txt` registration (a guarded path), so new-file scaffolding is a **C3**
+  task, not C2.
+- **Escalate to C3 when:** the plan needs design judgement, a new file/registration, a public-API
+  change, or the loop cannot produce a passing test.
+- **Run:** via a Phase Packet through `script/agent/dispatch.sh <packet>` (routes
+  `improve-test-coverage/C2` → `test_phase.sh`), or `script/agent/test_phase.sh <packet>` directly.
+
 ## 1. Generating and Inspecting Coverage
 
 Do not blindly guess which lines are uncovered, and do not manually run gcov or cmake. A dedicated script exists to fully automate configuring the coverage build, compiling tests, running them, and parsing the missing lines.
