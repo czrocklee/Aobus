@@ -26,7 +26,6 @@
 #include <gtkmm/grid.h>
 #include <gtkmm/label.h>
 #include <gtkmm/scrolledwindow.h>
-#include <gtkmm/separator.h>
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 #include <sigc++/signal.h>
@@ -480,13 +479,16 @@ namespace ao::gtk::layout::test
         std::int32_t height = 0;
         grid->query_child(*child, left, top, width, height);
 
-        if (dynamic_cast<Gtk::Separator*>(child) != nullptr)
+        bool const isWidthAnchor = child->has_css_class("ao-key-column-width-anchor");
+
+        if (child->has_css_class("ao-track-detail-section-header"))
         {
           sawSeparator = true;
           CHECK_FALSE(child->get_hexpand());
         }
 
-        if (keySlot == nullptr && left == 0 && width == 1 && dynamic_cast<Gtk::Separator*>(child) == nullptr)
+        if (keySlot == nullptr && left == 0 && width == 1 && !child->has_css_class("ao-track-detail-section-header") &&
+            !isWidthAnchor)
         {
           keySlot = child;
           keyRow = top;
@@ -931,13 +933,22 @@ namespace ao::gtk::layout::test
 
       for (auto* child = grid->get_first_child(); child != nullptr; child = child->get_next_sibling())
       {
-        sawGridChild = true;
-
-        if (dynamic_cast<Gtk::Separator*>(child) != nullptr)
+        if (!child->get_visible())
         {
           continue;
         }
 
+        // Skip non-standard rows (headers and the zero-height key-column width anchor)
+        bool const isSpecial = child->has_css_class("ao-track-detail-section-header") ||
+                               child->has_css_class("ao-key-column-width-anchor") ||
+                               dynamic_cast<Gtk::Button*>(child) != nullptr;
+
+        if (isSpecial)
+        {
+          continue;
+        }
+
+        sawGridChild = true;
         CHECK(child->get_height() == expectedRowHeight);
       }
 

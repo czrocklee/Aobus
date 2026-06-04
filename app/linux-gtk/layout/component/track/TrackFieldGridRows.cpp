@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk::layout::track_field_grid
@@ -64,11 +65,39 @@ namespace ao::gtk::layout::track_field_grid
     labelSlot.set_hexpand(false);
   }
 
-  SeparatorRow::SeparatorRow()
+  SectionHeaderRow::SectionHeaderRow([[maybe_unused]] std::string_view title)
   {
-    separator.set_margin_top(4);
-    separator.set_margin_bottom(4);
-    separator.set_hexpand(false);
-    separator.set_halign(Gtk::Align::FILL);
+    button.set_has_frame(false);
+    button.set_halign(Gtk::Align::FILL);
+    button.set_hexpand(false);
+    button.set_focusable(true);
+    button.add_css_class("ao-track-detail-section-header");
+
+    line.set_hexpand(true);
+    line.set_valign(Gtk::Align::CENTER);
+    line.add_css_class("ao-track-detail-section-line");
+
+    icon.set_halign(Gtk::Align::END);
+    icon.set_margin_start(4);
+
+    box.set_hexpand(true);
+    box.set_halign(Gtk::Align::FILL);
+    box.set_margin_top(0);
+    box.set_margin_bottom(0);
+    box.append(line);
+    box.append(icon);
+
+    button.set_child(box);
+    setExpanded(true);
+  }
+
+  void SectionHeaderRow::setExpanded(bool const expanded)
+  {
+    icon.set_from_icon_name(expanded ? "pan-down-symbolic" : "pan-end-symbolic");
+  }
+
+  void SectionHeaderRow::addCssClass(std::string_view const className)
+  {
+    button.add_css_class(std::string{className});
   }
 } // namespace ao::gtk::layout::track_field_grid

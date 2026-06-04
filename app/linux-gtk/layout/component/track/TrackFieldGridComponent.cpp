@@ -114,6 +114,70 @@ namespace ao::gtk::layout
       return protectCompositeMixedText && agg.mixed && newValue == kCompositeMixedText;
     }
 
+    class KeyColumnWidthAnchor final : public Gtk::Widget
+    {
+    public:
+      KeyColumnWidthAnchor()
+      {
+        set_halign(Gtk::Align::FILL);
+        set_hexpand(false);
+        set_can_target(false);
+        set_focusable(false);
+        set_overflow(Gtk::Overflow::HIDDEN);
+        set_size_request(0, -1);
+        set_visible(true);
+        add_css_class("ao-key-column-width-anchor");
+      }
+
+      void setLabels(std::vector<Gtk::Label*> labels)
+      {
+        _labels = std::move(labels);
+        queue_resize();
+      }
+
+    protected:
+      Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH; }
+
+      void measure_vfunc(Gtk::Orientation orientation,
+                         int /*forSize*/,
+                         int& minimum,
+                         int& natural,
+                         int& minimumBaseline,
+                         int& naturalBaseline) const override
+      {
+        minimumBaseline = -1;
+        naturalBaseline = -1;
+        minimum = 0;
+        natural = 0;
+
+        if (orientation != Gtk::Orientation::HORIZONTAL)
+        {
+          return;
+        }
+
+        for (auto* const label : _labels)
+        {
+          if (label == nullptr)
+          {
+            continue;
+          }
+
+          auto labelMinimum = 0;
+          auto labelNatural = 0;
+          auto labelMinimumBaseline = -1;
+          auto labelNaturalBaseline = -1;
+          label->measure(
+            Gtk::Orientation::HORIZONTAL, -1, labelMinimum, labelNatural, labelMinimumBaseline, labelNaturalBaseline);
+          natural = std::max(natural, labelNatural);
+        }
+      }
+
+      void size_allocate_vfunc(int /*width*/, int /*height*/, int /*baseline*/) override {}
+
+    private:
+      std::vector<Gtk::Label*> _labels;
+    };
+
     using track_field_grid::AddCustomPropertyRow;
     using track_field_grid::BuiltInRow;
     using track_field_grid::CompositeBuiltInRow;
@@ -123,7 +187,7 @@ namespace ao::gtk::layout
     using track_field_grid::FieldInlineEditor;
     using track_field_grid::FixedHeightMinimum;
     using track_field_grid::FixedHeightWidgetSlot;
-    using track_field_grid::SeparatorRow;
+    using track_field_grid::SectionHeaderRow;
 
     class TrackFieldGridComponent final : public ILayoutComponent
     {
@@ -146,10 +210,21 @@ namespace ao::gtk::layout
         _undoBar.signalUndoRequested().connect([this] { onUndo(); });
         _mainBox.append(_undoBar.widget());
 
+        _metadataHeader.button.signal_clicked().connect([this] { onToggleMetadata(); });
+        _customHeader.button.signal_clicked().connect([this] { onToggleCustom(); });
+        _technicalHeader.button.signal_clicked().connect([this] { onToggleTechnical(); });
+
+        _metadataHeader.addCssClass("ao-track-detail-section-meta");
+        _customHeader.addCssClass("ao-track-detail-section-custom");
+        _technicalHeader.addCssClass("ao-track-detail-section-tech");
+
+        updateHeaderStyles();
+
         _wrapper.setGrid(_grid);
         _wrapper.set_vexpand(true);
+        _grid.set_hexpand(true);
         _grid.set_column_spacing(kGridColumnSpacing);
-        _grid.set_row_spacing(8);
+        _grid.set_row_spacing(4);
         _grid.set_valign(Gtk::Align::START);
         _grid.set_vexpand(true);
 
@@ -197,7 +272,7 @@ namespace ao::gtk::layout
           else
           {
             _technicalRows.emplace_back(def.field);
-            setupBuiltInRow(_technicalRows.back());
+            setupBuiltInRow(_technicalRows.back(), true);
           }
         }
 
@@ -228,6 +303,73 @@ namespace ao::gtk::layout
       static constexpr std::int32_t kGridRowSpacing = 8;
       static constexpr std::int32_t kGridViewportHeight =
         (kVisibleFieldRows * kFieldRowHeight) + ((kVisibleFieldRows - 1) * kGridRowSpacing);
+
+      void onToggleMetadata()
+      {
+        _metadataExpanded = !_metadataExpanded;
+        _metadataHeader.setExpanded(_metadataExpanded);
+        updateHeaderStyles();
+
+        for (auto& row : _metadataRows)
+        {
+          row.labelSlot.set_visible(_metadataExpanded);
+          row.valueSlot.set_visible(_metadataExpanded);
+        }
+
+        for (auto& row : _compositeRows)
+        {
+          row.labelSlot.set_visible(_metadataExpanded);
+          row.valueSlot.set_visible(_metadataExpanded);
+        }
+      }
+
+      void onToggleCustom()
+      {
+        _customExpanded = !_customExpanded;
+        _customHeader.setExpanded(_customExpanded);
+        updateHeaderStyles();
+
+        for (auto& row : _customRows)
+        {
+          row.labelSlot.set_visible(_customExpanded);
+          row.valueSlot.set_visible(_customExpanded);
+        }
+
+        _addPropertyRow.keySlot().set_visible(_customExpanded);
+        _addPropertyRow.valueSlot().set_visible(_customExpanded);
+      }
+
+      void onToggleTechnical()
+      {
+        _technicalExpanded = !_technicalExpanded;
+        _technicalHeader.setExpanded(_technicalExpanded);
+        updateHeaderStyles();
+
+        for (auto& row : _technicalRows)
+        {
+          row.labelSlot.set_visible(_technicalExpanded);
+          row.valueSlot.set_visible(_technicalExpanded);
+        }
+      }
+
+      void updateHeaderStyles()
+      {
+        auto toggleClass = [](auto& header, bool const expanded)
+        {
+          if (expanded)
+          {
+            header.button.remove_css_class("is-collapsed");
+          }
+          else
+          {
+            header.button.add_css_class("is-collapsed");
+          }
+        };
+
+        toggleClass(_metadataHeader, _metadataExpanded);
+        toggleClass(_customHeader, _customExpanded);
+        toggleClass(_technicalHeader, _technicalExpanded);
+      }
 
       void onUndo()
       {
@@ -269,7 +411,7 @@ namespace ao::gtk::layout
         updateCustomRows(snap);
       }
 
-      void setupBuiltInRow(BuiltInRow& row)
+      void setupBuiltInRow(BuiltInRow& row, bool isTechnical = false)
       {
         auto const* def = rt::trackFieldDefinition(row.field);
         row.label.set_text(std::string{def != nullptr ? def->label : ""});
@@ -282,6 +424,12 @@ namespace ao::gtk::layout
         configureValueEditable(row.valueEditable);
         row.valueEditable.add_css_class("ao-property-value");
         row.valueBox.append(row.valueClip);
+
+        if (isTechnical)
+        {
+          row.label.add_css_class("ao-detail-field-technical");
+          row.valueEditable.add_css_class("ao-detail-field-technical-value");
+        }
 
         if (row.editable)
         {
@@ -762,24 +910,53 @@ namespace ao::gtk::layout
         clearGrid();
         std::int32_t rowIdx = 0;
 
-        attachBuiltInGroup(_metadataRows, rowIdx);
-
-        for (auto& row : _compositeRows)
-        {
-          attachCompositeRow(row, rowIdx);
-          rowIdx++;
-        }
+        refreshKeyColumnWidthAnchor();
+        _grid.attach(_keyColumnWidthAnchor, 0, 0, 1, 1);
 
         bool const hasMetadata = !_metadataRows.empty() || !_compositeRows.empty();
-        attachSeparatorIf(hasMetadata, rowIdx);
 
-        attachCustomRows(rowIdx);
-        attachAddPropertyRow(rowIdx);
+        if (hasMetadata)
+        {
+          _metadataHeader.setExpanded(_metadataExpanded);
+          _grid.attach(_metadataHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
 
-        bool const hasTechnical = !_technicalRows.empty();
-        attachSeparatorIf(hasTechnical && (hasMetadata || !_customRows.empty()), rowIdx);
+          attachBuiltInGroup(_metadataRows, rowIdx, _metadataExpanded);
 
-        attachBuiltInGroup(_technicalRows, rowIdx);
+          for (auto& row : _compositeRows)
+          {
+            attachCompositeRow(row, rowIdx++);
+            row.labelSlot.set_visible(_metadataExpanded);
+            row.valueSlot.set_visible(_metadataExpanded);
+          }
+        }
+
+        bool const tracksSelected = (_scope != nullptr && !_scope->snapshot().trackIds.empty());
+
+        if (tracksSelected)
+        {
+          _customHeader.setExpanded(_customExpanded);
+          _grid.attach(_customHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
+
+          for (auto& row : _customRows)
+          {
+            _grid.attach(row.labelSlot, 0, rowIdx, 1, 1);
+            _grid.attach(row.valueSlot, 1, rowIdx, kValueColWidth, 1);
+            row.labelSlot.set_visible(_customExpanded);
+            row.valueSlot.set_visible(_customExpanded);
+            rowIdx++;
+          }
+
+          attachAddPropertyRow(rowIdx++);
+          _addPropertyRow.keySlot().set_visible(_customExpanded);
+          _addPropertyRow.valueSlot().set_visible(_customExpanded);
+        }
+
+        if (!_technicalRows.empty())
+        {
+          _technicalHeader.setExpanded(_technicalExpanded);
+          _grid.attach(_technicalHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
+          attachBuiltInGroup(_technicalRows, rowIdx, _technicalExpanded);
+        }
       }
 
       void clearGrid()
@@ -788,8 +965,6 @@ namespace ao::gtk::layout
         {
           _grid.remove(*child);
         }
-
-        _separatorRows.clear();
       }
 
       void attachBuiltInRow(BuiltInRow& row, std::int32_t const rowNum)
@@ -804,43 +979,49 @@ namespace ao::gtk::layout
         _grid.attach(row.valueSlot, 1, rowNum, kValueColWidth, 1);
       }
 
-      void attachBuiltInGroup(std::deque<BuiltInRow>& rows, std::int32_t& rowIdx)
+      void attachBuiltInGroup(std::deque<BuiltInRow>& rows, std::int32_t& rowIdx, bool const expanded)
       {
         for (auto& row : rows)
         {
-          attachBuiltInRow(row, rowIdx);
-          rowIdx++;
+          attachBuiltInRow(row, rowIdx++);
+          row.labelSlot.set_visible(expanded);
+          row.valueSlot.set_visible(expanded);
         }
       }
 
-      void attachCustomRows(std::int32_t& rowIdx)
-      {
-        for (auto& row : _customRows)
-        {
-          _grid.attach(row.labelSlot, 0, rowIdx, 1, 1);
-          _grid.attach(row.valueSlot, 1, rowIdx, kValueColWidth, 1);
-          rowIdx++;
-        }
-      }
-
-      void attachAddPropertyRow(std::int32_t& rowIdx)
+      void attachAddPropertyRow(std::int32_t const rowIdx)
       {
         configureValueBox(_addPropertyRow.valueSlot());
         _grid.attach(_addPropertyRow.keySlot(), 0, rowIdx, 1, 1);
         _grid.attach(_addPropertyRow.valueSlot(), 1, rowIdx, kValueColWidth, 1);
-        rowIdx++;
       }
 
-      void attachSeparatorIf(bool condition, std::int32_t& rowIdx)
+      void refreshKeyColumnWidthAnchor()
       {
-        if (!condition)
+        auto labels = std::vector<Gtk::Label*>{};
+        labels.reserve(_metadataRows.size() + _compositeRows.size() + _technicalRows.size() + _customRows.size());
+
+        for (auto& row : _metadataRows)
         {
-          return;
+          labels.push_back(&row.label);
         }
 
-        _separatorRows.emplace_back();
-        _grid.attach(_separatorRows.back().separator, 0, rowIdx, 1 + kValueColWidth, 1);
-        rowIdx++;
+        for (auto& row : _compositeRows)
+        {
+          labels.push_back(&row.label);
+        }
+
+        for (auto& row : _technicalRows)
+        {
+          labels.push_back(&row.label);
+        }
+
+        for (auto& row : _customRows)
+        {
+          labels.push_back(&row.label);
+        }
+
+        _keyColumnWidthAnchor.setLabels(std::move(labels));
       }
 
       void configureValueBox(Gtk::Widget& box)
@@ -932,7 +1113,14 @@ namespace ao::gtk::layout
       std::deque<CompositeBuiltInRow> _compositeRows;
       std::deque<BuiltInRow> _technicalRows;
       std::deque<CustomRow> _customRows;
-      std::deque<SeparatorRow> _separatorRows;
+
+      bool _metadataExpanded = true;
+      bool _customExpanded = true;
+      bool _technicalExpanded = false;
+
+      SectionHeaderRow _metadataHeader{"Metadata"};
+      SectionHeaderRow _customHeader{"Custom Properties"};
+      SectionHeaderRow _technicalHeader{"Audio Properties"};
 
       Gtk::Box _mainBox;
       CustomPropertyUndoBar _undoBar;
@@ -941,6 +1129,8 @@ namespace ao::gtk::layout
       Glib::RefPtr<Gtk::SizeGroup> _compositeSecondarySizeGroupPtr;
 
       AddCustomPropertyRow _addPropertyRow{kGridColumnSpacing};
+
+      KeyColumnWidthAnchor _keyColumnWidthAnchor;
 
       sigc::connection _scopeConn;
 

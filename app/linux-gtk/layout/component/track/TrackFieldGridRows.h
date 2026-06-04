@@ -12,10 +12,10 @@
 #include <gtkmm/button.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
-#include <gtkmm/separator.h>
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::gtk::layout::track_field_grid
@@ -81,11 +81,16 @@ namespace ao::gtk::layout::track_field_grid
     CustomRow(std::string key, std::int32_t actionSpacing);
   };
 
-  struct SeparatorRow final
+  struct SectionHeaderRow final
   {
-    Gtk::Separator separator{};
+    Gtk::Button button{};
+    Gtk::Box box{Gtk::Orientation::HORIZONTAL, 0};
+    Gtk::Box line{Gtk::Orientation::HORIZONTAL, 0};
+    Gtk::Image icon{};
 
-    SeparatorRow();
+    explicit SectionHeaderRow(std::string_view title);
+    void setExpanded(bool expanded);
+    void addCssClass(std::string_view className);
   };
 
   struct UndoState final

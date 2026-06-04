@@ -616,3 +616,24 @@ listview>row:first-child .ao-track-section-box {
   border-color: alpha(@accent_color, 0.5);
   box-shadow: 0 4px 12px alpha(black, 0.1);
 }
+
+/* Modern Section Headers */
+.ao-theme-modern .ao-track-detail-section-header {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.ao-theme-modern .ao-track-detail-section-meta {
+  margin-top: 0; /* Consistency */
+}
+
+.ao-theme-modern .ao-track-detail-section-header label {
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  opacity: 0.8;
+}
+
+.ao-theme-modern .ao-track-detail-section-line {
+  background-color: alpha(currentColor, 0.15);
+}
+

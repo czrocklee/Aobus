@@ -56,7 +56,7 @@ Selecting a different track or resizing the split pane never changes the
 structural row layout.
 
 All rows use a 4-column `Gtk::Grid` so labels, values, warning icons, delete
-buttons, separator rows, and add-property rows have stable coordinates.
+buttons, section headers, and add-property rows have stable coordinates.
 
 The grid is hosted in a scroll viewport with a fixed natural height. The
 viewport shows eight field rows by default and uses a vertical scrollbar when
@@ -73,8 +73,13 @@ Built-in rows are side-by-side: label occupies column 0, value occupies columns 
 Custom rows are single-row: label at column 0, editable value at column 1, partial-presence icon at column 2, delete button at column 3.
 
 The add-property row mirrors the key/value split: the key entry occupies column
-0, while the value entry and add action occupy columns 1–3. Separator rows span
-all 4 columns.
+0, while the value entry and add action occupy columns 1–3.
+
+Metadata, custom metadata, and technical fields are grouped under collapsible
+section headers. Metadata and custom metadata are expanded by default; technical
+audio properties are collapsed by default. Collapsing a section hides its field
+rows but keeps the section header in the grid, so users can restore the section
+without changing the surrounding layout.
 
 Every grid cell is hosted by a clipped fixed-height slot. Row height is stable
 across field values and font metrics; if a child widget internally asks for more
@@ -83,7 +88,9 @@ changing the row rhythm.
 
 ### Ordering
 
-Content is always ordered: metadata rows, custom rows, add-property row, separator (when technical rows are present and metadata/custom rows exist), technical rows.
+Content is always ordered: metadata header and rows, custom header with custom
+rows and add-property row when tracks are selected, then the technical header and
+technical rows.
 
 ## Text Stability
 
@@ -108,10 +115,15 @@ left untouched unless the user edits and saves the value.
 All value widgets expose their full display text via tooltip.
 
 Column expansion is managed through `hexpand` rules that are stable across track changes, preventing value length changes from resizing columns or shifting layout.
-Key-column slots and cross-column separators do not request horizontal expansion,
-and the add-property key entry uses only a one-character natural-width hint so it
-fills the existing key column without making that column compete with values
-during split-pane resize.
+Key-column slots do not request horizontal expansion, and the add-property key
+entry uses only a one-character natural-width hint so it fills the existing key
+column without making that column compete with values during split-pane resize.
+
+The key column includes a zero-minimum width anchor that measures all key labels,
+including labels in collapsed sections, and contributes only a natural width to
+GTK's grid allocation. This keeps the value column from jumping when technical
+audio properties are expanded or collapsed, while preserving the panel's ability
+to report a zero horizontal minimum and fit extremely narrow split-pane widths.
 
 The field grid wrapper treats the detail panel allocation as the hard horizontal
 limit. It does not report the grid's content-driven minimum or natural width to

@@ -120,3 +120,7 @@ popover.ao-popover-rounded-md>contents {
   font-size: 0.8rem;
   opacity: 0.55;
 }
+
+.caption {
+  font-size: var(--ao-font-size-sm);
+}

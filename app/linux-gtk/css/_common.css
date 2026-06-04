@@ -16,8 +16,46 @@
 }
 
 /* Section Header (generic) */
-.ao-section-header {
-  margin-bottom: var(--ao-spacing-sm);
+.ao-track-detail-section-header {
+  margin-top: 0;
+  margin-bottom: 0;
+  transition: all var(--ao-transition-base);
+}
+
+button.ao-track-detail-section-header {
+  padding: 0 4px;
+  min-height: 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--ao-radius-sm);
+  opacity: 0.5;
+  color: inherit;
+  transition: opacity var(--ao-transition-base), background-color var(--ao-transition-base);
+}
+
+button.ao-track-detail-section-header:hover {
+  opacity: 0.9;
+  background-color: alpha(currentColor, 0.05);
+}
+
+button.ao-track-detail-section-header image {
+  -gtk-icon-size: 12px;
+  opacity: 0.7;
+  color: inherit;
+}
+
+.ao-track-detail-section-line {
+  min-height: 1px;
+  background-color: alpha(currentColor, 0.4);
+}
+
+/* Visual Differentiation between sections */
+.ao-track-detail-section-tech {
+  opacity: 0.35;
+}
+
+.ao-track-detail-section-tech:hover {
+  opacity: 0.8;
 }
 
 /* Track Section Header */
@@ -554,14 +592,14 @@ columnview row.ao-missing-row label {
 /* Row & Field Interaction */
 .ao-detail-field-row {
   border-radius: var(--ao-radius-md);
-  margin: 0 -4px;
+  margin: 0;
   padding: 0 4px;
 }
 
 .ao-detail-field-value {
   border-radius: var(--ao-radius-sm);
   padding: 2px 6px;
-  margin: 0 -4px;
+  margin: 1px; /* Small positive margin to prevent border clipping */
   transition: background 0.15s ease, border-color 0.15s ease;
   border: 1px solid transparent;
 }
@@ -596,12 +634,23 @@ columnview row.ao-missing-row label {
   opacity: 1;
 }
 
+/* Audio Properties / Technical Fields (Read-Only) */
 .ao-detail-field-technical {
-  opacity: 0.65;
+  opacity: 0.6;
 }
 
-.ao-detail-field-value.ao-detail-field-technical:hover,
-.ao-detail-field-value.ao-detail-field-technical:focus-within {
-  background: transparent;
+.ao-detail-field-technical-value {
+  opacity: 0.6;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+/* Strip hover feedback from read-only technical values */
+.ao-detail-field-technical-value:hover,
+.ao-detail-field-technical-value:focus,
+.ao-detail-field-technical-value:focus-within {
+  background-color: transparent;
+  background-image: none;
   border-color: transparent;
+  box-shadow: none;
 }
