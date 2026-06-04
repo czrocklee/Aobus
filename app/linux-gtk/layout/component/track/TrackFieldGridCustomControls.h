@@ -80,8 +80,8 @@ namespace ao::gtk::layout::track_field_grid
 
     Gtk::Entry _valueEntry;
     Gtk::Button _submitButton;
-    CompressibleActionRow _valueBox;
-    FixedHeightWidgetSlot _valueSlot{_valueBox, true};
+    FieldValueWrapper _valueClip;
+    FixedHeightWidgetSlot _valueSlot{_valueClip, true};
 
     sigc::signal<void(std::string, std::string)> _addRequested;
   };

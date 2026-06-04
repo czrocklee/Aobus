@@ -150,7 +150,8 @@ namespace ao::gtk::layout::track_field_grid
                       bool editable,
                       bool technical = false,
                       bool showEditHint = true,
-                      bool propagateNaturalWidth = false);
+                      bool propagateNaturalWidth = false,
+                      Gtk::Widget* actionWidget = nullptr);
     ~FieldValueWrapper() override;
 
     FieldValueWrapper(FieldValueWrapper const&) = delete;
@@ -174,41 +175,10 @@ namespace ao::gtk::layout::track_field_grid
 
   private:
     Gtk::Widget& _valueWidget;
+    Gtk::Widget* _actionWidget = nullptr;
     Gtk::Image _editHint;
     bool _editable;
     bool _showEditHint;
     bool _propagateNaturalWidth;
-  };
-
-  class CompressibleActionRow final : public Gtk::Widget
-  {
-  public:
-    CompressibleActionRow(Gtk::Widget& content, Gtk::Widget& action, std::int32_t spacing);
-    ~CompressibleActionRow() override;
-
-    CompressibleActionRow(CompressibleActionRow const&) = delete;
-    CompressibleActionRow& operator=(CompressibleActionRow const&) = delete;
-    CompressibleActionRow(CompressibleActionRow&&) = delete;
-    CompressibleActionRow& operator=(CompressibleActionRow&&) = delete;
-
-  protected:
-    Gtk::SizeRequestMode get_request_mode_vfunc() const override;
-
-    void measure_vfunc(Gtk::Orientation orientation,
-                       int forSize,
-                       int& minimum,
-                       int& natural,
-                       int& minimumBaseline,
-                       int& naturalBaseline) const override;
-
-    void size_allocate_vfunc(int width, int height, int baseline) override;
-
-  private:
-    std::int32_t actionNaturalWidth() const;
-    std::int32_t spacingForAction(std::int32_t actionWidth) const;
-
-    Gtk::Widget& _content;
-    Gtk::Widget& _action;
-    std::int32_t _spacing;
   };
 } // namespace ao::gtk::layout::track_field_grid

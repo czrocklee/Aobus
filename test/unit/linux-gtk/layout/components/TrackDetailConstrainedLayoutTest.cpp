@@ -647,11 +647,12 @@ namespace ao::gtk::layout::test
       auto const optCustomPoint = customValueBox->compute_point(*scopedGrid, Gdk::Graphene::Point{0.0F, 0.0F});
       auto const optDeletePoint = deleteButton->compute_point(*scopedGrid, Gdk::Graphene::Point{0.0F, 0.0F});
       REQUIRE(optBuiltInPoint);
-      REQUIRE(optControlsPoint);
       REQUIRE(optCustomPoint);
       REQUIRE(optDeletePoint);
       CHECK(optCustomPoint->get_x() == optBuiltInPoint->get_x());
-      CHECK(optDeletePoint->get_x() >= optCustomPoint->get_x() + static_cast<float>(customValueBox->get_width()));
+      CHECK(optDeletePoint->get_x() > optCustomPoint->get_x());
+      CHECK(optDeletePoint->get_x() + deleteButton->get_width() <=
+            optCustomPoint->get_x() + customValueBox->get_width());
       CHECK(customValueBox->get_width() > deleteButton->get_width());
 
       auto const narrowPanelWidth = 120;

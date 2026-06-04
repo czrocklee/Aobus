@@ -53,13 +53,13 @@ namespace ao::gtk::layout::track_field_grid
     valueBox.append(secondaryClip);
   }
 
-  CustomRow::CustomRow(std::string key, std::int32_t const actionSpacing)
+  CustomRow::CustomRow(std::string key, std::int32_t const /*actionSpacing*/)
     : key{std::move(key)}
     , labelSlot{label, false}
     , editable{}
-    , valueClip{editable, true, false}
-    , controlsBox{valueBox, deleteButton, actionSpacing}
-    , controlsSlot{controlsBox, true}
+    , deleteButton{}
+    , valueClip{editable, true, false, true, false, &deleteButton}
+    , valueSlot{valueBox, true}
   {
     labelSlot.set_hexpand(false);
   }

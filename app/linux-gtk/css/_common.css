@@ -587,8 +587,8 @@ columnview row.ao-missing-row label {
   transition: opacity 0.15s ease;
 }
 
-.ao-detail-field-row.ao-hover .ao-detail-field-delete,
-.ao-detail-field-row:focus-within .ao-detail-field-delete {
+.ao-detail-field-value.ao-hover .ao-detail-field-delete,
+.ao-detail-field-value:focus-within .ao-detail-field-delete {
   opacity: 0.6;
 }
 

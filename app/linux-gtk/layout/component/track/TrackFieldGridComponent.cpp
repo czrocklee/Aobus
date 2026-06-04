@@ -576,11 +576,6 @@ namespace ao::gtk::layout
         row.label.set_opacity(kLabelOpacity);
         row.label.add_css_class("ao-property-label");
 
-        row.controlsBox.set_halign(Gtk::Align::FILL);
-        row.controlsBox.set_hexpand(true);
-        row.controlsBox.set_overflow(Gtk::Overflow::HIDDEN);
-        row.controlsBox.set_size_request(0, -1);
-
         configureValueBox(row.valueBox);
         configureValueEditable(row.editable);
         row.editable.add_css_class("ao-property-value");
@@ -609,6 +604,7 @@ namespace ao::gtk::layout
         row.deleteButton.set_hexpand(false);
         row.deleteButton.set_has_frame(false);
         row.deleteButton.add_css_class("ao-icon-button");
+        row.deleteButton.add_css_class("ao-detail-field-delete");
         row.deleteButton.set_tooltip_text("Delete Property");
         row.deleteButton.signal_clicked().connect([this, key = row.key] { onCustomDeleted(key); });
 
@@ -822,7 +818,7 @@ namespace ao::gtk::layout
         for (auto& row : _customRows)
         {
           _grid.attach(row.labelSlot, 0, rowIdx, 1, 1);
-          _grid.attach(row.controlsSlot, 1, rowIdx, kValueColWidth, 1);
+          _grid.attach(row.valueSlot, 1, rowIdx, kValueColWidth, 1);
           rowIdx++;
         }
       }

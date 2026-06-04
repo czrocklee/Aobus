@@ -72,11 +72,10 @@ namespace ao::gtk::layout::track_field_grid
     FixedHeightWidgetSlot labelSlot;
     Gtk::Box valueBox{Gtk::Orientation::HORIZONTAL, 0};
     FieldInlineEditor editable{};
+    Gtk::Button deleteButton{};
     FieldValueWrapper valueClip;
     Gtk::Image partialIcon{};
-    Gtk::Button deleteButton{};
-    CompressibleActionRow controlsBox;
-    FixedHeightWidgetSlot controlsSlot;
+    FixedHeightWidgetSlot valueSlot;
     bool discardNextEdit = false;
 
     CustomRow(std::string key, std::int32_t actionSpacing);

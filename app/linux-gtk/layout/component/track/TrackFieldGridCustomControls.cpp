@@ -9,6 +9,8 @@
 
 #include <glibmm/main.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollerfocus.h>
+#include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/widget.h>
 
 #include <cstdint>
@@ -118,8 +120,8 @@ namespace ao::gtk::layout::track_field_grid
     }
   }
 
-  AddCustomPropertyRow::AddCustomPropertyRow(std::int32_t const actionSpacing)
-    : _valueBox{_valueEntry, _submitButton, actionSpacing}
+  AddCustomPropertyRow::AddCustomPropertyRow(std::int32_t const /*actionSpacing*/)
+    : _valueClip{_valueEntry, true, false, false, false, &_submitButton}
   {
     _keySlot.set_halign(Gtk::Align::FILL);
     _keySlot.set_hexpand(false);
@@ -137,8 +139,10 @@ namespace ao::gtk::layout::track_field_grid
 
     _submitButton.set_icon_name("list-add-symbolic");
     _submitButton.set_halign(Gtk::Align::END);
+    _submitButton.set_hexpand(false);
     _submitButton.set_has_frame(false);
     _submitButton.add_css_class("ao-icon-button");
+    _submitButton.add_css_class("ao-detail-field-delete");
     _submitButton.set_tooltip_text("Add Custom Property");
 
     _submitButton.signal_clicked().connect([this] { onAddRequested(); });

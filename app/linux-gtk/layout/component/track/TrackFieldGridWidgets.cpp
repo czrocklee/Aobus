@@ -405,8 +405,10 @@ namespace ao::gtk::layout::track_field_grid
                                        bool const editable,
                                        bool const technical,
                                        bool const showEditHint,
-                                       bool const propagateNaturalWidth)
+                                       bool const propagateNaturalWidth,
+                                       Gtk::Widget* const actionWidget)
     : _valueWidget{valueWidget}
+    , _actionWidget{actionWidget}
     , _editable{editable}
     , _showEditHint{showEditHint}
     , _propagateNaturalWidth{propagateNaturalWidth}
@@ -416,6 +418,11 @@ namespace ao::gtk::layout::track_field_grid
     set_overflow(Gtk::Overflow::HIDDEN);
     set_size_request(0, -1);
     _valueWidget.set_parent(*this);
+
+    if (_actionWidget != nullptr)
+    {
+      _actionWidget->set_parent(*this);
+    }
 
     add_css_class("ao-detail-field-value");
 
@@ -455,6 +462,11 @@ namespace ao::gtk::layout::track_field_grid
     if (_editable && _showEditHint)
     {
       _editHint.unparent();
+    }
+
+    if (_actionWidget != nullptr)
+    {
+      _actionWidget->unparent();
     }
 
     _valueWidget.unparent();
@@ -500,6 +512,11 @@ namespace ao::gtk::layout::track_field_grid
         {
           natural += naturalWidth(_editHint) + 4;
         }
+
+        if (_actionWidget != nullptr)
+        {
+          natural += naturalWidth(*_actionWidget) + 4;
+        }
       }
 
       return;
@@ -514,6 +531,24 @@ namespace ao::gtk::layout::track_field_grid
     auto const childWidth = widthAtLeastMinimum(_valueWidget, width);
     _valueWidget.size_allocate({0, 0, childWidth, height}, baseline);
 
+    auto rightEdge = width - 4;
+
+    if (_actionWidget != nullptr)
+    {
+      auto min = 0;
+      auto nat = 0;
+      auto minB = -1;
+      auto natB = -1;
+      _actionWidget->measure(Gtk::Orientation::HORIZONTAL, -1, min, nat, minB, natB);
+      auto const actionWidth = nat;
+      _actionWidget->measure(Gtk::Orientation::VERTICAL, actionWidth, min, nat, minB, natB);
+      auto const actionHeight = nat;
+
+      rightEdge -= actionWidth;
+      _actionWidget->size_allocate({rightEdge, (height - actionHeight) / 2, actionWidth, actionHeight}, baseline);
+      rightEdge -= 4;
+    }
+
     if (_editable && _showEditHint)
     {
       auto min = 0;
@@ -525,81 +560,8 @@ namespace ao::gtk::layout::track_field_grid
       _editHint.measure(Gtk::Orientation::VERTICAL, hintWidth, min, nat, minB, natB);
       auto const hintHeight = nat;
 
-      _editHint.size_allocate({width - hintWidth - 4, (height - hintHeight) / 2, hintWidth, hintHeight}, baseline);
+      rightEdge -= hintWidth;
+      _editHint.size_allocate({rightEdge, (height - hintHeight) / 2, hintWidth, hintHeight}, baseline);
     }
-  }
-
-  CompressibleActionRow::CompressibleActionRow(Gtk::Widget& content, Gtk::Widget& action, std::int32_t const spacing)
-    : _content{content}, _action{action}, _spacing{spacing}
-  {
-    set_halign(Gtk::Align::FILL);
-    set_hexpand(true);
-    set_overflow(Gtk::Overflow::HIDDEN);
-    set_size_request(0, -1);
-    _content.set_parent(*this);
-    _action.set_parent(*this);
-  }
-
-  CompressibleActionRow::~CompressibleActionRow()
-  {
-    _action.unparent();
-    _content.unparent();
-  }
-
-  Gtk::SizeRequestMode CompressibleActionRow::get_request_mode_vfunc() const
-  {
-    return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH;
-  }
-
-  void CompressibleActionRow::measure_vfunc(Gtk::Orientation orientation,
-                                            int forSize,
-                                            int& minimum,
-                                            int& natural,
-                                            int& minimumBaseline,
-                                            int& naturalBaseline) const
-  {
-    minimumBaseline = -1;
-    naturalBaseline = -1;
-
-    if (orientation == Gtk::Orientation::HORIZONTAL)
-    {
-      auto const contentMeasure = measureWidget(_content, orientation, forSize);
-      auto const actionMeasure = measureWidget(_action, orientation, forSize);
-      minimum = 0;
-      natural = contentMeasure.natural + actionMeasure.natural + spacingForAction(actionMeasure.natural);
-      return;
-    }
-
-    auto const availableWidth = std::max(0, forSize);
-    auto const actionWidth = actionNaturalWidth();
-    auto const contentWidth =
-      std::max(minimumWidth(_content), availableWidth - actionWidth - spacingForAction(actionWidth));
-
-    auto const contentMeasure = measureWidget(_content, orientation, contentWidth);
-    auto const actionMeasure = measureWidget(_action, orientation, actionWidth);
-    minimum = std::max(contentMeasure.minimum, actionMeasure.minimum);
-    natural = std::max(contentMeasure.natural, actionMeasure.natural);
-  }
-
-  void CompressibleActionRow::size_allocate_vfunc(int width, int height, int baseline)
-  {
-    auto const actionWidth = actionNaturalWidth();
-    auto const spacing = spacingForAction(actionWidth);
-    auto const contentMinWidth = minimumWidth(_content);
-    auto const contentWidth = std::max(contentMinWidth, width - actionWidth - spacing);
-    auto const actionX = std::max(contentWidth + spacing, width - actionWidth);
-
-    _content.size_allocate({0, 0, contentWidth, height}, baseline);
-    _action.size_allocate({actionX, 0, actionWidth, height}, baseline);
-  }
-
-  std::int32_t CompressibleActionRow::actionNaturalWidth() const
-  {
-    return naturalWidth(_action);
-  }
-
-  std::int32_t CompressibleActionRow::spacingForAction(std::int32_t const actionWidth) const
-  {
-    return actionWidth > 0 ? _spacing : 0;
   }
 } // namespace ao::gtk::layout::track_field_grid
