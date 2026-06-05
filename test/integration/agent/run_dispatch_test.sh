@@ -32,7 +32,7 @@ cat > "$ROUTING" <<'EOF'
 #!/usr/bin/env bash
 ROUTE_C1_LABEL="mock"
 route_c1_worker() { sed -i 's/BAD //g' "$AGENT_SANDBOX/$AGENT_REL"; }
-ROUTE_C2_LABEL="-"; ROUTE_C3_LABEL="-"
+ROUTE_C2_LABEL="-"
 EOF
 
 # Mock validation allowlist: v_tidy records the args the INDEPENDENT gate got

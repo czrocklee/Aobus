@@ -12,7 +12,9 @@ description: >-
 
 This skill turns a **C3** task (plan / review) from a solo act into a **committee**. The mechanism is
 `script/agent/council.sh` plus the C3 roster in `script/agent/routing.env`. The current in-loop agent is
-the **chair**: it convenes the council, sits on it as a blind member, and writes the final answer.
+the **chair**: it convenes the council, independently verifies the dossier's key claims, and writes the
+final answer. The chair does not draft in R1; if the chair's model should produce an R1/R2/R3 opinion,
+it belongs in `ROUTE_C3_MEMBERS` as an ordinary member.
 
 It is the C3 analogue of the C1 lint fan-out, but C3 has **no deterministic gate** — a plan or a review
 is prose, and "correct" is a judgment. So the convergence mechanism is **adversarial cross-examination +
@@ -25,32 +27,40 @@ Convene only when the decision is **high-stakes** and a wrong call is costly:
   a concurrency/lifetime design, a public-API or ABI change, a risky or large diff under review.
 
 Do **not** convene for routine work — a local refactor, a small bugfix, an obvious review. A council
-spends real frontier budget (≈ 4 rounds × N members ≈ a dozen slow frontier calls). When in doubt, draft
+spends real frontier budget (R1/R2/R3 × N members, plus the chair's R4 synthesis). When in doubt, draft
 solo; convene only if the stakes justify the cost. This skill is always **opt-in** — never on a default
 path.
 
 ## Protocol (4 rounds)
 
 ```
-R1  BLIND DRAFT   each member (incl. the chair) drafts independently, with NO peer context
+R1  BLIND DRAFT   each routed member drafts independently, with NO peer context
 R2  CHALLENGE     each member is shown the OTHERS' drafts and critiques them (adversarial, specific)
 R3  SELF-REVISE   each member revises its OWN draft having seen the critiques aimed at it
-R4  SYNTHESIS     the chair reads the dossier and writes the FINAL plan/review, resolving consensus vs dissent
+R4  SYNTHESIS     the chair verifies key claims, then writes the FINAL plan/review
 ```
 
 `council.sh` runs R1–R3 (the C0 plumbing) and stops. **R4 is yours**, in-loop — it is the one
 irreducibly-frontier act. Blindness in R1 is the point: do not leak peer drafts into R1, or the panel
 anchors and the diversity that makes a committee worth convening collapses.
 
-## The chair's two acts
+> [!CAUTION]
+> **Shared Artifact Exposure:** While repository copies are isolated via tree-hash canaries, all members
+> share the same `$AGENT_COUNCIL_OUT` directory for artifact collection. R1 blindness relies on member
+> cooperation and CLI tool-calling limits rather than hard filesystem isolation.
 
-1. **Before** invoking, write your own **blind** draft to `$AGENT_COUNCIL_OUT/draft.chair.md` — your
-   independent plan/review, written without consulting the members. It is then a peer the members
-   challenge in R2 and appears in the dossier.
-2. **After** `council.sh` prints the dossier path, read `dossier.md` and write the **final** plan/review:
-   weigh the revised drafts and the full challenge log (including the challenges aimed at your own draft),
-   state where the council agreed and where it split, and resolve the splits with reasons. For plan mode
-   the synthesis becomes the plan-file / `ExitPlanMode` artifact; for review it is the review you report.
+## The chair's act
+
+After `council.sh` prints the dossier path, read `dossier.md` and write the **final** plan/review. The
+chair stays in the verifier/synthesizer role instead of becoming another contestant.
+
+For R4:
+- State the council's main consensus points.
+- List the key disagreements and high-risk claims.
+- Independently inspect the relevant code, diff, tests, and design docs for those claims.
+- Explicitly accept or reject important member claims with evidence.
+- Resolve the splits with reasons. For plan mode the synthesis becomes the plan-file / `ExitPlanMode`
+  artifact; for review it is the review you report.
 
 ## Invoking the council
 
@@ -65,13 +75,12 @@ inputs:               # optional repo-relative paths to emphasise (safety-checke
   - lib/audio/Player.cpp
 ---
 The QUESTION goes in the body: the task to plan, or the change to review, plus the
-constraints and context the members need. For a review, paste/point at the diff here.
+constraints and context the members need. For a review, PASTE the full diff here (members
+have no git access and cannot resolve "HEAD" or commit hashes).
 ```
 
 ```bash
 export AGENT_COUNCIL_OUT=/tmp/aobus-council/$(date +%s)   # an out dir OUTSIDE the repo
-# (optional) write your blind chair draft first:
-#   ...your independent plan/review... > "$AGENT_COUNCIL_OUT/draft.chair.md"
 nix-shell --run "script/agent/council.sh /tmp/my-council-packet.md"   # prints the dossier path
 ```
 
@@ -79,9 +88,11 @@ nix-shell --run "script/agent/council.sh /tmp/my-council-packet.md"   # prints t
   `dispatch.sh`; `council.sh` is its own entry.
 - Roster, labels, and per-vendor read-only invocation live in `routing.env`
   (`ROUTE_C3_MEMBERS` / `ROUTE_C3_MEMBER_LABELS`). Cross-vendor by default — a same-vendor council
-  defeats the purpose. Swap models there, not here.
+  defeats the purpose. The default roster includes a Claude/Opus member as an ordinary member; the chair
+  is still outside the roster and only performs R4. Swap models there, not here.
 - Exit `0` = dossier emitted (read it; `quorum: degraded` inside means too few drafts to really debate —
-  treat it as close to a solo draft); `2` = no usable draft; `64` = bad packet.
+  treat it as close to a solo draft); `2` = no usable draft (quorum failure); `3` = configuration or
+  system error (unsafe inputs, repo copy failure); `5` = routing table missing; `64` = bad packet.
 
 ## Two modes
 

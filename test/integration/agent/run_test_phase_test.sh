@@ -32,7 +32,7 @@ export T_REL="$REL"   # test_phase does not export the rel path; the mock derive
 ROUTING="$ROOT/mock-routing.env"
 cat > "$ROUTING" <<'EOF'
 #!/usr/bin/env bash
-ROUTE_C1_LABEL="-"; ROUTE_C2_LABEL="mock-c2"; ROUTE_C3_LABEL="-"
+ROUTE_C1_LABEL="-"; ROUTE_C2_LABEL="mock-c2"
 route_c2_worker() {
   local t="$AGENT_SANDBOX/${T_REL:?}"
   case "${C2_MODE:-good}" in

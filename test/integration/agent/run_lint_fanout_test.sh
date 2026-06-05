@@ -46,7 +46,7 @@ route_c1_surgical() { sed -i 's/BAD //g' "$AGENT_SANDBOX/$SD_REL"; }
 route_c1_rewrite()  { for _ in $(seq 20); do echo clean; done > "$AGENT_SANDBOX/$SD_REL"; }
 route_c1_noop()     { :; }
 route_c1_worker()   { sed -i 's/BAD //g' "$AGENT_SANDBOX/$SD_REL"; }   # legacy single-worker name
-ROUTE_C2_LABEL="-"; ROUTE_C3_LABEL="-"
+ROUTE_C2_LABEL="-"
 EOF
 
 SD_REL="lib/foo.cpp"

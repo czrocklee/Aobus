@@ -35,7 +35,7 @@ cat > "$ROUTING" <<'EOF'
 #!/usr/bin/env bash
 ROUTE_C1_LABEL="mock"
 route_c1_worker() { [ "${C1_NOOP:-}" = 1 ] && return 0; sed -i 's/BAD //g' "$AGENT_SANDBOX/$AGENT_REL"; }
-ROUTE_C2_LABEL="-"; ROUTE_C3_LABEL="-"
+ROUTE_C2_LABEL="-"
 EOF
 
 # Mock validation allowlist: the dispatcher's independent tidy gate — passes iff no BAD markers remain.

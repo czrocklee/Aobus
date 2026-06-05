@@ -11,11 +11,11 @@
 # 4) — that is the one irreducibly-frontier act and stays with the chair, in-loop, which reads the
 # dossier this script prints.
 #
-# Protocol (the chair is a blind R1 drafter + the R4 synthesizer; non-chair members run R1-R3):
+# Protocol (members run R1-R3; the chair is only the R4 verifier/synthesizer):
 #   R1 BLIND DRAFT  each member drafts independently, with NO peer context (diversity-preserving).
-#   R2 CHALLENGE    each member is shown the OTHERS' drafts (incl. the chair's) and critiques them.
+#   R2 CHALLENGE    each member is shown the OTHERS' drafts and critiques them.
 #   R3 SELF-REVISE  each member revises its OWN draft having seen the critiques of it.
-#   R4 SYNTHESIS    (NOT here) the chair reads dossier.md and writes the final plan/review.
+#   R4 SYNTHESIS    (NOT here) the chair verifies dossier claims, then writes the final plan/review.
 #
 # Safety: a council member is READ-ONLY — it produces an OPINION, never a patch, and must not touch the
 # tree. Each member runs in its own disposable COPY of the repo (cwd), and council.sh content-hashes that
@@ -32,56 +32,64 @@
 # A council has NO `validation:` — there is no deterministic gate (that is the whole point of C3), so
 # council packets do NOT go through dispatch.sh's allowlist path; this is a separate entry.
 #
-# The chair MAY pre-write its own blind draft to $AGENT_COUNCIL_OUT/draft.chair.md BEFORE invoking; if
-# present it is included as a peer in the challenge round and in the dossier.
-#
 # Usage: script/agent/council.sh <packet.md>
 # Exit:  0 = dossier emitted (path on stdout; possibly quorum-degraded — flagged inside) ; 2 = no usable
-#        draft / config error ; 5 = routing table missing ; 64 = bad packet.
+#        draft ; 3 = configuration / system error ; 5 = routing table missing ; 64 = bad packet.
 set -u
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 agent_load_routing || exit 5
 
-PACKET="${1:?need a council packet path}"
-[ -r "$PACKET" ] || { echo "council: packet not readable: $PACKET" >&2; exit 64; }
+PACKET="${1:?council: need a council packet path}"
+[ -r "$PACKET" ] || { echo "council: cannot read packet '$PACKET'" >&2; exit 64; }
 
-KIND="$(agent_packet_scalar "$PACKET" kind)"
-MODE="$(agent_packet_scalar "$PACKET" mode)"
-mapfile -t INPUTS < <(agent_packet_list "$PACKET" inputs)
+KIND="$(agent_packet_scalar "$PACKET" kind 2>/dev/null)"
+MODE="$(agent_packet_scalar "$PACKET" mode 2>/dev/null)"
+mapfile -t INPUTS < <(agent_packet_list "$PACKET" inputs 2>/dev/null)
 QUESTION="$(agent_packet_body "$PACKET")"
 
 # --- contract gates: reject early ---
-[ "$KIND" = "council" ] || { echo "council: packet kind must be 'council' (got '${KIND:-}') -> reject" >&2; exit 64; }
+[ "$KIND" = "council" ] || { echo "council: packet kind must be 'council' (got '${KIND:-}')" >&2; exit 64; }
 case "$MODE" in
   plan | review) ;;
-  *) echo "council: mode must be 'plan' or 'review' (got '${MODE:-}') -> reject" >&2; exit 64 ;;
+  *) echo "council: mode must be 'plan' or 'review' (got '${MODE:-}')" >&2; exit 64 ;;
 esac
-[ -n "$QUESTION" ] || { echo "council: packet has an empty body (the question) -> reject" >&2; exit 64; }
+[ -n "$QUESTION" ] || { echo "council: packet has an empty body (the question)" >&2; exit 64; }
 for f in "${INPUTS[@]}"; do
-  agent_arg_safe "$f" || { echo "council: unsafe input '$f' -> reject" >&2; exit 2; }
+  agent_arg_safe "$f" || { echo "council: unsafe input '$f'" >&2; exit 3; }
 done
+
+# Enforcement: C3 council is prose-only; it never runs a deterministic validation gate.
+if agent_packet_scalar "$PACKET" validation 2>/dev/null | grep -q "."; then
+  echo "council: packet must not have a 'validation:' key (C3 has no deterministic gate)" >&2
+  exit 64
+fi
 
 # --- roster (cross-vendor by default; configurable/opt-in via ROUTE_C3_MEMBERS, like C1 candidates) ---
 if declare -p ROUTE_C3_MEMBERS >/dev/null 2>&1 && [ "${#ROUTE_C3_MEMBERS[@]}" -gt 0 ]; then
   MEMBERS=("${ROUTE_C3_MEMBERS[@]}")
 else
-  MEMBERS=(route_c3_member_codex route_c3_member_gemini route_c3_member_dspro)
+  MEMBERS=(route_c3_member_claude_opus route_c3_member_codex route_c3_member_gemini route_c3_member_dspro)
 fi
-COUNCIL_MIN="${COUNCIL_MIN:-2}"   # drafts (members + chair) needed for a real debate; below = degraded
+COUNCIL_MIN="${COUNCIL_MIN:-2}"   # member drafts needed for a real debate; below = degraded
 
-OUT="${AGENT_COUNCIL_OUT:-$AGENT_WORK/council/$(date +%Y%m%d-%H%M%S)-$$}"; mkdir -p "$OUT"
+OUT="${AGENT_COUNCIL_OUT:-$AGENT_WORK/council/$(date +%Y%m%d-%H%M%S)-$$}"
 export AGENT_COUNCIL_OUT="$OUT"
 
 # Guard: the out dir MUST be outside the repo. Each member's cwd is a COPY of $AGENT_REPO; if $OUT lived
-# under the repo, staging would copy the out dir (incl. draft.chair.md and in-flight artifacts) into every
-# member's cwd — breaking R1 blindness and polluting the canary. Reject rather than silently corrupt.
-_real_repo="$(cd "$AGENT_REPO" 2>/dev/null && pwd -P)"; _real_out="$(cd "$OUT" 2>/dev/null && pwd -P)"
+# under the repo, staging would copy the out dir (incl. in-flight artifacts) into every member's cwd —
+# breaking R1 blindness and polluting the canary. Reject rather than silently corrupt.
+_real_repo="$(cd "$AGENT_REPO" 2>/dev/null && pwd -P)"
+[ -n "$_real_repo" ] || { echo "council: AGENT_REPO ('$AGENT_REPO') not found or not a directory" >&2; exit 3; }
+
+# Resolve the absolute path of $OUT without creating it to avoid repository mutation on rejection.
+_real_out="$(readlink -f "$OUT" 2>/dev/null || echo "$OUT")"
 case "$_real_out/" in
   "$_real_repo"/*)
     echo "council: AGENT_COUNCIL_OUT ('$OUT') is inside the repo ('$AGENT_REPO') -> reject (would leak into member copies and break R1 blindness)" >&2
-    exit 2 ;;
+    exit 3 ;;
 esac
+mkdir -p "$OUT"
 
 c3_label() { if declare -p ROUTE_C3_MEMBER_LABELS >/dev/null 2>&1; then printf '%s' "${ROUTE_C3_MEMBER_LABELS[$1]:-$1}"; else printf '%s' "$1"; fi; }
 mid_of()   { printf '%s' "${1#route_c3_member_}"; }
@@ -95,7 +103,7 @@ case "$MODE" in
     ARTIFACT="CODE REVIEW"
     STRUCT="Findings (each: severity [blocker|major|minor|nit], location file:line, problem, suggested fix) / Correctness & regressions / Overall verdict [approve|approve-with-nits|request-changes]" ;;
 esac
-PREAMBLE="You are one member of a cross-vendor advisory council for Aobus (a C++26 music app: a gtkmm desktop frontend and a CLI sharing a core library). You are running READ-ONLY: you may READ files under the current directory but MUST NOT create, edit, move, or delete any file. Put your ENTIRE response on stdout as markdown; do not use any file-writing tool."
+PREAMBLE="You are one member of a cross-vendor advisory council for Aobus (a C++26 music app). You are running in a READ-ONLY, NON-GIT temporary copy: you may READ files but MUST NOT use git commands or modify any file. Put your ENTIRE response on stdout as markdown."
 
 # The packet's validated `inputs:` (emphasis paths) are surfaced to every member; empty string if none.
 INPUTS_NOTE=""
@@ -112,36 +120,40 @@ render_draft() { # <mid> <promptfile>
     printf '=== TASK ===\n%s\n' "$QUESTION"
   } > "$2"
 }
-render_challenge() { # <mid> <promptfile> ; peers = every OTHER draft (incl. the chair's)
+render_challenge() { # <mid> <promptfile> ; peers = every OTHER member draft
   { printf '%s\n\n' "$PREAMBLE"
     printf 'Below are the OTHER council members %s drafts for the same task. CHALLENGE them: find flaws,\n' "$ARTIFACT"
     printf 'missed cases, hidden risks, wrong assumptions, and points of disagreement. Be specific and\n'
-    printf 'adversarial but fair; name the draft and cite the file/line. Do NOT rewrite the drafts — only critique.\n\n'
+    printf 'refer to peer drafts by their member label.\n\n'
     [ -n "$INPUTS_NOTE" ] && printf '%s\n\n' "$INPUTS_NOTE"
     printf '=== TASK ===\n%s\n\n' "$QUESTION"
     local mid="$1" peer pmid
-    [ -s "$OUT/draft.chair.md" ] && { printf '=== Draft from %s ===\n' "the chair (Opus)"; cat "$OUT/draft.chair.md"; printf '\n\n'; }
     for peer in "${SEATED[@]}"; do
       pmid="$(mid_of "$peer")"; [ "$pmid" = "$mid" ] && continue
-      printf '=== Draft from %s ===\n' "$(c3_label "$peer")"; cat "$OUT/draft.$pmid.md"; printf '\n\n'
+      printf '<peer_draft member="%s">\n' "$(c3_label "$peer")"
+      cat "$OUT/draft.$pmid.md"
+      printf '\n</peer_draft>\n\n'
     done
   } > "$2"
 }
 render_revise() { # <mid> <promptfile> ; own draft + the full challenge log (member self-selects critiques of it)
   { printf '%s\n\n' "$PREAMBLE"
-    printf 'Below is YOUR earlier draft %s and the critiques the other members raised. Produce a REVISED\n' "$ARTIFACT"
+    printf 'Below is YOUR earlier draft %s and the full challenge log from the other members. Produce a REVISED\n' "$ARTIFACT"
     printf '%s that addresses the valid critiques of YOUR draft and explicitly defends any point where you\n' "$ARTIFACT"
-    printf 'disagree. Keep the same structure: %s.\n\n' "$STRUCT"
+    printf 'disagree. Identify the critiques aimed at YOUR draft within the log.\n\n'
+    printf 'Keep the same structure: %s.\n\n' "$STRUCT"
     [ -n "$INPUTS_NOTE" ] && printf '%s\n\n' "$INPUTS_NOTE"
     printf '=== TASK ===\n%s\n\n' "$QUESTION"
     printf '=== YOUR DRAFT ===\n'; cat "$OUT/draft.$1.md"; printf '\n\n'
-    printf '=== CRITIQUES RAISED AGAINST YOUR DRAFT BY OTHER MEMBERS ===\n'
+    printf '=== FULL CHALLENGE LOG (Identify the critiques aimed at your draft) ===\n'
     local peer pmid
     for peer in "${SEATED[@]}"; do
       pmid="$(mid_of "$peer")"
       [ "$pmid" = "$1" ] && continue                       # skip the member's OWN challenge (it critiques others)
       [ -s "$OUT/challenge.$pmid.md" ] || continue
-      printf '%s\n' "--- from $(c3_label "$peer") ---"; cat "$OUT/challenge.$pmid.md"; printf '\n\n'
+      printf '<peer_challenge member="%s">\n' "$(c3_label "$peer")"
+      cat "$OUT/challenge.$pmid.md"
+      printf '\n</peer_challenge>\n\n'
     done
   } > "$2"
 }
@@ -195,12 +207,12 @@ quarantine() {
 }
 
 echo "council: mode=$MODE members=[${MEMBERS[*]}] out=$OUT"
-[ -s "$OUT/draft.chair.md" ] && echo "council: chair draft present -> seated as a peer"
 
 # Stage one disposable repo copy per member (cwd for every round). .git is excluded by the copy.
 for fn in "${MEMBERS[@]}"; do
   mid="$(mid_of "$fn")"; dest="$OUT/copy.$mid"; mkdir -p "$dest"
   ( cd "$AGENT_REPO" && find . -mindepth 1 -maxdepth 1 -not -name '.git' -exec cp -a {} "$dest/" \; ) 2>/dev/null
+  [ "$(ls -A "$dest" 2>/dev/null)" ] || { echo "council: failed to stage repo copy for $mid" >&2; exit 3; }
 done
 
 # ---- R1: blind draft ----
@@ -221,7 +233,7 @@ for fn in "${MEMBERS[@]}"; do
   esac
 done
 
-drafts=${#SEATED[@]}; [ -s "$OUT/draft.chair.md" ] && drafts=$((drafts + 1))
+drafts=${#SEATED[@]}
 QUORUM="ok"; [ "$drafts" -lt "$COUNCIL_MIN" ] && QUORUM="degraded"
 if [ "$drafts" -eq 0 ]; then
   echo "council: no member produced a draft -> nothing to deliberate" >&2
@@ -250,6 +262,15 @@ else
 fi
 
 # ---- assemble the dossier the chair synthesizes from (this script never synthesizes) ----
+# Recompute trusted drafts count and QUORUM status for accurate dossier metadata.
+drafts=${#SEATED[@]}
+QUORUM="ok"; [ "$drafts" -lt "$COUNCIL_MIN" ] && QUORUM="degraded"
+
+if [ "$drafts" -eq 0 ]; then
+  echo "council: all members quarantined — no trusted drafts remain" >&2
+  exit 2
+fi
+
 DOSSIER="$OUT/dossier.md"
 {
   echo "---"
@@ -264,10 +285,10 @@ DOSSIER="$OUT/dossier.md"
   echo "- mode: \`$MODE\`  |  drafts: $drafts  |  quorum: **$QUORUM**"
   echo "- members: $(for fn in "${MEMBERS[@]}"; do printf '%s; ' "$(c3_label "$fn")"; done)"
   [ "${#INPUTS[@]}" -gt 0 ] && echo "- emphasized inputs: ${INPUTS[*]}"
-  echo "- NEXT (chair, R4): read this dossier and write the FINAL $ARTIFACT, resolving consensus vs dissent."
+  echo "- NEXT (chair, R4): independently verify the dossier's key claims, then write the FINAL $ARTIFACT, resolving consensus vs dissent."
   if [ "$QUORUM" = "degraded" ]; then
     echo
-    echo "> **quorum: degraded** — fewer than $COUNCIL_MIN drafts; the cross-challenge did not run in full."
+    echo "> **quorum: degraded** — fewer than $COUNCIL_MIN member drafts; the cross-challenge did not run in full."
     echo "> The chair should treat this as close to a solo draft and decide whether to proceed or re-convene."
   fi
   echo
@@ -276,9 +297,6 @@ DOSSIER="$OUT/dossier.md"
   printf '%s\n' "$QUESTION"
   echo '```'
 
-  if [ -s "$OUT/draft.chair.md" ]; then
-    echo; echo "## R1 draft — the chair (Opus)"; echo; cat "$OUT/draft.chair.md"
-  fi
   echo; echo "## R1 — blind drafts"
   for fn in "${SEATED[@]}"; do
     mid="$(mid_of "$fn")"; echo; echo "### $(c3_label "$fn")"; echo; cat "$OUT/draft.$mid.md"
