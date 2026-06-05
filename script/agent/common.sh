@@ -145,6 +145,24 @@ agent_changed_cpp() {
     done )
 }
 
+# agent_tree_hash [dir] ; a stable fingerprint of a directory (default AGENT_REPO), `.git` excluded.
+# council.sh (§11) gives each READ-ONLY committee member a disposable COPY of the repo as its cwd and
+# snapshots this hash of that copy immediately before and after the member runs: an unequal hash means
+# the member mutated files, a protocol violation (its job is an OPINION, never a patch) — the runner then
+# discards that member's output and flags it. Per-member copies make the check attributable under
+# parallel fan-out. The fingerprint folds in a TYPED MANIFEST (type, octal mode, path, and symlink
+# target) plus regular-file CONTENT, so additions, deletions, edits, chmods, AND symlink retargets all
+# change the result — a member cannot escape the canary by flipping a bit, an exec bit, or repointing a
+# symlink out of the copy. The manifest is one `find -printf` pass (no per-file fork); content is a
+# single batched `sha256sum`. An empty or missing dir yields a stable hash.
+agent_tree_hash() {
+  local d="${1:-$AGENT_REPO}"
+  ( cd "$d" 2>/dev/null || exit 0
+    find . -path ./.git -prune -o -printf '%y %m %p -> %l\n' 2>/dev/null | sort
+    find . -path ./.git -prune -o -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null
+  ) | sha256sum | awk '{print $1}'
+}
+
 # agent_harness_diff <orig> <modified> <out-patch> ; the dispatcher computes the patch itself, never
 # trusting a model-authored diff. Writes a unified diff to <out-patch> and echoes the changed-line
 # count (added/removed body lines, excluding the +++/--- header) to stdout.

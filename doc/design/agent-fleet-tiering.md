@@ -1,6 +1,6 @@
 # Aobus:能力分层工作流与跨 Harness Model 路由设计
 
-> 状态:设计草案 v10 / 讨论用。日期:2026-06-05。
+> 状态:设计草案 v11 / 讨论用。日期:2026-06-05。
 > 范围:**通用、不绑定任何单一 harness 或厂商**。把工作流阶段抽象成能力等级,再把异构 agent 舰队
 > (Opus / GPT-5.5 / Gemini 3 Pro·Flash / DeepSeek V4 Pro·Flash / …)按等级路由。
 >
@@ -28,6 +28,16 @@
 > 候选数组);agy 调用抽成共享 `_route_agy_edit`(C1 gflash 与 C2 gpro 共用),并修 `test_phase` 未导出 `AGENT_REL`
 > 的契约缺口(agy worker 按它 stage)。C3 加文档化备选 **GPT-5.5 (high) via codex**(C3 不自动派发,仅 roster)。
 > 离线套件 5 套共 **139** 断言。
+>
+> v11 变更:C3 从"纯文档 roster"升级为**可主动召集的议事会(council,§11)**。新增 `council.sh`(C0 编排)+ routing.env
+> 的 `ROUTE_C3_MEMBERS`(三个跨厂商**只读**成员:GPT-5.5 high via codex、Gemini 3 Pro via gemini、DeepSeek V4 Pro via
+> opencode)+ common.sh `agent_tree_hash`。协议四轮:R1 盲 draft → R2 相互 challenge → R3 自我 revise → R4 chair
+> (当前 in-loop agent)综合。council.sh 只做 C0 管线(fan-out / 收集 / 只读 canary / 拼 dossier),**不做判断、也不做
+> R4 综合**;成员只读、产出**意见**而非 patch,各自在一份可弃的仓库副本里跑,前后内容哈希抓出任何改树的成员并丢弃+标记。
+> plan 与 review 两入口都接(`run-council` skill + diagnose-issue 注脚)。**自审固化**:用本机制对它自身跑了一次真实
+> review council(chair=Opus + GPT-5.5 high via codex + Gemini 3 Pro via gemini),跨 challenge 抓出 `printf '--'` 解析、
+> `run_one` 漏判退出码、R3 自评注入、R2 违规未隔离、OUT-in-repo 破盲等真 bug,逐条修复并补测;成员 prompt 改走 stdin 以避开
+> ARG_MAX。离线套件 `run_council_test.sh`(64 断言);全部六套共 **209** 断言。
 >
 > v4 变更:① 把"低成本模型 token 成本近似可忽略"和"`run-clang-tidy.sh --fix` 禁用"列为事实前提,
 > 不再作为开放问题讨论;② C1 路由允许多低成本模型并行产候选 patch,只把 guard 后最优候选送入慢验证;
@@ -98,6 +108,10 @@ Aobus 仓库**已经在走 harness 中立路线**,设计要在此之上扩展而
 >
 > **C2 是最未验证的一层**:它与 C1(局部机械)、C3(推理)的边界最模糊,deterministic guard 很难裁定。
 > C1 跑通前不要投入 C2,它很可能塌缩成"大 scope 的 C1"或"窄 scope 的 C3"。
+>
+> **C3 既可单跑也可召集 council(§11)**:plan/review 既能由 chair(当前 in-loop frontier agent)独自产出,也能召集
+> 跨厂商议事会(draft → challenge → revise → chair 综合)。council 是 opt-in、贵(真 frontier token × 成员 × 轮次),
+> 只用于高风险判断;它**没有确定性 gate**,这正是 C3 与 C1/C2 的根本区别。
 
 ## 4. 舰队路由表(把能力等级映射到具体 model)
 
@@ -120,6 +134,10 @@ Aobus 仓库**已经在走 harness 中立路线**,设计要在此之上扩展而
 > **实测 headless 调用(Step 0,§9)**:`claude -p` / `codex exec -s read-only` / `gemini -p --approval-mode plan` /
 > `opencode run -m opencode-go/deepseek-v4-flash`。opencode 默认是本地 `ollama/gemma4:31b`,**必须显式钉云端模型**;
 > Pro 档为 `opencode-go/deepseek-v4-pro`。
+
+> **C3 备选不再只是文档**:routing.env 的 `ROUTE_C3_MEMBERS` 把上表 C3"备选"列落成可调用的**只读 council 成员**
+> (codex / gemini / opencode 各一,§11),各自跑在自己厂商的只读 headless 模式;单跑仍只用 chair(Opus)。换厂商 /
+> 换模型只改 routing.env,council.sh 与 phase contract 不动。
 
 ## 5. Phase Contract(harness-agnostic 阶段契约)
 
@@ -417,8 +435,8 @@ OpenCode 另有约定)。v1 不把"自动发现 `.agents/skills/`"当硬依赖:
    format → 2 轮 fixpoint(再次 fix→include-cleaner→补 `<cstdint>`)→ gate 过 → `git status` 仍 `M`(改动保留、已格式化且
    lint-clean、未提交)→ 交 C3。
 
-   **回归覆盖**(五套**离线确定性**套件,共 139 断言,无 model / 无 clang-tidy,均进 CI):
-   - `test/integration/agent/run_agent_fleet_test.sh`(60 断言):arg sanitizer、path guard、validation allowlist
+   **回归覆盖**(六套**离线确定性**套件,共 209 断言,无 model / 无 clang-tidy,均进 CI):
+   - `test/integration/agent/run_agent_fleet_test.sh`(63 断言):arg sanitizer、path guard、validation allowlist
      拒绝路径 + id 归一化(hyphen→underscore)、**per-arg 契约**(`agent_argtype_re` 的 path/filter/any 判型 +
      `agent_validation_args_ok` 的 arity/类型,对真实 spec)、harness-diff churn 计数、**候选排序**
      (`agent_rank_candidates` 按"文件少 → churn 小 → id"稳定排序;`agent_patch_files` 计 `+++` 头)、Phase Packet
@@ -427,7 +445,7 @@ OpenCode 另有约定)。v1 不把"自动发现 `.agents/skills/`"当硬依赖:
      mock 成 `AOBUS_ROUTING_ENV`、慢 tidy mock 成 `AOBUS_LINT_TIDY`、目标树指向 `AOBUS_AGENT_REPO` 下的临时树,
      确定性验证 Step D 的多候选路径:排序选中低 churn 的 surgical 候选(即便它在 fan-out 里**后**启动)而非正确但
      铺张的 rewrite、全 no-op → escalate + packet + 树复原、churn 超限 → escalate、旧 routing(无候选数组)回退单 worker。
-   - `test/integration/agent/run_dispatch_test.sh`(19 断言):**端到端**跑真实 `dispatch.sh`(§6),mock 路由 +
+   - `test/integration/agent/run_dispatch_test.sh`(22 断言):**端到端**跑真实 `dispatch.sh`(§6),mock 路由 +
      mock allowlist(`AOBUS_VALIDATION_ENV`)+ 临时树。覆盖 PASS 路径与**每条**拒绝/升级分支:非 allowlist 的
      validation(树不动)、缺必填字段(exit 64)、不安全输入路径(traversal)、(skill,capability) 无注册 runner →
      升级、**Step C 的 mistyped-arg 上游拒绝**(filter 喂给 tidy → 在 runner 之前 reject、树不动),以及**关键的独立门**
@@ -442,7 +460,15 @@ OpenCode 另有约定)。v1 不把"自动发现 `.agents/skills/`"当硬依赖:
      在一棵临时 **git** 树上(`clang-format` 用 PATH stub),验证 format→分流 guarded→C1 lint via dispatch→交接。
      关键安全性质:**commit_flow 永不 commit / stage**(即便全程通过,commit 数不变、暂存区为空、改动留在工作区);
      另覆盖无改动→空转、guarded 路径在改动集→NEEDS C3、lintable 无法收敛→C1 升级→NEEDS C3。
-   端到端 lint/dispatch/commit/test 链针对**真实 worker** 另行验证(见上)。
+   - `test/integration/agent/run_council_test.sh`(64 断言):**端到端**跑真实 `council.sh`(§11),成员 mock 成
+     `AOBUS_ROUTING_ENV`(行为由 `COUNCIL_MUTATE` / `COUNCIL_MUTATE_R2` / `COUNCIL_FAIL` / `COUNCIL_SILENT` /
+     `COUNCIL_ROSTER` 切换)+ 临时树。覆盖 happy path(三成员 + chair draft → 全 dossier、quorum ok)、**只读 canary**
+     (改了自己副本的成员被丢弃 + 归因到具体成员、其余存活)、**R1 盲**(R1 prompt 无 peer 文本,R2/R3 有)、坏 mode → 拒
+     (64)、unsafe input → 拒(2)、单成员 → quorum degraded + 跳过 challenge/revise、静默成员 → 记 absent 并以幸存者继续、
+     plan/review 两 mode 选对 prompt 模板;**自审修复后新增**:成员非零退出 → 丢弃不就座、R2 阶段违规 → 整体隔离(连 R1
+     draft 一并移出 dossier)、OUT 在 repo 内 → 拒(破盲)、canary 对 chmod / 符号链接改向敏感、inputs 注入 prompt、R3 排除自评。
+   端到端 lint/dispatch/commit/test 链针对**真实 worker** 另行验证(见上);council 的真实 frontier 验证是 opt-in 手动
+   smoke(frontier 不进 CI)。
 
    **C2 test phase 落地实测(2026-06-05,`script/agent/test_phase.sh`,worker=codex/GPT-5.5)**:Step E 的第一个推广。
    - **结构性发现(eval 先行的价值)**:Aobus 测试在 `test/CMakeLists.txt` 里**显式登记**(`add_executable(ao_test …)`,
@@ -486,6 +512,12 @@ OpenCode 另有约定)。v1 不把"自动发现 `.agents/skills/`"当硬依赖:
    **未尽**:K 的自适应、跨厂商第二候选的真实 silent-wrong 滚动统计、候选间的语义 tie-break(并列时才上交 frontier)。
 5. **Step E:推广与抽象化**。稳定后再推广到 `write-unit-test` / `improve-test-coverage`;当确实需要无人值守、
    并发或队列化时,再把 dispatcher(本就是 C0 逻辑)独立成脚本/工具。
+6. **Step F:C3 council(已落地,2026-06-05)**。把 C3 从纯文档 roster 升级为可召集的多模型议事会。落地件:
+   `council.sh` 四轮(R1 盲 draft → R2 challenge → R3 自我 revise → R4 chair 综合;脚本只跑 R1–R3,R4 留给 in-loop
+   chair)、只读成员 + per-member 仓库副本 + `agent_tree_hash` 前后哈希 canary(改树即丢弃 + 归因)、quorum(默认 ≥2
+   draft 才有辩论,不足则 `quorum: degraded` 仍出 dossier)、dossier 拼装;routing.env `ROUTE_C3_MEMBERS`(三个跨厂商
+   只读成员)+ `ROUTE_C3_MEMBER_LABELS`;`run-council` skill 统一 plan/review 两 mode 契约,review 经 code-review /
+   diagnose-issue 召集;离线套件 `run_council_test.sh`(64 断言)。详见 §11。
 
 ## 10. 固定事实、成本模型与开放风险
 
@@ -524,3 +556,76 @@ OpenCode 另有约定)。v1 不把"自动发现 `.agents/skills/`"当硬依赖:
 - **非交互调用与认证**:各 CLI 的 headless flag、鉴权、速率限制、上下文窗口差异在 Step 0 探针中确认并登记进路由表。
 - **可观测性**:phase packet + validation 退出码 + patch/report artifacts 天然可审计;建议每阶段留存便于回溯。
 - **与 RTK 正交叠加**:RTK 压缩*输出* token,本设计压缩*model 用量*,二者可叠加。
+
+## 11. C3 议事会(council):plan/review 的多模型对抗-综合
+
+C1/C2 靠"廉价 worker + 确定性 gate"收敛;**C3 没有确定性 oracle**——plan 与 review 是 prose,"对不对"是判断,
+没有退出码能裁。所以 C3 不走 ranking+validation,而是召集一个**跨厂商议事会**:多个 frontier 模型先各自起草,再
+**相互 challenge**,再自我修订,最后由 **chair(运行此流程的 in-loop frontier agent)综合**出唯一答案。这是 C1 fan-out
+在 C3 的类比,但收敛机制是**对抗式交叉质询 + chair 综合**,不是确定性排序。
+
+### 11.1 协议(四轮)
+
+```
+R1  盲 draft      每个成员(含 chair)独立起草,无任何 peer 上下文(保多样性)
+R2  challenge     每个成员看到其他人的 draft 并逐条质询(对抗、具体)
+R3  自我 revise    每个成员看过针对自己的批评后修订自己的 draft
+R4  综合          chair 读 dossier,写最终 plan/review,显式裁定共识 vs 分歧
+```
+
+- **R1 盲是关键质量属性**:成员在 R1 不能看到彼此,否则相互锚定、多样性塌缩(召集议事会的全部价值就在多样性)。
+  离线套件断言 R1 prompt 不含任何 peer 文本,R2/R3 才注入。
+- **chair 是盲 R1 起草者 + R4 综合者**,在 R2 同样被质询;它的 R3 自我修订并入 R4 综合(chair 有全局视角,修订与综合
+  一步完成)。非 chair 成员跑 R1–R3;chair 在 in-loop 跑 R1(可选,把自己的盲 draft 预写到 `draft.chair.md`)+ R4。
+
+### 11.2 C0/C3 切分
+
+`council.sh` 是 **C0 管线**:fan-out、收集、拼 prompt、跑只读 canary、拼 `dossier.md`——**不做任何判断**,且**故意
+不做 R4 综合**。R4 是唯一不可外包的 frontier 动作,留给 chair 在 in-loop 读 dossier 完成。这与 `dispatch.sh` 同构
+(一个 C0 runner 路由 C3 工作),也让脚本保持确定性、可离线单测;真正的 frontier 注意力只花在两处:chair 的盲 draft 与
+最终综合。
+
+### 11.3 只读安全模型(与 C1/C2 不同)
+
+council 成员是**只读**的:它产出**意见**而非 patch,永不改树——所以**没有** sandbox-copy / guard / churn / rollback
+那套(什么都不会被 apply)。安全闸门换成:
+1. **只读调用**:各厂商的只读 headless 模式(`codex exec -s read-only`、`gemini -p --approval-mode plan`、
+   `opencode run` 查询、只读 `claude -p`)。尽力而为,各 CLI 保真度不一。
+2. **树不变 canary(硬兜底)**:每个成员在**自己的一份可弃仓库副本**里跑(cwd = `AGENT_COUNCIL_CWD`),council.sh 用
+   `agent_tree_hash` 在调用前后对该副本做哈希(内容 + 文件模式 + 符号链接目标,故 chmod / 符号链接改向也抓得到);**任何改了
+   副本的成员,其产出被丢弃并标记**(成员写文件就是违约,与 C1
+   "diff 即交付"正相反)。per-member 副本让这道检查在**并行 fan-out** 下仍可**归因到具体成员**。
+3. 成员副本不含 `.git`;§10.3 的"足够 agentic 的 CLI 可逃逸出 cwd"对**不完全信任**的 review 输入仍是开放风险(对可信
+   厂商 roster 够用,与 C1 agy 同一信任姿态)。
+
+### 11.4 quorum、成本与入口
+
+- **quorum**:一个议事会要有真正的辩论,至少要 `COUNCIL_MIN`(默认 2)份 draft(成员 + chair);不足时 council.sh 仍出
+  dossier 但标 `quorum: degraded`,告诉 chair"这接近单跑",由它决定是否照办或重召。零 draft → exit 2。
+- **成本**:四轮 × N 成员 ≈ 十余次慢 frontier 调用,每次都是真 frontier token。与 C1(token 近免)相反,council
+  **opt-in**、只用于高风险 plan/review(架构、错误契约、风险 diff)。轮内并行 fan-out 把墙钟压到约 3 个串行慢轮。
+- **入口(plan 与 review 都接)**:`run-council` skill 是两个 mode 的统一契约;review 经 `code-review`(内建)/
+  `diagnose-issue`(注脚)召集,plan 在 plan 模式由 chair 召集、综合结果即 plan 文件 / `ExitPlanMode` 产物。
+- **packet**:复用 v1 schema,新增 `kind: council` / `mode: plan|review`,**无 `validation:`**(无确定性 gate),
+  故**不走 `dispatch.sh` 的 allowlist 路径**;council.sh 自成入口。
+
+### 11.5 落地实测(2026-06-05)
+
+`script/agent/council.sh`(C0 编排)+ routing.env `ROUTE_C3_MEMBERS`(codex / gemini / opencode 三个只读成员函数 +
+`ROUTE_C3_MEMBER_LABELS`,跨厂商默认、opt-in/可配,fallback 到三人组)+ common.sh `agent_tree_hash`(通用目录内容哈希,
+排除 `.git`,含 mode/符号链接目标的 typed manifest)+ `.agents/skills/run-council/SKILL.md` + `diagnose-issue` 注脚。
+成员 prompt 走 **stdin**(从 `AGENT_COUNCIL_PROMPT_FILE`,绕开单 argv 的 `MAX_ARG_STRLEN` 128KB 上限);`run_one` 硬判
+成员退出码(非零即丢弃,不让 timeout/crash 的部分输出蒙混就座)。离线确定性套件 `run_council_test.sh`(64 断言,无 model /
+无网络)用 mock 成员(`AOBUS_ROUTING_ENV`,行为由 `COUNCIL_MUTATE` / `COUNCIL_MUTATE_R2` / `COUNCIL_FAIL` /
+`COUNCIL_SILENT` / `COUNCIL_ROSTER` 切换)+ 临时树验证整条管线:happy path、canary 抓改树成员(丢弃 + 归因)、R1 盲、
+坏 mode / unsafe input / OUT-in-repo 拒、单成员 → quorum degraded、静默/非零退出成员 → 丢弃续跑、R2 阶段违规 → 整体隔离、
+canary 对 chmod/符号链接改向敏感、inputs 注入 prompt、R3 排除自评、plan/review 两 mode 选对模板。
+
+**自审固化(dogfood)**:用本机制对自身跑了一次真实 review council(chair=Opus + GPT-5.5 high via codex + Gemini 3 Pro
+via gemini,只读)。跨 challenge 的产出抓到一批连 chair 盲 draft 与离线断言都漏掉的真 bug——`printf '--'` 选项解析、
+`run_one` 漏判退出码(部分输出被当成功)、R3 把成员自己的 challenge 当"对它的批评"回灌、R2/R3 阶段违规未整体隔离(R1 draft
+仍进 dossier)、`AGENT_COUNCIL_OUT` 落在 repo 内会把 `draft.chair.md` 拷进成员 cwd 破坏 R1 盲——并指出 prompt 走单 argv 会
+撞 `MAX_ARG_STRLEN`。逐条修复并各补回归断言。这本身是 council 价值的最佳实证:多样性抓到了单模型 + 确定性测试都没抓到的东西。
+
+**未尽**:对**不完全信任**输入的硬沙箱(容器/firejail/bwrap,§10.3 开放项——只读 flag + canary 拦不住进程级网络/exec);
+K(成员数)与轮数的自适应;成员"自信但错"的滚动统计与熔断;chair 综合质量的人评。
