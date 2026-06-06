@@ -15,6 +15,13 @@ AGENT_WORK="${AOBUS_AGENT_WORK:-/tmp/aobus-agent}"
 # escalate to C3, never auto-fix. Keep in sync with the Phase Contract in use-clang-tidy/SKILL.md.
 AGENT_FORBID='^(include/|.*CMakeLists\.txt|\.clang-tidy|script/|doc/design/|\.agents/)'
 
+# Proposal scope (the C2 proposal executor) is WIDER than the C1 guard: this repo has no API/ABI-compat
+# requirement, so a header edit is gated by the validation oracle's blast-radius coverage (see
+# c2_proposal_phase.sh), not by a path taboo. Only the oracle's OWN measurement apparatus stays
+# forbidden -- CMake / .clang-tidy define the build (the "ruler"), and script / doc / .agents have no
+# build/test oracle to falsify them. This is AGENT_FORBID MINUS the now-allowed include/ headers.
+AGENT_PROPOSAL_FORBID='^(.*CMakeLists\.txt|\.clang-tidy|script/|doc/design/|\.agents/)'
+
 # agent_guard_path <repo-relative path> ; exit 0 = allowed, nonzero = forbidden.
 agent_guard_path() {
   ! printf '%s' "$1" | rg -q "$AGENT_FORBID"
@@ -110,14 +117,75 @@ agent_scope_ok() {
   esac
 }
 
-# agent_proposal_input_ok <repo-relative-path> ; scope gate for C2 proposal executor.
+# agent_is_header <repo-relative-path> ; 0 iff it classifies as a public header (include/**).
+agent_is_header() { [ "$(agent_classify_path "$1")" = public-header ]; }
+
+# agent_proposal_input_ok <repo-relative-path> ; scope gate for the C2 proposal executor. Accepts a
+# private cpp source, a public header (include/**; blast-radius-gated by the runner), or an EXISTING
+# registered test source (so a behavior-change proposal can extend the test that pins the new behavior).
+# Rejects the oracle-foundation paths (AGENT_PROPOSAL_FORBID), non-files, and symlinks.
 agent_proposal_input_ok() {
   local p="$1"
   agent_arg_safe "$p" || return 1
-  agent_guard_path "$p" || return 1
+  ! printf '%s' "$p" | rg -q "$AGENT_PROPOSAL_FORBID" || return 1
   [ -f "$AGENT_REPO/$p" ] || return 1
   [ ! -L "$AGENT_REPO/$p" ] || return 1
-  [ "$(agent_classify_path "$p")" = private-cpp-source ] || return 1
+  case "$(agent_classify_path "$p")" in
+    private-cpp-source | public-header) return 0 ;;
+    test-cpp) agent_check_registered_test "$p" ;;
+    *) return 1 ;;
+  esac
+}
+
+# agent_proposal_compute_blast_radius <header-rel-path>... ; over-approximate the #include closure of
+# the given headers and print one repo-relative SOURCE includer (.cpp/.cc/.cxx) per line -- the set of
+# translation units the build/test oracle must cover. Conservative: matches any TU that (transitively)
+# #includes a header by its include-rooted path, so it OVER-includes rather than under-includes (an
+# over-count only escalates a borderline case to C3, it never hides one). Reads from $AGENT_REPO.
+agent_proposal_compute_blast_radius() {
+  local repo="$AGENT_REPO"
+  declare -A seen_hdr=() includer=()
+  local -a frontier=("$@") next
+  local h inc inc_re f
+  while [ "${#frontier[@]}" -gt 0 ]; do
+    next=()
+    for h in "${frontier[@]}"; do
+      [ -n "${seen_hdr["$h"]:-}" ] && continue
+      seen_hdr["$h"]=1
+      inc="${h#include/}"            # include-rooted path, e.g. ao/utility/Base64.h
+      inc_re="${inc//./\\.}"
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        case "$f" in
+          *.cpp | *.cc | *.cxx) includer["$f"]=1 ;;
+          *) [ -n "${seen_hdr["$f"]:-}" ] || next+=("$f") ;;
+        esac
+      done < <(cd "$repo" 2>/dev/null && rg -l --no-messages \
+                 -e "#include[[:space:]]*[<\"]${inc_re}[>\"]" lib app src test include 2>/dev/null)
+    done
+    if [ "${#next[@]}" -gt 0 ]; then frontier=("${next[@]}"); else frontier=(); fi
+  done
+  [ "${#includer[@]}" -gt 0 ] || return 0
+  local k
+  for k in "${!includer[@]}"; do printf '%s\n' "$k"; done | sort
+}
+
+# agent_proposal_blast_core_only <includer-src>... ; 0 iff EVERY includer is covered by the core
+# (ao_test) oracle -- a lib source (linked into ao_test) or a registered ao_test core test source.
+# Anything else (the GTK/app frontend, a GTK-only test) reaches beyond test-core-all, so the caller
+# must escalate to C3 rather than claim a coverage it does not have.
+agent_proposal_blast_core_only() {
+  local f
+  for f in "$@"; do
+    case "$f" in
+      lib/*.cpp | lib/*.cc | lib/*.cxx) continue ;;
+    esac
+    if [ "$(agent_classify_path "$f")" = test-cpp ] \
+       && agent_cmake_has_source "$AGENT_REPO/test/CMakeLists.txt" "$f" ao_test; then
+      continue
+    fi
+    return 1
+  done
   return 0
 }
 
@@ -291,7 +359,7 @@ agent_request_is_c2_test() {
 # agent_packet_validate <file> [expected-kind] ; strict schema for mutating request packets.
 agent_packet_validate() {
   local packet="$1" expected="${2:-}"
-  local schema kind key
+  local schema kind key pid_val
   schema="$(agent_packet_scalar "$packet" schema)"
   kind="$(agent_packet_scalar "$packet" kind)"
   [ "$schema" = "aobus-phase-packet/v1" ] || {
@@ -332,7 +400,7 @@ agent_packet_validate() {
       done
       while IFS= read -r key; do
         agent_key_allowed "$key" schema kind skill capability mode validation validation_args inputs \
-          escalate_to || {
+          escalate_to id intent || {
           echo "agent: proposal packet has unknown key '$key' -> reject" >&2
           return 64
         }
@@ -353,6 +421,15 @@ agent_packet_validate() {
         echo "agent: proposal body cannot be empty -> reject" >&2
         return 64
       fi
+      pid_val="$(agent_packet_scalar "$packet" id)"   # id is optional; the runner mints one when absent
+      if [ -n "$pid_val" ] && ! agent_id_ok "$pid_val"; then
+        echo "agent: proposal id '$pid_val' is unsafe or reserved -> reject" >&2
+        return 64
+      fi
+      case "$(agent_packet_scalar "$packet" intent)" in   # optional; defaults to 'refactor' in the runner
+        '' | refactor | behavior-change) ;;
+        *) echo "agent: proposal intent must be 'refactor' or 'behavior-change' -> reject" >&2; return 64 ;;
+      esac
       ;;
     escalation)
       for key in schema kind skill capability escalate_to validation inputs; do
@@ -428,6 +505,17 @@ agent_count_assertions() {
 
 agent_phase_id() { printf '%s-%s-%s' "$1" "$(date -u +%Y%m%d-%H%M%S)" "$$"; }
 
+# A phase id keys the audit log, review-outcomes log, breaker files, and the review_stats joins, so it
+# must be a safe, non-reserved token. Reject the empty string and the literal "unknown" (the old
+# id-less sentinel that collided across runs), plus anything outside the filename/grep-safe charset.
+agent_id_ok() {
+  case "${1:-}" in
+    '' | unknown) return 1 ;;
+    *[!A-Za-z0-9._:-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 agent_json_escape() {
   local s="$1"
   s="${s//\\/\\\\}"
@@ -446,6 +534,50 @@ agent_audit_entry() {
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(agent_json_escape "$id")" "$(agent_json_escape "$skill")" \
     "$(agent_json_escape "$cap")" "$(agent_json_escape "$worker")" "$(agent_json_escape "$result")" \
     "${rounds:-0}" "${churn:-0}" "${delta:-0}" "$(agent_json_escape "$reason")" >> "$AGENT_WORK/audit.log"
+}
+
+# agent_audit_field_for <phase-id> <field> ; print the JSON scalar value of <field> from the LAST
+# audit.log line for <phase-id> (e.g. result, worker, capability). Empty if no such entry. Reuses the
+# same phase-id match shape as record_review.sh so the join key is consistent across the harness.
+agent_audit_field_for() {
+  local id="$1" field="$2" log="$AGENT_WORK/audit.log"
+  [ -r "$log" ] || return 0
+  grep -F "\"phase_id\":\"$(agent_json_escape "$id")\"" "$log" 2>/dev/null | tail -n 1 |
+    grep -oE "\"$field\":\"[^\"]*\"" | tail -n 1 | sed -E "s/^\"$field\":\"(.*)\"$/\1/"
+}
+
+# --- Circuit breaker -------------------------------------------------------------------------------
+# The "first production silent-wrong pauses that route" rule (§Step A) made automatic. A breaker is a
+# per-worker-label flag file under $AGENT_WORK/breaker/. record_review.sh trips it on a silent-wrong (a
+# validated/kept phase that C3 later rejects); runners refuse a tripped worker and escalate to C3;
+# review_stats.sh --reset clears it after a postmortem.
+agent_breaker_dir() { printf '%s' "$AGENT_WORK/breaker"; }
+
+# agent_breaker_slug <label> ; map a worker label to a safe flat filename.
+agent_breaker_slug() {
+  local s="$1"
+  s="$(printf '%s' "$s" | tr '[:upper:]' '[:lower:]')"
+  s="${s//[^a-z0-9]/-}"        # collapse every non-alnum to '-'
+  s="$(printf '%s' "$s" | sed -E 's/-+/-/g; s/^-//; s/-$//')"
+  printf '%s' "${s:-unknown}"
+}
+
+# agent_breaker_tripped <label> ; rc 0 iff this worker's breaker is tripped.
+agent_breaker_tripped() {
+  [ -f "$(agent_breaker_dir)/$(agent_breaker_slug "$1").tripped" ]
+}
+
+# agent_breaker_trip <label> <phase-id> <reason> ; create the breaker flag (idempotent: keeps the
+# first trip's record). Returns 0 on a fresh trip, 1 if it was already tripped.
+agent_breaker_trip() {
+  local label="$1" id="$2" reason="$3" dir; dir="$(agent_breaker_dir)"
+  local f="$dir/$(agent_breaker_slug "$label").tripped"
+  mkdir -p "$dir"
+  if [ -f "$f" ]; then return 1; fi
+  printf '{"ts":"%s","worker":"%s","phase_id":"%s","reason":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(agent_json_escape "$label")" \
+    "$(agent_json_escape "$id")" "$(agent_json_escape "$reason")" > "$f"
+  return 0
 }
 
 # agent_write_manifest <out.json> <artifact...>
@@ -634,6 +766,30 @@ agent_stage_repo_copy() {
   rsync -a --exclude='.git/' --exclude='build*/' --exclude='.cache/' "$src/" "$dst/"
 }
 
+# agent_clean_ignored <tree-dir> <repo-with-rules>
+# Remove from <tree-dir> every path that <repo>'s gitignore rules would ignore (logs, runtime
+# artifacts, etc.). A C2 proposal operates on TRACKED source; a worker's build/test run inevitably
+# writes gitignored runtime files (e.g. logs/app.log) into its work copy, and those must NOT register
+# as in/out-of-scope changes. Cleaning BOTH the base and work copies identically keeps the diff about
+# source only. No-op when <repo> is not a git repo (offline tests use plain temp trees).
+agent_clean_ignored() {
+  local tree="$1" repo="$2"
+  git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  # `git check-ignore` exits 1 when NOTHING matches; that is normal, not an error. Capture via a
+  # substitution with `|| true` so a caller's `set -e`/`pipefail` is not tripped by the empty case.
+  local ignored
+  ignored="$( ( cd "$tree" 2>/dev/null && find . -mindepth 1 \( -type f -o -type d \) -printf '%P\n' 2>/dev/null ) \
+                | git -C "$repo" check-ignore --stdin 2>/dev/null || true )"
+  local p
+  while IFS= read -r p; do
+    [ -n "$p" ] && rm -rf "${tree:?}/$p"
+  done <<< "$ignored"
+  # Prune directories left empty (e.g. logs/ after removing logs/*.log) so an empty dir does not
+  # register as a spurious add. Base and work are cleaned identically, so this stays symmetric.
+  find "${tree:?}" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+  return 0
+}
+
 # agent_tree_manifest <dir> <out.tsv>
 agent_tree_manifest() {
   local d="$1" out="$2"
@@ -725,4 +881,17 @@ agent_proposal_changes_ok() {
     fi
   done < "$changes_file"
   return "$((1 - ok))"
+}
+
+# agent_changes_touch_registered_test <changes.tsv> ; 0 iff at least one changed path is an existing
+# registered test source. Enforces the behavior-change intent obligation deterministically (the runner
+# never infers "did behavior change" from worker output -- the planner declares it, this confirms a test
+# moved with it).
+agent_changes_touch_registered_test() {
+  local change path
+  while IFS=$'\t' read -r change path; do
+    [ -n "$path" ] || continue
+    agent_check_registered_test "$path" && return 0
+  done < "$1"
+  return 1
 }

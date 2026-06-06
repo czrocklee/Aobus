@@ -78,9 +78,11 @@ A generic C2 proposal request is a first-class proposal packet, not a normal
 ---
 schema: aobus-phase-packet/v1
 kind: proposal
+id: base64-refactor-001   # optional; harness mints proposal-<utc>-<pid> if omitted
 skill: execute-plan
 capability: C2
 mode: proposal
+intent: refactor          # refactor | behavior-change (optional; default refactor)
 inputs:
   - app/runtime/Foo.cpp
   - app/runtime/Bar.cpp
@@ -96,9 +98,18 @@ Important properties:
 
 - `kind: proposal` selects proposal-specific packet validation and avoids the
   keep-oriented assumptions in `script/agent/dispatch.sh`.
+- `id` is optional. If present it is charset-validated and used as the phase id
+  verbatim; if omitted the harness mints a unique `proposal-<utc>-<pid>` id. It
+  keys the audit/outcome/breaker logs, so the reserved `unknown` value is rejected.
 - `mode: proposal` is fixed metadata that makes the non-keep semantics explicit.
+- `intent` (optional, default `refactor`) declares whether the change is
+  behavior-preserving. `behavior-change` deterministically requires a registered
+  test to change; `refactor` is exempt but flagged in the dossier. The runner
+  never infers behavior change from worker output — the planner declares it.
 - `inputs[]` is the exact editable file set. C2 may not edit outside it.
-- `validation` is an allowlisted validation ID, not a shell command.
+- `validation` is an allowlisted validation ID, not a shell command. For a header
+  change the runner overrides it with the forced `test-core-all` oracle (below);
+  the packet may request more validation, never less.
 - `validation_args[]` must satisfy the validation argument contract.
 - The markdown body is the C3 plan. C2 should execute it, not redesign it.
 
@@ -107,39 +118,58 @@ The proposal runner should be invoked through a dedicated entry point such as
 `dispatch.sh` request pipeline unless that pipeline is later refactored to
 distinguish keep phases from proposal-only phases.
 
-## V1 Scope Policy
+## Scope Policy (v16: oracle-coverage ⊇ blast-radius)
 
-V1 is intentionally narrow. A conservative false rejection is acceptable; a
-false acceptance that lets C2 edit a sensitive or unvalidated surface is not.
+The scope gate is no longer path-based. This repo has no API/ABI-compat
+requirement, so "the edit changed the public surface" is not a danger by itself;
+the protected invariant is silent-wrong = 0 (validated-but-semantically-wrong).
+A change is admissible when the validation oracle's coverage contains the
+change's blast radius. A conservative false rejection (escalate to C3) is
+acceptable; a false acceptance that lets C2 present an unvalidated change as
+"validated" is not.
 
-For V1, every `inputs[]` entry must:
+Every `inputs[]` entry must:
 
-- be a safe repo-relative argument;
-- exist in the repository at phase start;
-- be a regular file;
-- classify as `private-cpp-source` through `agent_classify_path`;
-- pass `agent_guard_path` / `AGENT_FORBID`.
+- be a safe repo-relative argument that exists at phase start and is a regular
+  file (no symlinks);
+- classify (via `agent_classify_path`) as `private-cpp-source`, a `public-header`
+  (`include/**`), or an existing **registered** test source;
+- pass `AGENT_PROPOSAL_FORBID` — the oracle-foundation paths stay forbidden:
+  CMake / `.clang-tidy` / `script/**` / `doc/design/**` / `.agents/**`. These are
+  excluded as **ruler-protection** (they define the build/test oracle itself),
+  not because of a path taboo. (This is `AGENT_FORBID` minus the now-allowed
+  `include/` headers.)
 
-V1 rejects:
+When any in-scope path is a **header**, the runner:
 
-- public headers and API surfaces;
-- CMake files and build configuration;
-- `.clang-tidy`;
-- all `script/**`, including but not limited to `script/agent/**`;
-- `doc/design/**`;
-- `.agents/**`;
-- test files, unless they use the existing `test_phase.sh` fast path;
-- new files, deleted files, symlinks, binary files, and mode-only changes;
-- new translation units that would require CMake registration.
+- **forces the `test-core-all` oracle** (build `ao_test` + run the whole core
+  suite) for both baseline and work validation. A single Catch2 filter cannot
+  cover a header's blast radius, so the packet's `validation`/`validation_args`
+  are ignored for the gate — the packet may request *more*, never *less*. This is
+  the atomicity rule: opening headers without forcing the oracle would let a
+  header change "validate" under a narrow filter.
+- **computes the blast radius** with `agent_proposal_compute_blast_radius` (an
+  over-approximating transitive `#include` closure; over-inclusion only escalates
+  a borderline case, it never hides one) and **escalates to C3 before the worker
+  runs** if the radius reaches the GTK/app frontend (`agent_proposal_blast_core_only`
+  is false — not covered by the core oracle) or exceeds `PROPOSAL_BLAST_MAX`
+  (default 12 TUs). The build is a *compile/link coherence* oracle, not a semantic
+  one; the budget keeps the residual C3 review surface bounded.
 
-The runner applies both an input gate before invoking C2 and a changed-file gate
-after each worker round. The changed-file gate is defense in depth: even if the
-worker edits an out-of-scope file inside the disposable work copy, the proposal
-is rejected before validation and before artifacts are presented as successful.
+A `cpp`-only change keeps the packet's filtered validation (status quo).
 
-C2 may report that a wider scope is needed, but it may not silently add files or
-modify a sensitive path. Future support for sensitive paths requires a separate
-C3 design and must remain proposal-only.
+The changed-file gate still runs after each worker round (defense in depth): only
+`modify` of a declared input is accepted — new files, deletions, symlinks, binary,
+and mode-only changes are rejected, and out-of-scope edits reject the round. A
+`behavior-change` proposal must additionally change a registered test
+(`agent_changes_touch_registered_test`), and the dossier records `intent`,
+`header_touched`, `blast_radius`, and `assertion_delta` (a `header-touched +
+assertion-delta:0` change carries an explicit RISK marker for C3).
+
+Still out of scope (separate later steps): CMake registration of new translation
+units, GTK/app-implicated header autonomy, the `nm`-based undeclared-symbol-deletion
+guard, and proposal→auto-keep promotion. C2 may report that a wider scope is
+needed; it may not silently add files or edit a forbidden path.
 
 ## Dedicated Proposal Worker Contract
 
@@ -150,11 +180,14 @@ flat filename staging workaround to avoid known path-collision escapes. A
 full-repository proposal copy needs real repo-relative paths for includes and
 builds, so that mitigation is not valid.
 
-V1 should introduce a separate proposal worker route, for example:
+V1 should introduce a separate proposal worker route. The landed default (Step G) is **DeepSeek V4
+Pro via opencode**, chosen because opencode runs in the `/tmp` work-copy cwd under its own external-dir
+permission interception (the "good" §10.3 isolation), unlike agy/steam-run; codex is the alternate:
 
 ```bash
-ROUTE_C2_PROPOSAL_WORKER="route_c2_proposal_worker_codex"
-ROUTE_C2_PROPOSAL_LABEL="GPT-5.5 via codex"
+ROUTE_C2_PROPOSAL_WORKER="route_c2_proposal_worker_dspro"   # opencode/deepseek-v4-pro (default)
+ROUTE_C2_PROPOSAL_LABEL="DeepSeek V4 Pro via opencode"
+# alternate: ROUTE_C2_PROPOSAL_WORKER="route_c2_proposal_worker_codex"  # GPT-5.5 via codex
 ```
 
 The worker contract should use files for larger payloads rather than large argv
@@ -230,6 +263,11 @@ The copy step should follow the same safety shape as `council.sh`:
 - the proposal output directory must resolve outside the repository;
 - `.git` is excluded;
 - known build directories, caches, and the output directory are excluded;
+- **gitignored runtime artifacts are stripped from both base and work** (`agent_clean_ignored`):
+  a worker's build/test run inevitably writes gitignored files (e.g. `logs/app.log`) into its work
+  copy, and without this they register as out-of-scope changes and reject every otherwise-valid
+  proposal (found by the Step G eval). Cleaning base and work identically — including pruning emptied
+  directories — keeps the base→work diff about tracked source only. No-op outside a git repo;
 - base and work are copied from the same main-tree snapshot;
 - the base copy is made read-only after staging;
 - the worker receives only the work-copy path;
@@ -426,10 +464,21 @@ After C2 emits a proposal, C3 should:
 6. accept or reject the final real-tree change;
 7. record the proposal review outcome.
 
-The existing `record_review.sh` is keep-phase oriented and requires a `keep`
-audit entry. Proposal mode needs either a dedicated `record_proposal_review.sh`
-or an extension that accepts proposal audit results and verdicts such as
-`accept`, `modify`, and `reject` without pretending that C2 kept a change.
+**Landed (Step G):** `record_review.sh` accepts proposal audit results
+(`proposal-validated` / `proposal-diagnostic` / `proposal-rejected`) and verdicts
+`accept` / `modify` / `reject`, writing to `review-outcomes.log` without pretending
+C2 kept a change. A `reject` of a `proposal-validated` (or `keep`) phase is a
+**silent-wrong** and auto-trips the per-worker circuit breaker, pausing that route
+until `review_stats.sh --reset`. `review_stats.sh` rolls the audit + outcome logs
+into per-worker silent-wrong rates, and `--window N` adds a rolling rate over each
+worker's last N validated+reviewed evals (recent trend vs the lifetime average,
+which never recovers from an early miss). The phase `id` is **optional** on the
+packet: when supplied it is charset-validated (rejecting unsafe or the reserved
+`unknown`) and used verbatim; otherwise the harness mints a unique
+`proposal-<utc>-<pid>` id, exactly as `test_phase.sh` does. The old id-less
+`unknown` sentinel — which collided across runs in the audit/outcome/breaker keys —
+can no longer occur, and the shared `agent_id_ok` guard keeps `record_review.sh`
+from recording against an empty or reserved id.
 
 Council review should be reserved for high-risk cases, such as public API
 changes, architecture changes, error-contract choices, or cases where the C3
@@ -446,7 +495,9 @@ The detailed implementation plan lives in
 - No new narrow auto-keep runners.
 - No temporal apply to the main tree for generic proposals.
 - No sensitive-path override mechanism.
-- No edits to public headers, scripts, CMake, design docs, `.agents/**`, or
-  `.clang-tidy`.
+- No edits to scripts, CMake, design docs, `.agents/**`, or `.clang-tidy` (the
+  oracle's own measurement apparatus — ruler-protection). Public headers ARE now
+  editable as of v16, gated by the forced `test-core-all` oracle + blast-radius
+  budget rather than forbidden (see Scope Policy).
 - No agy-backed full-tree proposal worker until its isolation is proven.
 - No assumption that proposal validation replaces C3's final validation.

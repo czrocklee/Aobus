@@ -99,6 +99,16 @@ if [ "$skill/$cap" = "improve-test-coverage/C2" ] || [ "$skill/$cap" = "write-un
   fi
 fi
 
+# Circuit breaker: refuse a C2 route whose worker was paused by a prior silent-wrong (escalate to C3;
+# clear via review_stats.sh --reset). C1 multi-candidate breaker gating is a follow-up.
+case "$skill/$cap" in
+  improve-test-coverage/C2 | write-unit-test/C2)
+    if agent_breaker_tripped "${ROUTE_C2_LABEL:-unknown}"; then
+      echo "dispatch: C2 worker '${ROUTE_C2_LABEL:-unknown}' route is breaker-tripped -> escalate ${esc:-C3}" >&2
+      exit 2
+    fi ;;
+esac
+
 # --- route (skill, capability) -> runner ---
 runner_rc=0
 rollback_dir=""

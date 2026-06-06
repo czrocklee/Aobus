@@ -118,6 +118,58 @@ nix-shell --run "script/agent/council.sh /tmp/my-council-packet.md"   # prints t
     drafts is `quorum: ok`, `shallow: by-design` — synthesize the independent drafts; do not mistake it
     for a degraded `full`.
 
+## Writing a correct packet (the body decides whether the council earns its cost)
+
+The frontmatter is mechanical; the **body** is what makes a council useful or wasted. Drafting it well
+matters more than the depth/roster knobs. In order of importance:
+
+1. **Lead with motivation and goal — not the mechanism.** A panel's real job is to judge whether a
+   design is *proportionate* to its purpose: over-built, under-built, or solving the wrong problem. If
+   the body opens with "replace X with Y," members can only critique the mechanics of Y; they cannot
+   tell you that Y is the wrong fight. State **why this decision exists and what success looks like**,
+   *then* the proposed approach. This is the single most common packet defect — the body that reads as
+   a finished spec instead of a question.
+2. **Make the body self-contained.** Members have **no git access** — they cannot resolve `HEAD`, a
+   branch name, or a commit hash. For `mode: review`, **paste the actual diff/change**. Members can
+   read the repo read-only, but do not make them hunt: anchor every claim to the exact excerpt you
+   mean (the function body, `file:line`) so the review is about *your* change, not their reconstruction
+   of it.
+3. **Fence off settled premises.** Mark anything already decided as **"NOT under review — do not
+   relitigate,"** with its reason. A `panel`/`challenge` council has only one or two rounds; if you
+   leave a closed question open, members spend that budget re-deciding it instead of stress-testing
+   what is actually live. (Example: "this repo has no ABI/API-compat requirement — assume callers are
+   in-tree and freely updatable.")
+4. **Ask enumerated, specific questions — and demand a steel-man.** "Review this" yields mush. List the
+   exact claims to attack, numbered, and require each member to argue the **opposite** position at
+   least once. The adversarial round is the entire point of a committee; hand it a target.
+5. **Specify the output contract** so drafts come back comparable and synthesizable. Review: findings
+   as **(severity / location / problem / fix)** + an explicit **verdict** + the **single biggest
+   risk**. Plan: **Approach / Files to change / Risks / Alternatives / Open questions**.
+6. **`inputs:` is a hint, not a substitute.** Those paths are safety-checked (no flags, no traversal)
+   and only *emphasise* where to look; they never replace pasting the change or stating the question.
+
+### Trimming or swapping the roster for one run (e.g. excluding the chair's own model)
+
+`council.sh` honours `ROUTE_C3_MEMBERS` when it is set and non-empty (`council.sh:88`), **but**
+`routing.env` assigns that array **unconditionally** (`routing.env:233`), so simply *exporting*
+`ROUTE_C3_MEMBERS` before the run is clobbered the moment the table is sourced. To change the roster
+for a single run without editing the committed table, point `AOBUS_ROUTING_ENV` at a thin override
+that sources the real table (for all member functions + labels) and *then* trims the array:
+
+```bash
+cat > /tmp/roster.env <<'EOF'
+. /home/<you>/dev/Aobus/script/agent/routing.env          # every member fn + label
+ROUTE_C3_MEMBERS=(route_c3_member_codex route_c3_member_gemini route_c3_member_dspro)  # drop claude
+EOF
+AOBUS_ROUTING_ENV=/tmp/roster.env \
+  nix-shell --run "script/agent/council.sh /tmp/packet.md"
+```
+
+When the chair is reviewing **its own** proposal, consider dropping the chair's own model from the
+roster (e.g. `route_c3_member_claude_opus` when the chair is Claude): seating it is same-model
+self-sampling and dilutes the cross-vendor diversity that justifies convening at all. The trade is one
+fewer blind draft — keep at least `COUNCIL_MIN` (default 2) members from **different** vendors.
+
 ## Depth tiers (how much debate)
 
 `depth:` caps how many **member** rounds run; the chair's R4 synthesis always runs.

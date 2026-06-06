@@ -1,6 +1,6 @@
 # Aobus: Capability-Tiered Workflow and Cross-Harness Model Routing Design
 
-> Status: design draft v14 / for discussion. Date: 2026-06-06.
+> Status: design draft v16 / for discussion. Date: 2026-06-07.
 > Scope: **general, not bound to any single harness or vendor**. Abstract workflow stages into capability
 > classes, then route a heterogeneous agent fleet (Opus / GPT-5.5 / Gemini 3 Pro·Flash / DeepSeek V4
 > Pro·Flash / …) by class.
@@ -73,6 +73,60 @@
 > at Gemini, so an old runner still uses the new default when the selector is absent. C2 reuses agy's
 > HOME-backed staging + flat-path contract; `GEMINI_C2_MODEL` is the current override name, the old
 > `AGY_C2_MODEL` still compatible. Six offline agent integration tests, **262** assertions total.
+>
+> v15 changes: landed **Step G — the first real generic-C2 proposal eval, sanitizer oracles, and the
+> observability/circuit-breaker loop** (Track A of the V2 cross-vendor council review; agy and the hard
+> sandbox are deferred). The C2 proposal worker default switched to **DeepSeek V4 Pro via opencode**
+> (`route_c2_proposal_worker_dspro`, cwd-confined — the "good" §10.3 isolation, no agy/steam-run); codex
+> stays the documented alternate. Two **sanitizer validations** `test-core-asan` / `test-core-tsan`
+> joined the allowlist — each configures its own `-DAOBUS_ENABLE_ASAN/TSAN=ON` build dir, builds the
+> core `ao_test` target only (run-tests.sh would also build the heavy GTK target), is isolatable, and
+> the dossier states the honest "no finding on the EXERCISED paths" caveat (NOT memory-/race-safe).
+> **Observability**: `record_review.sh` now auto-trips a per-worker **circuit breaker** on a
+> *silent-wrong* (a `keep`/`proposal-validated` phase that C3 later `reject`s; `modify` and
+> non-validated rejects do NOT trip); the proposal runner and dispatcher refuse a breaker-tripped route;
+> new read-only `review_stats.sh` rolls up per-worker×capability accept/modify/reject + silent-wrong
+> rate, with `--window N` adding a **rolling** silent-wrong rate over each worker's last N
+> validated+reviewed evals (recent trend vs the never-recovering lifetime average), and
+> lists/`--reset`s breakers — all built **on the pre-existing** `audit.log` /
+> `review-outcomes.log` (the panel corrected an earlier claim: proposal-mode *recording* already
+> existed; only aggregation + the breaker were missing). **Eval datum**: ds-pro refactored
+> `base64Encode` to chunk-based form, **validated in 1 round under `test-core-asan [base64]`, in-scope
+> (single file), graded `modify`** (correct + byte-identical, but raw pointer arithmetic and unnamed
+> tail bit-masks would be polished before merge). Eval-first earned its keep: it surfaced and fixed two
+> real harness bugs — gitignored worker runtime artifacts (`logs/app.log`, written by the worker's test
+> run) polluting the change set, now stripped from base+work symmetrically by `agent_clean_ignored`
+> (plus emptied-dir pruning); and a `churn` unbound-variable crash on the all-rejected diagnostic path.
+> **Phase-id hardening**: the proposal executor now mints a unique `proposal-<utc>-<pid>` id (as
+> `test_phase.sh` does), honoring an optional charset-validated packet `id` when supplied, instead of the
+> old `unknown` sentinel that collided across id-less runs in the audit/outcome/breaker keys; the shared
+> `agent_id_ok` guard also keeps `record_review.sh` from recording against an empty/reserved id.
+> Conclusion: generic C2 is viable for a settled, single-file, behavior-preserving task under a hard
+> test+sanitizer oracle; the rolling silent-wrong statistic now exists (`review_stats.sh --window N`), so
+> the remaining gate is widening the eval set to populate it before any C2 scope expansion. Offline agent
+> suites: 8 suites, **448** assertions (`run_review_stats_test.sh` = 25; proposal suite 64 → 79).
+>
+> v16 changes: **C2 scope widening — the path-based gate replaced by "oracle-coverage ⊇ blast-radius"**
+> (council-reviewed, unanimous accept-with-changes; Claude excluded from the panel as the chair). C2 may
+> now propose edits to **any in-tree source including `include/**` headers** — `agent_proposal_input_ok`
+> accepts public headers and registered test sources, not only a private `.cpp` — because this repo has no
+> API/ABI-compat requirement, so the old `include/` taboo guarded nothing real while blocking legitimate
+> header-resident refactors (e.g. adding a private nested class). The gate is now derived from the
+> validation oracle, **atomically** (the packet can no longer pick a narrow filter for a header change):
+> any header in scope forces the new isolatable **`test-core-all`** oracle (build `ao_test` + run the WHOLE
+> core suite), bounded by a blast-radius budget (`PROPOSAL_BLAST_MAX`, default 12) —
+> `agent_proposal_compute_blast_radius` over-approximates the `#include` closure, and a change that reaches
+> the GTK/app frontend or exceeds the budget **escalates to C3 before the worker runs**. A new packet field
+> **`intent: refactor | behavior-change`** makes the test obligation deterministic: `behavior-change`
+> requires a registered test to change (the planner declares intent; the runner never infers "did behavior
+> change"); `refactor` is exempt but the dossier carries a `header-touched + assertion-delta:0` RISK marker.
+> CMake / `.clang-tidy` / `script` / `doc` / `.agents` stay forbidden — reason sharpened to
+> **ruler-protection** (they define the oracle's own measurement apparatus), not "unfalsifiable". The build
+> is a **compile/link coherence** oracle, not a semantic one (`include/ao/Type.h` is `constexpr`-bearing and
+> included 168× — exactly why headers are budget-gated; C3 still judges semantics). Real smoke:
+> `test-core-all` built `ao_test` and ran 14610 assertions / 701 cases green on the clean tree. The
+> separate proposal→auto-keep step (eval-stats-gated) remains deferred. Offline agent suites: 8 suites,
+> **463** assertions (proposal suite 79 → 94).
 >
 > v14 changes: council gained a **`depth` tier** (`panel`=R1 / `challenge`=R1+R2, **default** /
 > `full`=R1+R2+R3), providing a lightweight council for medium-stakes plan/review without breaking the
@@ -309,6 +363,16 @@ take the lock and apply to the main tree → pass allowlist validation with exit
 → only then is it settled. On an Escalate hit, stop immediately and do not improvise. A self-reported
 `escalate_reason` is still kept, but only as an **extra signal**; the real gates are the deterministic
 guard + validation + C3 review.
+
+> **Landed (v16, 2026-06-07) — the C2 proposal executor's scope gate is no longer path-based.** The
+> `include/**` row above is a **C1** rule; the **C2 proposal executor** no longer treats a header edit as
+> an automatic escalate. Because this repo has no API/ABI-compat requirement, a header is gated by
+> *oracle coverage*, not path: any header in scope forces the whole-core `test-core-all` oracle (the
+> packet cannot downgrade it) and is bounded by a blast-radius budget —
+> `agent_proposal_compute_blast_radius` over-approximates the `#include` closure; a change reaching the
+> GTK/app frontend or exceeding `PROPOSAL_BLAST_MAX` escalates to C3 before the worker runs. CMake /
+> `.clang-tidy` / `script` / `doc` / `.agents` stay forbidden as the oracle's own measurement apparatus
+> (ruler-protection). See §9 Step H and `c2-proposal-executor.md`.
 
 ### 5.3 Validation allowlist
 
@@ -747,6 +811,52 @@ hard dependency:
    members, of which Claude/Opus is also an ordinary member) + `ROUTE_C3_MEMBER_LABELS`; the `run-council`
    skill unifies the plan/review two-mode contract, with review convened via code-review / diagnose-issue;
    the offline suite `run_council_test.sh` (63 assertions). See §11.
+7. **Step G: first generic-C2 eval + sanitizer oracles + observability loop (landed, 2026-06-06)**.
+   Track A of the V2 cross-vendor council review (agy and the hard sandbox deferred). (a) **ds-pro
+   proposal worker**: `route_c2_proposal_worker_dspro` (opencode/deepseek-v4-pro, cwd-confined) is the
+   new `ROUTE_C2_PROPOSAL_WORKER` default; codex stays the alternate. (b) **Sanitizer oracles**
+   `test-core-asan` / `test-core-tsan` in `validation.env` — own `-DAOBUS_ENABLE_ASAN/TSAN=ON` build
+   dir, core-only `ao_test` target, isolatable, honest "no finding on EXERCISED paths" dossier caveat;
+   genuinely new because `agent_validate_in_repo`'s `cmake --preset linux-debug` leaves the sanitizer
+   options OFF. (c) **Circuit breaker + rolling stats**: `record_review.sh` auto-trips a per-worker
+   breaker on a silent-wrong (a `keep`/`proposal-validated` phase C3 later `reject`s; `modify` /
+   non-validated do not trip); `c2_proposal_phase.sh` and `dispatch.sh` refuse a tripped route;
+   read-only `review_stats.sh` aggregates per-worker×capability accept/modify/reject + silent-wrong rate
+   (and, with `--window N`, a rolling silent-wrong rate over each worker's last N validated+reviewed
+   evals) and lists/`--reset`s breakers — all on the **pre-existing** `audit.log` / `review-outcomes.log`
+   (recording already existed; only aggregation + breaker were missing). (d) **Eval datum**: ds-pro
+   chunk-refactored `base64Encode`, **validated round 1 under `test-core-asan [base64]`, in-scope,
+   graded `modify`**; eval-first caught + fixed gitignored-artifact pollution (`agent_clean_ignored`
+   strips gitignored paths + emptied dirs from base+work symmetrically) and a `churn` unbound crash.
+   Conclusion: generic C2 is viable for a settled, single-file, behavior-preserving task under a hard
+   test+sanitizer oracle — the rolling silent-wrong statistic now exists (`review_stats.sh --window N`),
+   so the remaining gate is widening the eval set to populate it before any C2 scope expansion. The
+   proposal executor now mints a unique `proposal-<utc>-<pid>` phase id (honoring an optional
+   charset-validated packet `id`) instead of the colliding `unknown` sentinel, so audit/outcome/breaker
+   keying is clean. Open follow-ups: the hard sandbox and a real not-fully-trusted-worker isolation layer
+   remain §10.3/§11.6 items. Offline agent suites: 8 suites, **448** assertions
+   (`run_review_stats_test.sh` = 25; proposal suite 64 → 79).
+8. **Step H: C2 scope widening — oracle-coverage ⊇ blast-radius (landed, 2026-06-07)**. Council-reviewed
+   (panel, Claude-excluded; unanimous accept-with-changes). The path-based scope gate is replaced by a
+   gate derived from the validation oracle. (a) **Wider input gate**: `agent_proposal_input_ok` now
+   accepts public headers (`include/**`) and registered test sources, not just a private `.cpp`; the old
+   `include/` taboo guarded nothing in a no-compat repo. (b) **Forced oracle, atomically**: any header in
+   scope forces the new isolatable `test-core-all` (build `ao_test` + whole core suite) for baseline +
+   work validation — the packet's `validation`/`validation_args` can no longer downgrade a header change.
+   (c) **Blast-radius budget**: `agent_proposal_compute_blast_radius` over-approximates the `#include`
+   closure; a change that reaches the GTK/app frontend (`agent_proposal_blast_core_only` false) or exceeds
+   `PROPOSAL_BLAST_MAX` (default 12 TUs) escalates to C3 **before the worker runs**. (d) **Deterministic
+   test obligation**: a new packet `intent: refactor | behavior-change`; `behavior-change` requires a
+   registered test to change (`agent_changes_touch_registered_test`) — the planner declares intent, the
+   runner never infers it; `refactor` is exempt with a dossier RISK marker. (e) Dossier gains `intent` /
+   `header_touched` / `blast_radius` / `assertion_delta`; symbol-diff stays a **non-blocking** triage
+   signal (the undeclared-deletion hard guard is a fast-follow). Forbidden set unchanged
+   (CMake/`.clang-tidy`/`script`/`doc`/`.agents`) but re-justified as **ruler-protection**. Verified: the
+   build is a *compile/link coherence* oracle, not semantic (`include/ao/Type.h` is `constexpr`-bearing and
+   included 168×); real smoke ran `test-core-all` green (14610 assertions / 701 cases). Open follow-ups:
+   precise (non-over-approx) include graph, GTK-implicated header autonomy, `nm`-based deletion guard,
+   proposal→auto-keep (eval-stats-gated). Offline agent suites: 8 suites, **463** assertions (proposal
+   suite 79 → 94).
 
 ## 10. Settled facts, cost model, and open risks
 
