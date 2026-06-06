@@ -16,6 +16,14 @@ Stay focused on the failing behavior. Do not start documentation updates, format
 
 If the fix touches C++ files, also load `generate-cpp-code` before editing. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
 
+## C2 Delegation Boundary
+
+Diagnosis, root-cause selection, error-contract choices, and bug-fix design remain C3 work. The current
+C2 runner may only implement a C3-decided regression test in an existing registered test file through
+`write-unit-test` / `improve-test-coverage`. Production-source body-fill delegation is future work and
+must not be routed until a separate runner enforces an immutable oracle test, single private `.cpp`
+scope, and mandatory C3 review.
+
 ## Debugging Loop
 
 1. Capture the exact failing command, test filter, input, log excerpt, signal, assertion, or stack trace.

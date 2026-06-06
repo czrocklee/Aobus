@@ -32,7 +32,10 @@ cat > "$ROUTING" <<'EOF'
 #!/usr/bin/env bash
 ROUTE_C1_LABEL="mock"
 route_c1_worker() { sed -i 's/BAD //g' "$AGENT_SANDBOX/$AGENT_REL"; }
-ROUTE_C2_LABEL="-"
+ROUTE_C2_LABEL="mock-c2"
+route_c2_worker() {
+  printf 'TEST_CASE("anchor", "[x][anchor]") { CHECK(true); }\nPASSMARK\n' >> "$AGENT_SANDBOX/test/FooTest.cpp"
+}
 EOF
 
 # Mock validation allowlist: v_tidy records the args the INDEPENDENT gate got
@@ -50,7 +53,36 @@ v_tidy() {
   done
   [ "$total" -eq 0 ]
 }
-declare -gA VALIDATION_ARGSPEC=([tidy]="path 1 -")  # -gA: sourced inside a loader fn (Step C arg gate)
+v_test_core() { return 0; }
+v_test_core() {
+  if [ -n "${DISPATCH_C2_FINAL_FAIL:-}" ]; then
+    local cf="${GATE_ARGS_LOG:?}.c2count" n=0
+    [ -r "$cf" ] && n="$(cat "$cf")"
+    n=$((n + 1)); printf '%s\n' "$n" > "$cf"
+    [ "$n" -ge 3 ] && return 1
+  fi
+  return 0
+}
+v_test_core_list() {
+  local file="$AOBUS_AGENT_REPO/test/FooTest.cpp"
+  case "$1" in
+    "[empty]") printf 'Matching test cases:\n0 matching test cases\n'; return 0 ;;
+  esac
+  echo "Matching test cases:"
+  echo "  x"
+  echo "    $file:2"
+  echo "      [x]"
+  if grep -q 'anchor' "$file" 2>/dev/null; then
+    echo "  anchor"
+    echo "    $file:3"
+    echo "      [x][anchor]"
+    echo "2 matching test cases"
+  else
+    echo "1 matching test cases"
+  fi
+}
+v_build_debug() { return 0; }
+declare -gA VALIDATION_ARGSPEC=([tidy]="path 1 -" [test-core]="filter 1 1" [build-debug]="any 0 -")  # -gA: sourced inside a loader fn (Step C arg gate)
 EOF
 
 # Fake lint-phase tidy: one "warning:" per remaining BAD marker. This drives the
@@ -72,12 +104,14 @@ REL="lib/foo.cpp"
 
 seed_repo() { # <repo> <bad|clean>
   local repo="$1" mode="$2"
-  rm -rf "$repo"; mkdir -p "$repo/$(dirname "$REL")"
+  rm -rf "$repo"; mkdir -p "$repo/$(dirname "$REL")" "$repo/test"
   if [ "$mode" = bad ]; then
     printf 'keep-1\nremove BAD here\nkeep-2\n' > "$repo/$REL"
   else
     printf 'keep-1\nkeep-2\n' > "$repo/$REL"
   fi
+  printf 'add_executable(ao_test FooTest.cpp)\n' > "$repo/test/CMakeLists.txt"
+  printf '#include <catch2/catch_test_macros.hpp>\nTEST_CASE("x", "[x]") { CHECK(true); }\n' > "$repo/test/FooTest.cpp"
 }
 
 run_dispatch() { # <packet> <bad|clean> [VAR=val...] ; sets RC, LOG
@@ -93,6 +127,7 @@ echo "== A: well-formed C1 lint packet -> runner converges + independent gate cl
 cat > "$ROOT/p_ok.md" <<'EOF'
 ---
 schema: aobus-phase-packet/v1
+kind: request
 skill: use-clang-tidy
 capability: C1
 validation: tidy
@@ -110,6 +145,8 @@ case "$(cat "$ROOT/repo/$REL")" in *BAD*) bad "A: BAD cleared in real tree" ;; *
 echo "== B: validation id not in allowlist -> reject (exit 2), runner never runs =="
 cat > "$ROOT/p_badvalid.md" <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: use-clang-tidy
 capability: C1
 validation: rm-rf-slash
@@ -125,6 +162,8 @@ case "$(cat "$ROOT/repo/$REL")" in *BAD*) ok "B: tree untouched (runner never ra
 echo "== C: packet missing a required field (no inputs) -> reject (exit 64) =="
 cat > "$ROOT/p_noinputs.md" <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: use-clang-tidy
 capability: C1
 validation: tidy
@@ -132,11 +171,13 @@ validation: tidy
 EOF
 run_dispatch "$ROOT/p_noinputs.md" bad
 assert_eq "C: missing inputs -> exit 64" "$RC" "64"
-case "$LOG" in *"missing required fields"*) ok "C: rejected for missing fields" ;; *) bad "C: rejected for missing fields" ;; esac
+case "$LOG" in *"request packet missing 'inputs'"*) ok "C: rejected for missing fields" ;; *) bad "C: rejected for missing fields" ;; esac
 
 echo "== D: unsafe input path (traversal) -> reject (exit 2) =="
 cat > "$ROOT/p_unsafe.md" <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: use-clang-tidy
 capability: C1
 validation: tidy
@@ -151,6 +192,8 @@ case "$LOG" in *"unsafe field"*) ok "D: rejected at arg-safety gate" ;; *) bad "
 echo "== E: (skill,capability) with no registered runner -> escalate (exit 2) =="
 cat > "$ROOT/p_norunner.md" <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: diagnose-issue
 capability: C3
 validation: tidy
@@ -175,6 +218,8 @@ echo "== G: C1 tidy validation_args may feed the gate only when they match input
 : > "$GATE_ARGS_LOG"
 cat > "$ROOT/p_vargs.md" <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: use-clang-tidy
 capability: C1
 validation: tidy
@@ -191,6 +236,8 @@ assert_eq "G: gate received the matching validation_args" "$(tail -n 1 "$GATE_AR
 echo "== H: C1 tidy validation_args outside inputs are rejected before the runner =="
 cat > "$ROOT/p_scope_escape.md" <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: use-clang-tidy
 capability: C1
 validation: tidy
@@ -210,6 +257,8 @@ echo "== I: a mistyped validation arg is rejected up front, before the runner (S
 # up-front arg-contract gate, BEFORE the lint runner touches the tree.
 cat > "$ROOT/p_mistyped.md" <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: use-clang-tidy
 capability: C1
 validation: tidy
@@ -223,6 +272,120 @@ run_dispatch "$ROOT/p_mistyped.md" bad
 assert_eq "I: mistyped arg -> exit 2" "$RC" "2"
 case "$LOG" in *"do not satisfy the 'tidy' contract"*) ok "I: rejected at the arg-contract gate" ;; *) bad "I: rejected at the arg-contract gate" ;; esac
 case "$(cat "$ROOT/repo/$REL")" in *BAD*) ok "I: tree untouched (runner never ran)" ;; *) bad "I: tree untouched (runner never ran)" ;; esac
+
+echo "== J: C2 test phase rejects a non-test input before routing =="
+cat > "$ROOT/p_c2_source.md" <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: request
+skill: write-unit-test
+capability: C2
+validation: test-core
+target_anchor: anchor
+validation_args:
+  - [x]
+inputs:
+  - lib/foo.cpp
+---
+Add a test.
+EOF
+run_dispatch "$ROOT/p_c2_source.md" clean
+assert_eq "J: C2 source input rejected -> exit 2" "$RC" "2"
+case "$LOG" in *"target must be one registered Catch2 test file"*) ok "J: rejected at C2 scope gate" ;; *) bad "J: rejected at C2 scope gate" ;; esac
+
+echo "== K: schema-less request is rejected before routing =="
+cat > "$ROOT/p_no_schema.md" <<'EOF'
+---
+skill: use-clang-tidy
+capability: C1
+validation: tidy
+inputs:
+  - lib/foo.cpp
+---
+EOF
+run_dispatch "$ROOT/p_no_schema.md" bad
+assert_eq "K: missing schema -> exit 64" "$RC" "64"
+case "$LOG" in *"packet schema must be"*) ok "K: rejected at schema gate" ;; *) bad "K: rejected at schema gate" ;; esac
+
+echo "== L: C2 test phase rejects non-test validation ids before routing =="
+cat > "$ROOT/p_c2_bad_family.md" <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: request
+skill: write-unit-test
+capability: C2
+validation: build-debug
+target_anchor: anchor
+validation_args:
+  - [x]
+inputs:
+  - test/FooTest.cpp
+---
+Add a test.
+EOF
+run_dispatch "$ROOT/p_c2_bad_family.md" clean
+assert_eq "L: C2 non-test validation rejected -> exit 2" "$RC" "2"
+case "$LOG" in *"validation must be test-core or test-gtk"*) ok "L: rejected at C2 validation-family gate" ;; *) bad "L: rejected at C2 validation-family gate" ;; esac
+
+echo "== M: C2 test phase rejects an empty Catch2 filter before routing =="
+cat > "$ROOT/p_c2_empty_filter.md" <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: request
+skill: write-unit-test
+capability: C2
+validation: test-core
+target_anchor: anchor
+validation_args:
+  - [empty]
+inputs:
+  - test/FooTest.cpp
+---
+Add a test.
+EOF
+run_dispatch "$ROOT/p_c2_empty_filter.md" clean
+assert_eq "M: C2 empty filter rejected -> exit 2" "$RC" "2"
+case "$LOG" in *"filter matches no tests"*) ok "M: rejected at nonempty-filter gate" ;; *) bad "M: rejected at nonempty-filter gate" ;; esac
+
+echo "== N: C2 test request missing target_anchor is rejected by schema gate =="
+cat > "$ROOT/p_c2_no_anchor.md" <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: request
+skill: write-unit-test
+capability: C2
+validation: test-core
+validation_args:
+  - [x]
+inputs:
+  - test/FooTest.cpp
+---
+Add a test.
+EOF
+run_dispatch "$ROOT/p_c2_no_anchor.md" clean
+assert_eq "N: missing C2 target_anchor -> exit 64" "$RC" "64"
+case "$LOG" in *"missing 'target_anchor'"*) ok "N: rejected at schema gate" ;; *) bad "N: rejected at schema gate" ;; esac
+
+echo "== O: C2 runner keep is rolled back if dispatch independent gate fails =="
+cat > "$ROOT/p_c2_keep_then_gate_fail.md" <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: request
+skill: write-unit-test
+capability: C2
+validation: test-core
+target_anchor: anchor
+validation_args:
+  - [x]
+inputs:
+  - test/FooTest.cpp
+---
+Add a test.
+EOF
+run_dispatch "$ROOT/p_c2_keep_then_gate_fail.md" clean DISPATCH_C2_FINAL_FAIL=1
+assert_eq "O: C2 final gate fail -> exit 2" "$RC" "2"
+case "$LOG" in *"restored C2 target"*) ok "O: dispatcher reports C2 rollback" ;; *) bad "O: dispatcher reports C2 rollback" ;; esac
+case "$(cat "$ROOT/repo/test/FooTest.cpp")" in *PASSMARK*) bad "O: C2 edit rolled back" ;; *) ok "O: C2 edit rolled back" ;; esac
 
 echo "============================================================"
 echo "PASS=$PASS FAIL=$FAIL"

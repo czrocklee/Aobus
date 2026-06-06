@@ -25,7 +25,7 @@ hasnt(){ case "$2" in *"$3"*) bad "$1 (unexpected [$3])" ;; *) ok "$1" ;; esac; 
 ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT"' EXIT
 
-REL="lib/foo.cpp"
+REL="test/foo.cpp"
 export T_REL="$REL"   # test_phase does not export the rel path; the mock derives it from here
 
 # Mock C2 routing: one worker whose behavior is selected by C2_MODE. It edits ONLY its sandbox copy.
@@ -36,17 +36,19 @@ ROUTE_C1_LABEL="-"; ROUTE_C2_LABEL="mock-c2"
 route_c2_worker() {
   local t="$AGENT_SANDBOX/${T_REL:?}"
   case "${C2_MODE:-good}" in
-    good)  printf 'PASSMARK\n' >> "$t" ;;                          # one-round pass
+    good)  printf 'TEST_CASE("anchor", "[base64][anchor]") { CHECK(true); }\nPASSMARK\n' >> "$t" ;;  # one-round pass
     noop)  : ;;                                                     # no change
     churn) for _ in $(seq 30); do echo filler; done >> "$t" ;;     # blow the churn budget
     fail)  printf 'FAILMARK\n' >> "$t" ;;                          # never satisfies validation
+    noanchor) printf 'CHECK(true);\nPASSMARK\n' >> "$t" ;;          # validation passes but anchor gate fails
+    subtract) printf '#include <catch2/catch_test_macros.hpp>\nTEST_CASE("anchor", "[base64][anchor]") {}\nPASSMARK\n' > "$t" ;;
     flaky) case "$AGENT_PROMPT" in                                 # fail round 1, pass once told it failed
-             *FAILED*) printf 'PASSMARK\n' >> "$t" ;;
+             *FAILED*) printf 'TEST_CASE("anchor", "[base64][anchor]") { CHECK(true); }\nPASSMARK\n' >> "$t" ;;
              *)        printf 'FAILMARK\n' >> "$t" ;;
            esac ;;
   esac
 }
-route_c2_alt() { printf 'PASSMARK\nALTWORKER\n' >> "$AGENT_SANDBOX/${T_REL:?}"; }  # a 2nd selectable C2 worker
+route_c2_alt() { printf 'TEST_CASE("anchor", "[base64][anchor]") { CHECK(true); }\nPASSMARK\nALTWORKER\n' >> "$AGENT_SANDBOX/${T_REL:?}"; }  # a 2nd selectable C2 worker
 EOF
 
 # Mock validation allowlist: v_test_core passes iff the (applied) tree carries PASSMARK. It ignores the
@@ -57,8 +59,24 @@ VALID="$ROOT/mock-validation.env"
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
 v_test_core() {
-  grep -q 'PASSMARK' "$AOBUS_AGENT_REPO/${T_REL:?}" && return 0
-  echo "test failed: PASSMARK assertion not satisfied"; return 1
+  [ -z "${BASELINE_FAIL:-}" ] || { echo "baseline failed"; return 1; }
+  ! grep -q 'FAILMARK' "$AOBUS_AGENT_REPO/${T_REL:?}" && return 0
+  echo "test failed: FAILMARK assertion failed"; return 1
+}
+v_test_core_list() {
+  local file="$AOBUS_AGENT_REPO/${T_REL:?}"
+  echo "Matching test cases:"
+  echo "  base"
+  echo "    $file:2"
+  echo "      [base64]"
+  if grep -q 'anchor' "$file" 2>/dev/null; then
+    echo "  anchor"
+    echo "    $file:3"
+    echo "      [base64][anchor]"
+    echo "2 matching test cases"
+  else
+    echo "1 matching test cases"
+  fi
 }
 EOF
 
@@ -66,15 +84,25 @@ EOF
 VALID_SPEC="$ROOT/mock-validation-spec.env"
 cat > "$VALID_SPEC" <<'EOF'
 #!/usr/bin/env bash
-v_test_core() { grep -q 'PASSMARK' "$AOBUS_AGENT_REPO/${T_REL:?}" && return 0; echo "test failed"; return 1; }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1")
+v_test_core() { ! grep -q 'FAILMARK' "$AOBUS_AGENT_REPO/${T_REL:?}" && return 0; echo "test failed"; return 1; }
+v_test_core_list() {
+  local file="$AOBUS_AGENT_REPO/${T_REL:?}"
+  echo "Matching test cases:"
+  echo "  base"
+  echo "    $file:2"
+  echo "      [base64]"
+  echo "1 matching test cases"
+}
+v_build_debug() { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [build-debug]="any 0 -")
 EOF
 
 export AOBUS_ROUTING_ENV="$ROUTING" AOBUS_VALIDATION_ENV="$VALID"
 
 reseed() { # fresh throwaway tree with a baseline "existing test file"
-  local repo="$1"; rm -rf "$repo"; mkdir -p "$repo/lib"
-  printf '// existing test\nTEST_CASE("x") {}\n' > "$repo/$REL"
+  local repo="$1"; rm -rf "$repo"; mkdir -p "$repo/test"
+  printf 'add_executable(ao_test foo.cpp)\n' > "$repo/test/CMakeLists.txt"
+  printf '#include <catch2/catch_test_macros.hpp>\nTEST_CASE("x", "[base64]") { CHECK(true); }\n' > "$repo/$REL"
 }
 
 run_tp() { # <packet> [VAR=val...] ; sets RC, LOG, BODY
@@ -93,13 +121,15 @@ echo "== A: valid packet, worker passes in one round -> KEEP (exit 0) =="
 pkt <<'EOF'
 ---
 schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
+target_anchor: anchor
 validation_args:
   - [base64]
 inputs:
-  - lib/foo.cpp
+  - test/foo.cpp
 ---
 Add a base64 round-trip assertion.
 EOF
@@ -107,15 +137,23 @@ run_tp "$ROOT/p.md"
 assert_eq "A: pass -> exit 0" "$RC" "0"
 has  "A: reports validation pass" "$LOG" "VALIDATION PASS"
 has  "A: edit landed in real tree" "$BODY" "PASSMARK"
+[ -n "$(find "$ROOT/work/test" -name review.md -print -quit 2>/dev/null)" ] && ok "A: review dossier written" || bad "A: review dossier written"
+[ -n "$(find "$ROOT/work/test" -name manifest.json -print -quit 2>/dev/null)" ] && ok "A: manifest written" || bad "A: manifest written"
+[ -s "$ROOT/work/audit.log" ] && ok "A: audit log written" || bad "A: audit log written"
 
 echo "== B: validation id not in allowlist -> reject (exit 2) =="
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: drop-tables
+target_anchor: anchor
+validation_args:
+  - [base64]
 inputs:
-  - lib/foo.cpp
+  - test/foo.cpp
 ---
 plan
 EOF
@@ -123,9 +161,31 @@ run_tp "$ROOT/p.md"
 assert_eq "B: non-allowlisted validation -> exit 2" "$RC" "2"
 has  "B: rejected at allowlist gate" "$LOG" "not in the allowlist"
 
+echo "== B2: C2 rejects non-test validation ids even when allowlisted =="
+pkt <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: request
+skill: improve-test-coverage
+capability: C2
+validation: build-debug
+target_anchor: anchor
+validation_args:
+  - [base64]
+inputs:
+  - test/foo.cpp
+---
+plan
+EOF
+run_tp "$ROOT/p.md" AOBUS_VALIDATION_ENV="$VALID_SPEC"
+assert_eq "B2: non-test validation -> exit 2" "$RC" "2"
+has  "B2: rejected by C2 validation-family gate" "$LOG" "validation must be test-core or test-gtk"
+
 echo "== C: packet with no inputs -> reject (exit 64) =="
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
@@ -138,11 +198,16 @@ assert_eq "C: no inputs -> exit 64" "$RC" "64"
 echo "== D: empty plan body -> reject (exit 64) =="
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
+target_anchor: anchor
+validation_args:
+  - [base64]
 inputs:
-  - lib/foo.cpp
+  - test/foo.cpp
 ---
 EOF
 run_tp "$ROOT/p.md"
@@ -152,13 +217,16 @@ has  "D: rejected for empty plan" "$LOG" "empty plan body"
 echo "== E: unsafe validation_args -> reject (exit 2) =="
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
+target_anchor: anchor
 validation_args:
   - -rf
 inputs:
-  - lib/foo.cpp
+  - test/foo.cpp
 ---
 plan
 EOF
@@ -169,9 +237,14 @@ has  "E: rejected at arg-safety gate" "$LOG" "unsafe validation arg"
 echo "== F: guarded target path -> escalate (exit 2) + packet =="
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
+target_anchor: anchor
+validation_args:
+  - [base64]
 inputs:
   - include/foo.h
 ---
@@ -185,9 +258,14 @@ has  "F: reports guard reject" "$LOG" "GUARD REJECT"
 echo "== G: target missing on disk -> escalate (exit 2) =="
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
+target_anchor: anchor
+validation_args:
+  - [base64]
 inputs:
   - lib/missing.cpp
 ---
@@ -200,11 +278,16 @@ has  "G: reports missing target" "$LOG" "target missing on disk"
 echo "== H: no-op worker -> rollback + escalate (exit 2) + packet =="
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
+target_anchor: anchor
+validation_args:
+  - [base64]
 inputs:
-  - lib/foo.cpp
+  - test/foo.cpp
 ---
 plan
 EOF
@@ -226,6 +309,24 @@ assert_eq "J: budget exhausted -> exit 2" "$RC" "2"
 has   "J: reports budget exhausted" "$LOG" "ROUND BUDGET"
 hasnt "J: tree restored (failed attempt discarded)" "$BODY" "FAILMARK"
 
+echo "== J2: baseline validation failure rejects before worker =="
+run_tp "$ROOT/p.md" BASELINE_FAIL=1
+assert_eq "J2: baseline failure -> exit 2" "$RC" "2"
+has   "J2: reports baseline failure" "$LOG" "BASELINE VALIDATION FAILED"
+hasnt "J2: worker never kept an edit" "$BODY" "PASSMARK"
+
+echo "== J3: validation pass without anchor rolls back and exhausts =="
+run_tp "$ROOT/p.md" C2_MODE=noanchor MAX_ROUNDS=1
+assert_eq "J3: missing anchor -> exit 2" "$RC" "2"
+has   "J3: reports missing anchor" "$LOG" "target_anchor 'anchor' was not present"
+hasnt "J3: tree restored after missing anchor" "$BODY" "PASSMARK"
+
+echo "== J4: assertion-count decrease rolls back and escalates =="
+run_tp "$ROOT/p.md" C2_MODE=subtract
+assert_eq "J4: negative assertion delta -> exit 2" "$RC" "2"
+has   "J4: reports assertion delta" "$LOG" "ASSERTION DELTA"
+hasnt "J4: tree restored after negative delta" "$BODY" "PASSMARK"
+
 echo "== K: flaky worker fails round 1, passes round 2 on error feedback (exit 0) =="
 run_tp "$ROOT/p.md" C2_MODE=flaky MAX_ROUNDS=2
 assert_eq "K: eventual pass -> exit 0" "$RC" "0"
@@ -237,13 +338,16 @@ echo "== L: validation_args that violate the arg contract are rejected up front 
 # BEFORE the lock/worker — the same up-front gate the dispatcher enforces.
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
+target_anchor: anchor
 validation_args:
   - lib/foo.cpp
 inputs:
-  - lib/foo.cpp
+  - test/foo.cpp
 ---
 Add a test.
 EOF
@@ -252,16 +356,40 @@ assert_eq "L: mistyped validation arg -> exit 2" "$RC" "2"
 has   "L: rejected at the arg-contract gate" "$LOG" "do not satisfy the 'test-core' contract"
 hasnt "L: worker never ran (no marker)" "$BODY" "PASSMARK"
 
-echo "== M: ROUTE_C2_WORKER selects the active C2 worker (default vs alternate) =="
+echo "== L2: pre-existing target_anchor is rejected before worker =="
 pkt <<'EOF'
 ---
+schema: aobus-phase-packet/v1
+kind: request
 skill: improve-test-coverage
 capability: C2
 validation: test-core
+target_anchor: x
 validation_args:
   - [base64]
 inputs:
-  - lib/foo.cpp
+  - test/foo.cpp
+---
+Add a test.
+EOF
+run_tp "$ROOT/p.md"
+assert_eq "L2: pre-existing anchor -> exit 2" "$RC" "2"
+has   "L2: rejected before worker" "$LOG" "target_anchor 'x' is already present"
+hasnt "L2: worker never ran" "$BODY" "PASSMARK"
+
+echo "== M: ROUTE_C2_WORKER selects the active C2 worker (default vs alternate) =="
+pkt <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: request
+skill: improve-test-coverage
+capability: C2
+validation: test-core
+target_anchor: anchor
+validation_args:
+  - [base64]
+inputs:
+  - test/foo.cpp
 ---
 Add a test.
 EOF

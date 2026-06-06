@@ -17,17 +17,22 @@ file — can be delegated to a mid-tier model (capability **C2**) via `script/ag
 implements the plan. The rest of this document is the manual / frontier (C3) path for choosing targets.
 
 - **Capability:** C2 (scoped implementation inside a fixed plan, validated by a real build + run).
-- **Worker:** per `script/agent/routing.env` (`route_c2_worker`; pilot default: GPT-5.5 via codex).
-- **Inputs (Phase Packet):** one existing test file (`inputs[0]`), the plan (packet body), and a
-  Catch2 filter (`validation_args`) for the validation.
+- **Worker:** per `script/agent/routing.env` (`route_c2_worker`; default: Gemini 3.1 Pro via agy).
+- **Inputs (Phase Packet):** one existing registered test file (`inputs[0]`), the plan (packet body),
+  one Catch2 filter (`validation_args`), and a `target_anchor` naming a safe unique tag/test token that
+  is absent before the edit and visible in Catch2 `--list-tests --verbosity high` output after the edit.
 - **Validation:** an allowlisted build+run id — `test-core` / `test-gtk` (`script/agent/validation.env`);
-  the filtered suite must build and pass. Re-run by the harness; never trusted from the model.
+  the filtered suite must already pass on the baseline tree, then build and pass after the worker edit.
+  The list output must bind the selected filter back to the edited source file and `target_anchor`.
+  Re-run by the harness; never trusted from the model.
 - **Iterate:** a failed build/test is fed back to the worker, up to a round budget, then escalate.
 - **Isolation / harness-diff / guard / temporal isolation:** identical to the C1 lint phase — the worker
   edits a sandbox copy; the dispatcher takes the patch by diff, applies, validates, keeps or rolls back.
 - **Scope limit (structural):** this **augments an existing, registered** test file only. A **new** test
   file needs a `test/CMakeLists.txt` registration (a guarded path), so new-file scaffolding is a **C3**
   task, not C2.
+- **Review handoff:** a kept C2 edit emits a review dossier with the plan, diff, validation output,
+  scope classification, and assertion-count delta. The delta is a risk marker, not semantic proof.
 - **Escalate to C3 when:** the plan needs design judgement, a new file/registration, a public-API
   change, or the loop cannot produce a passing test.
 - **Run:** via a Phase Packet through `script/agent/dispatch.sh <packet>` (routes

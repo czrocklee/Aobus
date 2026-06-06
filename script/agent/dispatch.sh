@@ -22,12 +22,20 @@ agent_load_validation || exit 5
 PACKET="${1:?need a phase packet path}"
 [ -r "$PACKET" ] || { echo "dispatch: packet not readable: $PACKET" >&2; exit 64; }
 
+if [ "$(agent_packet_scalar "$PACKET" kind)" = "proposal" ]; then
+  echo "dispatch: proposal packets must run via c2_proposal_phase.sh, not dispatch.sh -> reject" >&2
+  exit 64
+fi
+
+agent_packet_validate "$PACKET" request || exit 64
+
 skill="$(agent_packet_scalar "$PACKET" skill)"
 cap="$(agent_packet_scalar "$PACKET" capability)"
 valid="$(agent_packet_scalar "$PACKET" validation)"
 esc="$(agent_packet_scalar "$PACKET" escalate_to)"
 mapfile -t inputs < <(agent_packet_list "$PACKET" inputs)
 mapfile -t vargs < <(agent_packet_list "$PACKET" validation_args)
+anchor="$(agent_packet_scalar "$PACKET" target_anchor)"
 
 echo "dispatch: skill=$skill capability=$cap validation=$valid escalate_to=${esc:-?} inputs=${#inputs[@]}"
 
@@ -68,8 +76,36 @@ if [ "$skill/$cap" = "use-clang-tidy/C1" ] && [ "${#vargs[@]}" -gt 0 ]; then
   done
 fi
 
+if [ "$skill/$cap" = "improve-test-coverage/C2" ] || [ "$skill/$cap" = "write-unit-test/C2" ]; then
+  if ! agent_c2_test_validation_ok "$valid"; then
+    echo "dispatch: C2 test phase validation must be test-core or test-gtk -> reject" >&2; exit 2
+  fi
+  if [ "${#inputs[@]}" -ne 1 ]; then
+    echo "dispatch: C2 test phase requires exactly one input -> reject" >&2; exit 2
+  fi
+  if ! agent_check_registered_test_for_validation "${inputs[0]}" "$valid"; then
+    echo "dispatch: C2 test phase target must be one registered Catch2 test file for '$valid' -> reject" >&2
+    exit 2
+  fi
+  if [ "${#vargs[@]}" -ne 1 ]; then
+    echo "dispatch: C2 test phase requires exactly one validation_args filter -> reject" >&2; exit 2
+  fi
+  if [ -z "$anchor" ]; then
+    echo "dispatch: C2 test phase requires target_anchor -> reject" >&2; exit 64
+  fi
+  agent_arg_safe "$anchor" || { echo "dispatch: unsafe target_anchor '$anchor' -> reject" >&2; exit 2; }
+  if ! agent_test_filter_nonempty "$valid" "${vargs[0]}"; then
+    echo "dispatch: C2 test phase filter matches no tests -> reject" >&2; exit 2
+  fi
+fi
+
 # --- route (skill, capability) -> runner ---
 runner_rc=0
+rollback_dir=""
+if [ "$skill/$cap" = "improve-test-coverage/C2" ] || [ "$skill/$cap" = "write-unit-test/C2" ]; then
+  rollback_dir="$(mktemp -d)"
+  cp "$AGENT_REPO/${inputs[0]}" "$rollback_dir/target"
+fi
 case "$skill/$cap" in
   use-clang-tidy/C1)
     "$AGENT_DIR/lint_phase.sh" "${inputs[@]}"; runner_rc=$? ;;
@@ -85,5 +121,14 @@ if [ "$runner_rc" -eq 0 ] && agent_validate "$valid" "${gate_args[@]}"; then
   echo "dispatch: PASS (runner kept + independent '$valid' gate clean)"; exit 0
 fi
 echo "dispatch: runner_rc=$runner_rc or '$valid' gate failed -> escalate ${esc:-C3}"
-echo "dispatch: packets under $AGENT_WORK/lint/escalate/"
+if [ -n "$rollback_dir" ] && [ "$runner_rc" -eq 0 ] && [ -f "$rollback_dir/target" ]; then
+  cp "$rollback_dir/target" "$AGENT_REPO/${inputs[0]}"
+  echo "dispatch: restored C2 target after independent-gate failure"
+fi
+case "$skill/$cap" in
+  use-clang-tidy/C1) phase_dir="lint" ;;
+  improve-test-coverage/C2 | write-unit-test/C2) phase_dir="test" ;;
+  *) phase_dir="dispatch" ;;
+esac
+echo "dispatch: packets under $AGENT_WORK/$phase_dir/escalate/"
 exit 2

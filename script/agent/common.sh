@@ -20,6 +20,107 @@ agent_guard_path() {
   ! printf '%s' "$1" | rg -q "$AGENT_FORBID"
 }
 
+# agent_classify_path <repo-relative path> ; classify a path for capability-specific positive gates.
+agent_classify_path() {
+  case "$1" in
+    include/*)                 echo public-header ;;
+    script/*)                  echo script ;;
+    doc/design/*)              echo design-doc ;;
+    .agents/*)                 echo skill ;;
+    .clang-tidy | *CMakeLists.txt) echo build-config ;;
+    test/*.cpp | test/**/*.cpp) echo test-cpp ;;
+    test/* | test/**/*)        echo test-helper ;;
+    lib/*.cpp | lib/**/*.cpp | app/*.cpp | app/**/*.cpp | src/*.cpp | src/**/*.cpp) echo private-cpp-source ;;
+    *)                         echo unknown ;;
+  esac
+}
+
+# agent_check_registered_test <repo-relative test .cpp> ; true iff the file is an existing registered
+# Catch2 test source. A conservative false negative escalates to C3; a false positive would let C2 write
+# tests that never run, so keep this intentionally strict.
+agent_cmake_has_source() {
+  local cmake="$1" rel="$2" target="${3:-}" src
+  src="${rel#test/}"
+  [ -r "$cmake" ] || return 1
+  awk -v src="$src" -v target="$target" '
+    function scan(line,    n, i, tok) {
+      sub(/#.*/, "", line)
+      gsub(/[()]/, " ", line)
+      n = split(line, tok, /[ \t\r\n]+/)
+      for (i = 1; i <= n; i++) {
+        if (tok[i] == src) found = 1
+      }
+    }
+    target == "" { scan($0); next }
+    $0 ~ "^[ \t]*add_executable[ \t]*\\(" {
+      line = $0
+      sub(/#.*/, "", line)
+      gsub(/[()]/, " ", line)
+      n = split(line, tok, /[ \t\r\n]+/)
+      in_target = (tok[2] == target)
+    }
+    in_target {
+      scan($0)
+      if ($0 ~ /\)/) in_target = 0
+    }
+    END { exit found ? 0 : 1 }
+  ' "$cmake"
+}
+
+agent_test_executable_for_validation() {
+  case "$1" in
+    test-core) echo ao_test ;;
+    test-gtk)  echo ao_test_gtk ;;
+    *) return 1 ;;
+  esac
+}
+
+agent_c2_test_validation_ok() {
+  case "$1" in test-core | test-gtk) return 0 ;; *) return 1 ;; esac
+}
+
+agent_check_registered_test() {
+  local rel="$1" cmake
+  [ "$(agent_classify_path "$rel")" = test-cpp ] || return 1
+  [ -f "$AGENT_REPO/$rel" ] || return 1
+  grep -Eq '\b(TEST_CASE|TEMPLATE_TEST_CASE|SCENARIO)\s*\(' "$AGENT_REPO/$rel" || return 1
+  cmake="$AGENT_REPO/test/CMakeLists.txt"
+  agent_cmake_has_source "$cmake" "$rel"
+}
+
+agent_check_registered_test_for_validation() {
+  local rel="$1" validation="$2" cmake target
+  agent_check_registered_test "$rel" || return 1
+  target="$(agent_test_executable_for_validation "$validation")" || return 1
+  cmake="$AGENT_REPO/test/CMakeLists.txt"
+  agent_cmake_has_source "$cmake" "$rel" "$target"
+}
+
+# agent_scope_ok <task-class> <path...> ; positive scope gate for C1/C2 runners.
+agent_scope_ok() {
+  local class="$1"; shift
+  case "$class" in
+    c2-test-augment)
+      [ "$#" -eq 1 ] || return 1
+      agent_guard_path "$1" && agent_check_registered_test "$1" ;;
+    c2-private-cpp)
+      [ "$#" -eq 1 ] || return 1
+      [ "$(agent_classify_path "$1")" = private-cpp-source ] && agent_guard_path "$1" ;;
+    *) return 1 ;;
+  esac
+}
+
+# agent_proposal_input_ok <repo-relative-path> ; scope gate for C2 proposal executor.
+agent_proposal_input_ok() {
+  local p="$1"
+  agent_arg_safe "$p" || return 1
+  agent_guard_path "$p" || return 1
+  [ -f "$AGENT_REPO/$p" ] || return 1
+  [ ! -L "$AGENT_REPO/$p" ] || return 1
+  [ "$(agent_classify_path "$p")" = private-cpp-source ] || return 1
+  return 0
+}
+
 # agent_load_routing ; source the routing table (override file via AOBUS_ROUTING_ENV).
 agent_load_routing() {
   local rt="${AOBUS_ROUTING_ENV:-$AGENT_DIR/routing.env}"
@@ -104,6 +205,42 @@ agent_validate() {
   ( cd "$AGENT_REPO" && "$fn" "$@" )
 }
 
+# agent_validate_in_repo <source-dir> <build-dir> <validation-id> [args...]
+# Isolated validation wrapper for proposals.
+agent_validate_in_repo() {
+  local src="$1" bld="$2" id="$3"; shift 3
+  src="$(cd "$src" 2>/dev/null && pwd -P)" || return 2
+  mkdir -p "$bld"
+  bld="$(cd "$bld" 2>/dev/null && pwd -P)" || return 2
+  local fn
+  fn="$(agent_validation_fn "$id")"
+  if ! agent_validation_exists "$id"; then
+    echo "agent: validation '$id' is not in the allowlist -> reject" >&2
+    return 2
+  fi
+  
+  if [ "${VALIDATION_IS_ISOLATABLE[$id]:-}" != "1" ]; then
+    echo "agent: validation '$id' is not proposal-isolatable -> reject" >&2
+    return 2
+  fi
+  
+  local a
+  for a in "$@"; do
+    agent_arg_safe "$a" || { echo "agent: validation arg '$a' is unsafe -> reject" >&2; return 2; }
+  done
+  agent_validation_args_ok "$id" "$@" || return 2
+  
+  ( 
+    export AOBUS_AGENT_REPO="$src"
+    export BUILD_DIR="$bld"
+    cd "$src"
+    if [ ! -f "$bld/CMakeCache.txt" ]; then
+      cmake --preset linux-debug -B "$bld" -S "$src" >/dev/null 2>&1 || true
+    fi
+    "$fn" "$@" 
+  )
+}
+
 # Phase Packet (v1) is YAML frontmatter + markdown body. These read the constrained frontmatter we
 # author (no general YAML parser): a key we own, simple scalars, and one-level "- item" lists.
 agent_packet_scalar() { # <file> <key>
@@ -120,6 +257,262 @@ agent_packet_list() { # <file> <key> ; one item per line
 }
 agent_packet_body() { # <file> ; the markdown body (everything after the closing frontmatter ---)
   awk '/^---[ \t]*$/ {fmc++; next} fmc>=2 {print}' "$1"
+}
+
+agent_packet_keys() { # <file> ; one scalar/list key per line from frontmatter
+  awk '
+    /^---[ \t]*$/ {fmc++; next}
+    fmc!=1 {next}
+    /^[A-Za-z_][A-Za-z0-9_-]*:[ \t]*($|[^ ].*)/ {
+      sub(/:.*/, "")
+      print
+    }
+  ' "$1"
+}
+
+agent_has_key() {
+  [ -n "$(agent_packet_scalar "$1" "$2")" ] || [ -n "$(agent_packet_list "$1" "$2")" ]
+}
+
+agent_key_allowed() {
+  local key="$1"; shift
+  local allowed
+  for allowed in "$@"; do [ "$key" = "$allowed" ] && return 0; done
+  return 1
+}
+
+agent_request_is_c2_test() {
+  local skill cap
+  skill="$(agent_packet_scalar "$1" skill)"
+  cap="$(agent_packet_scalar "$1" capability)"
+  [ "$cap" = C2 ] && { [ "$skill" = improve-test-coverage ] || [ "$skill" = write-unit-test ]; }
+}
+
+# agent_packet_validate <file> [expected-kind] ; strict schema for mutating request packets.
+agent_packet_validate() {
+  local packet="$1" expected="${2:-}"
+  local schema kind key
+  schema="$(agent_packet_scalar "$packet" schema)"
+  kind="$(agent_packet_scalar "$packet" kind)"
+  [ "$schema" = "aobus-phase-packet/v1" ] || {
+    echo "agent: packet schema must be aobus-phase-packet/v1 (got '${schema:-}') -> reject" >&2
+    return 64
+  }
+  [ -n "$kind" ] || { echo "agent: packet kind is required -> reject" >&2; return 64; }
+  [ -z "$expected" ] || [ "$kind" = "$expected" ] || {
+    echo "agent: packet kind must be '$expected' (got '$kind') -> reject" >&2
+    return 64
+  }
+  case "$kind" in
+    request)
+      for key in schema kind skill capability validation inputs; do
+        agent_has_key "$packet" "$key" || {
+          echo "agent: request packet missing '$key' -> reject" >&2
+          return 64
+        }
+      done
+      while IFS= read -r key; do
+        agent_key_allowed "$key" schema kind skill capability validation validation_args inputs \
+          escalate_to target_anchor || {
+          echo "agent: request packet has unknown key '$key' -> reject" >&2
+          return 64
+        }
+      done < <(agent_packet_keys "$packet")
+      if agent_request_is_c2_test "$packet" && ! agent_has_key "$packet" target_anchor; then
+        echo "agent: C2 test request missing 'target_anchor' -> reject" >&2
+        return 64
+      fi
+      ;;
+    proposal)
+      for key in schema kind skill capability mode inputs validation; do
+        agent_has_key "$packet" "$key" || {
+          echo "agent: proposal packet missing '$key' -> reject" >&2
+          return 64
+        }
+      done
+      while IFS= read -r key; do
+        agent_key_allowed "$key" schema kind skill capability mode validation validation_args inputs \
+          escalate_to || {
+          echo "agent: proposal packet has unknown key '$key' -> reject" >&2
+          return 64
+        }
+      done < <(agent_packet_keys "$packet")
+      if [ "$(agent_packet_scalar "$packet" skill)" != "execute-plan" ]; then
+        echo "agent: proposal skill must be execute-plan -> reject" >&2
+        return 64
+      fi
+      if [ "$(agent_packet_scalar "$packet" capability)" != "C2" ]; then
+        echo "agent: proposal capability must be C2 -> reject" >&2
+        return 64
+      fi
+      if [ "$(agent_packet_scalar "$packet" mode)" != "proposal" ]; then
+        echo "agent: proposal mode must be proposal -> reject" >&2
+        return 64
+      fi
+      if [ -z "$(agent_packet_body "$packet" | sed '/^[[:space:]]*$/d')" ]; then
+        echo "agent: proposal body cannot be empty -> reject" >&2
+        return 64
+      fi
+      ;;
+    escalation)
+      for key in schema kind skill capability escalate_to validation inputs; do
+        agent_has_key "$packet" "$key" || {
+          echo "agent: escalation packet missing '$key' -> reject" >&2
+          return 64
+        }
+      done
+      ;;
+    council | council-dossier)
+      : ;;
+    *)
+      echo "agent: unknown packet kind '$kind' -> reject" >&2
+      return 64
+      ;;
+  esac
+  return 0
+}
+
+agent_test_list_output() {
+  local id="$1" filter="$2" fn
+  fn="$(agent_validation_fn "$id")_list"
+  [ "$(type -t "$fn" 2>/dev/null)" = function ] || return 3
+  ( cd "$AGENT_REPO" && "$fn" "$filter" )
+}
+
+agent_test_list_has_matches() {
+  local out="$1"
+  printf '%s\n' "$out" | rg -q '(^|[^0-9])0 matching test cases' && return 1
+  printf '%s\n' "$out" | rg -q '(^|[^0-9])[1-9][0-9]* matching test cases' && return 0
+  [ -n "$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d')" ]
+}
+
+# agent_test_filter_nonempty <validation-id> <filter> ; if the validation table exposes a list helper,
+# require the filter to match at least one real test. Mock validation tables that do not define the
+# helper are treated as unknown rather than failing, preserving deterministic unit seams.
+agent_test_filter_nonempty() {
+  local out
+  out="$(agent_test_list_output "$1" "$2" 2>/dev/null)" || return 0
+  agent_test_list_has_matches "$out"
+}
+
+agent_test_list_mentions_target_anchor() {
+  local out="$1" rel="$2" anchor="$3" abs
+  abs="$AGENT_REPO/$rel"
+  awk -v abs="$abs" -v rel="$rel" -v anchor="$anchor" '
+    function flush() {
+      if (has_path && has_anchor) ok = 1
+      has_path = 0
+      has_anchor = 0
+    }
+    /^  [^[:space:]]/ { flush() }
+    {
+      if (index($0, abs) || index($0, "/" rel ":") || index($0, rel ":")) has_path = 1
+      if (index($0, anchor)) has_anchor = 1
+    }
+    END { flush(); exit ok ? 0 : 1 }
+  ' <<<"$out"
+}
+
+agent_test_filter_mentions_target_anchor() {
+  local id="$1" filter="$2" rel="$3" anchor="$4" out
+  out="$(agent_test_list_output "$id" "$filter" 2>/dev/null)" || return 1
+  agent_test_list_has_matches "$out" || return 1
+  agent_test_list_mentions_target_anchor "$out" "$rel" "$anchor"
+}
+
+# agent_count_assertions <file> ; cheap C0 risk marker for test augmentation dossiers.
+agent_count_assertions() {
+  [ -r "$1" ] || { echo 0; return 0; }
+  rg -o '\b(CHECK|REQUIRE)(_[A-Z0-9_]+)?\s*\(' "$1" 2>/dev/null | wc -l
+}
+
+agent_phase_id() { printf '%s-%s-%s' "$1" "$(date -u +%Y%m%d-%H%M%S)" "$$"; }
+
+agent_json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+# agent_audit_entry <phase-id> <skill> <cap> <worker> <result> <rounds> <churn> <assertion-delta> <reason>
+agent_audit_entry() {
+  local id="$1" skill="$2" cap="$3" worker="$4" result="$5" rounds="$6" churn="$7" delta="$8" reason="$9"
+  mkdir -p "$AGENT_WORK"
+  printf '{"ts":"%s","phase_id":"%s","skill":"%s","capability":"%s","worker":"%s","result":"%s","rounds":%s,"churn":%s,"assertion_delta":%s,"reason":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(agent_json_escape "$id")" "$(agent_json_escape "$skill")" \
+    "$(agent_json_escape "$cap")" "$(agent_json_escape "$worker")" "$(agent_json_escape "$result")" \
+    "${rounds:-0}" "${churn:-0}" "${delta:-0}" "$(agent_json_escape "$reason")" >> "$AGENT_WORK/audit.log"
+}
+
+# agent_write_manifest <out.json> <artifact...>
+agent_write_manifest() {
+  local out="$1"; shift
+  local f first=1
+  mkdir -p "$(dirname "$out")"
+  {
+    echo '{'
+    echo '  "artifacts": ['
+    for f in "$@"; do
+      [ -e "$f" ] || continue
+      [ "$first" -eq 1 ] || echo ','
+      first=0
+      printf '    {"path":"%s","bytes":%s,"sha256":"%s"}' \
+        "$(agent_json_escape "$f")" "$(wc -c < "$f" 2>/dev/null || echo 0)" \
+        "$(sha256sum "$f" 2>/dev/null | awk '{print $1}')"
+    done
+    echo
+    echo '  ]'
+    echo '}'
+  } > "$out"
+}
+
+# agent_emit_review_dossier <out.md> <packet> <target-rel> <patch> <validation-log> <phase-id>
+#                           <worker> <rounds> <churn> <pre-assertions> <post-assertions> <oracle>
+agent_emit_review_dossier() {
+  local out="$1" packet="$2" rel="$3" patch="$4" vout="$5" phase_id="$6"
+  local worker="$7" rounds="$8" churn="$9" pre="${10}" post="${11}" oracle="${12}"
+  mkdir -p "$(dirname "$out")"
+  {
+    echo "# C2 Review Dossier"
+    echo
+    echo "- phase_id: \`$phase_id\`"
+    echo "- skill: \`$(agent_packet_scalar "$packet" skill)\`"
+    echo "- capability: \`$(agent_packet_scalar "$packet" capability)\`"
+    echo "- target: \`$rel\`"
+    echo "- worker: \`$worker\`"
+    echo "- rounds: $rounds"
+    echo "- churn: $churn"
+    echo "- scope: \`$(agent_classify_path "$rel")\`"
+    echo "- assertions: $pre -> $post"
+    echo "- oracle: \`$oracle\`"
+    [ "$oracle" = zero-delta ] && echo "- risk: assertion count did not increase; C3 must verify the added test is meaningful."
+    echo
+    echo "## Plan"
+    echo '```markdown'
+    agent_packet_body "$packet"
+    echo '```'
+    echo
+    echo "## Diff"
+    echo '```diff'
+    [ -r "$patch" ] && cat "$patch"
+    echo '```'
+    echo
+    echo "## Validation Output"
+    echo '```'
+    if [ -r "$vout" ]; then tail -80 "$vout"; else echo "(none captured)"; fi
+    echo '```'
+    echo
+    echo "## C3 Review Checklist"
+    echo "- Does the diff implement the requested plan and no extra behavior?"
+    echo "- Did C2 stay within the single registered test file?"
+    echo "- Are assertions non-trivial and tied to observable public behavior?"
+    echo "- Is a zero-delta oracle acceptable for this specific plan?"
+  } > "$out"
+  echo "$out"
 }
 
 # agent_repo_lock ; serialize all tree-mutating phases on this repo with an exclusive flock on fd 9.
@@ -200,12 +593,12 @@ agent_emit_packet() {
     echo "---"
     echo "# Phase Packet — escalation to C3"
     echo
-    echo "- skill: \`.agents/skills/use-clang-tidy\`"
+    echo "- skill: \`.agents/skills/${AGENT_PACKET_SKILL:-use-clang-tidy}\`"
     echo "- escalated_from: $capfrom"
     echo "- capability_needed: C3 (frontier reasoning)"
     echo "- target: \`$rel\`"
     echo "- reason: $reason"
-    echo "- validation: \`./script/run-clang-tidy.sh $rel\` (zero warnings is the gate)"
+    echo "- validation: \`${AGENT_PACKET_VALIDATION:-tidy}\`"
     echo "- real-tree state: rolled back to pre-phase (no partial edits applied)"
     echo
     echo "## Residual diagnostics"
@@ -221,4 +614,115 @@ agent_emit_packet() {
     fi
   } > "$out"
   echo "$out"
+}
+
+# agent_guard_output_dir <repo> <output>
+agent_guard_output_dir() {
+  local repo="$1" out="$2"
+  local r o
+  r="$(cd "$repo" 2>/dev/null && pwd -P)" || return 1
+  mkdir -p "$out"
+  o="$(cd "$out" 2>/dev/null && pwd -P)" || return 1
+  case "$o/" in "$r/"*) return 1 ;; esac
+  return 0
+}
+
+# agent_stage_repo_copy <source-repo> <destination>
+agent_stage_repo_copy() {
+  local src="$1" dst="$2"
+  mkdir -p "$dst"
+  rsync -a --exclude='.git/' --exclude='build*/' --exclude='.cache/' "$src/" "$dst/"
+}
+
+# agent_tree_manifest <dir> <out.tsv>
+agent_tree_manifest() {
+  local d="$1" out="$2"
+  mkdir -p "$(dirname "$out")"
+  out="$(cd "$(dirname "$out")" 2>/dev/null && pwd -P)/$(basename "$out")" || return 2
+  d="$(cd "$d" 2>/dev/null && pwd -P)" || return 2
+  ( cd "$d" && 
+    find . -path ./.git -prune -o ! -path ./.git -printf '%y\t%m\t%p\t%l\n' 2>/dev/null | sed 's|^\([^\t]*\t[^\t]*\t\)\./|\1|' | sort > "$out.base"
+    find . -path ./.git -prune -o ! -path ./.git -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null | sed 's|^\([a-f0-9]\{64\}\)[ \t]\+\./|\1\t|' > "$out.hashes"
+    
+    awk -F'\t' -v OFS='\t' '
+      NR==FNR { hash[$2] = $1; next }
+      {
+        if ($1 == "f") {
+          h = hash[$3];
+          if (h == "") h = "-";
+          print $1, $2, $3, $4, h;
+        } else {
+          print $1, $2, $3, $4, "-";
+        }
+      }
+    ' "$out.hashes" "$out.base" > "$out"
+    rm -f "$out.base" "$out.hashes"
+  )
+}
+
+# agent_tree_changes <base-dir> <work-dir> <out.tsv>
+agent_tree_changes() {
+  local b="$1" w="$2" out="$3"
+  agent_tree_manifest "$b" "$out.base"
+  agent_tree_manifest "$w" "$out.work"
+  
+  awk -F'\t' '
+    FNR==NR { type[$3]=$1; mode[$3]=$2; sym[$3]=$4; hash[$3]=$5; base_seen[$3]=1; next }
+    FNR!=NR {
+      w_type=$1; w_mode=$2; w_sym=$4; w_hash=$5; path=$3
+      if (!base_seen[path] && path != ".") {
+        print "add\t" path
+      } else if (path != ".") {
+        if (type[path] != w_type) { print "type\t" path }
+        else if (w_type == "f") {
+          if (hash[path] != w_hash) { print "modify\t" path }
+          else if (mode[path] != w_mode) { print "mode\t" path }
+        } else if (w_type == "l") {
+          if (sym[path] != w_sym) { print "symlink\t" path }
+        }
+      }
+      work_seen[path]=1
+    }
+    END {
+      for (path in base_seen) {
+        if (!work_seen[path] && path != ".") print "delete\t" path
+      }
+    }
+  ' "$out.base" "$out.work" | sort > "$out.raw"
+  
+  while IFS=$'\t' read -r change path; do
+    if [ "$change" = "modify" ] || [ "$change" = "add" ]; then
+      if grep -Iq "" "$w/$path" 2>/dev/null; then
+         :
+      elif [ -s "$w/$path" ]; then
+         change="binary"
+      fi
+    fi
+    printf '%s\t%s\n' "$change" "$path"
+  done < "$out.raw" > "$out"
+  rm -f "$out.base" "$out.work" "$out.raw"
+}
+
+# agent_harness_diff_tree <base-dir> <work-dir> <out.patch>
+agent_harness_diff_tree() {
+  local b="$1" w="$2" out="$3"
+  git diff --no-index --src-prefix=a/ --dst-prefix=b/ "$b" "$w" > "$out" || true
+}
+
+# agent_proposal_changes_ok <inputs-file> <changes.tsv>
+agent_proposal_changes_ok() {
+  local inputs_file="$1" changes_file="$2"
+  local ok=1
+  while IFS=$'\t' read -r change path; do
+    if [ "$change" != "modify" ]; then
+      echo "agent: unsupported change '$change' on '$path' -> reject" >&2
+      ok=0
+    else
+      if ! grep -Fxq "$path" "$inputs_file"; then
+        echo "agent: out-of-scope edit on '$path' -> reject" >&2
+        ok=0
+      fi
+    fi
+  done < "$changes_file"
+  return "$((1 - ok))"
 }

@@ -29,7 +29,8 @@ has()  { case "$2" in *"$3"*) ok "$1" ;; *) bad "$1 (missing [$3])" ;; esac; }
 hasnt(){ case "$2" in *"$3"*) bad "$1 (unexpected [$3])" ;; *) ok "$1" ;; esac; }
 
 ROOT="$(mktemp -d)"
-trap 'rm -rf "$ROOT"' EXIT
+EXTERNAL_STAGE="$HOME/.cache/aobus-council-test.$$"
+trap 'rm -rf "$ROOT" "$EXTERNAL_STAGE"' EXIT
 
 # A small throwaway repo the members get a (disposable) copy of. Never mutated by the test directly;
 # the mutate scenario edits a member's COPY (under the out dir), not this tree.
@@ -262,6 +263,119 @@ PLAN_PKT
 run_in "$ROOT/p.md" COUNCIL_ROSTER="route_c3_member_m1 route_c3_member_m2" COUNCIL_MUTATE_R2="m1 m2"
 assert_eq "MM: exit 2" "$RC" "2"
 has "MM: reports reason" "$LOG" "all members quarantined"
+
+echo "== N: real Gemini C3 route stages under HOME for steam-run private-/tmp =="
+BIN="$ROOT/bin"; mkdir -p "$BIN"
+cat > "$BIN/steam-run" <<'EOF'
+#!/usr/bin/env bash
+pwd -P > "${STEAM_CWD_FILE:?}"
+case "$(pwd -P)/" in
+  /tmp/*) echo "steam-run test: cwd under private /tmp" >&2; exit 77 ;;
+esac
+"$@"
+EOF
+cat > "$BIN/agy" <<'EOF'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'gemini opinion from %s\n' "$(pwd -P)"
+case "${AGY_MUTATE:-}" in
+  1) printf 'mutated\n' > MUTATED_BY_AGY ;;
+esac
+EOF
+chmod +x "$BIN/steam-run" "$BIN/agy"
+REAL_ROUTING="$(cd "$SCRIPT_DIR/../../.." && pwd)/script/agent/routing.env"
+ROUTING_REAL="$ROOT/real-routing.env"
+cat > "$ROUTING_REAL" <<EOF
+. "$REAL_ROUTING"
+ROUTE_C3_MEMBERS=(route_c3_member_gemini)
+COUNCIL_MIN=1
+EOF
+old_routing="$ROUTING"; ROUTING="$ROUTING_REAL"
+new_out
+PLAN_PKT
+run_in "$ROOT/p.md" PATH="$BIN:$PATH" AOBUS_AGY_COUNCIL_STAGE="$EXTERNAL_STAGE" STEAM_CWD_FILE="$ROOT/steam.cwd"
+assert_eq "N: Gemini route exits 0 with fake steam-run" "$RC" "0"
+has "N: Gemini seated" "$DOSS" "### Gemini 3 Pro via gemini"
+steam_cwd="$(cat "$ROOT/steam.cwd" 2>/dev/null || true)"
+case "$steam_cwd/" in
+  /tmp/*) bad "N: steam-run cwd must not be /tmp ($steam_cwd)" ;;
+  "$EXTERNAL_STAGE"/*) ok "N: steam-run cwd is HOME-backed staged copy" ;;
+  *) bad "N: steam-run cwd under expected stage (got [$steam_cwd])" ;;
+esac
+
+echo "== O: Gemini staged-copy mutation is mirrored to outer canary as violation =="
+new_out
+PLAN_PKT
+run_in "$ROOT/p.md" PATH="$BIN:$PATH" AOBUS_AGY_COUNCIL_STAGE="$EXTERNAL_STAGE" \
+  STEAM_CWD_FILE="$ROOT/steam-mut.cwd" AGY_MUTATE=1
+assert_eq "O: all-draft violation exits 2" "$RC" "2"
+assert_eq "O: Gemini status is violation" "$(cat "$OUTDIR/draft.gemini.md.status" 2>/dev/null || true)" "violation"
+has "O: violation note explains mutation" "$(cat "$OUTDIR/draft.gemini.md.note" 2>/dev/null || true)" "mutated its working copy"
+ROUTING="$old_routing"
+
+echo "== P: stable prefix is byte-identical across R1/R2/R3 (with inputs) =="
+new_out
+PLAN_PKT
+run_in "$ROOT/p.md"
+# Extract the prefix: everything up to (but not including) the INSTRUCTIONS header.
+_prefix_of() { sed '/^=== INSTRUCTIONS ===/,$d' "$1"; }
+pfx_r1="$(_prefix_of "$OUTDIR/prompt.draft.m1.txt")"
+pfx_r2="$(_prefix_of "$OUTDIR/prompt.challenge.m1.txt")"
+pfx_r3="$(_prefix_of "$OUTDIR/prompt.revise.m1.txt")"
+assert_eq "P: R1 prefix == R2 prefix" "$pfx_r1" "$pfx_r2"
+assert_eq "P: R2 prefix == R3 prefix" "$pfx_r2" "$pfx_r3"
+
+echo "== Q: stable prefix is byte-identical without inputs =="
+new_out
+pkt <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: council
+mode: plan
+---
+Design question without inputs.
+EOF
+run_in "$ROOT/p.md"
+_prefix_of() { sed '/^=== INSTRUCTIONS ===/,$d' "$1"; }
+pfx_r1="$(_prefix_of "$OUTDIR/prompt.draft.m1.txt")"
+pfx_r2="$(_prefix_of "$OUTDIR/prompt.challenge.m1.txt")"
+pfx_r3="$(_prefix_of "$OUTDIR/prompt.revise.m1.txt")"
+assert_eq "Q: R1 prefix == R2 prefix (no inputs)" "$pfx_r1" "$pfx_r2"
+assert_eq "Q: R2 prefix == R3 prefix (no inputs)" "$pfx_r2" "$pfx_r3"
+
+echo "== R: prompt layout ordering — TASK before INSTRUCTIONS before peer data =="
+new_out
+PLAN_PKT
+run_in "$ROOT/p.md"
+# Helper: line number of first match
+_lineof() { grep -n "$2" "$1" | head -1 | cut -d: -f1; }
+# R1 draft: TASK before INSTRUCTIONS
+t1=$(_lineof "$OUTDIR/prompt.draft.m1.txt" "^=== TASK ===")
+i1=$(_lineof "$OUTDIR/prompt.draft.m1.txt" "^=== INSTRUCTIONS ===")
+[ "$t1" -lt "$i1" ] && ok "R: R1 TASK before INSTRUCTIONS" || bad "R: R1 TASK before INSTRUCTIONS (TASK=$t1 INST=$i1)"
+# R2 challenge: TASK before INSTRUCTIONS before peer_draft
+t2=$(_lineof "$OUTDIR/prompt.challenge.m1.txt" "^=== TASK ===")
+i2=$(_lineof "$OUTDIR/prompt.challenge.m1.txt" "^=== INSTRUCTIONS ===")
+p2=$(_lineof "$OUTDIR/prompt.challenge.m1.txt" "<peer_draft")
+[ "$t2" -lt "$i2" ] && ok "R: R2 TASK before INSTRUCTIONS" || bad "R: R2 TASK before INSTRUCTIONS"
+[ "$i2" -lt "$p2" ] && ok "R: R2 INSTRUCTIONS before peer_draft" || bad "R: R2 INSTRUCTIONS before peer_draft"
+# R3 revise: TASK before INSTRUCTIONS before YOUR DRAFT
+t3=$(_lineof "$OUTDIR/prompt.revise.m1.txt" "^=== TASK ===")
+i3=$(_lineof "$OUTDIR/prompt.revise.m1.txt" "^=== INSTRUCTIONS ===")
+d3=$(_lineof "$OUTDIR/prompt.revise.m1.txt" "^=== YOUR DRAFT ===")
+[ "$t3" -lt "$i3" ] && ok "R: R3 TASK before INSTRUCTIONS" || bad "R: R3 TASK before INSTRUCTIONS"
+[ "$i3" -lt "$d3" ] && ok "R: R3 INSTRUCTIONS before YOUR DRAFT" || bad "R: R3 INSTRUCTIONS before YOUR DRAFT"
+
+echo "== S: cross-member prefix symmetry within the same round =="
+new_out
+PLAN_PKT
+run_in "$ROOT/p.md"
+_prefix_of() { sed '/^=== INSTRUCTIONS ===/,$d' "$1"; }
+pfx_m1="$(_prefix_of "$OUTDIR/prompt.draft.m1.txt")"
+pfx_m2="$(_prefix_of "$OUTDIR/prompt.draft.m2.txt")"
+pfx_m3="$(_prefix_of "$OUTDIR/prompt.draft.m3.txt")"
+assert_eq "S: m1 R1 prefix == m2 R1 prefix" "$pfx_m1" "$pfx_m2"
+assert_eq "S: m2 R1 prefix == m3 R1 prefix" "$pfx_m2" "$pfx_m3"
 
 echo "============================================================"
 echo "PASS=$PASS FAIL=$FAIL"

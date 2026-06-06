@@ -109,24 +109,28 @@ PREAMBLE="You are one member of a cross-vendor advisory council for Aobus (a C++
 INPUTS_NOTE=""
 [ "${#INPUTS[@]}" -gt 0 ] && INPUTS_NOTE="$(printf 'Pay particular attention to these files: %s' "${INPUTS[*]}")"
 
-# render_*: write the round prompt for one member to a file (also the audit record). R1 carries NO peer
-# text — blindness is what keeps the drafts diverse; the offline test asserts this.
+# render_*: write the round prompt for one member to a file (also the audit record). We put the massive
+# background (PREAMBLE + TASK) at the very top and round-specific instructions AFTER it. This ensures
+# a byte-identical STABLE PREFIX across R1, R2, and R3, which enables efficient provider-side prompt
+# caching for the heavy repository context, reducing input costs and improving TTFT across rounds.
 render_draft() { # <mid> <promptfile>
   { printf '%s\n\n' "$PREAMBLE"
-    printf 'Independently produce an %s for the task below. Work alone — do not assume any other input.\n' "$ARTIFACT"
-    printf 'Structure your answer as: %s.\n' "$STRUCT"
-    printf 'Be concrete and cite real files where relevant.\n\n'
     [ -n "$INPUTS_NOTE" ] && printf '%s\n\n' "$INPUTS_NOTE"
-    printf '=== TASK ===\n%s\n' "$QUESTION"
+    printf '=== TASK ===\n%s\n\n' "$QUESTION"
+    printf '=== INSTRUCTIONS ===\n'
+    printf 'Independently produce an %s for the task above. Work alone — do not assume any other input.\n' "$ARTIFACT"
+    printf 'Structure your answer as: %s.\n' "$STRUCT"
+    printf 'Be concrete and cite real files where relevant.\n'
   } > "$2"
 }
 render_challenge() { # <mid> <promptfile> ; peers = every OTHER member draft
   { printf '%s\n\n' "$PREAMBLE"
+    [ -n "$INPUTS_NOTE" ] && printf '%s\n\n' "$INPUTS_NOTE"
+    printf '=== TASK ===\n%s\n\n' "$QUESTION"
+    printf '=== INSTRUCTIONS ===\n'
     printf 'Below are the OTHER council members %s drafts for the same task. CHALLENGE them: find flaws,\n' "$ARTIFACT"
     printf 'missed cases, hidden risks, wrong assumptions, and points of disagreement. Be specific and\n'
     printf 'refer to peer drafts by their member label.\n\n'
-    [ -n "$INPUTS_NOTE" ] && printf '%s\n\n' "$INPUTS_NOTE"
-    printf '=== TASK ===\n%s\n\n' "$QUESTION"
     local mid="$1" peer pmid
     for peer in "${SEATED[@]}"; do
       pmid="$(mid_of "$peer")"; [ "$pmid" = "$mid" ] && continue
@@ -138,12 +142,13 @@ render_challenge() { # <mid> <promptfile> ; peers = every OTHER member draft
 }
 render_revise() { # <mid> <promptfile> ; own draft + the full challenge log (member self-selects critiques of it)
   { printf '%s\n\n' "$PREAMBLE"
+    [ -n "$INPUTS_NOTE" ] && printf '%s\n\n' "$INPUTS_NOTE"
+    printf '=== TASK ===\n%s\n\n' "$QUESTION"
+    printf '=== INSTRUCTIONS ===\n'
     printf 'Below is YOUR earlier draft %s and the full challenge log from the other members. Produce a REVISED\n' "$ARTIFACT"
     printf '%s that addresses the valid critiques of YOUR draft and explicitly defends any point where you\n' "$ARTIFACT"
     printf 'disagree. Identify the critiques aimed at YOUR draft within the log.\n\n'
     printf 'Keep the same structure: %s.\n\n' "$STRUCT"
-    [ -n "$INPUTS_NOTE" ] && printf '%s\n\n' "$INPUTS_NOTE"
-    printf '=== TASK ===\n%s\n\n' "$QUESTION"
     printf '=== YOUR DRAFT ===\n'; cat "$OUT/draft.$1.md"; printf '\n\n'
     printf '=== FULL CHALLENGE LOG (Identify the critiques aimed at your draft) ===\n'
     local peer pmid

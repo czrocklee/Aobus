@@ -89,7 +89,7 @@ run_core() {
 
     local CMD=("$CORE_TEST_BIN")
     if [[ "$LIST_ONLY" == "true" ]]; then
-        CMD+=(--list-tests)
+        CMD+=(--list-tests --verbosity high)
     fi
     if [[ -n "$TEST_FILTER" ]]; then
         CMD+=("$TEST_FILTER")
@@ -121,7 +121,7 @@ run_gtk() {
     fi
 
     if [[ "$LIST_ONLY" == "true" ]]; then
-        CMD+=(--list-tests)
+        CMD+=(--list-tests --verbosity high)
     fi
     if [[ -n "$TEST_FILTER" ]]; then
         CMD+=("$TEST_FILTER")

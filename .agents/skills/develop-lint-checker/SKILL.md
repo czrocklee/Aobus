@@ -9,6 +9,13 @@ This skill is an explicit linting workflow. It is the exception to the repositor
 
 This guide provides the mandatory workflow and debugging strategies for developing custom Clang-Tidy lint checks in the Aobus codebase. Aobus relies heavily on custom AST matchers to enforce C++26 standards and Modern C++ paradigms.
 
+## C2 Delegation Boundary
+
+Checker behavior, AST matcher design, diagnostic policy, checker registration, and fixture design are
+C3 work. The current C2 test phase is not a lint-checker implementation path. A future C2 checker phase
+may only be considered after C3 has already proven the matcher, created/registered the checker files and
+fixture, and defined an exact validation contract.
+
 ## 1. Test-Driven Development (TDD) Workflow
 
 Always prioritize integration tests. You must define the expected behavior before writing the AST Matcher.
