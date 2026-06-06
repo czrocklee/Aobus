@@ -27,11 +27,23 @@ Convene only when the decision is **high-stakes** and a wrong call is costly:
   a concurrency/lifetime design, a public-API or ABI change, a risky or large diff under review.
 
 Do **not** convene for routine work — a local refactor, a small bugfix, an obvious review. A council
-spends real frontier budget (R1/R2/R3 × N members, plus the chair's R4 synthesis). When in doubt, draft
-solo; convene only if the stakes justify the cost. This skill is always **opt-in** — never on a default
-path.
+spends real frontier budget (member rounds × N members, plus the chair's R4 synthesis). When in doubt,
+draft solo; convene only if the stakes justify the cost. This skill is always **opt-in** — never on a
+default path.
 
-## Protocol (4 rounds)
+**Once you have decided to convene, pick a `depth`** (how much debate, below):
+
+- **non-critical → don't convene at all** (draft solo) — the cheapest correct answer.
+- **medium-stakes → `challenge`** (the default): one adversarial round + chair synthesis. The common case.
+- **brainstorm / "give me N independent options" → `panel`** (opt-down): diversity, no debate.
+- **highest-stakes** (architecture, error-contract, concurrency/lifetime, ABI, risky/large diff) **→
+  `full`** (opt-up): adds the R3 self-revise so each member converges its own position before synthesis.
+
+Depth trades **debate depth**; the orthogonal cost lever is **roster size** (fewer members = less
+diversity), already adjustable via `ROUTE_C3_MEMBERS` / `COUNCIL_MIN` in `routing.env` — shrink the
+roster when you want a cheaper panel without giving up the rounds.
+
+## Protocol (rounds)
 
 ```
 R1  BLIND DRAFT   each routed member drafts independently, with NO peer context
@@ -40,9 +52,12 @@ R3  SELF-REVISE   each member revises its OWN draft having seen the critiques ai
 R4  SYNTHESIS     the chair verifies key claims, then writes the FINAL plan/review
 ```
 
-`council.sh` runs R1–R3 (the C0 plumbing) and stops. **R4 is yours**, in-loop — it is the one
-irreducibly-frontier act. Blindness in R1 is the point: do not leak peer drafts into R1, or the panel
-anchors and the diversity that makes a committee worth convening collapses.
+`council.sh` runs the **member** rounds (R1–R3, the C0 plumbing) and stops. **R4 is yours**, in-loop —
+it is the one irreducibly-frontier act and **always runs regardless of depth**. Blindness in R1 is the
+point: do not leak peer drafts into R1, or the panel anchors and the diversity that makes a committee
+worth convening collapses.
+
+How many member rounds run is the **`depth`** axis (see below); R4 (the chair) is constant.
 
 > [!CAUTION]
 > **Shared Artifact Exposure:** While repository copies are isolated via tree-hash canaries, all members
@@ -71,6 +86,7 @@ Write a council Phase Packet (YAML frontmatter + markdown body) and run the orch
 schema: aobus-phase-packet/v1
 kind: council
 mode: plan            # plan | review  — selects the prompt templates
+depth: challenge      # panel | challenge | full  — member rounds to run (optional; default challenge)
 inputs:               # optional repo-relative paths to emphasise (safety-checked; no flags/traversal)
   - lib/audio/Player.cpp
 ---
@@ -90,9 +106,31 @@ nix-shell --run "script/agent/council.sh /tmp/my-council-packet.md"   # prints t
   (`ROUTE_C3_MEMBERS` / `ROUTE_C3_MEMBER_LABELS`). Cross-vendor by default — a same-vendor council
   defeats the purpose. The default roster includes a Claude/Opus member as an ordinary member; the chair
   is still outside the roster and only performs R4. Swap models there, not here.
-- Exit `0` = dossier emitted (read it; `quorum: degraded` inside means too few drafts to really debate —
-  treat it as close to a solo draft); `2` = no usable draft (quorum failure); `3` = configuration or
-  system error (unsafe inputs, repo copy failure); `5` = routing table missing; `64` = bad packet.
+- Exit `0` = dossier emitted (read it); `2` = no usable draft (quorum failure); `3` = configuration or
+  system error (unsafe inputs, repo copy failure); `5` = routing table missing; `64` = bad packet (bad
+  `kind`/`mode`/`depth`, empty body, or a forbidden `validation:` key).
+- The dossier frontmatter carries two **independent** status axes — read both:
+  - `quorum: ok | degraded` — *accidental*: `degraded` means fewer than `COUNCIL_MIN` drafts came back,
+    so the cross-challenge could not really run; treat it as close to a solo draft.
+  - `shallow: full | by-design` — *intentional*: `by-design` means you chose a `depth` below `full`
+    (`panel`/`challenge`), so the rounds **beyond that depth** were a deliberate cost choice, **not** a
+    failure (any accidental shortfall is reported under quorum, separately). A healthy `panel` with four
+    drafts is `quorum: ok`, `shallow: by-design` — synthesize the independent drafts; do not mistake it
+    for a degraded `full`.
+
+## Depth tiers (how much debate)
+
+`depth:` caps how many **member** rounds run; the chair's R4 synthesis always runs.
+
+| `depth`     | member rounds | what you get                              | when |
+|-------------|---------------|-------------------------------------------|------|
+| `panel`     | R1            | N independent drafts, no debate           | brainstorm / "give me N options" |
+| `challenge` | R1 + R2       | diversity + one adversarial round         | **default** — medium-stakes plan/review |
+| `full`      | R1 + R2 + R3  | + each member self-revises before synthesis | highest-stakes architecture / error-contract / risky diff |
+
+`depth` is orthogonal to `mode` (below): any of the six combinations is valid. Omitting `depth` defaults
+to `challenge`. `panel` shines in plan-mode brainstorming (you want a spread of options, not a debate);
+`challenge` is the review sweet spot; reach for `full` only when a wrong call is genuinely costly.
 
 ## Two modes
 

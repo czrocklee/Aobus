@@ -16,6 +16,9 @@
 #   R2 CHALLENGE    each member is shown the OTHERS' drafts and critiques them.
 #   R3 SELF-REVISE  each member revises its OWN draft having seen the critiques of it.
 #   R4 SYNTHESIS    (NOT here) the chair verifies dossier claims, then writes the final plan/review.
+# The `depth:` packet field caps how many MEMBER rounds run (R4 chair synthesis is constant, always runs):
+#   panel = R1 only ; challenge = R1+R2 (DEFAULT) ; full = R1+R2+R3. A capped protocol is "shallow:
+#   by-design" in the dossier — distinct from "quorum: degraded" (too few drafts, an accident).
 #
 # Safety: a council member is READ-ONLY — it produces an OPINION, never a patch, and must not touch the
 # tree. Each member runs in its own disposable COPY of the repo (cwd), and council.sh content-hashes that
@@ -27,6 +30,7 @@
 # Packet (YAML frontmatter + markdown body; schema aobus-phase-packet/v1):
 #   kind: council            (required)
 #   mode: plan | review      (required — selects the prompt templates)
+#   depth: panel|challenge|full  (optional — member rounds to run; default 'challenge')
 #   inputs: [...]            (optional repo-relative paths the chair wants emphasized; safety-checked)
 #   <body>                   the QUESTION: the task to plan, or the change to review (+ context)
 # A council has NO `validation:` — there is no deterministic gate (that is the whole point of C3), so
@@ -45,6 +49,7 @@ PACKET="${1:?council: need a council packet path}"
 
 KIND="$(agent_packet_scalar "$PACKET" kind 2>/dev/null)"
 MODE="$(agent_packet_scalar "$PACKET" mode 2>/dev/null)"
+DEPTH="$(agent_packet_scalar "$PACKET" depth 2>/dev/null)"
 mapfile -t INPUTS < <(agent_packet_list "$PACKET" inputs 2>/dev/null)
 QUESTION="$(agent_packet_body "$PACKET")"
 
@@ -54,6 +59,20 @@ case "$MODE" in
   plan | review) ;;
   *) echo "council: mode must be 'plan' or 'review' (got '${MODE:-}')" >&2; exit 64 ;;
 esac
+# depth selects how many member rounds run; the chair's R4 synthesis is constant and runs regardless.
+#   panel     = R1                  (diversity only; no debate — opt-down for brainstorm)
+#   challenge = R1 + R2             (one adversarial round; the DEFAULT)
+#   full      = R1 + R2 + R3        (adds self-revise; deliberate opt-up for the highest-stakes calls)
+[ -n "$DEPTH" ] || DEPTH="challenge"
+case "$DEPTH" in
+  panel | challenge | full) ;;
+  *) echo "council: depth must be 'panel', 'challenge', or 'full' (got '${DEPTH:-}')" >&2; exit 64 ;;
+esac
+WANT_CHALLENGE=0; [ "$DEPTH" != "panel" ] && WANT_CHALLENGE=1   # R2 runs unless panel
+WANT_REVISE=0;    [ "$DEPTH" = "full" ]   && WANT_REVISE=1      # R3 runs only at full
+# shallow is the INTENTIONAL axis (protocol capped below full); orthogonal to quorum (the ACCIDENTAL axis,
+# i.e. too few drafts). The chair must not read a by-design panel as a degraded full.
+SHALLOW="full";   [ "$DEPTH" != "full" ]  && SHALLOW="by-design"
 [ -n "$QUESTION" ] || { echo "council: packet has an empty body (the question)" >&2; exit 64; }
 for f in "${INPUTS[@]}"; do
   agent_arg_safe "$f" || { echo "council: unsafe input '$f'" >&2; exit 3; }
@@ -211,7 +230,7 @@ quarantine() {
   SEATED=("${keep[@]}")
 }
 
-echo "council: mode=$MODE members=[${MEMBERS[*]}] out=$OUT"
+echo "council: mode=$MODE depth=$DEPTH members=[${MEMBERS[*]}] out=$OUT"
 
 # Stage one disposable repo copy per member (cwd for every round). .git is excluded by the copy.
 for fn in "${MEMBERS[@]}"; do
@@ -245,8 +264,8 @@ if [ "$drafts" -eq 0 ]; then
   exit 2
 fi
 
-# A challenge round needs at least two drafts to compare; with one it is skipped (degraded).
-if [ "${#SEATED[@]}" -ge 1 ] && [ "$drafts" -ge 2 ]; then
+# R2 runs unless depth=panel (shallow by design), and needs >=2 drafts to compare (else degraded).
+if [ "$WANT_CHALLENGE" = 1 ] && [ "$drafts" -ge 2 ]; then
   echo "==================== R2: cross-challenge ===================="
   for fn in "${SEATED[@]}"; do
     mid="$(mid_of "$fn")"; pf="$OUT/prompt.challenge.$mid.txt"; render_challenge "$mid" "$pf"
@@ -255,15 +274,27 @@ if [ "${#SEATED[@]}" -ge 1 ] && [ "$drafts" -ge 2 ]; then
   wait
   quarantine challenge    # drop R2 violators before they can taint R3 or the dossier
 
-  echo "==================== R3: self-revise ===================="
-  for fn in "${SEATED[@]}"; do
-    mid="$(mid_of "$fn")"; pf="$OUT/prompt.revise.$mid.txt"; render_revise "$mid" "$pf"
-    run_one "$fn" "$mid" "revised" "$pf" &
-  done
-  wait
-  quarantine revised      # drop R3 violators from the dossier
+  # R3 runs only at depth=full; challenge/panel stop after R2 and hand the challenge log to the chair.
+  if [ "$WANT_REVISE" = 1 ]; then
+    echo "==================== R3: self-revise ===================="
+    for fn in "${SEATED[@]}"; do
+      mid="$(mid_of "$fn")"; pf="$OUT/prompt.revise.$mid.txt"; render_revise "$mid" "$pf"
+      run_one "$fn" "$mid" "revised" "$pf" &
+    done
+    wait
+    quarantine revised      # drop R3 violators from the dossier
+  else
+    echo "council: depth=$DEPTH -> skipping self-revise (shallow by design)"
+  fi
+elif [ "$WANT_CHALLENGE" != 1 ]; then
+  echo "council: depth=$DEPTH -> skipping challenge/revise (shallow by design)"
 else
-  echo "council: only $drafts draft(s) -> skipping challenge/revise (quorum degraded)"
+  # challenge/full but <2 drafts: the round(s) depth WOULD have run can't, for lack of anything to compare.
+  if [ "$WANT_REVISE" = 1 ]; then
+    echo "council: only $drafts draft(s) -> skipping challenge/revise (quorum degraded)"
+  else
+    echo "council: only $drafts draft(s) -> skipping challenge (quorum degraded)"
+  fi
 fi
 
 # ---- assemble the dossier the chair synthesizes from (this script never synthesizes) ----
@@ -282,18 +313,30 @@ DOSSIER="$OUT/dossier.md"
   echo "schema: aobus-phase-packet/v1"
   echo "kind: council-dossier"
   echo "mode: $MODE"
+  echo "depth: $DEPTH"
   echo "quorum: $QUORUM"
+  echo "shallow: $SHALLOW"
   echo "drafts: $drafts"
   echo "---"
   echo "# Council dossier — $MODE"
   echo
-  echo "- mode: \`$MODE\`  |  drafts: $drafts  |  quorum: **$QUORUM**"
+  echo "- mode: \`$MODE\`  |  depth: \`$DEPTH\`  |  drafts: $drafts  |  quorum: **$QUORUM**  |  shallow: $SHALLOW"
   echo "- members: $(for fn in "${MEMBERS[@]}"; do printf '%s; ' "$(c3_label "$fn")"; done)"
   [ "${#INPUTS[@]}" -gt 0 ] && echo "- emphasized inputs: ${INPUTS[*]}"
-  echo "- NEXT (chair, R4): independently verify the dossier's key claims, then write the FINAL $ARTIFACT, resolving consensus vs dissent."
+  # No debate to resolve when the panel never challenged (depth=panel) OR too few drafts survived to compare.
+  if [ "$DEPTH" = "panel" ] || [ "$drafts" -lt 2 ]; then
+    _why="depth=panel, by design"; [ "$DEPTH" != "panel" ] && _why="only $drafts draft(s) survived — quorum degraded"
+    echo "- NEXT (chair, R4): independently verify the dossier's key claims, then synthesize the $drafts independent draft(s) into the FINAL $ARTIFACT (no cross-examination to resolve — $_why)."
+  else
+    echo "- NEXT (chair, R4): independently verify the dossier's key claims, then write the FINAL $ARTIFACT, resolving consensus vs dissent."
+  fi
+  if [ "$SHALLOW" = "by-design" ]; then
+    echo
+    echo "> **shallow: by-design** (depth: \`$DEPTH\`) — rounds beyond \`$DEPTH\` were intentionally not convened (a deliberate cost choice, not a failure). This concerns only the depth cap; any accidental draft shortfall is reported under quorum, separately."
+  fi
   if [ "$QUORUM" = "degraded" ]; then
     echo
-    echo "> **quorum: degraded** — fewer than $COUNCIL_MIN member drafts; the cross-challenge did not run in full."
+    echo "> **quorum: degraded** — fewer than $COUNCIL_MIN trusted member draft(s) came back$( [ "$WANT_CHALLENGE" = 1 ] && printf ', so the cross-challenge could not run as intended' )."
     echo "> The chair should treat this as close to a solo draft and decide whether to proceed or re-convene."
   fi
   echo
@@ -306,17 +349,20 @@ DOSSIER="$OUT/dossier.md"
   for fn in "${SEATED[@]}"; do
     mid="$(mid_of "$fn")"; echo; echo "### $(c3_label "$fn")"; echo; cat "$OUT/draft.$mid.md"
   done
-  if [ "$drafts" -ge 2 ] && [ "${#SEATED[@]}" -ge 1 ]; then
+  # The R2/R3 sections appear only when those rounds actually ran (depth + quorum both permitting).
+  if [ "$WANT_CHALLENGE" = 1 ] && [ "$drafts" -ge 2 ]; then
     echo; echo "## R2 — challenges"
     for fn in "${SEATED[@]}"; do
       mid="$(mid_of "$fn")"; [ "$(status_of "challenge.$mid")" = ok ] || continue
       echo; echo "### challenge by $(c3_label "$fn")"; echo; cat "$OUT/challenge.$mid.md"
     done
-    echo; echo "## R3 — revised drafts"
-    for fn in "${SEATED[@]}"; do
-      mid="$(mid_of "$fn")"; [ "$(status_of "revised.$mid")" = ok ] || continue
-      echo; echo "### $(c3_label "$fn") (revised)"; echo; cat "$OUT/revised.$mid.md"
-    done
+    if [ "$WANT_REVISE" = 1 ]; then
+      echo; echo "## R3 — revised drafts"
+      for fn in "${SEATED[@]}"; do
+        mid="$(mid_of "$fn")"; [ "$(status_of "revised.$mid")" = ok ] || continue
+        echo; echo "### $(c3_label "$fn") (revised)"; echo; cat "$OUT/revised.$mid.md"
+      done
+    fi
   fi
 
   # Roll up every absence/violation note for an audit trail.

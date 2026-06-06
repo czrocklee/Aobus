@@ -84,11 +84,14 @@ run_in() { # <packet> [VAR=val...] ; uses current $OUTDIR ; sets RC LOG DOSS
   DOSS="$(cat "$OUTDIR/dossier.md" 2>/dev/null || true)"
 }
 
+# The standard fixture exercises the FULL three-round protocol (R1+R2+R3), so it pins depth: full
+# explicitly now that the default is the lighter 'challenge'. Depth-tier behaviour has its own scenarios.
 PLAN_PKT() { pkt <<'EOF'
 ---
 schema: aobus-phase-packet/v1
 kind: council
 mode: plan
+depth: full
 inputs:
   - lib/foo.cpp
 ---
@@ -103,6 +106,7 @@ run_in "$ROOT/p.md"
 assert_eq "A: exit 0" "$RC" "0"
 [ -f "$OUTDIR/dossier.md" ] && ok "A: dossier written" || bad "A: dossier written"
 has "A: quorum ok"            "$DOSS" "quorum: ok"
+has "A: shallow full (depth: full)" "$DOSS" "shallow: full"
 has "A: m1 seated"            "$DOSS" "### Mock M1"
 has "A: m2 seated"            "$DOSS" "### Mock M2"
 has "A: m3 seated"            "$DOSS" "### Mock M3"
@@ -332,6 +336,7 @@ pkt <<'EOF'
 schema: aobus-phase-packet/v1
 kind: council
 mode: plan
+depth: full
 ---
 Design question without inputs.
 EOF
@@ -376,6 +381,106 @@ pfx_m2="$(_prefix_of "$OUTDIR/prompt.draft.m2.txt")"
 pfx_m3="$(_prefix_of "$OUTDIR/prompt.draft.m3.txt")"
 assert_eq "S: m1 R1 prefix == m2 R1 prefix" "$pfx_m1" "$pfx_m2"
 assert_eq "S: m2 R1 prefix == m3 R1 prefix" "$pfx_m2" "$pfx_m3"
+
+# A packet at an arbitrary depth (4-member roster), for the depth-tier scenarios below.
+DEPTH_PKT() { # <depth>
+  pkt <<EOF
+---
+schema: aobus-phase-packet/v1
+kind: council
+mode: plan
+depth: $1
+---
+Should Aobus model track durations as int seconds or std::chrono::milliseconds?
+EOF
+}
+
+echo "== T: depth=panel -> R1 only; no challenge/revise prompts; shallow by-design; blindness intact =="
+new_out
+DEPTH_PKT panel
+run_in "$ROOT/p.md"
+assert_eq "T: exit 0" "$RC" "0"
+[ -f "$OUTDIR/prompt.draft.m1.txt" ]      && ok "T: R1 draft prompt rendered"   || bad "T: R1 draft prompt rendered"
+[ ! -f "$OUTDIR/prompt.challenge.m1.txt" ] && ok "T: no R2 challenge prompt"      || bad "T: no R2 challenge prompt"
+[ ! -f "$OUTDIR/prompt.revise.m1.txt" ]    && ok "T: no R3 revise prompt"         || bad "T: no R3 revise prompt"
+has   "T: dossier depth panel"      "$DOSS" "depth: panel"
+has   "T: dossier shallow by-design" "$DOSS" "shallow: by-design"
+has   "T: quorum still ok (4 drafts)" "$DOSS" "quorum: ok"
+hasnt "T: no R2 section"             "$DOSS" "## R2"
+hasnt "T: no R3 section"             "$DOSS" "## R3"
+hasnt "T: R1 prompt still blind"     "$(cat "$OUTDIR/prompt.draft.m1.txt")" "<peer_draft"
+has   "T: skip reason is by-design"  "$LOG"  "shallow by design"
+
+echo "== U: depth=challenge -> R1+R2, no R3; R2 section present, R3 absent =="
+new_out
+DEPTH_PKT challenge
+run_in "$ROOT/p.md"
+assert_eq "U: exit 0" "$RC" "0"
+[ -f "$OUTDIR/prompt.challenge.m1.txt" ] && ok "U: R2 challenge prompt rendered" || bad "U: R2 challenge prompt rendered"
+[ ! -f "$OUTDIR/prompt.revise.m1.txt" ]   && ok "U: no R3 revise prompt"          || bad "U: no R3 revise prompt"
+has   "U: dossier depth challenge"   "$DOSS" "depth: challenge"
+has   "U: dossier shallow by-design" "$DOSS" "shallow: by-design"
+has   "U: R2 section present"        "$DOSS" "## R2"
+hasnt "U: no R3 section"             "$DOSS" "## R3"
+has   "U: skip self-revise logged"   "$LOG"  "skipping self-revise"
+
+echo "== V: depth absent -> defaults to challenge (R1+R2, no R3) =="
+new_out
+pkt <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: council
+mode: plan
+---
+A medium-stakes question with no explicit depth.
+EOF
+run_in "$ROOT/p.md"
+assert_eq "V: exit 0" "$RC" "0"
+has   "V: defaults to challenge"     "$DOSS" "depth: challenge"
+has   "V: shallow by-design"         "$DOSS" "shallow: by-design"
+has   "V: startup echo shows depth"  "$LOG"  "depth=challenge"
+[ ! -f "$OUTDIR/prompt.revise.m1.txt" ] && ok "V: no R3 revise prompt" || bad "V: no R3 revise prompt"
+has   "V: R2 section present"        "$DOSS" "## R2"
+hasnt "V: no R3 section"             "$DOSS" "## R3"
+
+echo "== W: unknown depth -> reject (exit 64) =="
+new_out
+DEPTH_PKT deep
+run_in "$ROOT/p.md"
+assert_eq "W: bad depth -> exit 64" "$RC" "64"
+has "W: reports reason" "$LOG" "depth must be 'panel', 'challenge', or 'full'"
+
+echo "== X: shallow and quorum are independent axes (single-member roster) =="
+# X1: depth=full but only 1 draft -> quorum degraded (accidental) AND shallow full (not capped by design).
+new_out
+DEPTH_PKT full
+run_in "$ROOT/p.md" COUNCIL_ROSTER="route_c3_member_m1"
+assert_eq "X1: exit 0" "$RC" "0"
+has "X1: quorum degraded"  "$DOSS" "quorum: degraded"
+has "X1: shallow full"     "$DOSS" "shallow: full"
+# X2: depth=panel with 1 draft -> quorum degraded AND shallow by-design (both axes flagged independently).
+new_out
+DEPTH_PKT panel
+run_in "$ROOT/p.md" COUNCIL_ROSTER="route_c3_member_m1"
+assert_eq "X2: exit 0" "$RC" "0"
+has   "X2: quorum degraded"     "$DOSS" "quorum: degraded"
+has   "X2: shallow by-design"   "$DOSS" "shallow: by-design"
+hasnt "X2: notes never mention cross-challenge under panel" "$DOSS" "cross-challenge"
+
+echo "== X3: depth=challenge + degraded quorum (1 draft) -> R2 skipped by ACCIDENT, not by design =="
+# The new default's degraded path: R3 is capped by design (shallow), but R2's absence is the quorum
+# shortfall — the skip log and the shallow note must not claim R2 was a deliberate choice.
+new_out
+DEPTH_PKT challenge
+run_in "$ROOT/p.md" COUNCIL_ROSTER="route_c3_member_m1"
+assert_eq "X3: exit 0" "$RC" "0"
+has   "X3: depth challenge"     "$DOSS" "depth: challenge"
+has   "X3: quorum degraded"     "$DOSS" "quorum: degraded"
+has   "X3: shallow by-design"   "$DOSS" "shallow: by-design"
+[ ! -f "$OUTDIR/prompt.challenge.m1.txt" ] && ok "X3: no R2 prompt (degraded, not run)" || bad "X3: no R2 prompt (degraded, not run)"
+hasnt "X3: no R2 section"       "$DOSS" "## R2"
+has   "X3: skip log says challenge only (not /revise)" "$LOG" "skipping challenge (quorum degraded)"
+hasnt "X3: skip log omits revise" "$LOG" "skipping challenge/revise"
 
 echo "============================================================"
 echo "PASS=$PASS FAIL=$FAIL"
