@@ -259,7 +259,17 @@ printf '\0\1\2\3' > "$TC/work4/lib/foo.cpp"
 agent_tree_changes "$TC/copy" "$TC/work4" "$TC/changes4.tsv"
 assert_rc 0 "binary detected" grep -q "binary	lib/foo.cpp" "$TC/changes4.tsv"
 
-# Proposal changes ok gate
+mkdir -p "$TC/work5"
+agent_stage_repo_copy "$TC/repo" "$TC/work5"
+mkdir -p "$TC/work5/logs" "$TC/work5/.cache" "$TC/work5/build-debug"
+echo "log" > "$TC/work5/logs/app.log"
+echo "hit" > "$TC/work5/.cache/ccache.hit"
+echo "cmake" > "$TC/work5/build-debug/CMakeCache.txt"
+agent_tree_changes "$TC/copy" "$TC/work5" "$TC/changes5.tsv"
+assert_eq "sandbox noise (logs, cache, build) is ignored by tree_changes" "$(wc -l < "$TC/changes5.tsv")" "0"
+
+# Scope evaluation
+
 echo "lib/foo.cpp" > "$TC/inputs.txt"
 printf "modify\tlib/foo.cpp\n" > "$TC/c_ok.tsv"
 assert_rc 0 "accept normal edit" agent_proposal_changes_ok "$TC/inputs.txt" "$TC/c_ok.tsv"

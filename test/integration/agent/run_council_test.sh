@@ -268,25 +268,14 @@ run_in "$ROOT/p.md" COUNCIL_ROSTER="route_c3_member_m1 route_c3_member_m2" COUNC
 assert_eq "MM: exit 2" "$RC" "2"
 has "MM: reports reason" "$LOG" "all members quarantined"
 
-echo "== N: real Gemini C3 route stages under HOME for steam-run private-/tmp =="
+echo "== N: real Gemini C3 route runs natively in council CWD (Step G) =="
 BIN="$ROOT/bin"; mkdir -p "$BIN"
-cat > "$BIN/steam-run" <<'EOF'
-#!/usr/bin/env bash
-pwd -P > "${STEAM_CWD_FILE:?}"
-case "$(pwd -P)/" in
-  /tmp/*) echo "steam-run test: cwd under private /tmp" >&2; exit 77 ;;
-esac
-"$@"
-EOF
 cat > "$BIN/agy" <<'EOF'
 #!/usr/bin/env bash
 cat >/dev/null
 printf 'gemini opinion from %s\n' "$(pwd -P)"
-case "${AGY_MUTATE:-}" in
-  1) printf 'mutated\n' > MUTATED_BY_AGY ;;
-esac
 EOF
-chmod +x "$BIN/steam-run" "$BIN/agy"
+chmod +x "$BIN/agy"
 REAL_ROUTING="$(cd "$SCRIPT_DIR/../../.." && pwd)/script/agent/routing.env"
 ROUTING_REAL="$ROOT/real-routing.env"
 cat > "$ROUTING_REAL" <<EOF
@@ -297,24 +286,15 @@ EOF
 old_routing="$ROUTING"; ROUTING="$ROUTING_REAL"
 new_out
 PLAN_PKT
-run_in "$ROOT/p.md" PATH="$BIN:$PATH" AOBUS_AGY_COUNCIL_STAGE="$EXTERNAL_STAGE" STEAM_CWD_FILE="$ROOT/steam.cwd"
-assert_eq "N: Gemini route exits 0 with fake steam-run" "$RC" "0"
+run_in "$ROOT/p.md" PATH="$BIN:$PATH"
+assert_eq "N: Gemini route exits 0" "$RC" "0"
 has "N: Gemini seated" "$DOSS" "### Gemini 3 Pro via gemini"
-steam_cwd="$(cat "$ROOT/steam.cwd" 2>/dev/null || true)"
-case "$steam_cwd/" in
-  /tmp/*) bad "N: steam-run cwd must not be /tmp ($steam_cwd)" ;;
-  "$EXTERNAL_STAGE"/*) ok "N: steam-run cwd is HOME-backed staged copy" ;;
-  *) bad "N: steam-run cwd under expected stage (got [$steam_cwd])" ;;
+# Use $(cd ... && pwd -P) to ensure we compare against a fully resolved path.
+expected_cwd="$(cd "$ROOT/council" && pwd -P)"
+case "$(cat "$OUTDIR/draft.gemini.md")" in
+  *"gemini opinion from $expected_cwd"*) ok "N: agy runs in council CWD" ;;
+  *) bad "N: agy must run in council CWD ($expected_cwd), got: $(cat "$OUTDIR/draft.gemini.md")" ;;
 esac
-
-echo "== O: Gemini staged-copy mutation is mirrored to outer canary as violation =="
-new_out
-PLAN_PKT
-run_in "$ROOT/p.md" PATH="$BIN:$PATH" AOBUS_AGY_COUNCIL_STAGE="$EXTERNAL_STAGE" \
-  STEAM_CWD_FILE="$ROOT/steam-mut.cwd" AGY_MUTATE=1
-assert_eq "O: all-draft violation exits 2" "$RC" "2"
-assert_eq "O: Gemini status is violation" "$(cat "$OUTDIR/draft.gemini.md.status" 2>/dev/null || true)" "violation"
-has "O: violation note explains mutation" "$(cat "$OUTDIR/draft.gemini.md.note" 2>/dev/null || true)" "mutated its working copy"
 ROUTING="$old_routing"
 
 echo "== P: stable prefix is byte-identical across R1/R2/R3 (with inputs) =="

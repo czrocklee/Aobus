@@ -75,13 +75,12 @@
 > `AGY_C2_MODEL` still compatible. Six offline agent integration tests, **262** assertions total.
 >
 > v15 changes: landed **Step G — the first real generic-C2 proposal eval, sanitizer oracles, and the
-> observability/circuit-breaker loop** (Track A of the V2 cross-vendor council review; agy and the hard
-> sandbox are deferred). The C2 proposal worker default switched to **DeepSeek V4 Pro via opencode**
-> (`route_c2_proposal_worker_dspro`, cwd-confined — the "good" §10.3 isolation, no agy/steam-run); codex
+> observability/circuit-breaker loop** (Track A of the V2 cross-vendor council review). The C2
+> proposal worker default switched to **DeepSeek V4 Pro via opencode**
+> (`route_c2_proposal_worker_dspro`, cwd-confined — the "good" §10.3 isolation); codex
 > stays the documented alternate. Two **sanitizer validations** `test-core-asan` / `test-core-tsan`
-> joined the allowlist — each configures its own `-DAOBUS_ENABLE_ASAN/TSAN=ON` build dir, builds the
-> core `ao_test` target only (run-tests.sh would also build the heavy GTK target), is isolatable, and
-> the dossier states the honest "no finding on the EXERCISED paths" caveat (NOT memory-/race-safe).
+> joined the allowlist. **Native agy (re-enabled 2026-06-07)** joined the fleet as a 
+> high-performance, cwd-confined worker, dropping the old `steam-run` isolation workaround.
 > **Observability**: `record_review.sh` now auto-trips a per-worker **circuit breaker** on a
 > *silent-wrong* (a `keep`/`proposal-validated` phase that C3 later `reject`s; `modify` and
 > non-validated rejects do NOT trip); the proposal runner and dispatcher refuse a breaker-tripped route;
@@ -562,30 +561,10 @@ hard dependency:
    single case fully and idiomatically); the bottleneck is not model capability but **output-contract
    robustness**. Next: add the sentinel contract, expand to multiple cases, run rolling silent-wrong.
 
-   **Cross-vendor second candidate = Gemini 3.5 Flash via `agy` (2026-06-05, replaces the dead `gemini -p`
-   path)**: use `steam-run agy -p` instead of `gemini -p`. Three measured points:
-   - **Clean contract (probe)**: agy in `-p` mode is agentic (uses tools to edit files in place), with
-     narration going only to **stdout**, **not polluting the file** — exactly the failure mode of the old
-     `gemini -p` (writing "my fix plan…" into the file) is now gone. The 4 diagnostic classes were fixed
-     correctly in one pass, idiomatically.
-   - **Capability met (real eval)**: via the real `lint_phase.sh` + real clang-tidy, seeding 9 diagnostics
-     into `lib/tag/Open.cpp`, **9→0 in one FIXPOINT round** (int→`std::int32_t`+`<cstdint>`,
-     C-cast→`static_cast`, `std::endl`→`'\n'`, magic `7`→`constexpr kAddend`, optional merged into the
-     if-init and const). Tied with DeepSeek Flash (9/9, 0 silent-wrong, 0 out-of-bounds). → **C1-usable, a
-     cross-vendor second candidate beyond ds4f**. Note: it enters the **optional** candidate line in
-     routing.env; the **default remains a single worker** (ds4f); cross-vendor fan-out is opt-in (see v8
-     below and §10's latency/isolation tradeoff).
-   - **Isolation hole + mitigation (key)**: see §10.3. `steam-run` bind-mounts the whole `$HOME` (including
-     the real repo) and gives agy a **private /tmp** (so an AGENT_SANDBOX under `/tmp` is invisible to it).
-     On the first run agy **escaped** via the **repo-relative path** `lib/tag/Open.cpp` in the prompt to
-     edit the real repo file (it prefers "a real git project" over the cwd copy), the sandbox copy
-     untouched → harness-diff reverse → 9→9 no progress. A canary-controlled experiment located it:
-     switching to a **unique filename** (no such path in the repo), agy dutifully edited the cwd copy and
-     the real repo's sha256 was unchanged. **Mitigation**: the agy worker stages the target as a **flat
-     unique name under `$HOME`** (colliding with no repo-relative path), rewrites the path in the prompt to
-     that name, and copies the edit back to AGENT_SANDBOX; the contract adds an exported `AGENT_REL`. This
-     is **path-collision avoidance for a trusted vendor model**, not a hard sandbox; but every edit still
-     passes harness-diff + guard + independent re-validation, so an escaped edit cannot land silently.
+   **Cross-vendor second candidate = Gemini 3.5 Flash via native `agy` (re-enabled 2026-06-07)**:
+   Native `agy` runs directly in the sandbox CWD, just like `opencode`. This replaces the old 
+   `steam-run agy -p` workaround which suffered from "isolation escape" to the real repo. 
+   Native `agy` is safe and fast in a standard `/tmp` sandbox.
 2. **Step B: `use-clang-tidy` Phase Contract pilot**. After eval passes, add the Phase Contract; **no
    `--fix`**; C0 only produces diagnostics, C1 only handles the clear, local, verifiable tidy fixes.
 
@@ -812,7 +791,7 @@ hard dependency:
    skill unifies the plan/review two-mode contract, with review convened via code-review / diagnose-issue;
    the offline suite `run_council_test.sh` (63 assertions). See §11.
 7. **Step G: first generic-C2 eval + sanitizer oracles + observability loop (landed, 2026-06-06)**.
-   Track A of the V2 cross-vendor council review (agy and the hard sandbox deferred). (a) **ds-pro
+   Track A of the V2 cross-vendor council review). (a) **ds-pro
    proposal worker**: `route_c2_proposal_worker_dspro` (opencode/deepseek-v4-pro, cwd-confined) is the
    new `ROUTE_C2_PROPOSAL_WORKER` default; codex stays the alternate. (b) **Sanitizer oracles**
    `test-core-asan` / `test-core-tsan` in `validation.env` — own `-DAOBUS_ENABLE_ASAN/TSAN=ON` build

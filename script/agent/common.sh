@@ -30,7 +30,9 @@ agent_guard_path() {
 # agent_classify_path <repo-relative path> ; classify a path for capability-specific positive gates.
 agent_classify_path() {
   case "$1" in
-    include/*)                 echo public-header ;;
+    include/* | app/include/*) echo public-header ;;
+    app/*.h | app/**/*.h)      echo private-app-header ;;
+    lib/*.h | lib/**/*.h)      echo private-lib-header ;;
     script/*)                  echo script ;;
     doc/design/*)              echo design-doc ;;
     .agents/*)                 echo skill ;;
@@ -118,7 +120,10 @@ agent_scope_ok() {
 }
 
 # agent_is_header <repo-relative-path> ; 0 iff it classifies as a public header (include/**).
-agent_is_header() { [ "$(agent_classify_path "$1")" = public-header ]; }
+agent_is_header() {
+  local c; c="$(agent_classify_path "$1")"
+  case "$c" in public-header | private-app-header | private-lib-header) return 0 ;; *) return 1 ;; esac
+}
 
 # agent_proposal_input_ok <repo-relative-path> ; scope gate for the C2 proposal executor. Accepts a
 # private cpp source, a public header (include/**; blast-radius-gated by the runner), or an EXISTING
@@ -131,7 +136,7 @@ agent_proposal_input_ok() {
   [ -f "$AGENT_REPO/$p" ] || return 1
   [ ! -L "$AGENT_REPO/$p" ] || return 1
   case "$(agent_classify_path "$p")" in
-    private-cpp-source | public-header) return 0 ;;
+    private-cpp-source | public-header | private-app-header | private-lib-header) return 0 ;;
     test-cpp) agent_check_registered_test "$p" ;;
     *) return 1 ;;
   esac
@@ -153,7 +158,13 @@ agent_proposal_compute_blast_radius() {
       [ -n "${seen_hdr["$h"]:-}" ] && continue
       seen_hdr["$h"]=1
       inc="${h#include/}"            # include-rooted path, e.g. ao/utility/Base64.h
-      inc_re="${inc//./\\.}"
+      inc="${inc#app/include/}"      # also check app-specific headers
+      inc="${inc#lib/include/}"      # and lib-specific headers
+      if [ "$inc" = "$h" ]; then
+        inc_re="(.*/)?$(basename "$h" | sed 's/\./\\./g')"
+      else
+        inc_re="${inc//./\\.}"
+      fi
       while IFS= read -r f; do
         [ -n "$f" ] || continue
         case "$f" in
@@ -182,6 +193,21 @@ agent_proposal_blast_core_only() {
     esac
     if [ "$(agent_classify_path "$f")" = test-cpp ] \
        && agent_cmake_has_source "$AGENT_REPO/test/CMakeLists.txt" "$f" ao_test; then
+      continue
+    fi
+    return 1
+  done
+  return 0
+}
+
+agent_proposal_blast_app_gtk_only() {
+  local f
+  for f in "$@"; do
+    case "$f" in
+      app/linux-gtk/*.cpp | app/linux-gtk/*.cc | app/linux-gtk/*.cxx) continue ;;
+    esac
+    if [ "$(agent_classify_path "$f")" = test-cpp ] \
+       && agent_cmake_has_source "$AGENT_REPO/test/CMakeLists.txt" "$f" ao_test_gtk; then
       continue
     fi
     return 1
@@ -301,6 +327,12 @@ agent_validate_in_repo() {
   ( 
     export AOBUS_AGENT_REPO="$src"
     export BUILD_DIR="$bld"
+    export CCACHE_BASEDIR="$src"
+    export CCACHE_READONLY=1
+    # Normalize file paths (including DW_AT_comp_dir and __FILE__ macros)
+    # so ASan/GDB traces are consistent and Ccache hits across boundaries.
+    export CFLAGS="${CFLAGS:-} -ffile-prefix-map=\"$src\"=."
+    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=\"$src\"=."
     cd "$src"
     if [ ! -f "$bld/CMakeCache.txt" ]; then
       cmake --preset linux-debug -B "$bld" -S "$src" >/dev/null 2>&1 || true
@@ -683,8 +715,10 @@ agent_changed_cpp() {
 agent_tree_hash() {
   local d="${1:-$AGENT_REPO}"
   ( cd "$d" 2>/dev/null || exit 0
-    find . -path ./.git -prune -o -printf '%y %m %p -> %l\n' 2>/dev/null | sort
-    find . -path ./.git -prune -o -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null
+    # Exclude common noise paths that are not part of the source identity.
+    local skip=( "(" -path "./.git" -o -path "./build*" -o -path "./.cache" -o -path "./logs" ")" )
+    find . "${skip[@]}" -prune -o -printf '%y %m %p -> %l\n' 2>/dev/null | sort
+    find . "${skip[@]}" -prune -o -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null
   ) | sha256sum | awk '{print $1}'
 }
 
@@ -797,8 +831,9 @@ agent_tree_manifest() {
   out="$(cd "$(dirname "$out")" 2>/dev/null && pwd -P)/$(basename "$out")" || return 2
   d="$(cd "$d" 2>/dev/null && pwd -P)" || return 2
   ( cd "$d" && 
-    find . -path ./.git -prune -o ! -path ./.git -printf '%y\t%m\t%p\t%l\n' 2>/dev/null | sed 's|^\([^\t]*\t[^\t]*\t\)\./|\1|' | sort > "$out.base"
-    find . -path ./.git -prune -o ! -path ./.git -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null | sed 's|^\([a-f0-9]\{64\}\)[ \t]\+\./|\1\t|' > "$out.hashes"
+    local skip=( "(" -path "./.git" -o -path "./build*" -o -path "./.cache" -o -path "./logs" ")" )
+    find . "${skip[@]}" -prune -o -printf '%y\t%m\t%p\t%l\n' 2>/dev/null | sed 's|^\([^\t]*\t[^\t]*\t\)\./|\1|' | sort > "$out.base"
+    find . "${skip[@]}" -prune -o -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null | sed 's|^\([a-f0-9]\{64\}\)[ \t]\+\./|\1\t|' > "$out.hashes"
     
     awk -F'\t' -v OFS='\t' '
       NR==FNR { hash[$2] = $1; next }

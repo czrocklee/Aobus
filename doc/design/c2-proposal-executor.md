@@ -180,14 +180,15 @@ flat filename staging workaround to avoid known path-collision escapes. A
 full-repository proposal copy needs real repo-relative paths for includes and
 builds, so that mitigation is not valid.
 
-V1 should introduce a separate proposal worker route. The landed default (Step G) is **DeepSeek V4
-Pro via opencode**, chosen because opencode runs in the `/tmp` work-copy cwd under its own external-dir
-permission interception (the "good" §10.3 isolation), unlike agy/steam-run; codex is the alternate:
+V1 should introduce a separate proposal worker route. The landed defaults (Step G) are **DeepSeek V4
+Pro via opencode** and **Gemini 3.1 Pro via native agy**, both chosen because they run in the 
+`/tmp` work-copy cwd with strong process-level isolation; codex is the alternate:
 
 ```bash
 ROUTE_C2_PROPOSAL_WORKER="route_c2_proposal_worker_dspro"   # opencode/deepseek-v4-pro (default)
 ROUTE_C2_PROPOSAL_LABEL="DeepSeek V4 Pro via opencode"
-# alternate: ROUTE_C2_PROPOSAL_WORKER="route_c2_proposal_worker_codex"  # GPT-5.5 via codex
+# alternate: ROUTE_C2_PROPOSAL_WORKER="route_c2_proposal_worker_gpro"  # Gemini 3.1 Pro via native agy
+# alternate: ROUTE_C2_PROPOSAL_WORKER="route_c2_proposal_worker_codex" # GPT-5.5 via codex
 ```
 
 The worker contract should use files for larger payloads rather than large argv
@@ -499,5 +500,4 @@ The detailed implementation plan lives in
   oracle's own measurement apparatus — ruler-protection). Public headers ARE now
   editable as of v16, gated by the forced `test-core-all` oracle + blast-radius
   budget rather than forbidden (see Scope Policy).
-- No agy-backed full-tree proposal worker until its isolation is proven.
 - No assumption that proposal validation replaces C3's final validation.

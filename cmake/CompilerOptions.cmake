@@ -104,3 +104,17 @@ if(USE_FAST_LINKER)
     message(STATUS "Using fast linker: ${FAST_LINKER_FLAGS}")
   endif()
 endif()
+
+# ── Compiler Cache ──────────────────────────────────────────────────────────
+option(USE_CCACHE "Use ccache for faster recompilation if available" ON)
+
+if(USE_CCACHE)
+  find_program(CCACHE_PROGRAM ccache)
+  if(CCACHE_PROGRAM)
+    message(STATUS "Using compiler cache: ${CCACHE_PROGRAM}")
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+  else()
+    message(STATUS "ccache not found, proceeding without compiler cache.")
+  endif()
+endif()

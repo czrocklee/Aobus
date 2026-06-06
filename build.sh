@@ -117,15 +117,17 @@ if [[ "$ENABLE_ASAN" == "true" ]]; then
     ASAN_SUFFIX="-asan"
 fi
 
-case "$BUILD_TYPE" in
-    debug|release|profile)
-        BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${ASAN_SUFFIX}"
-        ;;
-    pgo1|pgo2)
+if [[ -z "${BUILD_DIR:-}" ]]; then
+    case "$BUILD_TYPE" in
+        debug|release|profile)
+            BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${ASAN_SUFFIX}"
+            ;;
+        pgo1|pgo2)
 #PGO generate / use steps must share a build tree so profile data stays available.
-        BUILD_DIR="/tmp/build/pgo${COMPILER_SUFFIX}"
-        ;;
-esac
+            BUILD_DIR="/tmp/build/pgo${COMPILER_SUFFIX}"
+            ;;
+    esac
+fi
 
 #Clean if requested
 if [[ "$CLEAN" == "true" ]]; then

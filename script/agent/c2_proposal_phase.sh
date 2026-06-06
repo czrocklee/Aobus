@@ -65,23 +65,49 @@ hdr_touched=false
 blast_n=0
 if [ "${#hdr_inputs[@]}" -gt 0 ]; then
   hdr_touched=true
-  declare -a blast
+  declare -a core_hdrs=() app_hdrs=() blast
+  for h in "${hdr_inputs[@]}"; do
+    case "$(agent_classify_path "$h")" in
+      public-header | private-lib-header) core_hdrs+=("$h") ;;
+      private-app-header)                 app_hdrs+=("$h") ;;
+    esac
+  done
+
+  if [ "${#core_hdrs[@]}" -gt 0 ] && [ "${#app_hdrs[@]}" -gt 0 ]; then
+    echo "proposal: mixed core + app header blast radius -> escalate to C3" >&2
+    agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "mixed core + app header blast radius; escalate to C3"
+    exit 2
+  fi
+
   mapfile -t blast < <(agent_proposal_compute_blast_radius "${hdr_inputs[@]}")
   blast_n="${#blast[@]}"
   budget="${PROPOSAL_BLAST_MAX:-12}"
-  echo "proposal: header(s) in scope -> blast radius $blast_n TU(s) (budget $budget)"
-  if ! agent_proposal_blast_core_only ${blast[@]+"${blast[@]}"}; then
-    echo "proposal: header blast radius reaches GTK/app targets beyond the core oracle -> escalate to C3" >&2
-    agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "header blast radius not core-only; escalate to C3"
-    exit 2
+
+  if [ "${#core_hdrs[@]}" -gt 0 ]; then
+    echo "proposal: core/lib header(s) in scope -> blast radius $blast_n TU(s) (budget $budget)"
+    if ! agent_proposal_blast_core_only ${blast[@]+"${blast[@]}"}; then
+      echo "proposal: header blast radius reaches targets beyond the core oracle -> escalate to C3" >&2
+      agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "core header blast radius not core-only; escalate to C3"
+      exit 2
+    fi
+    vid="test-core-all"
+    vargs=()
+  elif [ "${#app_hdrs[@]}" -gt 0 ]; then
+    echo "proposal: app header(s) in scope -> blast radius $blast_n TU(s) (budget $budget)"
+    if ! agent_proposal_blast_app_gtk_only ${blast[@]+"${blast[@]}"}; then
+      echo "proposal: app header blast radius exceeds GTK oracle coverage -> escalate to C3" >&2
+      agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "app header blast radius exceeds GTK oracle; escalate to C3"
+      exit 2
+    fi
+    vid="test-gtk-all"
+    vargs=()
   fi
+
   if [ "$blast_n" -gt "$budget" ]; then
     echo "proposal: header blast radius $blast_n exceeds budget $budget -> escalate to C3" >&2
     agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "blast radius $blast_n > budget $budget; escalate to C3"
     exit 2
   fi
-  vid="test-core-all"   # harness-forced; the packet's validation cannot downgrade a header change
-  vargs=()
 fi
 
 # Output / Sandbox setup
@@ -99,15 +125,20 @@ verify_tree_immutability() {
     exit 2
   fi
 }
-trap 'verify_tree_immutability; chmod -R u+w "$out_dir/base" 2>/dev/null || true; rm -rf "$out_dir/base" "$out_dir/work"' EXIT
+trap 'verify_tree_immutability; chmod -R +w "$out_dir/base" 2>/dev/null || true; rm -rf "$out_dir/base" "$out_dir/work"' EXIT
 
 # Staging
 bdir="$out_dir/base"
 wdir="$out_dir/work"
 agent_stage_repo_copy "$AGENT_REPO" "$bdir"
-agent_clean_ignored "$bdir" "$AGENT_REPO"   # drop gitignored runtime noise so base == work for source
-chmod -R a-w "$bdir" # Base is strictly read-only
+agent_clean_ignored "$bdir" "$AGENT_REPO"
+mkdir -p "$bdir/logs" "$bdir/.cache"
+chmod -R a-w "$bdir"
+chmod u+w "$bdir" "$bdir/logs" "$bdir/.cache" 2>/dev/null || true
+
 agent_stage_repo_copy "$AGENT_REPO" "$wdir"
+agent_clean_ignored "$wdir" "$AGENT_REPO"
+mkdir -p "$wdir/logs" "$wdir/.cache"
 
 # Baseline Validation
 echo "proposal: running baseline validation..."

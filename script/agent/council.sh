@@ -232,11 +232,17 @@ quarantine() {
 
 echo "council: mode=$MODE depth=$DEPTH members=[${MEMBERS[*]}] out=$OUT"
 
-# Stage one disposable repo copy per member (cwd for every round). .git is excluded by the copy.
+# Stage one disposable repo copy per member (cwd for every round).
 for fn in "${MEMBERS[@]}"; do
-  mid="$(mid_of "$fn")"; dest="$OUT/copy.$mid"; mkdir -p "$dest"
-  ( cd "$AGENT_REPO" && find . -mindepth 1 -maxdepth 1 -not -name '.git' -exec cp -a {} "$dest/" \; ) 2>/dev/null
+  mid="$(mid_of "$fn")"; dest="$OUT/copy.$mid"
+  agent_stage_repo_copy "$AGENT_REPO" "$dest"
   [ "$(ls -A "$dest" 2>/dev/null)" ] || { echo "council: failed to stage repo copy for $mid" >&2; exit 3; }
+
+  # Share .cache/ccache and logs to avoid filling /tmp with redundant multi-GB copies.
+  # agent_tree_hash (§11) ignores these paths, so symlinking them does not trigger the mutation canary.
+  mkdir -p "$AGENT_REPO/.cache" "$AGENT_REPO/logs"
+  ln -s "$AGENT_REPO/.cache" "$dest/.cache"
+  ln -s "$AGENT_REPO/logs"   "$dest/logs"
 done
 
 # ---- R1: blind draft ----

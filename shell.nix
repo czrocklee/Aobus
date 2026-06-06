@@ -28,6 +28,7 @@ pkgs.mkShell {
   buildInputs =
     with pkgs;
     [
+      ccache
       cmake
       gperf
       ripgrep
@@ -83,6 +84,14 @@ pkgs.mkShell {
     export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${pkgs.gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
     # Set Lexy include path
     export CPLUS_INCLUDE_PATH="${lexy}/include:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
+
+    # ccache configuration
+    export CCACHE_DIR="$PWD/.cache/ccache"
+    export CCACHE_BASEDIR="$PWD"
+    export CCACHE_MAXSIZE="10G"
+    export CCACHE_COMPRESS=1
+    export CCACHE_SLOPPINESS="time_macros"
+
     echo "Using nixpkgs pinned (see nixpkgs.json)"
     echo "Using GCC by default"
   '';
