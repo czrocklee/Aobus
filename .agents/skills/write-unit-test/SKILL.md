@@ -9,24 +9,15 @@ Use this skill to write behavior-focused Aobus unit tests that match the existin
 
 If the task also modifies C++ source or test files, follow `generate-cpp-code` first, especially `references/04-test-snippets.md`.
 
-## Phase Contract — C2 Delegation
+## Delegating implementation to C2
 
-Implementing a **C3-decided** test plan in one existing, already-registered Catch2 file can be delegated
-to C2 through `script/agent/test_phase.sh` or a Phase Packet routed by `script/agent/dispatch.sh`.
-C3 still decides what behavior and boundaries to test; C2 only writes the planned case.
-
-- **Capability:** C2, scoped test augmentation inside a fixed plan.
-- **Inputs:** exactly one registered Catch2 `.cpp` file under `test/`.
-- **Validation:** `test-core` or `test-gtk` with exactly one Catch2 tag filter in `validation_args`.
-- **Required packet field:** `target_anchor`, a safe unique tag/test token that is absent from the
-  baseline target file and appears in the post-edit Catch2 `--list-tests --verbosity high` output for
-  the selected filter and target source file.
-- **Scope:** the worker may edit only that one test file. No new files, `test/CMakeLists.txt`, production
-  code, public headers, scripts, design docs, or skills.
-- **Review:** a passing C2 run emits a review dossier; C3 must review the diff and record the verdict
-  before commit.
-- **Escalate to C3 when:** the plan needs test-design judgement, a new file/registration, production
-  changes, public API changes, or the C2 loop cannot produce a passing focused test.
+Deciding *what behavior and which edge cases* to test is a **C3** judgement — this document helps you
+make it. *Writing* the decided tests can be delegated to the C2 proposal executor via the
+**`execute-plan`** skill; there is no separate test-specific C2 route. The proposal worker reads this
+document from `.agents/skills/` in its work copy for the conventions below, then returns a validated
+patch that you (the chair) review and land. Use `intent: behavior-change` in the packet when the tests
+pin new behavior (the runner then requires a registered test to change). See
+`.agents/skills/execute-plan/SKILL.md`.
 
 ## Core Workflow
 

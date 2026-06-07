@@ -9,34 +9,14 @@ This skill provides a systematic workflow for agents to analyze and improve C++ 
 
 It is designed to handle edge cases in coverage, find missing lines efficiently, and write Catch2 tests that simulate complex logic (e.g. batch operations, UI-driven data updates, lambda dispatching).
 
-## Phase Contract — C2 delegation (machine path)
+## Delegating implementation to C2
 
-Implementing a decided test plan — adding boundary cases to an **existing, already-registered** Catch2
-file — can be delegated to a mid-tier model (capability **C2**) via `script/agent/test_phase.sh`
-(packet-driven). Deciding *what* to test and *which* boundaries is a **C3** judgement; C2 only
-implements the plan. The rest of this document is the manual / frontier (C3) path for choosing targets.
-
-- **Capability:** C2 (scoped implementation inside a fixed plan, validated by a real build + run).
-- **Worker:** per `script/agent/routing.env` (`route_c2_worker`; default: Gemini 3.1 Pro via agy).
-- **Inputs (Phase Packet):** one existing registered test file (`inputs[0]`), the plan (packet body),
-  one Catch2 filter (`validation_args`), and a `target_anchor` naming a safe unique tag/test token that
-  is absent before the edit and visible in Catch2 `--list-tests --verbosity high` output after the edit.
-- **Validation:** an allowlisted build+run id — `test-core` / `test-gtk` (`script/agent/validation.env`);
-  the filtered suite must already pass on the baseline tree, then build and pass after the worker edit.
-  The list output must bind the selected filter back to the edited source file and `target_anchor`.
-  Re-run by the harness; never trusted from the model.
-- **Iterate:** a failed build/test is fed back to the worker, up to a round budget, then escalate.
-- **Isolation / harness-diff / guard / temporal isolation:** identical to the C1 lint phase — the worker
-  edits a sandbox copy; the dispatcher takes the patch by diff, applies, validates, keeps or rolls back.
-- **Scope limit (structural):** this **augments an existing, registered** test file only. A **new** test
-  file needs a `test/CMakeLists.txt` registration (a guarded path), so new-file scaffolding is a **C3**
-  task, not C2.
-- **Review handoff:** a kept C2 edit emits a review dossier with the plan, diff, validation output,
-  scope classification, and assertion-count delta. The delta is a risk marker, not semantic proof.
-- **Escalate to C3 when:** the plan needs design judgement, a new file/registration, a public-API
-  change, or the loop cannot produce a passing test.
-- **Run:** via a Phase Packet through `script/agent/dispatch.sh <packet>` (routes
-  `improve-test-coverage/C2` → `test_phase.sh`), or `script/agent/test_phase.sh <packet>` directly.
+Deciding *what* to test and *which* boundaries to cover is a **C3** judgement — the rest of this document
+is that frontier (C3) path. *Implementing* a decided coverage plan can be delegated to the C2 proposal
+executor via the **`execute-plan`** skill; there is no separate coverage-specific C2 route. The proposal
+worker reads this document from `.agents/skills/` in its work copy for the conventions and the
+coverage workflow below, then returns a validated patch you (the chair) review and land. Use
+`intent: behavior-change` when the new tests pin behavior. See `.agents/skills/execute-plan/SKILL.md`.
 
 ## 1. Generating and Inspecting Coverage
 

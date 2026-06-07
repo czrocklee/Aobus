@@ -16,8 +16,8 @@ AGENT_WORK="${AOBUS_AGENT_WORK:-/tmp/aobus-agent}"
 AGENT_FORBID='^(include/|.*CMakeLists\.txt|\.clang-tidy|script/|doc/design/|\.agents/)'
 
 # Proposal scope (the C2 proposal executor) is WIDER than the C1 guard: this repo has no API/ABI-compat
-# requirement, so a header edit is gated by the validation oracle's blast-radius coverage (see
-# c2_proposal_phase.sh), not by a path taboo. Only the oracle's OWN measurement apparatus stays
+# requirement, so a header edit is allowed and falsified by the full-suite oracle (test-all; see
+# c2_proposal_phase.sh), not gated by a path taboo. Only the oracle's OWN measurement apparatus stays
 # forbidden -- CMake / .clang-tidy define the build (the "ruler"), and script / doc / .agents have no
 # build/test oracle to falsify them. This is AGENT_FORBID MINUS the now-allowed include/ headers.
 AGENT_PROPOSAL_FORBID='^(.*CMakeLists\.txt|\.clang-tidy|script/|doc/design/|\.agents/)'
@@ -76,18 +76,6 @@ agent_cmake_has_source() {
   ' "$cmake"
 }
 
-agent_test_executable_for_validation() {
-  case "$1" in
-    test-core) echo ao_test ;;
-    test-gtk)  echo ao_test_gtk ;;
-    *) return 1 ;;
-  esac
-}
-
-agent_c2_test_validation_ok() {
-  case "$1" in test-core | test-gtk) return 0 ;; *) return 1 ;; esac
-}
-
 agent_check_registered_test() {
   local rel="$1" cmake
   [ "$(agent_classify_path "$rel")" = test-cpp ] || return 1
@@ -97,36 +85,15 @@ agent_check_registered_test() {
   agent_cmake_has_source "$cmake" "$rel"
 }
 
-agent_check_registered_test_for_validation() {
-  local rel="$1" validation="$2" cmake target
-  agent_check_registered_test "$rel" || return 1
-  target="$(agent_test_executable_for_validation "$validation")" || return 1
-  cmake="$AGENT_REPO/test/CMakeLists.txt"
-  agent_cmake_has_source "$cmake" "$rel" "$target"
-}
-
-# agent_scope_ok <task-class> <path...> ; positive scope gate for C1/C2 runners.
-agent_scope_ok() {
-  local class="$1"; shift
-  case "$class" in
-    c2-test-augment)
-      [ "$#" -eq 1 ] || return 1
-      agent_guard_path "$1" && agent_check_registered_test "$1" ;;
-    c2-private-cpp)
-      [ "$#" -eq 1 ] || return 1
-      [ "$(agent_classify_path "$1")" = private-cpp-source ] && agent_guard_path "$1" ;;
-    *) return 1 ;;
-  esac
-}
-
-# agent_is_header <repo-relative-path> ; 0 iff it classifies as a public header (include/**).
+# agent_is_header <repo-relative-path> ; 0 iff it classifies as any header (public include/** OR a
+# private lib/app header).
 agent_is_header() {
   local c; c="$(agent_classify_path "$1")"
   case "$c" in public-header | private-app-header | private-lib-header) return 0 ;; *) return 1 ;; esac
 }
 
 # agent_proposal_input_ok <repo-relative-path> ; scope gate for the C2 proposal executor. Accepts a
-# private cpp source, a public header (include/**; blast-radius-gated by the runner), or an EXISTING
+# private cpp source, a public/private header (falsified by the full-suite oracle), or an EXISTING
 # registered test source (so a behavior-change proposal can extend the test that pins the new behavior).
 # Rejects the oracle-foundation paths (AGENT_PROPOSAL_FORBID), non-files, and symlinks.
 agent_proposal_input_ok() {
@@ -140,79 +107,6 @@ agent_proposal_input_ok() {
     test-cpp) agent_check_registered_test "$p" ;;
     *) return 1 ;;
   esac
-}
-
-# agent_proposal_compute_blast_radius <header-rel-path>... ; over-approximate the #include closure of
-# the given headers and print one repo-relative SOURCE includer (.cpp/.cc/.cxx) per line -- the set of
-# translation units the build/test oracle must cover. Conservative: matches any TU that (transitively)
-# #includes a header by its include-rooted path, so it OVER-includes rather than under-includes (an
-# over-count only escalates a borderline case to C3, it never hides one). Reads from $AGENT_REPO.
-agent_proposal_compute_blast_radius() {
-  local repo="$AGENT_REPO"
-  declare -A seen_hdr=() includer=()
-  local -a frontier=("$@") next
-  local h inc inc_re f
-  while [ "${#frontier[@]}" -gt 0 ]; do
-    next=()
-    for h in "${frontier[@]}"; do
-      [ -n "${seen_hdr["$h"]:-}" ] && continue
-      seen_hdr["$h"]=1
-      inc="${h#include/}"            # include-rooted path, e.g. ao/utility/Base64.h
-      inc="${inc#app/include/}"      # also check app-specific headers
-      inc="${inc#lib/include/}"      # and lib-specific headers
-      if [ "$inc" = "$h" ]; then
-        inc_re="(.*/)?$(basename "$h" | sed 's/\./\\./g')"
-      else
-        inc_re="${inc//./\\.}"
-      fi
-      while IFS= read -r f; do
-        [ -n "$f" ] || continue
-        case "$f" in
-          *.cpp | *.cc | *.cxx) includer["$f"]=1 ;;
-          *) [ -n "${seen_hdr["$f"]:-}" ] || next+=("$f") ;;
-        esac
-      done < <(cd "$repo" 2>/dev/null && rg -l --no-messages \
-                 -e "#include[[:space:]]*[<\"]${inc_re}[>\"]" lib app src test include 2>/dev/null)
-    done
-    if [ "${#next[@]}" -gt 0 ]; then frontier=("${next[@]}"); else frontier=(); fi
-  done
-  [ "${#includer[@]}" -gt 0 ] || return 0
-  local k
-  for k in "${!includer[@]}"; do printf '%s\n' "$k"; done | sort
-}
-
-# agent_proposal_blast_core_only <includer-src>... ; 0 iff EVERY includer is covered by the core
-# (ao_test) oracle -- a lib source (linked into ao_test) or a registered ao_test core test source.
-# Anything else (the GTK/app frontend, a GTK-only test) reaches beyond test-core-all, so the caller
-# must escalate to C3 rather than claim a coverage it does not have.
-agent_proposal_blast_core_only() {
-  local f
-  for f in "$@"; do
-    case "$f" in
-      lib/*.cpp | lib/*.cc | lib/*.cxx) continue ;;
-    esac
-    if [ "$(agent_classify_path "$f")" = test-cpp ] \
-       && agent_cmake_has_source "$AGENT_REPO/test/CMakeLists.txt" "$f" ao_test; then
-      continue
-    fi
-    return 1
-  done
-  return 0
-}
-
-agent_proposal_blast_app_gtk_only() {
-  local f
-  for f in "$@"; do
-    case "$f" in
-      app/linux-gtk/*.cpp | app/linux-gtk/*.cc | app/linux-gtk/*.cxx) continue ;;
-    esac
-    if [ "$(agent_classify_path "$f")" = test-cpp ] \
-       && agent_cmake_has_source "$AGENT_REPO/test/CMakeLists.txt" "$f" ao_test_gtk; then
-      continue
-    fi
-    return 1
-  done
-  return 0
 }
 
 # agent_load_routing ; source the routing table (override file via AOBUS_ROUTING_ENV).
@@ -331,8 +225,8 @@ agent_validate_in_repo() {
     export CCACHE_READONLY=1
     # Normalize file paths (including DW_AT_comp_dir and __FILE__ macros)
     # so ASan/GDB traces are consistent and Ccache hits across boundaries.
-    export CFLAGS="${CFLAGS:-} -ffile-prefix-map=\"$src\"=."
-    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=\"$src\"=."
+    export CFLAGS="${CFLAGS:-} -ffile-prefix-map=$src=."
+    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=$src=."
     cd "$src"
     if [ ! -f "$bld/CMakeCache.txt" ]; then
       cmake --preset linux-debug -B "$bld" -S "$src" >/dev/null 2>&1 || true
@@ -381,13 +275,6 @@ agent_key_allowed() {
   return 1
 }
 
-agent_request_is_c2_test() {
-  local skill cap
-  skill="$(agent_packet_scalar "$1" skill)"
-  cap="$(agent_packet_scalar "$1" capability)"
-  [ "$cap" = C2 ] && { [ "$skill" = improve-test-coverage ] || [ "$skill" = write-unit-test ]; }
-}
-
 # agent_packet_validate <file> [expected-kind] ; strict schema for mutating request packets.
 agent_packet_validate() {
   local packet="$1" expected="${2:-}"
@@ -413,15 +300,11 @@ agent_packet_validate() {
       done
       while IFS= read -r key; do
         agent_key_allowed "$key" schema kind skill capability validation validation_args inputs \
-          escalate_to target_anchor || {
+          escalate_to || {
           echo "agent: request packet has unknown key '$key' -> reject" >&2
           return 64
         }
       done < <(agent_packet_keys "$packet")
-      if agent_request_is_c2_test "$packet" && ! agent_has_key "$packet" target_anchor; then
-        echo "agent: C2 test request missing 'target_anchor' -> reject" >&2
-        return 64
-      fi
       ;;
     proposal)
       for key in schema kind skill capability mode inputs validation; do
@@ -479,60 +362,6 @@ agent_packet_validate() {
       ;;
   esac
   return 0
-}
-
-agent_test_list_output() {
-  local id="$1" filter="$2" fn
-  fn="$(agent_validation_fn "$id")_list"
-  [ "$(type -t "$fn" 2>/dev/null)" = function ] || return 3
-  ( cd "$AGENT_REPO" && "$fn" "$filter" )
-}
-
-agent_test_list_has_matches() {
-  local out="$1"
-  printf '%s\n' "$out" | rg -q '(^|[^0-9])0 matching test cases' && return 1
-  printf '%s\n' "$out" | rg -q '(^|[^0-9])[1-9][0-9]* matching test cases' && return 0
-  [ -n "$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d')" ]
-}
-
-# agent_test_filter_nonempty <validation-id> <filter> ; if the validation table exposes a list helper,
-# require the filter to match at least one real test. Mock validation tables that do not define the
-# helper are treated as unknown rather than failing, preserving deterministic unit seams.
-agent_test_filter_nonempty() {
-  local out
-  out="$(agent_test_list_output "$1" "$2" 2>/dev/null)" || return 0
-  agent_test_list_has_matches "$out"
-}
-
-agent_test_list_mentions_target_anchor() {
-  local out="$1" rel="$2" anchor="$3" abs
-  abs="$AGENT_REPO/$rel"
-  awk -v abs="$abs" -v rel="$rel" -v anchor="$anchor" '
-    function flush() {
-      if (has_path && has_anchor) ok = 1
-      has_path = 0
-      has_anchor = 0
-    }
-    /^  [^[:space:]]/ { flush() }
-    {
-      if (index($0, abs) || index($0, "/" rel ":") || index($0, rel ":")) has_path = 1
-      if (index($0, anchor)) has_anchor = 1
-    }
-    END { flush(); exit ok ? 0 : 1 }
-  ' <<<"$out"
-}
-
-agent_test_filter_mentions_target_anchor() {
-  local id="$1" filter="$2" rel="$3" anchor="$4" out
-  out="$(agent_test_list_output "$id" "$filter" 2>/dev/null)" || return 1
-  agent_test_list_has_matches "$out" || return 1
-  agent_test_list_mentions_target_anchor "$out" "$rel" "$anchor"
-}
-
-# agent_count_assertions <file> ; cheap C0 risk marker for test augmentation dossiers.
-agent_count_assertions() {
-  [ -r "$1" ] || { echo 0; return 0; }
-  rg -o '\b(CHECK|REQUIRE)(_[A-Z0-9_]+)?\s*\(' "$1" 2>/dev/null | wc -l
 }
 
 agent_phase_id() { printf '%s-%s-%s' "$1" "$(date -u +%Y%m%d-%H%M%S)" "$$"; }
@@ -612,73 +441,6 @@ agent_breaker_trip() {
   return 0
 }
 
-# agent_write_manifest <out.json> <artifact...>
-agent_write_manifest() {
-  local out="$1"; shift
-  local f first=1
-  mkdir -p "$(dirname "$out")"
-  {
-    echo '{'
-    echo '  "artifacts": ['
-    for f in "$@"; do
-      [ -e "$f" ] || continue
-      [ "$first" -eq 1 ] || echo ','
-      first=0
-      printf '    {"path":"%s","bytes":%s,"sha256":"%s"}' \
-        "$(agent_json_escape "$f")" "$(wc -c < "$f" 2>/dev/null || echo 0)" \
-        "$(sha256sum "$f" 2>/dev/null | awk '{print $1}')"
-    done
-    echo
-    echo '  ]'
-    echo '}'
-  } > "$out"
-}
-
-# agent_emit_review_dossier <out.md> <packet> <target-rel> <patch> <validation-log> <phase-id>
-#                           <worker> <rounds> <churn> <pre-assertions> <post-assertions> <oracle>
-agent_emit_review_dossier() {
-  local out="$1" packet="$2" rel="$3" patch="$4" vout="$5" phase_id="$6"
-  local worker="$7" rounds="$8" churn="$9" pre="${10}" post="${11}" oracle="${12}"
-  mkdir -p "$(dirname "$out")"
-  {
-    echo "# C2 Review Dossier"
-    echo
-    echo "- phase_id: \`$phase_id\`"
-    echo "- skill: \`$(agent_packet_scalar "$packet" skill)\`"
-    echo "- capability: \`$(agent_packet_scalar "$packet" capability)\`"
-    echo "- target: \`$rel\`"
-    echo "- worker: \`$worker\`"
-    echo "- rounds: $rounds"
-    echo "- churn: $churn"
-    echo "- scope: \`$(agent_classify_path "$rel")\`"
-    echo "- assertions: $pre -> $post"
-    echo "- oracle: \`$oracle\`"
-    [ "$oracle" = zero-delta ] && echo "- risk: assertion count did not increase; C3 must verify the added test is meaningful."
-    echo
-    echo "## Plan"
-    echo '```markdown'
-    agent_packet_body "$packet"
-    echo '```'
-    echo
-    echo "## Diff"
-    echo '```diff'
-    [ -r "$patch" ] && cat "$patch"
-    echo '```'
-    echo
-    echo "## Validation Output"
-    echo '```'
-    if [ -r "$vout" ]; then tail -80 "$vout"; else echo "(none captured)"; fi
-    echo '```'
-    echo
-    echo "## C3 Review Checklist"
-    echo "- Does the diff implement the requested plan and no extra behavior?"
-    echo "- Did C2 stay within the single registered test file?"
-    echo "- Are assertions non-trivial and tied to observable public behavior?"
-    echo "- Is a zero-delta oracle acceptable for this specific plan?"
-  } > "$out"
-  echo "$out"
-}
-
 # agent_repo_lock ; serialize all tree-mutating phases on this repo with an exclusive flock on fd 9.
 # Call once, early. The lock is held for the process lifetime. Returns 4 if it cannot be acquired
 # within AGENT_LOCK_WAIT seconds (default 120).
@@ -716,7 +478,7 @@ agent_tree_hash() {
   local d="${1:-$AGENT_REPO}"
   ( cd "$d" 2>/dev/null || exit 0
     # Exclude common noise paths that are not part of the source identity.
-    local skip=( "(" -path "./.git" -o -path "./build*" -o -path "./.cache" -o -path "./logs" ")" )
+    local skip=( "(" -path "./.git" -o -path "./build" -o -path "./build/*" -o -path "./build-*" -o -path "./.cache" -o -path "./logs" ")" )
     find . "${skip[@]}" -prune -o -printf '%y %m %p -> %l\n' 2>/dev/null | sort
     find . "${skip[@]}" -prune -o -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null
   ) | sha256sum | awk '{print $1}'
@@ -797,7 +559,7 @@ agent_guard_output_dir() {
 agent_stage_repo_copy() {
   local src="$1" dst="$2"
   mkdir -p "$dst"
-  rsync -a --exclude='.git/' --exclude='build*/' --exclude='.cache/' "$src/" "$dst/"
+  rsync -a --exclude='.git/' --exclude='build*/' --exclude='.cache/' --exclude='logs/' "$src/" "$dst/"
 }
 
 # agent_clean_ignored <tree-dir> <repo-with-rules>
@@ -831,7 +593,7 @@ agent_tree_manifest() {
   out="$(cd "$(dirname "$out")" 2>/dev/null && pwd -P)/$(basename "$out")" || return 2
   d="$(cd "$d" 2>/dev/null && pwd -P)" || return 2
   ( cd "$d" && 
-    local skip=( "(" -path "./.git" -o -path "./build*" -o -path "./.cache" -o -path "./logs" ")" )
+    local skip=( "(" -path "./.git" -o -path "./build" -o -path "./build/*" -o -path "./build-*" -o -path "./.cache" -o -path "./logs" ")" )
     find . "${skip[@]}" -prune -o -printf '%y\t%m\t%p\t%l\n' 2>/dev/null | sed 's|^\([^\t]*\t[^\t]*\t\)\./|\1|' | sort > "$out.base"
     find . "${skip[@]}" -prune -o -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null | sed 's|^\([a-f0-9]\{64\}\)[ \t]\+\./|\1\t|' > "$out.hashes"
     
@@ -900,7 +662,10 @@ agent_harness_diff_tree() {
   git diff --no-index --src-prefix=a/ --dst-prefix=b/ "$b" "$w" > "$out" || true
 }
 
-# agent_proposal_changes_ok <inputs-file> <changes.tsv>
+# agent_proposal_changes_ok <inputs-file> <changes.tsv> ; 0 iff every change is a `modify` of a path
+# listed in <inputs-file>. SECURITY: <inputs-file> is the scope authority, so the caller MUST pass a
+# trusted file the worker cannot write (the C2 runner regenerates it from its in-memory packet inputs
+# right before calling this, since the worker is handed its own copy via AGENT_PROPOSAL_INPUTS_FILE).
 agent_proposal_changes_ok() {
   local inputs_file="$1" changes_file="$2"
   local ok=1

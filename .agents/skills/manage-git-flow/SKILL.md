@@ -68,18 +68,20 @@ What it runs over the changed C++ set: **C0** targeted `clang-format` → **C1**
 
 commit_flow mutates the working tree (formatting and lint fixes); review those edits in `git diff` before staging. The DANGER rules in §5 still apply.
 
-## 3.1 C2 Review Handoff
+## 3.1 C2 Proposal Review Handoff
 
-A kept C2 test phase is **review-ready**, not commit-ready. Before staging or committing a C2-delegated
-change, read its review dossier, perform C3 semantic review, and record the verdict:
+C2 never keeps a change — it produces a **proposal** (a validated patch + dossier via the `execute-plan`
+skill). Before staging or committing a C2-delegated change, read its review dossier, apply the patch to
+the real tree, re-validate, perform C3 semantic review, and record the verdict:
 
 ```bash
 script/agent/record_review.sh <phase-id> accept|reject [reason]
 ```
 
-The phase id must already exist as a kept C2 audit entry, and verdicts are terminal: a conflicting
-second verdict is rejected. Only an accepted C2 change may proceed through the normal commit procedure.
-A rejected C2 keep must be rolled back or fixed by C3; do not treat a passing focused test as sufficient
+The phase id must already exist as a proposal audit entry, and verdicts are terminal: a conflicting
+second verdict is rejected. Only an accepted change proceeds through the normal commit procedure.
+Rejecting a `proposal-validated` phase is a **silent-wrong** that trips the per-worker circuit breaker
+(cleared via `review_stats.sh --reset`); record honestly, and do not treat a passing oracle as sufficient
 semantic approval.
 
 ## 4. Commit Procedure

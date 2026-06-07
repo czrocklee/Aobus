@@ -41,6 +41,22 @@ assert_eq "classify build config"  "$(agent_classify_path test/CMakeLists.txt)" 
 assert_eq "classify test cpp"      "$(agent_classify_path test/unit/FooTest.cpp)" "test-cpp"
 assert_eq "classify source cpp"    "$(agent_classify_path lib/audio/Foo.cpp)" "private-cpp-source"
 assert_eq "classify unknown"       "$(agent_classify_path README.md)" "unknown"
+# v16/01f2b5f0: private lib/app headers and app public headers are now classified (and in scope).
+assert_eq "classify private lib header" "$(agent_classify_path lib/audio/Sink.h)" "private-lib-header"
+assert_eq "classify private app header" "$(agent_classify_path app/widgets/Row.h)" "private-app-header"
+assert_eq "classify app public header"  "$(agent_classify_path app/include/ao/App.h)" "public-header"
+
+# agent_proposal_input_ok: private lib/app headers are now accepted; unknown ext + missing stay rejected.
+IOK="$(mktemp -d)"; mkdir -p "$IOK/lib/util" "$IOK/app/widgets"
+touch "$IOK/lib/util/Helper.h" "$IOK/app/widgets/Row.h" "$IOK/lib/util/Helper.cpp" "$IOK/lib/notes.txt"
+OLD_IOK_REPO="$AGENT_REPO"; AGENT_REPO="$IOK"
+assert_rc 0 "input_ok accepts private lib header" agent_proposal_input_ok "lib/util/Helper.h"
+assert_rc 0 "input_ok accepts private app header" agent_proposal_input_ok "app/widgets/Row.h"
+assert_rc 0 "input_ok accepts private cpp"        agent_proposal_input_ok "lib/util/Helper.cpp"
+assert_rc 1 "input_ok rejects unknown extension"  agent_proposal_input_ok "lib/notes.txt"
+assert_rc 1 "input_ok rejects missing file"       agent_proposal_input_ok "lib/util/Ghost.h"
+AGENT_REPO="$OLD_IOK_REPO"; rm -rf "$IOK"
+
 RT="$(mktemp -d)"
 OLD_AGENT_REPO="$AGENT_REPO"; AGENT_REPO="$RT"
 mkdir -p "$RT/test/unit"
@@ -55,11 +71,6 @@ assert_rc 1 "unregistered test rejected"      agent_check_registered_test test/u
 assert_rc 1 "same-basename different-dir test rejected" agent_check_registered_test test/unit/DupeTest.cpp
 assert_rc 1 "substring CMake source match rejected"      agent_check_registered_test test/unit/OtherTest.cpp
 assert_rc 1 "non-test source rejected"        agent_check_registered_test lib/foo.cpp
-assert_rc 0 "C2 test scope accepts one registered test" agent_scope_ok c2-test-augment test/unit/FooTest.cpp
-assert_rc 1 "C2 test scope rejects source"             agent_scope_ok c2-test-augment lib/foo.cpp
-assert_rc 0 "C2 test validation accepts test-core" agent_c2_test_validation_ok test-core
-assert_rc 0 "C2 test validation accepts test-gtk"  agent_c2_test_validation_ok test-gtk
-assert_rc 1 "C2 test validation rejects tidy"     agent_c2_test_validation_ok tidy
 AGENT_REPO="$OLD_AGENT_REPO"; rm -rf "$RT"
 
 echo "== validation allowlist =="
@@ -79,18 +90,13 @@ routing_value() {
     # shellcheck disable=SC1091
     source "$REPO/script/agent/routing.env"
     case "$key" in
-      c2_worker) printf '%s' "$ROUTE_C2_WORKER" ;;
-      c2_label)  printf '%s' "$ROUTE_C2_LABEL" ;;
-      fallback)  declare -f route_c2_worker ;;
+      c2_proposal_worker) printf '%s' "$ROUTE_C2_PROPOSAL_WORKER" ;;
+      c2_proposal_label)  printf '%s' "$ROUTE_C2_PROPOSAL_LABEL" ;;
     esac
   )
 }
-assert_eq "C2 default worker is Gemini agy" "$(routing_value c2_worker)" "route_c2_worker_gpro"
-assert_eq "C2 default label is Gemini agy"  "$(routing_value c2_label)"  "Gemini 3.1 Pro (high) via agy"
-case "$(routing_value fallback)" in
-  *route_c2_worker_gpro*) ok "C2 fallback alias routes to Gemini agy" ;;
-  *) bad "C2 fallback alias routes to Gemini agy" ;;
-esac
+assert_eq "C2 proposal worker default is DeepSeek opencode" "$(routing_value c2_proposal_worker)" "route_c2_proposal_worker_dspro"
+assert_eq "C2 proposal label default is DeepSeek opencode"  "$(routing_value c2_proposal_label)"  "DeepSeek V4 Pro via opencode"
 
 VT="$(mktemp -d)"; mkdir -p "$VT/script"
 vtidy_in() { ( cd "$1" && v_tidy lib/foo.cpp ); }
@@ -123,24 +129,6 @@ assert_rc 2 "test-core rejects 0 args (min 1)"      agent_validation_args_ok tes
 assert_rc 0 "build-debug tolerates extra/no args"   agent_validation_args_ok build-debug x y
 assert_rc 0 "unspec'd id falls back to allow"       agent_validation_args_ok no-such-id whatever
 
-echo "== test list gates =="
-v_mock_list_gate() { :; }
-v_mock_list_gate_list() {
-  case "$1" in
-    "[empty]") printf 'Matching test cases:\n0 matching test cases\n' ;;
-    "[hit]")   printf 'Matching test cases:\n  anchor case\n    %s/test/unit/FooTest.cpp:7\n      [hit][anchor]\n1 matching test cases\n' "$AGENT_REPO" ;;
-    *)         printf 'mock test\n' ;;
-  esac
-}
-LIST_REPO="$(mktemp -d)"
-OLD_AGENT_REPO="$AGENT_REPO"; AGENT_REPO="$LIST_REPO"
-assert_rc 1 "empty Catch2 list output rejected" agent_test_filter_nonempty mock-list-gate "[empty]"
-assert_rc 0 "nonempty Catch2 list output accepted" agent_test_filter_nonempty mock-list-gate "[hit]"
-hit_out="$(v_mock_list_gate_list "[hit]")"
-assert_rc 0 "list block binds target and anchor" agent_test_list_mentions_target_anchor "$hit_out" test/unit/FooTest.cpp anchor
-assert_rc 1 "list block rejects missing anchor" agent_test_list_mentions_target_anchor "$hit_out" test/unit/FooTest.cpp other-anchor
-AGENT_REPO="$OLD_AGENT_REPO"; rm -rf "$LIST_REPO"
-
 echo "== harness diff churn =="
 T="$(mktemp -d)"; printf 'a\nb\nc\n' > "$T/o"; printf 'a\nB\nc\nd\n' > "$T/m"
 assert_eq "churn counts changed body lines" "$(agent_harness_diff "$T/o" "$T/m" "$T/p")" "3"
@@ -171,7 +159,7 @@ assert_rc 0 "escalation packet validates" agent_packet_validate "$PK" escalation
 
 # packet body parsing on a hand-written request packet (frontmatter + body)
 PKR="$T/req.md"
-printf -- '---\nschema: aobus-phase-packet/v1\nkind: request\nskill: improve-test-coverage\ncapability: C2\nvalidation: test-core\ntarget_anchor: anchor\nvalidation_args:\n  - [base64]\ninputs:\n  - test/unit/utility/Base64Test.cpp\n---\nLINE ONE of plan\nLINE TWO of plan\n' > "$PKR"
+printf -- '---\nschema: aobus-phase-packet/v1\nkind: request\nskill: improve-test-coverage\ncapability: C2\nvalidation: test-core\nvalidation_args:\n  - [base64]\ninputs:\n  - test/unit/utility/Base64Test.cpp\n---\nLINE ONE of plan\nLINE TWO of plan\n' > "$PKR"
 assert_eq "validation_args list" "$(agent_packet_list "$PKR" validation_args)" "[base64]"
 assert_eq "body first line"      "$(agent_packet_body "$PKR" | head -1)"       "LINE ONE of plan"
 assert_eq "body line count"      "$(agent_packet_body "$PKR" | grep -c .)"      "2"
@@ -181,18 +169,7 @@ assert_rc 64 "bad schema rejected" agent_packet_validate "$T/bad-schema.md" requ
 printf -- '---\nschema: aobus-phase-packet/v1\nkind: request\nskill: x\ncapability: C2\nvalidation: test-core\nunknown: y\ninputs:\n  - test/x.cpp\n---\n' > "$T/unknown-key.md"
 assert_rc 64 "unknown request key rejected" agent_packet_validate "$T/unknown-key.md" request
 
-echo "== C2 review artifacts =="
-AF="$T/assert.cpp"
-printf 'TEST_CASE("x") { CHECK(true); REQUIRE(true); }\n' > "$AF"
-assert_eq "assertion count catches CHECK/REQUIRE" "$(agent_count_assertions "$AF")" "2"
-AP="$T/change.patch"; printf 'diff\n' > "$AP"
-VL="$T/validation.log"; printf 'validation ok\n' > "$VL"
-DOS="$T/review.md"; MAN="$T/manifest.json"
-agent_emit_review_dossier "$DOS" "$PKR" "test/unit/utility/Base64Test.cpp" "$AP" "$VL" phase-1 worker 1 2 1 2 increased >/dev/null
-[ -s "$DOS" ] && ok "review dossier emitted" || bad "review dossier emitted"
-case "$(cat "$DOS")" in *"C2 Review Dossier"* ) ok "review dossier has title" ;; *) bad "review dossier has title" ;; esac
-agent_write_manifest "$MAN" "$AP" "$VL" "$DOS"
-[ -s "$MAN" ] && ok "manifest emitted" || bad "manifest emitted"
+echo "== audit + review-outcome helpers =="
 OLD_AGENT_WORK="$AGENT_WORK"; AGENT_WORK="$T/work"
 agent_audit_entry phase-1 improve-test-coverage C2 worker keep 1 2 1 increased
 [ -s "$AGENT_WORK/audit.log" ] && ok "audit entry emitted" || bad "audit entry emitted"
@@ -267,6 +244,12 @@ echo "hit" > "$TC/work5/.cache/ccache.hit"
 echo "cmake" > "$TC/work5/build-debug/CMakeCache.txt"
 agent_tree_changes "$TC/copy" "$TC/work5" "$TC/changes5.tsv"
 assert_eq "sandbox noise (logs, cache, build) is ignored by tree_changes" "$(wc -l < "$TC/changes5.tsv")" "0"
+
+# Fix A regression: build.sh is a TRACKED file; the build* noise prune must match build DIRS only and
+# must NOT hide build.sh, or the canary/scope-diff would be blind to a worker editing it.
+echo "tampered" >> "$TC/work5/build.sh"
+agent_tree_changes "$TC/copy" "$TC/work5" "$TC/changes5b.tsv"
+assert_rc 0 "tracked build.sh edit IS detected (not pruned by the build* noise filter)" grep -q "build.sh" "$TC/changes5b.tsv"
 
 # Scope evaluation
 

@@ -110,6 +110,29 @@ case "$_real_out/" in
 esac
 mkdir -p "$OUT"
 
+# Preserve the reviewed packet (question + emphasized inputs + any pasted diff) next to the dossier so the
+# bundle is self-contained for audit. The dossier then REFERENCES this instead of re-embedding the body:
+# the in-loop chair already authored it, so re-inlining a large diff dominated the chair's read cost for
+# nothing.
+cp "$PACKET" "$OUT/packet.md"
+
+# Real-repo immutability canary. The per-member canary (pre/post hash of each member's COPY, below)
+# catches a member that mutates its own cwd, but native read-only CLIs run with full filesystem access
+# and could ESCAPE the copy to touch the real repo directly (see §10.3). Hash the real tree before
+# fan-out and re-check on EVERY exit path so an escaped mutation is detected and the run discarded —
+# C2 (c2_proposal_phase.sh) has the same backstop. agent_tree_hash excludes .cache/logs/build*, so the
+# by-design .cache/logs symlink writes (below) do NOT trip it.
+_repo_canary_pre="$(agent_tree_hash "$_real_repo")"
+_verify_repo_immutable() {
+  local now; now="$(agent_tree_hash "$_real_repo")"
+  if [ "$now" != "$_repo_canary_pre" ]; then
+    echo "council: FATAL: real repo tree mutated by a member (escaped its copy) -> discard run" >&2
+    trap - EXIT
+    exit 3
+  fi
+}
+trap _verify_repo_immutable EXIT
+
 c3_label() { if declare -p ROUTE_C3_MEMBER_LABELS >/dev/null 2>&1; then printf '%s' "${ROUTE_C3_MEMBER_LABELS[$1]:-$1}"; else printf '%s' "$1"; fi; }
 mid_of()   { printf '%s' "${1#route_c3_member_}"; }
 
@@ -347,9 +370,7 @@ DOSSIER="$OUT/dossier.md"
   fi
   echo
   echo "## The question"
-  echo '```'
-  printf '%s\n' "$QUESTION"
-  echo '```'
+  echo "> Full question, emphasized inputs, and the reviewed diff: see [\`packet.md\`](packet.md) in this directory."
 
   echo; echo "## R1 — blind drafts"
   for fn in "${SEATED[@]}"; do

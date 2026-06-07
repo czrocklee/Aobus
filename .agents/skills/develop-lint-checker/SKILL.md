@@ -12,9 +12,9 @@ This guide provides the mandatory workflow and debugging strategies for developi
 ## C2 Delegation Boundary
 
 Checker behavior, AST matcher design, diagnostic policy, checker registration, and fixture design are
-C3 work. The current C2 test phase is not a lint-checker implementation path. A future C2 checker phase
-may only be considered after C3 has already proven the matcher, created/registered the checker files and
-fixture, and defined an exact validation contract.
+C3 work. Lint-checker implementation is a poor fit for C2 delegation: new or registered checker files
+touch CMake and the checker registry — forbidden, ruler-protected surfaces that the `execute-plan`
+proposal executor rejects. Treat checker development as C3 end-to-end.
 
 ## 1. Test-Driven Development (TDD) Workflow
 

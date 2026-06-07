@@ -1,153 +1,9 @@
 # Aobus: Capability-Tiered Workflow and Cross-Harness Model Routing Design
 
-> Status: design draft v16 / for discussion. Date: 2026-06-07.
+> Status: design draft v17 / for discussion. Date: 2026-06-07.
 > Scope: **general, not bound to any single harness or vendor**. Abstract workflow stages into capability
 > classes, then route a heterogeneous agent fleet (Opus / GPT-5.5 / Gemini 3 Pro·Flash / DeepSeek V4
 > Pro·Flash / …) by class.
->
-> v6 changes: Step D's "parallel candidates + deterministic ranking" went from design to code —
-> `ROUTE_C1_CANDIDATES` candidate set + `agent_rank_candidates` (fewer files → smaller churn → stable id
-> ordering) + `lint_phase.sh` doing fan-out/guard/rank/validate-top-K per round; new `AOBUS_LINT_TIDY` /
-> `AOBUS_AGENT_REPO` test seams and the offline-deterministic e2e `run_lint_fanout_test.sh` (see §9).
->
-> v7 changes: C1 fan-out gained a **genuine cross-vendor second candidate** — Google **Gemini 3.5 Flash
-> via the `agy` CLI** (replacing the dead `gemini -p` path), measured 9/9 cleared, 0 silent-wrong. Along
-> the way it confirmed §10.3's "isolation ≠ sandbox": under steam-run, agy can reach the real repo tree
-> (it once "escaped" via a repo-relative path to edit real files), mitigated with "sandbox-unique flat
-> path + canary" (see the §9 agy block and §10.3).
->
-> v8 changes: reverted cross-vendor fan-out to **opt-in** by default. `ROUTE_C1_CANDIDATES` defaults to a
-> single worker (ds4f via opencode): zero fan-out, lowest latency, no `steam-run`/agy cold start, and no
-> §10.3 soft-isolation tradeoff. Multiple candidates (adding `route_c1_worker_gflash` cross-vendor, or
-> `route_c1_worker_pro` same-vendor reinforcement) are a one-line opt-in commented into routing.env; the
-> runner and Phase Contract are unchanged, still validating only the ranked top-K. Rationale: leave the
-> "is a higher single-round clear rate worth the latency + soft-isolation cost" decision to the operator
-> per scenario, and default to the safest, fastest path.
->
-> v9 changes: completed §5.3's **per-arg enum/type contract** (Step C wrap-up) — `validation.env`
-> declares `VALIDATION_ARGSPEC[id]="<type> <min> <max>"` for each validation, and
-> `agent_validation_args_ok` rejects type-/count-mismatched packets by arity + per-arg type before the
-> runner; both dispatch and test_phase are wired in. Fixed one real bug: the two env files are sourced by
-> a loader function, so the arrays must be `declare -gA` or they are lost as function-locals. Also
-> backfilled offline regressions for dispatcher/commit_flow/test_phase (three new suites), and folded C1
-> worker labels into the `ROUTE_C1_LABELS` map (fan-out logs show the model name). Offline suites: 5
-> suites, **136** assertions total.
->
-> v10 changes: enriched the routing roster — C2 gained a **cross-vendor alternate Gemini 3.1 Pro (high)
-> via agy** (a real worker, not doc-only), with the `ROUTE_C2_WORKER` selector flipping between the
-> then-default GPT-5.5 and the alternate in one line (C2 is a single worker + feedback rounds, unlike C1
-> fan-out, so a selector rather than a candidate array); the agy call was extracted into the shared
-> `_route_agy_edit` (used by both C1 gflash and C2 gpro), and fixed `test_phase`'s contract gap of not
-> exporting `AGENT_REL` (the agy worker stages by it). C3 gained a documented alternate **GPT-5.5 (high)
-> via codex** (C3 is not auto-dispatched, roster only). Offline suites: 5 suites, **139** assertions
-> total.
->
-> v11 changes: C3 was upgraded from a "doc-only roster" into a **convenable council (§11)**. New
-> `council.sh` (C0 orchestration) + routing.env's `ROUTE_C3_MEMBERS` (four **read-only** members: Claude
-> Opus via claude, GPT-5.5 high via codex, Gemini 3 Pro via gemini, DeepSeek V4 Pro via opencode) +
-> common.sh `agent_tree_hash`. Four-round protocol: R1 blind draft → R2 mutual challenge → R3 self-revise
-> → R4 chair (the current in-loop agent) verifies and synthesizes. council.sh does only the C0 plumbing
-> (fan-out / collection / read-only canary / dossier assembly), **makes no judgments and deliberately
-> does not do the R4 synthesis**; members are read-only, produce **opinions** not patches, each runs in a
-> disposable repo copy, and a before/after content hash catches and discards+flags any member that
-> mutated the tree. Both plan and review entries are supported (`run-council` skill + a diagnose-issue
-> footnote). **Self-audit hardening**: ran a real review council on the mechanism itself (chair=in-loop
-> agent + GPT-5.5 high via codex + Gemini 3 Pro via gemini), and the cross-challenge output caught real
-> bugs that single-model thinking and offline assertions both missed — `printf '--'` option parsing, a
-> missed exit-code check in `run_one`, R3 self-critique injection, unquarantined R2 violations, OUT-in-repo
-> breaking blindness — each fixed with tests; member prompts moved to stdin to avoid ARG_MAX. Offline
-> suite `run_council_test.sh` (63 assertions); six suites, **208** assertions total.
->
-> v12 changes: C2 was not yet expanded into production implementation; instead the existing test phase was
-> hardened into **single-file, registered-Catch2-test augmentation**. Added/tightened C0 gates: strict
-> request-packet schema (`kind: request`), a positive path classifier + registered-test check, baseline
-> filtered-test pass, `target_anchor` baseline-absence + Catch2 list-output source binding, an
-> assertion-count delta risk marker, a C2 keep review dossier, audit log, and `record_review.sh`.
-> `write-unit-test/C2` now formally uses the same `test_phase.sh` contract; `diagnose-issue` /
-> `develop-lint-checker` only record the future body-fill/checker-phase conditions and remain C3-only for
-> now. C2 fan-out stays disabled: single worker + feedback rounds; a passing test only means review-ready,
-> not commit-ready. Six offline agent integration tests, **259** assertions total.
->
-> v13 changes: the C2 default worker switched from GPT-5.5/Codex to **Gemini 3.1 Pro (high) via agy**.
-> Codex is kept as the `route_c2_worker_codex` alternate; the `route_c2_worker` fallback alias also points
-> at Gemini, so an old runner still uses the new default when the selector is absent. C2 reuses agy's
-> HOME-backed staging + flat-path contract; `GEMINI_C2_MODEL` is the current override name, the old
-> `AGY_C2_MODEL` still compatible. Six offline agent integration tests, **262** assertions total.
->
-> v15 changes: landed **Step G — the first real generic-C2 proposal eval, sanitizer oracles, and the
-> observability/circuit-breaker loop** (Track A of the V2 cross-vendor council review). The C2
-> proposal worker default switched to **DeepSeek V4 Pro via opencode**
-> (`route_c2_proposal_worker_dspro`, cwd-confined — the "good" §10.3 isolation); codex
-> stays the documented alternate. Two **sanitizer validations** `test-core-asan` / `test-core-tsan`
-> joined the allowlist. **Native agy (re-enabled 2026-06-07)** joined the fleet as a 
-> high-performance, cwd-confined worker, dropping the old `steam-run` isolation workaround.
-> **Observability**: `record_review.sh` now auto-trips a per-worker **circuit breaker** on a
-> *silent-wrong* (a `keep`/`proposal-validated` phase that C3 later `reject`s; `modify` and
-> non-validated rejects do NOT trip); the proposal runner and dispatcher refuse a breaker-tripped route;
-> new read-only `review_stats.sh` rolls up per-worker×capability accept/modify/reject + silent-wrong
-> rate, with `--window N` adding a **rolling** silent-wrong rate over each worker's last N
-> validated+reviewed evals (recent trend vs the never-recovering lifetime average), and
-> lists/`--reset`s breakers — all built **on the pre-existing** `audit.log` /
-> `review-outcomes.log` (the panel corrected an earlier claim: proposal-mode *recording* already
-> existed; only aggregation + the breaker were missing). **Eval datum**: ds-pro refactored
-> `base64Encode` to chunk-based form, **validated in 1 round under `test-core-asan [base64]`, in-scope
-> (single file), graded `modify`** (correct + byte-identical, but raw pointer arithmetic and unnamed
-> tail bit-masks would be polished before merge). Eval-first earned its keep: it surfaced and fixed two
-> real harness bugs — gitignored worker runtime artifacts (`logs/app.log`, written by the worker's test
-> run) polluting the change set, now stripped from base+work symmetrically by `agent_clean_ignored`
-> (plus emptied-dir pruning); and a `churn` unbound-variable crash on the all-rejected diagnostic path.
-> **Phase-id hardening**: the proposal executor now mints a unique `proposal-<utc>-<pid>` id (as
-> `test_phase.sh` does), honoring an optional charset-validated packet `id` when supplied, instead of the
-> old `unknown` sentinel that collided across id-less runs in the audit/outcome/breaker keys; the shared
-> `agent_id_ok` guard also keeps `record_review.sh` from recording against an empty/reserved id.
-> Conclusion: generic C2 is viable for a settled, single-file, behavior-preserving task under a hard
-> test+sanitizer oracle; the rolling silent-wrong statistic now exists (`review_stats.sh --window N`), so
-> the remaining gate is widening the eval set to populate it before any C2 scope expansion. Offline agent
-> suites: 8 suites, **448** assertions (`run_review_stats_test.sh` = 25; proposal suite 64 → 79).
->
-> v16 changes: **C2 scope widening — the path-based gate replaced by "oracle-coverage ⊇ blast-radius"**
-> (council-reviewed, unanimous accept-with-changes; Claude excluded from the panel as the chair). C2 may
-> now propose edits to **any in-tree source including `include/**` headers** — `agent_proposal_input_ok`
-> accepts public headers and registered test sources, not only a private `.cpp` — because this repo has no
-> API/ABI-compat requirement, so the old `include/` taboo guarded nothing real while blocking legitimate
-> header-resident refactors (e.g. adding a private nested class). The gate is now derived from the
-> validation oracle, **atomically** (the packet can no longer pick a narrow filter for a header change):
-> any header in scope forces the new isolatable **`test-core-all`** oracle (build `ao_test` + run the WHOLE
-> core suite), bounded by a blast-radius budget (`PROPOSAL_BLAST_MAX`, default 12) —
-> `agent_proposal_compute_blast_radius` over-approximates the `#include` closure, and a change that reaches
-> the GTK/app frontend or exceeds the budget **escalates to C3 before the worker runs**. A new packet field
-> **`intent: refactor | behavior-change`** makes the test obligation deterministic: `behavior-change`
-> requires a registered test to change (the planner declares intent; the runner never infers "did behavior
-> change"); `refactor` is exempt but the dossier carries a `header-touched + assertion-delta:0` RISK marker.
-> CMake / `.clang-tidy` / `script` / `doc` / `.agents` stay forbidden — reason sharpened to
-> **ruler-protection** (they define the oracle's own measurement apparatus), not "unfalsifiable". The build
-> is a **compile/link coherence** oracle, not a semantic one (`include/ao/Type.h` is `constexpr`-bearing and
-> included 168× — exactly why headers are budget-gated; C3 still judges semantics). Real smoke:
-> `test-core-all` built `ao_test` and ran 14610 assertions / 701 cases green on the clean tree. The
-> separate proposal→auto-keep step (eval-stats-gated) remains deferred. Offline agent suites: 8 suites,
-> **463** assertions (proposal suite 79 → 94).
->
-> v14 changes: council gained a **`depth` tier** (`panel`=R1 / `challenge`=R1+R2, **default** /
-> `full`=R1+R2+R3), providing a lightweight council for medium-stakes plan/review without breaking the
-> "non-critical → solo" rule; the R4 chair synthesis always runs. The dossier uses the orthogonal pair
-> `depth` + `shallow` to separate "shallow by design" (`shallow: by-design`) from "degraded by accident"
-> (`quorum: degraded`), so the chair is not misled. Roster size remains another already-available
-> cost lever (`ROUTE_C3_MEMBERS`); v1 only adds depth (see §11.6). The council suite grew to **110**
-> assertions; seven agent integration tests, **396** assertions total.
->
-> v4 changes: ① treat "low-cost-model token cost is approximately negligible" and "`run-clang-tidy.sh
-> --fix` disabled" as settled premises, no longer discussed as open questions; ② C1 routing allows
-> multiple low-cost models to produce candidate patches in parallel, sending only the best post-guard
-> candidate into slow validation; ③ rollback changed from `git restore` to "scope clean check + reverse-
-> apply this patch"; ④ eval changed to a small-sample 0-silent-wrong gate + rolling statistics; ⑤ skill
-> discovery does not hard-depend on the harness auto-reading `.agents/skills/`, and the packet may carry
-> the expanded contract.
->
-> v5 changes: ① split candidate ranking into "deterministic first + frontier tie-break", and defined
-> "validate at most K by rank, then escalate"; ② added the "target file must be clean first" operational
-> constraint + the out-of-tree build benefit; ③ added the rule-of-three note to eval + a first-production
-> silent-wrong circuit breaker; ④ folded candidate-parallelism rate/latency into "real cost"; ⑤ the
-> in-packet contract is generated by the source skill + hash-stamped.
 
 ## 0. Settled premises (not open for debate)
 
@@ -164,9 +20,10 @@
 
 The Aobus repo is **already on a harness-neutral track**, and this design extends it rather than starting
 over:
-- **`.agents/skills/`**: a vendor-neutral skill directory (not `.claude/skills/`). The existing 6 skills:
-  `develop-lint-checker`, `diagnose-issue`, `improve-test-coverage`, `manage-git-flow`,
-  `use-clang-tidy`, `write-unit-test`.
+- **`.agents/skills/`**: a vendor-neutral skill directory (`.claude/skills/` is a symlink to it). The
+  skills: `develop-lint-checker`, `diagnose-issue`, `execute-plan`, `improve-test-coverage`,
+  `manage-git-flow`, `run-council`, `use-clang-tidy`, `write-unit-test`. (`execute-plan` is the C2
+  delegation skill — §12; `run-council` is the C3 council skill — §11.)
 - **Single instruction source + multi-harness naming**: `CLAUDE.md` and `GEMINI.md` are both symlinks to
   `AGENTS.md`. One spec, read by multiple harnesses under their own conventional names.
 - **The fleet is already on disk**: `~/.claude` (Opus), `~/.codex` (GPT-5.5), `~/.gemini` + Antigravity
@@ -208,7 +65,7 @@ decision needs (local vs global) / the semantic risk of a wrong judgment**.
 |---|---|---|---|
 | **C0 mechanical·deterministic** | No reasoning needed, a script can judge correctness | format, run lint, run tests, build, **diff guard, validation execution, dispatch routing lookup** | the *execution* face of `manage-git-flow`, `build.sh`, `run-clang-tidy.sh` |
 | **C1 bounded·mechanical** | Local rewrite with a deterministic acceptance gate as backstop | fix residual tidy diagnostics from a report, lay down test boilerplate/fixtures, generate scaffolding | `use-clang-tidy` (fixing), `develop-lint-checker` (scaffolding), test boilerplate |
-| **C2 scoped·implementation** | Write code/tests within a settled design — capability, not novel reasoning | implement a settled plan, fill in a set of edge cases | the implementation face of `write-unit-test`/`improve-test-coverage` |
+| **C2 scoped·implementation** | Write code/tests within a settled design — capability, not novel reasoning | implement a settled plan, fill in a set of edge cases | `execute-plan` (the sole C2 delegation skill; the worker self-loads `write-unit-test`/`improve-test-coverage` for specifics) |
 | **C3 frontier·reasoning** | Global/semantic/architecture judgment, where a wrong call is costly | plan, root-cause diagnose, design review, **signature/ABI and semantic-equivalence review**, error-contract choice (§5) | `diagnose-issue`, `code-review`, plan, the matcher design of `develop-lint-checker` |
 
 Your original examples land as: "run lint" = **C0**, "fix lint diagnostics" = **C1**, "review/plan/
@@ -363,15 +220,16 @@ take the lock and apply to the main tree → pass allowlist validation with exit
 `escalate_reason` is still kept, but only as an **extra signal**; the real gates are the deterministic
 guard + validation + C3 review.
 
-> **Landed (v16, 2026-06-07) — the C2 proposal executor's scope gate is no longer path-based.** The
+> **Landed — the C2 proposal executor's scope gate is no longer path-based.** The
 > `include/**` row above is a **C1** rule; the **C2 proposal executor** no longer treats a header edit as
-> an automatic escalate. Because this repo has no API/ABI-compat requirement, a header is gated by
-> *oracle coverage*, not path: any header in scope forces the whole-core `test-core-all` oracle (the
-> packet cannot downgrade it) and is bounded by a blast-radius budget —
-> `agent_proposal_compute_blast_radius` over-approximates the `#include` closure; a change reaching the
-> GTK/app frontend or exceeding `PROPOSAL_BLAST_MAX` escalates to C3 before the worker runs. CMake /
-> `.clang-tidy` / `script` / `doc` / `.agents` stay forbidden as the oracle's own measurement apparatus
-> (ruler-protection). See §9 Step H and `c2-proposal-executor.md`.
+> an automatic escalate. Because this repo has no API/ABI-compat requirement, a header is allowed and
+> falsified by a **single, fixed full-suite oracle** rather than by path: every proposal — cpp or header,
+> core or app — validates against `test-all` (build + run the *whole* core and GTK suites), and the
+> packet cannot downgrade it. The runner does **not** select a test subset from the changed paths: the
+> whole suite runs in seconds and any change ultimately reaches the app, so a per-change blast-radius
+> gate bought complexity, not safety — and running everything closes the gap where a core edit silently
+> broke an app-only test. CMake / `.clang-tidy` / `script` / `doc` / `.agents` stay forbidden as the
+> oracle's own measurement apparatus (ruler-protection). See §9 Step H and §12.
 
 ### 5.3 Validation allowlist
 
@@ -385,7 +243,7 @@ the argument string.
 > `VALIDATION_ARGSPEC[id]="<type> <min> <max>"` for each `v_<id>` (`tidy`=`path 1 -`,
 > `test-core`/`test-gtk`=`filter 1 1`, `build-debug`=`any 0 -`). `agent_validation_args_ok` rejects
 > mistyped/mis-counted packets by arity + per-arg type (`agent_argtype_re`: `path`/`filter`/`any`, enum
-> being literal alternation) **before** running slow validation. Both dispatch and test_phase pass this
+> being literal alternation) **before** running slow validation. `dispatch.sh` passes this
 > gate before routing the runner; an id with no declared spec falls back to the `agent_arg_safe` charset
 > gate only (backward-compatible, mock-friendly). For `use-clang-tidy/C1`, even if a packet carries
 > `validation_args`, they must exactly match the `inputs` file set; otherwise it validates the wrong
@@ -676,13 +534,10 @@ hard dependency:
      keeps changes, but the dispatcher's own allowlist gate is red → still escalate (never trust the
      runner's self-report); and verifies `validation_args` rather than `inputs` is fed to the independent
      gate.
-   - `test/integration/agent/run_test_phase_test.sh` (34 assertions): **end-to-end** runs the real
-     `test_phase.sh` (C2), with the C2 worker mocked via `AOBUS_ROUTING_ENV` (behavior switched by
-     `C2_MODE`) and validation mocked via `AOBUS_VALIDATION_ENV`. Covers a single-round pass, every
-     reject/escalate branch (non-allowlist, missing inputs, empty plan body, unsafe validation_args, **Step
-     C's arg-contract violation**, guarded target + packet, target nonexistent), no-op / churn over limit →
-     rollback + escalate, the **failure-feedback round** (worker fails round one, passes round two after
-     getting the validation output), and the **`ROUTE_C2_WORKER` selector** (default vs alternate worker).
+   - `test/integration/agent/run_test_phase_test.sh` — **removed 2026-06-07** together with the narrow
+     test-augment C2 route (`test_phase.sh`). The C2 proposal executor is covered end-to-end by
+     `run_c2_proposal_phase_test.sh`, and the dispatcher's retirement of the test-C2 route (a `…/C2`
+     packet now escalates with "no runner registered") is pinned in `run_dispatch_test.sh`.
    - `test/integration/agent/run_commit_flow_test.sh` (15 assertions): **end-to-end** runs the real
      `commit_flow.sh` (§6's commit chain) on a temp **git** tree (`clang-format` via a PATH stub),
      validating format → split off guarded → C1 lint via dispatch → handoff. The key safety property:
@@ -726,6 +581,11 @@ hard dependency:
      (`test-core`) but the allowlist function uses an underscore (`v_test_core`), so `type -t` failed to
      resolve → added `agent_validation_fn` normalization (hyphen→underscore) unified across
      `agent_validate`/dispatch/test_phase, plus 5 regression assertions.
+   - **Retired 2026-06-07**: this narrow auto-keep path (`test_phase.sh` + the `improve-test-coverage/C2`
+     / `write-unit-test/C2` dispatch routes, plus their dossier/manifest/test-list helpers) was removed in
+     favor of the **single `execute-plan` proposal path** (§12). Test-writing is now just a proposal whose
+     worker self-loads `write-unit-test`/`improve-test-coverage` from its work copy. The
+     hyphen→underscore `agent_validation_fn` fix above stays (used everywhere).
    **Step D multi-candidate parallel + deterministic ranking landing field test (2026-06-05,
    `script/agent/{routing.env,common.sh,lint_phase.sh}`)**: turned §4/§5.1's "C1 defaults to multi-candidate
    fan-out, validate only the best" from design into code. The other half of Step D (lock + guard +
@@ -757,11 +617,12 @@ hard dependency:
    above)**. packet = YAML frontmatter + markdown body; a mutating request packet requires `schema:
    aobus-phase-packet/v1` + `kind: request` and goes through a closed-schema gate. validation allows only a
    fixed ID from the allowlist + safe args (supporting `validation_args`), never an arbitrary shell string;
-   the per-arg enum/type contract has landed via `VALIDATION_ARGSPEC` + `agent_validation_args_ok`. C2 test
-   validation is additionally restricted to `test-core` / `test-gtk`, and binds the selected filter back to
-   the target source file + `target_anchor` via Catch2 high-verbosity list output. The dispatcher's runner
-   registry already contains C1 (lint) + C2 (test). **Pending/in progress**: the post-C3 review outcome
-   statistics for C2 keeps.
+   the per-arg enum/type contract has landed via `VALIDATION_ARGSPEC` + `agent_validation_args_ok`. At the
+   time, C2 test validation was additionally restricted to `test-core` / `test-gtk`, binding the selected
+   filter back to the target source file + `target_anchor` via Catch2 high-verbosity list output, and the
+   dispatcher's runner registry contained C1 (lint) + C2 (test). **Retired 2026-06-07**: the C2 test route
+   was removed when C2 collapsed to the single `execute-plan` proposal path (§12); the dispatcher now
+   routes C1 only, and the per-arg contract is still enforced by `dispatch.sh`.
 4. **Step D: patch + deterministic guard + temporal isolation + multi-candidate parallel/ranking — landed
    (see field tests above)**. lock + guard + temporal isolation + rollback had long landed; the **candidate
    parallel fan-out + deterministic ranking + validate top-K** half is now also landed
@@ -781,6 +642,10 @@ hard dependency:
    helper edits are not yet routed; they must wait until that C0 safety envelope's statistics prove the
    risk controllable before building another runner. When unattended, concurrent, or queued execution is
    genuinely needed, extract the dispatcher (already C0 logic) into a standalone tool.
+   **Superseded 2026-06-07**: rather than build a separate runner per C2 capability, the full-tree
+   proposal executor (Steps G–H, §12) became the **single** C2 route, and this narrow auto-keep
+   test-augment path was retired. Multi-file edits and test-writing are now the same `execute-plan`
+   proposal; the worker self-loads the relevant domain skill for specifics.
 6. **Step F: C3 council (landed, 2026-06-05)**. Upgraded C3 from a doc-only roster into a convenable
    multi-model council. Landed: `council.sh`'s four rounds (R1 blind draft → R2 challenge → R3 self-revise
    → R4 chair verifies and synthesizes; the script runs only R1–R3, R4 left to the in-loop chair),
@@ -791,7 +656,7 @@ hard dependency:
    skill unifies the plan/review two-mode contract, with review convened via code-review / diagnose-issue;
    the offline suite `run_council_test.sh` (63 assertions). See §11.
 7. **Step G: first generic-C2 eval + sanitizer oracles + observability loop (landed, 2026-06-06)**.
-   Track A of the V2 cross-vendor council review). (a) **ds-pro
+   Track A of the V2 cross-vendor council review. (a) **ds-pro
    proposal worker**: `route_c2_proposal_worker_dspro` (opencode/deepseek-v4-pro, cwd-confined) is the
    new `ROUTE_C2_PROPOSAL_WORKER` default; codex stays the alternate. (b) **Sanitizer oracles**
    `test-core-asan` / `test-core-tsan` in `validation.env` — own `-DAOBUS_ENABLE_ASAN/TSAN=ON` build
@@ -799,7 +664,8 @@ hard dependency:
    genuinely new because `agent_validate_in_repo`'s `cmake --preset linux-debug` leaves the sanitizer
    options OFF. (c) **Circuit breaker + rolling stats**: `record_review.sh` auto-trips a per-worker
    breaker on a silent-wrong (a `keep`/`proposal-validated` phase C3 later `reject`s; `modify` /
-   non-validated do not trip); `c2_proposal_phase.sh` and `dispatch.sh` refuse a tripped route;
+   non-validated do not trip); `c2_proposal_phase.sh` refuses a tripped route (the C2-test breaker arm in
+   `dispatch.sh` went away with that route on 2026-06-07);
    read-only `review_stats.sh` aggregates per-worker×capability accept/modify/reject + silent-wrong rate
    (and, with `--window N`, a rolling silent-wrong rate over each worker's last N validated+reviewed
    evals) and lists/`--reset`s breakers — all on the **pre-existing** `audit.log` / `review-outcomes.log`
@@ -815,27 +681,26 @@ hard dependency:
    keying is clean. Open follow-ups: the hard sandbox and a real not-fully-trusted-worker isolation layer
    remain §10.3/§11.6 items. Offline agent suites: 8 suites, **448** assertions
    (`run_review_stats_test.sh` = 25; proposal suite 64 → 79).
-8. **Step H: C2 scope widening — oracle-coverage ⊇ blast-radius (landed, 2026-06-07)**. Council-reviewed
-   (panel, Claude-excluded; unanimous accept-with-changes). The path-based scope gate is replaced by a
-   gate derived from the validation oracle. (a) **Wider input gate**: `agent_proposal_input_ok` now
-   accepts public headers (`include/**`) and registered test sources, not just a private `.cpp`; the old
-   `include/` taboo guarded nothing in a no-compat repo. (b) **Forced oracle, atomically**: any header in
-   scope forces the new isolatable `test-core-all` (build `ao_test` + whole core suite) for baseline +
-   work validation — the packet's `validation`/`validation_args` can no longer downgrade a header change.
-   (c) **Blast-radius budget**: `agent_proposal_compute_blast_radius` over-approximates the `#include`
-   closure; a change that reaches the GTK/app frontend (`agent_proposal_blast_core_only` false) or exceeds
-   `PROPOSAL_BLAST_MAX` (default 12 TUs) escalates to C3 **before the worker runs**. (d) **Deterministic
-   test obligation**: a new packet `intent: refactor | behavior-change`; `behavior-change` requires a
-   registered test to change (`agent_changes_touch_registered_test`) — the planner declares intent, the
-   runner never infers it; `refactor` is exempt with a dossier RISK marker. (e) Dossier gains `intent` /
-   `header_touched` / `blast_radius` / `assertion_delta`; symbol-diff stays a **non-blocking** triage
-   signal (the undeclared-deletion hard guard is a fast-follow). Forbidden set unchanged
-   (CMake/`.clang-tidy`/`script`/`doc`/`.agents`) but re-justified as **ruler-protection**. Verified: the
-   build is a *compile/link coherence* oracle, not semantic (`include/ao/Type.h` is `constexpr`-bearing and
-   included 168×); real smoke ran `test-core-all` green (14610 assertions / 701 cases). Open follow-ups:
-   precise (non-over-approx) include graph, GTK-implicated header autonomy, `nm`-based deletion guard,
-   proposal→auto-keep (eval-stats-gated). Offline agent suites: 8 suites, **463** assertions (proposal
-   suite 79 → 94).
+8. **Step H: C2 scope widening — a single full-suite oracle (landed, 2026-06-07)**. The path-based scope
+   gate is replaced by one fixed validation oracle. (a) **Wider input gate**: `agent_proposal_input_ok`
+   accepts public and private headers (`include/**`, `lib/**`, `app/**`) and registered test sources, not
+   just a private `.cpp`; the old `include/` taboo guarded nothing in a no-compat repo. (b) **Single fixed
+   oracle**: every proposal — cpp or header, core or app — validates against `test-all` (build `ao_test` +
+   `ao_test_gtk` + `aobus-gtk`, run *both* whole suites) for baseline and work validation; the packet's
+   `validation`/`validation_args` cannot weaken it. The runner does **not** select a test subset from the
+   changed paths. The earlier design tried to (force `test-core-all`/`test-gtk-all` by header domain,
+   over-approximate the `#include` closure via `agent_proposal_compute_blast_radius`, bound it by
+   `PROPOSAL_BLAST_MAX`, escalate a mixed core+app set), but the whole suite runs in seconds and any change
+   ultimately reaches the app, so that machinery bought complexity, not safety — and running everything
+   closes the gap where a core edit silently broke an app-only test. The GTK suite runs **headless** (no
+   widget realization, no preset), so no DISPLAY/xvfb is needed. (c) **Deterministic test obligation**: a
+   packet `intent: refactor | behavior-change`; `behavior-change` requires a registered test to change
+   (`agent_changes_touch_registered_test`) — the planner declares intent, the runner never infers it;
+   `refactor` is exempt with a dossier RISK marker. (d) Dossier carries `intent` / `header_touched` /
+   `assertion_delta`; a header touched with assertion-delta 0 still carries an explicit RISK note for C3.
+   Forbidden set unchanged (CMake/`.clang-tidy`/`script`/`doc`/`.agents`), re-justified as
+   **ruler-protection**. Open follow-ups: `nm`-based undeclared-deletion guard, proposal→auto-keep
+   (eval-stats-gated).
 
 ## 10. Settled facts, cost model, and open risks
 
@@ -885,9 +750,9 @@ hard dependency:
 - **Non-interactive invocation and auth**: each CLI's headless flags, auth, rate limits, and context-window
   differences are confirmed in the Step 0 probe and registered into the routing table.
 - **Observability**: phase packet + validation exit codes + patch/report artifacts are naturally auditable;
-  a C2 keep must additionally leave a review dossier, manifest/audit, with C3 recording accept/reject
-  before commit. Without post-C3 review-outcome pass-rate statistics, C2 quality is systematically
-  overestimated.
+  a C2 *proposal* additionally leaves a review dossier + manifest/audit, with C3 recording accept/reject
+  after it applies the patch to the real tree. Without post-C3 review-outcome pass-rate statistics, C2
+  quality is systematically overestimated.
 - **Orthogonal stacking with RTK**: RTK compresses *output* tokens, this design compresses *model usage*;
   the two stack.
 
@@ -946,14 +811,18 @@ safety gates are replaced by:
    (content + file mode + symlink target, so chmod / symlink-retarget are also caught); **any member that
    edited its copy has its output discarded and flagged** (a member writing a file is a violation, the
    opposite of C1's "diff is the deliverable"). The per-member copy keeps this check **attributable to the
-   specific member** even under **parallel fan-out**.
-   The agy/Gemini member cannot run directly from `/tmp` because `steam-run` gives agy a private `/tmp`;
-   routing therefore stages its read-only council copy under `$HOME/.cache/aobus-agy-council`. The helper
-   hashes that staged copy too, and if agy mutates it, writes a sentinel into the outer `AGENT_COUNCIL_CWD`
-   so the normal council canary still discards the member as a read-only violation.
-3. Member copies exclude `.git`; §10.3's "a sufficiently agentic CLI can escape the cwd" remains an open
-   risk for **not-fully-trusted** review input (sufficient for a trusted vendor roster, the same trust
-   posture as C1 agy).
+   specific member** even under **parallel fan-out**. As of 2026-06-07 every member (incl. the
+   agy/Gemini member) runs **natively in its council cwd** — the old `steam-run` staged-copy + sentinel
+   workaround is gone.
+3. **Real-repo canary (escape backstop, 2026-06-07)**: the per-member canary only watches each member's
+   *copy*; a native CLI with full filesystem access could ESCAPE its cwd and touch the real repo
+   directly. council.sh therefore also hashes `$AGENT_REPO` before fan-out and re-checks on every exit
+   path (`_verify_repo_immutable`, EXIT trap), aborting with exit 3 on any change — the same backstop
+   C2's `c2_proposal_phase.sh` has. `agent_tree_hash` excludes `.cache`/`logs`/`build*`, so the
+   by-design shared-`.cache`/`logs` symlinks do not trip it (and `build.sh` is *not* excluded).
+4. Member copies exclude `.git`; §10.3's "a sufficiently agentic CLI can escape the cwd" remains the
+   reason the real-repo canary exists, and stays an open risk for **not-fully-trusted** review input
+   (the canary detects+discards an escape but cannot prevent it; sufficient for a trusted vendor roster).
 
 ### 11.4 quorum, cost, and entries
 
@@ -1044,3 +913,103 @@ without eroding the "non-critical → solo" rule.
   intentional, the `quorum` note no longer mentions cross-challenge under panel, and the degraded NEXT no
   longer asks to "adjudicate consensus vs dissent" (the machine-readable `depth`/`shallow`/`quorum` fields
   were already correct; what was tightened is the prose given to the chair).
+
+## 12. C2 proposal executor (contract & safety model)
+
+C2 is a **proposal executor, not an autonomous keeper**. It turns an already-decided C3 plan into
+validated code inside an isolated repo copy and hands a review-ready patch back; it never lands a change
+on the real tree. A successful run means "a validated proposal was produced," not "the tree changed."
+(Landed mechanism + eval history: §9 Steps G–H. Entry point: `script/agent/c2_proposal_phase.sh`.)
+
+> **Operator guide:** the `execute-plan` skill (`.agents/skills/execute-plan/SKILL.md`) is the chair's
+> manual for this contract — when to delegate, how to author the proposal packet, how to invoke the
+> executor, and the acceptance flow. It is the **single** C2 delegation skill.
+
+```text
+C3 plan → C2 executes in an isolated copy → emits {patch, manifests, dossier, logs}
+        → C3 reviews, applies/modifies/rejects, and validates in the REAL worktree
+```
+
+**Tier boundary.** C1 keeps mechanical changes behind a hard oracle; C3 owns judgment (planning,
+architecture, error-contract/concurrency decisions, final semantic review, and the *apply* to the real
+tree); C2 only executes a scoped plan and proposes. The proposal executor is the **sole** C2 route and
+is deliberately **non-keep** — every C2 result is a chair-reviewed proposal, never auto-landed. (The
+earlier narrow auto-keep test-augment path, `test_phase.sh`, was **retired 2026-06-07**: writing tests
+is now just another proposal whose worker self-loads `write-unit-test`/`improve-test-coverage` from its
+work copy. Retiring it removed the one place C2 could land a change without chair review, which fits the
+`silent-wrong = 0` invariant.)
+
+**Proposal packet** (`kind: proposal`, not a `dispatch.sh` `kind: request`):
+- `id` optional — charset-validated and used verbatim, else the harness mints `proposal-<utc>-<pid>`
+  (the reserved `unknown` is rejected; the id keys the audit/outcome/breaker logs).
+- `intent: refactor | behavior-change` (default `refactor`) — the planner *declares* it; the runner
+  never infers behavior change. `behavior-change` deterministically requires a registered test to change.
+- `inputs[]` — the exact editable set; C2 may not touch anything else.
+- `validation` / `validation_args[]` — required by the packet schema but **ignored by the proposal
+  runner**, which always forces the full-suite `test-all` oracle (below). The body is the C3 plan to
+  execute, not to redesign.
+
+**Scope policy — a single fixed full-suite oracle** (no path taboo; this repo has no API/ABI-compat
+requirement, so the protected invariant is *silent-wrong = 0*, not "the public surface changed"). A
+conservative false rejection (escalate to C3) is fine; a false *acceptance* that presents an unvalidated
+change as "validated" is not.
+- Each input must exist at phase start, be a regular file (no symlinks), classify as
+  `private-cpp-source` / `public-header` / a private `lib`/`app` header / a registered test, and pass
+  `AGENT_PROPOSAL_FORBID` (CMake / `.clang-tidy` / `script` / `doc/design` / `.agents` stay forbidden as
+  **ruler-protection** — they define the oracle itself).
+- **Every** proposal — cpp or header, core or app — validates against the same fixed oracle `test-all`
+  (build `ao_test` + `ao_test_gtk` + `aobus-gtk`, run *both* whole suites) for *both* baseline and work
+  validation; the packet cannot weaken it. The runner does **not** derive a per-change test subset: the
+  whole suite runs in seconds and any change ultimately reaches the app, so a blast-radius gate bought
+  complexity, not safety — and running everything closes the gap where a core edit silently broke an
+  app-only test. The GTK suite runs **headless** (no widget realization, no preset), so no DISPLAY/xvfb
+  is needed.
+- Defense in depth after each round: only `modify` of a declared input is accepted (adds, deletes,
+  renames, symlinks, binary, mode-only → reject). The dossier records `intent` / `header_touched` /
+  `assertion_delta`; a header changed with assertion-delta 0 carries an explicit RISK marker for C3 (the
+  full suite passed, but it need not exercise the changed path).
+
+**Execution & safety model** (the main worktree is never mutated):
+- Record `agent_tree_hash` of the real repo; stage a sanitized **base** + **work** copy (`.git`, build
+  dirs, caches, `logs/`, and gitignored runtime artifacts excluded — base and work cleaned identically so
+  the diff is tracked-source-only); make base read-only and hidden from the worker.
+- Run **baseline validation** from base in an isolated build dir — a red baseline rejects the packet (C2
+  is never asked to debug pre-existing breakage).
+- Rounds: the worker edits the work copy → the **harness** computes the typed base→work manifest + patch
+  (model-authored patches are never trusted as the source of truth) → scope/churn guards → 
+  `agent_validate_in_repo` runs the allowlisted validation against the work copy + isolated build dir →
+  the failure log feeds the next round.
+- On exit, re-hash the real repo; **any change invalidates the proposal** (catching mode/symlink/
+  out-of-scope edits an isolated-target check would miss). `council.sh` carries the same real-repo canary
+  (`_verify_repo_immutable`); `agent_tree_hash` excludes noise *directories* (`.cache`/`logs`/`build*`)
+  but not the tracked `build.sh` file.
+- Validation must honor the source/build-dir seam; one touching shared build state (`build-debug`) is
+  rejected for proposal mode — proposal validation is only meaningful when isolated.
+
+**Worker contract** — the dedicated `ROUTE_C2_PROPOSAL_WORKER` / `ROUTE_C2_PROPOSAL_LABEL` route. The
+worker receives `AGENT_PROPOSAL_WORK` (its cwd, the only writable path), `AGENT_PROPOSAL_INPUTS_FILE`,
+`AGENT_PROPOSAL_PLAN_FILE`, `AGENT_PROPOSAL_FEEDBACK_FILE`, `AGENT_PROPOSAL_ROUND`, `AGENT_PROPOSAL_OUT`;
+it never sees the base copy or the real tree. The prompt also names the read-only `.agents/skills/`
+directory present in the work copy, so a plan can point the worker at a domain skill
+(`write-unit-test`/`improve-test-coverage`) instead of inlining conventions. Defaults: DeepSeek V4 Pro
+via opencode (`route_c2_proposal_worker_dspro`), Gemini 3.1 Pro via native agy (`_gpro`); codex is the
+alternate.
+
+**Statuses / exit codes.** `validated` → 0 · `diagnostic-budget-exhausted` (an in-scope patch was
+produced but never went green) → 1 · rejected — no usable in-scope patch (out-of-scope / churn / breaker
+/ red baseline / real-repo mutation, or the worker produced no in-scope change) → 2 · config/routing/
+table missing → 5 · bad packet → 64. (The forced `test-all` oracle is always isolatable and the runner
+takes no repo lock, so the not-isolatable / lock paths do not arise here.) Bounded by round, total/
+per-file churn, and per-round worker-timeout budgets; budget exhaustion never keeps changes.
+
+**Acceptance flow.** C3 reads the dossier, inspects the harness patch against the plan, applies (and
+possibly modifies) it to the real tree, runs real validation, accepts/rejects, and records the outcome
+(`record_review.sh`). A `reject` of a `proposal-validated` phase is a **silent-wrong** that auto-trips
+the per-worker circuit breaker until `review_stats.sh --reset`. Reserve a *council* review for high-risk
+cases (public-API / architecture / error-contract, or chair uncertainty).
+
+**C2 must not**: mutate the real tree; edit outside `inputs[]`; create/delete/rename/symlink/chmod;
+change the validation contract; edit harness/script/CMake/design-doc/skill surfaces; decide semantic
+correctness or make architecture/API/ownership/threading decisions; promote a proposal to a keep.
+**Out of scope** (later steps): CMake registration of new translation units, the `nm`-based
+undeclared-symbol-deletion guard, and proposal→auto-keep promotion (eval-stats-gated).

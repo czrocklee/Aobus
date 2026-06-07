@@ -105,6 +105,12 @@ PLAN_PKT
 run_in "$ROOT/p.md"
 assert_eq "A: exit 0" "$RC" "0"
 [ -f "$OUTDIR/dossier.md" ] && ok "A: dossier written" || bad "A: dossier written"
+# The reviewed packet is preserved next to the dossier; the dossier REFERENCES it rather than re-embedding
+# the (possibly huge) body, which the chair already has -- see the packet-copy in council.sh.
+[ -f "$OUTDIR/packet.md" ] && ok "A: packet.md copied into out dir" || bad "A: packet.md copied into out dir"
+has   "A: dossier references packet.md"        "$DOSS"                      "packet.md"
+has   "A: packet.md holds the question body"   "$(cat "$OUTDIR/packet.md" 2>/dev/null)" "track durations as int seconds"
+hasnt "A: dossier does NOT inline the question" "$DOSS"                     "track durations as int seconds"
 has "A: quorum ok"            "$DOSS" "quorum: ok"
 has "A: shallow full (depth: full)" "$DOSS" "shallow: full"
 has "A: m1 seated"            "$DOSS" "### Mock M1"
@@ -288,13 +294,31 @@ new_out
 PLAN_PKT
 run_in "$ROOT/p.md" PATH="$BIN:$PATH"
 assert_eq "N: Gemini route exits 0" "$RC" "0"
-has "N: Gemini seated" "$DOSS" "### Gemini 3 Pro via gemini"
+has "N: Gemini seated" "$DOSS" "### Gemini 3.1 Pro via agy"
 # Use $(cd ... && pwd -P) to ensure we compare against a fully resolved path.
 expected_cwd="$(cd "$ROOT/council" && pwd -P)"
 case "$(cat "$OUTDIR/draft.gemini.md")" in
   *"gemini opinion from $expected_cwd"*) ok "N: agy runs in council CWD" ;;
   *) bad "N: agy must run in council CWD ($expected_cwd), got: $(cat "$OUTDIR/draft.gemini.md")" ;;
 esac
+
+echo "== N2: a native member that ESCAPES its cwd to mutate the real repo is detected (canary) =="
+# Native CLIs run with full FS access; the per-member copy canary cannot see a write OUTSIDE the copy.
+# The real-repo canary (council.sh _verify_repo_immutable) must catch it and abort.
+cat > "$BIN/agy" <<'EOF'
+#!/usr/bin/env bash
+cat >/dev/null
+# Simulate an escape: write into the REAL repo tree, not the cwd copy.
+echo "escaped edit" > "$AOBUS_AGENT_REPO/lib/escaped_by_member.cpp"
+printf 'gemini opinion from %s\n' "$(pwd -P)"
+EOF
+chmod +x "$BIN/agy"
+new_out
+PLAN_PKT
+run_in "$ROOT/p.md" PATH="$BIN:$PATH"
+assert_eq "N2: real-repo escape aborts the council (exit 3)" "$RC" "3"
+has "N2: reports the real-repo mutation" "$LOG" "real repo tree mutated"
+rm -f "$REPO/lib/escaped_by_member.cpp"
 ROUTING="$old_routing"
 
 echo "== P: stable prefix is byte-identical across R1/R2/R3 (with inputs) =="

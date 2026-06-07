@@ -28,8 +28,9 @@ VALID="$ROOT/mock-validation.env"
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
 v_test_core() { return 0; }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1")
-declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1")
+v_test_all() { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1" [test-all]="1")
 EOF
 
 export AOBUS_ROUTING_ENV="$ROUTING" AOBUS_VALIDATION_ENV="$VALID"
@@ -74,8 +75,9 @@ EOF
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
 v_test_core() { return 0; }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1")
-declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1")
+v_test_all() { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1" [test-all]="1")
 EOF
 export AOBUS_VALIDATION_ENV="$VALID"
 
@@ -90,6 +92,22 @@ export -f mock_am_worker
 
 run_proposal "$ROOT/p_ok.md"; assert_eq "A: valid proposal -> exit 0" "$RC" "0"
 case "$LOG" in *"proposal: running baseline validation"*) ok "A: reaches skeleton" ;; *) bad "A: reaches skeleton" ;; esac
+
+echo "== A2: the worker prompt carries the reference-skills self-load hint =="
+# The runner tells the worker it MAY consult .agents/skills/<topic>/SKILL.md in its work copy, so a
+# test-writing plan needs no inlined conventions. Probe the assembled prompt the worker actually saw.
+export PROMPT_PROBE="$ROOT/prompt_probe.txt"; : > "$PROMPT_PROBE"
+mock_probe_worker() {
+  cp "$AGENT_PROMPT_FILE" "$PROMPT_PROBE"
+  local f
+  f=$(grep -A 1 'ALLOWED INPUTS:' "$AGENT_PROMPT_FILE" | tail -n 1 | sed 's/^- //')
+  mkdir -p "$(dirname "$AGENT_PROPOSAL_WORK/$f")"
+  echo "edit" >> "$AGENT_PROPOSAL_WORK/$f"
+}
+export -f mock_probe_worker
+run_proposal "$ROOT/p_ok.md" ROUTE_C2_PROPOSAL_WORKER=mock_probe_worker
+assert_eq "A2: proposal still validates -> exit 0" "$RC" "0"
+case "$(cat "$PROMPT_PROBE")" in *".agents/skills/"*) ok "A2: prompt includes reference-skills hint" ;; *) bad "A2: prompt includes reference-skills hint" ;; esac
 
 echo "== B: missing opening frontmatter marker is rejected =="
 cat > "$ROOT/p_no_front.md" <<'EOF'
@@ -240,7 +258,7 @@ echo "== K: scope gate rejections =="
 
 mkdir -p "$ROOT/repo/include" "$ROOT/repo/lib" "$ROOT/repo/script/agent" "$ROOT/repo/doc/design" "$ROOT/repo/.agents/skills/foo" "$ROOT/repo/test"
 touch "$ROOT/repo/include/Foo.h"
-touch "$ROOT/repo/lib/Foo.h"
+touch "$ROOT/repo/lib/notes.txt"
 touch "$ROOT/repo/script/foo.sh"
 touch "$ROOT/repo/script/agent/foo.sh"
 touch "$ROOT/repo/doc/design/foo.md"
@@ -272,9 +290,10 @@ EOF
   run_proposal "$ROOT/p_scope.md"
 }
 
-# include/** headers are NO LONGER a flat scope rejection -- they are blast-radius-gated by the runner
-# (sections W/X). A .h OUTSIDE include/ classifies as 'unknown' and stays rejected.
-check_scope "lib/Foo.h"; assert_eq "K: reject lib/Foo.h (header outside include/)" "$RC" "2"
+# include/** AND private lib/app headers are NO LONGER a flat scope rejection -- they are accepted and
+# falsified by the single forced full-suite oracle (sections W/Z). A non-source extension classifies as
+# 'unknown' and stays rejected at the input gate.
+check_scope "lib/notes.txt"; assert_eq "K: reject lib/notes.txt (unknown, non-source ext)" "$RC" "2"
 check_scope "script/foo.sh"; assert_eq "K: reject script/foo.sh" "$RC" "2"
 check_scope "script/agent/foo.sh"; assert_eq "K: reject script/agent/foo.sh" "$RC" "2"
 check_scope "doc/design/foo.md"; assert_eq "K: reject doc/design/foo.md" "$RC" "2"
@@ -345,9 +364,9 @@ echo "== O: Runner Loop (Phase 6) =="
 
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
-v_test_core() { return 1; }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1")
-declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1")
+v_test_all() { return 1; }
+declare -gA VALIDATION_ARGSPEC=([test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-all]="1")
 EOF
 
 cat > "$ROOT/p_base.md" <<'EOF'
@@ -370,14 +389,14 @@ run_proposal "$ROOT/p_base.md"; assert_eq "O: baseline validation failure exits 
 
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
-v_test_core() {
+v_test_all() {
   if [ "$(cat "$BUILD_DIR/fail" 2>/dev/null || echo 0)" = "1" ]; then
     return 1
   fi
   return 0
 }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1")
-declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1")
+declare -gA VALIDATION_ARGSPEC=([test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-all]="1")
 EOF
 
 export ROUTE_C2_PROPOSAL_WORKER="mock_worker"
@@ -409,15 +428,34 @@ mock_worker_out_of_scope() {
 export ROUTE_C2_PROPOSAL_WORKER="mock_worker_out_of_scope"
 export -f mock_worker_out_of_scope
 
-run_proposal "$ROOT/p_base.md"; assert_eq "O: out of scope exhausts budget exits 1" "$RC" "1"
+# Every round is rejected wholesale for the out-of-scope file, so NO usable in-scope patch is ever
+# produced -> exit 2 (rejected), NOT exit 1 (which means "an in-scope patch was produced but never green").
+run_proposal "$ROOT/p_base.md"; assert_eq "O: out-of-scope-only -> no usable patch -> exit 2" "$RC" "2"
 
+# A real worker is an external subprocess; model a crash as a non-zero return that made no edits (using
+# `exit` here would terminate the runner's own shell rather than the worker). No patch -> exit 2.
 mock_worker_crash() {
-  exit 1
+  return 1
 }
 export ROUTE_C2_PROPOSAL_WORKER="mock_worker_crash"
 export -f mock_worker_crash
 
-run_proposal "$ROOT/p_base.md"; assert_eq "O: worker crash exhausts budget exits 1" "$RC" "1"
+run_proposal "$ROOT/p_base.md"; assert_eq "O: worker crash (no patch) -> exit 2" "$RC" "2"
+
+# A worker MUST NOT be able to widen its own scope by tampering AGENT_PROPOSAL_INPUTS_FILE: the runner
+# re-derives the scope authority from its trusted in-memory packet inputs before the guard runs.
+mkdir -p "$ROOT/repo/script"; echo "orig" > "$ROOT/repo/script/evil.sh"  # exists -> a worker edit is a 'modify', not an 'add'
+mock_worker_tamper() {
+  printf 'script/evil.sh\n' >> "$AGENT_PROPOSAL_INPUTS_FILE"   # try to widen the allow-list
+  echo "pwn" >> "$AGENT_PROPOSAL_WORK/script/evil.sh"          # edit a forbidden, out-of-scope file
+}
+export ROUTE_C2_PROPOSAL_WORKER="mock_worker_tamper"
+export -f mock_worker_tamper
+
+run_proposal "$ROOT/p_base.md"
+assert_eq "O2: tampered-scope forbidden edit -> exit 2" "$RC" "2"
+case "$LOG" in *"out-of-scope edit on 'script/evil.sh'"*) ok "O2: guard ignores worker-tampered inputs file" ;; *) bad "O2: guard ignores worker-tampered inputs file"; printf '%s\n' "$LOG" | tail -5 ;; esac
+rm -rf "$ROOT/repo/script"
 
 mock_worker_mutate_real() {
   echo "mutate" >> "$AOBUS_AGENT_REPO/lib/foo.cpp"
@@ -488,8 +526,9 @@ echo "== R: proposal runner refuses a breaker-tripped worker BEFORE the worker r
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
 v_test_core() { return 0; }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1")
-declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1")
+v_test_all() { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1" [test-all]="1")
 EOF
 mkdir -p "$ROOT/work/breaker"
 : > "$ROOT/work/breaker/unknown.tripped"   # label resolves to 'unknown' under the empty mock routing
@@ -540,8 +579,9 @@ GR="$ROOT/gitrepo2"; mkdir -p "$GR/lib"
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
 v_test_core() { return 0; }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1")
-declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1")
+v_test_all() { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1" [test-all]="1")
 EOF
 mock_worker_with_log() {
   echo edit >> "$AGENT_PROPOSAL_WORK/lib/bar.cpp"          # in-scope source edit
@@ -625,19 +665,18 @@ EOF
   assert_eq "V: packet id '$badid' rejected (exit 64)" "$RC" "64"
 done
 
-echo "== W: header input accepted; oracle FORCED to test-core-all (atomicity) + dossier markers =="
-# A low-fan-out core header: its only includer is a lib source -> blast radius 1, core-only, in budget.
+echo "== W: header input accepted; oracle FORCED to test-all (packet cannot weaken) + dossier markers =="
 mkdir -p "$ROOT/repo/include/ao/util" "$ROOT/repo/lib/util"
 printf '#pragma once\nint kWidget();\n' > "$ROOT/repo/include/ao/util/Widget.h"
 printf '#include <ao/util/Widget.h>\nint kWidget(){return 0;}\n' > "$ROOT/repo/lib/util/Widget.cpp"
-# The packet asks for the narrow test-core (made to FAIL); the runner must force test-core-all (PASS) for
-# a header change. exit 0 therefore proves the packet could not downgrade the oracle.
+# The packet asks for the narrow test-core (made to FAIL); the runner forces the full-suite test-all
+# (PASS) regardless of scope. exit 0 therefore proves the packet could not downgrade the oracle.
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
-v_test_core()     { return 1; }
-v_test_core_all() { return 0; }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [test-core-all]="any 0 -")
-declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1" [test-core-all]="1")
+v_test_core() { return 1; }
+v_test_all()  { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1" [test-all]="1")
 EOF
 mock_hdr_worker() { echo "// private nested helper" >> "$AGENT_PROPOSAL_WORK/include/ao/util/Widget.h"; }
 export ROUTE_C2_PROPOSAL_WORKER="mock_hdr_worker"; export -f mock_hdr_worker
@@ -658,71 +697,14 @@ Add a private nested helper class to Widget.h (behavior-preserving).
 EOF
 WH="$ROOT/work_hdr"; mkdir -p "$WH"
 env AOBUS_AGENT_REPO="$ROOT/repo" AOBUS_AGENT_WORK="$WH" bash "$PROPOSAL" "$ROOT/p_hdr.md" > "$ROOT/run_hdr.log" 2>&1
-assert_eq "W: header proposal validates under forced test-core-all -> exit 0" "$?" "0"
-LOGH="$(cat "$ROOT/run_hdr.log")"
-case "$LOGH" in *"blast radius 1 TU"*) ok "W: reports blast radius" ;; *) bad "W: reports blast radius"; echo "$LOGH" ;; esac
+assert_eq "W: header proposal validates under forced test-all -> exit 0" "$?" "0"
 man="$(ls "$WH"/proposal_*/manifest.json 2>/dev/null | head -1)"
 if [ -n "$man" ]; then
   MAN="$(cat "$man")"
   case "$MAN" in *'"intent": "refactor"'*) ok "W: dossier records intent" ;; *) bad "W: dossier intent"; echo "$MAN" ;; esac
   case "$MAN" in *'"header_touched": true'*) ok "W: dossier marks header_touched" ;; *) bad "W: dossier header_touched" ;; esac
-  case "$MAN" in *'"blast_radius": 1'*) ok "W: dossier records blast_radius" ;; *) bad "W: dossier blast_radius" ;; esac
+  case "$MAN" in *'"validation": "test-all"'*) ok "W: dossier records forced test-all oracle" ;; *) bad "W: dossier oracle"; echo "$MAN" ;; esac
 else bad "W: manifest.json emitted"; fi
-
-echo "== X: header blast radius is bounded; over-budget / non-core escalates BEFORE the worker =="
-# X1: a header pulled in by 3 lib TUs, budget 2 -> escalate (no worker run).
-mkdir -p "$ROOT/repo/include/ao/core" "$ROOT/repo/lib/a" "$ROOT/repo/lib/b" "$ROOT/repo/lib/c"
-printf '#pragma once\nint kWide();\n' > "$ROOT/repo/include/ao/core/Wide.h"
-for d in a b c; do printf '#include <ao/core/Wide.h>\nint u_%s(){return kWide();}\n' "$d" > "$ROOT/repo/lib/$d/u.cpp"; done
-cat > "$ROOT/p_wide.md" <<'EOF'
----
-schema: aobus-phase-packet/v1
-kind: proposal
-skill: execute-plan
-capability: C2
-mode: proposal
-validation: test-core
-validation_args:
-  - [audio]
-inputs:
-  - include/ao/core/Wide.h
----
-Touch a widely-included header.
-EOF
-mock_canary_x() { echo ran > "$AOBUS_AGENT_WORK/ran"; echo edit >> "$AGENT_PROPOSAL_WORK/include/ao/core/Wide.h"; }
-export ROUTE_C2_PROPOSAL_WORKER="mock_canary_x"; export -f mock_canary_x
-WX="$ROOT/work_wide"; mkdir -p "$WX"; rm -f "$WX/ran"
-env PROPOSAL_BLAST_MAX=2 AOBUS_AGENT_REPO="$ROOT/repo" AOBUS_AGENT_WORK="$WX" bash "$PROPOSAL" "$ROOT/p_wide.md" > "$ROOT/run_wide.log" 2>&1
-assert_eq "X1: over-budget header escalates -> exit 2" "$?" "2"
-[ -f "$WX/ran" ] && bad "X1: worker must NOT run when over budget" || ok "X1: worker did not run (pre-staging escalation)"
-case "$(cat "$ROOT/run_wide.log")" in *"exceeds budget"*) ok "X1: reports budget escalation" ;; *) bad "X1: reports budget escalation" ;; esac
-case "$(cat "$WX/audit.log" 2>/dev/null)" in *'"result":"proposal-rejected"'*) ok "X1: audited as proposal-rejected" ;; *) bad "X1: audited rejected" ;; esac
-
-# X2: a header reached only by the GTK/app frontend is not covered by the core oracle -> escalate.
-mkdir -p "$ROOT/repo/include/ao/ui" "$ROOT/repo/app"
-printf '#pragma once\nint kPanel();\n' > "$ROOT/repo/include/ao/ui/Panel.h"
-printf '#include <ao/ui/Panel.h>\nint kPanel(){return 0;}\n' > "$ROOT/repo/app/gui.cpp"
-cat > "$ROOT/p_panel.md" <<'EOF'
----
-schema: aobus-phase-packet/v1
-kind: proposal
-skill: execute-plan
-capability: C2
-mode: proposal
-validation: test-core
-validation_args:
-  - [audio]
-inputs:
-  - include/ao/ui/Panel.h
----
-Touch a frontend-only header.
-EOF
-export ROUTE_C2_PROPOSAL_WORKER="mock_canary_x"
-WP="$ROOT/work_panel"; mkdir -p "$WP"; rm -f "$WP/ran"
-env AOBUS_AGENT_REPO="$ROOT/repo" AOBUS_AGENT_WORK="$WP" bash "$PROPOSAL" "$ROOT/p_panel.md" > "$ROOT/run_panel.log" 2>&1
-assert_eq "X2: non-core (GTK/app) blast radius escalates -> exit 2" "$?" "2"
-[ -f "$WP/ran" ] && bad "X2: worker must NOT run when non-core" || ok "X2: worker did not run"
-case "$(cat "$ROOT/run_panel.log")" in *"core oracle"*) ok "X2: reports non-core escalation" ;; *) bad "X2: reports non-core escalation" ;; esac
 
 echo "== Y: intent=behavior-change requires a registered test change (deterministic obligation) =="
 mkdir -p "$ROOT/repo/test/unit"
@@ -731,8 +713,9 @@ printf 'add_executable(ao_test\n  unit/WidgetTest.cpp\n)\n' > "$ROOT/repo/test/C
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
 v_test_core() { return 0; }
-declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1")
-declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1")
+v_test_all() { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1" [test-all]="1")
 EOF
 cat > "$ROOT/p_bc.md" <<'EOF'
 ---
@@ -769,6 +752,82 @@ env AOBUS_AGENT_REPO="$ROOT/repo" AOBUS_AGENT_WORK="$WB2" bash "$PROPOSAL" "$ROO
 assert_eq "Y2: behavior-change with a test change -> exit 0" "$?" "0"
 man2="$(ls "$WB2"/proposal_*/manifest.json 2>/dev/null | head -1)"
 [ -n "$man2" ] && case "$(cat "$man2")" in *'"assertion_delta": 1'*) ok "Y2: dossier records assertion_delta" ;; *) bad "Y2: assertion_delta"; cat "$man2" ;; esac
+
+echo "== Z: headers no longer route per-domain or escalate on a core+app mix -> always test-all =="
+# Z1: a private lib header (lib/**/*.h) validates under the single forced test-all oracle. The packet's
+# narrow test-core (made to FAIL) cannot downgrade it; the forced test-all PASSES -> exit 0.
+mkdir -p "$ROOT/repo/lib/util"
+printf '#pragma once\nint kHelper();\n' > "$ROOT/repo/lib/util/Helper.h"
+printf '#include "Helper.h"\nint kHelper(){return 0;}\n' > "$ROOT/repo/lib/util/Helper.cpp"
+cat > "$VALID" <<'EOF'
+#!/usr/bin/env bash
+v_test_core() { return 1; }
+v_test_all()  { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-core]="filter 1 1" [test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-core]="1" [test-all]="1")
+EOF
+mock_libhdr_worker() { echo "// private helper" >> "$AGENT_PROPOSAL_WORK/lib/util/Helper.h"; }
+export ROUTE_C2_PROPOSAL_WORKER="mock_libhdr_worker"; export -f mock_libhdr_worker
+cat > "$ROOT/p_libhdr.md" <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: proposal
+skill: execute-plan
+capability: C2
+mode: proposal
+validation: test-core
+validation_args:
+  - [audio]
+inputs:
+  - lib/util/Helper.h
+---
+Refactor a private lib header (behavior-preserving).
+EOF
+WZ1="$ROOT/work_libhdr"; mkdir -p "$WZ1"
+env AOBUS_AGENT_REPO="$ROOT/repo" AOBUS_AGENT_WORK="$WZ1" bash "$PROPOSAL" "$ROOT/p_libhdr.md" > "$ROOT/run_libhdr.log" 2>&1
+assert_eq "Z1: private lib header validates under forced test-all -> exit 0" "$?" "0"
+man_z1="$(ls "$WZ1"/proposal_*/manifest.json 2>/dev/null | head -1)"
+[ -n "$man_z1" ] && case "$(cat "$man_z1")" in *'"validation": "test-all"'*) ok "Z1: forced test-all oracle" ;; *) bad "Z1: oracle"; cat "$man_z1" ;; esac
+
+# Z2: a header set spanning BOTH core and app no longer escalates -- the full-suite oracle covers both,
+# so the worker RUNS and the proposal validates (regression guard for the removed mixed-escalation gate).
+mkdir -p "$ROOT/repo/app/widgets" "$ROOT/repo/app/linux-gtk"
+printf '#pragma once\nint kRow();\n' > "$ROOT/repo/app/widgets/Row.h"
+printf '#include "Row.h"\nint kRow(){return 0;}\n' > "$ROOT/repo/app/linux-gtk/Row.cpp"
+cat > "$VALID" <<'EOF'
+#!/usr/bin/env bash
+v_test_all() { return 0; }
+declare -gA VALIDATION_ARGSPEC=([test-all]="any 0 -")
+declare -gA VALIDATION_IS_ISOLATABLE=([test-all]="1")
+EOF
+mock_mixed_worker() {
+  echo "// helper" >> "$AGENT_PROPOSAL_WORK/lib/util/Helper.h"
+  echo "// row"    >> "$AGENT_PROPOSAL_WORK/app/widgets/Row.h"
+  echo ran > "$AOBUS_AGENT_WORK/ran"
+}
+export ROUTE_C2_PROPOSAL_WORKER="mock_mixed_worker"; export -f mock_mixed_worker
+cat > "$ROOT/p_mixed.md" <<'EOF'
+---
+schema: aobus-phase-packet/v1
+kind: proposal
+skill: execute-plan
+capability: C2
+mode: proposal
+validation: test-core
+validation_args:
+  - [audio]
+inputs:
+  - lib/util/Helper.h
+  - app/widgets/Row.h
+---
+Touch both a core and an app header.
+EOF
+WZ2="$ROOT/work_mixed"; mkdir -p "$WZ2"; rm -f "$WZ2/ran"
+env AOBUS_AGENT_REPO="$ROOT/repo" AOBUS_AGENT_WORK="$WZ2" bash "$PROPOSAL" "$ROOT/p_mixed.md" > "$ROOT/run_mixed.log" 2>&1
+assert_eq "Z2: core+app header mix runs under test-all (no escalation) -> exit 0" "$?" "0"
+[ -f "$WZ2/ran" ] && ok "Z2: worker ran (mixed no longer escalates)" || { bad "Z2: worker should run"; cat "$ROOT/run_mixed.log"; }
+man_z2="$(ls "$WZ2"/proposal_*/manifest.json 2>/dev/null | head -1)"
+[ -n "$man_z2" ] && case "$(cat "$man_z2")" in *'"validation": "test-all"'*) ok "Z2: forced test-all oracle" ;; *) bad "Z2: oracle"; cat "$man_z2" ;; esac
 
 echo "============================================================"
 if [ "$FAIL" -eq 0 ]; then

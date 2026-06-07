@@ -18,11 +18,11 @@ If the fix touches C++ files, also load `generate-cpp-code` before editing. Use 
 
 ## C2 Delegation Boundary
 
-Diagnosis, root-cause selection, error-contract choices, and bug-fix design remain C3 work. The current
-C2 runner may only implement a C3-decided regression test in an existing registered test file through
-`write-unit-test` / `improve-test-coverage`. Production-source body-fill delegation is future work and
-must not be routed until a separate runner enforces an immutable oracle test, single private `.cpp`
-scope, and mandatory C3 review.
+Diagnosis, root-cause selection, error-contract choices, and bug-fix design remain C3 work. Once the fix
+(or a C3-decided regression test) is settled, *implementing* it can be delegated as a proposal via the
+`execute-plan` skill (`.agents/skills/execute-plan/SKILL.md`); the worker may self-load `write-unit-test`
+/ `improve-test-coverage` for conventions. C2 returns a validated patch that you (the chair) review,
+apply, and re-validate on the real tree — it never lands a change itself, and never decides the diagnosis.
 
 ## Debugging Loop
 

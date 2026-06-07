@@ -2,20 +2,23 @@
 # script/agent/c2_proposal_phase.sh — C2 proposal executor skeleton
 #
 # Usage: script/agent/c2_proposal_phase.sh <packet.md>
-# Exit:  0 = success ; 1 = diagnostic ; 2 = rejected / invalidated ; 64 = usage
+# Exit:  0 = validated ; 1 = diagnostic (an in-scope patch was produced but never validated within the
+#        round budget) ; 2 = rejected / no usable in-scope patch ; 5 = config/routing/table missing ;
+#        64 = bad packet / usage. (The forced `test-all` oracle is always isolatable, so the
+#        not-isolatable path never fires here.)
 
 set -euo pipefail
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-agent_load_routing    || exit 2
-agent_load_validation || exit 2
+agent_load_routing    || exit 5
+agent_load_validation || exit 5
 
 PACKET="${1:?need a proposal packet path}"
 [ -r "$PACKET" ] || { echo "proposal: packet not readable: $PACKET" >&2; exit 64; }
 
 agent_packet_validate "$PACKET" proposal || exit 64
 
-# The harness owns the phase id (as test_phase.sh does): honor the packet's optional `id` when supplied
+# The harness owns the phase id: honor the packet's optional `id` when supplied
 # (already charset-validated by agent_packet_validate), otherwise mint a unique one. Never the old
 # "unknown" sentinel, which collided across id-less runs in audit.log / review-outcomes / breaker keys.
 pid="$(agent_packet_scalar "$PACKET" id)"
@@ -49,66 +52,21 @@ if agent_breaker_tripped "${ROUTE_C2_PROPOSAL_LABEL:-unknown}"; then
   exit 2
 fi
 
-# Extract packet info
-vid="$(agent_packet_scalar "$PACKET" validation)"
-declare -a vargs
-mapfile -t vargs < <(agent_packet_list "$PACKET" validation_args)
+# The proposal oracle is FIXED to the full suite -- the C2 executor no longer selects a test subset from
+# the changed paths. The whole suite runs in seconds and any change ultimately reaches the app, so a
+# per-change blast-radius gate bought complexity, not safety; running everything also closes the gap
+# where a core change silently broke an app-only test. Every proposal validates against `test-all`
+# (build + run the WHOLE core AND GTK suites); the packet's `validation` field cannot weaken it. We
+# still flag a header touched with NO test delta as a residual risk for C3, but it no longer steers the
+# oracle.
 body="$(agent_packet_body "$PACKET")"
+vid="test-all"
+declare -a vargs=()
 
-# Derive the validation oracle from the ACTUAL scope -- the packet cannot weaken it. A single Catch2
-# filter cannot cover a header's blast radius, so any header in scope forces the whole-core oracle
-# (test-core-all) and is bounded by a blast-radius budget; a change that reaches the GTK/app frontend or
-# exceeds the budget escalates to C3 BEFORE the worker runs. cpp-only changes keep the packet's filter.
-declare -a hdr_inputs=()
-for f in "${inputs[@]}"; do agent_is_header "$f" && hdr_inputs+=("$f"); done
 hdr_touched=false
-blast_n=0
-if [ "${#hdr_inputs[@]}" -gt 0 ]; then
-  hdr_touched=true
-  declare -a core_hdrs=() app_hdrs=() blast
-  for h in "${hdr_inputs[@]}"; do
-    case "$(agent_classify_path "$h")" in
-      public-header | private-lib-header) core_hdrs+=("$h") ;;
-      private-app-header)                 app_hdrs+=("$h") ;;
-    esac
-  done
-
-  if [ "${#core_hdrs[@]}" -gt 0 ] && [ "${#app_hdrs[@]}" -gt 0 ]; then
-    echo "proposal: mixed core + app header blast radius -> escalate to C3" >&2
-    agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "mixed core + app header blast radius; escalate to C3"
-    exit 2
-  fi
-
-  mapfile -t blast < <(agent_proposal_compute_blast_radius "${hdr_inputs[@]}")
-  blast_n="${#blast[@]}"
-  budget="${PROPOSAL_BLAST_MAX:-12}"
-
-  if [ "${#core_hdrs[@]}" -gt 0 ]; then
-    echo "proposal: core/lib header(s) in scope -> blast radius $blast_n TU(s) (budget $budget)"
-    if ! agent_proposal_blast_core_only ${blast[@]+"${blast[@]}"}; then
-      echo "proposal: header blast radius reaches targets beyond the core oracle -> escalate to C3" >&2
-      agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "core header blast radius not core-only; escalate to C3"
-      exit 2
-    fi
-    vid="test-core-all"
-    vargs=()
-  elif [ "${#app_hdrs[@]}" -gt 0 ]; then
-    echo "proposal: app header(s) in scope -> blast radius $blast_n TU(s) (budget $budget)"
-    if ! agent_proposal_blast_app_gtk_only ${blast[@]+"${blast[@]}"}; then
-      echo "proposal: app header blast radius exceeds GTK oracle coverage -> escalate to C3" >&2
-      agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "app header blast radius exceeds GTK oracle; escalate to C3"
-      exit 2
-    fi
-    vid="test-gtk-all"
-    vargs=()
-  fi
-
-  if [ "$blast_n" -gt "$budget" ]; then
-    echo "proposal: header blast radius $blast_n exceeds budget $budget -> escalate to C3" >&2
-    agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "blast radius $blast_n > budget $budget; escalate to C3"
-    exit 2
-  fi
-fi
+for f in "${inputs[@]}"; do
+  if agent_is_header "$f"; then hdr_touched=true; break; fi
+done
 
 # Output / Sandbox setup
 out_dir="${AOBUS_AGENT_WORK:-/tmp/aobus-c2}/proposal_$$"
@@ -170,7 +128,7 @@ emit_artifacts() {
   agent_changes_touch_registered_test "$out_dir/changes.tsv" 2>/dev/null && adelta=1
   local risk_note=""
   if [ "$hdr_touched" = true ] && [ "$adelta" -eq 0 ]; then
-    risk_note=" RISK: a header changed with NO test delta (intent=$pintent) -- C3 must confirm behavior is preserved across the ${blast_n} translation unit(s) in the blast radius."
+    risk_note=" RISK: a header changed with NO test delta (intent=$pintent) -- the full suite passed, but C3 must confirm behavior is preserved on paths the existing tests do not exercise."
   fi
   echo "${churn:-0}" > "$out_dir/churn.txt"
   awk '{print $2}' "$out_dir/changes.tsv" > "$out_dir/changed-files.txt"
@@ -183,7 +141,6 @@ emit_artifacts() {
   "status": "$status",
   "intent": "$(agent_json_escape "$pintent")",
   "header_touched": $hdr_touched,
-  "blast_radius": ${blast_n:-0},
   "assertion_delta": $adelta,
   "rounds": $round,
   "churn": ${churn:-0},
@@ -205,7 +162,7 @@ EOF
 **Rounds:** $round / $max_rounds
 **Churn:** ${churn:-0} lines
 **Intent:** $pintent
-**Header touched:** $hdr_touched (blast radius: ${blast_n:-0} TU)
+**Header touched:** $hdr_touched
 **Registered test changed:** $([ "$adelta" -eq 1 ] && echo yes || echo "no (assertion-delta 0)")
 
 ## Plan
@@ -220,6 +177,7 @@ EOF
 }
 
 round=1
+patch_produced=false   # set once a round yields an in-scope, non-empty, within-budget patch
 while [ "$round" -le "$max_rounds" ]; do
   echo "proposal: Round $round"
   
@@ -229,6 +187,9 @@ while [ "$round" -le "$max_rounds" ]; do
     echo "$body"
     echo "ALLOWED INPUTS:"
     for f in "${inputs[@]}"; do echo "- $f"; done
+    echo "REFERENCE SKILLS: for domain conventions, you MAY READ .agents/skills/<topic>/SKILL.md in your"
+    echo "working directory (e.g. write-unit-test, improve-test-coverage). Do NOT edit anything under .agents/"
+    echo "(it is guarded -- any edit there is rejected and invalidates the proposal)."
     if [ "$round" -gt 1 ] && [ -r "$out_dir/round$((round - 1)).validation.log" ]; then
       echo "FEEDBACK FROM PREVIOUS ROUND:"
       tail -n 50 "$out_dir/round$((round - 1)).validation.log"
@@ -252,7 +213,14 @@ while [ "$round" -le "$max_rounds" ]; do
 
   # Check Changes
   agent_tree_changes "$bdir" "$wdir" "$out_dir/changes.tsv"
+  # Drop mode rows: the base copy is deliberately `chmod -R a-w` while the work copy is writable, so every
+  # file shows a spurious mode delta; the harness patch (git diff --no-index) carries no mode either way.
   sed -i '/^mode\t/d' "$out_dir/changes.tsv"
+  # Re-derive the scope authority from the TRUSTED in-memory inputs before gating. The worker was handed
+  # $AGENT_PROPOSAL_INPUTS_FILE and could have appended a forbidden path to widen its own allow-list; it
+  # has already exited, so rewriting the file here cannot race. The guard must never trust a
+  # worker-writable file for what is in scope.
+  printf "%s\n" "${inputs[@]}" > "$inputs_file"
   if ! agent_proposal_changes_ok "$inputs_file" "$out_dir/changes.tsv"; then
     echo "proposal: worker made out-of-scope edits or unsupported changes" >&2
     chmod -R u+w "$wdir"
@@ -283,6 +251,7 @@ while [ "$round" -le "$max_rounds" ]; do
     agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "$round" "$churn" "0" "churn limit exceeded"
     exit 2
   fi
+  patch_produced=true   # an in-scope, non-empty, within-budget patch exists this round
 
   # Validate
   echo "proposal: validating changes..."
@@ -297,7 +266,13 @@ while [ "$round" -le "$max_rounds" ]; do
   fi
 done
 
-echo "proposal: round budget exhausted"
-emit_artifacts "diagnostic-budget-exhausted"
-agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-diagnostic" "$round" "${churn:-0}" "0" "round budget exhausted"
-exit 1
+if [ "$patch_produced" = true ]; then
+  echo "proposal: round budget exhausted (an in-scope patch was produced but never validated)" >&2
+  emit_artifacts "diagnostic-budget-exhausted"
+  agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-diagnostic" "$round" "${churn:-0}" "0" "round budget exhausted"
+  exit 1
+fi
+echo "proposal: no usable in-scope patch was produced -> reject" >&2
+emit_artifacts "rejected-no-patch"
+agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "$round" "${churn:-0}" "0" "no in-scope patch produced"
+exit 2
