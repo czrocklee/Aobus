@@ -18,6 +18,11 @@ namespace ao::library
 
 namespace ao::rt
 {
+  class TrackSource;
+}
+
+namespace ao::rt
+{
   /**
    * ManualListSource - A TrackSource that holds a manually curated set of tracks.
    *

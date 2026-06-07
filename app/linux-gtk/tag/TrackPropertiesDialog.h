@@ -20,7 +20,9 @@
 
 namespace ao::library
 {
+  class DictionaryStore;
   class MusicLibrary;
+  class TrackView;
 }
 
 namespace ao::rt

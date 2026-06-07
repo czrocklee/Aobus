@@ -11,6 +11,8 @@
 
 namespace ao::uimodel::layout
 {
+  struct ActionBindingContext;
+
   class ActionCatalog final
   {
   public:

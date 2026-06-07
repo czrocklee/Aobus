@@ -5,13 +5,18 @@
 
 #include <ao/uimodel/playback/AudioOutputViewModel.h>
 
-#include <giomm/liststore.h>
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
+
+namespace Gio
+{
+  template<typename T>
+  class ListStore;
+}
 
 namespace ao::rt
 {

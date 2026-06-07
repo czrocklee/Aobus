@@ -9,12 +9,16 @@
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <glibmm/refptr.h>
-#include <gtkmm/columnview.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/multiselection.h>
 #include <sigc++/scoped_connection.h>
 
 #include <memory>
+
+namespace Gtk
+{
+  class ColumnView;
+}
 
 namespace ao::gtk
 {

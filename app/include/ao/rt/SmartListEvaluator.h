@@ -5,7 +5,6 @@
 
 #include "TrackSource.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 
 #include <cstddef>
@@ -13,6 +12,11 @@
 #include <memory>
 #include <span>
 #include <vector>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
 
 namespace ao::rt
 {

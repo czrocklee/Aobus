@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-// NEGATIVE: Correct order (public -> protected -> private)
+// NEGATIVE - Correct order (public -> protected -> private)
 class CorrectOrderDemo
 {
 public:

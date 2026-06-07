@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/TransportButton.h"
 #include <ao/rt/AppRuntime.h>
@@ -12,6 +11,8 @@
 
 namespace ao::gtk::layout
 {
+  class ComponentRegistry;
+
   void registerOutputSelectorComponent(ComponentRegistry& registry);
   void registerPlaybackImageComponent(ComponentRegistry& registry);
   void registerSoulTransportButtonComponent(ComponentRegistry& registry);

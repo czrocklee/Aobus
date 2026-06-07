@@ -31,5 +31,5 @@ struct StructNamingDemo
 struct ClassLikeStruct
 {
 private:
-  std::int32_t _privateVal = 0; // NEGATIVE: Exempt due to private member (considered class-like)
+  std::int32_t _privateVal = 0; // NEGATIVE - Exempt due to private member (considered class-like)
 };

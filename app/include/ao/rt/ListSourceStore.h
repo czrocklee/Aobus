@@ -8,10 +8,14 @@
 #include "SmartListEvaluator.h"
 #include "TrackSource.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
 
 #include <memory>
 #include <unordered_map>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
 
 namespace ao::rt
 {

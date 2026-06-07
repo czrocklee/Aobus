@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "layout/runtime/ComponentRegistry.h"
-
 namespace ao::gtk::layout
 {
+  class ComponentRegistry;
+
   /**
    * @brief Register core track components (quickFilter, presentationButton).
    */

@@ -19,6 +19,7 @@
 #include "check/RedundantUsingDirectiveCheck.h"
 #include "check/SpdxLicenseHeaderCheck.h"
 #include "check/StdCLibraryQualificationCheck.h"
+#include "check/StrictForwardDeclarationCheck.h"
 #include "check/ThreadingPolicyCheck.h"
 #include "check/UnusedSuppressionStyleCheck.h"
 #include "check/UseCtadCheck.h"
@@ -71,6 +72,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<UseCtadCheck>("aobus-modernize-use-ctad");
       checkFactories.registerCheck<IncludeConventionCheck>("aobus-include-convention");
       checkFactories.registerCheck<SpdxLicenseHeaderCheck>("aobus-license-header");
+      checkFactories.registerCheck<aobus::StrictForwardDeclarationCheck>("aobus-strict-forward-declaration");
     }
   };
 

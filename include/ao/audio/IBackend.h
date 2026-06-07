@@ -5,8 +5,6 @@
 
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
 
 #include <concepts>
@@ -14,6 +12,9 @@
 
 namespace ao::audio
 {
+  struct Format;
+  class IRenderTarget;
+
   /**
    * @brief Interface for platform-specific audio output backends.
    */

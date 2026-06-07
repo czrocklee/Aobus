@@ -5,7 +5,6 @@
 
 #include <ao/Type.h>
 #include <ao/library/FileManifestStore.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
 
@@ -20,6 +19,7 @@
 
 namespace ao::library
 {
+  class MusicLibrary;
   struct ScanPlan;
   class DictionaryStore;
 

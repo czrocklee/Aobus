@@ -18,27 +18,35 @@ def parse_clang_tidy_output(output, filter_check=None):
     return diagnostics
 
 def parse_source_file(file_path, filter_check=None):
-    # Match comments like: // POSITIVE: aobus-check-name
-    # Or just // POSITIVE.
-    # If POSITIVE is the only thing on a line, it applies to the NEXT line.
-    # If POSITIVE is on a line with code, it applies to THAT line.
-    pattern = re.compile(r'//\s*POSITIVE(?::\s*([a-zA-Z0-9\-_]+))?')
+    # Match comments like: // POSITIVE: aobus-check-name or // NEGATIVE: aobus-check-name
+    # Or just // POSITIVE / // NEGATIVE.
+    # If the annotation is the only thing on a line, it applies to the NEXT line.
+    # If the annotation is on a line with code, it applies to THAT line.
+    pos_pattern = re.compile(r'//\s*POSITIVE(?::\s*([a-zA-Z0-9\-_]+))?')
+    neg_pattern = re.compile(r'//\s*NEGATIVE(?::\s*([a-zA-Z0-9\-_]+))?')
+    
     expected = defaultdict(list)
+    negated = defaultdict(list)
     with open(file_path, 'r') as f:
         for i, line in enumerate(f, 1):
-            match = pattern.search(line)
-            if match:
-                check_name = match.group(1) or filter_check
-                if not check_name:
-                    continue
-                
-                # Determine if the comment is "standalone" (only whitespace/comment on line)
-                # or "inline" (attached to code).
+            pos_match = pos_pattern.search(line)
+            neg_match = neg_pattern.search(line)
+            
+            if pos_match or neg_match:
                 code_part = line.split('//')[0].strip()
                 target_line = i if code_part else i + 1
-                expected[target_line].append(check_name)
                 
-    return expected
+                if pos_match:
+                    check_name = pos_match.group(1) or filter_check
+                    if check_name:
+                        expected[target_line].append(check_name)
+                        
+                if neg_match:
+                    check_name = neg_match.group(1) or filter_check
+                    if check_name:
+                        negated[target_line].append(check_name)
+                
+    return expected, negated
 
 def main():
     parser = argparse.ArgumentParser(description='Verify clang-tidy diagnostics against inline comments.')
@@ -54,9 +62,9 @@ def main():
         tidy_output = sys.stdin.read()
 
     actual_diagnostics = parse_clang_tidy_output(tidy_output)
-    expected_diagnostics = parse_source_file(args.source, filter_check=args.check)
+    expected_diagnostics, negated_diagnostics = parse_source_file(args.source, filter_check=args.check)
 
-    all_lines = sorted(set(actual_diagnostics.keys()) | set(expected_diagnostics.keys()))
+    all_lines = sorted(set(actual_diagnostics.keys()) | set(expected_diagnostics.keys()) | set(negated_diagnostics.keys()))
     errors = []
 
     for line in all_lines:
@@ -66,9 +74,12 @@ def main():
         # Check for unexpected diagnostics
         for a in actual:
             if a not in expected:
-                # If we are testing a specific check, ANY other diagnostic is an error,
-                # even if it's not on a POSITIVE line.
-                errors.append(f"Unexpected diagnostic at {args.source}:{line}: [{a}]")
+                if a in negated_diagnostics.get(line, []):
+                    errors.append(f"Diagnostic found on explicitly NEGATIVE line at {args.source}:{line}: [{a}]")
+                else:
+                    # If we are testing a specific check, ANY other diagnostic is an error,
+                    # even if it's not on a POSITIVE line.
+                    errors.append(f"Unexpected diagnostic at {args.source}:{line}: [{a}]")
         
         # Check for missing diagnostics
         for e in expected:

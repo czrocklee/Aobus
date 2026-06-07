@@ -35,5 +35,5 @@ void negativeNonEraseRemove()
 {
   auto v = std::vector<int>{1, 2, 3};
   auto it = std::remove_if(v.begin(), v.end(), isNegative);
-  // NEGATIVE: no erase, just remove_if alone
+  // NEGATIVE - no erase, just remove_if alone
 }

@@ -10,7 +10,6 @@
 
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
-#include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/listitemfactory.h>
@@ -22,6 +21,11 @@
 #include <span>
 #include <string>
 #include <vector>
+
+namespace Gtk
+{
+  class ColumnView;
+}
 
 namespace ao::gtk
 {

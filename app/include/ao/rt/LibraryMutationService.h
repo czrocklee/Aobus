@@ -8,7 +8,6 @@
 #include "async/Task.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/rt/LibraryYamlExporter.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +27,9 @@ namespace ao::library
 namespace ao::rt
 {
   class IControlExecutor;
+  struct MetadataPatch;
+  struct UpdateTrackMetadataReply;
+  enum class ExportMode : std::uint8_t;
 
   namespace async
   {

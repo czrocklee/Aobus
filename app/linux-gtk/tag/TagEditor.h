@@ -4,14 +4,11 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/flowbox.h>
-#include <gtkmm/flowboxchild.h>
-#include <gtkmm/label.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/widget.h>
 #include <sigc++/signal.h>
@@ -22,6 +19,16 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
+namespace Gtk
+{
+  class FlowBoxChild;
+}
 
 namespace ao::gtk
 {
@@ -73,11 +80,9 @@ namespace ao::gtk
 
     Gtk::Box _box{Gtk::Orientation::VERTICAL};
     Gtk::Entry _searchEntry;
-    Gtk::Label _currentLabel;
     Gtk::FlowBox _currentTagsBox;
-    Gtk::Separator _separator{Gtk::Orientation::HORIZONTAL};
-    Gtk::Label _availableLabel;
     Gtk::FlowBox _availableTagsBox;
+    Gtk::Separator _separator{Gtk::Orientation::HORIZONTAL};
 
     std::vector<std::string> _currentTags;
     std::map<std::string, std::size_t> _tagMembershipCounts;

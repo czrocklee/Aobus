@@ -6,7 +6,6 @@
 #include <ao/Type.h>
 #include <ao/audio/Types.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 
@@ -17,6 +16,11 @@
 #include <filesystem>
 #include <optional>
 #include <unordered_map>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
 
 namespace ao::audio
 {

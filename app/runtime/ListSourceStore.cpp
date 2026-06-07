@@ -4,6 +4,7 @@
 #include <ao/Type.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/ManualListSource.h>

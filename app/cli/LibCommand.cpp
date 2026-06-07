@@ -7,6 +7,7 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/Meta.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/CoreRuntime.h>

@@ -115,42 +115,42 @@ static void testRaiiProtection(std::int32_t cond)
 {
   std::mutex m;
 
-  // NEGATIVE: lock_guard is RAII
+  // NEGATIVE - lock_guard is RAII
   std::lock_guard guard(m);
   if (cond > 0)
   {
     (void)guard;
   }
 
-  // NEGATIVE: TagFile is whitelisted
+  // NEGATIVE - TagFile is whitelisted
   ao::tag::TagFile tagFile;
   if (tagFile.isValid())
   {
     std::cout << "tag";
   }
 
-  // NEGATIVE: Transaction suffix is RAII
+  // NEGATIVE - Transaction suffix is RAII
   MockTransaction txn;
   if (txn.ok())
   {
     std::cout << "txn";
   }
 
-  // NEGATIVE: Wrapper unique_ptr<TagFile> is protected
+  // NEGATIVE - Wrapper unique_ptr<TagFile> is protected
   std::unique_ptr<ao::tag::TagFile> tagFilePtr;
   if (tagFilePtr.operator->() != nullptr)
   {
     std::cout << "ptr";
   }
 
-  // NEGATIVE: Wrapper optional<Transaction> is protected
+  // NEGATIVE - Wrapper optional<Transaction> is protected
   std::optional<MockTransaction> txnOpt;
   if (txnOpt.has_value())
   {
     std::cout << "opt";
   }
 
-  // NEGATIVE: Already in init-statement (don't flag or touch)
+  // NEGATIVE - Already in init-statement (don't flag or touch)
   if (MockTransaction txn2; txn2.ok())
   {
     std::cout << "txn2";

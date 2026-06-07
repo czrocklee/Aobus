@@ -5,13 +5,17 @@
 
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/IBackend.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
 
 #include <memory>
 #include <string>
+
+namespace ao::audio
+{
+  struct Format;
+  class IRenderTarget;
+}
 
 namespace ao::audio::backend
 {

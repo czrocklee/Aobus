@@ -6,9 +6,13 @@
 #include <giomm/menu.h>
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
-#include <gtkmm/applicationwindow.h>
 
 #include <functional>
+
+namespace Gtk
+{
+  class ApplicationWindow;
+}
 
 namespace ao::gtk
 {

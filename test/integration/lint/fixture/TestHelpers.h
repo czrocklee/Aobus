@@ -46,3 +46,46 @@ struct LocalFoo
   LocalFoo() = default;
   LocalFoo(std::int32_t /*val*/) {}
 };
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#pragma once
+
+class TargetBadUniquePtr
+{};
+class TargetBadSharedPtr
+{};
+class TargetBadRefPtr
+{};
+class TargetBadRawPtr
+{};
+class TargetBadRef
+{};
+
+class TargetGoodInheritance
+{};
+class TargetGoodValueType
+{};
+class TargetGoodInlineCall
+{
+public:
+  void doSomething() {}
+};
+class TargetGoodByValParam
+{};
+class TargetGoodByValRet
+{};
+
+class ExtraTargetA
+{};
+class ExtraTargetB
+{
+public:
+  void doSomething() {}
+};
+class ExtraTargetC
+{};
+class SharedHeaderBase
+{};
+class SharedHeaderUsed
+{};

@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "layout/runtime/ActionBinder.h"
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
@@ -17,6 +16,7 @@
 
 namespace ao::gtk::layout
 {
+  class ActionBinder;
   struct LayoutContext;
 
   /**

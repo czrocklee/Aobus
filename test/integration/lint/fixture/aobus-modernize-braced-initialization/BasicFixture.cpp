@@ -63,13 +63,13 @@ public:
     // POSITIVE
     [[maybe_unused]] auto const p1 = std::filesystem::path(s1);
 
-    // NEGATIVE: DANGEROUS cases (Should be IGNORED)
+    // NEGATIVE - DANGEROUS cases (Should be IGNORED)
     [[maybe_unused]] auto const v1 = std::vector<int>(kInitVal1);       // size constructor
     [[maybe_unused]] auto const v2 = std::vector<int>(kInitVal1, 1);    // size + value
     [[maybe_unused]] auto const s8 = std::string(kInitVal1, 'a');       // count + char
     [[maybe_unused]] auto const s9 = std::string(s1.begin(), s1.end()); // iterator range
 
-    // NEGATIVE: Scalar Casts (Should be IGNORED)
+    // NEGATIVE - Scalar Casts (Should be IGNORED)
     [[maybe_unused]] auto const u1 = std::uintptr_t(&s1);
     [[maybe_unused]] auto const i1 = std::int32_t(1.5);
   }

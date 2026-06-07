@@ -4,7 +4,6 @@
 #pragma once
 
 #include "app/ThemeCoordinator.h"
-#include "portal/LibraryTaskProgressDialog.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/async/LifetimeScope.h>
@@ -12,7 +11,6 @@
 
 #include <giomm/asyncresult.h>
 #include <glibmm/refptr.h>
-#include <gtkmm/dropdown.h>
 #include <gtkmm/filedialog.h>
 #include <gtkmm/window.h>
 
@@ -33,6 +31,11 @@ namespace ao::gtk
   class ThemeCoordinator;
 }
 
+namespace Gtk
+{
+  class DropDown;
+}
+
 namespace ao::gtk
 {
   class AppDialog;
@@ -40,6 +43,8 @@ namespace ao::gtk
 
 namespace ao::gtk::portal
 {
+  class LibraryTaskProgressDialog;
+
   /**
    * ImportExportCallbacks defines the notifications from coordinator to host.
    */

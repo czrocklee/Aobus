@@ -12,6 +12,7 @@
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/grid.h>
 #include <pangomm/layout.h>
 
 #include <algorithm>

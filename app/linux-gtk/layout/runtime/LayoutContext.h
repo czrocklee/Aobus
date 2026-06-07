@@ -33,15 +33,24 @@ namespace ao::gtk
   class ListNavigationController;
 } // namespace ao::gtk
 
+namespace ao::uimodel::playback
+{
+  class PlaybackQueueModel;
+}
+
 namespace ao::uimodel::track
 {
   class TrackPresentationViewModel;
 }
 
-#include "layout/component/track/TrackDetailScope.h"
+namespace ao::gtk
+{
+  class ThemeCoordinator;
+}
 
 namespace ao::gtk::layout
 {
+  class ITrackDetailScope;
   class ComponentRegistry;
   class ActionRegistry;
 

@@ -3,10 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/ActionCatalog.h>
 #include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <functional>
@@ -16,6 +14,9 @@
 
 namespace ao::uimodel::layout
 {
+  class ActionCatalog;
+  struct LayoutDocument;
+
   struct LayoutDiagnostic final
   {
     std::string componentId;

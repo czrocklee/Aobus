@@ -6,8 +6,7 @@
 #include "app/AppDialog.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
-#include "layout/runtime/ActionRegistry.h"
-#include "layout/runtime/ComponentRegistry.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
 
 #include <giomm/simpleactiongroup.h>
 #include <glibmm/refptr.h>
@@ -24,12 +23,20 @@
 #include <gtkmm/treemodelcolumn.h>
 #include <gtkmm/treestore.h>
 #include <gtkmm/treeview.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 #include <sigc++/signal.h>
 
 #include <cstdint>
 #include <string>
 #include <string_view>
+
+namespace ao::gtk::layout
+{
+  class ActionRegistry;
+  class ComponentRegistry;
+  using PropertyDescriptor = uimodel::layout::PropertyDescriptor;
+}
 
 namespace ao::gtk::layout::editor
 {

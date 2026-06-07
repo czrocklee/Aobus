@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "app/AppConfig.h"
 #include <ao/rt/StateTypes.h>
 
 #include <gtkmm/widget.h>
@@ -14,6 +13,7 @@
 
 namespace ao::gtk
 {
+  class AppConfig;
   class ThemeCoordinator;
 
   class [[nodiscard]] ThemeRegistrationToken final

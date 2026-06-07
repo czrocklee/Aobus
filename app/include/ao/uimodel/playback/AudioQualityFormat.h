@@ -4,12 +4,16 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <string>
 #include <vector>
+
+namespace ao::audio
+{
+  struct Format;
+}
 
 namespace ao::uimodel::playback
 {

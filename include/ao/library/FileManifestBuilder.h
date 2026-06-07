@@ -5,7 +5,6 @@
 
 #include <ao/Type.h>
 #include <ao/library/FileManifestLayout.h>
-#include <ao/library/FileManifestView.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +12,8 @@
 
 namespace ao::library
 {
+  class FileManifestView;
+
   /**
    * FileManifestBuilder - Fluent builder for constructing file manifest binary data.
    */

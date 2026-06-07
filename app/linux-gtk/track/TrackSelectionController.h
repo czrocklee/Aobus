@@ -8,7 +8,6 @@
 #include <ao/Type.h>
 
 #include <glibmm/refptr.h>
-#include <gtkmm/columnview.h>
 #include <gtkmm/multiselection.h>
 #include <gtkmm/widget.h>
 #include <sigc++/scoped_connection.h>
@@ -18,6 +17,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+
+namespace Gtk
+{
+  class ColumnView;
+}
 
 namespace ao::gtk
 {

@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -15,6 +14,8 @@
 
 namespace ao::library
 {
+  class MusicLibrary;
+
   enum class ScanClassification : std::uint8_t
   {
     New,

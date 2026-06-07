@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/library/Meta.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 
@@ -12,6 +11,8 @@
 
 namespace ao::library
 {
+  struct MetaHeader;
+
   class MetaStore final
   {
   public:

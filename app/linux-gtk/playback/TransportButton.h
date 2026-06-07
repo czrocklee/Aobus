@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/uimodel/playback/TransportViewModel.h>
 
 #include <gtkmm/button.h>
@@ -12,6 +11,11 @@
 
 #include <functional>
 #include <string>
+
+namespace ao::uimodel::playback
+{
+  class PlaybackQueueModel;
+}
 
 namespace ao::gtk
 {

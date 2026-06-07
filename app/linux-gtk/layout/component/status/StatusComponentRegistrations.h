@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "layout/runtime/ComponentRegistry.h"
-
 namespace ao::gtk::layout
 {
+  class ComponentRegistry;
+
   void registerPlaybackDetailsComponent(ComponentRegistry& registry);
   void registerNowPlayingStatusComponent(ComponentRegistry& registry);
   void registerStatusSlotComponent(ComponentRegistry& registry);

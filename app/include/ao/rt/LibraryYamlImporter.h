@@ -4,7 +4,10 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/library/MusicLibrary.h>
+namespace ao::library
+{
+  class MusicLibrary;
+}
 
 #include <cstdint>
 #include <filesystem>

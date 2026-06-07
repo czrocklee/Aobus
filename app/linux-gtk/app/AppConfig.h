@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "UIState.h"
 #include "layout/document/LayoutDocument.h"
 #include <ao/rt/StateTypes.h>
 
@@ -18,6 +17,8 @@ namespace ao::rt
 
 namespace ao::gtk
 {
+  struct WindowState;
+
   /**
    * @brief Manages persistence of global application configuration.
    *

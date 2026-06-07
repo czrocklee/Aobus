@@ -5,15 +5,16 @@
 
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/IBackend.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
 
 #include <expected>
 
 namespace ao::audio
 {
+  struct Format;
+  class IRenderTarget;
+
   /**
    * @brief A backend that does nothing (used when no hardware is selected).
    *

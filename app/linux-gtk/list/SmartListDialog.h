@@ -9,7 +9,6 @@
 #include <ao/rt/LibraryMutationService.h>
 
 #include <gtkmm/box.h>
-#include <gtkmm/button.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/dropdown.h>
 #include <gtkmm/entry.h>
@@ -22,6 +21,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
+
+namespace Gtk
+{
+  class Button;
+}
 
 namespace ao::library
 {

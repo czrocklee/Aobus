@@ -6,7 +6,6 @@
 #include "TrackSource.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/PlanEvaluator.h>
 
@@ -15,6 +14,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
 
 namespace ao::rt
 {

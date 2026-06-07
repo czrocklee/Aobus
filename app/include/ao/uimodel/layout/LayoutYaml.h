@@ -3,10 +3,14 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-
 #include <ryml.hpp>
+
+namespace ao::uimodel::layout
+{
+  struct LayoutValue;
+  struct LayoutNode;
+  struct LayoutDocument;
+}
 
 namespace ao::rt::yaml
 {

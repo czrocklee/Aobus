@@ -10,8 +10,6 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
-#include <gtkmm/stack.h>
-
 #include <map>
 #include <memory>
 
@@ -24,6 +22,11 @@ namespace ao::uimodel::playback
 {
   class PlaybackQueueModel;
 }
+namespace Gtk
+{
+  class Stack;
+}
+
 namespace ao::gtk
 {
   class ListNavigationController;

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "layout/document/LayoutNode.h"
-#include "layout/runtime/ActionRegistry.h"
+#include <ao/uimodel/layout/ActionTypes.h>
 
 #include <functional>
 #include <string_view>
@@ -12,11 +12,19 @@
 namespace Gtk
 {
   class Widget;
+  class Window;
+}
+
+namespace ao::rt
+{
+  class AppRuntime;
 }
 
 namespace ao::gtk::layout
 {
+  class ActionRegistry;
   struct LayoutContext;
+  using ActionSlot = uimodel::layout::ActionSlot;
 
   class ActionBinder final
   {

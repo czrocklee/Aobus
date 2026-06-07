@@ -54,6 +54,6 @@ void negativeFindNoCompare()
 {
   auto str = "hello world"s;
   auto pos = str.find("hello");
-  // NEGATIVE: no comparison with 0
+  // NEGATIVE - no comparison with 0
   (void)pos;
 }

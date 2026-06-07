@@ -14,6 +14,11 @@
 #include <memory>
 #include <numbers>
 
+namespace Gtk
+{
+  class Snapshot;
+}
+
 namespace ao::gtk
 {
   class AobusSoul final : public Gtk::Widget

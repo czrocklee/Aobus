@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/audio/Format.h>
 #include <ao/audio/Property.h>
 
 #include <cstddef>
@@ -13,6 +12,8 @@
 
 namespace ao::audio
 {
+  struct Format;
+
   /**
    * @brief Interface for receiving render requests and events from an audio backend.
    *

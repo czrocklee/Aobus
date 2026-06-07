@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "layout/runtime/ILayoutComponent.h"
-
 #include <glibmm/main.h>
 #include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/popover.h>
@@ -13,6 +11,8 @@
 
 namespace ao::gtk::layout
 {
+  class ILayoutComponent;
+
   class ComponentTooltipController final
   {
   public:

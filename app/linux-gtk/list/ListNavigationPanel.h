@@ -6,7 +6,6 @@
 #include <ao/Type.h>
 
 #include <gdkmm/rectangle.h>
-#include <giomm/liststore.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/listview.h>
@@ -19,6 +18,12 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+
+namespace Gio
+{
+  template<typename T>
+  class ListStore;
+}
 
 namespace ao::rt
 {

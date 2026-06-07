@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "layout/runtime/ComponentRegistry.h"
-
 namespace ao::gtk::layout
 {
+  class ComponentRegistry;
+
   void registerAbsoluteCanvasComponent(ComponentRegistry& registry);
   void registerBoxComponent(ComponentRegistry& registry);
   void registerCenterBoxComponent(ComponentRegistry& registry);

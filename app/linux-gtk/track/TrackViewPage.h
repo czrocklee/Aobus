@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "tag/TagPopover.h"
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
@@ -17,7 +16,6 @@
 
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
-#include <gtkmm/columnview.h>
 #include <gtkmm/label.h>
 #include <gtkmm/multiselection.h>
 #include <gtkmm/popover.h>
@@ -34,6 +32,11 @@
 #include <string_view>
 #include <vector>
 
+namespace Gtk
+{
+  class ColumnView;
+}
+
 namespace ao::rt
 {
   class AppRuntime;
@@ -42,6 +45,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class ImageCache;
+  class TagPopover;
 
   class TrackViewPage final : public Gtk::Box
   {

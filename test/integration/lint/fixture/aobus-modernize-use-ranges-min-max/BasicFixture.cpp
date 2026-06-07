@@ -38,7 +38,7 @@ void negativeNoDeref()
 {
   auto v = std::vector<int>{1, 2, 3};
   auto it = std::min_element(v.begin(), v.end());
-  // NEGATIVE: no dereference — user wants the iterator
+  // NEGATIVE - no dereference — user wants the iterator
   (void)it;
 }
 

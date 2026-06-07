@@ -20,6 +20,7 @@
 #include <ao/Type.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>

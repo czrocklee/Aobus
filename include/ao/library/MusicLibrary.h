@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/library/Meta.h>
 #include <ao/lmdb/Transaction.h>
 
 #include <filesystem>
@@ -11,6 +10,7 @@
 
 namespace ao::library
 {
+  struct MetaHeader;
   class TrackStore;
   class ListStore;
   class ResourceStore;

@@ -5,7 +5,6 @@
 
 #include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutRuntime.h"
 
 #include <gtkmm/box.h>
@@ -14,6 +13,9 @@
 
 namespace ao::gtk::layout
 {
+  class ComponentRegistry;
+  struct LayoutContext;
+
   /**
    * @brief A GTK widget that hosts a dynamic layout.
    */

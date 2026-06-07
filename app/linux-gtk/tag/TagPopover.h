@@ -5,11 +5,15 @@
 
 #include "tag/TagEditor.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
 
 #include <gtkmm/popover.h>
 
 #include <vector>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
 
 namespace ao::gtk
 {

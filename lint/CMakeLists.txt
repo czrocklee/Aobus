@@ -33,6 +33,7 @@ add_library(AobusLintPlugin MODULE
   check/PointerNamingConventionCheck.cpp  check/MemberOrderCheck.cpp
   check/UseEraseIfCheck.cpp
   check/UseStdNumbersCheck.cpp
+  check/StrictForwardDeclarationCheck.cpp
   check/UseRangesContainsCheck.cpp
   check/UseRangesProjectionCheck.cpp
   check/UseRangesAnyOfCheck.cpp

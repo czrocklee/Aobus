@@ -6,13 +6,17 @@
 #include <glibmm/ustring.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/grid.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 #include <sigc++/signal.h>
 
 #include <cstdint>
+
+namespace Gtk
+{
+  class Grid;
+}
 
 namespace ao::gtk::layout::track_field_grid
 {

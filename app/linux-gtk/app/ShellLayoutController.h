@@ -22,6 +22,11 @@
 #include <string_view>
 #include <vector>
 
+namespace ao::rt
+{
+  class AppRuntime;
+}
+
 namespace ao::gtk
 {
   class AppConfig;

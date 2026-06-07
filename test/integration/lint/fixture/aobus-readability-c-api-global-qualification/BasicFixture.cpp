@@ -18,7 +18,7 @@ namespace
     // NEGATIVE
     ::getpid();
 
-    // NEGATIVE: Declared in the project, not system headers
+    // NEGATIVE - Declared in the project, not system headers
     my_local_c_function();
   }
 } // namespace

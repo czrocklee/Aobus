@@ -3,11 +3,12 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 namespace ao::uimodel::layout
 {
+  struct LayoutDocument;
+
   class LayoutTemplateExpander final
   {
   public:

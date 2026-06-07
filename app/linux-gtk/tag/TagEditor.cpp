@@ -67,20 +67,10 @@ namespace ao::gtk
         _removeBtn.set_has_frame(false);
         _removeBtn.add_css_class("ao-tag-chip-remove");
         _removeBtn.set_parent(*this);
-        _removeBtn.set_visible(false);
+        _removeBtn.set_visible(true);
 
         add_css_class("ao-tag-chip");
         add_css_class("ao-tag-chip-current");
-
-        auto motionPtr = Gtk::EventControllerMotion::create();
-        motionPtr->signal_enter().connect([this](double, double) { updateHover(true); });
-        motionPtr->signal_leave().connect([this] { updateHover(false); });
-        add_controller(motionPtr);
-
-        auto focusPtr = Gtk::EventControllerFocus::create();
-        focusPtr->signal_enter().connect([this] { updateHover(true); });
-        focusPtr->signal_leave().connect([this] { updateHover(false); });
-        add_controller(focusPtr);
       }
 
       ~TagChip() override
@@ -93,8 +83,6 @@ namespace ao::gtk
       TagChip& operator=(TagChip const&) = delete;
       TagChip(TagChip&&) = delete;
       TagChip& operator=(TagChip&&) = delete;
-
-      void updateHover(bool hovered) { _removeBtn.set_visible(hovered || _removeBtn.has_focus()); }
 
       auto signal_remove() { return _removeBtn.signal_clicked(); }
 
@@ -143,6 +131,29 @@ namespace ao::gtk
 
       Gtk::Label _label;
       Gtk::Button _removeBtn;
+    };
+
+    class AvailableTagChip final : public Gtk::Button
+    {
+    public:
+      explicit AvailableTagChip(std::string const& tag)
+        : _tag{tag}, _label{tag}
+      {
+        _icon.set_from_icon_name("list-add-symbolic");
+        _box.set_spacing(4);
+        _box.append(_icon);
+        _box.append(_label);
+        set_child(_box);
+        add_css_class("ao-tag-chip");
+      }
+
+      std::string const& getTag() const { return _tag; }
+
+    private:
+      std::string _tag;
+      Gtk::Box _box{Gtk::Orientation::HORIZONTAL};
+      Gtk::Image _icon;
+      Gtk::Label _label;
     };
   }
 
@@ -231,11 +242,7 @@ namespace ao::gtk
 
     _box.append(_searchEntry);
 
-    _currentLabel.set_markup("<span size='small' weight='bold'>CURRENT TAGS</span>");
-    _currentLabel.set_halign(Gtk::Align::START);
-    _currentLabel.add_css_class("dim-label");
-
-    _box.append(_currentLabel);
+    _box.append(_searchEntry);
 
     _currentTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _currentTagsBox.set_halign(Gtk::Align::START);
@@ -247,11 +254,7 @@ namespace ao::gtk
     _box.append(_currentTagsBox);
     _box.append(_separator);
 
-    _availableLabel.set_markup("<span size='small' weight='bold'>AVAILABLE TAGS</span>");
-    _availableLabel.set_halign(Gtk::Align::START);
-    _availableLabel.add_css_class("dim-label");
-
-    _box.append(_availableLabel);
+    _box.append(_separator);
 
     _availableTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _availableTagsBox.set_halign(Gtk::Align::START);
@@ -401,8 +404,7 @@ namespace ao::gtk
 
     auto const addAvailableChip = [this](std::string const& tag, bool isHighlighted)
     {
-      auto* const btn = Gtk::make_managed<Gtk::Button>(tag);
-      btn->add_css_class("ao-tag-chip");
+      auto* const btn = Gtk::make_managed<AvailableTagChip>(tag);
 
       if (!isHighlighted)
       {
@@ -495,9 +497,9 @@ namespace ao::gtk
       return {};
     }
 
-    if (auto* const btn = dynamic_cast<Gtk::Button*>(child->get_child()); btn != nullptr)
+    if (auto* const btn = dynamic_cast<AvailableTagChip*>(child->get_child()); btn != nullptr)
     {
-      return btn->get_label();
+      return btn->getTag();
     }
 
     return "";

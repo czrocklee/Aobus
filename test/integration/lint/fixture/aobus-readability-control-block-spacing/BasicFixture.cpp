@@ -43,7 +43,7 @@ void testControlBlockSpacing(std::int32_t x)
     x--;
   }
 
-  // NEGATIVE: standalone while after if with proper spacing (not a do-while)
+  // NEGATIVE - standalone while after if with proper spacing (not a do-while)
   if (x > 0)
   {
     x++;

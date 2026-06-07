@@ -3,6 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/SeekControl.h"

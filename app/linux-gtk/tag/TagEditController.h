@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "tag/TagPopover.h"
-#include "track/TrackViewPage.h"
 #include <ao/Type.h>
 
 #include <giomm/actionmap.h>
@@ -30,6 +28,8 @@ namespace ao::gtk
 {
   class TrackRowCache;
   class ThemeCoordinator;
+  class TagPopover;
+  class TrackViewPage;
 }
 
 namespace ao::gtk

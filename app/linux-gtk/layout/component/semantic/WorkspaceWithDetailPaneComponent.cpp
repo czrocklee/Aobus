@@ -3,6 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackPageHost.h"
@@ -12,6 +13,7 @@
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/revealer.h>
+#include <gtkmm/stack.h>
 #include <gtkmm/togglebutton.h>
 
 #include <memory>

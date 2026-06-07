@@ -20,38 +20,16 @@ if [[ ! -f "$PLUGIN" ]]; then
 fi
 
 get_check_alias() {
-    local fixture_name="$1"
-    case "$fixture_name" in
-        CApiGlobalQualificationCheckFixture.cpp) echo "aobus-readability-c-api-global-qualification" ;;
-        ConcreteFinalCheckFixture.cpp) echo "aobus-modernize-concrete-final" ;;
-        ControlBlockSpacingCheckFixture.cpp) echo "aobus-readability-control-block-spacing" ;;
-        NodiscardUsageCheckFixture.cpp) echo "aobus-modernize-nodiscard-usage" ;;
-        ForbidTrailingReturnCheckFixture.cpp) echo "aobus-modernize-forbid-trailing-return" ;;
-        IdentifierNamingExtensionsCheckFixture.cpp) echo "aobus-readability-identifier-naming-extensions" ;;
-        LambdaParamsCheckFixture.cpp) echo "aobus-modernize-lambda-params" ;;
-        LocalInitializationStyleCheckFixture.cpp) echo "aobus-modernize-local-initialization-style" ;;
-        BracedInitializationCheckFixture.cpp) echo "aobus-modernize-braced-initialization" ;;
-        MemberOrderCheckFixture.cpp) echo "aobus-readability-member-order" ;;
-        OptionalNamingAndUsageCheckFixture.cpp) echo "aobus-readability-optional-naming-and-usage" ;;
-        RedundantNamespaceQualificationCheckFixture.cpp) echo "aobus-readability-redundant-namespace-qualification" ;;
-        StdCLibraryQualificationCheckFixture.cpp) echo "aobus-readability-std-c-library-qualification" ;;
-        ThreadingPolicyCheckFixture.cpp) echo "aobus-threading-policy" ;;
-        UnusedSuppressionStyleCheckFixture.cpp) echo "aobus-readability-unused-suppression-style" ;;
-        UseIfInitStatementCheckFixture.cpp) echo "aobus-readability-use-if-init-statement" ;;
-        UseRangesContainsCheckFixture.cpp) echo "aobus-modernize-use-ranges-contains" ;;
-        UseRangesProjectionCheckFixture.cpp) echo "aobus-modernize-use-ranges-projection" ;;
-        UseRangesAnyOfCheckFixture.cpp) echo "aobus-modernize-use-ranges-any-of" ;;
-        UseEraseIfCheckFixture.cpp) echo "aobus-modernize-use-erase-if" ;;
-        UseRangesMinMaxCheckFixture.cpp) echo "aobus-modernize-use-ranges-min-max" ;;
-        UseStartsWithCheckFixture.cpp) echo "aobus-modernize-use-starts-with" ;;
-        UseStdNumbersCheckFixture.cpp) echo "aobus-modernize-use-std-numbers" ;;
-        IncludeConventionCheckFixture.cpp) echo "aobus-include-convention" ;;
-        SpdxLicenseHeaderCheckFixture.cpp) echo "aobus-license-header" ;;
-        SpdxLicenseHeaderCheckMissingFixture.cpp) echo "aobus-license-header" ;;
-        UseCtadCheckFixture.cpp) echo "aobus-modernize-use-ctad" ;;
-        PointerNamingConventionFixture.cpp) echo "aobus-readability-pointer-naming-convention" ;;
-        *) return 1 ;;
-    esac
+    local fixture_path="$1"
+    local dir_name=$(basename "$(dirname "$fixture_path")")
+    
+    # If the file is directly under fixture/ or not in a subdirectory, return error
+    if [[ "$dir_name" == "fixture" || "$dir_name" == "." ]]; then
+        return 1
+    fi
+    
+    echo "$dir_name"
+    return 0
 }
 
 expects_auto_fix() {
@@ -90,7 +68,7 @@ trap cleanup EXIT
 run_diag() {
     local FIXTURE="$1"
     local FNAME=$(basename "$FIXTURE")
-    local ALIAS=$(get_check_alias "$FNAME") || return 0
+    local ALIAS=$(get_check_alias "$FIXTURE") || return 0
 
     local TEST_TMP=$(mktemp -d "$RUN_TMP_ROOT/${FNAME}.diag.XXXXXX")
     local ACTUAL="$TEST_TMP/actual.txt"
@@ -108,10 +86,10 @@ run_diag() {
         fi
         echo "DIAG_PASS"
     } > "$LOG_FILE" 2>&1; then
-        echo "  [DIAG PASS] $FNAME"
+        echo "  [DIAG PASS] $ALIAS/$FNAME"
         return 0
     else
-        echo "  [DIAG FAIL] $FNAME (See $LOG_FILE)"
+        echo "  [DIAG FAIL] $ALIAS/$FNAME (See $LOG_FILE)"
         return 1
     fi
 }
@@ -119,7 +97,7 @@ run_diag() {
 run_fix() {
     local FIXTURE="$1"
     local FNAME=$(basename "$FIXTURE")
-    local ALIAS=$(get_check_alias "$FNAME") || return 0
+    local ALIAS=$(get_check_alias "$FIXTURE") || return 0
 
     local TEST_TMP=$(mktemp -d "$RUN_TMP_ROOT/${FNAME}.fix.XXXXXX")
     local LOG_FILE="$TEST_TMP/run.log"
@@ -129,6 +107,12 @@ run_fix() {
         local FIXED_FILE="$TEST_TMP/$FNAME"
         cp "$FIXTURE" "$FIXED_FILE"
         cp "$FIXTURE_DIR/TestHelpers.h" "$TEST_TMP/TestHelpers.h"
+        # Copy sibling headers from the fixture's directory so cross-includes resolve
+        local FIXTURE_SUBDIR
+        FIXTURE_SUBDIR=$(dirname "$FIXTURE")
+        for sibling in "$FIXTURE_SUBDIR"/*.h; do
+            [[ -f "$sibling" ]] && cp -n "$sibling" "$TEST_TMP/"
+        done
 
         EXTRA_CHECKS="-*,$ALIAS" "$PROJECT_ROOT/script/run-clang-tidy.sh" \
             -p "$BUILD_DIR" \
@@ -145,11 +129,11 @@ run_fix() {
             return 1
         fi
     } >> "$LOG_FILE" 2>&1; then
-        echo "  [FIX PASS] $FNAME"
+        echo "  [FIX PASS] $ALIAS/$FNAME"
         rm -rf "$TEST_TMP"
         return 0
     else
-        echo "  [FIX FAIL] $FNAME (See $LOG_FILE)"
+        echo "  [FIX FAIL] $ALIAS/$FNAME (See $LOG_FILE)"
         return 1
     fi
 }
@@ -217,10 +201,10 @@ EOF
 echo "=== [2] Diagnostic Verification (parallel) ==="
 DIAG_FAILED=0
 PIDS=()
-for FIXTURE in "$FIXTURE_DIR"/*Fixture.cpp; do
+while IFS= read -r FIXTURE; do
     run_diag "$FIXTURE" &
     PIDS+=($!)
-done
+done < <(find "$FIXTURE_DIR" -mindepth 2 -type f \( -name "*.cpp" -o -name "*.h" \) | sort)
 for PID in "${PIDS[@]}"; do
     if ! wait $PID; then
         DIAG_FAILED=1
@@ -229,11 +213,11 @@ done
 
 echo "=== [3] Auto-Fix Verification (serial) ==="
 FIX_FAILED=0
-for FIXTURE in "$FIXTURE_DIR"/*Fixture.cpp; do
+while IFS= read -r FIXTURE; do
     if ! run_fix "$FIXTURE"; then
         FIX_FAILED=1
     fi
-done
+done < <(find "$FIXTURE_DIR" -mindepth 2 -type f \( -name "*.cpp" -o -name "*.h" \) | sort)
 
 echo "=== [4] Replacement Application Smoke ==="
 APPLY_FAILED=0

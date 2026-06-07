@@ -6,7 +6,6 @@
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
 
 #include <glibmm/main.h>
@@ -23,6 +22,7 @@
 
 namespace ao::rt
 {
+  class NotificationService;
   class ViewService;
 }
 

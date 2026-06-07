@@ -12,6 +12,7 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
+#include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 
 #include <memory>
@@ -34,7 +35,8 @@ namespace ao::gtk::layout
           return;
         }
 
-        _container.append(ctx.track.pageHost->stack());
+        Gtk::Stack& stack = ctx.track.pageHost->stack();
+        _container.append(stack);
         _container.set_hexpand(true);
         _container.set_vexpand(true);
       }
