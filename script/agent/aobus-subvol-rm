@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ALLOWED_ROOT="/home/rocklee/dev/.aobus_work"
+
+die() {
+  echo "aobus-subvol-rm: $*" >&2
+  exit 3
+}
+
+realpath_strict() {
+  realpath -- "$1"
+}
+
+selfcheck() {
+  command -v btrfs >/dev/null 2>&1 || die "btrfs not found"
+  command -v realpath >/dev/null 2>&1 || die "realpath not found"
+  [ -d "$ALLOWED_ROOT" ] || die "allowed root does not exist: $ALLOWED_ROOT"
+  [ "$(stat -f -c %T "$ALLOWED_ROOT" 2>/dev/null)" = "btrfs" ] || die "allowed root is not on btrfs"
+}
+
+if [ "${1:-}" = "--selfcheck" ]; then
+  selfcheck
+  exit 0
+fi
+
+[ "$#" -eq 1 ] || {
+  echo "usage: aobus-subvol-rm <subvolume-path>" >&2
+  exit 2
+}
+
+selfcheck
+
+target="$1"
+real="$(realpath_strict "$target")" || exit 2
+root="$(realpath_strict "$ALLOWED_ROOT")" || exit 2
+
+case "$real/" in
+  "$root"/*) ;;
+  *) die "refuse path outside allowed root: $real" ;;
+esac
+
+[ "$real" != "$root" ] || die "refuse deleting allowed root itself"
+btrfs subvolume show -- "$real" >/dev/null 2>&1 || die "refuse non-subvolume: $real"
+
+exec btrfs subvolume delete -- "$real"

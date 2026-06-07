@@ -133,6 +133,87 @@ agent_arg_safe() {
   [ -z "$(printf '%s' "$1" | tr -d 'A-Za-z0-9._/,:[]-')" ]
 }
 
+# Stable real-repo-shaped path the work copy is presented at under bwrap. Defaults to the real repo
+# ($AGENT_REPO) so ccache keys match the warm main cache; falls back to the staged source for direct
+# (test) calls where no real repo is in play.
+agent_bwrap_repo_view_path() {
+  printf '%s\n' "${AOBUS_AGENT_BWRAP_REPO_VIEW:-${AGENT_REPO:-${1:-}}}"
+}
+
+agent_bwrap_build_view_path() {
+  local _b="$1"
+  printf '%s\n' "${AOBUS_AGENT_BWRAP_BUILD_VIEW:-/tmp/build/debug}"
+}
+
+agent_bwrap_out_view_path() {
+  printf '%s\n' "${AOBUS_AGENT_BWRAP_OUT_VIEW:-/agent/out}"
+}
+
+agent_bwrap_add_path_if_dir() {
+  local array_name="$1" mode="$2" path="$3"
+  local -n bind_argv="$array_name"
+  [ -d "$path" ] || return 0
+  bind_argv+=("$mode" "$path" "$path")
+}
+
+# agent_bwrap_path_view_run <host-src> <view-src> <host-build> <view-build> <host-cache-parent>
+#                           <host-out-or-> <view-out-or-> <command> [args...]
+# Run a command with the proposal source and build directories visible at stable paths. This is a path
+# virtualizer, not a security sandbox: it keeps HOME, network, and the caller's environment available so
+# model CLIs keep their normal authentication behavior.
+agent_bwrap_path_view_run() {
+  local host_src="$1" view_src="$2" host_build="$3" view_build="$4" host_cache_parent="$5"
+  local host_out="$6" view_out="$7"
+  shift 7
+  command -v bwrap >/dev/null 2>&1 || {
+    echo "agent: bwrap is required for proposal isolation but is not on PATH" >&2
+    return 2
+  }
+  mkdir -p "$host_build" "$host_cache_parent" "$host_cache_parent/cmake-deps" "$host_build/_deps"
+  local argv=(bwrap)
+  agent_bwrap_add_path_if_dir argv --ro-bind /nix/store
+  agent_bwrap_add_path_if_dir argv --ro-bind /run/current-system/sw
+  agent_bwrap_add_path_if_dir argv --ro-bind /etc
+  agent_bwrap_add_path_if_dir argv --ro-bind /usr
+  agent_bwrap_add_path_if_dir argv --ro-bind /bin
+  agent_bwrap_add_path_if_dir argv --bind /tmp
+  if [ -n "${HOME:-}" ]; then
+    agent_bwrap_add_path_if_dir argv --bind "$HOME"
+  fi
+  argv+=(--proc /proc --dev /dev --dir /agent)
+  argv+=(--bind "$host_src" "$view_src")
+  argv+=(--bind "$host_build" "$view_build")
+  argv+=(--bind "$host_cache_parent" "$view_src/.cache")
+  argv+=(--bind "$host_cache_parent/cmake-deps" "$view_build/_deps")
+  if [ -n "$host_out" ] && [ "$host_out" != "-" ]; then
+    mkdir -p "$host_out"
+    argv+=(--bind "$host_out" "$view_out")
+  fi
+  argv+=(--chdir "$view_src")
+  argv+=(--setenv AOBUS_AGENT_BWRAP_ACTIVE 1)
+  argv+=(--setenv PATH "${PATH:-/run/current-system/sw/bin:/usr/bin:/bin}")
+  argv+=(--setenv HOME "${HOME:-}")
+  argv+=(--setenv AOBUS_AGENT_REPO "$view_src")
+  argv+=(--setenv AGENT_PROPOSAL_WORK "$view_src")
+  argv+=(--setenv BUILD_DIR "$view_build")
+  argv+=(--setenv AGENT_PROPOSAL_BUILD_DIR "$view_build")
+  argv+=(--setenv CCACHE_BASEDIR "$view_src")
+  argv+=(--setenv CCACHE_DIR "$view_src/.cache/ccache")
+  argv+=(--setenv AOBUS_CMAKE_DEPS_DIR "$view_build/_deps")
+  argv+=(--setenv FETCHCONTENT_BASE_DIR "$view_build/_deps")
+  if [ -n "$host_out" ] && [ "$host_out" != "-" ]; then
+    argv+=(--setenv AGENT_PROPOSAL_OUT "$view_out")
+    argv+=(--setenv AGENT_PROMPT_FILE "$view_out/prompt.md")
+    argv+=(--setenv AGENT_PROPOSAL_INPUTS_FILE "$view_out/inputs.txt")
+    argv+=(--setenv AGENT_PROPOSAL_PLAN_FILE "$view_out/plan.md")
+    if [ -n "${AGENT_PROPOSAL_FEEDBACK_FILE:-}" ]; then
+      argv+=(--setenv AGENT_PROPOSAL_FEEDBACK_FILE "$view_out/$(basename "$AGENT_PROPOSAL_FEEDBACK_FILE")")
+    fi
+  fi
+  argv+=("$@")
+  "${argv[@]}"
+}
+
 # A validation id (e.g. test-core) maps to a function v_<id-with-hyphens-as-underscores> (v_test_core).
 agent_validation_fn()     { printf 'v_%s' "${1//-/_}"; }
 agent_validation_exists() { [ "$(type -t "$(agent_validation_fn "$1")" 2>/dev/null)" = "function" ]; }
@@ -218,20 +299,33 @@ agent_validate_in_repo() {
   done
   agent_validation_args_ok "$id" "$@" || return 2
   
-  ( 
-    export AOBUS_AGENT_REPO="$src"
-    export BUILD_DIR="$bld"
-    export CCACHE_BASEDIR="$src"
-    export CCACHE_READONLY=1
-    # Normalize file paths (including DW_AT_comp_dir and __FILE__ macros)
-    # so ASan/GDB traces are consistent and Ccache hits across boundaries.
-    export CFLAGS="${CFLAGS:-} -ffile-prefix-map=$src=."
-    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=$src=."
-    cd "$src"
-    if [ ! -f "$bld/CMakeCache.txt" ]; then
-      cmake --preset linux-debug -B "$bld" -S "$src" >/dev/null 2>&1 || true
-    fi
-    "$fn" "$@" 
+  (
+    # The worker/oracle always runs under a bwrap path view so the staged copy appears at the stable
+    # real-repo path. That stable shape is what lets plain ccache hit across proposal sandboxes -- no
+    # per-snapshot source/build paths leak into the cache key, so no compiler-arg rewriting is needed.
+    local src_view bld_view cache_dir cache_parent exported_fn
+    src_view="$(agent_bwrap_repo_view_path "$src")"
+    bld_view="$(agent_bwrap_build_view_path "$bld")"
+    cache_dir="${AGENT_VALIDATE_CCACHE_DIR:-$src/.cache/ccache}"
+    mkdir -p "$cache_dir"
+    cache_parent="$(cd "$cache_dir/.." 2>/dev/null && pwd -P)" || return 2
+
+    unset CCACHE_READONLY
+    export AGENT_CCACHE_LAUNCHER="${AOBUS_AGENT_CCACHE_PROGRAM:-$(command -v ccache 2>/dev/null || printf 'ccache')}"
+
+    while IFS= read -r exported_fn; do
+      export -f "$exported_fn" 2>/dev/null || true
+    done < <(declare -F | awk '/ v_/ {print $3}')
+    agent_bwrap_path_view_run "$src" "$src_view" "$bld" "$bld_view" "$cache_parent" "-" "-" \
+      bash -c '
+        cd "$AOBUS_AGENT_REPO" || exit 2
+        if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
+          cmake --preset linux-debug -B "$BUILD_DIR" -S "$AOBUS_AGENT_REPO" \
+            -DCCACHE_PROGRAM="$AGENT_CCACHE_LAUNCHER" \
+            -DFETCHCONTENT_BASE_DIR="$FETCHCONTENT_BASE_DIR" >/dev/null 2>&1 || true
+        fi
+        "$@"
+      ' bash "$fn" "$@"
   )
 }
 
@@ -484,6 +578,72 @@ agent_tree_hash() {
   ) | sha256sum | awk '{print $1}'
 }
 
+# agent_council_evidence_hash <repo> ; a stronger evidence fingerprint for C3 forensic mode covering
+# both current worktree and visible Git history. Used to verify that all per-member read-only snapshots
+# share an identical evidence baseline (the fingerprint gate). Intentionally excludes unreachable objects
+# — HEAD + all visible refs cover the history entry points members inspect via git log/show/blame/diff.
+agent_council_evidence_hash() {
+  local repo="$1"
+  (
+    cd "$repo" 2>/dev/null || exit 0
+    printf 'worktree %s\n' "$(agent_tree_hash "$repo")"
+    # [ -e .git ] covers both a regular .git/ directory and a linked-worktree .git file.
+    if [ -e .git ]; then
+      git rev-parse --verify HEAD 2>/dev/null | sed 's/^/HEAD /' || true
+      git for-each-ref --format='ref %(refname) %(objectname)' 2>/dev/null | sort || true
+      # Include staged-but-uncommitted content so the fingerprint covers the full evidence
+      # baseline members can inspect via git diff --cached / git status.
+      GIT_OPTIONAL_LOCKS=0 git ls-files --stage 2>/dev/null | sort || true
+    else
+      printf 'git absent\n'
+    fi
+  ) | sha256sum | awk '{print $1}'
+}
+
+# agent_bwrap_council_view_run <host-snapshot> <view-repo-path> <host-run-dir> <command> [args...]
+# Run a command with a private read-only view of a repository snapshot mounted at its real path.
+# This is a path virtualizer for a trusted C3 roster, not a hard security sandbox: HOME and network
+# remain available for model CLI auth. Key properties vs the C2 helper (agent_bwrap_path_view_run):
+#   - repo is mounted --ro-bind (not writable)
+#   - /tmp is a private tmpfs (not the host /tmp; avoids writable aliases over snapshots in /tmp)
+#   - no build/cache mounts (forensic auditors read, never build)
+#   - /agent/out is the per-member/per-round private output dir
+agent_bwrap_council_view_run() {
+  local host_snap="$1" view_repo="$2" host_run_dir="$3"
+  shift 3
+  command -v bwrap >/dev/null 2>&1 || {
+    echo "agent: bwrap is required for council forensic view but is not on PATH" >&2
+    return 2
+  }
+  local argv=(bwrap)
+  agent_bwrap_add_path_if_dir argv --ro-bind /nix/store
+  agent_bwrap_add_path_if_dir argv --ro-bind /run/current-system/sw
+  agent_bwrap_add_path_if_dir argv --ro-bind /etc
+  agent_bwrap_add_path_if_dir argv --ro-bind /usr
+  agent_bwrap_add_path_if_dir argv --ro-bind /bin
+  argv+=(--tmpfs /tmp)
+  if [ -n "${HOME:-}" ]; then
+    agent_bwrap_add_path_if_dir argv --bind "$HOME"
+  fi
+  argv+=(--proc /proc --dev /dev --dir /agent)
+  argv+=(--ro-bind "$host_snap" "$view_repo")
+  argv+=(--bind "$host_run_dir" /agent/out)
+  argv+=(--chdir "$view_repo")
+  argv+=(--setenv AOBUS_AGENT_BWRAP_ACTIVE 1)
+  argv+=(--setenv AOBUS_AGENT_REPO "$view_repo")
+  argv+=(--setenv AGENT_COUNCIL_CWD "$view_repo")
+  argv+=(--setenv AGENT_COUNCIL_OUT /agent/out)
+  argv+=(--setenv AGENT_COUNCIL_SLOT out.md)
+  argv+=(--setenv AGENT_COUNCIL_PROMPT_FILE /agent/out/prompt.md)
+  argv+=(--setenv GIT_PAGER cat)
+  argv+=(--setenv PAGER cat)
+  argv+=(--setenv GIT_OPTIONAL_LOCKS 0)
+  argv+=(--setenv PATH "${PATH:-/run/current-system/sw/bin:/usr/bin:/bin}")
+  argv+=(--setenv HOME "${HOME:-}")
+  argv+=("$@")
+  "${argv[@]}"
+}
+
 # agent_harness_diff <orig> <modified> <out-patch> ; the dispatcher computes the patch itself, never
 # trusting a model-authored diff. Writes a unified diff to <out-patch> and echoes the changed-line
 # count (added/removed body lines, excluding the +++/--- header) to stdout.
@@ -555,11 +715,149 @@ agent_guard_output_dir() {
   return 0
 }
 
-# agent_stage_repo_copy <source-repo> <destination>
+# agent_snapshot_required ; true when snapshot staging is explicitly required by the caller.
+agent_snapshot_required() {
+  case "${AOBUS_SNAPSHOT_STAGE:-auto}" in
+    1 | yes | true | on | require | required) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# agent_snapshot_disabled ; true when snapshot staging is explicitly disabled by the caller.
+agent_snapshot_disabled() {
+  case "${AOBUS_SNAPSHOT_STAGE:-auto}" in
+    0 | no | false | off | never) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+agent_btrfs_work_root() { printf '%s\n' "${AOBUS_BTRFS_WORK:-/home/rocklee/dev/.aobus_work}"; }
+agent_btrfs_helper() { printf '%s\n' "${AOBUS_BTRFS_HELPER:-/run/current-system/sw/bin/aobus-subvol-rm}"; }
+
+# agent_proc_start_time <pid> ; echo Linux /proc starttime (field 22), or fail.
+agent_proc_start_time() {
+  local pid="$1" line rest
+  line="$(cat "/proc/$pid/stat" 2>/dev/null)" || return 1
+  rest="${line##*) }"
+  set -- $rest
+  [ "$#" -ge 20 ] || return 1
+  printf '%s\n' "$20"
+}
+
+# agent_write_proposal_marker <dir> [pid]
+agent_write_proposal_marker() {
+  local dir="$1" pid="${2:-$$}" start tmp
+  start="$(agent_proc_start_time "$pid")" || return 1
+  tmp="$dir/.aobus_marker.$$"
+  printf '%s %s\n' "$pid" "$start" > "$tmp"
+  mv "$tmp" "$dir/.aobus_marker"
+}
+
+# agent_is_btrfs_subvolume <path>
+agent_is_btrfs_subvolume() {
+  local path="$1"
+  [ -d "$path" ] || return 1
+  [ "$(stat -f -c %T "$path" 2>/dev/null)" = "btrfs" ] || return 1
+  [ "$(stat -c %i "$path" 2>/dev/null)" = "256" ] && return 0
+  command -v btrfs >/dev/null 2>&1 || return 1
+  btrfs subvolume show "$path" >/dev/null 2>&1
+}
+
+# agent_can_snapshot <source-repo> <destination>
+agent_can_snapshot() {
+  local src="$1" dst="$2" parent helper
+  agent_snapshot_disabled && return 1
+  command -v btrfs >/dev/null 2>&1 || return 1
+  command -v sudo >/dev/null 2>&1 || return 1
+  helper="$(agent_btrfs_helper)"
+  [ -x "$helper" ] || return 1
+  sudo -n "$helper" --selfcheck >/dev/null 2>&1 || return 1
+  agent_is_btrfs_subvolume "$src" || return 1
+  parent="$(dirname "$dst")"
+  mkdir -p "$parent" || return 1
+  [ "$(stat -f -c %T "$src" 2>/dev/null)" = "btrfs" ] || return 1
+  [ "$(stat -f -c %T "$parent" 2>/dev/null)" = "btrfs" ] || return 1
+  return 0
+}
+
+# agent_stage_repo_copy <source-repo> <destination> [ro]
 agent_stage_repo_copy() {
-  local src="$1" dst="$2"
+  local src="$1" dst="$2" mode="${3:-}" parent
+  parent="$(dirname "$dst")"
+  mkdir -p "$parent"
+  if agent_can_snapshot "$src" "$dst"; then
+    [ ! -e "$dst" ] || { echo "agent: snapshot destination already exists: $dst" >&2; return 2; }
+    if [ "$mode" = "ro" ]; then
+      btrfs subvolume snapshot -r "$src" "$dst" >/dev/null
+    else
+      btrfs subvolume snapshot "$src" "$dst" >/dev/null
+    fi
+    return
+  fi
+  if agent_snapshot_required; then
+    echo "agent: snapshot staging was required but preflight failed for '$src' -> '$dst'" >&2
+    return 2
+  fi
   mkdir -p "$dst"
   rsync -a --exclude='.git/' --exclude='build*/' --exclude='.cache/' --exclude='logs/' "$src/" "$dst/"
+}
+
+# agent_stage_repo_teardown <dir>...
+agent_stage_repo_teardown() {
+  local dir helper
+  helper="$(agent_btrfs_helper)"
+  for dir in "$@"; do
+    [ -e "$dir" ] || continue
+    if agent_is_btrfs_subvolume "$dir"; then
+      if [ -x "$helper" ] && sudo -n "$helper" "$dir" >/dev/null 2>&1; then
+        continue
+      fi
+      btrfs property set -ts "$dir" ro false >/dev/null 2>&1 || true
+    fi
+    chmod -R u+w "$dir" 2>/dev/null || true
+    rm -rf "$dir"
+  done
+}
+
+# agent_btrfs_sweep <work-root>
+agent_btrfs_sweep() {
+  local root="$1" grace="${AOBUS_BTRFS_SWEEP_GRACE:-600}" now d age marker pid start live_start
+  [ -d "$root" ] || return 0
+  now="$(date +%s)"
+  for d in "$root"/proposal_*; do
+    [ -d "$d" ] || continue
+    age=$((now - $(stat -c %Y "$d" 2>/dev/null || printf '%s' "$now")))
+    [ "$age" -ge "$grace" ] || continue
+    marker="$d/.aobus_marker"
+    if [ -r "$marker" ]; then
+      read -r pid start < "$marker" || { pid=""; start=""; }
+      live_start="$(agent_proc_start_time "$pid" 2>/dev/null || true)"
+      [ -n "$live_start" ] && [ "$live_start" = "$start" ] && continue
+    fi
+    agent_stage_repo_teardown "$d/base" "$d/work"
+    chmod -R u+w "$d" 2>/dev/null || true
+    rm -rf "$d"
+  done
+  # Sweep orphaned council snapshot roots (council.sh forensic mode). Each dated subdir under
+  # council/ holds snap.* Btrfs read-only subvolumes; use the same marker+grace logic as proposals.
+  if [ -d "$root/council" ]; then
+    local snap
+    for d in "$root/council"/*; do
+      [ -d "$d" ] || continue
+      age=$((now - $(stat -c %Y "$d" 2>/dev/null || printf '%s' "$now")))
+      [ "$age" -ge "$grace" ] || continue
+      marker="$d/.aobus_marker"
+      if [ -r "$marker" ]; then
+        read -r pid start < "$marker" || { pid=""; start=""; }
+        live_start="$(agent_proc_start_time "$pid" 2>/dev/null || true)"
+        [ -n "$live_start" ] && [ "$live_start" = "$start" ] && continue
+      fi
+      for snap in "$d"/snap.*; do
+        [ -e "$snap" ] && agent_stage_repo_teardown "$snap"
+      done
+      rmdir "$d" 2>/dev/null || true
+    done
+  fi
 }
 
 # agent_clean_ignored <tree-dir> <repo-with-rules>
@@ -659,7 +957,24 @@ agent_tree_changes() {
 # agent_harness_diff_tree <base-dir> <work-dir> <out.patch>
 agent_harness_diff_tree() {
   local b="$1" w="$2" out="$3"
-  git diff --no-index --src-prefix=a/ --dst-prefix=b/ "$b" "$w" > "$out" || true
+  local tmp change path base_path work_path
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/aobus-agent-diff.XXXXXX")" || return 2
+  mkdir -p "$tmp/base" "$tmp/work"
+  agent_tree_changes "$b" "$w" "$tmp/changes.tsv"
+  while IFS=$'\t' read -r change path; do
+    [ -n "$path" ] || continue
+    mkdir -p "$tmp/base/$(dirname "$path")" "$tmp/work/$(dirname "$path")"
+    base_path="$b/$path"
+    work_path="$w/$path"
+    if [ -e "$base_path" ] || [ -L "$base_path" ]; then
+      cp -a "$base_path" "$tmp/base/$path"
+    fi
+    if [ -e "$work_path" ] || [ -L "$work_path" ]; then
+      cp -a "$work_path" "$tmp/work/$path"
+    fi
+  done < "$tmp/changes.tsv"
+  ( cd "$tmp" && git diff --no-index --src-prefix=a/ --dst-prefix=b/ base work > "$out" ) || true
+  rm -rf "$tmp"
 }
 
 # agent_proposal_changes_ok <inputs-file> <changes.tsv> ; 0 iff every change is a `modify` of a path

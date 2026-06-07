@@ -59,10 +59,13 @@ worth convening collapses.
 
 How many member rounds run is the **`depth`** axis (see below); R4 (the chair) is constant.
 
-> [!CAUTION]
-> **Shared Artifact Exposure:** While repository copies are isolated via tree-hash canaries, all members
-> share the same `$AGENT_COUNCIL_OUT` directory for artifact collection. R1 blindness relies on member
-> cooperation and CLI tool-calling limits rather than hard filesystem isolation.
+> [!NOTE]
+> **Forensic mode (Btrfs + bwrap):** When available, each member gets a private read-only Btrfs
+> snapshot of the repo mounted at its real path via bubblewrap. Members may use `git log`, `git show`,
+> `git blame`, `git diff`, and `rg` for independent reconnaissance. R1 blindness is a mount property
+> (each member's `/agent/out` is a private run dir). An evidence fingerprint gate verifies all snapshots
+> share the same baseline before R1 starts. Legacy mode (no Btrfs) falls back to writable copies and
+> tree-hash canaries.
 
 ## The chair's act
 
@@ -129,11 +132,12 @@ matters more than the depth/roster knobs. In order of importance:
    tell you that Y is the wrong fight. State **why this decision exists and what success looks like**,
    *then* the proposed approach. This is the single most common packet defect — the body that reads as
    a finished spec instead of a question.
-2. **Make the body self-contained.** Members have **no git access** — they cannot resolve `HEAD`, a
-   branch name, or a commit hash. For `mode: review`, **paste the actual diff/change**. Members can
-   read the repo read-only, but do not make them hunt: anchor every claim to the exact excerpt you
-   mean (the function body, `file:line`) so the review is about *your* change, not their reconstruction
-   of it.
+2. **Make the body self-contained, and prefer an investigation index over feeding code.** In forensic
+   mode, members can run `git log`, `git blame`, `rg`, and normal file reads independently — you don't
+   need to paste every excerpt. Instead, provide an **investigation index**: the goal, files/symbols
+   likely relevant, suggested starting queries, settled premises (NOT under review), and numbered
+   questions to answer. For `mode: review`, still include the actual diff/change (either paste it or
+   note the commit so members can inspect it via `git show`); don't make members hunt for the target.
 3. **Fence off settled premises.** Mark anything already decided as **"NOT under review — do not
    relitigate,"** with its reason. A `panel`/`challenge` council has only one or two rounds; if you
    leave a closed question open, members spend that budget re-deciding it instead of stress-testing
@@ -194,9 +198,18 @@ to `challenge`. `panel` shines in plan-mode brainstorming (you want a spread of 
 
 ## Read-only safety
 
-Council members are **read-only**: they produce an opinion, never a patch, and never touch the tree. Each
-member runs in its own disposable repo copy, and `council.sh` content-hashes that copy before/after the
-call — any member that mutated it has its output **discarded and flagged** (a member writing a file is a
-protocol violation). This is process isolation for a **trusted** roster, not a hard sandbox; an agentic
-CLI could still read outside its cwd (see §10.3). Do not feed untrusted review input to a council without
-the harder sandbox noted there.
+Council members are **read-only**: they produce an opinion, never a patch, and never touch the tree.
+
+**Forensic mode (Btrfs + bwrap, the default when infrastructure is available):** Each member gets a
+private read-only Btrfs snapshot of the repo mounted at its real path inside a bubblewrap namespace.
+Source writes fail at the filesystem level. An evidence fingerprint gate (`HEAD` + all refs + worktree
+hash) verifies all snapshots share an identical baseline before R1 starts. R1 blindness is enforced by
+the mount: each member's output dir (`/agent/out`) is a distinct private run directory.
+
+**Legacy mode (no Btrfs or no bwrap):** Each member runs in its own disposable writable copy of the
+repo; `council.sh` content-hashes that copy before/after each call — any member that mutated it has its
+output **discarded and flagged**. This is process isolation for a **trusted** roster, not a hard sandbox;
+an agentic CLI could still read outside its cwd (see §10.3).
+
+In both modes, the real-repo canary (`agent_tree_hash` of the source repo) runs before fan-out and on
+every exit path to catch any member that escapes its environment.

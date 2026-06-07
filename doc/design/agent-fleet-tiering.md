@@ -692,8 +692,11 @@ hard dependency:
    over-approximate the `#include` closure via `agent_proposal_compute_blast_radius`, bound it by
    `PROPOSAL_BLAST_MAX`, escalate a mixed core+app set), but the whole suite runs in seconds and any change
    ultimately reaches the app, so that machinery bought complexity, not safety — and running everything
-   closes the gap where a core edit silently broke an app-only test. The GTK suite runs **headless** (no
-   widget realization, no preset), so no DISPLAY/xvfb is needed. (c) **Deterministic test obligation**: a
+   closes the gap where a core edit silently broke an app-only test. Test binaries run from a writable
+   build-runtime working directory with the source tree's `test/` directory exposed there, so runtime
+   artifacts stay out of read-only snapshots while relative fixture paths keep working. The GTK suite
+   runs **headless** (no widget realization, no preset), so no DISPLAY/xvfb is needed. (c)
+   **Deterministic test obligation**: a
    packet `intent: refactor | behavior-change`; `behavior-change` requires a registered test to change
    (`agent_changes_touch_registered_test`) — the planner declares intent, the runner never infers it;
    `refactor` is exempt with a dossier RISK marker. (d) Dossier carries `intent` / `header_touched` /
@@ -970,9 +973,40 @@ change as "validated" is not.
   full suite passed, but it need not exercise the changed path).
 
 **Execution & safety model** (the main worktree is never mutated):
-- Record `agent_tree_hash` of the real repo; stage a sanitized **base** + **work** copy (`.git`, build
-  dirs, caches, `logs/`, and gitignored runtime artifacts excluded — base and work cleaned identically so
-  the diff is tracked-source-only); make base read-only and hidden from the worker.
+- Record `agent_tree_hash` of the real repo; when the host supports it, stage **base** + **work** as full
+  Btrfs subvolume snapshots under the repo-external work root (`/home/rocklee/dev/.aobus_work` by
+  default). `base` is a read-only snapshot and hidden from the worker; `work` is writable and deliberately
+  keeps the full repo state, including `.git`, `.cache`, `logs`, and build dirs. Validation uses
+  `work/.cache/ccache` as a writable, per-proposal inherited cache for both baseline and worker rounds,
+  so new cache entries never pollute the real repo and disappear when the subvolume is destroyed.
+  `agent_validate_in_repo` always runs under the bwrap path view (below): it configures CMake with the
+  plain `ccache` launcher and exposes each proposal-local build dir at the main developer build path shape
+  (`/tmp/build/debug` by default, override with `AOBUS_AGENT_BWRAP_BUILD_VIEW`). Because the work copy is
+  presented at the stable real-repo path, no per-snapshot source/build path leaks into the ccache key, so
+  no compiler-argument rewriting is needed. Any remaining CMake-managed download dependencies are exposed
+  at `/tmp/build/debug/_deps` while their host storage remains under the proposal snapshot cache. This lets
+  the inherited snapshot `.cache/ccache` hit entries produced by the normal developer build; new misses are
+  written only to the proposal-local cache and are discarded with the snapshot. Test-only FakeIt headers
+  are provided by Nix, like lexy, so CMake configure does not clone FakeIt or depend on proposal-local
+  `_deps` state for that library. Non-Btrfs or unprepared hosts fall back to the historical sanitized
+  `rsync` copy for staging; the bwrap path view sits on top of either staging mode.
+- Path virtualization (always on): both the C2 worker and `agent_validate_in_repo` run inside a
+  `bubblewrap` mount namespace that binds the proposal work copy at the real repo path (for this host,
+  `/home/rocklee/dev/Aobus`) and binds the proposal build dirs at the main-cache-shaped build view
+  (`/tmp/build/debug` by default). bwrap is a hard dependency of the proposal phase (shipped via
+  `shell.nix`); a host without it is rejected rather than silently downgraded. This is a performance and
+  reproducibility feature, not a security sandbox: `$HOME`, network, and the caller's environment stay
+  visible so model CLIs keep their normal authentication behavior. It also incidentally shadows the real
+  repo path with the work copy, so a worker that targets the repo path can only mutate its own sandbox.
+  The proposal-local `.cache` directory is bound at
+  `<repo>/.cache`, so inherited `.cache/ccache` remains writable inside the snapshot lifecycle while
+  ccache sees the same source/build/cache path shape as the main developer build.
+- Manual cache warmup: `script/agent/warm-main-ccache.sh [target ...]` is an explicit maintenance entry
+  for the one case where the normal build dir is up to date but `.cache/ccache` is not. It mounts a
+  throwaway host build dir at the same main-cache-shaped build view (`/tmp/build/debug` by default),
+  writes the real repo `.cache/ccache`, and removes the throwaway build on exit. This is not part of the
+  C2 hot path; run it after cache/toolchain resets or when proposal baseline stats show an unexpectedly
+  cold inherited cache.
 - Run **baseline validation** from base in an isolated build dir — a red baseline rejects the packet (C2
   is never asked to debug pre-existing breakage).
 - Rounds: the worker edits the work copy → the **harness** computes the typed base→work manifest + patch
@@ -988,12 +1022,18 @@ change as "validated" is not.
 
 **Worker contract** — the dedicated `ROUTE_C2_PROPOSAL_WORKER` / `ROUTE_C2_PROPOSAL_LABEL` route. The
 worker receives `AGENT_PROPOSAL_WORK` (its cwd, the only writable path), `AGENT_PROPOSAL_INPUTS_FILE`,
-`AGENT_PROPOSAL_PLAN_FILE`, `AGENT_PROPOSAL_FEEDBACK_FILE`, `AGENT_PROPOSAL_ROUND`, `AGENT_PROPOSAL_OUT`;
-it never sees the base copy or the real tree. The prompt also names the read-only `.agents/skills/`
-directory present in the work copy, so a plan can point the worker at a domain skill
-(`write-unit-test`/`improve-test-coverage`) instead of inlining conventions. Defaults: DeepSeek V4 Pro
-via opencode (`route_c2_proposal_worker_dspro`), Gemini 3.1 Pro via native agy (`_gpro`); codex is the
-alternate.
+`AGENT_PROPOSAL_PLAN_FILE`, `AGENT_PROPOSAL_FEEDBACK_FILE`, `AGENT_PROPOSAL_ROUND`,
+`AGENT_PROPOSAL_BUILD_DIR`, `AGENT_PROPOSAL_OUT`; it never sees the base copy or the real tree.
+`BUILD_DIR` and `AOBUS_AGENT_REPO` are bound to the work copy for the worker, so accidental self-checks
+such as `./build.sh debug` stay inside the proposal-local `build-worker` host dir instead of mutating the
+real `/tmp/build/debug` or poisoning the harness-owned `build-work` validation tree. Because the worker
+runs under the bwrap path view, those variables contain namespace paths shaped like the normal developer
+build (`<repo>` and `/tmp/build/debug` by default), so worker self-builds can reuse the inherited main
+cache while writes land in the proposal snapshot. The prompt also names the read-only `.agents/skills/` directory present in the
+work copy, so a plan can point the worker at a domain skill
+(`write-unit-test`/`improve-test-coverage`) instead of inlining conventions. Defaults: DeepSeek V4 Pro via
+opencode
+(`route_c2_proposal_worker_dspro`), Gemini 3.1 Pro via native agy (`_gpro`); codex is the alternate.
 
 **Statuses / exit codes.** `validated` → 0 · `diagnostic-budget-exhausted` (an in-scope patch was
 produced but never went green) → 1 · rejected — no usable in-scope patch (out-of-scope / churn / breaker
@@ -1001,6 +1041,11 @@ produced but never went green) → 1 · rejected — no usable in-scope patch (o
 table missing → 5 · bad packet → 64. (The forced `test-all` oracle is always isolatable and the runner
 takes no repo lock, so the not-isolatable / lock paths do not arise here.) Bounded by round, total/
 per-file churn, and per-round worker-timeout budgets; budget exhaustion never keeps changes.
+Each proposal directory also gets a `phase-exit.env` trap artifact with the final exit code, phase id,
+last round, and whether an in-scope patch was produced. The runner records `ccache -s` snapshots around
+baseline, worker, and validation phases (`baseline.before.ccache`, `baseline.after.ccache`,
+`roundN.worker.before/after.ccache`, `roundN.validation.before/after.ccache`) so cache behavior remains
+auditable even though the proposal-local `.cache` is disposable and may be removed during teardown.
 
 **Acceptance flow.** C3 reads the dossier, inspects the harness patch against the plan, applies (and
 possibly modifies) it to the real tree, runs real validation, accepts/rejects, and records the outcome

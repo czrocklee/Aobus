@@ -22,6 +22,20 @@ let
       cp -r include/* $out/include/
     '';
   };
+  fakeit-src = (
+    builtins.fetchTarball {
+      url = "https://github.com/eranpeer/FakeIt/archive/refs/tags/2.5.0.tar.gz";
+      sha256 = "10ar4h803gi7c7byp1lm8dxd4brrsw9ph770p1h2zwamlq0hgqai";
+    }
+  );
+  fakeit = pkgs.stdenv.mkDerivation {
+    name = "fakeit";
+    src = fakeit-src;
+    nativeBuildInputs = [ pkgs.cmake ];
+    cmakeFlags = [
+      "-DENABLE_TESTING=OFF"
+    ];
+  };
 in
 pkgs.mkShell {
   name = "cpp-dev-env";
@@ -29,6 +43,8 @@ pkgs.mkShell {
     with pkgs;
     [
       ccache
+      btrfs-progs
+      bubblewrap
       cmake
       gperf
       ripgrep
@@ -77,12 +93,12 @@ pkgs.mkShell {
       udev
       xvfb-run
     ]
-    ++ [ lexy ];
+    ++ [ lexy fakeit ];
   shellHook = ''
     export PATH="$PATH:/run/current-system/sw/bin"
     # Include gtk4 schemas - need both desktop schemas and gtk4 schemas
     export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${pkgs.gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
-    # Set Lexy include path
+    # Set header-only dependency include paths
     export CPLUS_INCLUDE_PATH="${lexy}/include:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
 
     # ccache configuration

@@ -16,6 +16,7 @@ assert_eq() { [ "$2" = "$3" ] && ok "$1" || bad "$1 (got [$2], want [$3])"; }
 assert_rc() { local e="$1" d="$2"; shift 2; "$@" >/dev/null 2>&1; local r=$?; [ "$r" -eq "$e" ] && ok "$d" || bad "$d (rc=$r, want $e)"; }
 
 ROOT="$(mktemp -d)"
+export ROOT
 # trap 'rm -rf "$ROOT"' EXIT
 
 # --- test doubles ------------------------------------------------------------
@@ -41,6 +42,10 @@ run_proposal() {
     bash "$PROPOSAL" "$packet" > "$ROOT/run.log" 2>&1
   RC=$?
   LOG="$(cat "$ROOT/run.log")"
+}
+
+latest_proposal_dir() {
+  ls -td "$ROOT/work"/proposal_* 2>/dev/null | head -1
 }
 
 run_dispatch() {
@@ -92,6 +97,14 @@ export -f mock_am_worker
 
 run_proposal "$ROOT/p_ok.md"; assert_eq "A: valid proposal -> exit 0" "$RC" "0"
 case "$LOG" in *"proposal: running baseline validation"*) ok "A: reaches skeleton" ;; *) bad "A: reaches skeleton" ;; esac
+adir="$(latest_proposal_dir)"
+assert_eq "A: phase exit artifact records success" "$(sed -n 's/^exit_code=//p' "$adir/phase-exit.env")" "0"
+[ -s "$adir/baseline.before.ccache" ] && ok "A: baseline before ccache stats emitted" || bad "A: baseline before ccache stats emitted"
+[ -s "$adir/baseline.after.ccache" ] && ok "A: baseline after ccache stats emitted" || bad "A: baseline after ccache stats emitted"
+[ -s "$adir/round1.worker.before.ccache" ] && ok "A: worker before ccache stats emitted" || bad "A: worker before ccache stats emitted"
+[ -s "$adir/round1.worker.after.ccache" ] && ok "A: worker after ccache stats emitted" || bad "A: worker after ccache stats emitted"
+[ -s "$adir/round1.validation.before.ccache" ] && ok "A: validation before ccache stats emitted" || bad "A: validation before ccache stats emitted"
+[ -s "$adir/round1.validation.after.ccache" ] && ok "A: validation after ccache stats emitted" || bad "A: validation after ccache stats emitted"
 
 echo "== A2: the worker prompt carries the reference-skills self-load hint =="
 # The runner tells the worker it MAY consult .agents/skills/<topic>/SKILL.md in its work copy, so a
@@ -108,6 +121,48 @@ export -f mock_probe_worker
 run_proposal "$ROOT/p_ok.md" ROUTE_C2_PROPOSAL_WORKER=mock_probe_worker
 assert_eq "A2: proposal still validates -> exit 0" "$RC" "0"
 case "$(cat "$PROMPT_PROBE")" in *".agents/skills/"*) ok "A2: prompt includes reference-skills hint" ;; *) bad "A2: prompt includes reference-skills hint" ;; esac
+
+echo "== A4: bwrap path view gives the worker stable repo/build/out paths =="
+export BWRAP_WORKER_ENV_PROBE="$ROOT/bwrap_worker_env_probe.txt"; : > "$BWRAP_WORKER_ENV_PROBE"
+export BWRAP_WORKER_PROMPT_PROBE="$ROOT/bwrap_worker_prompt_probe.txt"; : > "$BWRAP_WORKER_PROMPT_PROBE"
+before_bwrap_hash="$(sha256sum "$ROOT/repo/lib/foo.cpp" | awk '{print $1}')"
+mock_bwrap_worker() {
+  cp "$AGENT_PROMPT_FILE" "$BWRAP_WORKER_PROMPT_PROBE"
+  {
+    printf 'BUILD_DIR=%s\n' "${BUILD_DIR:-}"
+    printf 'AGENT_PROPOSAL_BUILD_DIR=%s\n' "${AGENT_PROPOSAL_BUILD_DIR:-}"
+    printf 'AOBUS_AGENT_REPO=%s\n' "${AOBUS_AGENT_REPO:-}"
+    printf 'AGENT_PROPOSAL_WORK=%s\n' "${AGENT_PROPOSAL_WORK:-}"
+    printf 'AGENT_PROMPT_FILE=%s\n' "${AGENT_PROMPT_FILE:-}"
+    printf 'AGENT_PROPOSAL_OUT=%s\n' "${AGENT_PROPOSAL_OUT:-}"
+  } > "$BWRAP_WORKER_ENV_PROBE"
+  local f
+  f=$(grep -A 1 'ALLOWED INPUTS:' "$AGENT_PROMPT_FILE" | tail -n 1 | sed 's/^- //')
+  mkdir -p "$(dirname "$AGENT_PROPOSAL_WORK/$f")"
+  echo "edit" >> "$AGENT_PROPOSAL_WORK/$f"
+}
+export -f mock_bwrap_worker
+if command -v bwrap >/dev/null 2>&1; then
+  run_proposal "$ROOT/p_ok.md" ROUTE_C2_PROPOSAL_WORKER=mock_bwrap_worker
+  assert_eq "A4: bwrap path-view proposal validates -> exit 0" "$RC" "0"
+  bwrap_build_dir="$(sed -n 's/^BUILD_DIR=//p' "$BWRAP_WORKER_ENV_PROBE")"
+  bwrap_declared_build_dir="$(sed -n 's/^AGENT_PROPOSAL_BUILD_DIR=//p' "$BWRAP_WORKER_ENV_PROBE")"
+  bwrap_repo="$(sed -n 's/^AOBUS_AGENT_REPO=//p' "$BWRAP_WORKER_ENV_PROBE")"
+  bwrap_work="$(sed -n 's/^AGENT_PROPOSAL_WORK=//p' "$BWRAP_WORKER_ENV_PROBE")"
+  bwrap_prompt="$(sed -n 's/^AGENT_PROMPT_FILE=//p' "$BWRAP_WORKER_ENV_PROBE")"
+  bwrap_out="$(sed -n 's/^AGENT_PROPOSAL_OUT=//p' "$BWRAP_WORKER_ENV_PROBE")"
+  assert_eq "A4: bwrap BUILD_DIR is main-cache-shaped build view" "$bwrap_build_dir" "/tmp/build/debug"
+  assert_eq "A4: bwrap BUILD_DIR equals AGENT_PROPOSAL_BUILD_DIR" "$bwrap_build_dir" "$bwrap_declared_build_dir"
+  assert_eq "A4: bwrap AOBUS_AGENT_REPO is the stable repo view" "$bwrap_repo" "$ROOT/repo"
+  assert_eq "A4: bwrap AGENT_PROPOSAL_WORK is the stable repo view" "$bwrap_work" "$ROOT/repo"
+  assert_eq "A4: bwrap prompt file uses stable out view" "$bwrap_prompt" "/agent/out/prompt.md"
+  assert_eq "A4: bwrap output dir uses stable out view" "$bwrap_out" "/agent/out"
+  case "$(cat "$BWRAP_WORKER_PROMPT_PROBE")" in *"BUILD_DIR=/tmp/build/debug"*) ok "A4: prompt names the bwrap build view" ;; *) bad "A4: prompt names the bwrap build view" ;; esac
+  case "$(cat "$BWRAP_WORKER_PROMPT_PROBE")" in *"build-work is reserved for the harness oracle"*) ok "A4: prompt reserves build-work for harness validation" ;; *) bad "A4: prompt reserves build-work for harness validation" ;; esac
+  assert_eq "A4: real repo remains untouched by bwrap worker edit" "$(sha256sum "$ROOT/repo/lib/foo.cpp" | awk '{print $1}')" "$before_bwrap_hash"
+else
+  ok "A4: bwrap worker path-view skipped (bwrap missing)"
+fi
 
 echo "== B: missing opening frontmatter marker is rejected =="
 cat > "$ROOT/p_no_front.md" <<'EOF'
@@ -335,11 +390,12 @@ check_scope "lib/foo.cpp"; assert_eq "M: accept lib/foo.cpp" "$RC" "0"
 check_scope "app/foo.cpp"; assert_eq "M: accept app/foo.cpp" "$RC" "0"
 check_scope "app/nested/bar.cpp"; assert_eq "M: accept app/nested/bar.cpp" "$RC" "0"
 
-echo "== N: agent_validate_in_repo (Phase 4) =="
+echo "== N: agent_validate_in_repo runs the oracle under the bwrap path view =="
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
 v_test_core() {
   echo "src=$AOBUS_AGENT_REPO build=$BUILD_DIR arg=$1" > "$ROOT/work/v_out.txt"
+  echo "ccache=${CCACHE_DIR:-} readonly=${CCACHE_READONLY:-unset} basedir=${CCACHE_BASEDIR:-} deps=${AOBUS_CMAKE_DEPS_DIR:-} fetch=${FETCHCONTENT_BASE_DIR:-}" > "$ROOT/work/v_cache.txt"
   return 0
 }
 v_tidy() { return 0; }
@@ -352,9 +408,33 @@ source "$SCRIPT_DIR/../../../script/agent/common.sh"
 # shellcheck disable=SC1091
 source "$VALID"
 
-mkdir -p "$ROOT/work"
-assert_rc 0 "test-core is isolatable" agent_validate_in_repo "$ROOT/repo" "$ROOT/bld" test-core "[x]"
-assert_eq "validation receives environment" "$(cat "$ROOT/work/v_out.txt")" "src=$ROOT/repo build=$ROOT/bld arg=[x]"
+mkdir -p "$ROOT/work" "$ROOT/repo/.cache/ccache" "$ROOT/bin"
+cat > "$ROOT/bin/cmake" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >> "$ROOT/work/cmake_args.txt"
+exit 0
+EOF
+chmod +x "$ROOT/bin/cmake"
+rm -f "$ROOT/work/cmake_args.txt" "$ROOT/work/v_out.txt" "$ROOT/work/v_cache.txt"
+# The proposal oracle always runs under bwrap: the staged copy ($ROOT/repo here) is presented at the
+# stable real-repo path and the build dir at the main-cache-shaped view, so plain ccache hits across
+# sandboxes -- no source/build path leaks into the cache key, so no compiler-arg rewriter is needed.
+run_validate() {
+  AGENT_REPO="$ROOT/repo" PATH="$ROOT/bin:$PATH" AOBUS_AGENT_CCACHE_PROGRAM="$ROOT/bin/fakeccache" \
+    agent_validate_in_repo "$ROOT/repo" "$ROOT/bld" test-core "[x]"
+}
+if command -v bwrap >/dev/null 2>&1; then
+  assert_rc 0 "test-core is isolatable" run_validate
+  assert_eq "oracle sees stable real-repo-shaped paths" "$(cat "$ROOT/work/v_out.txt")" "src=$ROOT/repo build=/tmp/build/debug arg=[x]"
+  assert_eq "oracle gets bwrap-mapped writable caches" "$(cat "$ROOT/work/v_cache.txt")" "ccache=$ROOT/repo/.cache/ccache readonly=unset basedir=$ROOT/repo deps=/tmp/build/debug/_deps fetch=/tmp/build/debug/_deps"
+  assert_rc 0 "configure uses the plain ccache launcher (no srcroot rewriter)" grep -qx -- "-DCCACHE_PROGRAM=$ROOT/bin/fakeccache" "$ROOT/work/cmake_args.txt"
+  assert_rc 0 "configure uses the bwrap build view" grep -qx -- "/tmp/build/debug" "$ROOT/work/cmake_args.txt"
+  assert_rc 0 "configure uses the stable source view" grep -qx -- "$ROOT/repo" "$ROOT/work/cmake_args.txt"
+  assert_rc 0 "configure uses the bwrap CMake dependency base" grep -qx -- "-DFETCHCONTENT_BASE_DIR=/tmp/build/debug/_deps" "$ROOT/work/cmake_args.txt"
+  [ ! -e "$ROOT/repo/.cache/build-root" ] && ok "no ccache-srcroot build alias is created" || bad "no ccache-srcroot build alias is created"
+else
+  ok "agent_validate_in_repo bwrap checks skipped (bwrap missing)"
+fi
 
 assert_rc 2 "tidy is not proposal-isolatable" agent_validate_in_repo "$ROOT/repo" "$ROOT/bld" tidy "lib/foo.cpp"
 assert_rc 2 "unknown id rejected" agent_validate_in_repo "$ROOT/repo" "$ROOT/bld" bogus "arg"
@@ -386,6 +466,11 @@ Task
 EOF
 
 run_proposal "$ROOT/p_base.md"; assert_eq "O: baseline validation failure exits 2" "$RC" "2"
+odir="$(latest_proposal_dir)"
+assert_eq "O: baseline failure exit artifact records rejection" "$(sed -n 's/^exit_code=//p' "$odir/phase-exit.env")" "2"
+[ -s "$odir/baseline.before.ccache" ] && ok "O: baseline failure before ccache stats emitted" || bad "O: baseline failure before ccache stats emitted"
+[ -s "$odir/baseline.after.ccache" ] && ok "O: baseline failure after ccache stats emitted" || bad "O: baseline failure after ccache stats emitted"
+[ ! -e "$odir/round1.worker.before.ccache" ] && ok "O: baseline failure does not emit worker stats" || bad "O: baseline failure does not emit worker stats"
 
 cat > "$VALID" <<'EOF'
 #!/usr/bin/env bash
@@ -402,8 +487,8 @@ EOF
 export ROUTE_C2_PROPOSAL_WORKER="mock_worker"
 mock_worker() {
   echo "edit" >> "$AGENT_PROPOSAL_WORK/lib/foo.cpp"
-  mkdir -p "$BUILD_DIR"
-  echo "1" > "$BUILD_DIR/fail"
+  mkdir -p "$AGENT_PROPOSAL_OUT/build-work"
+  echo "1" > "$AGENT_PROPOSAL_OUT/build-work/fail"
 }
 export -f mock_worker
 
@@ -457,18 +542,19 @@ assert_eq "O2: tampered-scope forbidden edit -> exit 2" "$RC" "2"
 case "$LOG" in *"out-of-scope edit on 'script/evil.sh'"*) ok "O2: guard ignores worker-tampered inputs file" ;; *) bad "O2: guard ignores worker-tampered inputs file"; printf '%s\n' "$LOG" | tail -5 ;; esac
 rm -rf "$ROOT/repo/script"
 
+# Under the bwrap path view the worker sees its work copy AT the real-repo path, so the real tree is
+# structurally unreachable: a worker that targets the repo path only mutates its own sandbox. The real
+# repo therefore stays byte-identical and the in-scope edit still validates.
+before_mut_hash="$(sha256sum "$ROOT/repo/lib/foo.cpp" | awk '{print $1}')"
 mock_worker_mutate_real() {
-  echo "mutate" >> "$AOBUS_AGENT_REPO/lib/foo.cpp"
-  echo "edit" >> "$AGENT_PROPOSAL_WORK/lib/foo.cpp"
+  echo "mutate" >> "$AOBUS_AGENT_REPO/lib/foo.cpp"   # the repo path the worker sees == its sandbox copy
+  echo "edit"   >> "$AGENT_PROPOSAL_WORK/lib/foo.cpp"
 }
 export ROUTE_C2_PROPOSAL_WORKER="mock_worker_mutate_real"
 export -f mock_worker_mutate_real
 
-# Need to make repo writable for the worker to actually mutate it, since test setup might not matter, wait, repo is writable.
-run_proposal "$ROOT/p_base.md"; assert_eq "O: tree mutation exits 2" "$RC" "2"
-
-# restore file
-sed -i '/mutate/d' "$ROOT/repo/lib/foo.cpp"
+run_proposal "$ROOT/p_base.md"; assert_eq "O: bwrap shadows the real repo -> worker repo-path writes stay sandboxed -> exit 0" "$RC" "0"
+assert_eq "O: real repo tree untouched by a worker targeting the repo path" "$(sha256sum "$ROOT/repo/lib/foo.cpp" | awk '{print $1}')" "$before_mut_hash"
 
 echo "== P: record_review.sh tests (Phase 7) =="
 RR="$(cd "$SCRIPT_DIR/../../.." && pwd)/script/agent/record_review.sh"

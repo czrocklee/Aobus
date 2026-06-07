@@ -69,8 +69,42 @@ for f in "${inputs[@]}"; do
 done
 
 # Output / Sandbox setup
-out_dir="${AOBUS_AGENT_WORK:-/tmp/aobus-c2}/proposal_$$"
+work_root="${AOBUS_AGENT_WORK:-}"
+snapshot_work_root=false
+if [ -z "$work_root" ]; then
+  if agent_snapshot_disabled; then
+    work_root="/tmp/aobus-c2"
+  else
+    work_root="$(agent_btrfs_work_root)"
+    mkdir -p "$work_root"
+    if agent_can_snapshot "$AGENT_REPO" "$work_root/.snapshot_probe"; then
+      snapshot_work_root=true
+    else
+      if agent_snapshot_required; then
+        echo "proposal: snapshot staging is required but unavailable" >&2
+        exit 2
+      fi
+      work_root="/tmp/aobus-c2"
+    fi
+  fi
+else
+  mkdir -p "$work_root"
+  if agent_can_snapshot "$AGENT_REPO" "$work_root/.snapshot_probe"; then
+    snapshot_work_root=true
+  else
+    if agent_snapshot_required; then
+      echo "proposal: snapshot staging is required but unavailable for AOBUS_AGENT_WORK=$work_root" >&2
+      exit 2
+    fi
+  fi
+fi
+
+if [ "$snapshot_work_root" = true ]; then
+  agent_btrfs_sweep "$work_root"
+fi
+out_dir="$work_root/proposal_$(date +%s)_$$_$RANDOM"
 mkdir -p "$out_dir"
+agent_write_proposal_marker "$out_dir"
 agent_guard_output_dir "$AGENT_REPO" "$out_dir" || { echo "proposal: safe out dir failed" >&2; exit 2; }
 
 # Save initial tree hash
@@ -80,31 +114,77 @@ verify_tree_immutability() {
   if [ "$h" != "$orig_hash" ]; then
     echo "proposal: FATAL: real repo tree was mutated during execution!" >&2
     agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "${round:-0}" "0" "0" "real repo tree mutated"
-    exit 2
+    return 2
   fi
+  return 0
 }
-trap 'verify_tree_immutability; chmod -R +w "$out_dir/base" 2>/dev/null || true; rm -rf "$out_dir/base" "$out_dir/work"' EXIT
+
+record_phase_exit() {
+  local rc="$1"
+  {
+    printf 'exit_code=%s\n' "$rc"
+    printf 'phase_id=%s\n' "$pid"
+    printf 'round=%s\n' "${round:-0}"
+    printf 'patch_produced=%s\n' "${patch_produced:-false}"
+  } > "$out_dir/phase-exit.env" 2>/dev/null || true
+}
+
+record_ccache_stats() {
+  local label="$1"
+  local cache_dir="$wdir/.cache/ccache"
+  local stats_file="$out_dir/$label.ccache"
+  {
+    printf 'CCACHE_DIR=%s\n' "$cache_dir"
+    if command -v ccache >/dev/null 2>&1; then
+      CCACHE_DIR="$cache_dir" ccache -s
+    else
+      echo "ccache: unavailable"
+    fi
+  } > "$stats_file" 2>&1 || true
+}
+
+proposal_exit_trap() {
+  local rc=$?
+  record_phase_exit "$rc"
+  verify_tree_immutability || rc=$?
+  agent_stage_repo_teardown "$out_dir/base" "$out_dir/work" || true
+  exit "$rc"
+}
+trap proposal_exit_trap EXIT
 
 # Staging
 bdir="$out_dir/base"
 wdir="$out_dir/work"
-agent_stage_repo_copy "$AGENT_REPO" "$bdir"
-agent_clean_ignored "$bdir" "$AGENT_REPO"
-mkdir -p "$bdir/logs" "$bdir/.cache"
-chmod -R a-w "$bdir"
-chmod u+w "$bdir" "$bdir/logs" "$bdir/.cache" 2>/dev/null || true
+agent_stage_repo_copy "$AGENT_REPO" "$bdir" ro
+if ! agent_is_btrfs_subvolume "$bdir"; then
+  agent_clean_ignored "$bdir" "$AGENT_REPO"
+  mkdir -p "$bdir/logs" "$bdir/.cache"
+  chmod -R a-w "$bdir"
+  chmod u+w "$bdir" "$bdir/logs" "$bdir/.cache" 2>/dev/null || true
+fi
 
-agent_stage_repo_copy "$AGENT_REPO" "$wdir"
-agent_clean_ignored "$wdir" "$AGENT_REPO"
-mkdir -p "$wdir/logs" "$wdir/.cache"
+stage_work_copy() {
+  agent_stage_repo_copy "$AGENT_REPO" "$wdir"
+  work_snapshot=false
+  if agent_is_btrfs_subvolume "$wdir"; then
+    work_snapshot=true
+  else
+    agent_clean_ignored "$wdir" "$AGENT_REPO"
+  fi
+  mkdir -p "$wdir/logs" "$wdir/.cache"
+}
+stage_work_copy
 
 # Baseline Validation
 echo "proposal: running baseline validation..."
-if ! agent_validate_in_repo "$bdir" "$out_dir/build-base" "$vid" "${vargs[@]}" > "$out_dir/baseline.log" 2>&1; then
+record_ccache_stats "baseline.before"
+if ! AGENT_VALIDATE_CCACHE_DIR="$wdir/.cache/ccache" agent_validate_in_repo "$bdir" "$out_dir/build-base" "$vid" "${vargs[@]}" > "$out_dir/baseline.log" 2>&1; then
+  record_ccache_stats "baseline.after"
   echo "proposal: baseline validation failed before any edits" >&2
   agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-rejected" "0" "0" "0" "baseline validation failed"
   exit 2
 fi
+record_ccache_stats "baseline.after"
 
 # Worker Loop
 inputs_file="$out_dir/inputs.txt"
@@ -117,10 +197,17 @@ plan_file="$out_dir/plan.md"
 echo "$body" > "$plan_file"
 
 export AGENT_PROPOSAL_WORK="$wdir"
+export AGENT_PROPOSAL_BUILD_DIR="$out_dir/build-worker"
 export AGENT_PROMPT_FILE="$out_dir/prompt.md"
 export AGENT_PROPOSAL_INPUTS_FILE="$inputs_file"
 export AGENT_PROPOSAL_PLAN_FILE="$plan_file"
 export AGENT_PROPOSAL_OUT="$out_dir"
+proposal_work_host="$AGENT_PROPOSAL_WORK"
+proposal_build_host="$AGENT_PROPOSAL_BUILD_DIR"
+proposal_out_host="$AGENT_PROPOSAL_OUT"
+proposal_work_view="$(agent_bwrap_repo_view_path "$proposal_work_host")"
+proposal_build_view="$(agent_bwrap_build_view_path "$AGENT_PROPOSAL_BUILD_DIR")"
+proposal_out_view="$(agent_bwrap_out_view_path)"
 
 emit_artifacts() {
   local status="$1"
@@ -190,6 +277,9 @@ while [ "$round" -le "$max_rounds" ]; do
     echo "REFERENCE SKILLS: for domain conventions, you MAY READ .agents/skills/<topic>/SKILL.md in your"
     echo "working directory (e.g. write-unit-test, improve-test-coverage). Do NOT edit anything under .agents/"
     echo "(it is guarded -- any edit there is rejected and invalidates the proposal)."
+    echo "SELF-VALIDATION: if you run local build/test commands, keep them inside the proposal worker"
+    echo "build dir: BUILD_DIR=$proposal_build_view. This path is namespace-mapped to proposal-local storage."
+    echo "Do not use build-base or build-work; build-work is reserved for the harness oracle."
     if [ "$round" -gt 1 ] && [ -r "$out_dir/round$((round - 1)).validation.log" ]; then
       echo "FEEDBACK FROM PREVIOUS ROUND:"
       tail -n 50 "$out_dir/round$((round - 1)).validation.log"
@@ -197,19 +287,42 @@ while [ "$round" -le "$max_rounds" ]; do
   } > "$AGENT_PROMPT_FILE"
 
   export AGENT_PROPOSAL_ROUND="$round"
+  export AOBUS_AGENT_REPO="$proposal_work_view"
+  export BUILD_DIR="$proposal_build_view"
   if [ "$round" -gt 1 ] && [ -r "$out_dir/round$((round - 1)).validation.log" ]; then
     export AGENT_PROPOSAL_FEEDBACK_FILE="$out_dir/round$((round - 1)).validation.log"
   else
     unset AGENT_PROPOSAL_FEEDBACK_FILE
   fi
 
-  if ! "$ROUTE_C2_PROPOSAL_WORKER" > "$out_dir/round$round.worker.log" 2>&1; then
+  worker_rc=0
+  record_ccache_stats "round$round.worker.before"
+  export -f "$ROUTE_C2_PROPOSAL_WORKER" 2>/dev/null || true
+  (
+    export AGENT_PROPOSAL_WORK="$proposal_work_view"
+    export AGENT_PROPOSAL_BUILD_DIR="$proposal_build_view"
+    export AGENT_PROPOSAL_OUT="$proposal_out_view"
+    export AGENT_PROMPT_FILE="$proposal_out_view/prompt.md"
+    export AGENT_PROPOSAL_INPUTS_FILE="$proposal_out_view/inputs.txt"
+    export AGENT_PROPOSAL_PLAN_FILE="$proposal_out_view/plan.md"
+    export AOBUS_AGENT_REPO="$proposal_work_view"
+    export BUILD_DIR="$proposal_build_view"
+    cache_parent="$proposal_work_host/.cache"
+    mkdir -p "$cache_parent/ccache" "$cache_parent/cmake-deps"
+    agent_bwrap_path_view_run "$proposal_work_host" "$proposal_work_view" "$proposal_build_host" \
+      "$proposal_build_view" "$cache_parent" "$proposal_out_host" "$proposal_out_view" \
+      bash -lc "$ROUTE_C2_PROPOSAL_WORKER"
+  ) > "$out_dir/round$round.worker.log" 2>&1 || worker_rc=$?
+  record_ccache_stats "round$round.worker.after"
+  if [ "${worker_rc:-0}" -ne 0 ]; then
     echo "proposal: worker exited with non-zero status" >&2
   fi
 
-  # Drop gitignored runtime artifacts a worker's build/test run wrote into the work copy (e.g.
-  # logs/app.log) so they don't register as out-of-scope changes; base was cleaned identically.
-  agent_clean_ignored "$wdir" "$AGENT_REPO"
+  # Fallback rsync copies keep the historical gitignored cleanup behavior. Snapshot work copies keep the
+  # full repo state, including inherited .git/.cache, and rely on the manifest noise filter.
+  if [ "$work_snapshot" != true ]; then
+    agent_clean_ignored "$wdir" "$AGENT_REPO"
+  fi
 
   # Check Changes
   agent_tree_changes "$bdir" "$wdir" "$out_dir/changes.tsv"
@@ -223,9 +336,8 @@ while [ "$round" -le "$max_rounds" ]; do
   printf "%s\n" "${inputs[@]}" > "$inputs_file"
   if ! agent_proposal_changes_ok "$inputs_file" "$out_dir/changes.tsv"; then
     echo "proposal: worker made out-of-scope edits or unsupported changes" >&2
-    chmod -R u+w "$wdir"
-    rm -rf "$wdir"
-    agent_stage_repo_copy "$AGENT_REPO" "$wdir"
+    agent_stage_repo_teardown "$wdir"
+    stage_work_copy
     round=$((round + 1))
     continue
   fi
@@ -255,7 +367,11 @@ while [ "$round" -le "$max_rounds" ]; do
 
   # Validate
   echo "proposal: validating changes..."
-  if agent_validate_in_repo "$wdir" "$out_dir/build-work" "$vid" "${vargs[@]}" > "$out_dir/round$round.validation.log" 2>&1; then
+  validate_rc=0
+  record_ccache_stats "round$round.validation.before"
+  AGENT_VALIDATE_CCACHE_DIR="$wdir/.cache/ccache" agent_validate_in_repo "$wdir" "$out_dir/build-work" "$vid" "${vargs[@]}" > "$out_dir/round$round.validation.log" 2>&1 || validate_rc=$?
+  record_ccache_stats "round$round.validation.after"
+  if [ "$validate_rc" -eq 0 ]; then
     echo "proposal: validation passed"
     emit_artifacts "validated"
     agent_audit_entry "$pid" "${pskill:-execute-plan}" "${pcap:-C2}" "${ROUTE_C2_PROPOSAL_LABEL:-unknown}" "proposal-validated" "$round" "$churn" "0" "validation passed"

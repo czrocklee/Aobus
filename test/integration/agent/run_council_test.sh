@@ -486,6 +486,55 @@ hasnt "X3: no R2 section"       "$DOSS" "## R2"
 has   "X3: skip log says challenge only (not /revise)" "$LOG" "skipping challenge (quorum degraded)"
 hasnt "X3: skip log omits revise" "$LOG" "skipping challenge/revise"
 
+echo "== Y: agent_council_evidence_hash — equal hashes for same tree; different after mutation =="
+# Does not require Btrfs; exercises the new primitive directly.
+TH_EV="$ROOT/th_ev"; rm -rf "$TH_EV"
+git init -q "$TH_EV"
+git -C "$TH_EV" config user.email "test@test"
+git -C "$TH_EV" config user.name "Test"
+printf 'int x = 1;\n' > "$TH_EV/a.cpp"
+git -C "$TH_EV" add a.cpp
+git -C "$TH_EV" commit -q -m "init"
+h_ev_0="$(agent_council_evidence_hash "$TH_EV")"
+h_ev_1="$(agent_council_evidence_hash "$TH_EV")"
+assert_eq "Y: same tree -> same evidence hash" "$h_ev_0" "$h_ev_1"
+printf 'int x = 2;\n' > "$TH_EV/a.cpp"
+git -C "$TH_EV" add a.cpp
+git -C "$TH_EV" commit -q -m "change"
+h_ev_2="$(agent_council_evidence_hash "$TH_EV")"
+[ "$h_ev_0" != "$h_ev_2" ] && ok "Y: new commit changes evidence hash" || bad "Y: new commit changes evidence hash"
+# A worktree-only change (unstaged) also changes the hash (via agent_tree_hash component).
+printf 'int x = 3;\n' > "$TH_EV/a.cpp"
+h_ev_3="$(agent_council_evidence_hash "$TH_EV")"
+[ "$h_ev_2" != "$h_ev_3" ] && ok "Y: unstaged worktree change changes evidence hash" || bad "Y: unstaged worktree change changes evidence hash"
+# A staged-but-uncommitted change (git index) must also change the hash.
+# Restore worktree to committed state so the ONLY difference is the staged index content.
+git -C "$TH_EV" checkout -- a.cpp
+h_ev_clean="$(agent_council_evidence_hash "$TH_EV")"
+printf 'int x = 99;\n' > "$TH_EV/a.cpp"
+git -C "$TH_EV" add a.cpp                           # staged but not committed
+git -C "$TH_EV" checkout -- a.cpp                   # restore worktree (index still differs from HEAD)
+h_ev_staged="$(agent_council_evidence_hash "$TH_EV")"
+[ "$h_ev_clean" != "$h_ev_staged" ] && ok "Y: staged-only change (git index) changes evidence hash" || bad "Y: staged-only change (git index) changes evidence hash"
+git -C "$TH_EV" restore --staged a.cpp 2>/dev/null || git -C "$TH_EV" reset HEAD a.cpp >/dev/null 2>&1 || true
+# A repo without .git emits 'git absent' and produces a consistent hash.
+TH_EV_NOGIT="$ROOT/th_ev_nogit"; mkdir -p "$TH_EV_NOGIT"; printf 'x\n' > "$TH_EV_NOGIT/f"
+h_ng_0="$(agent_council_evidence_hash "$TH_EV_NOGIT")"
+h_ng_1="$(agent_council_evidence_hash "$TH_EV_NOGIT")"
+assert_eq "Y: non-git tree -> stable evidence hash" "$h_ng_0" "$h_ng_1"
+
+echo "== Z: prompt contract — forensic mode OFF in test env, prompt uses updated legacy contract =="
+# The test repo is a plain dir (not Btrfs) so FORENSIC_MODE=0. Verify prompt updated from old contract:
+# - R1 draft must NOT contain 'NON-GIT' (legacy PREAMBLE no longer claims non-git)
+# - In legacy mode the forensic PREAMBLE is not used, but the old NON-GIT wording is also gone.
+new_out
+PLAN_PKT
+run_in "$ROOT/p.md"
+P_DRAFT_Z="$(cat "$OUTDIR/prompt.draft.m1.txt")"
+hasnt "Z: R1 draft prompt no longer says NON-GIT" "$P_DRAFT_Z" "NON-GIT"
+# The context-consistency section instruction only appears in forensic mode; must be absent here.
+hasnt "Z: no context-consistency section in legacy mode" "$P_DRAFT_Z" "Context-consistency check"
+
 echo "============================================================"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || { echo "=== COUNCIL TESTS FAILED ==="; exit 1; }

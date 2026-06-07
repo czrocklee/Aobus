@@ -111,10 +111,4 @@ pkg_check_modules(LMDB REQUIRED lmdb)
 find_package(mimalloc REQUIRED)
 
 # ── FakeIt (Header-only Mocking Framework for tests) ────────────────────────
-include(FetchContent)
-FetchContent_Declare(
-    FakeIt
-    GIT_REPOSITORY https://github.com/eranpeer/FakeIt.git
-    GIT_TAG        2.5.0
-)
-FetchContent_MakeAvailable(FakeIt)
+find_package(FakeIt CONFIG REQUIRED)

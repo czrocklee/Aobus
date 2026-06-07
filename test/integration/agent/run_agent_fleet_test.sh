@@ -108,6 +108,63 @@ printf '#!/usr/bin/env bash\nexit 0\n' > "$VT/script/run-clang-tidy.sh"; chmod +
 assert_rc 0 "v_tidy passes when tidy exits clean with no warnings" vtidy_in "$VT"
 rm -rf "$VT"
 
+VALL="$(mktemp -d)"
+mkdir -p "$VALL/bin" "$VALL/build/test" "$VALL/src/test/integration/tag/test_data"
+printf 'fixture\n' > "$VALL/src/test/integration/tag/test_data/basic_metadata.flac"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$VALL/bin/cmake"
+chmod +x "$VALL/bin/cmake"
+cat > "$VALL/build/test/ao_test" <<EOF
+#!/usr/bin/env bash
+pwd > "$VALL/core.cwd"
+[ "\$PWD" = "$VALL/build/agent-validation-runtime" ]
+[ -f test/integration/tag/test_data/basic_metadata.flac ]
+[ "\$(readlink test)" = "$VALL/src/test" ]
+EOF
+cat > "$VALL/build/test/ao_test_gtk" <<EOF
+#!/usr/bin/env bash
+pwd > "$VALL/gtk.cwd"
+[ "\$PWD" = "$VALL/build/agent-validation-runtime" ]
+[ -f test/integration/tag/test_data/basic_metadata.flac ]
+EOF
+chmod +x "$VALL/build/test/ao_test" "$VALL/build/test/ao_test_gtk"
+vtest_all_in_runtime() { PATH="$VALL/bin:$PATH" AOBUS_AGENT_REPO="$VALL/src" BUILD_DIR="$VALL/build" v_test_all; }
+assert_rc 0 "v_test_all runs test binaries from writable build runtime dir" vtest_all_in_runtime
+assert_eq "v_test_all core cwd is build runtime" "$(cat "$VALL/core.cwd")" "$VALL/build/agent-validation-runtime"
+assert_eq "v_test_all gtk cwd is build runtime" "$(cat "$VALL/gtk.cwd")" "$VALL/build/agent-validation-runtime"
+rm -rf "$VALL"
+
+VWARM="$(mktemp -d)"
+mkdir -p "$VWARM/bin" "$VWARM/src/.cache/ccache"
+cat > "$VWARM/bin/ccache" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "-s" ]; then
+  printf '%s\n' "\${CCACHE_DIR:-}" >> "$VWARM/ccache.stats"
+  echo "fake ccache stats"
+  exit 0
+fi
+exit 0
+EOF
+cat > "$VWARM/bin/bwrap" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$VWARM/bwrap.args"
+exit 0
+EOF
+chmod +x "$VWARM/bin/ccache" "$VWARM/bin/bwrap"
+warm_main_ccache_fake() {
+  env IN_NIX_SHELL=1 AOBUS_AGENT_REPO="$VWARM/src" \
+    AOBUS_WARM_CCACHE_BUILD_DIR="$VWARM/host-build" AOBUS_WARM_CCACHE_KEEP_BUILD=1 \
+    PATH="$VWARM/bin:$PATH" "$REPO/script/agent/warm-main-ccache.sh" ao_test
+}
+assert_rc 0 "warm-main-ccache runs under fake bwrap" warm_main_ccache_fake
+assert_rc 0 "warm-main-ccache maps real repo path" grep -qx -- "$VWARM/src" "$VWARM/bwrap.args"
+assert_rc 0 "warm-main-ccache maps throwaway build to main build view" grep -qx -- "$VWARM/host-build" "$VWARM/bwrap.args"
+assert_rc 0 "warm-main-ccache uses main build view" grep -qx -- "/tmp/build/debug" "$VWARM/bwrap.args"
+assert_rc 0 "warm-main-ccache maps deps to main build deps view" grep -qx -- "$VWARM/src/.cache/cmake-deps" "$VWARM/bwrap.args"
+assert_rc 0 "warm-main-ccache passes requested target" grep -qx -- "ao_test" "$VWARM/bwrap.args"
+assert_eq "warm-main-ccache samples ccache stats before and after" "$(wc -l < "$VWARM/ccache.stats")" "2"
+assert_eq "warm-main-ccache stats use real repo cache" "$(sed -n '1p' "$VWARM/ccache.stats")" "$VWARM/src/.cache/ccache"
+rm -rf "$VWARM"
+
 echo "== validation arg contract (Step C: per-arg enum/type) =="
 # agent_argtype_re: a repo path token and a Catch2 tag expression are distinguishable types.
 amatch() { printf '%s' "$2" | grep -Eq "$(agent_argtype_re "$1")"; }
@@ -199,6 +256,10 @@ assert_rc 1 "reject output inside repo" agent_guard_output_dir "$TC/repo" "$TC/r
 assert_rc 1 "reject output same as repo" agent_guard_output_dir "$TC/repo" "$TC/repo"
 assert_rc 0 "accept output outside repo" agent_guard_output_dir "$TC/repo" "$TC/out"
 
+assert_eq "default btrfs work root" "$(agent_btrfs_work_root)" "/home/rocklee/dev/.aobus_work"
+assert_rc 0 "current shell has a proc start time" test -n "$(agent_proc_start_time "$$")"
+assert_rc 1 "snapshot disabled prevents snapshot preflight" env AOBUS_SNAPSHOT_STAGE=0 bash -c "source '$REPO/script/agent/common.sh'; agent_can_snapshot '$TC/repo' '$TC/out/snap'"
+
 agent_stage_repo_copy "$TC/repo" "$TC/copy"
 assert_eq "file is copied" "$(cat "$TC/copy/lib/foo.cpp")" "cpp"
 [ -d "$TC/copy/.git" ] && bad ".git was copied" || ok ".git not copied"
@@ -250,6 +311,11 @@ assert_eq "sandbox noise (logs, cache, build) is ignored by tree_changes" "$(wc 
 echo "tampered" >> "$TC/work5/build.sh"
 agent_tree_changes "$TC/copy" "$TC/work5" "$TC/changes5b.tsv"
 assert_rc 0 "tracked build.sh edit IS detected (not pruned by the build* noise filter)" grep -q "build.sh" "$TC/changes5b.tsv"
+
+TD="$TC/delete_me"; mkdir -p "$TD/sub"; chmod a-w "$TD"
+assert_rc 0 "teardown removes a readonly plain directory" agent_stage_repo_teardown "$TD"
+[ -e "$TD" ] && bad "readonly plain directory removed" || ok "readonly plain directory removed"
+assert_rc 0 "subvolume helper has valid bash syntax" bash -n "$REPO/script/agent/aobus-subvol-rm"
 
 # Scope evaluation
 
