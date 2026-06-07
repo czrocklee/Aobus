@@ -644,6 +644,98 @@ agent_bwrap_council_view_run() {
   "${argv[@]}"
 }
 
+# agent_lint_input_ok <repo-relative path>
+# 0 = safe for C1 lint processing, nonzero = rejected.
+# Validates: safe arg charset, not forbidden by AGENT_FORBID, existing regular file (not a symlink),
+# and canonical path contained strictly under AGENT_REPO (no symlink-based escape).
+agent_lint_input_ok() {
+  local rel="$1" abs real repo_real _repo="${AOBUS_AGENT_REPO:-$AGENT_REPO}"
+  agent_arg_safe "$rel" || return 1
+  agent_guard_path "$rel" || return 1
+  abs="$_repo/$rel"
+  [ -f "$abs" ] || return 1
+  [ ! -L "$abs" ] || return 1
+  real="$(realpath -e "$abs" 2>/dev/null)" || return 1
+  repo_real="$(realpath -e "$_repo" 2>/dev/null)" || return 1
+  case "$real" in "$repo_real/"*) ;; *) return 1 ;; esac
+}
+
+# agent_c1_sig_changed <patch>
+# 0 = a function signature likely changed in this patch (caller should reject + escalate to C3).
+# 1 = no signature change detected.
+# Conservative fail-closed heuristic using grep: false positives (spurious escalation) are acceptable
+# for C1; false negatives (missing a real signature change) are not.
+#
+# Qualifier pattern: ) followed by a post-declaration keyword that is unambiguously a declaration
+# qualifier. Excludes -> (matches method-chain foo()->bar) and =0 (matches body assignments like
+# array(i)=0). Excluded patterns are accepted false negatives: pure-virtual and trailing-return
+# changes are rare lint fixes and belong at C3 anyway.
+#
+# Attribute pattern: scoped to the attributes that change call-site semantics. Excludes [[fallthrough]],
+# [[likely]], [[unlikely]] (body-only attributes that clang-tidy legitimately adds as fixes).
+agent_c1_sig_changed() {
+  local patch="$1"
+  [ -f "$patch" ] && [ -s "$patch" ] || return 1
+  local body
+  body="$(grep -E '^[+-][^+-]' "$patch" 2>/dev/null)" || return 1
+  [ -n "$body" ] || return 1
+  # Qualifier pattern: ) followed by a declaration-only qualifier
+  printf '%s\n' "$body" \
+    | grep -qE '\)\s*(const|noexcept|override|final|volatile|=\s*(default|delete))' 2>/dev/null \
+    && return 0
+  # Attribute pattern: call-site-affecting attributes only (nodiscard, deprecated, warn_unused_result)
+  printf '%s\n' "$body" \
+    | grep -qE '\[\[(nodiscard|deprecated|gnu::deprecated|gnu::warn_unused_result)\b' 2>/dev/null \
+    && return 0
+  return 1
+}
+
+# agent_bwrap_c1_lint_view_run <host-snapshot> <view-repo> <host-sandbox-dir> <rel> <command> [args...]
+# Run a C1 worker with full-repo read context: snapshot --ro-bind at view-repo (full repo, read-only),
+# host-sandbox-dir/rel --bind at view-repo/rel (the one writable file). AGENT_SANDBOX = view-repo so the
+# worker's cwd is the full repo. AGENT_REL / AGENT_PROMPT are forwarded via --setenv from the caller's
+# exported env. After the worker exits, the harness reads host-sandbox-dir/rel for the modified content.
+#
+# Atomic-save note: the target file's parent directory is part of the ro-bind; model CLIs that create a
+# temp file in the same directory and rename it over the target will get EACCES on the creat(). Direct-
+# write CLIs (opencode, agy) open the path and write in place, which works correctly via the bind mount.
+agent_bwrap_c1_lint_view_run() {
+  local host_snap="$1" view_repo="$2" host_sandbox="$3" rel="$4"
+  shift 4
+  command -v bwrap >/dev/null 2>&1 || {
+    echo "agent: bwrap required for C1 full-context but not on PATH" >&2; return 2
+  }
+  local host_target="$host_sandbox/$rel"
+  [ -f "$host_target" ] || { echo "agent: C1 target not in sandbox: $host_target" >&2; return 2; }
+  [ ! -L "$host_target" ] || { echo "agent: C1 target is a symlink (rejected)" >&2; return 2; }
+  local argv=(bwrap)
+  agent_bwrap_add_path_if_dir argv --ro-bind /nix/store
+  agent_bwrap_add_path_if_dir argv --ro-bind /run/current-system/sw
+  agent_bwrap_add_path_if_dir argv --ro-bind /etc
+  agent_bwrap_add_path_if_dir argv --ro-bind /usr
+  agent_bwrap_add_path_if_dir argv --ro-bind /bin
+  argv+=(--tmpfs /tmp)
+  if [ -n "${HOME:-}" ]; then
+    agent_bwrap_add_path_if_dir argv --bind "$HOME"
+  fi
+  argv+=(--proc /proc --dev /dev)
+  argv+=(--ro-bind "$host_snap" "$view_repo")
+  argv+=(--bind "$host_target" "$view_repo/$rel")
+  argv+=(--chdir "$view_repo")
+  argv+=(--setenv AOBUS_AGENT_BWRAP_ACTIVE 1)
+  argv+=(--setenv AOBUS_AGENT_REPO "$view_repo")
+  argv+=(--setenv AGENT_SANDBOX "$view_repo")
+  argv+=(--setenv AGENT_REL "${AGENT_REL:-$rel}")
+  argv+=(--setenv AGENT_PROMPT "${AGENT_PROMPT:-}")
+  argv+=(--setenv GIT_PAGER cat)
+  argv+=(--setenv PAGER cat)
+  argv+=(--setenv GIT_OPTIONAL_LOCKS 0)
+  argv+=(--setenv PATH "${PATH:-/run/current-system/sw/bin:/usr/bin:/bin}")
+  argv+=(--setenv HOME "${HOME:-}")
+  argv+=("$@")
+  "${argv[@]}"
+}
+
 # agent_harness_diff <orig> <modified> <out-patch> ; the dispatcher computes the patch itself, never
 # trusting a model-authored diff. Writes a unified diff to <out-patch> and echoes the changed-line
 # count (added/removed body lines, excluding the +++/--- header) to stdout.

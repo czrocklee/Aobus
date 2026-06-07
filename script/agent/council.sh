@@ -152,7 +152,8 @@ if command -v bwrap >/dev/null 2>&1; then
   _snap_root_candidate="$(agent_btrfs_work_root)/council/$(date +%Y%m%d-%H%M%S)-$$"
   mkdir -p "$_snap_root_candidate" 2>/dev/null || true
   if agent_can_snapshot "$_real_repo" "$_snap_root_candidate/snap._preflight" && \
-     bwrap --tmpfs /tmp true >/dev/null 2>&1; then
+     bwrap $([ -d /nix/store ] && printf '%s' '--ro-bind /nix/store /nix/store') \
+           --tmpfs /tmp "$(command -v bash)" -c true >/dev/null 2>&1; then
     SNAP_ROOT="$_snap_root_candidate"
     FORENSIC_MODE=1
     # Write a process marker so agent_btrfs_sweep can distinguish live from orphaned council runs.

@@ -346,6 +346,141 @@ agent_harness_diff_tree "$TC/copy" "$TC/work" "$TC/patch"
 
 rm -rf "$TC"
 
+# -----------------------------------------------------------------------
+# agent_lint_input_ok unit tests
+# -----------------------------------------------------------------------
+echo "--- agent_lint_input_ok ---"
+LT="$(mktemp -d)"
+
+# happy path: a regular C++ file under the repo root
+mkdir -p "$LT/lib"
+printf 'int x;\n' > "$LT/lib/ok.cpp"
+AOBUS_AGENT_REPO="$LT" agent_lint_input_ok "lib/ok.cpp" \
+  && ok "lint_input_ok: regular file accepted" || bad "lint_input_ok: regular file accepted"
+
+# missing file -> rejected
+AOBUS_AGENT_REPO="$LT" agent_lint_input_ok "lib/missing.cpp" \
+  && bad "lint_input_ok: missing file rejected" || ok "lint_input_ok: missing file rejected"
+
+# symlink -> rejected
+ln -s "$LT/lib/ok.cpp" "$LT/lib/sym.cpp"
+AOBUS_AGENT_REPO="$LT" agent_lint_input_ok "lib/sym.cpp" \
+  && bad "lint_input_ok: symlink rejected" || ok "lint_input_ok: symlink rejected"
+
+# forbidden path -> rejected
+mkdir -p "$LT/script/agent"
+printf 'x\n' > "$LT/script/agent/foo.sh"
+AOBUS_AGENT_REPO="$LT" agent_lint_input_ok "script/agent/foo.sh" \
+  && bad "lint_input_ok: forbidden path rejected" || ok "lint_input_ok: forbidden path rejected"
+
+# path traversal -> rejected (agent_arg_safe blocks it)
+AOBUS_AGENT_REPO="$LT" agent_lint_input_ok "../etc/passwd" \
+  && bad "lint_input_ok: path traversal rejected" || ok "lint_input_ok: path traversal rejected"
+
+rm -rf "$LT"
+
+# -----------------------------------------------------------------------
+# agent_c1_sig_changed unit tests
+# -----------------------------------------------------------------------
+echo "--- agent_c1_sig_changed ---"
+SG="$(mktemp -d)"
+
+# patch adds noexcept -> signature change detected
+cat > "$SG/noexcept.patch" <<'EOF'
+--- a/foo.cpp
++++ b/foo.cpp
+@@ -1 +1 @@
+-void foo();
++void foo() noexcept;
+EOF
+agent_c1_sig_changed "$SG/noexcept.patch" \
+  && ok "sig_changed: noexcept addition detected" || bad "sig_changed: noexcept addition detected"
+
+# patch adds [[nodiscard]] attribute -> signature change detected
+cat > "$SG/attr.patch" <<'EOF'
+--- a/foo.cpp
++++ b/foo.cpp
+@@ -1 +1 @@
+-int foo();
++[[nodiscard]] int foo();
+EOF
+agent_c1_sig_changed "$SG/attr.patch" \
+  && ok "sig_changed: [[nodiscard]] attribute detected" || bad "sig_changed: [[nodiscard]] attribute detected"
+
+# patch adds [[fallthrough]] inside a switch (body attribute, not a sig change) -> NOT detected
+cat > "$SG/fallthrough.patch" <<'EOF'
+--- a/foo.cpp
++++ b/foo.cpp
+@@ -1 +1,2 @@
+   case 1:
++    [[fallthrough]];
+   case 2:
+EOF
+agent_c1_sig_changed "$SG/fallthrough.patch" \
+  && bad "sig_changed: [[fallthrough]] not a sig change" || ok "sig_changed: [[fallthrough]] not a sig change"
+
+# patch is a body assignment array(i) = 0 (would match old =\s*0 pattern) -> NOT detected
+cat > "$SG/assign.patch" <<'EOF'
+--- a/foo.cpp
++++ b/foo.cpp
+@@ -1 +1 @@
+-  vec(idx) = old;
++  vec(idx) = 0;
+EOF
+agent_c1_sig_changed "$SG/assign.patch" \
+  && bad "sig_changed: body assignment not a sig change" || ok "sig_changed: body assignment not a sig change"
+
+# patch has a method chain foo(args)->member (would match old -> pattern) -> NOT detected
+cat > "$SG/chain.patch" <<'EOF'
+--- a/foo.cpp
++++ b/foo.cpp
+@@ -1 +1 @@
+-  auto x = get(key)->value();
++  auto x = get(key)->new_value();
+EOF
+agent_c1_sig_changed "$SG/chain.patch" \
+  && bad "sig_changed: method chain not a sig change" || ok "sig_changed: method chain not a sig change"
+
+# patch fixes a variable name (no sig change) -> not detected
+cat > "$SG/varfix.patch" <<'EOF'
+--- a/foo.cpp
++++ b/foo.cpp
+@@ -1 +1 @@
+-  int bad_name = 0;
++  int goodName = 0;
+EOF
+agent_c1_sig_changed "$SG/varfix.patch" \
+  && bad "sig_changed: variable rename not a sig change" || ok "sig_changed: variable rename not a sig change"
+
+# patch changes a local if-condition (not a declaration) -> not detected
+cat > "$SG/iffix.patch" <<'EOF'
+--- a/foo.cpp
++++ b/foo.cpp
+@@ -1 +1 @@
+-  if (x == 0) {
++  if (x != 0) {
+EOF
+agent_c1_sig_changed "$SG/iffix.patch" \
+  && bad "sig_changed: if-condition not a sig change" || ok "sig_changed: if-condition not a sig change"
+
+# empty patch -> no sig change
+printf '' > "$SG/empty.patch"
+agent_c1_sig_changed "$SG/empty.patch" \
+  && bad "sig_changed: empty patch not a sig change" || ok "sig_changed: empty patch not a sig change"
+
+# patch adds 'override' keyword -> signature change detected
+cat > "$SG/override.patch" <<'EOF'
+--- a/foo.cpp
++++ b/foo.cpp
+@@ -1 +1 @@
+-  void bar();
++  void bar() override;
+EOF
+agent_c1_sig_changed "$SG/override.patch" \
+  && ok "sig_changed: override addition detected" || bad "sig_changed: override addition detected"
+
+rm -rf "$SG"
+
 echo "============================================================"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || { echo "=== AGENT FLEET UNIT TESTS FAILED ==="; exit 1; }
