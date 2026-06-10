@@ -58,19 +58,17 @@ namespace ao::rt
         return {};
       }
 
-      auto result = AggregateValue<T>{.optValue = values.front()};
+      auto const& firstValue = values.front();
 
       for (std::size_t i = 1; i < values.size(); ++i)
       {
-        if (values[i] != *result.optValue)
+        if (values[i] != firstValue)
         {
-          result.mixed = true;
-          result.optValue = std::nullopt;
-          break;
+          return {.mixed = true};
         }
       }
 
-      return result;
+      return {.optValue = firstValue};
     }
   }
 

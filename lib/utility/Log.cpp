@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/DecoderFactory.h>
 #include <ao/utility/Log.h>
 
 #include <spdlog/async.h>
@@ -95,8 +94,6 @@ namespace ao::log
 
     spdlog::set_default_logger(appLoggerPtr);
     _initialized = true;
-
-    audio::initializeDecoders();
 
     APP_LOG_INFO("========================================================");
     APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());

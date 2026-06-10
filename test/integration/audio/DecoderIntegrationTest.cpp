@@ -5,6 +5,7 @@
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
+#include <ao/audio/Mp3DecoderSession.h>
 #include <ao/utility/Log.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -207,6 +208,27 @@ namespace ao::audio::test
     }
   }
 
+  TEST_CASE("MP3 Decoder Integrity", "[playback][integration][mp3]")
+  {
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.mp3";
+
+    if (!std::filesystem::exists(testFile))
+    {
+      return;
+    }
+
+    SECTION("Metadata Extraction")
+    {
+      auto decoder = Mp3DecoderSession{Format{.bitDepth = 16}};
+      REQUIRE(decoder.open(testFile));
+
+      auto const info = decoder.streamInfo();
+      CHECK(info.sourceFormat.sampleRate == 48000);
+      CHECK(info.sourceFormat.channels == 2);
+      CHECK(info.isLossy == true);
+    }
+  }
+
   TEST_CASE("Decoder Robustness", "[playback][integration][robustness]")
   {
     SECTION("Corrupt: Opening a non-FLAC file as FLAC")
@@ -217,6 +239,27 @@ namespace ao::audio::test
       auto const res = decoder.open(testFile);
 
       CHECK_FALSE(res);
+    }
+
+    SECTION("MP3: Seek near EOF")
+    {
+      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.mp3";
+
+      if (std::filesystem::exists(testFile))
+      {
+        auto decoder = Mp3DecoderSession{Format{.bitDepth = 16}};
+        REQUIRE(decoder.open(testFile));
+
+        if (auto const info = decoder.streamInfo(); info.durationMs > 10)
+        {
+          REQUIRE(decoder.seek(info.durationMs - 10));
+
+          if (auto const block = decoder.readNextBlock(); block && !block->endOfStream)
+          {
+            CHECK(block->frames > 0);
+          }
+        }
+      }
     }
 
     SECTION("Seek near EOF")

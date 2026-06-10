@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#pragma once
+
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/IDecoderSession.h>
+
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+
+namespace ao::audio
+{
+  class [[nodiscard]] Mp3DecoderSession final : public IDecoderSession
+  {
+  public:
+    explicit Mp3DecoderSession(Format outputFormat);
+    ~Mp3DecoderSession() override;
+
+    // Not copyable or movable
+    Mp3DecoderSession(Mp3DecoderSession const&) = delete;
+    Mp3DecoderSession& operator=(Mp3DecoderSession const&) = delete;
+    Mp3DecoderSession(Mp3DecoderSession&&) = delete;
+    Mp3DecoderSession& operator=(Mp3DecoderSession&&) = delete;
+
+    Result<> open(std::filesystem::path const& filePath) override;
+    void close() override;
+    Result<> seek(std::uint32_t positionMs) override;
+    void flush() override;
+
+    Result<PcmBlock> readNextBlock() override;
+    DecodedStreamInfo streamInfo() const override;
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
+  };
+} // namespace ao::audio

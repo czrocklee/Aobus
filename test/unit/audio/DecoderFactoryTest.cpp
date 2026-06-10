@@ -28,9 +28,14 @@ namespace ao::audio::test
       REQUIRE(session2Ptr != nullptr);
     }
 
+    SECTION("Creates MP3 runtime for .mp3")
+    {
+      auto sessionPtr = createDecoderSession("song.mp3", format);
+      REQUIRE(sessionPtr != nullptr);
+    }
+
     SECTION("Returns null for unsupported extensions")
     {
-      REQUIRE(createDecoderSession("song.mp3", format) == nullptr);
       REQUIRE(createDecoderSession("song.wav", format) == nullptr);
       REQUIRE(createDecoderSession("song.ogg", format) == nullptr);
     }

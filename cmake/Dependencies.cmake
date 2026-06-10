@@ -79,6 +79,12 @@ target_include_directories(PkgALAC INTERFACE ${ALAC_INCLUDE_DIRS})
 target_link_libraries(PkgALAC INTERFACE ${ALAC_LIBRARIES})
 message(STATUS "ALAC found")
 
+# ── MP3 (mpg123) ────────────────────────────────────────────────────────────
+pkg_check_modules(MPG123 REQUIRED IMPORTED_TARGET libmpg123)
+add_library(PkgMPG123 INTERFACE)
+target_link_libraries(PkgMPG123 INTERFACE PkgConfig::MPG123)
+message(STATUS "mpg123 found")
+
 # ── PipeWire (optional) ────────────────────────────────────────────────────
 pkg_check_modules(PIPEWIRE libpipewire-0.3)
 if(PIPEWIRE_FOUND)

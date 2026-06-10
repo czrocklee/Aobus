@@ -6,16 +6,13 @@
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
+#include <ao/audio/Mp3DecoderSession.h>
 
 #include <filesystem>
 #include <memory>
 
 namespace ao::audio
 {
-  void initializeDecoders()
-  {
-  }
-
   std::unique_ptr<IDecoderSession> createDecoderSession(std::filesystem::path const& filePath, Format outputFormat)
   {
     auto const ext = filePath.extension().string();
@@ -28,6 +25,11 @@ namespace ao::audio
     if (ext == ".m4a" || ext == ".mp4")
     {
       return std::make_unique<AlacDecoderSession>(outputFormat);
+    }
+
+    if (ext == ".mp3")
+    {
+      return std::make_unique<Mp3DecoderSession>(outputFormat);
     }
 
     return {};

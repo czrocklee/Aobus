@@ -3,8 +3,10 @@ add_library(ao_audio STATIC
     DecoderFactory.cpp
     FlacDecoderSession.cpp
     AlacDecoderSession.cpp
+    Mp3DecoderSession.cpp
     Player.cpp
     QualityAnalyzer.cpp
+    detail/Mpg123Runtime.cpp
     detail/TrackSession.cpp
     Engine.cpp
     FormatNegotiator.cpp
@@ -14,7 +16,7 @@ add_library(ao_audio STATIC
     detail/RouteTracker.cpp
 )
 target_include_directories(ao_audio PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
-target_link_libraries(ao_audio PUBLIC ao_library PkgFLAC PkgALAC)
+target_link_libraries(ao_audio PUBLIC ao_library PkgFLAC PkgALAC PkgMPG123)
 
 if(LINUX)
     target_compile_definitions(ao_audio PUBLIC PIPEWIRE_FOUND ALSA_FOUND)
