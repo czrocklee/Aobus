@@ -16,6 +16,8 @@ class TargetBadRawPtr
 {};
 class TargetBadRef
 {};
+class TargetBadMacroPtr
+{};
 
 class ExtraTargetA
 {};

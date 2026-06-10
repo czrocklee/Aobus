@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/async/Runtime.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/TrackCommandService.h>
-#include <ao/rt/async/Runtime.h>
 
 #include <filesystem>
 #include <memory>
@@ -17,7 +17,7 @@ namespace ao::rt
 {
   struct CoreRuntime::Impl final
   {
-    std::unique_ptr<IControlExecutor> executorPtr;
+    std::unique_ptr<async::IExecutor> executorPtr;
     async::Runtime asyncRuntime;
     std::filesystem::path musicRoot;
     std::filesystem::path databasePath;
@@ -27,7 +27,7 @@ namespace ao::rt
     ListSourceStore listSourceStore;
     NotificationService notificationService;
 
-    Impl(std::unique_ptr<IControlExecutor> execPtr, std::filesystem::path musicRoot, std::filesystem::path databasePath)
+    Impl(std::unique_ptr<async::IExecutor> execPtr, std::filesystem::path musicRoot, std::filesystem::path databasePath)
       : executorPtr{std::move(execPtr)}
       , asyncRuntime{*executorPtr}
       , musicRoot{std::move(musicRoot)}
@@ -41,7 +41,7 @@ namespace ao::rt
     }
   };
 
-  CoreRuntime::CoreRuntime(std::unique_ptr<IControlExecutor> executorPtr,
+  CoreRuntime::CoreRuntime(std::unique_ptr<async::IExecutor> executorPtr,
                            std::filesystem::path musicRoot,
                            std::filesystem::path databasePath)
     : _implPtr{std::make_unique<Impl>(std::move(executorPtr), std::move(musicRoot), std::move(databasePath))}

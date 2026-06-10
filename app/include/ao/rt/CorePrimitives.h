@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Type.h>
+#include <ao/async/Executor.h>
 #include <ao/utility/StrongType.h>
 #include <ao/utility/Subscription.h>
 
@@ -33,28 +34,6 @@ namespace ao::rt
 
   using Subscription = utility::Subscription;
 
-  class IControlExecutor
-  {
-  public:
-    virtual ~IControlExecutor() = default;
-
-    IControlExecutor(IControlExecutor const&) = delete;
-    IControlExecutor& operator=(IControlExecutor const&) = delete;
-    IControlExecutor(IControlExecutor&&) = delete;
-    IControlExecutor& operator=(IControlExecutor&&) = delete;
-
-    virtual bool isCurrent() const noexcept = 0;
-
-    // Thread-safe: enqueue and wake the control thread (e.g. for cross-thread callbacks).
-    virtual void dispatch(std::move_only_function<void()> task) = 0;
-
-    // Always deferred: run in the next idle iteration, even from the control thread.
-    virtual void defer(std::move_only_function<void()> task) = 0;
-
-  protected:
-    IControlExecutor() = default;
-  };
-
   template<typename... Args>
   class Signal final
   {
@@ -78,7 +57,7 @@ namespace ao::rt
       }
     }
 
-    void post(IControlExecutor& executor, std::decay_t<Args>... args)
+    void post(async::IExecutor& executor, std::decay_t<Args>... args)
     {
       executor.defer(
         [this, ... args = std::move(args)] mutable

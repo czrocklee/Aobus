@@ -252,8 +252,20 @@ namespace clang::tidy::readability
 
       if (!isBlockStart && !isChainAfterBrace && newlines < newlinesMin)
       {
-        diag(nextToken.getLocation(), "expected a blank line before '%0'")
-          << stmtName << FixItHint::CreateInsertion(nextToken.getLocation(), "\n");
+        auto db = diag(nextToken.getLocation(), "expected a blank line before '%0'");
+        db << stmtName;
+
+        if (size_t const firstNewline = gap.find('\n'); firstNewline != StringRef::npos)
+        {
+          FileID const fid = sm.getFileID(prevCodeTok.getLocation());
+          SourceLocation const insertLoc =
+            sm.getLocForStartOfFile(fid).getLocWithOffset(static_cast<std::int32_t>(prevEnd + firstNewline + 1));
+          db << FixItHint::CreateInsertion(insertLoc, "\n");
+        }
+        else
+        {
+          db << FixItHint::CreateInsertion(nextToken.getLocation(), newlinesMin == 2 ? "\n\n" : "\n");
+        }
       }
     }
   }
@@ -448,7 +460,17 @@ namespace clang::tidy::readability
       }
 
       auto db = diag(rBraceLoc, "expected a blank line after closing '}' of control block");
-      db << FixItHint::CreateInsertion(tokens[codeIdx].getLocation(), "\n");
+
+      if (size_t const firstNewline = gap.find('\n'); firstNewline != StringRef::npos)
+      {
+        SourceLocation const insertLoc =
+          sm.getLocForStartOfFile(fid).getLocWithOffset(static_cast<std::int32_t>(gapStartOffset + firstNewline + 1));
+        db << FixItHint::CreateInsertion(insertLoc, "\n");
+      }
+      else
+      {
+        db << FixItHint::CreateInsertion(tokens[codeIdx].getLocation(), "\n\n");
+      }
     }
   }
 

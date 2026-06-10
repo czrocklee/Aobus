@@ -3,12 +3,12 @@
 
 #include "test/unit/runtime/TestUtils.h"
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/async/Runtime.h>
 #include <ao/uimodel/playback/PlaybackTimeViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>

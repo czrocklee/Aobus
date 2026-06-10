@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
 #include "CoreRuntime.h"
 #include <ao/Type.h>
 
@@ -15,13 +14,13 @@ namespace ao::audio
   class IBackendProvider;
 }
 
+namespace ao::async
+{
+  class Runtime;
+}
+
 namespace ao::rt
 {
-  namespace async
-  {
-    class Runtime;
-  }
-
   class ConfigStore;
   class PlaybackService;
   class WorkspaceService;
@@ -29,7 +28,7 @@ namespace ao::rt
 
   struct AppRuntimeDependencies
   {
-    std::unique_ptr<IControlExecutor> executorPtr{};
+    std::unique_ptr<async::IExecutor> executorPtr{};
     std::filesystem::path musicRoot{};
     std::filesystem::path databasePath{};
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};

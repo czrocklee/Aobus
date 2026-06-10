@@ -45,6 +45,7 @@ pkgs.mkShell {
       ccache
       btrfs-progs
       bubblewrap
+      rsync
       cmake
       gperf
       ripgrep

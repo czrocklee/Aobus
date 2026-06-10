@@ -13,45 +13,13 @@ Use `./script/run-clang-tidy.sh` as the single entry point for clang-tidy in Aob
 
 When editing C++ to fix warnings, follow the conventions in `CONTRIBUTING.md` (the `aobus-*` checks enforce them).
 
-## Phase Contract — C1 delegation (machine path)
+## Fleet Delegation
 
-The mechanical subset of this skill can be delegated to a low-cost model (capability **C1**) via the
-runner `script/agent/lint_phase.sh`. The runner enforces the gates below; this contract declares the
-boundaries. The rest of this document is the manual / frontier (**C3**) path for judgement-heavy
-warnings (NOLINT decisions, include-cleaner triage, API-shape calls).
-
-- **Capability:** C1 (bounded, mechanical, validation-gated).
-- **Worker(s):** per the fleet routing table `script/agent/routing.env`, the candidate set
-  `ROUTE_C1_CANDIDATES` the runner fans out. The **default is a single worker** (DeepSeek V4 Flash via
-  opencode): lowest latency, no fan-out cost. Multi-candidate fan-out is **opt-in** — uncomment a second
-  source in routing.env, e.g. Gemini 3.5 Flash via `agy` for a genuine cross-vendor candidate, or
-  `route_c1_worker_pro` for a stronger same-vendor mix. Swapping/adding a model is a routing.env edit
-  only — this contract and the runner do not change. (Note: the opt-in agy worker is not hard-FS-sandboxed
-  under steam-run; it relies on path-collision avoidance for a trusted model — see the design doc §10.3 —
-  but every edit is still gated by harness-diff + guard + re-validation.)
-- **Inputs:** one or more target files + their `run-clang-tidy.sh` diagnostics.
-- **Scope:** the named target file(s) only.
-- **Validation:** `run-clang-tidy.sh <file>` — zero warnings is the gate (re-run; never trusted from the model).
-- **Multi-candidate (fan-out → rank → validate top-K):** each round fans the candidate set out **in
-  parallel** (each worker edits only its own sandbox copy), takes each patch by harness-diff, drops no-op /
-  over-churn candidates, then ranks the survivors **deterministically** (fewest files touched, then least
-  churn). Candidate generation is near-free; the slow tidy validation is paid on only the **top-K**
-  (`MAX_VALIDATE`, default 2) in rank order, keeping the first that makes progress. Semantic tie-breaking
-  is a C3 concern, not done in the runner.
-- **Iterate to fixpoint:** a fix can surface new warnings (e.g. a named constant must be `kCamelCase`);
-  loop fix → re-tidy → feed back until 0 warnings, or round budget / no-progress → escalate.
-- **Process isolation:** the worker runs in a non-repo sandbox cwd holding only a copy of the target at
-  its repo-relative path (agentic CLIs edit cwd files directly); the dispatcher takes the patch by
-  diffing that copy (harness-diff — never a model-authored diff) and changes the real tree itself under
-  temporal isolation (apply → re-validate → keep / rollback). Concurrent phases serialize on a repo lock.
-- **Deterministic guard (reject → escalate C3):** any change to `include/**`, `*/CMakeLists.txt`,
-  `.clang-tidy`, `script/**`, `doc/design/**`, `.agents/**`; out-of-scope files; churn over budget.
-- **Escalate to C3 (frontier) when:** a fix needs a public-API/signature change, an error-contract
-  choice, a cross-file refactor, a NOLINT judgement, or the loop cannot reach 0 warnings. Each escalation
-  writes a Phase Packet (`$AOBUS_AGENT_WORK/lint/escalate/<file>.packet.md`) for the reviewer.
-- **Run:** `script/agent/lint_phase.sh <repo-relative-file>...` or `--changed` for the changed C++ set.
-  Or drive it from a Phase Packet (YAML frontmatter + body) via `script/agent/dispatch.sh <packet>`,
-  which enforces the validation allowlist (`script/agent/validation.env`) and re-validates independently.
+The mechanical subset may be delegated with an `aobus-fleet-intent/v1` document using
+`task-kind: fix-lint`, exact file scope, and an invariant that behavior is preserved. The registered
+GateEngine fans out isolated candidates, extracts patches itself, enforces scope and ruler protection,
+and runs the `tidy-clean` oracle. Public API changes, cross-file redesign, NOLINT judgment, or exhausted
+gate budgets remain chair work. A passing result is still a proposal, not an automatic edit.
 
 ## Default Workflow
 

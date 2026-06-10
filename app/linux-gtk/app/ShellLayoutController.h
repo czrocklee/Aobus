@@ -10,8 +10,8 @@
 #include "layout/runtime/GioActionBridge.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutHost.h"
+#include <ao/async/LifetimeScope.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/async/LifetimeScope.h>
 
 #include <gtkmm/window.h>
 
@@ -83,6 +83,6 @@ namespace ao::gtk
     ThemeCoordinator& _themeCoordinator;
     std::optional<ThemeRegistrationToken> _optEditorThemeToken;
     bool _isCustomized = false;
-    rt::async::LifetimeScope _tasks;
+    async::LifetimeScope _tasks;
   };
 } // namespace ao::gtk

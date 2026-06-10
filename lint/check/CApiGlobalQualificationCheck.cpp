@@ -3,58 +3,24 @@
 
 #include "check/CApiGlobalQualificationCheck.h"
 
+#include "check/CalleeQualificationUtil.h"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
-#include <clang/Lex/Lexer.h>
-#include <llvm/ADT/StringSwitch.h>
 
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::readability
 {
-  namespace
-  {
-    bool isCStandardLibraryFunction(StringRef name)
-    {
-      return llvm::StringSwitch<bool>{name}
-        .Cases("memcpy", "memmove", "memcmp", "memset", true)
-        .Cases("strlen", "strcmp", "strncmp", "strcpy", "strncpy", true)
-        .Cases("strcat", "strncat", "strchr", "strrchr", "strstr", true)
-        .Cases("abs", "labs", "llabs", "fabs", "fabsf", "fabsl", true)
-        .Cases("div", "ldiv", "lldiv", true)
-        .Cases("isalnum", "isalpha", "isblank", "iscntrl", "isdigit", true)
-        .Cases("isgraph", "islower", "isprint", "ispunct", "isspace", true)
-        .Cases("isupper", "isxdigit", "tolower", "toupper", true)
-        .Cases("sin", "cos", "tan", "sqrt", "pow", "log", "exp", true)
-        .Cases("floor", "ceil", "round", "trunc", "fmod", true)
-        .Cases("malloc", "calloc", "realloc", "free", true)
-        .Cases("qsort", "bsearch", true)
-        .Cases("atoi", "atol", "atoll", "atof", true)
-        .Cases("strtol", "strtoul", "strtoll", "strtoull", true)
-        .Cases("strtof", "strtod", "strtold", true)
-        .Cases("sprintf", "snprintf", "vsprintf", "vsnprintf", true)
-        .Cases("fopen", "fclose", "fread", "fwrite", "fseek", "ftell", true)
-        .Cases("fprintf", "fscanf", "fgets", "fputs", true)
-        .Cases("remove", "rename", "tmpfile", "tmpnam", true)
-        .Cases("rand", "srand", true)
-        .Cases("clock", "time", "difftime", "mktime", "strftime", true)
-        .Default(false);
-    }
-  } // namespace
-
   void CApiGlobalQualificationCheck::registerMatchers(MatchFinder* finder)
   {
-    // The callee of a function call is an ImplicitCastExpr (FunctionToPointerDecay)
-    // wrapping the actual DeclRefExpr to the FunctionDecl.
-    finder->addMatcher(
-      callExpr(callee(implicitCastExpr(hasSourceExpression(declRefExpr(to(functionDecl(isExternC()).bind("func")))))))
-        .bind("call"),
-      this);
+    finder->addMatcher(callExpr(callee(functionDecl(isExternC()).bind("func"))).bind("call"), this);
   }
 
   void CApiGlobalQualificationCheck::check(MatchFinder::MatchResult const& result)
@@ -68,9 +34,7 @@ namespace clang::tidy::readability
       return;
     }
 
-    SourceLocation const loc = call->getBeginLoc();
-
-    if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
+    if (SourceLocation const loc = call->getBeginLoc(); loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
     {
       return;
     }
@@ -83,19 +47,24 @@ namespace clang::tidy::readability
     }
 
     // Skip C standard library functions — those need std::, handled by Check 2
-    if (isCStandardLibraryFunction(func->getName()))
+    if (aobus::isCStandardLibraryFunction(func->getName()))
     {
       return;
     }
 
-    auto calleeRange = CharSourceRange::getTokenRange(call->getCallee()->getSourceRange());
-    StringRef const calleeText = Lexer::getSourceText(calleeRange, sm, result.Context->getLangOpts());
+    auto const optCallee = aobus::getCalleeForQualification(*call, sm, result.Context->getLangOpts());
 
-    if (calleeText.starts_with("::") || calleeText.starts_with("std::"))
+    if (!optCallee)
     {
       return;
     }
 
-    diag(loc, "external C library function '%0' must use global qualification '::%0'") << func->getName();
+    if (optCallee->text.starts_with("::") || optCallee->text.starts_with("std::"))
+    {
+      return;
+    }
+
+    diag(optCallee->loc, "external C library function '%0' must use global qualification '::%0'")
+      << func->getName() << FixItHint::CreateInsertion(optCallee->loc, "::");
   }
 } // namespace clang::tidy::readability

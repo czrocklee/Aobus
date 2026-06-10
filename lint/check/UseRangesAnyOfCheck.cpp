@@ -3,23 +3,50 @@
 
 #include "UseRangesAnyOfCheck.h"
 
+#include "AstUtil.h"
+
 #include <clang/AST/ASTContext.h>
-#include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
-#include <clang/Basic/SourceLocation.h>
-#include <clang/Lex/Lexer.h>
 
+#include <cstdint>
 #include <string>
 
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::modernize
 {
+  namespace
+  {
+    enum class AlgoKind : std::uint8_t
+    {
+      None,
+      FindIf,
+      FindIfNot
+    };
+
+    AlgoKind getAlgoKind(CXXOperatorCallExpr const* algoCall)
+    {
+      auto const algoName = aobus::getRangesCpoName(*algoCall);
+
+      if (algoName == "find_if")
+      {
+        return AlgoKind::FindIf;
+      }
+
+      if (algoName == "find_if_not")
+      {
+        return AlgoKind::FindIfNot;
+      }
+
+      return AlgoKind::None;
+    }
+  } // namespace
+
   void UseRangesAnyOfCheck::registerMatchers(MatchFinder* finder)
   {
     if (!getLangOpts().CPlusPlus20)
@@ -74,39 +101,31 @@ namespace clang::tidy::modernize
       return;
     }
 
-    if (auto const* calleeDecl = algoCall->getDirectCallee(); calleeDecl == nullptr)
+    auto const* endCall = result.Nodes.getNodeAs<CallExpr>("end_call");
+
+    if (endCall == nullptr)
     {
       return;
     }
 
-    // std::ranges::find_if is a Niebloid, so the callee is actually the operator() of the functor object.
-    // We should get the type of the functor (the 0th argument) to see if it's find_if or find_if_not.
-    auto const* functorArg = algoCall->getArg(0)->IgnoreParenImpCasts();
-    auto const* functorDecl = functorArg->getType()->getAsCXXRecordDecl();
+    auto const algoKind = getAlgoKind(algoCall);
 
-    if (functorDecl == nullptr)
+    if (algoKind == AlgoKind::None)
     {
       return;
     }
 
-    // Aobus uses libstdc++ where functor names might be _Find_if or _Find_if_not.
-    // Alternatively, we can check the declRefExpr of the 0th argument.
-    auto const* declRef = dyn_cast<DeclRefExpr>(functorArg);
-
-    if (declRef == nullptr)
+    if (!aobus::isEndCall(*endCall))
     {
       return;
     }
 
-    auto const algoName = declRef->getFoundDecl()->getQualifiedNameAsString();
+    if (aobus::isWithinRewrittenOperator(*match, *result.Context))
+    {
+      return;
+    }
 
-    bool const isFindIf = (algoName == "std::ranges::__cpo::find_if" ||
-                           algoName == "std::ranges::views::__cpo::find_if" || algoName == "std::ranges::find_if");
-    bool const isFindIfNot =
-      (algoName == "std::ranges::__cpo::find_if_not" || algoName == "std::ranges::views::__cpo::find_if_not" ||
-       algoName == "std::ranges::find_if_not");
-
-    if (!isFindIf && !isFindIfNot)
+    if (aobus::isInMacro(match->getSourceRange()))
     {
       return;
     }
@@ -114,15 +133,19 @@ namespace clang::tidy::modernize
     auto const& sm = *result.SourceManager;
     auto const& langOpts = result.Context->getLangOpts();
 
-    auto const rangeStr =
-      Lexer::getSourceText(CharSourceRange::getTokenRange(rangeArg->getSourceRange()), sm, langOpts).str();
-    auto const predStr =
-      Lexer::getSourceText(CharSourceRange::getTokenRange(predArg->getSourceRange()), sm, langOpts).str();
+    auto const rangeStr = aobus::getExprSourceText(*rangeArg, sm, langOpts);
+
+    if (!aobus::verifyEndObject(*endCall, rangeStr, sm, langOpts))
+    {
+      return;
+    }
+
+    auto const predStr = aobus::getExprSourceText(*predArg, sm, langOpts);
 
     auto replacement = std::string{};
     auto diagnosticMsg = std::string{};
 
-    if (isFindIf)
+    if (algoKind == AlgoKind::FindIf)
     {
       if (neOp != nullptr)
       {
@@ -137,7 +160,7 @@ namespace clang::tidy::modernize
         diagnosticMsg = "use std::ranges::none_of instead of std::ranges::find_if == end()";
       }
     }
-    else if (isFindIfNot)
+    else if (algoKind == AlgoKind::FindIfNot)
     {
       if (eqOp != nullptr)
       {

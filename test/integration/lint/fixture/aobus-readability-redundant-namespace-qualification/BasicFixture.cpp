@@ -15,17 +15,17 @@ namespace ao
 
 namespace ao
 {
-  void test()
+  void test1()
   {
-    // POSITIVE
+    // POSITIVE: FIX-TO: Foo const f;
     ao::Foo const f;
-    // POSITIVE
+    // POSITIVE: FIX-TO: Foo const cf;
     ao::Foo const cf;
     // NEGATIVE
     library::Track const t;
-    // POSITIVE
+    // POSITIVE: FIX-TO: library::Track const t2;
     ao::library::Track const t2;
-    // POSITIVE
+    // POSITIVE: FIX-TO: bar();
     ao::bar();
   }
 }
@@ -34,9 +34,9 @@ namespace ao::library
 {
   void test2()
   {
-    // POSITIVE
+    // POSITIVE: FIX-TO: Track const t;
     ao::library::Track const t;
-    // POSITIVE
+    // POSITIVE: FIX-TO: Foo const f;
     ao::Foo const f;
   }
 }
@@ -84,8 +84,7 @@ namespace ao::rt::other
 {
   void test6()
   {
-    // POSITIVE
+    // NEGATIVE
     ao::test::TempDir const t;
   }
-}
 }

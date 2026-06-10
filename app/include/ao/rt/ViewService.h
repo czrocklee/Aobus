@@ -19,6 +19,12 @@ namespace ao::library
 {
   class MusicLibrary;
 }
+
+namespace ao::async
+{
+  class IExecutor;
+}
+
 namespace ao::rt
 {
   class ListSourceStore;
@@ -53,7 +59,7 @@ namespace ao::rt
       TrackPresentationSpec presentation{};
     };
 
-    ViewService(IControlExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources);
+    ViewService(async::IExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;

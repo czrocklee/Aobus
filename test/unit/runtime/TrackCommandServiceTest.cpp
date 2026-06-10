@@ -3,10 +3,10 @@
 
 #include "TestUtils.h"
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/TrackCommandService.h>
-#include <ao/rt/async/Runtime.h>
 
 #include <catch2/catch_test_macros.hpp>
 

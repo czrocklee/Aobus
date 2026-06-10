@@ -76,7 +76,7 @@ class TestClassByValueCoResident
 // ============================================================
 class TestIsolatedWeakRef
 {
-  // POSITIVE
+  // POSITIVE: FIX-TO: /* forward declare */ TargetBadRawPtr* _ptr;
   TargetBadRawPtr* _ptr;
 };
 
@@ -88,7 +88,7 @@ class TestMixedCoResident
   CoResidentNodeType _type = CoResidentNodeType::Decoder;
   // NEGATIVE co-resident with enum
   CoResidentGraph* _graph;
-  // POSITIVE TargetBadRawPtr is in a different header with no strong deps
+  // POSITIVE: FIX-TO: /* forward declare */ TargetBadRawPtr* _isolated;
   TargetBadRawPtr* _isolated;
 };
 

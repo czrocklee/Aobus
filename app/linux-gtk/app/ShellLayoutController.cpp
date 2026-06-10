@@ -18,14 +18,14 @@
 #include "playback/AudioDeviceSelector.h"
 #include "tag/TagEditController.h"
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackDetailProjection.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/async/Runtime.h>
-#include <ao/rt/async/Task.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/utility/Log.h>
 
@@ -384,7 +384,7 @@ namespace ao::gtk
     auto& runtime = _context.runtime.async();
     runtime.spawnWithLifetime(
       &_tasks,
-      [](ShellLayoutController* self, AppConfig* cfg) -> rt::async::Task<void>
+      [](ShellLayoutController* self, AppConfig* cfg) -> async::Task<void>
       {
         APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
@@ -412,7 +412,7 @@ namespace ao::gtk
         auto doc = layout::createBuiltInLayout(presetId);
         auto const customized = cfg->loadShellLayout(doc, presetIdStr);
 
-        co_await asyncRuntime->resumeOnControl();
+        co_await asyncRuntime->resumeOnCallbackExecutor();
         APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
 
         self->_isCustomized = customized;

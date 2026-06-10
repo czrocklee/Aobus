@@ -3,6 +3,7 @@
 
 #include "TestUtils.h"
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -10,7 +11,6 @@
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/ManualListSource.h>
 #include <ao/rt/SmartListSource.h>
-#include <ao/rt/async/Runtime.h>
 
 #include <catch2/catch_test_macros.hpp>
 

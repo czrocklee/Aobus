@@ -3,15 +3,32 @@
 int scalar();
 void* raw();
 
+struct WithMember
+{
+  int member;
+};
+
+#define AOBUS_TRUTHY(x) x
+
 void test()
 {
-  // POSITIVE
+  // POSITIVE: FIX-TO: if (auto ptr = raw(); ptr != nullptr)
   if (auto ptr = raw(); ptr)
   {
   }
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: if (auto value = scalar(); value != 0)
   if (auto value = scalar(); value)
+  {
+  }
+
+  // POSITIVE: FIX-TO: if (auto memberPtr = &WithMember::member; memberPtr != nullptr)
+  if (auto memberPtr = &WithMember::member; memberPtr)
+  {
+  }
+
+  // POSITIVE - diagnostic fires; no FixIt because the variable is spelled inside a macro
+  if (auto flag = scalar(); AOBUS_TRUTHY(flag))
   {
   }
 

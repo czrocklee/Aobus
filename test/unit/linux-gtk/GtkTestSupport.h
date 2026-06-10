@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "linux-gtk/app/GtkControlExecutor.h"
+#include "linux-gtk/app/GtkMainContextExecutor.h"
 #include "test/unit/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
@@ -138,7 +138,7 @@ namespace ao::gtk::test
       auto configStorePtr = std::make_unique<rt::ConfigStore>(configPath);
 
       _runtimePtr = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
-        .executorPtr = std::make_unique<GtkControlExecutor>(),
+        .executorPtr = std::make_unique<GtkMainContextExecutor>(),
         .musicRoot = musicRoot,
         .databasePath = databasePath,
         .workspaceConfigStorePtr = std::move(configStorePtr),
@@ -154,12 +154,12 @@ namespace ao::gtk::test
   };
 
   /**
-   * @brief Creates an AppRuntime backed by a temporary directory with a GtkControlExecutor.
+   * @brief Creates an AppRuntime backed by a temporary directory with a GtkMainContextExecutor.
    */
   inline auto makeRuntime(ao::test::TempDir const& tempDir)
   {
     return rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executorPtr = std::make_unique<GtkControlExecutor>(),
+      .executorPtr = std::make_unique<GtkMainContextExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
       .workspaceConfigStorePtr =

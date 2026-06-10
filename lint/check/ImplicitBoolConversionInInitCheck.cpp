@@ -48,23 +48,18 @@ namespace clang::tidy::aobus
       return;
     }
 
-    // Determine if it's a pointer or integer conversion.
-    bool isPointer = false;
+    // Pick the explicit comparison for this conversion kind. Unhandled kinds
+    // bail out instead of falling through to a potentially wrong suggestion.
+    char const* replacement = nullptr;
 
-    if (cast->getCastKind() == CK_PointerToBoolean)
+    switch (cast->getCastKind())
     {
-      isPointer = true;
+      case CK_PointerToBoolean:
+      case CK_MemberPointerToBoolean: replacement = " != nullptr"; break;
+      case CK_IntegralToBoolean:
+      case CK_FloatingToBoolean: replacement = " != 0"; break;
+      default: return;
     }
-    else if (cast->getCastKind() == CK_IntegralToBoolean || cast->getCastKind() == CK_FloatingToBoolean)
-    {
-      isPointer = false;
-    }
-    else
-    {
-      // Only care about pointer and integer conversions for now, maybe others if needed.
-    }
-
-    char const* replacement = isPointer ? " != nullptr" : " != 0";
 
     auto diagnostic =
       diag(bareVar->getBeginLoc(),
@@ -74,7 +69,9 @@ namespace clang::tidy::aobus
     SourceLocation const endLoc =
       Lexer::getLocForEndOfToken(bareVar->getEndLoc(), 0, *result.SourceManager, result.Context->getLangOpts());
 
-    if (endLoc.isValid())
+    // A variable spelled inside a macro cannot take the insertion; the FixIt
+    // would edit the macro definition.
+    if (endLoc.isValid() && !bareVar->getEndLoc().isMacroID())
     {
       diagnostic << FixItHint::CreateInsertion(endLoc, replacement);
     }

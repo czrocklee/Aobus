@@ -19,9 +19,13 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::async
+{
+  class IExecutor;
+}
+
 namespace ao::rt
 {
-  class IControlExecutor;
   class ViewService;
 
   class PlaybackService final
@@ -68,7 +72,7 @@ namespace ao::rt
       ViewId preferredViewId = kInvalidViewId;
     };
 
-    PlaybackService(IControlExecutor& executor, ViewService& views, library::MusicLibrary& library);
+    PlaybackService(async::IExecutor& executor, ViewService& views, library::MusicLibrary& library);
     ~PlaybackService();
 
     PlaybackService(PlaybackService const&) = delete;

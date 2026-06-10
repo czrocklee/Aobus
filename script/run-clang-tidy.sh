@@ -477,7 +477,7 @@ run_batch() {
         tmp=$(printf '%s/%06d_%s.log' "$tmpdir" "$index" "${name//\//_}")
         logs+=("$tmp")
         ((index++))
-        run_one "$mode" "$f" "$tmp" &
+        { run_one "$mode" "$f" "$tmp" || { touch "$tmp.failed"; exit 1; }; } &
         ((running++))
 
         if ((running >= JOBS)); then
@@ -507,6 +507,16 @@ run_batch() {
         fi
     done
 
+    if ((batch_status != 0)); then
+        echo "=== Failed logs ===" >&2
+        for log in "${logs[@]}"; do
+            if [[ -f "$log.failed" && -f "$log" ]]; then
+                echo "--- Log: $log ---" >&2
+                cat "$log" >&2
+            fi
+        done
+    fi
+
     if [[ ${#logs_with_warnings[@]} -gt 0 ]]; then
         python3 -c "$DEDUPLICATOR_PY" "$PROJECT_ROOT" "$OUTPUT_FILE" "${logs_with_warnings[@]}"
         if [[ -n "$OUTPUT_FILE" ]]; then
@@ -520,6 +530,31 @@ run_batch() {
         if ((batch_status != 0)); then
             echo "  Skipping automatic fixes because clang-tidy failed for at least one file."
         else
+            # Filter out blacklisted rules from the exported fixes
+            find "$tmpdir" -type f -name '*.yaml' -print0 | while IFS= read -r -d '' yaml_file; do
+                local tmp_yaml="${yaml_file}.tmp"
+                awk '
+                  /^  - DiagnosticName:/ {
+                    if ($0 ~ /readability-identifier-naming/) {
+                      skip = 1
+                    } else {
+                      skip = 0
+                    }
+                    if (!skip) print
+                    next
+                  }
+                  /^    / {
+                    if (!skip) print
+                    next
+                  }
+                  {
+                    skip = 0
+                    print
+                  }
+                ' "$yaml_file" > "$tmp_yaml"
+                mv "$tmp_yaml" "$yaml_file"
+            done
+
             local fix_file_count=0
             local replacement_count=0
             fix_file_count=$(find "$tmpdir" -type f -name '*.yaml' | wc -l | tr -d ' ')

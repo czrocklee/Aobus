@@ -104,7 +104,7 @@ namespace ao::rt
 
   struct PlaybackService::Impl final
   {
-    IControlExecutor& executor;
+    async::IExecutor& executor;
     PlaybackState state;
     std::unique_ptr<audio::Player> playerPtr;
     ViewService& views;
@@ -182,8 +182,8 @@ namespace ao::rt
       return snapshot;
     }
 
-    explicit Impl(IControlExecutor& controlExecutor, ViewService& viewService, library::MusicLibrary& musicLibrary)
-      : executor{controlExecutor}
+    explicit Impl(async::IExecutor& callbackExecutor, ViewService& viewService, library::MusicLibrary& musicLibrary)
+      : executor{callbackExecutor}
       , playerPtr{std::make_unique<audio::Player>()}
       , views{viewService}
       , library{musicLibrary}
@@ -250,7 +250,7 @@ namespace ao::rt
     }
   };
 
-  PlaybackService::PlaybackService(IControlExecutor& executor, ViewService& views, library::MusicLibrary& library)
+  PlaybackService::PlaybackService(async::IExecutor& executor, ViewService& views, library::MusicLibrary& library)
     : _implPtr{std::make_unique<Impl>(executor, views, library)}
   {
   }

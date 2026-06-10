@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/TestUtils.h"
+#include <ao/async/Runtime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
@@ -10,7 +11,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/async/Runtime.h>
 #include <ao/uimodel/track/TrackFilterViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>

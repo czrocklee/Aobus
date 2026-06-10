@@ -3,6 +3,8 @@
 
 #include "UseRangesProjectionCheck.h"
 
+#include "AstUtil.h"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
@@ -91,6 +93,14 @@ namespace clang::tidy::readability
         return;
       }
 
+      // A dependent parameter type (generic lambda) cannot be spelled in a
+      // &Type::member projection.
+      if (param1->getType().getNonReferenceType()->isDependentType() ||
+          aobus::isInMacro(singleLambda->getSourceRange()))
+      {
+        return;
+      }
+
       auto const typeName = param1->getType().getNonReferenceType().getUnqualifiedType().getAsString(policy);
       auto memberName = std::string{};
 
@@ -126,6 +136,12 @@ namespace clang::tidy::readability
       auto const* memB = result.Nodes.getNodeAs<MemberExpr>("memB");
 
       if (paramA == nullptr || memA == nullptr || memB == nullptr)
+      {
+        return;
+      }
+
+      if (paramA->getType().getNonReferenceType()->isDependentType() ||
+          aobus::isInMacro(doubleLambda->getSourceRange()))
       {
         return;
       }

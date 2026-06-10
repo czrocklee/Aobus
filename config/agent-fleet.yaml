@@ -1,0 +1,183 @@
+schema: aobus-fleet-registry/v1
+agents:
+  dspro:
+    vendor: opencode-go
+    model: deepseek-v4-pro
+    argv: [opencode, run, --dangerously-skip-permissions, --variant, max, -m, opencode-go/deepseek-v4-pro]
+    prompt-delivery: stdin
+    environment-whitelist: [PATH, HOME, USER, XDG_CONFIG_HOME, OPENCODE_CONFIG_DIR]
+    credential-mounts: []
+    timeout-ms: 1200000
+    rate-limit-key: opencode-go
+    default-authority: trusted-writable
+  codex:
+    vendor: openai
+    model: gpt-5.5
+    argv: [codex, exec, -s, workspace-write, --skip-git-repo-check]
+    prompt-delivery: stdin
+    environment-whitelist: [PATH, HOME, USER, CODEX_HOME]
+    credential-mounts: []
+    timeout-ms: 1200000
+    rate-limit-key: openai
+    default-authority: trusted-writable
+  claude-opus:
+    vendor: anthropic
+    model: opus
+    argv: [claude, -p, --dangerously-skip-permissions, --no-session-persistence, --model, opus, --effort, xhigh]
+    prompt-delivery: stdin
+    environment-whitelist: [PATH, HOME, USER, ANTHROPIC_API_KEY]
+    credential-mounts: []
+    timeout-ms: 1200000
+    rate-limit-key: anthropic
+    default-authority: trusted-read-only
+  gemini-pro:
+    vendor: google
+    model: gemini-3.1-pro-high
+    argv: [agy, -p, "", --add-dir, ., --dangerously-skip-permissions, --model, "Gemini 3.1 Pro (High)"]
+    prompt-delivery: stdin
+    environment-whitelist: [PATH, HOME, USER, GOOGLE_API_KEY]
+    credential-mounts: []
+    timeout-ms: 1200000
+    rate-limit-key: google
+    default-authority: trusted-read-only
+oracles:
+  test-all:
+    runner: test-all
+    arguments: {}
+    property: The full core and GTK test suites build and pass.
+    prerequisites: [nix-shell, bubblewrap]
+    known-gaps: [Passing tests do not prove semantic completeness.]
+    baseline-policy: require-green
+    ruler-paths: [CMakeLists.txt, cmake, build.sh, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+  test-core:
+    runner: test-core
+    arguments: {}
+    property: The selected core tests pass.
+    prerequisites: [existing-debug-build]
+    known-gaps: [GTK behavior is not checked.]
+    baseline-policy: require-green
+    ruler-paths: [CMakeLists.txt, cmake, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+  test-gtk:
+    runner: test-gtk
+    arguments: {}
+    property: The selected GTK tests pass headlessly.
+    prerequisites: [existing-debug-build, xvfb]
+    known-gaps: [Core-only behavior is not checked.]
+    baseline-policy: require-green
+    ruler-paths: [CMakeLists.txt, cmake, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+  tidy-clean:
+    runner: tidy-clean
+    arguments: {}
+    property: Registered clang-tidy checks report no diagnostics for the selected files.
+    prerequisites: [compile-commands]
+    known-gaps: [Lint cleanliness does not prove behavior preservation.]
+    baseline-policy: require-green
+    ruler-paths: [.clang-tidy, lint, script/run-clang-tidy.sh, tool/fleet, config/agent-fleet.yaml]
+  build-debug:
+    runner: build-debug
+    arguments: {}
+    property: The debug application target builds successfully.
+    prerequisites: [nix-shell]
+    known-gaps: [Tests are not executed.]
+    baseline-policy: require-green
+    ruler-paths: [CMakeLists.txt, cmake, build.sh, tool/fleet, config/agent-fleet.yaml]
+  test-delta:
+    runner: test-delta
+    arguments: {}
+    property: The patch changes a registered test path.
+    prerequisites: []
+    known-gaps: [A changed test may still miss the changed behavior.]
+    baseline-policy: skip
+    ruler-paths: [tool/fleet, config/agent-fleet.yaml]
+  public-signature-delta:
+    runner: public-signature-delta
+    arguments: {}
+    property: The patch does not change a public header signature surface.
+    prerequisites: []
+    known-gaps: [Private ABI and semantic contract changes are not detected.]
+    baseline-policy: skip
+    ruler-paths: [tool/fleet, config/agent-fleet.yaml]
+authorities:
+  trusted-read-only:
+    filesystem: read-only
+    network: vendor
+    context-view: full
+  trusted-writable:
+    filesystem: writable-copy
+    network: vendor
+    context-view: full
+  local-writable:
+    filesystem: writable-copy
+    network: off
+    context-view: full
+bindings:
+  implement-plan:
+    agent: dspro
+    engine: gate
+    oracle: test-all
+    risk-oracle: test-delta
+    authority: trusted-writable
+    params: {fanout: 1, top-k: 1, max-rounds: 3, churn-lines: 2000}
+  draft-change:
+    agent: dspro
+    engine: gate
+    authority: trusted-writable
+    params: {fanout: 1, top-k: 1, max-rounds: 1, churn-lines: 1000}
+  fix-lint:
+    agent: dspro
+    engine: gate
+    oracle: tidy-clean
+    risk-oracle: test-delta
+    authority: trusted-writable
+    params: {fanout: 2, top-k: 1, max-rounds: 3, churn-lines: 500}
+  council-plan:
+    agent: claude-opus
+    engine: synthesis
+    authority: trusted-read-only
+    params:
+      roster: [claude-opus, codex, gemini-pro, dspro]
+      depth: full
+      quorum: 3
+  council-review:
+    agent: claude-opus
+    engine: synthesis
+    authority: trusted-read-only
+    params:
+      roster: [claude-opus, codex, gemini-pro, dspro]
+      depth: challenge
+      quorum: 3
+escalations:
+  - reason: infrastructure
+    action: retry
+    retry-limit: 2
+  - reason: no-candidate
+    action: switch-route
+    route: codex
+    retry-limit: 1
+  - reason: scope-violation
+    action: return-chair
+    retry-limit: 0
+  - reason: churn-exceeded
+    action: return-chair
+    retry-limit: 0
+  - reason: oracle-failed
+    action: retry
+    retry-limit: 2
+  - reason: risk-oracle-fired
+    action: require-council
+    retry-limit: 0
+  - reason: budget-exhausted
+    action: return-chair
+    retry-limit: 0
+  - reason: dependency-failed
+    action: return-chair
+    retry-limit: 0
+  - reason: real-tree-changed
+    action: stop-route
+    retry-limit: 0
+  - reason: quorum-failed
+    action: return-chair
+    retry-limit: 0
+  - reason: route-paused
+    action: return-chair
+    retry-limit: 0

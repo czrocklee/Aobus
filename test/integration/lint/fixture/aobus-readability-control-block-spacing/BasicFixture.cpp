@@ -57,35 +57,35 @@ void testControlBlockSpacing(std::int32_t x)
   if (x > 0)
   {
     x++;
-  } // POSITIVE
+  } // POSITIVE: FIX-TO: }\n
   x--;
 
   x++;
-  if (x > 0) // POSITIVE
+  if (x > 0) // POSITIVE: FIX-TO: \nif (x > 0)
   {
     x++;
   }
 
   x++;
-  for (std::int32_t i = 0; i < 10; ++i) // POSITIVE
+  for (std::int32_t i = 0; i < 10; ++i) // POSITIVE: FIX-TO: \nfor (std::int32_t i = 0; i < 10; ++i)
   {
     x += i;
   }
 
   x++;
-  while (x > 100) // POSITIVE
+  while (x > 100) // POSITIVE: FIX-TO: \nwhile (x > 100)
   {
     x--;
   }
 
   x++;
-  switch (x) // POSITIVE
+  switch (x) // POSITIVE: FIX-TO: \nswitch (x)
   {
     default: break;
   }
 
   x++;
-  do // POSITIVE
+  do // POSITIVE: FIX-TO: \ndo
   {
     x--;
   }
@@ -94,25 +94,25 @@ void testControlBlockSpacing(std::int32_t x)
   for (std::int32_t i = 0; i < 10; ++i)
   {
     x += i;
-  } // POSITIVE
+  } // POSITIVE: FIX-TO: }\n
   x++;
 
   while (x > 100)
   {
     x--;
-  } // POSITIVE
+  } // POSITIVE: FIX-TO: }\n
   x++;
 
   switch (x)
   {
     default: break;
-  } // POSITIVE
+  } // POSITIVE: FIX-TO: }\n
   x++;
 
   do
   {
     x--;
-  } // POSITIVE
+  } // POSITIVE: FIX-TO: }\n  while (x > 0);\n
   while (x > 0);
   x++;
 }
@@ -136,7 +136,7 @@ void testControlBlockCommentSpacing(std::int32_t x)
 void testControlBlockTryCatchSpacing(std::int32_t x)
 {
   x++;
-  try // POSITIVE
+  try // POSITIVE: FIX-TO: \ntry
   {
     if (x > 0)
     {
@@ -155,7 +155,7 @@ void testControlBlockTryCatchSpacing(std::int32_t x)
   catch (std::int32_t)
   {
     x = 1;
-  } // POSITIVE
+  } // POSITIVE: FIX-TO: }\n
   x--;
 
   try

@@ -12,16 +12,18 @@ struct Item
   bool isValid() const { return id > 0; }
 };
 
+#define AOBUS_IS_VALID_PRED [](Item const& item) { return item.isValid(); }
+
 void testProjections(std::vector<Item>& v)
 {
-  // POSITIVE
+  // POSITIVE: FIX-TO: bool const anyValid = std::ranges::any_of(v, &Item::isValid);
   bool const anyValid = std::ranges::any_of(v, [](Item const& item) { return item.isValid(); });
 
   auto ids = std::vector<int>{};
-  // POSITIVE
+  // POSITIVE: FIX-TO: std::ranges::transform(v, std::back_inserter(ids), &Item::id);
   std::ranges::transform(v, std::back_inserter(ids), [](Item const& item) { return item.id; });
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: std::ranges::sort(v, {}, &Item::id);
   std::ranges::sort(v, [](Item const& a, Item const& b) { return a.id < b.id; });
 
   // NEGATIVE
@@ -34,4 +36,10 @@ void testProjections(std::vector<Item>& v)
 
   // NEGATIVE
   std::ranges::any_of(v, [](Item const& item) { return item.isValid() && item.id > 10; });
+
+  // NEGATIVE - generic lambda: the parameter type cannot be spelled in a projection
+  std::ranges::any_of(v, [](auto const& item) { return item.isValid(); });
+
+  // NEGATIVE - lambda spelled inside a macro expansion
+  std::ranges::any_of(v, AOBUS_IS_VALID_PRED);
 }

@@ -3,12 +3,12 @@
 
 #include "TestUtils.h"
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/LibraryScanner.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/rt/async/Runtime.h>
-#include <ao/rt/async/Task.h>
 
 #include <catch2/catch_test_macros.hpp>
 

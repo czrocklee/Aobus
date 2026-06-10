@@ -3,6 +3,8 @@
 
 #include "check/UseRangesContainsCheck.h"
 
+#include "check/AstUtil.h"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
@@ -10,15 +12,88 @@
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
-#include <clang/Basic/SourceLocation.h>
-#include <clang/Lex/Lexer.h>
+#include <llvm/ADT/StringRef.h>
 
+#include <cstdint>
 #include <string>
 
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::readability
 {
+  namespace
+  {
+    // Number of explicitly written arguments of the range overload: CPO object
+    // + range + value for the operator() form, range + value for a plain call.
+    constexpr std::uint32_t kCpoRangeOverloadArgs = 3;
+    constexpr std::uint32_t kPlainRangeOverloadArgs = 2;
+
+    // Counts arguments the caller actually wrote, skipping defaulted ones such
+    // as the trailing projection parameter of std::ranges algorithms.
+    std::uint32_t countExplicitArgs(CallExpr const& call)
+    {
+      std::uint32_t count = 0;
+
+      for (Expr const* arg : call.arguments())
+      {
+        if (!isa<CXXDefaultArgExpr>(arg))
+        {
+          ++count;
+        }
+      }
+
+      return count;
+    }
+
+    // Verifies via the AST that algoCall invokes std::ranges::find or
+    // std::ranges::count on the (range, value) overload. Rejects same-named
+    // functions from other namespaces and the iterator-pair overloads, whose
+    // first argument is not a range.
+    bool isRangesAlgo(CallExpr const& algoCall, llvm::StringRef const expectedName)
+    {
+      if (auto const* opCall = dyn_cast<CXXOperatorCallExpr>(&algoCall); opCall != nullptr)
+      {
+        return countExplicitArgs(*opCall) == kCpoRangeOverloadArgs && aobus::getRangesCpoName(*opCall) == expectedName;
+      }
+
+      if (countExplicitArgs(algoCall) != kPlainRangeOverloadArgs)
+      {
+        return false;
+      }
+
+      auto const* calleeDecl = algoCall.getDirectCallee();
+
+      if (calleeDecl == nullptr || calleeDecl->getIdentifier() == nullptr || calleeDecl->getName() != expectedName)
+      {
+        return false;
+      }
+
+      return llvm::StringRef{calleeDecl->getQualifiedNameAsString()}.starts_with("std::ranges::");
+    }
+
+    Expr const* getComparisonExpr(MatchFinder::MatchResult const& result, bool isFindGroup)
+    {
+      if (isFindGroup)
+      {
+        auto const* findEq = result.Nodes.getNodeAs<Expr>("find_eq");
+
+        return findEq != nullptr ? findEq : result.Nodes.getNodeAs<Expr>("find_ne");
+      }
+
+      if (auto const* countEq = result.Nodes.getNodeAs<Expr>("count_eq"); countEq != nullptr)
+      {
+        return countEq;
+      }
+
+      if (auto const* countNe = result.Nodes.getNodeAs<Expr>("count_ne"); countNe != nullptr)
+      {
+        return countNe;
+      }
+
+      return result.Nodes.getNodeAs<Expr>("count_gt");
+    }
+  } // namespace
+
   void UseRangesContainsCheck::registerMatchers(MatchFinder* finder)
   {
     auto rangeArg = expr().bind("range");
@@ -65,7 +140,6 @@ namespace clang::tidy::readability
   void UseRangesContainsCheck::check(MatchFinder::MatchResult const& result)
   {
     auto const* algoCall = result.Nodes.getNodeAs<CallExpr>("algo_call");
-    auto const* endCall = result.Nodes.getNodeAs<CallExpr>("end_call");
     auto const* range = result.Nodes.getNodeAs<Expr>("range");
     auto const* val = result.Nodes.getNodeAs<Expr>("val");
 
@@ -74,44 +148,54 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const& sm = *result.SourceManager;
-    auto const& langOpts = result.Context->getLangOpts();
+    auto const* findEq = result.Nodes.getNodeAs<Expr>("find_eq");
+    auto const* countEq = result.Nodes.getNodeAs<Expr>("count_eq");
 
-    auto const getSourceText = [&](Expr const* exprArg) -> std::string
-    {
-      if (exprArg == nullptr)
-      {
-        return "";
-      }
+    bool const isFindGroup = findEq != nullptr || result.Nodes.getNodeAs<Expr>("find_ne") != nullptr;
+    auto const* cmp = getComparisonExpr(result, isFindGroup);
 
-      return Lexer::getSourceText(CharSourceRange::getTokenRange(exprArg->getSourceRange()), sm, langOpts).str();
-    };
-
-    auto const* calleeExpr = (isa<CXXOperatorCallExpr>(algoCall)) ? algoCall->getArg(0) : algoCall->getCallee();
-    auto const calleeText = getSourceText(calleeExpr);
-
-    bool const isFind = calleeText.find("find") != std::string::npos;
-    bool const isCount = calleeText.find("count") != std::string::npos;
-
-    if (!isFind && !isCount)
+    if (cmp == nullptr)
     {
       return;
     }
 
-    if (endCall != nullptr)
+    if (!isRangesAlgo(*algoCall, isFindGroup ? "find" : "count"))
     {
-      auto const* endCalleeExpr = (isa<CXXOperatorCallExpr>(endCall)) ? endCall->getArg(0) : endCall->getCallee();
+      return;
+    }
 
-      if (auto const endCalleeText = getSourceText(endCalleeExpr); endCalleeText.find("end") == std::string::npos)
+    if (isFindGroup)
+    {
+      auto const* endCall = result.Nodes.getNodeAs<CallExpr>("end_call");
+
+      if (endCall == nullptr || !aobus::isEndCall(*endCall))
       {
         return;
       }
     }
 
-    auto const rangeStr = getSourceText(range);
-    auto valStr = getSourceText(val);
+    if (aobus::isWithinRewrittenOperator(*cmp, *result.Context))
+    {
+      return;
+    }
+
+    if (aobus::isInMacro(cmp->getSourceRange()))
+    {
+      return;
+    }
+
+    auto const& sm = *result.SourceManager;
+    auto const& langOpts = result.Context->getLangOpts();
+
+    auto const rangeStr = aobus::getExprSourceText(*range, sm, langOpts);
+    auto valStr = aobus::getExprSourceText(*val, sm, langOpts);
 
     if (rangeStr.empty() || valStr.empty())
+    {
+      return;
+    }
+
+    if (isFindGroup && !aobus::verifyEndObject(*result.Nodes.getNodeAs<CallExpr>("end_call"), rangeStr, sm, langOpts))
     {
       return;
     }
@@ -121,73 +205,18 @@ namespace clang::tidy::readability
       valStr = "std::string_view{" + valStr + "}";
     }
 
-    auto const replacementBase = "std::ranges::contains(" + rangeStr + ", " + valStr + ")";
+    auto replacement = "std::ranges::contains(" + rangeStr + ", " + valStr + ")";
 
-    handleFindReplacement(result, replacementBase, isFind);
-    handleCountReplacement(result, replacementBase, isCount);
-  }
-
-  void UseRangesContainsCheck::handleFindReplacement(MatchFinder::MatchResult const& result,
-                                                     std::string const& replacementBase,
-                                                     bool isFind)
-  {
-    auto const* findEq = result.Nodes.getNodeAs<Expr>("find_eq");
-    auto const* findNe = result.Nodes.getNodeAs<Expr>("find_ne");
-
-    if (findEq == nullptr && findNe == nullptr)
-    {
-      return;
-    }
-
-    if (!isFind)
-    {
-      return;
-    }
-
-    auto replacement = replacementBase;
-    auto const* cmp = (findEq != nullptr) ? findEq : findNe;
-
-    if (findEq != nullptr)
+    // find == end and count == 0 both assert absence; the other comparison
+    // forms assert presence.
+    if (findEq != nullptr || countEq != nullptr)
     {
       replacement = "!" + replacement;
     }
 
-    diag(cmp->getBeginLoc(), "use std::ranges::contains instead of std::ranges::find != end")
-      << FixItHint::CreateReplacement(cmp->getSourceRange(), replacement);
-  }
+    auto const* message = isFindGroup ? "use std::ranges::contains instead of std::ranges::find != end"
+                                      : "use std::ranges::contains instead of std::ranges::count > 0";
 
-  void UseRangesContainsCheck::handleCountReplacement(MatchFinder::MatchResult const& result,
-                                                      std::string const& replacementBase,
-                                                      bool isCount)
-  {
-    auto const* countEq = result.Nodes.getNodeAs<Expr>("count_eq");
-    auto const* countNe = result.Nodes.getNodeAs<Expr>("count_ne");
-    auto const* countGt = result.Nodes.getNodeAs<Expr>("count_gt");
-
-    if (countEq == nullptr && countNe == nullptr && countGt == nullptr)
-    {
-      return;
-    }
-
-    if (!isCount)
-    {
-      return;
-    }
-
-    auto replacement = replacementBase;
-    Expr const* cmp = nullptr;
-
-    if (countEq != nullptr)
-    {
-      cmp = countEq;
-      replacement = "!" + replacement;
-    }
-    else
-    {
-      cmp = (countNe != nullptr) ? countNe : countGt;
-    }
-
-    diag(cmp->getBeginLoc(), "use std::ranges::contains instead of std::ranges::count > 0")
-      << FixItHint::CreateReplacement(cmp->getSourceRange(), replacement);
+    diag(cmp->getBeginLoc(), message) << FixItHint::CreateReplacement(cmp->getSourceRange(), replacement);
   }
 } // namespace clang::tidy::readability

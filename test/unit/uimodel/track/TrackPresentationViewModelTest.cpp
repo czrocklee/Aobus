@@ -3,6 +3,7 @@
 
 #include "test/unit/runtime/TestUtils.h"
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
@@ -10,7 +11,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/async/Runtime.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>

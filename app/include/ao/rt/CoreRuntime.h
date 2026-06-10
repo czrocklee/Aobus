@@ -11,14 +11,14 @@ namespace ao::library
   class MusicLibrary;
 }
 
-namespace ao::rt::async
+namespace ao::async
 {
+  class IExecutor;
   class Runtime;
 }
 
 namespace ao::rt
 {
-  class IControlExecutor;
   class LibraryMutationService;
   class TrackCommandService;
   class ListSourceStore;
@@ -31,7 +31,7 @@ namespace ao::rt
   class CoreRuntime
   {
   public:
-    CoreRuntime(std::unique_ptr<IControlExecutor> executorPtr,
+    CoreRuntime(std::unique_ptr<async::IExecutor> executorPtr,
                 std::filesystem::path musicRoot,
                 std::filesystem::path databasePath);
     virtual ~CoreRuntime();

@@ -5,9 +5,9 @@
 
 #include "CorePrimitives.h"
 #include "StateTypes.h"
-#include "async/Task.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
+#include <ao/async/Task.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -24,17 +24,16 @@ namespace ao::library
   struct ScanPlan;
 }
 
+namespace ao::async
+{
+  class Runtime;
+}
+
 namespace ao::rt
 {
-  class IControlExecutor;
   struct MetadataPatch;
   struct UpdateTrackMetadataReply;
   enum class ExportMode : std::uint8_t;
-
-  namespace async
-  {
-    class Runtime;
-  }
 
   class LibraryMutationService final
   {

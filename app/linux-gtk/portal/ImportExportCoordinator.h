@@ -4,10 +4,10 @@
 #pragma once
 
 #include "app/ThemeCoordinator.h"
+#include <ao/async/LifetimeScope.h>
+#include <ao/async/Task.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryYamlExporter.h>
-#include <ao/rt/async/LifetimeScope.h>
-#include <ao/rt/async/Task.h>
 
 #include <giomm/asyncresult.h>
 #include <glibmm/refptr.h>
@@ -86,7 +86,7 @@ namespace ao::gtk::portal
     void onImportFinished() const;
 
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
-    rt::async::Task<void> importLibraryTask(std::filesystem::path importPath);
+    async::Task<void> importLibraryTask(std::filesystem::path importPath);
 
     void onExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, AppDialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
@@ -102,7 +102,7 @@ namespace ao::gtk::portal
     std::optional<ThemeRegistrationToken> _optLibraryTaskThemeToken;
     rt::Subscription _libraryTaskProgressSub;
     rt::Subscription _libraryTaskCompletedSub;
-    rt::async::LifetimeScope _tasks;
+    async::LifetimeScope _tasks;
     std::unique_ptr<LibraryTaskProgressDialog> _libraryTaskDialogPtr;
   };
 } // namespace ao::gtk::portal

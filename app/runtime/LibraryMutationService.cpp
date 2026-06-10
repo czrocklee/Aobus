@@ -4,6 +4,8 @@
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/LibraryScanner.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -16,8 +18,6 @@
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/LibraryYamlImporter.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/rt/async/Runtime.h>
-#include <ao/rt/async/Task.h>
 #include <ao/utility/ThreadUtils.h>
 
 #include <cstddef>
@@ -284,7 +284,7 @@ namespace ao::rt
       throwException<Exception>("Library import failed: {}", result.error().message);
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnControl();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
   }
 
   async::Task<void> LibraryMutationService::exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode)
@@ -298,7 +298,7 @@ namespace ao::rt
       throwException<Exception>("Library export failed: {}", result.error().message);
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnControl();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
   }
 
   async::Task<library::ScanPlan> LibraryMutationService::buildScanPlanAsync()
@@ -310,7 +310,7 @@ namespace ao::rt
     auto plan = scanner.buildPlan(
       [this](std::filesystem::path const& path)
       {
-        _implPtr->asyncRuntime.controlExecutor().dispatch(
+        _implPtr->asyncRuntime.callbackExecutor().dispatch(
           [this, path]
           {
             _implPtr->libraryTaskProgressSignal.emit(LibraryMutationService::LibraryTaskProgressUpdated{
@@ -320,7 +320,7 @@ namespace ao::rt
           });
       });
 
-    co_await _implPtr->asyncRuntime.resumeOnControl();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
     co_return plan;
   }
 
@@ -337,7 +337,7 @@ namespace ao::rt
       std::move(plan),
       [this, totalItems](std::filesystem::path const& filePath, std::int32_t index)
       {
-        _implPtr->asyncRuntime.controlExecutor().dispatch(
+        _implPtr->asyncRuntime.callbackExecutor().dispatch(
           [this, filePath, index, totalItems]
           {
             auto const fraction = totalItems > 0 ? static_cast<double>(index) / static_cast<double>(totalItems) : 0.0;
@@ -353,7 +353,7 @@ namespace ao::rt
     executor.run();
     resultIds = executor.result().processedIds;
 
-    co_await _implPtr->asyncRuntime.resumeOnControl();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 
     _implPtr->libraryTaskCompletedSignal.emit(resultIds.size());
 

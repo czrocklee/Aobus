@@ -18,4 +18,5 @@ add_subdirectory(lint)
 
 add_subdirectory(lib)
 add_subdirectory(app)
+add_subdirectory(tool/fleet)
 add_subdirectory(test)

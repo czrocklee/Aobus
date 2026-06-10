@@ -8,12 +8,20 @@
 extern "C" void my_local_c_function()
 {}
 
+#define AOBUS_GETPID getpid
+
 namespace
 {
   void testCApiQualification()
   {
-    // POSITIVE
+    // POSITIVE: FIX-TO: ::getpid();
     getpid();
+
+    // POSITIVE: FIX-TO: (::getpid)();
+    (getpid)();
+
+    // NEGATIVE - callee spelled by a macro; a FixIt would edit the macro definition
+    (AOBUS_GETPID)();
 
     // NEGATIVE
     ::getpid();

@@ -2,11 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtils.h"
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ImmediateControlExecutor.h>
-#include <ao/rt/async/LifetimeScope.h>
-#include <ao/rt/async/Runtime.h>
-#include <ao/rt/async/Task.h>
+#include <ao/async/Executor.h>
+#include <ao/async/ImmediateExecutor.h>
+#include <ao/async/LifetimeScope.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -20,7 +20,7 @@
 
 namespace ao::rt::test
 {
-  using namespace ao::rt::async;
+  using namespace ao::async;
 
   namespace
   {
@@ -42,7 +42,7 @@ namespace ao::rt::test
       AsyncTestState<int> completed;
     };
 
-    class QueuedControlExecutor final : public IControlExecutor
+    class QueuedExecutor final : public IExecutor
     {
     public:
       bool isCurrent() const noexcept override { return true; }
@@ -104,7 +104,7 @@ namespace ao::rt::test
       co_await runtime->resumeOnWorker();
       barrier->wait(); // deterministic wait point (blocks worker thread)
 
-      co_await runtime->resumeOnControl();
+      co_await runtime->resumeOnCallbackExecutor();
       // If cancelled, this line should never be reached.
       completed.set(true);
     }
@@ -112,14 +112,14 @@ namespace ao::rt::test
     Task<void> pendingControlResumeTask(Runtime* runtime, AsyncTestState<bool> completed)
     {
       co_await runtime->resumeOnWorker();
-      co_await runtime->resumeOnControl();
+      co_await runtime->resumeOnCallbackExecutor();
       completed.set(true);
     }
   }
 
   TEST_CASE("LifetimeScope - Completion without cancellation", "[async][unit][runtime]")
   {
-    auto executor = ImmediateControlExecutor{};
+    auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
     auto barrier = AsyncBarrier{};
     auto completed = AsyncTestState<bool>::create(false);
@@ -130,7 +130,7 @@ namespace ao::rt::test
 
       barrier.release();
 
-      // Wait for it to complete on the worker thread/ImmediateControlExecutor
+      // Wait for it to complete on the worker thread/ImmediateExecutor
       REQUIRE(completed.waitUntil(true));
     }
 
@@ -141,7 +141,7 @@ namespace ao::rt::test
 
   TEST_CASE("LifetimeScope - Automatic cancellation", "[async][unit][runtime]")
   {
-    auto executor = ImmediateControlExecutor{};
+    auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
     auto barrier = AsyncBarrier{};
     auto completed = AsyncTestState<bool>::create(false);
@@ -153,7 +153,7 @@ namespace ao::rt::test
       // Destroy scope while task is blocked at the barrier
     }
 
-    // Now release the barrier - task should resume but be cancelled at resumeOnControl
+    // Now release the barrier - task should resume but be cancelled at resumeOnCallbackExecutor
     barrier.release();
 
     // Yield a bounded number of times to let the worker thread process the cancellation.
@@ -170,7 +170,7 @@ namespace ao::rt::test
 
   TEST_CASE("LifetimeScope - Cancellation before queued control resume", "[async][unit][runtime]")
   {
-    auto executor = QueuedControlExecutor{};
+    auto executor = QueuedExecutor{};
     auto runtime = Runtime{executor};
     auto completed = AsyncTestState<bool>::create(false);
 
@@ -189,7 +189,7 @@ namespace ao::rt::test
 
   TEST_CASE("LifetimeScope - Member task lifecycle", "[async][unit][runtime]")
   {
-    auto executor = ImmediateControlExecutor{};
+    auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
     auto completed = AsyncTestState<int>::create(0);
 

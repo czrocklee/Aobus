@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/TestUtils.h"
+#include <ao/async/Runtime.h>
 #include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/async/Runtime.h>
 #include <ao/uimodel/tag/TagEditWorkflow.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -19,7 +19,7 @@ namespace ao::uimodel::tag::test
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
-    auto runtime = rt::async::Runtime{executor};
+    auto runtime = async::Runtime{executor};
     auto mutation = rt::LibraryMutationService{runtime, testLib.library()};
     auto workflow = TagEditWorkflow{mutation};
 

@@ -5,12 +5,12 @@
 
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Type.h>
+#include <ao/async/Executor.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 
 #include <atomic>
 #include <chrono>
@@ -200,7 +200,7 @@ namespace ao::rt::test
   /**
    * @brief Immediate executor for tests — runs tasks synchronously on the calling thread.
    */
-  class MockExecutor final : public IControlExecutor
+  class MockExecutor final : public async::IExecutor
   {
   public:
     bool isCurrent() const noexcept override { return true; }

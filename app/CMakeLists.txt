@@ -1,8 +1,6 @@
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
-    runtime/async/Runtime.cpp
-    runtime/async/LifetimeScope.cpp
     runtime/CoreRuntime.cpp
     runtime/LibraryYamlImporter.cpp
     runtime/LibraryYamlExporter.cpp
@@ -28,7 +26,7 @@ add_library(ao_app_runtime STATIC
 )
 target_include_directories(ao_app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_app_runtime PUBLIC ao PkgRapidYaml)
+target_link_libraries(ao_app_runtime PUBLIC ao ao_async PkgRapidYaml)
 target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
 
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)

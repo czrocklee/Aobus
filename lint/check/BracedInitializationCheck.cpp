@@ -355,6 +355,13 @@ namespace clang::tidy::readability
       return;
     }
 
+    // Parens inside a macro expansion must not be edited: the FixIt would
+    // rewrite the macro definition rather than this use site.
+    if (optTarget->lParen.isMacroID() || optTarget->rParen.isMacroID())
+    {
+      return;
+    }
+
     if (!isParenChar(optTarget->lParen, sm, '(') || isParenChar(optTarget->lParen, sm, '{'))
     {
       return;

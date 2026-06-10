@@ -35,15 +35,26 @@ get_check_alias() {
 expects_auto_fix() {
     local alias="$1"
     case "$alias" in
-        aobus-modernize-braced-initialization | \
+        aobus-implicit-bool-conversion-in-init | \
+            aobus-include-convention | \
+            aobus-strict-forward-declaration | \
+            aobus-modernize-braced-initialization | \
             aobus-modernize-concrete-final | \
             aobus-modernize-lambda-params | \
+            aobus-modernize-nodiscard-usage | \
+            aobus-modernize-use-ctad | \
             aobus-modernize-use-erase-if | \
+            aobus-modernize-use-ranges-any-of | \
+            aobus-modernize-use-ranges-contains | \
             aobus-modernize-use-ranges-min-max | \
+            aobus-modernize-use-ranges-projection | \
             aobus-modernize-use-starts-with | \
             aobus-modernize-use-std-numbers | \
+            aobus-readability-c-api-global-qualification | \
             aobus-readability-control-block-spacing | \
             aobus-readability-redundant-namespace-qualification | \
+            aobus-readability-redundant-using-directive | \
+            aobus-readability-std-c-library-qualification | \
             aobus-readability-use-if-init-statement)
             return 0
             ;;
@@ -114,18 +125,39 @@ run_fix() {
             [[ -f "$sibling" ]] && cp -n "$sibling" "$TEST_TMP/"
         done
 
-        EXTRA_CHECKS="-*,$ALIAS" "$PROJECT_ROOT/script/run-clang-tidy.sh" \
+        local FIX_EXTRA_TIDY_ARGS="${EXTRA_TIDY_ARGS:-}"
+        FIX_EXTRA_TIDY_ARGS="${FIX_EXTRA_TIDY_ARGS:+$FIX_EXTRA_TIDY_ARGS }--extra-arg=-Wno-error"
+        FIX_EXTRA_TIDY_ARGS="$FIX_EXTRA_TIDY_ARGS --extra-arg=-std=c++26"
+        FIX_EXTRA_TIDY_ARGS="$FIX_EXTRA_TIDY_ARGS --extra-arg=-x --extra-arg=c++"
+        FIX_EXTRA_TIDY_ARGS="$FIX_EXTRA_TIDY_ARGS --extra-arg=-I${PROJECT_ROOT}/include"
+        FIX_EXTRA_TIDY_ARGS="$FIX_EXTRA_TIDY_ARGS --extra-arg=-I${PROJECT_ROOT}/lib"
+        FIX_EXTRA_TIDY_ARGS="$FIX_EXTRA_TIDY_ARGS --extra-arg=-I${TEST_TMP}"
+
+        if ! EXTRA_CHECKS="-*,$ALIAS" EXTRA_TIDY_ARGS="$FIX_EXTRA_TIDY_ARGS" "$PROJECT_ROOT/script/run-clang-tidy.sh" \
             -p "$BUILD_DIR" \
             --fix \
-            "$FIXED_FILE" > /dev/null 2>&1 || true
+            "$FIXED_FILE"; then
+            echo "ERROR: clang-tidy --fix failed for $FNAME"
+            return 1
+        fi
 
-        if expects_auto_fix "$ALIAS" && cmp -s "$FIXTURE" "$FIXED_FILE"; then
+        local has_positive=0
+        if grep -qE '//[[:space:]]*(POSITIVE|FIX-TO)' "$FIXTURE"; then
+            has_positive=1
+        fi
+
+        if expects_auto_fix "$ALIAS" && [[ $has_positive -eq 1 ]] && cmp -s "$FIXTURE" "$FIXED_FILE"; then
             echo "ERROR: Auto-Fix did not modify $FNAME"
             return 1
         fi
 
         if ! g++ -std=c++26 -fsyntax-only -I"${PROJECT_ROOT}/include" -I"${PROJECT_ROOT}/lib" -I"$TEST_TMP" "$FIXED_FILE"; then
             echo "ERROR: Auto-Fix Compilation FAILED for $FNAME"
+            return 1
+        fi
+
+        if ! "$VERIFIER" "$FIXTURE" --check "$ALIAS" --fixed-file "$FIXED_FILE" --only-fixes; then
+            echo "ERROR: Auto-Fix Verification FAILED for $FNAME"
             return 1
         fi
     } >> "$LOG_FILE" 2>&1; then

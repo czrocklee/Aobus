@@ -3,17 +3,17 @@
 
 #include <cstdint>
 
-// POSITIVE
+// POSITIVE: FIX-TO: std::int32_t getForbiddenVal()
 [[nodiscard]] std::int32_t getForbiddenVal()
 {
   return 42;
 }
 
-// POSITIVE
+// POSITIVE: FIX-TO: struct ForbiddenStruct
 struct [[nodiscard]] ForbiddenStruct
 {};
 
-// POSITIVE
+// POSITIVE: FIX-TO: class ForbiddenClass
 class [[nodiscard]] ForbiddenClass
 {};
 
@@ -29,7 +29,7 @@ struct ConformingStruct
 
 // --- RAII Tests ---
 
-// POSITIVE
+// POSITIVE: FIX-TO: class [[nodiscard]] MissingNodiscardRaii
 class MissingNodiscardRaii
 {
 public:
@@ -85,7 +85,7 @@ public:
   MainWindow(MainWindow const&) = delete;
 };
 
-// POSITIVE
+// POSITIVE: FIX-TO: class [[nodiscard]] SomeResourceToken
 class SomeResourceToken
 {
 public:
@@ -95,7 +95,7 @@ public:
 
 namespace ao::tag
 {
-  // POSITIVE
+  // POSITIVE: FIX-TO: class [[nodiscard]] TagFile
   class TagFile
   {
   public:
@@ -104,10 +104,22 @@ namespace ao::tag
   };
 } // namespace ao::tag
 
-// POSITIVE
+// POSITIVE: FIX-TO: class [[nodiscard]] WriteTransaction
 class WriteTransaction
 {
 public:
   ~WriteTransaction() {}
   WriteTransaction(WriteTransaction const&) = delete;
 };
+
+// POSITIVE: FIX-TO: [[deprecated]] std::int32_t testMultiAttr1()
+[[nodiscard, deprecated]] std::int32_t testMultiAttr1()
+{
+  return 1;
+}
+
+// POSITIVE: FIX-TO: [[deprecated]] std::int32_t testMultiAttr2()
+[[deprecated, nodiscard]] std::int32_t testMultiAttr2()
+{
+  return 2;
+}

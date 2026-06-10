@@ -7,6 +7,7 @@
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/DeclarationName.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/NestedNameSpecifier.h>
 #include <clang/AST/TypeLoc.h>
@@ -96,6 +97,53 @@ namespace clang::tidy::readability
       return ns != nullptr && isAncestor(ns, currentContext);
     }
 
+    bool declaresNamespaceNamed(DeclContext const* context, DeclarationName name)
+    {
+      if (context == nullptr || name.isEmpty())
+      {
+        return false;
+      }
+
+      auto declaresInSingleContext = [name](DeclContext const* candidate)
+      {
+        return std::ranges::any_of(candidate->decls(),
+                                   [name](auto const* decl)
+                                   {
+                                     if (auto const* nsDecl = dyn_cast<NamespaceDecl>(decl);
+                                         nsDecl != nullptr && nsDecl->getDeclName() == name)
+                                     {
+                                       return true;
+                                     }
+
+                                     if (auto const* aliasDecl = dyn_cast<NamespaceAliasDecl>(decl);
+                                         aliasDecl != nullptr && aliasDecl->getDeclName() == name)
+                                     {
+                                       return true;
+                                     }
+
+                                     return false;
+                                   });
+      };
+
+      if (declaresInSingleContext(context))
+      {
+        return true;
+      }
+
+      if (auto const* nsContext = dyn_cast<NamespaceDecl>(context); nsContext != nullptr)
+      {
+        for (auto const* redecl : nsContext->redecls())
+        {
+          if (redecl != nsContext && declaresInSingleContext(redecl))
+          {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    }
+
     bool isShadowedByIntermediateNamespace(NestedNameSpecifierLoc const& lastRedundant,
                                            llvm::SmallVectorImpl<NestedNameSpecifierLoc> const& chain,
                                            DeclContext const* currentContext)
@@ -137,6 +185,11 @@ namespace clang::tidy::readability
         {
           if (auto const* nsDecl = dyn_cast<NamespaceDecl>(dc);
               nsDecl != nullptr && nsDecl->getDeclName() == targetName)
+          {
+            return true;
+          }
+
+          if (declaresNamespaceNamed(dc, targetName))
           {
             return true;
           }

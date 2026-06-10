@@ -14,6 +14,8 @@ public:
   BracedDemoBase(std::int32_t /*val*/) {}
 };
 
+#define AOBUS_MAKE_FOO(name, val) [[maybe_unused]] Foo const name(val)
+
 class BracedDemo final : public BracedDemoBase
 {
   static constexpr std::int32_t kInitVal1 = 10;
@@ -26,13 +28,13 @@ public:
   }
 
   BracedDemo(double /*val*/)
-    // POSITIVE
+    // POSITIVE: FIX-TO: : BracedDemoBase{kInitVal1}
     : BracedDemoBase(kInitVal1)
     ,
-    // POSITIVE
+    // POSITIVE: FIX-TO: _data{kInitVal1}
     _data(kInitVal1)
     ,
-    // POSITIVE
+    // POSITIVE: FIX-TO: _intData{kInitVal2}
     _intData(kInitVal2)
   {
   }
@@ -42,25 +44,25 @@ public:
     // NEGATIVE
     [[maybe_unused]] auto const s1 = std::string{"foo"};
 
-    // POSITIVE
+    // POSITIVE: FIX-TO: [[maybe_unused]] auto const s2 = std::string{"bar"};
     [[maybe_unused]] auto const s2 = std::string("bar");
 
     // NEGATIVE
     auto* const s3 = new std::string{"baz"};
 
-    // POSITIVE
+    // POSITIVE: FIX-TO: auto* const s4 = new std::string{"qux"};
     auto* const s4 = new std::string("qux");
 
     // NEGATIVE
     [[maybe_unused]] Foo const s5{10};
 
-    // POSITIVE
+    // POSITIVE: FIX-TO: [[maybe_unused]] Foo const s6{10};
     [[maybe_unused]] Foo const s6(10);
 
-    // POSITIVE
+    // POSITIVE: FIX-TO: [[maybe_unused]] auto const s7 = std::string{s1};
     [[maybe_unused]] auto const s7 = std::string(s1);
 
-    // POSITIVE
+    // POSITIVE: FIX-TO: [[maybe_unused]] auto const p1 = std::filesystem::path{s1};
     [[maybe_unused]] auto const p1 = std::filesystem::path(s1);
 
     // NEGATIVE - DANGEROUS cases (Should be IGNORED)
@@ -72,6 +74,9 @@ public:
     // NEGATIVE - Scalar Casts (Should be IGNORED)
     [[maybe_unused]] auto const u1 = std::uintptr_t(&s1);
     [[maybe_unused]] auto const i1 = std::int32_t(1.5);
+
+    // NEGATIVE - parens spelled inside a macro expansion
+    AOBUS_MAKE_FOO(s10, kInitVal1);
   }
 
 private:

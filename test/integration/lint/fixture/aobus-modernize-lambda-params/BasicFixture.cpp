@@ -6,7 +6,7 @@
 
 void testLambdaParams()
 {
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto invalidLambda = [] { std::cout << "Hi"; };
   [[maybe_unused]] auto invalidLambda = []() { std::cout << "Hi"; };
 
   // NEGATIVE

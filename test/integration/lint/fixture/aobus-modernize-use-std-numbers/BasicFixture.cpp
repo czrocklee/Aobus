@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+// FIX-TO: #include <cstddef>\n\n#include <cstdint>\n\n#include "TestHelpers.h"
 #include "TestHelpers.h"
 
 class MyWidget : public gtkmm_mock::Widget
@@ -19,13 +20,13 @@ extern "C"
   }
 }
 
-// POSITIVE
+// POSITIVE: FIX-TO: std::int32_t global_var = 0;
 int global_var = 0;
 
-// POSITIVE
+// POSITIVE: FIX-TO: std::int16_t small_var = 0;
 short small_var = 0;
 
-// POSITIVE
+// POSITIVE: FIX-TO: std::uint32_t u_var = 0;
 unsigned int u_var = 0;
 
 struct AlsaMock
@@ -41,7 +42,7 @@ struct AlsaMock
 
 void testLogic()
 {
-  // POSITIVE
+  // POSITIVE: FIX-TO: std::int32_t local = 0;
   int local = 0;
 
   // POSITIVE
@@ -51,7 +52,7 @@ void testLogic()
   long val_for_c = 0;
   some_c_api(&val_for_c, 5);
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: auto cast_val = static_cast<std::ptrdiff_t>(10);
   auto cast_val = static_cast<long>(10);
 }
 

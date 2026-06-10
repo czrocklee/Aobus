@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/AppConfig.h"
-#include "app/GtkControlExecutor.h"
+#include "app/GtkMainContextExecutor.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/MainWindow.h"
 #include "portal/ImportExportCoordinator.h"
@@ -69,7 +69,7 @@ namespace
                                         LibraryPaths paths,
                                         std::shared_ptr<AppConfig> appConfigPtr)
   {
-    auto executorPtr = std::make_unique<GtkControlExecutor>();
+    auto executorPtr = std::make_unique<GtkMainContextExecutor>();
 
     auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
     auto workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspaceConfigPath);

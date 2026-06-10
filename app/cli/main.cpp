@@ -7,8 +7,8 @@
 #include "TagCommand.h"
 #include "TrackCommand.h"
 #include <ao/Exception.h>
+#include <ao/async/ImmediateExecutor.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/ImmediateControlExecutor.h>
 
 #include <CLI/CLI.hpp>
 
@@ -23,7 +23,7 @@ int main(int argc, char const* argv[])
 {
   try
   {
-    auto executorPtr = std::make_unique<rt::ImmediateControlExecutor>();
+    auto executorPtr = std::make_unique<async::ImmediateExecutor>();
     auto runtime = rt::CoreRuntime{std::move(executorPtr), ".", ".aobus/library"};
 
     auto app = CLI::App{"Aobus CLI - aobus"};

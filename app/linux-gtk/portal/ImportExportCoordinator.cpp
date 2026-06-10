@@ -9,15 +9,15 @@
 #include "layout/LayoutConstants.h"
 #include "portal/LibraryTaskProgressDialog.h"
 #include <ao/Exception.h>
+#include <ao/async/LifetimeScope.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/LibraryScanner.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/rt/async/LifetimeScope.h>
-#include <ao/rt/async/Runtime.h>
-#include <ao/rt/async/Task.h>
 #include <ao/utility/Log.h>
 
 #include <giomm/asyncresult.h>
@@ -94,7 +94,7 @@ namespace ao::gtk::portal
 
     _runtime.async().spawnWithLifetime(
       &_tasks,
-      [](ImportExportCoordinator* self) -> rt::async::Task<void>
+      [](ImportExportCoordinator* self) -> async::Task<void>
       {
         // 1. Build Plan
         auto plan = co_await self->_runtime.mutation().buildScanPlanAsync();
@@ -259,9 +259,8 @@ namespace ao::gtk::portal
   {
     _runtime.async().spawnWithLifetime(
       &_tasks,
-      [](ImportExportCoordinator* self,
-         std::filesystem::path exportPath,
-         rt::ExportMode exportMode) -> rt::async::Task<void>
+      [](
+        ImportExportCoordinator* self, std::filesystem::path exportPath, rt::ExportMode exportMode) -> async::Task<void>
       {
         try
         {
@@ -300,7 +299,7 @@ namespace ao::gtk::portal
                         { onLibraryImportSelected(result, fileDialogPtr); });
   }
 
-  rt::async::Task<void> ImportExportCoordinator::importLibraryTask(std::filesystem::path importPath)
+  async::Task<void> ImportExportCoordinator::importLibraryTask(std::filesystem::path importPath)
   {
     try
     {
@@ -335,7 +334,7 @@ namespace ao::gtk::portal
         auto const path = std::filesystem::path{filePtr->get_path()};
         _runtime.async().spawnWithLifetime(
           &_tasks,
-          [](ImportExportCoordinator* self, std::filesystem::path importPath) -> rt::async::Task<void>
+          [](ImportExportCoordinator* self, std::filesystem::path importPath) -> async::Task<void>
           { co_await self->importLibraryTask(std::move(importPath)); }(this, path));
       }
     }

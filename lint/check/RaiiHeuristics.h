@@ -23,7 +23,7 @@ namespace clang::tidy::aobus
   namespace detail
   {
     inline constexpr std::string_view kRaiiSuffixPattern =
-      "::.*(Guard|Subscription|Scope|Session|Lock|Transaction|Timer|Writer|Handle|TempDir|TempFile|Token)$";
+      "::.*(Guard|Subscription|Scope|Session|Lock|Transaction|Timer|Writer|Handle|TempDir|TempFile|Token|Raii)$";
 
     inline constexpr auto kRaiiSuffixes = std::to_array<std::string_view>({"Guard",
                                                                            "Subscription",
@@ -36,7 +36,8 @@ namespace clang::tidy::aobus
                                                                            "Handle",
                                                                            "TempDir",
                                                                            "TempFile",
-                                                                           "Token"});
+                                                                           "Token",
+                                                                           "Raii"});
 
     struct IsRAIIMatcher final : public ast_matchers::internal::MatcherInterface<CXXRecordDecl>
     {
@@ -78,7 +79,8 @@ namespace clang::tidy::aobus
 
   inline ast_matchers::internal::Matcher<CXXRecordDecl> isWhitelistedRaiiName()
   {
-    return ast_matchers::matchesName(detail::kRaiiSuffixPattern);
+    return ast_matchers::anyOf(
+      ast_matchers::matchesName(detail::kRaiiSuffixPattern), ast_matchers::hasName("::ao::tag::TagFile"));
   }
 
   inline bool isScopedOrRaiiType(QualType type, ASTContext& context)

@@ -8,8 +8,6 @@
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Basic/LLVM.h>
 
-#include <string>
-
 namespace clang::tidy::readability
 {
   class UseRangesContainsCheck : public ClangTidyCheck
@@ -22,14 +20,5 @@ namespace clang::tidy::readability
 
     void registerMatchers(ast_matchers::MatchFinder* finder) override;
     void check(ast_matchers::MatchFinder::MatchResult const& result) override;
-
-  private:
-    void handleFindReplacement(ast_matchers::MatchFinder::MatchResult const& result,
-                               std::string const& replacementBase,
-                               bool isFind);
-
-    void handleCountReplacement(ast_matchers::MatchFinder::MatchResult const& result,
-                                std::string const& replacementBase,
-                                bool isCount);
   };
 } // namespace clang::tidy::readability

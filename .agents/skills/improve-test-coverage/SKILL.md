@@ -9,14 +9,13 @@ This skill provides a systematic workflow for agents to analyze and improve C++ 
 
 It is designed to handle edge cases in coverage, find missing lines efficiently, and write Catch2 tests that simulate complex logic (e.g. batch operations, UI-driven data updates, lambda dispatching).
 
-## Delegating implementation to C2
+## Delegating implementation
 
-Deciding *what* to test and *which* boundaries to cover is a **C3** judgement — the rest of this document
-is that frontier (C3) path. *Implementing* a decided coverage plan can be delegated to the C2 proposal
-executor via the **`execute-plan`** skill; there is no separate coverage-specific C2 route. The proposal
+Deciding what to test and which boundaries to cover remains chair judgment. Implementing a decided
+coverage plan can be delegated through the **`execute-plan`** skill; there is no separate coverage route. The proposal
 worker reads this document from `.agents/skills/` in its work copy for the conventions and the
-coverage workflow below, then returns a validated patch you (the chair) review and land. Use
-`intent: behavior-change` when the new tests pin behavior. See `.agents/skills/execute-plan/SKILL.md`.
+coverage workflow below, then returns a validated patch you (the chair) review and land. Put the
+behavioral obligation in the intent invariant and list every permitted test/source operation explicitly.
 
 ## 1. Generating and Inspecting Coverage
 

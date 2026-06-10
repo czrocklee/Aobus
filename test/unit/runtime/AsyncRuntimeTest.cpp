@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtils.h"
-#include <ao/rt/ImmediateControlExecutor.h>
-#include <ao/rt/async/Runtime.h>
-#include <ao/rt/async/Task.h>
+#include <ao/async/ImmediateExecutor.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -13,7 +13,7 @@
 
 namespace ao::rt::test
 {
-  using namespace ao::rt::async;
+  using namespace ao::async;
 
   namespace
   {
@@ -23,8 +23,8 @@ namespace ao::rt::test
       // Now on worker thread — the thread switch is the behavior under test.
       (*counter)++;
 
-      co_await runtime->resumeOnControl();
-      // Now back on UI (ImmediateControlExecutor for tests)
+      co_await runtime->resumeOnCallbackExecutor();
+      // Now back on UI (ImmediateExecutor for tests)
       (*counter)++;
 
       co_return std::this_thread::get_id();
@@ -39,7 +39,7 @@ namespace ao::rt::test
 
   TEST_CASE("Async runtime - Basic spawn and wait", "[async][unit][runtime]")
   {
-    auto executor = ImmediateControlExecutor{};
+    auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
     auto counter = AsyncTestState<int>::create(0);
 
@@ -55,7 +55,7 @@ namespace ao::rt::test
 
   TEST_CASE("Async runtime - Exception handling", "[async][unit][runtime]")
   {
-    auto executor = ImmediateControlExecutor{};
+    auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
 
     // Logging version - should not crash

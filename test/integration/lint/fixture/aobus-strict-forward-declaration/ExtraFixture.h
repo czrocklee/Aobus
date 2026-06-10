@@ -8,7 +8,7 @@
 
 class ExtraBadParam
 {
-  // POSITIVE
+  // POSITIVE: FIX-TO: void test(/* forward declare */ ExtraTargetA* a);
   void test(ExtraTargetA* a);
 };
 

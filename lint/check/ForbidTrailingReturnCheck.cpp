@@ -39,11 +39,14 @@ namespace clang::tidy::readability
     }
 
     // Skip lambda call operators — trailing return is allowed on lambdas
-    if (auto const* rd = dyn_cast<CXXRecordDecl>(func->getParent()); rd != nullptr)
+    if (func->isCXXClassMember())
     {
-      if (rd->isLambda())
+      if (auto const* rd = dyn_cast<CXXRecordDecl>(func->getDeclContext()); rd != nullptr)
       {
-        return;
+        if (rd->isLambda())
+        {
+          return;
+        }
       }
     }
 
@@ -60,6 +63,6 @@ namespace clang::tidy::readability
     diag(loc,
          "non-lambda function '%0' uses trailing return type; "
          "use traditional return type syntax")
-      << func->getName();
+      << func;
   }
 } // namespace clang::tidy::readability

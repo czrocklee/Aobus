@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <optional>
@@ -29,6 +30,16 @@ template<typename K, typename V>
 struct KeyValue
 {
   KeyValue(K /*k*/, V /*v*/) {}
+};
+
+// Non-std container with an initializer_list constructor: braced construction
+// that resolves to the iterator-pair constructor is unsafe for CTAD because
+// removing the template arguments would re-deduce via initializer_list.
+template<typename T>
+struct IlBag
+{
+  IlBag(std::initializer_list<T> /*il*/) {}
+  IlBag(T const* /*first*/, T const* /*last*/) {}
 };
 
 struct Sink
@@ -65,31 +76,31 @@ void noopDelete(char* /*ptr*/)
 
 void ctadPositiveCases()
 {
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const v1 = std::vector{std::byte{1}};
   [[maybe_unused]] auto const v1 = std::vector<std::byte>{std::byte{1}};
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const v2 = std::vector{1, 2, 3};
   [[maybe_unused]] auto const v2 = std::vector<int>{1, 2, 3};
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const p1 = std::pair{1, 2.0};
   [[maybe_unused]] auto const p1 = std::pair<int, double>{1, 2.0};
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const p2 = std::pair{std::string{"key"}, std::string{"value"}};
   [[maybe_unused]] auto const p2 = std::pair<std::string, std::string>{std::string{"key"}, std::string{"value"}};
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const t1 = std::tuple{1, 2.0, 'a'};
   [[maybe_unused]] auto const t1 = std::tuple<int, double, char>{1, 2.0, 'a'};
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const b1 = Box{42};
   [[maybe_unused]] auto const b1 = Box<int>{42};
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const kv = KeyValue{std::string{"key"}, 1};
   [[maybe_unused]] auto const kv = KeyValue<std::string, int>{std::string{"key"}, 1};
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const s1 = std::set{1, 2, 3};
   [[maybe_unused]] auto const s1 = std::set<int>{1, 2, 3};
 
-  // POSITIVE
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const rows = std::vector{Row{"Gamma", 1, 2}, Row{"Alpha", 1, 3}};
   [[maybe_unused]] auto const rows = std::vector<Row>{Row{"Gamma", 1, 2}, Row{"Alpha", 1, 3}};
 }
 
@@ -122,6 +133,7 @@ void ctadNegativeCases()
   std::array<int, 3> arr{1, 2, 3};
   [[maybe_unused]] auto const s2 = std::span<int>{arr.data(), arr.size()};
   [[maybe_unused]] auto const s3 = std::span<int const>{arr};
+  [[maybe_unused]] auto const bag = IlBag<int>{arr.data(), arr.data() + arr.size()};
 
   [[maybe_unused]] auto const m1 = std::map<int, std::string>{{1, std::string{"one"}}, {2, std::string{"two"}}};
   [[maybe_unused]] auto const m2 = std::map<std::string, int>{{"one", 1}, {"two", 2}};

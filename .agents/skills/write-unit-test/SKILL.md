@@ -9,15 +9,12 @@ Use this skill to write behavior-focused Aobus unit tests that match the existin
 
 If the task also modifies C++ source or test files, follow `generate-cpp-code` first, especially `references/04-test-snippets.md`.
 
-## Delegating implementation to C2
+## Delegating implementation
 
-Deciding *what behavior and which edge cases* to test is a **C3** judgement — this document helps you
-make it. *Writing* the decided tests can be delegated to the C2 proposal executor via the
-**`execute-plan`** skill; there is no separate test-specific C2 route. The proposal worker reads this
-document from `.agents/skills/` in its work copy for the conventions below, then returns a validated
-patch that you (the chair) review and land. Use `intent: behavior-change` in the packet when the tests
-pin new behavior (the runner then requires a registered test to change). See
-`.agents/skills/execute-plan/SKILL.md`.
+Deciding what behavior and edge cases to test remains chair judgment. Writing an already-decided test
+plan may be delegated through the **`execute-plan`** skill with `task-kind: implement-plan`, exact test
+paths in `scope`, and a correctness invariant. The fleet returns a proposal for chair review and never
+lands it automatically.
 
 ## Core Workflow
 

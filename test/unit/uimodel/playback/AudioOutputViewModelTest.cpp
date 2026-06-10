@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/TestUtils.h"
+#include <ao/async/Runtime.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IBackendProvider.h>
@@ -12,7 +13,6 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/async/Runtime.h>
 #include <ao/uimodel/playback/AudioOutputViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>

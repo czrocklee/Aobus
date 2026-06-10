@@ -2,13 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/TestUtils.h"
+#include <ao/async/Runtime.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/async/Runtime.h>
 #include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>

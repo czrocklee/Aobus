@@ -7,7 +7,7 @@
 
 find_package(PkgConfig REQUIRED)
 find_package(Catch2 3 REQUIRED)
-find_package(Boost REQUIRED COMPONENTS headers)
+find_package(Boost REQUIRED COMPONENTS headers process filesystem)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(ryml REQUIRED)

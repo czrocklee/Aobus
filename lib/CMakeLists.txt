@@ -4,6 +4,7 @@ set(AO_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated")
 
 # ── Library modules ─────────────────────────────────────────────────────────
 add_subdirectory(utility)
+add_subdirectory(async)
 add_subdirectory(lmdb)
 add_subdirectory(media)
 add_subdirectory(tag)
@@ -15,6 +16,7 @@ add_subdirectory(audio)
 add_library(ao INTERFACE)
 target_link_libraries(ao INTERFACE
     ao_utility
+    ao_async
     ao_lmdb
     ao_media
     ao_tag

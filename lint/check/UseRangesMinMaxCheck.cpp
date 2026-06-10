@@ -3,6 +3,8 @@
 
 #include "check/UseRangesMinMaxCheck.h"
 
+#include "check/AstUtil.h"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
@@ -11,8 +13,6 @@
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
-#include <clang/Basic/SourceLocation.h>
-#include <clang/Lex/Lexer.h>
 
 #include <string>
 
@@ -39,58 +39,6 @@ namespace clang::tidy::readability
       this);
   }
 
-  namespace
-  {
-    Expr const* stripImplicitNodes(Expr const* expr)
-    {
-      if (expr == nullptr)
-      {
-        return nullptr;
-      }
-
-      Expr const* current = expr;
-
-      while (true)
-      {
-        if (auto const* ice = dyn_cast<ImplicitCastExpr>(current); ice != nullptr)
-        {
-          current = ice->getSubExpr();
-        }
-        else if (auto const* cce = dyn_cast<CXXConstructExpr>(current); cce != nullptr)
-        {
-          if (cce->getNumArgs() == 1)
-          {
-            current = cce->getArg(0);
-          }
-          else
-          {
-            break;
-          }
-        }
-        else if (auto const* mte = dyn_cast<MaterializeTemporaryExpr>(current); mte != nullptr)
-        {
-          current = mte->getSubExpr();
-        }
-        else
-        {
-          break;
-        }
-      }
-
-      return current;
-    }
-
-    std::string getSource(Expr const* expr, SourceManager const& sm, LangOptions const& langOpts)
-    {
-      if (expr == nullptr)
-      {
-        return {};
-      }
-
-      return Lexer::getSourceText(CharSourceRange::getTokenRange(expr->getSourceRange()), sm, langOpts).str();
-    }
-  } // namespace
-
   void UseRangesMinMaxCheck::check(MatchFinder::MatchResult const& result)
   {
     auto const* root = result.Nodes.getNodeAs<CXXOperatorCallExpr>("root");
@@ -110,10 +58,10 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const calleeName = calleeDecl->getName();
-    bool const isMin = calleeName == "min_element";
+    auto const calleeName = calleeDecl->getQualifiedNameAsString();
+    bool const isMin = calleeName == "std::min_element";
 
-    if (!isMin && calleeName != "max_element")
+    if (!isMin && calleeName != "std::max_element")
     {
       return;
     }
@@ -128,8 +76,8 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const* arg0 = stripImplicitNodes(call->getArg(0));
-    auto const* arg1 = stripImplicitNodes(call->getArg(1));
+    auto const* arg0 = aobus::stripImplicitNodes(call->getArg(0));
+    auto const* arg1 = aobus::stripImplicitNodes(call->getArg(1));
 
     auto const* arg0BeginCall = dyn_cast_or_null<CXXMemberCallExpr>(arg0);
     auto const* arg1EndCall = dyn_cast_or_null<CXXMemberCallExpr>(arg1);
@@ -155,23 +103,27 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const& sm = *result.SourceManager;
-    auto const& langOpts = result.Context->getLangOpts();
-    auto const containerStr = container->getName().str();
-
-    if (getSource(arg0BeginCall->getImplicitObjectArgument(), sm, langOpts) != containerStr ||
-        getSource(arg1EndCall->getImplicitObjectArgument(), sm, langOpts) != containerStr)
+    if (!aobus::refersToVarDecl(arg0BeginCall->getImplicitObjectArgument(), *container) ||
+        !aobus::refersToVarDecl(arg1EndCall->getImplicitObjectArgument(), *container))
     {
       return;
     }
 
+    if (aobus::isInMacro(root->getSourceRange()))
+    {
+      return;
+    }
+
+    auto const& sm = *result.SourceManager;
+    auto const& langOpts = result.Context->getLangOpts();
+    auto const containerStr = container->getName().str();
     auto const* const funcName = isMin ? "std::ranges::min" : "std::ranges::max";
 
     auto replacement = std::string{};
 
     if (call->getNumArgs() >= kComparatorArgIndex)
     {
-      auto const compStr = getSource(call->getArg(2), sm, langOpts);
+      auto const compStr = aobus::getExprSourceText(*call->getArg(2), sm, langOpts);
 
       if (compStr.empty())
       {

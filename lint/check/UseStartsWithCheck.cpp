@@ -3,15 +3,16 @@
 
 #include "check/UseStartsWithCheck.h"
 
+#include "check/AstUtil.h"
+
 #include <clang/AST/ASTContext.h>
+#include <clang/AST/DeclCXX.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/OperationKinds.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
-#include <clang/Basic/SourceLocation.h>
-#include <clang/Lex/Lexer.h>
 
 #include <string>
 
@@ -33,14 +34,21 @@ namespace clang::tidy::readability
 
   namespace
   {
-    std::string getSource(Expr const* expr, SourceManager const& sm, LangOptions const& langOpts)
+    // Only std::basic_string and std::basic_string_view are known to pair a
+    // position-returning find() with a starts_with() member; rewriting any
+    // other type's find() would reference a member that may not exist.
+    bool hasStartsWithSemantics(CXXMemberCallExpr const& findCall)
     {
-      if (expr == nullptr)
+      auto const* method = findCall.getMethodDecl();
+
+      if (method == nullptr)
       {
-        return {};
+        return false;
       }
 
-      return Lexer::getSourceText(CharSourceRange::getTokenRange(expr->getSourceRange()), sm, langOpts).str();
+      auto const className = method->getParent()->getQualifiedNameAsString();
+
+      return className == "std::basic_string" || className == "std::basic_string_view";
     }
   } // namespace
 
@@ -51,6 +59,11 @@ namespace clang::tidy::readability
     auto const* obj = result.Nodes.getNodeAs<Expr>("obj");
 
     if (root == nullptr || findCall == nullptr || obj == nullptr)
+    {
+      return;
+    }
+
+    if (!hasStartsWithSemantics(*findCall))
     {
       return;
     }
@@ -73,11 +86,16 @@ namespace clang::tidy::readability
       }
     }
 
+    if (aobus::isInMacro(root->getSourceRange()))
+    {
+      return;
+    }
+
     auto const& sm = *result.SourceManager;
     auto const& langOpts = result.Context->getLangOpts();
 
-    auto const objStr = getSource(obj, sm, langOpts);
-    auto const argStr = getSource(findCall->getArg(0), sm, langOpts);
+    auto const objStr = aobus::getExprSourceText(*obj, sm, langOpts);
+    auto const argStr = aobus::getExprSourceText(*findCall->getArg(0), sm, langOpts);
 
     if (objStr.empty() || argStr.empty())
     {

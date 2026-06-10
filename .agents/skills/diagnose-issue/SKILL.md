@@ -16,13 +16,12 @@ Stay focused on the failing behavior. Do not start documentation updates, format
 
 If the fix touches C++ files, also load `generate-cpp-code` before editing. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
 
-## C2 Delegation Boundary
+## Delegation Boundary
 
-Diagnosis, root-cause selection, error-contract choices, and bug-fix design remain C3 work. Once the fix
-(or a C3-decided regression test) is settled, *implementing* it can be delegated as a proposal via the
-`execute-plan` skill (`.agents/skills/execute-plan/SKILL.md`); the worker may self-load `write-unit-test`
-/ `improve-test-coverage` for conventions. C2 returns a validated patch that you (the chair) review,
-apply, and re-validate on the real tree — it never lands a change itself, and never decides the diagnosis.
+Diagnosis, root-cause selection, error-contract choices, and bug-fix design remain chair work. Once the
+fix and regression coverage are settled, implementation may be delegated through the `execute-plan`
+skill and the `aobus-fleet` GateEngine. The result remains a chair-reviewed proposal; the fleet never
+decides the diagnosis or writes to the real tree.
 
 ## Debugging Loop
 

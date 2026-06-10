@@ -3,6 +3,7 @@
 
 #include "check/UseCtadCheck.h"
 
+#include <clang-tidy/ClangTidyCheck.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclTemplate.h>
@@ -446,14 +447,84 @@ namespace clang::tidy::readability
       return false;
     }
 
+    bool isInitializerListConstructor(CXXConstructorDecl const* ctor)
+    {
+      if (ctor->getNumParams() == 0)
+      {
+        return false;
+      }
+
+      QualType paramType = ctor->getParamDecl(0)->getType();
+
+      if (paramType->isReferenceType())
+      {
+        paramType = paramType->getPointeeType();
+      }
+
+      auto const* record = paramType->getAsCXXRecordDecl();
+
+      return record != nullptr && record->getQualifiedNameAsString() == "std::initializer_list";
+    }
+
+    bool hasInitializerListConstructor(CXXConstructExpr const* construct)
+    {
+      auto const* ctor = construct->getConstructor();
+
+      if (ctor == nullptr)
+      {
+        return false;
+      }
+
+      auto const* record = ctor->getParent();
+
+      if (record == nullptr)
+      {
+        return false;
+      }
+
+      return std::ranges::any_of(
+        record->ctors(), [](CXXConstructorDecl const* ctor) { return isInitializerListConstructor(ctor); });
+    }
+
     bool isUnsafeForCtad(CXXConstructExpr const* construct)
     {
+      if (construct == nullptr)
+      {
+        return true;
+      }
+
       auto const templateName = getConstructedTemplateName(construct);
+
+      // Braced initialization that resolved to a non-initializer-list constructor
+      // on a type that also has an initializer_list constructor: after removing
+      // the template arguments, CTAD would re-resolve the braced list to the
+      // initializer_list constructor and silently change the meaning
+      // (e.g. std::vector<int>{it1, it2} → std::vector{it1, it2}).
+      if (construct->isListInitialization() && !construct->isStdInitListInitialization() &&
+          hasInitializerListConstructor(construct))
+      {
+        return true;
+      }
 
       return isAlwaysUnsafeTemplateName(templateName) || isPointerSizeConstructor(construct) ||
              isParenSizeConstructor(construct) || isSingleSizeConstructor(construct) ||
              isSingleSameTypeConstructor(construct) || isPairWithTypeChangingArgs(construct) ||
              isInitializerListWithTypeChangingElements(construct);
+    }
+
+    void reportCtadWarning(ClangTidyCheck& check, SourceLocation loc, TemplateSpecializationTypeLoc tsLoc)
+    {
+      auto const templateName = getTemplateName(tsLoc);
+      auto diagBuilder =
+        check.diag(
+          loc,
+          "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
+        << templateName;
+
+      if (tsLoc.getLAngleLoc().isValid() && tsLoc.getRAngleLoc().isValid())
+      {
+        diagBuilder << FixItHint::CreateRemoval(SourceRange{tsLoc.getLAngleLoc(), tsLoc.getRAngleLoc()});
+      }
     }
   } // namespace
 
@@ -515,11 +586,7 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto const templateName = getTemplateName(tsLoc);
-
-      diag(
-        loc, "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
-        << templateName;
+      reportCtadWarning(*this, loc, tsLoc);
     }
     else if (auto const* varDecl = result.Nodes.getNodeAs<VarDecl>("var_decl"); varDecl != nullptr)
     {
@@ -557,11 +624,7 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto const templateName = getTemplateName(tsLoc);
-
-      diag(
-        loc, "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
-        << templateName;
+      reportCtadWarning(*this, loc, tsLoc);
     }
   }
 } // namespace clang::tidy::readability

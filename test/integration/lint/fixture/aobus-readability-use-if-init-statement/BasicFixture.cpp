@@ -3,12 +3,16 @@
 
 #include <cstdint>
 #include <iostream>
+#include <memory>
+#include <mutex>
+#include <optional>
 
 static void testUseIfInit(std::int32_t cond)
 {
   // POSITIVE
   std::int32_t const localX = cond * 2;
 
+  // FIX-TO: if (std::int32_t const localX = cond * 2; localX > 10)
   if (localX > 10)
   {
     std::cout << localX;
@@ -17,6 +21,7 @@ static void testUseIfInit(std::int32_t cond)
   // POSITIVE
   std::int32_t const localSwitch = cond + 1;
 
+  // FIX-TO: switch (std::int32_t const localSwitch = cond + 1; localSwitch)
   switch (localSwitch)
   {
     case 1: break;
@@ -59,38 +64,6 @@ static void testUseIfInit(std::int32_t cond)
     std::cout << localExplicit;
   }
 }
-
-namespace std
-{
-  template<typename T>
-  class lock_guard
-  {
-  public:
-    lock_guard(T&) {}
-    ~lock_guard() {}
-  };
-
-  template<typename T>
-  class unique_ptr
-  {
-  public:
-    unique_ptr() {}
-    ~unique_ptr() {}
-    T* operator->() const { return nullptr; }
-  };
-
-  template<typename T>
-  class optional
-  {
-  public:
-    optional() {}
-    ~optional() {}
-    bool has_value() const { return true; }
-  };
-
-  class mutex
-  {};
-} // namespace std
 
 namespace ao::tag
 {

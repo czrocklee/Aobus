@@ -88,11 +88,11 @@ namespace ao::rt
     std::uint64_t nextViewId = 1;
     std::unordered_map<ViewId, ViewEntry> views;
 
-    IControlExecutor& executor;
+    async::IExecutor& executor;
     library::MusicLibrary& library;
     ListSourceStore& sources;
 
-    Impl(IControlExecutor& exec, library::MusicLibrary& lib, ListSourceStore& src)
+    Impl(async::IExecutor& exec, library::MusicLibrary& lib, ListSourceStore& src)
       : executor{exec}, library{lib}, sources{src}
     {
     }
@@ -106,7 +106,7 @@ namespace ao::rt
     Signal<ViewService::ListChanged const&> listChangedSignal;
   };
 
-  ViewService::ViewService(IControlExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources)
+  ViewService::ViewService(async::IExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources)
     : _implPtr{std::make_unique<Impl>(executor, library, sources)}
   {
   }

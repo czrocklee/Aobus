@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
@@ -10,7 +11,6 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/async/Runtime.h>
 
 #include <memory>
 #include <utility>
@@ -25,8 +25,8 @@ namespace ao::rt
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr;
 
     Impl(AppRuntime& runtime, std::unique_ptr<ConfigStore> workspaceConfigPtr)
-      : viewService{runtime.async().controlExecutor(), runtime.musicLibrary(), runtime.sources()}
-      , playbackService{runtime.async().controlExecutor(), viewService, runtime.musicLibrary()}
+      : viewService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.sources()}
+      , playbackService{runtime.async().callbackExecutor(), viewService, runtime.musicLibrary()}
       , workspaceService{viewService, playbackService, runtime.mutation(), runtime.musicLibrary()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
     {
