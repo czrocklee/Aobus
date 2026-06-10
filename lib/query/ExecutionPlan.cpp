@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Exception.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
@@ -130,7 +131,6 @@ namespace ao::query
         case Field::Custom:      // cold: custom KV storage
         case Field::DurationMs:  // cold: TrackColdHeader
         case Field::Bitrate:     // cold: TrackColdHeader
-        case Field::SampleRate:  // cold: TrackColdHeader
         case Field::Channels:    // cold: TrackColdHeader
           return true;
         default: return false;
@@ -242,14 +242,16 @@ namespace ao::query
 
     std::optional<std::uint64_t> parseUnsigned(std::string_view value)
     {
-      std::uint64_t parsed = 0;
-      auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+      std::uint64_t parsedValue =
+        0; // NOLINT(misc-const-correctness): std::from_chars writes through this out parameter.
+      auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsedValue);
 
       if (ec != std::errc{} || ptr != value.data() + value.size())
       {
         return std::nullopt;
       }
 
+      auto const parsed = parsedValue;
       return parsed;
     }
 
@@ -650,6 +652,24 @@ namespace ao::query
                  },
                  [this](std::string const& val)
                  {
+                   if (_lastField == Field::Codec)
+                   {
+                     if (auto const optCodec = library::parseAudioCodecName(val); optCodec)
+                     {
+                       _plan.instructions.push_back(Instruction{
+                         .op = OpCode::LoadConstant,
+                         .field = 0,
+                         .operand = static_cast<std::int32_t>(_nextReg++),
+                         .constValue = library::audioCodecStorageValue(*optCodec),
+                         .strLen = 0,
+                         .strData = nullptr,
+                       });
+                       return;
+                     }
+
+                     throwException<Exception>("unknown audio codec '{}'", val);
+                   }
+
                    // Check if we should resolve this string via dictionary
                    // For metadata ID fields (artist, album, genre), resolve to numeric ID
                    auto const resolvedId = resolveStringConstant(val, _lastField);

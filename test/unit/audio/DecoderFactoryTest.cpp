@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/TestUtils.h"
+#include "test/unit/media/mp4/TestAtoms.h"
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/Format.h>
 
@@ -19,13 +21,23 @@ namespace ao::audio::test
       REQUIRE(runtimePtr != nullptr);
     }
 
-    SECTION("Creates ALAC runtime for .m4a and .mp4")
+    SECTION("Creates ALAC runtime for MP4 containers with alac sample entries")
     {
-      auto session1Ptr = createDecoderSession("song.m4a", format);
+      auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".m4a"};
+      auto const mp4 = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".mp4"};
+
+      auto session1Ptr = createDecoderSession(m4a.path, format);
       REQUIRE(session1Ptr != nullptr);
 
-      auto session2Ptr = createDecoderSession("song.mp4", format);
+      auto session2Ptr = createDecoderSession(mp4.path, format);
       REQUIRE(session2Ptr != nullptr);
+    }
+
+    SECTION("Creates AAC runtime for MP4 containers with AAC sample entries")
+    {
+      auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("mp4a"), ".m4a"};
+
+      REQUIRE(createDecoderSession(m4a.path, format) != nullptr);
     }
 
     SECTION("Creates MP3 runtime for .mp3")
@@ -38,6 +50,7 @@ namespace ao::audio::test
     {
       REQUIRE(createDecoderSession("song.wav", format) == nullptr);
       REQUIRE(createDecoderSession("song.ogg", format) == nullptr);
+      REQUIRE(createDecoderSession("missing.m4a", format) == nullptr);
     }
 
     SECTION("Case-sensitive extension behavior (Current)")

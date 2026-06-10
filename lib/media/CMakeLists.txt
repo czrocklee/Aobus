@@ -8,6 +8,7 @@ add_gperf_header(
 add_library(ao_media STATIC
     flac/MetadataBlock.cpp
     mp4/Demuxer.cpp
+    mp4/SampleDescription.cpp
     mp4/Atom.cpp
     "${MEDIA_ATOM_DISPATCH_HEADER}"
 )

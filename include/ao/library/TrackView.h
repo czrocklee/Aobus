@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
 
@@ -78,12 +79,12 @@ namespace ao::library
       }
 
       // Hot properties
-      std::uint16_t codecId() const noexcept { return _track.hotHeader().codecId; }
+      AudioCodec codec() const noexcept { return _track.hotHeader().codec; }
       std::uint8_t bitDepth() const noexcept { return static_cast<std::uint8_t>(_track.hotHeader().bitDepth); }
+      std::uint32_t sampleRate() const noexcept { return _track.hotHeader().sampleRate; }
 
       // Technical properties (from cold)
       std::uint32_t durationMs() const noexcept { return _track.coldHeader().durationMs; }
-      std::uint32_t sampleRate() const noexcept { return _track.coldHeader().sampleRate; }
       std::uint32_t bitrate() const noexcept { return _track.coldHeader().bitrate; }
       std::uint8_t channels() const noexcept { return _track.coldHeader().channels; }
       std::string_view uri() const { return _track.coldUri(); }

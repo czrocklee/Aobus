@@ -4,7 +4,9 @@
 #pragma once
 
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -15,16 +17,17 @@ namespace ao::library
    * Hot fields are used for fast filtering/sorting operations.
    *
    * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
-   * Total size: 36 bytes with 4-byte alignment.
+   * Total size: 40 bytes with 4-byte alignment.
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← hot data begin
-   *   │        TrackHotHeader (36B)         |
-   *   │  tagBloom, artistId, albumId,       │
+   *   │        TrackHotHeader (40B)         |
+   *   │  tagBloom, sampleRate,              │
+   *   │  artistId, albumId,                 │
    *   │  genreId, albumArtistId,            │
-   *   │  composerId, year, codecId,         │
+   *   │  composerId, year,                  │
    *   │  bitDepth, titleLen, tagLen,        │
-   *   │  rating, padding                    │
+   *   │  codec, rating, padding             │
    *   ├─────────────────────────────────────┤  ← tags begin = header + sizeof(header)
    *   │  tag ID 1 (4B)                      │
    *   │  tag ID 2 (4B)                      │
@@ -43,26 +46,27 @@ namespace ao::library
     DictionaryId genreId{};       // Dictionary ID for genre
     DictionaryId albumArtistId{}; // Dictionary ID for album artist
     DictionaryId composerId{};    // Dictionary ID for composer
+    std::uint32_t sampleRate{};   // Sample rate in Hz
 
     // 2-byte section
     std::uint16_t year{};     // Release year
-    std::uint16_t codecId{};  // Audio codec identifier
     std::uint16_t bitDepth{}; // Bits per sample
     std::uint16_t titleLen{}; // Length of title string
     std::uint16_t tagLen{};   // Length of tags blob in bytes
 
     // 1-byte section
+    AudioCodec codec{};    // Audio codec
     std::uint8_t rating{}; // User rating (0-5)
 
-    // 1 byte padding to reach 36 bytes total
-    std::byte padding{};
+    // 2 bytes padding to reach 40 bytes total
+    std::array<std::byte, 2> padding{};
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackHotHeaderSize = 36;
+  constexpr std::size_t kTrackHotHeaderSize = 40;
   constexpr std::size_t kTrackHotHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 36 bytes");
+  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 40 bytes");
   static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 4-byte alignment");
 
   /**
@@ -70,19 +74,19 @@ namespace ao::library
    * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
    *
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
-   *   - durationMs, bitrate, sampleRate, channels: audio properties
+   *   - durationMs, bitrate, channels: audio properties
    *   - coverArtId: display only
    *   - trackNumber, totalTracks, discNumber, totalDiscs: display only
    *   - workId: classical metadata
    *   - uri: playback path, not filtered
    *
-   * Total size: 36 bytes with 4-byte alignment.
+   * Total size: 32 bytes with 4-byte alignment.
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← cold data begin
-   *   │        TrackColdHeader (36B)        │
-   *   │  durationMs, sampleRate,            │
-   *   │  coverArtId, bitrate, workId        │
+   *   │        TrackColdHeader (32B)        │
+   *   │  durationMs, coverArtId, bitrate,   │
+   *   │  workId                             │
    *   │  trackNumber, totalTracks,          │
    *   │  discNumber, totalDiscs             │
    *   │  customCount, uriOffset, uriLen     │
@@ -101,7 +105,6 @@ namespace ao::library
   {
     // 4-byte section
     std::uint32_t durationMs{}; // Track duration in milliseconds
-    std::uint32_t sampleRate{}; // Sample rate in Hz
     std::uint32_t coverArtId{}; // ResourceStore ID for cover art
     std::uint32_t bitrate{};    // Bitrate in bps
     DictionaryId workId{};      // Dictionary ID for work
@@ -118,14 +121,14 @@ namespace ao::library
     // 1-byte section
     std::uint8_t channels{}; // Number of audio channels
 
-    // 1 byte padding to reach 36 bytes total
-    std::byte padding{};
+    // 1 byte padding to reach 32 bytes total
+    std::array<std::byte, 1> padding{};
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackColdHeaderSize = 36;
+  constexpr std::size_t kTrackColdHeaderSize = 32;
   constexpr std::size_t kTrackColdHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 36 bytes");
+  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 32 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 4-byte alignment");
 } // namespace ao::library

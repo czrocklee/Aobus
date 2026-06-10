@@ -85,6 +85,12 @@ add_library(PkgMPG123 INTERFACE)
 target_link_libraries(PkgMPG123 INTERFACE PkgConfig::MPG123)
 message(STATUS "mpg123 found")
 
+# ── AAC (FDK-AAC) ───────────────────────────────────────────────────────────
+pkg_check_modules(FDKAAC REQUIRED IMPORTED_TARGET fdk-aac)
+add_library(PkgFDKAAC INTERFACE)
+target_link_libraries(PkgFDKAAC INTERFACE PkgConfig::FDKAAC)
+message(STATUS "FDK-AAC found")
+
 # ── PipeWire (optional) ────────────────────────────────────────────────────
 pkg_check_modules(PIPEWIRE libpipewire-0.3)
 if(PIPEWIRE_FOUND)

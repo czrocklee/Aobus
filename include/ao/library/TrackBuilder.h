@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackView.h>
@@ -118,7 +119,7 @@ namespace ao::library
       PropertyBuilder& durationMs(std::uint32_t durationMs);
       PropertyBuilder& bitrate(std::uint32_t bitrate);
       PropertyBuilder& sampleRate(std::uint32_t sampleRate);
-      PropertyBuilder& codecId(std::uint16_t id);
+      PropertyBuilder& codec(AudioCodec codec);
       PropertyBuilder& channels(std::uint8_t channels);
       PropertyBuilder& bitDepth(std::uint8_t bitDepth);
       PropertyBuilder& uri(std::string_view uri);
@@ -128,7 +129,7 @@ namespace ao::library
       std::uint32_t durationMs() const { return _durationMs; }
       std::uint32_t bitrate() const { return _bitrate; }
       std::uint32_t sampleRate() const { return _sampleRate; }
-      std::uint16_t codecId() const { return _codecId; }
+      AudioCodec codec() const { return _codec; }
       std::uint8_t channels() const { return _channels; }
       std::uint8_t bitDepth() const { return _bitDepth; }
 
@@ -139,7 +140,7 @@ namespace ao::library
       std::uint32_t _durationMs = 0;
       std::uint32_t _bitrate = 0;
       std::uint32_t _sampleRate = 0;
-      std::uint16_t _codecId = 0;
+      AudioCodec _codec = AudioCodec::Unknown;
       std::uint8_t _channels = 0;
       std::uint8_t _bitDepth = 0;
 

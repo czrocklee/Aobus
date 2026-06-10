@@ -219,6 +219,57 @@ namespace ao::audio::test
     engine.stop();
   }
 
+  TEST_CASE("Engine - AAC playback supports 32-bit padded backend output", "[playback][unit][engine][aac]")
+  {
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
+
+    if (!std::filesystem::exists(testFile))
+    {
+      SKIP("Test file 'basic_metadata.m4a' missing");
+    }
+
+    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto const device = Device{.id = DeviceId{"alsa-exclusive"},
+                               .displayName = "ALSA",
+                               .description = "ALSA Exclusive",
+                               .isDefault = false,
+                               .backendId = kBackendAlsa,
+                               .capabilities = {.sampleRates = {44100},
+                                                .sampleFormats = {},
+                                                .bitDepths = {32},
+                                                .channelCounts = {2}}};
+
+    auto engine = Engine{std::move(backendPtr), device};
+    auto const descriptor =
+      TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "AAC", .artist = "Test Artist"};
+
+    engine.play(descriptor);
+
+    auto const snap = engine.status();
+    REQUIRE(snap.transport == Transport::Playing);
+
+    auto const events = backendRaw->events();
+    REQUIRE(!events.empty());
+    auto optOpenFormat = std::optional<Format>{};
+
+    for (auto const& event : events)
+    {
+      if (event.name == "open")
+      {
+        optOpenFormat = event.format;
+        break;
+      }
+    }
+
+    REQUIRE(optOpenFormat);
+    CHECK(optOpenFormat->bitDepth == 32);
+    CHECK(optOpenFormat->validBits == 16);
+    CHECK(optOpenFormat->sampleRate == 44100);
+
+    engine.stop();
+  }
+
   TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[playback][unit][engine][format]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";

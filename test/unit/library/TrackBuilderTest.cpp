@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/library/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/lmdb/Database.h>
@@ -94,7 +95,7 @@ namespace ao::library::test
       .durationMs(180500)
       .bitrate(320000)
       .sampleRate(44100)
-      .codecId(7)
+      .codec(AudioCodec::Alac)
       .channels(2)
       .bitDepth(16);
 
@@ -102,7 +103,7 @@ namespace ao::library::test
     CHECK(builder.property().durationMs() == 180500);
     CHECK(builder.property().bitrate() == 320000);
     CHECK(builder.property().sampleRate() == 44100);
-    CHECK(builder.property().codecId() == 7);
+    CHECK(builder.property().codec() == AudioCodec::Alac);
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
   }

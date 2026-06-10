@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/PlanEvaluator.h>
@@ -176,7 +177,7 @@ namespace ao::query
         case Field::SampleRate: return static_cast<std::int64_t>(track.property().sampleRate());
         case Field::Channels: return static_cast<std::int64_t>(track.property().channels());
         case Field::BitDepth: return static_cast<std::int64_t>(track.property().bitDepth());
-        case Field::CodecId: return static_cast<std::int64_t>(track.property().codecId());
+        case Field::Codec: return static_cast<std::int64_t>(library::audioCodecStorageValue(track.property().codec()));
         case Field::Rating: return static_cast<std::int64_t>(track.metadata().rating());
 
         // Metadata ID fields

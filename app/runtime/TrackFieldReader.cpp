@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackView.h>
@@ -66,9 +67,9 @@ namespace ao::rt
       case TrackField::FilePath: return TrackFieldRawValue{std::in_place_type<std::string>, view.property().uri()};
       case TrackField::Codec:
       {
-        auto const codecId = view.property().codecId();
-        return TrackFieldRawValue{std::in_place_type<std::string>,
-                                  codecId == 0 ? std::string{} : std::string{dict.getOrDefault(DictionaryId{codecId})}};
+        std::ignore = dict;
+        return TrackFieldRawValue{
+          std::in_place_type<std::string>, std::string{library::audioCodecName(view.property().codec())}};
       }
       case TrackField::SampleRate:
         return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().sampleRate()};

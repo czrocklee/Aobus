@@ -3,6 +3,7 @@
 
 #include <ao/Error.h>
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
@@ -630,7 +631,7 @@ namespace ao::rt
             .durationMs(props.durationMs())
             .bitrate(props.bitrate())
             .sampleRate(props.sampleRate())
-            .codecId(props.codecId())
+            .codec(props.codec())
             .channels(props.channels())
             .bitDepth(props.bitDepth());
 
@@ -742,10 +743,17 @@ namespace ao::rt
       {.field = rt::TrackField::Duration, .u32Setter = [](auto& prop, auto value) { prop.durationMs(value); }},
       {.field = rt::TrackField::Bitrate, .u32Setter = [](auto& prop, auto value) { prop.bitrate(value); }},
       {.field = rt::TrackField::SampleRate, .u32Setter = [](auto& prop, auto value) { prop.sampleRate(value); }},
-      {.field = rt::TrackField::Codec, .u16Setter = [](auto& prop, auto value) { prop.codecId(value); }},
       {.field = rt::TrackField::Channels, .u8Setter = [](auto& prop, auto value) { prop.channels(value); }},
       {.field = rt::TrackField::BitDepth, .u8Setter = [](auto& prop, auto value) { prop.bitDepth(value); }},
     });
+
+    if (auto codecNode = yaml::findChild(trackNode, rt::trackFieldId(rt::TrackField::Codec)); codecNode.readable())
+    {
+      if (auto const optCodec = library::parseAudioCodecName(yaml::scalarView(codecNode)); optCodec)
+      {
+        builder.property().codec(*optCodec);
+      }
+    }
 
     for (auto const& map : kPropertyDispatch)
     {

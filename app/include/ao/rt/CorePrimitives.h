@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <limits>
 #include <type_traits>
@@ -48,31 +49,26 @@ namespace ao::rt
 
     void emit(Args... args)
     {
-      for (auto& handler : _handlers)
+      // Index loop over a snapshotted size: a handler may connect new handlers while we
+      // emit. Storage is a deque so push_back never relocates the handler currently
+      // executing; the new handlers only take part starting with the next emission.
+      auto const count = _handlers.size();
+
+      for (std::size_t index = 0; index < count; ++index)
       {
-        if (handler)
+        if (_handlers[index])
         {
-          handler(args...);
+          _handlers[index](args...);
         }
       }
     }
 
     void post(async::IExecutor& executor, std::decay_t<Args>... args)
     {
-      executor.defer(
-        [this, ... args = std::move(args)] mutable
-        {
-          for (auto& handler : _handlers)
-          {
-            if (handler)
-            {
-              handler(args...);
-            }
-          }
-        });
+      executor.defer([this, ... args = std::move(args)] mutable { emit(args...); });
     }
 
   private:
-    std::vector<std::move_only_function<void(Args...)>> _handlers;
+    std::deque<std::move_only_function<void(Args...)>> _handlers;
   };
 }

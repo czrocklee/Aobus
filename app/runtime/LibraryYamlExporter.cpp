@@ -3,6 +3,7 @@
 
 #include <ao/Error.h>
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
@@ -207,6 +208,7 @@ namespace ao::rt
     using PropertyU32Getter = std::uint32_t (*)(library::TrackView::PropertyProxy const&);
     using PropertyU16Getter = std::uint16_t (*)(library::TrackView::PropertyProxy const&);
     using PropertyU8Getter = std::uint8_t (*)(library::TrackView::PropertyProxy const&);
+    using PropertyStringGetter = std::string_view (*)(library::TrackView::PropertyProxy const&);
 
     struct PropertyDispatch final
     {
@@ -215,13 +217,14 @@ namespace ao::rt
       PropertyU32Getter u32Get = nullptr;
       PropertyU16Getter u16Get = nullptr;
       PropertyU8Getter u8Get = nullptr;
+      PropertyStringGetter stringGet = nullptr;
     };
 
     constexpr auto kPropertyDispatch = std::to_array<PropertyDispatch>({
       {.field = TrackField::Duration, .u32Get = [](auto const& prop) { return prop.durationMs(); }},
       {.field = TrackField::Bitrate, .u32Get = [](auto const& prop) { return prop.bitrate(); }},
       {.field = TrackField::SampleRate, .u32Get = [](auto const& prop) { return prop.sampleRate(); }},
-      {.field = TrackField::Codec, .u16Get = [](auto const& prop) { return prop.codecId(); }},
+      {.field = TrackField::Codec, .stringGet = [](auto const& prop) { return library::audioCodecName(prop.codec()); }},
       {.field = TrackField::Channels, .u8Get = [](auto const& prop) { return prop.channels(); }},
       {.field = TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth(); }},
     });
@@ -247,6 +250,10 @@ namespace ao::rt
         else if (map.u8Get != nullptr)
         {
           node.append_child() << ryml::key(key) << map.u8Get(property);
+        }
+        else if (map.stringGet != nullptr)
+        {
+          node.append_child() << ryml::key(key) << map.stringGet(property);
         }
       }
 

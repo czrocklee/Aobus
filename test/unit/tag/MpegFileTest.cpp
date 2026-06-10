@@ -6,6 +6,7 @@
 #include "lib/tag/mpeg/id3v2/Layout.h"
 #include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -165,6 +166,10 @@ namespace ao::tag::mpeg::test
     REQUIRE_FALSE(meta.coverArtData().empty());
     CHECK(meta.coverArtData().size() == 2);
     CHECK(static_cast<std::uint8_t>(meta.coverArtData()[0]) == 0xAA);
+
+    auto const prop = builder.property();
+    CHECK(prop.codec() == library::AudioCodec::Mp3);
+    CHECK(prop.bitDepth() == 16);
   }
 
   TEST_CASE("MPEG File - CBR Duration", "[tag][unit][mpeg][file]")
@@ -180,6 +185,8 @@ namespace ao::tag::mpeg::test
 
     REQUIRE(builder.property().durationMs() >= 1000);
     CHECK(builder.property().durationMs() <= 1010);
+    CHECK(builder.property().codec() == library::AudioCodec::Mp3);
+    CHECK(builder.property().bitDepth() == 16);
   }
 
   TEST_CASE("MPEG File - ID3v2.2 (Unsupported)", "[tag][unit][mpeg][file]")

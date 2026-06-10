@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -43,6 +44,10 @@ namespace ao::library
     {
       auto meta = view.metadata();
       builder.metadata().title(meta.title()).year(meta.year());
+      builder.metadata().rating(meta.rating());
+
+      auto prop = view.property();
+      builder.property().sampleRate(prop.sampleRate()).codec(prop.codec()).bitDepth(prop.bitDepth());
 
       if (auto artistId = meta.artistId(); artistId.raw() > 0)
       {
@@ -81,7 +86,6 @@ namespace ao::library
       builder.property()
         .uri(prop.uri())
         .durationMs(prop.durationMs())
-        .sampleRate(prop.sampleRate())
         .bitrate(prop.bitrate())
         .channels(prop.channels());
 
@@ -264,9 +268,9 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::codecId(std::uint16_t id)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::codec(AudioCodec codec)
   {
-    _codecId = id;
+    _codec = codec;
     return *this;
   }
 
@@ -440,13 +444,14 @@ namespace ao::library
       .genreId = _genreId,
       .albumArtistId = _albumArtistId,
       .composerId = _composerId,
+      .sampleRate = builder._propertyBuilder._sampleRate,
       .year = builder._metadataBuilder._year,
-      .codecId = builder._propertyBuilder._codecId,
       .bitDepth = builder._propertyBuilder._bitDepth,
       .titleLen = static_cast<std::uint16_t>(builder._metadataBuilder._title.size()),
       .tagLen = static_cast<std::uint16_t>(_tagIds.size() * sizeof(DictionaryId)),
+      .codec = builder._propertyBuilder._codec,
       .rating = builder._metadataBuilder._rating,
-      .padding = std::byte{0},
+      .padding = {},
     };
 
     auto pos = sizeof(TrackHotHeader);
@@ -541,7 +546,6 @@ namespace ao::library
     {
       new (out.data()) TrackColdHeader{
         .durationMs = prop._durationMs,
-        .sampleRate = prop._sampleRate,
         .coverArtId = _coverArtId,
         .bitrate = prop._bitrate,
         .workId = _workId,
@@ -553,7 +557,7 @@ namespace ao::library
         .uriOffset = _uriOffset,
         .uriLen = _uriLen,
         .channels = prop._channels,
-        .padding = std::byte{0},
+        .padding = {},
       };
     }
 

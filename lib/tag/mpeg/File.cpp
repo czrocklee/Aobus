@@ -6,6 +6,7 @@
 #include "Frame.h"
 #include "id3v2/Layout.h"
 #include "id3v2/Reader.h"
+#include <ao/library/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 
 #include <cstdint>
@@ -14,11 +15,6 @@
 
 namespace ao::tag::mpeg
 {
-  namespace
-  {
-    constexpr std::uint8_t kCodecIdMp3 = 0x55;
-  }
-
   std::uint32_t File::calculateDuration(FrameView const& frame, bool hasId3v1) const
   {
     constexpr std::uint32_t kMsPerSecond = 1000;
@@ -116,13 +112,12 @@ namespace ao::tag::mpeg
       auto bitrate = optFrameView->bitrate();
       std::uint32_t durationMs = 0;
 
-      static constexpr std::uint32_t kMp3BitDepth = 16;
       builder.property()
         .sampleRate(optFrameView->sampleRate())
         .bitrate(bitrate)
         .channels(optFrameView->channels())
-        .bitDepth(kMp3BitDepth)
-        .codecId(kCodecIdMp3);
+        .bitDepth(16)
+        .codec(library::AudioCodec::Mp3);
 
       durationMs = calculateDuration(*optFrameView, hasId3v1);
       builder.property().durationMs(durationMs);

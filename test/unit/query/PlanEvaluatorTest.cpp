@@ -4,6 +4,7 @@
 #include "test/unit/library/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -61,7 +62,7 @@ namespace ao::query::test
       std::uint8_t bitDepth = 16;
       std::uint32_t coverArtId = 0;
       std::uint8_t rating = 0;
-      std::uint16_t codecId = 0;
+      library::AudioCodec codec = library::AudioCodec::Unknown;
       std::uint32_t artistId = 0;
       std::uint32_t albumId = 0;
       std::uint32_t genreId = 0;
@@ -166,7 +167,7 @@ namespace ao::query::test
         builder.property().channels(spec.channels);
         builder.property().bitDepth(spec.bitDepth);
         builder.metadata().rating(spec.rating);
-        builder.property().codecId(spec.codecId);
+        builder.property().codec(spec.codec);
         builder.metadata().coverArtId(spec.coverArtId);
 
         for (auto const& name : spec.tags)
@@ -662,7 +663,7 @@ namespace ao::query::test
   {
     auto spec = TrackSpec{};
     spec.rating = 5;
-    spec.codecId = 2;
+    spec.codec = library::AudioCodec::Flac;
     spec.trackNumber = 3;
     spec.totalTracks = 12;
     spec.discNumber = 1;
@@ -727,9 +728,9 @@ namespace ao::query::test
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
-    SECTION("CodecId")
+    SECTION("Codec")
     {
-      auto plan = compiler.compile(parse("@codecId = 2"));
+      auto plan = compiler.compile(parse("@codec = FLAC"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
@@ -1344,5 +1345,18 @@ namespace ao::query::test
       // evaluator.matches() MUST still return false because it does a full check.
       CHECK(evaluator.matches(planB, trackA.view()) == false);
     }
+  }
+
+  TEST_CASE("PlanEvaluator - AAC codec expression", "[query][unit][plan_evaluator]")
+  {
+    auto spec = TrackSpec{};
+    spec.codec = library::AudioCodec::Aac;
+    auto track = TestTrack{spec};
+
+    auto compiler = QueryCompiler{&track.dictionary()};
+    auto evaluator = PlanEvaluator{};
+    auto plan = compiler.compile(parse("@codec = AAC"));
+
+    CHECK(evaluator.evaluateFull(plan, track.view()) == true);
   }
 } // namespace ao::query::test

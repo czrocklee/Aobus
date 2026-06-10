@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
 
@@ -44,7 +45,7 @@ namespace ao::gtk
     std::uint32_t sampleRate() const { return _sampleRate; }
     std::uint8_t channels() const { return _channels; }
     std::uint8_t bitDepth() const { return _bitDepth; }
-    std::uint16_t codecId() const { return _codecId; }
+    library::AudioCodec codec() const { return _codec; }
 
     std::uint16_t year() const { return _year; }
     void setYear(std::uint16_t year);
@@ -89,7 +90,7 @@ namespace ao::gtk
                   std::uint32_t sampleRate,
                   std::uint8_t channels,
                   std::uint8_t bitDepth,
-                  std::uint16_t codecId,
+                  library::AudioCodec codec,
                   std::uint32_t bitrate,
                   std::uint64_t fileSize,
                   std::uint64_t modifiedTime,
@@ -117,7 +118,7 @@ namespace ao::gtk
     std::uint32_t _sampleRate = 0;
     std::uint8_t _channels = 0;
     std::uint8_t _bitDepth = 0;
-    std::uint16_t _codecId = 0;
+    library::AudioCodec _codec = library::AudioCodec::Unknown;
     std::uint32_t _bitrate = 0;
     std::uint64_t _fileSize = 0;
     std::uint64_t _modifiedTime = 0;

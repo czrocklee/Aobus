@@ -11,7 +11,7 @@ namespace ao::library::test
 {
   TEST_CASE("TrackHotHeader - Size and Alignment", "[library][unit][track]")
   {
-    CHECK(sizeof(TrackHotHeader) == 36);
+    CHECK(sizeof(TrackHotHeader) == 40);
     CHECK(alignof(TrackHotHeader) == 4);
   }
 
@@ -24,21 +24,22 @@ namespace ao::library::test
     CHECK(offsetof(TrackHotHeader, genreId) == 12);
     CHECK(offsetof(TrackHotHeader, albumArtistId) == 16);
     CHECK(offsetof(TrackHotHeader, composerId) == 20);
+    CHECK(offsetof(TrackHotHeader, sampleRate) == 24);
 
-    // Check 2-byte section starts at offset 24
-    CHECK(offsetof(TrackHotHeader, year) == 24);
-    CHECK(offsetof(TrackHotHeader, codecId) == 26);
-    CHECK(offsetof(TrackHotHeader, bitDepth) == 28);
-    CHECK(offsetof(TrackHotHeader, titleLen) == 30);
-    CHECK(offsetof(TrackHotHeader, tagLen) == 32);
+    // Check 2-byte section starts at offset 28
+    CHECK(offsetof(TrackHotHeader, year) == 28);
+    CHECK(offsetof(TrackHotHeader, bitDepth) == 30);
+    CHECK(offsetof(TrackHotHeader, titleLen) == 32);
+    CHECK(offsetof(TrackHotHeader, tagLen) == 34);
 
     // Check 1-byte section
-    CHECK(offsetof(TrackHotHeader, rating) == 34);
+    CHECK(offsetof(TrackHotHeader, codec) == 36);
+    CHECK(offsetof(TrackHotHeader, rating) == 37);
   }
 
   TEST_CASE("TrackColdHeader - Size and Alignment", "[library][unit][track]")
   {
-    CHECK(sizeof(TrackColdHeader) == 36);
+    CHECK(sizeof(TrackColdHeader) == 32);
     CHECK(alignof(TrackColdHeader) == 4);
   }
 
@@ -46,21 +47,20 @@ namespace ao::library::test
   {
     // 4-byte section
     CHECK(offsetof(TrackColdHeader, durationMs) == 0);
-    CHECK(offsetof(TrackColdHeader, sampleRate) == 4);
-    CHECK(offsetof(TrackColdHeader, coverArtId) == 8);
-    CHECK(offsetof(TrackColdHeader, bitrate) == 12);
-    CHECK(offsetof(TrackColdHeader, workId) == 16);
+    CHECK(offsetof(TrackColdHeader, coverArtId) == 4);
+    CHECK(offsetof(TrackColdHeader, bitrate) == 8);
+    CHECK(offsetof(TrackColdHeader, workId) == 12);
 
     // 2-byte section
-    CHECK(offsetof(TrackColdHeader, trackNumber) == 20);
-    CHECK(offsetof(TrackColdHeader, totalTracks) == 22);
-    CHECK(offsetof(TrackColdHeader, discNumber) == 24);
-    CHECK(offsetof(TrackColdHeader, totalDiscs) == 26);
-    CHECK(offsetof(TrackColdHeader, customCount) == 28);
-    CHECK(offsetof(TrackColdHeader, uriOffset) == 30);
-    CHECK(offsetof(TrackColdHeader, uriLen) == 32);
+    CHECK(offsetof(TrackColdHeader, trackNumber) == 16);
+    CHECK(offsetof(TrackColdHeader, totalTracks) == 18);
+    CHECK(offsetof(TrackColdHeader, discNumber) == 20);
+    CHECK(offsetof(TrackColdHeader, totalDiscs) == 22);
+    CHECK(offsetof(TrackColdHeader, customCount) == 24);
+    CHECK(offsetof(TrackColdHeader, uriOffset) == 26);
+    CHECK(offsetof(TrackColdHeader, uriLen) == 28);
 
     // 1-byte section
-    CHECK(offsetof(TrackColdHeader, channels) == 34);
+    CHECK(offsetof(TrackColdHeader, channels) == 30);
   }
 } // namespace ao::library::test

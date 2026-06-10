@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
@@ -147,6 +148,24 @@ namespace ao::query::test
 
     REQUIRE(it != plan.instructions.end());
     CHECK(it->constValue == 44100);
+  }
+
+  TEST_CASE("ExecutionPlan - Codec Constant", "[query][unit][execution_plan]")
+  {
+    auto compiler = QueryCompiler{};
+    auto plan = compiler.compile(parse("@codec = AAC"));
+
+    auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
+
+    REQUIRE(it != plan.instructions.end());
+    CHECK(std::cmp_equal(it->constValue, library::audioCodecStorageValue(library::AudioCodec::Aac)));
+  }
+
+  TEST_CASE("ExecutionPlan - Unsupported Codec Constant", "[query][unit][execution_plan]")
+  {
+    auto compiler = QueryCompiler{};
+
+    REQUIRE_THROWS(compiler.compile(parse("@codec = OPUS")));
   }
 
   TEST_CASE("ExecutionPlan - Unit Constant Rejects Unsupported Field", "[query][unit][execution_plan]")
@@ -397,12 +416,12 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile SampleRate is ColdOnly", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - AccessProfile SampleRate is HotOnly", "[query][unit][execution_plan]")
   {
     auto expr = parse("@sampleRate = 44100");
     auto compiler = QueryCompiler{};
     auto plan = compiler.compile(expr);
-    CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+    CHECK(plan.accessProfile == AccessProfile::HotOnly);
   }
 
   TEST_CASE("ExecutionPlan - AccessProfile Channels is ColdOnly", "[query][unit][execution_plan]")
@@ -709,7 +728,8 @@ namespace ao::query::test
                   Case{.name = "sr", .expected = Field::SampleRate},
                   Case{.name = "channels", .expected = Field::Channels},
                   Case{.name = "bitDepth", .expected = Field::BitDepth},
-                  Case{.name = "bd", .expected = Field::BitDepth}};
+                  Case{.name = "bd", .expected = Field::BitDepth},
+                  Case{.name = "codec", .expected = Field::Codec}};
 
     for (auto const& c : cases)
     {
@@ -741,9 +761,10 @@ namespace ao::query::test
                      "#rock",
                      "true",
                      "false",
+                     "@sampleRate",
                      "@bitDepth",
                      "@rating",
-                     "@codecId"};
+                     "@codec"};
 
       for (auto const* f : fields)
       {
@@ -770,7 +791,6 @@ namespace ao::query::test
                      "%isrc",
                      "@duration",
                      "@bitrate",
-                     "@sampleRate",
                      "@channels"};
 
       for (auto const* f : fields)

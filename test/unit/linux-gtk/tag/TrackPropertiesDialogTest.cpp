@@ -6,6 +6,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -52,7 +53,7 @@ namespace ao::gtk::test
         .bitrate(320)
         .channels(2)
         .bitDepth(16)
-        .codecId(1);
+        .codec(library::AudioCodec::Flac);
       auto const [hot1, cold1] = builder1.serialize(txn, library.dictionary(), library.resources());
       trackId1 = writer.createHotCold(hot1, cold1).first;
 
@@ -73,7 +74,7 @@ namespace ao::gtk::test
         .bitrate(320)
         .channels(2)
         .bitDepth(24)
-        .codecId(1);
+        .codec(library::AudioCodec::Flac);
       auto const [hot2, cold2] = builder2.serialize(txn, library.dictionary(), library.resources());
       trackId2 = writer.createHotCold(hot2, cold2).first;
 

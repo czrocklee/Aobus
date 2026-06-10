@@ -4,6 +4,7 @@
 #include "test/unit/library/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
@@ -49,7 +50,7 @@ namespace ao::library::test
       h.albumArtistId = kInvalidDictionaryId;
       h.composerId = kInvalidDictionaryId;
       h.year = 2020;
-      h.codecId = 0;
+      h.codec = AudioCodec::Unknown;
       h.bitDepth = 16;
       h.rating = 3;
       h.tagLen = 0;
@@ -68,7 +69,7 @@ namespace ao::library::test
       h.albumArtistId = kInvalidDictionaryId;
       h.composerId = kInvalidDictionaryId;
       h.year = 2020;
-      h.codecId = 0;
+      h.codec = AudioCodec::Unknown;
       h.bitDepth = 16;
       h.rating = 3;
       h.tagLen = 0; // no tags
@@ -96,7 +97,6 @@ namespace ao::library::test
       builder.metadata().discNumber(header.discNumber);
       builder.metadata().totalDiscs(header.totalDiscs);
       builder.property().durationMs(header.durationMs);
-      builder.property().sampleRate(header.sampleRate);
       builder.property().bitrate(header.bitrate);
       builder.property().channels(header.channels);
 
@@ -202,14 +202,16 @@ namespace ao::library::test
   TEST_CASE("TrackView - Hot Codec and BitDepth", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
-    h.codecId = 3; // FLAC
+    h.codec = AudioCodec::Flac;
     h.bitDepth = 24;
+    h.sampleRate = 96000;
     h.rating = 0;
     auto const data = serializeHeader(h);
     auto const view = TrackView{data, std::span<std::byte const>{}};
 
-    CHECK(view.property().codecId() == 3);
+    CHECK(view.property().codec() == AudioCodec::Flac);
     CHECK(view.property().bitDepth() == 24);
+    CHECK(view.property().sampleRate() == 96000);
   }
 
   TEST_CASE("TrackView - Hot Rating", "[library][unit][track]")
@@ -243,7 +245,6 @@ namespace ao::library::test
   {
     auto header = TrackColdHeader{};
     header.durationMs = 180000;
-    header.sampleRate = 44100;
     header.bitrate = 320000;
     header.channels = 2;
 
@@ -251,7 +252,6 @@ namespace ao::library::test
     auto const view = makeColdView(data);
 
     CHECK(view.property().durationMs() == 180000);
-    CHECK(view.property().sampleRate() == 44100);
     CHECK(view.property().bitrate() == 320000);
     CHECK(view.property().channels() == 2);
   }
@@ -293,7 +293,7 @@ namespace ao::library::test
     h.albumArtistId = kInvalidDictionaryId;
     h.composerId = kInvalidDictionaryId;
     h.year = 2020;
-    h.codecId = 0;
+    h.codec = AudioCodec::Unknown;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagLen = 8; // 2 tags * 4 bytes
@@ -324,7 +324,7 @@ namespace ao::library::test
     h.albumArtistId = kInvalidDictionaryId;
     h.composerId = kInvalidDictionaryId;
     h.year = 2020;
-    h.codecId = 0;
+    h.codec = AudioCodec::Unknown;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagLen = 8; // 2 tags * 4 bytes
@@ -359,7 +359,7 @@ namespace ao::library::test
     h.albumArtistId = kInvalidDictionaryId;
     h.composerId = kInvalidDictionaryId;
     h.year = 2020;
-    h.codecId = 0;
+    h.codec = AudioCodec::Unknown;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagLen = 8;
@@ -387,7 +387,7 @@ namespace ao::library::test
     h.albumArtistId = kInvalidDictionaryId;
     h.composerId = kInvalidDictionaryId;
     h.year = 2020;
-    h.codecId = 0;
+    h.codec = AudioCodec::Unknown;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagLen = 8;

@@ -11,6 +11,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -19,6 +20,158 @@
 
 namespace ao::media::mp4
 {
+  namespace
+  {
+    constexpr std::byte kEsDescriptorTag{0x03};
+    constexpr std::byte kDecoderConfigDescriptorTag{0x04};
+    constexpr std::byte kDecoderSpecificInfoTag{0x05};
+    constexpr std::uint8_t kDescriptorLengthBitsPerByte = 7;
+    constexpr std::uint8_t kDescriptorLengthByteMask = 0x7F;
+
+    std::uint8_t byteValue(std::byte byte) noexcept
+    {
+      return static_cast<std::uint8_t>(byte);
+    }
+
+    std::optional<std::size_t> readDescriptorLength(std::span<std::byte const> bytes, std::size_t& offset) noexcept
+    {
+      std::size_t length = 0;
+
+      for (std::size_t i = 0; i < 4; ++i)
+      {
+        if (offset >= bytes.size())
+        {
+          return std::nullopt;
+        }
+
+        auto const value = byteValue(bytes[offset++]);
+        length = (length << kDescriptorLengthBitsPerByte) | (value & kDescriptorLengthByteMask);
+
+        if ((value & 0x80U) == 0)
+        {
+          return length;
+        }
+      }
+
+      return std::nullopt;
+    }
+
+    std::span<std::byte const> skipEsDescriptorHeader(std::span<std::byte const> payload) noexcept
+    {
+      constexpr std::size_t kBaseHeaderSize = 3;
+
+      if (payload.size() < kBaseHeaderSize)
+      {
+        return {};
+      }
+
+      auto offset = kBaseHeaderSize;
+      auto const flags = byteValue(payload[2]);
+
+      if ((flags & 0x80U) != 0)
+      {
+        offset += 2;
+      }
+
+      if ((flags & 0x40U) != 0)
+      {
+        if (offset >= payload.size())
+        {
+          return {};
+        }
+
+        offset += 1U + byteValue(payload[offset]);
+      }
+
+      if ((flags & 0x20U) != 0)
+      {
+        offset += 2;
+      }
+
+      if (offset > payload.size())
+      {
+        return {};
+      }
+
+      return payload.subspan(offset);
+    }
+
+    std::span<std::byte const> skipDecoderConfigDescriptorHeader(std::span<std::byte const> payload) noexcept
+    {
+      constexpr std::size_t kHeaderSize = 13;
+
+      if (payload.size() < kHeaderSize)
+      {
+        return {};
+      }
+
+      return payload.subspan(kHeaderSize);
+    }
+
+    std::optional<std::vector<std::byte>> findDescriptorPayload(std::span<std::byte const> bytes,
+                                                                std::byte targetTag)
+    {
+      std::size_t offset = 0;
+
+      while (offset < bytes.size())
+      {
+        auto const tag = bytes[offset++];
+        auto const optLength = readDescriptorLength(bytes, offset);
+
+        if (!optLength || offset + *optLength > bytes.size())
+        {
+          return std::nullopt;
+        }
+
+        auto const payload = bytes.subspan(offset, *optLength);
+
+        if (tag == targetTag)
+        {
+          return std::vector<std::byte>{payload.begin(), payload.end()};
+        }
+
+        auto nested = std::span<std::byte const>{};
+
+        if (tag == kEsDescriptorTag)
+        {
+          nested = skipEsDescriptorHeader(payload);
+        }
+        else if (tag == kDecoderConfigDescriptorTag)
+        {
+          nested = skipDecoderConfigDescriptorHeader(payload);
+        }
+
+        if (!nested.empty())
+        {
+          if (auto optPayload = findDescriptorPayload(nested, targetTag); optPayload)
+          {
+            return optPayload;
+          }
+        }
+
+        offset += *optLength;
+      }
+
+      return std::nullopt;
+    }
+
+    std::vector<std::byte> extractAacMagicCookie(AtomView const& esdsView)
+    {
+      auto const bytes = esdsView.bytes();
+
+      constexpr std::size_t kFullAtomHeaderSize = sizeof(AtomLayout) + 4;
+
+      if (bytes.size() <= kFullAtomHeaderSize)
+      {
+        return {};
+      }
+
+      auto const descriptors = bytes.subspan(kFullAtomHeaderSize);
+      auto optCookie = findDescriptorPayload(descriptors, kDecoderSpecificInfoTag);
+      return optCookie.value_or(std::vector<std::byte>{});
+    }
+  } // namespace
+
   Demuxer::Demuxer(std::span<std::byte const> fileData)
     : _fileData{fileData}
   {
@@ -253,6 +406,27 @@ namespace ao::media::mp4
       auto const& view = utility::unsafeDowncast<AtomView const>(*node);
       auto const bytes = view.bytes();
       _magicCookie.assign(bytes.begin(), bytes.end());
+    }
+
+    if (targetFormat == "mp4a")
+    {
+      static constexpr std::array kEsdsPath = {
+        std::string_view{"root"},
+        std::string_view{"moov"},
+        std::string_view{"trak"},
+        std::string_view{"mdia"},
+        std::string_view{"minf"},
+        std::string_view{"stbl"},
+        std::string_view{"stsd"},
+        std::string_view{"mp4a"},
+        std::string_view{"esds"},
+      };
+
+      if (auto const* node = root.find(kEsdsPath); node != nullptr)
+      {
+        auto const& view = utility::unsafeDowncast<AtomView const>(*node);
+        _magicCookie = extractAacMagicCookie(view);
+      }
     }
 
     // stbl path

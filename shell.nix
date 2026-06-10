@@ -89,6 +89,7 @@ pkgs.mkShell {
       ffmpeg
       flac
       alac
+      fdk_aac.dev
       mpg123
       pipewire
       alsa-lib

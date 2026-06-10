@@ -4,6 +4,7 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -74,7 +75,12 @@ namespace ao::rt::test
       std::ignore = resWriter.create(createTestData(64));
 
       auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri("song.flac").durationMs(180000);
+      trackBuilder.property()
+        .uri("song.flac")
+        .durationMs(180000)
+        .sampleRate(96000)
+        .bitDepth(24)
+        .codec(AudioCodec::Flac);
       trackBuilder.metadata().title("Test Title").artist("Test Artist").coverArtId(resId.raw());
       trackBuilder.tags().add("rock").add("favorite");
       trackBuilder.custom().add("mood", "happy");
@@ -104,6 +110,14 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp1.path()} / "backup.yaml";
     auto exporter = LibraryYamlExporter{ml1};
     REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
+
+    {
+      auto ifs = std::ifstream{yamlPath};
+      auto const begin = std::istreambuf_iterator{ifs};
+      auto const end = decltype(begin){};
+      auto const exported = std::string{begin, end};
+      REQUIRE_THAT(exported, Catch::Matchers::ContainsSubstring("codec: FLAC"));
+    }
 
     // 3. Import into a new library
     auto const temp2 = TempDir{};
@@ -147,6 +161,9 @@ namespace ao::rt::test
       REQUIRE(tracks.size() == 1);
       auto const& view = tracks[0].second;
       REQUIRE(view.property().uri() == "song.flac");
+      REQUIRE(view.property().sampleRate() == 96000);
+      REQUIRE(view.property().bitDepth() == 24);
+      REQUIRE(view.property().codec() == AudioCodec::Flac);
       REQUIRE(view.metadata().title() == "Test Title");
       REQUIRE(dict.get(view.metadata().artistId()) == "Test Artist");
 

@@ -4,11 +4,14 @@
 #include "File.h"
 
 #include "../detail/Decoder.h"
+#include <ao/library/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/ByteView.h>
+
+#include <boost/endian/buffers.hpp>
 
 #include <array>
 #include <cstddef>
@@ -44,16 +47,67 @@ namespace ao::tag::mp4
       return utility::bytes::stringView(atomData(view));
     }
 
+    std::uint8_t byteValue(std::byte byte) noexcept
+    {
+      return static_cast<std::uint8_t>(byte);
+    }
+
+    std::uint16_t readBigEndianU16(std::span<std::byte const> bytes, std::size_t offset) noexcept
+    {
+      return static_cast<std::uint16_t>((static_cast<std::uint16_t>(byteValue(bytes[offset])) << 8U) |
+                                        static_cast<std::uint16_t>(byteValue(bytes[offset + 1])));
+    }
+
+    struct NumberPair final
+    {
+      std::uint16_t number = 0;
+      std::uint16_t total = 0;
+    };
+
+    std::optional<NumberPair> atomNumberPair(AtomView const& view)
+    {
+      constexpr std::size_t kDataAtomFieldsAfterParentHeader = sizeof(DataAtomLayout) - sizeof(AtomLayout);
+      constexpr std::size_t kNumberPairPayloadSize = 6;
+
+      auto const bytes = view.bytes();
+
+      if (bytes.size() < sizeof(DataAtomLayout) + kNumberPairPayloadSize)
+      {
+        return std::nullopt;
+      }
+
+      auto const* const layout = utility::layout::view<DataAtomLayout>(bytes);
+
+      if (auto const dataLength = layout->dataLength.value();
+          std::string_view{layout->magic.data(), layout->magic.size()} != "data" ||
+          dataLength < kDataAtomFieldsAfterParentHeader + kNumberPairPayloadSize ||
+          sizeof(AtomLayout) + dataLength > bytes.size())
+      {
+        return std::nullopt;
+      }
+
+      constexpr std::size_t kPayloadOffset = sizeof(DataAtomLayout);
+      constexpr std::size_t kNumberOffset = 2;
+      constexpr std::size_t kTotalOffset = 4;
+
+      return NumberPair{.number = readBigEndianU16(bytes, kPayloadOffset + kNumberOffset),
+                        .total = readBigEndianU16(bytes, kPayloadOffset + kTotalOffset)};
+    }
+
     void handleTrackNumbers(library::TrackBuilder& builder, AtomView const& view)
     {
-      auto const& layout = view.layout<TrknAtomLayout>();
-      builder.metadata().trackNumber(layout.trackNumber.value()).totalTracks(layout.totalTracks.value());
+      if (auto optPair = atomNumberPair(view); optPair)
+      {
+        builder.metadata().trackNumber(optPair->number).totalTracks(optPair->total);
+      }
     }
 
     void handleDiscNumbers(library::TrackBuilder& builder, AtomView const& view)
     {
-      auto const& layout = view.layout<DiskAtomLayout>();
-      builder.metadata().discNumber(layout.discNumber.value()).totalDiscs(layout.totalDiscs.value());
+      if (auto optPair = atomNumberPair(view); optPair)
+      {
+        builder.metadata().discNumber(optPair->number).totalDiscs(optPair->total);
+      }
     }
 
     template<TextSetter Setter>
@@ -203,6 +257,38 @@ namespace ao::tag::mp4
       std::string_view{"stsd"},
     };
 
+    AudioSampleEntryLayout const* firstAudioSampleEntry(AtomView const& stsdView)
+    {
+      auto const bytes = stsdView.bytes();
+
+      if (bytes.size() < sizeof(StsdAtomLayout) + sizeof(AudioSampleEntryLayout))
+      {
+        return nullptr;
+      }
+
+      if (auto const& stsdLayout = stsdView.layout<StsdAtomLayout>(); stsdLayout.entryCount.value() == 0)
+      {
+        return nullptr;
+      }
+
+      auto const entryBytes = bytes.subspan(sizeof(StsdAtomLayout));
+
+      if (entryBytes.size() < sizeof(AudioSampleEntryLayout))
+      {
+        return nullptr;
+      }
+
+      auto const* const entryLayout = utility::layout::view<AtomLayout>(entryBytes);
+
+      if (entryLayout->length.value() < sizeof(AudioSampleEntryLayout) ||
+          entryLayout->length.value() > entryBytes.size())
+      {
+        return nullptr;
+      }
+
+      return utility::layout::view<AudioSampleEntryLayout>(entryBytes);
+    }
+
     // Helper to extract audio properties from mdhd and stsd
     void extractAudioProperties(library::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
     {
@@ -237,26 +323,36 @@ namespace ao::tag::mp4
       if (auto const* const stsdNode = root.find(kStsdPath); stsdNode != nullptr)
       {
         auto const& view = utility::unsafeDowncast<AtomView const>(*stsdNode);
+        auto const* const audioLayout = firstAudioSampleEntry(view);
 
-        // stsd contains a version byte (1), flags (3), and then entry count (4)
-        // Entries start after 8 bytes of stsd content
-        constexpr std::size_t kStsdContentHeaderSize = 8;
-        auto const* const stsdBase = utility::layout::asPtr<std::byte>(view.bytes());
-        auto const* const data = stsdBase + sizeof(AtomLayout) + kStsdContentHeaderSize;
+        if (audioLayout == nullptr)
+        {
+          return;
+        }
 
-        // Now data points to the first sample entry (includes length + type)
-        auto const& audioLayout =
-          *utility::layout::view<AudioSampleEntryLayout>(utility::bytes::view(data, sizeof(AudioSampleEntryLayout)));
+        auto const sampleEntryType =
+          std::string_view{audioLayout->common.type.data(), audioLayout->common.type.size()};
+        auto codec = library::AudioCodec::Unknown;
+
+        if (sampleEntryType == "alac")
+        {
+          codec = library::AudioCodec::Alac;
+        }
+        else if (sampleEntryType == "mp4a")
+        {
+          codec = library::AudioCodec::Aac;
+        }
 
         builder.property()
-          .channels(static_cast<std::uint8_t>(audioLayout.channelCount.value()))
-          .bitDepth(static_cast<std::uint8_t>(audioLayout.sampleSize.value()));
+          .channels(static_cast<std::uint8_t>(audioLayout->channelCount.value()))
+          .bitDepth(static_cast<std::uint8_t>(audioLayout->sampleSize.value()))
+          .codec(codec);
 
         // Sample rate is a 16.16 fixed point, extract integer part
         // Only use if non-zero (ALAC may have 0 here, mdhd has correct rate)
         constexpr std::size_t kFixedPointShift = 16;
 
-        if (auto const sampleRateFixed = audioLayout.sampleRate.value(); sampleRateFixed >> kFixedPointShift > 0)
+        if (auto const sampleRateFixed = audioLayout->sampleRate.value(); sampleRateFixed >> kFixedPointShift > 0)
         {
           builder.property().sampleRate(sampleRateFixed >> kFixedPointShift);
         }

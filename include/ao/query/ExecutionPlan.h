@@ -29,7 +29,7 @@ namespace ao::query
     SampleRate = 4,
     Channels = 5,
     BitDepth = 6,
-    CodecId = 7,
+    Codec = 7,
     Rating = 8,
 
     // Metadata ID fields (Dictionary IDs)

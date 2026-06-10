@@ -3,6 +3,8 @@
 
 #include "lib/tag/mp4/File.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/media/mp4/TestAtoms.h"
+#include <ao/library/AudioCodec.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/tag/TagFile.h>
 
@@ -20,21 +22,8 @@ namespace ao::tag::mp4::test
 
   namespace
   {
-    void addAtom(std::vector<std::uint8_t>& buffer, char const* type, std::vector<std::uint8_t> const& body)
-    {
-      std::uint32_t const length = 8 + static_cast<std::uint32_t>(body.size());
-      auto lenBuf = boost::endian::big_uint32_buf_t{};
-      lenBuf = length;
-      auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
-      buffer.insert(buffer.end(), lenAddr, lenAddr + 4);
-      buffer.push_back(type[0]);
-      buffer.push_back(type[1]);
-      buffer.push_back(type[2]);
-      buffer.push_back(type[3]);
-      buffer.insert(buffer.end(), body.begin(), body.end());
-    }
-
-    std::vector<std::uint8_t> createMinimalM4a()
+    std::vector<std::uint8_t> createMinimalM4a(char const* sampleEntryType = "mp4a",
+                                              std::vector<std::uint8_t> const& sampleEntryExtensions = {})
     {
       auto data = std::vector<std::uint8_t>{};
 
@@ -52,7 +41,7 @@ namespace ao::tag::mp4::test
         namData.insert(namData.end(), dlAddr + 8, dlAddr + 24);
         namData.insert(namData.end(), text.begin(), text.end());
         auto atom = std::vector<std::uint8_t>{};
-        addAtom(atom, type, namData);
+        ao::test::mp4::addAtom(atom, type, namData);
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       };
 
@@ -94,7 +83,7 @@ namespace ao::tag::mp4::test
         covrData.push_back(0xCC);
         covrData.push_back(0xDD);
         auto atom = std::vector<std::uint8_t>{};
-        addAtom(atom, "covr", covrData);
+        ao::test::mp4::addAtom(atom, "covr", covrData);
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       }
 
@@ -131,87 +120,82 @@ namespace ao::tag::mp4::test
       // Unknown atom
       addTextAtom("XUNK", "UnknownValue");
 
-      auto ilstAtom = std::vector<std::uint8_t>{};
-      addAtom(ilstAtom, "ilst", ilstBody);
+      auto const ilstAtom = ao::test::mp4::makeAtom("ilst", ilstBody);
 
       auto metaBody = std::vector<std::uint8_t>{0, 0, 0, 0}; // Meta header
       metaBody.insert(metaBody.end(), ilstAtom.begin(), ilstAtom.end());
 
-      auto metaAtom = std::vector<std::uint8_t>{};
-      addAtom(metaAtom, "meta", metaBody);
+      auto const metaAtom = ao::test::mp4::makeAtom("meta", metaBody);
 
       auto udtaBody = std::vector<std::uint8_t>{};
       udtaBody.insert(udtaBody.end(), metaAtom.begin(), metaAtom.end());
 
-      auto udtaAtom = std::vector<std::uint8_t>{};
-      addAtom(udtaAtom, "udta", udtaBody);
-
-      // 2. Build trak
-      auto mdhd = MdhdAtomLayout{};
-      mdhd.common.length = sizeof(MdhdAtomLayout);
-      std::memcpy(mdhd.common.type.data(), "mdhd", 4);
-      mdhd.timescale = 44100;
-      mdhd.duration = 44100; // 1 second
-      auto const* mdhdAddr = reinterpret_cast<std::uint8_t const*>(&mdhd);
-      auto mdhdBody = std::vector<std::uint8_t>{};
-      mdhdBody.insert(mdhdBody.end(), mdhdAddr + 8, mdhdAddr + sizeof(MdhdAtomLayout));
-
-      auto mdhdAtom = std::vector<std::uint8_t>{};
-      addAtom(mdhdAtom, "mdhd", mdhdBody);
-
-      // 3. Build stsd
-      auto mp4a = AudioSampleEntryLayout{};
-      mp4a.common.length = sizeof(AudioSampleEntryLayout);
-      std::memcpy(mp4a.common.type.data(), "mp4a", 4);
-      mp4a.channelCount = 2;
-      mp4a.sampleSize = 16;
-      mp4a.sampleRate = (44100 << 16);
-      auto const* mp4aAddr = reinterpret_cast<std::uint8_t const*>(&mp4a);
-      auto mp4aBody = std::vector<std::uint8_t>{};
-      mp4aBody.insert(mp4aBody.end(), mp4aAddr + 8, mp4aAddr + sizeof(AudioSampleEntryLayout));
-
-      auto mp4aAtom = std::vector<std::uint8_t>{};
-      addAtom(mp4aAtom, "mp4a", mp4aBody);
-
-      auto stsdBody = std::vector<std::uint8_t>{0, 0, 0, 0, 0, 0, 0, 1};
-      stsdBody.insert(stsdBody.end(), mp4aAtom.begin(), mp4aAtom.end());
-
-      auto stsdAtom = std::vector<std::uint8_t>{};
-      addAtom(stsdAtom, "stsd", stsdBody);
-
-      auto stblBody = std::vector<std::uint8_t>{};
-      stblBody.insert(stblBody.end(), stsdAtom.begin(), stsdAtom.end());
-
-      auto stblAtom = std::vector<std::uint8_t>{};
-      addAtom(stblAtom, "stbl", stblBody);
-
-      auto minfBody = std::vector<std::uint8_t>{};
-      minfBody.insert(minfBody.end(), stblAtom.begin(), stblAtom.end());
-
-      auto minfAtom = std::vector<std::uint8_t>{};
-      addAtom(minfAtom, "minf", minfBody);
-
-      auto mdiaBody = std::vector<std::uint8_t>{};
-      mdiaBody.insert(mdiaBody.end(), mdhdAtom.begin(), mdhdAtom.end());
-      mdiaBody.insert(mdiaBody.end(), minfAtom.begin(), minfAtom.end());
-
-      auto mdiaAtom = std::vector<std::uint8_t>{};
-      addAtom(mdiaAtom, "mdia", mdiaBody);
-
-      auto trakBody = std::vector<std::uint8_t>{};
-      trakBody.insert(trakBody.end(), mdiaAtom.begin(), mdiaAtom.end());
-
-      auto trakAtom = std::vector<std::uint8_t>{};
-      addAtom(trakAtom, "trak", trakBody);
+      auto const udtaAtom = ao::test::mp4::makeAtom("udta", udtaBody);
+      auto const trakAtom = ao::test::mp4::makeAudioTrackAtom(sampleEntryType, sampleEntryExtensions);
 
       // 4. Assemble moov
       auto moovBody = std::vector<std::uint8_t>{};
       moovBody.insert(moovBody.end(), udtaAtom.begin(), udtaAtom.end());
       moovBody.insert(moovBody.end(), trakAtom.begin(), trakAtom.end());
 
-      addAtom(data, "moov", moovBody);
+      ao::test::mp4::addAtom(data, "moov", moovBody);
 
       return data;
+    }
+
+    std::vector<std::uint8_t> createMinimalM4aWithRawIlstAtom(std::vector<std::uint8_t> const& rawIlstChild)
+    {
+      auto data = std::vector<std::uint8_t>{};
+      auto const ilstAtom = ao::test::mp4::makeAtom("ilst", rawIlstChild);
+
+      auto metaBody = std::vector<std::uint8_t>{0, 0, 0, 0};
+      metaBody.insert(metaBody.end(), ilstAtom.begin(), ilstAtom.end());
+
+      auto const metaAtom = ao::test::mp4::makeAtom("meta", metaBody);
+      auto const udtaAtom = ao::test::mp4::makeAtom("udta", metaAtom);
+      auto const trakAtom = ao::test::mp4::makeAudioTrackAtom("mp4a");
+
+      auto moovBody = std::vector<std::uint8_t>{};
+      moovBody.insert(moovBody.end(), udtaAtom.begin(), udtaAtom.end());
+      moovBody.insert(moovBody.end(), trakAtom.begin(), trakAtom.end());
+
+      ao::test::mp4::addAtom(data, "moov", moovBody);
+      return data;
+    }
+
+    std::vector<std::uint8_t> createMinimalM4aWithRawDiskAtom()
+    {
+      auto const diskAtom = std::vector<std::uint8_t>{
+        0x00, 0x00, 0x00, 0x20, // disk atom size: 32
+        'd',  'i',  's',  'k',
+        0x00, 0x00, 0x00, 0x18, // data atom size: 24
+        'd',  'a',  't',  'a',
+        0x00, 0x00, 0x00, 0x00, // type
+        0x00, 0x00, 0x00, 0x00, // reserved
+        0x00, 0x00,             // padding
+        0x00, 0x02,             // disc number
+        0x00, 0x05,             // total discs
+        0x00, 0x00              // padding
+      };
+
+      return createMinimalM4aWithRawIlstAtom(diskAtom);
+    }
+
+    std::vector<std::uint8_t> createMinimalM4aWithRawTrackAtom()
+    {
+      auto const trackAtom = std::vector<std::uint8_t>{
+        0x00, 0x00, 0x00, 0x1E, // trkn atom size: 30
+        't',  'r',  'k',  'n',
+        0x00, 0x00, 0x00, 0x16, // data atom size: 22
+        'd',  'a',  't',  'a',
+        0x00, 0x00, 0x00, 0x00, // type
+        0x00, 0x00, 0x00, 0x00, // reserved
+        0x00, 0x00,             // padding
+        0x00, 0x02,             // track number
+        0x00, 0x04              // total tracks
+      };
+
+      return createMinimalM4aWithRawIlstAtom(trackAtom);
     }
   }
 
@@ -258,6 +242,57 @@ namespace ao::tag::mp4::test
 
     CHECK(builder.property().sampleRate() == 44100);
     CHECK(builder.property().durationMs() == 1000);
+    CHECK(builder.property().channels() == 2);
+    CHECK(builder.property().bitDepth() == 16);
+    CHECK(builder.property().codec() == library::AudioCodec::Aac);
+  }
+
+  TEST_CASE("MP4 File - ALAC sample entry sets codec", "[tag][unit][mp4][file]")
+  {
+    auto const data = createMinimalM4a("alac");
+    auto const temp = TempFile{data};
+
+    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto builder = file.loadTrack();
+
+    CHECK(builder.property().codec() == library::AudioCodec::Alac);
+  }
+
+  TEST_CASE("MP4 File - 32-byte disk atom parses disc numbers", "[tag][unit][mp4][file]")
+  {
+    auto const data = createMinimalM4aWithRawDiskAtom();
+    auto const temp = TempFile{data};
+
+    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto builder = file.loadTrack();
+
+    CHECK(builder.metadata().discNumber() == 2);
+    CHECK(builder.metadata().totalDiscs() == 5);
+  }
+
+  TEST_CASE("MP4 File - 30-byte trkn atom parses track numbers", "[tag][unit][mp4][file]")
+  {
+    auto const data = createMinimalM4aWithRawTrackAtom();
+    auto const temp = TempFile{data};
+
+    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto builder = file.loadTrack();
+
+    CHECK(builder.metadata().trackNumber() == 2);
+    CHECK(builder.metadata().totalTracks() == 4);
+  }
+
+  TEST_CASE("MP4 File - AAC sample entry with child atoms does not crash", "[tag][unit][mp4][file]")
+  {
+    auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0});
+    auto const data = createMinimalM4a("mp4a", esdsAtom);
+    auto const temp = TempFile{data};
+
+    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto builder = file.loadTrack();
+
+    CHECK(builder.property().codec() == library::AudioCodec::Aac);
+    CHECK(builder.property().sampleRate() == 44100);
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
   }

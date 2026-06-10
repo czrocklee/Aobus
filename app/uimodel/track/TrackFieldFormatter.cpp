@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Error.h>
-#include <ao/library/DictionaryStore.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 
 #include <charconv>
@@ -163,14 +163,14 @@ namespace ao::uimodel::track
     return std::format("{}-bit", bitDepth);
   }
 
-  std::string formatCodec(std::uint16_t codecId, library::DictionaryStore const& dict)
+  std::string formatCodec(library::AudioCodec codec)
   {
-    if (codecId == 0)
+    if (codec == library::AudioCodec::Unknown)
     {
       return {};
     }
 
-    return std::string{dict.getOrDefault(DictionaryId{codecId})};
+    return std::string{library::audioCodecName(codec)};
   }
 
   TrackFieldEditValue makeTextEditValue(std::string_view value)

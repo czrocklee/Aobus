@@ -25,6 +25,6 @@ channels, Field::Channels
 bitDepth, Field::BitDepth
 bd, Field::BitDepth
 rating, Field::Rating
-codecId, Field::CodecId
+codec, Field::Codec
 %%
 } // namespace property_dispatch

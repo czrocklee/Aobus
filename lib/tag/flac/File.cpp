@@ -5,6 +5,7 @@
 
 #include "../detail/Decoder.h"
 #include <ao/Exception.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlock.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
@@ -84,7 +85,11 @@ namespace ao::tag::flac
         case MetadataBlockType::StreamInfo:
         {
           auto view = StreamInfoBlockView{iter->data()};
-          builder.property().sampleRate(view.sampleRate()).channels(view.channels()).bitDepth(view.bitDepth());
+          builder.property()
+            .sampleRate(view.sampleRate())
+            .channels(view.channels())
+            .bitDepth(view.bitDepth())
+            .codec(library::AudioCodec::Flac);
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {

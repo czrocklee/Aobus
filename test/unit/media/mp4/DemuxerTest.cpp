@@ -2,11 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/media/mp4/Demuxer.h>
+#include <ao/utility/MappedFile.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstddef>
+#include <filesystem>
 #include <span>
 #include <vector>
 
@@ -54,5 +56,25 @@ namespace ao::media::mp4::test
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
     }
+  }
+
+  TEST_CASE("MP4 Demuxer - extracts AAC AudioSpecificConfig", "[media][unit][mp4]")
+  {
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
+
+    if (!std::filesystem::exists(testFile))
+    {
+      SKIP("Test file 'basic_metadata.m4a' missing");
+    }
+
+    auto mappedFile = utility::MappedFile{};
+    REQUIRE(mappedFile.map(testFile));
+
+    auto demuxer = Demuxer{mappedFile.bytes()};
+    auto const result = demuxer.parseTrack("mp4a");
+
+    REQUIRE(result);
+    CHECK_FALSE(demuxer.magicCookie().empty());
+    CHECK(demuxer.sampleCount() > 0);
   }
 } // namespace ao::media::mp4::test

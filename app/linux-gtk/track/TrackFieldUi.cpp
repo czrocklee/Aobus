@@ -116,10 +116,9 @@ namespace ao::gtk
       return std::format("{}", track);
     }
 
-    std::string readTechnicalSummary(TrackRowObject const& row, TrackRowCache const& cache)
+    std::string readTechnicalSummary(TrackRowObject const& row, TrackRowCache const& /*cache*/)
     {
-      auto const& dict = cache.dictionary();
-      auto const codec = uimodel::track::formatCodec(row.codecId(), dict);
+      auto const codec = uimodel::track::formatCodec(row.codec());
       auto const rate = uimodel::track::formatSampleRateCompact(row.sampleRate());
       auto const depth = std::format("{}-bit", row.bitDepth());
 
@@ -492,14 +491,14 @@ namespace ao::gtk
         },
         {
           .field = F::Codec,
-          .readRowText = +[](TrackRowObject const& row, TrackRowCache const& cache) -> std::string
-          { return uimodel::track::formatCodec(row.codecId(), cache.dictionary()); },
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const& /*cache*/) -> std::string
+          { return uimodel::track::formatCodec(row.codec()); },
           .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const& dict,
+                                  library::DictionaryStore const&,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           {
             return TrackFieldRawValue{
-              std::in_place_type<std::string>, uimodel::track::formatCodec(view.property().codecId(), dict)};
+              std::in_place_type<std::string>, uimodel::track::formatCodec(view.property().codec())};
           },
           .formatValue = readStr,
         },

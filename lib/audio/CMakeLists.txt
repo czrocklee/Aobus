@@ -1,5 +1,6 @@
 # ao_audio
 add_library(ao_audio STATIC
+    AacDecoderSession.cpp
     DecoderFactory.cpp
     FlacDecoderSession.cpp
     AlacDecoderSession.cpp
@@ -16,7 +17,7 @@ add_library(ao_audio STATIC
     detail/RouteTracker.cpp
 )
 target_include_directories(ao_audio PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
-target_link_libraries(ao_audio PUBLIC ao_library PkgFLAC PkgALAC PkgMPG123)
+target_link_libraries(ao_audio PUBLIC ao_library PkgFLAC PkgALAC PkgFDKAAC PkgMPG123)
 
 if(LINUX)
     target_compile_definitions(ao_audio PUBLIC PIPEWIRE_FOUND ALSA_FOUND)
@@ -34,4 +35,3 @@ if(LINUX)
     )
     target_link_libraries(ao_audio PRIVATE PkgALSA PkgPipeWire PkgUDEV)
 endif()
-

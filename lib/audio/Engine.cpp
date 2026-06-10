@@ -22,6 +22,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -186,6 +187,9 @@ namespace ao::audio
 
     void handleSourceError(Error const& error)
     {
+      auto const message = error.message.empty() ? std::string{"PCM source failed"} : error.message;
+      AUDIO_LOG_ERROR("Source error: {}", message);
+
       auto const endedCallback = [this]
       {
         auto const lock = std::scoped_lock{stateMutex};
@@ -203,7 +207,7 @@ namespace ao::audio
         backendStarted = false;
         playbackDrainPending = false;
         status.transport = Transport::Error;
-        status.statusText = error.message.empty() ? "PCM source failed" : error.message;
+        status.statusText = message;
       }
 
       backendPtr->stop();
@@ -463,6 +467,7 @@ namespace ao::audio
     if (!_implPtr->openTrack(descriptor, sourcePtr, backendFormat))
     {
       auto const lock = std::scoped_lock{_implPtr->stateMutex};
+      AUDIO_LOG_ERROR("Failed to open track '{}': {}", descriptor.filePath.string(), _implPtr->status.statusText);
       _implPtr->status.transport = Transport::Error;
       _implPtr->optCurrentTrack.reset();
       return;
@@ -478,6 +483,7 @@ namespace ao::audio
     if (auto const openResult = _implPtr->backendPtr->open(backendFormat, _implPtr.get()); !openResult)
     {
       _implPtr->source.store({}, std::memory_order_release);
+      AUDIO_LOG_ERROR("Failed to open backend for '{}': {}", descriptor.filePath.string(), openResult.error().message);
       auto const lock = std::scoped_lock{_implPtr->stateMutex};
       _implPtr->optCurrentTrack.reset();
       _implPtr->status.transport = Transport::Error;
@@ -607,6 +613,7 @@ namespace ao::audio
 
     if (auto const seekResult = sourcePtr->seek(positionMs); !seekResult)
     {
+      AUDIO_LOG_ERROR("Seek failed at {} ms: {}", positionMs, seekResult.error().message);
       auto const lock = std::scoped_lock{_implPtr->stateMutex};
       _implPtr->status.transport = Transport::Error;
       _implPtr->status.statusText = seekResult.error().message;

@@ -126,7 +126,7 @@ namespace ao::gtk
                      view.property().sampleRate(),
                      view.property().channels(),
                      view.property().bitDepth(),
-                     view.property().codecId(),
+                     view.property().codec(),
                      view.property().bitrate(),
                      fileSize,
                      mtime,

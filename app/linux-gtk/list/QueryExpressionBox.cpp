@@ -77,6 +77,7 @@ namespace ao::gtk
       "sampleRate",
       "channels",
       "bitDepth",
+      "codec",
     });
 
     bool isIdentifierStart(char ch)

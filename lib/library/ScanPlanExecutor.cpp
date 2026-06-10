@@ -139,7 +139,7 @@ namespace ao::library
             .bitrate(builder.property().bitrate())
             .sampleRate(builder.property().sampleRate())
             .channels(builder.property().channels())
-            .codecId(builder.property().codecId())
+            .codec(builder.property().codec())
             .bitDepth(builder.property().bitDepth());
 
           auto const [preparedHot, preparedCold] = merged.prepare(txn, dict, _ml.resources());

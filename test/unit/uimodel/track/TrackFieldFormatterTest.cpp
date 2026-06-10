@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/AudioCodec.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -77,6 +78,14 @@ namespace ao::uimodel::track::test
     REQUIRE(formatBitDepth(0).empty());
     REQUIRE(formatBitDepth(16) == "16-bit");
     REQUIRE(formatBitDepth(24) == "24-bit");
+  }
+
+  TEST_CASE("TrackFieldFormatter - codec formatting", "[uimodel][track][formatter]")
+  {
+    REQUIRE(formatCodec(AudioCodec::Unknown).empty());
+    REQUIRE(formatCodec(AudioCodec::Flac) == "FLAC");
+    REQUIRE(formatCodec(AudioCodec::Alac) == "ALAC");
+    REQUIRE(formatCodec(AudioCodec::Aac) == "AAC");
   }
 
   TEST_CASE("TrackFieldFormatter - text editing", "[uimodel][track][formatter]")

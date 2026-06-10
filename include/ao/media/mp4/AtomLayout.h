@@ -71,7 +71,7 @@ namespace ao::media::mp4
   struct DiskAtomLayout
   {
     static constexpr std::size_t kByteCount = 30;
-    using FixedSize = std::true_type;
+    using FixedSize = std::false_type;
 
     DataAtomLayout common;
     boost::endian::big_uint16_buf_t pad1;
