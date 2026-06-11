@@ -323,21 +323,6 @@ namespace ao::fleet
       return closedEnum(node, "engine", kEngineKindNames);
     }
 
-    FilesystemAuthority parseFilesystem(ryml::ConstNodeRef node)
-    {
-      return closedEnum(node, "filesystem authority", kFilesystemAuthorityNames);
-    }
-
-    NetworkAuthority parseNetwork(ryml::ConstNodeRef node)
-    {
-      return closedEnum(node, "network authority", kNetworkAuthorityNames);
-    }
-
-    ContextView parseContextView(ryml::ConstNodeRef node)
-    {
-      return closedEnum(node, "context view", kContextViewNames);
-    }
-
     PromptDelivery parsePromptDelivery(ryml::ConstNodeRef node)
     {
       return closedEnum(node, "prompt delivery", kPromptDeliveryNames);
@@ -571,15 +556,8 @@ namespace ao::fleet
 
     AgentDefinition parseAgent(std::string id, ryml::ConstNodeRef node)
     {
-      rejectUnknown(node,
-                    {"model",
-                     "argv",
-                     "prompt-delivery",
-                     "environment-whitelist",
-                     "timeout-ms",
-                     "rate-limit-key",
-                     "default-authority"},
-                    "agent");
+      rejectUnknown(
+        node, {"model", "argv", "prompt-delivery", "environment-whitelist", "timeout-ms", "rate-limit-key"}, "agent");
       auto result = AgentDefinition{};
       result.id = std::move(id);
       result.model = scalar(required(node, "model"), "agent model");
@@ -594,7 +572,6 @@ namespace ao::fleet
       result.environmentWhitelist = stringSequence(required(node, "environment-whitelist"), "environment whitelist");
       result.timeout = std::chrono::milliseconds{unsignedValue(required(node, "timeout-ms"), "timeout-ms")};
       result.rateLimitKey = scalar(required(node, "rate-limit-key"), "rate-limit-key");
-      result.defaultAuthority = scalar(required(node, "default-authority"), "default-authority");
       return result;
     }
 
@@ -658,20 +635,9 @@ namespace ao::fleet
       return result;
     }
 
-    AuthorityPolicy parseAuthority(std::string id, ryml::ConstNodeRef node)
-    {
-      rejectUnknown(node, {"filesystem", "network", "context-view"}, "authority");
-      return AuthorityPolicy{
-        .id = std::move(id),
-        .filesystem = parseFilesystem(required(node, "filesystem")),
-        .network = parseNetwork(required(node, "network")),
-        .contextView = parseContextView(required(node, "context-view")),
-      };
-    }
-
     Binding parseBinding(std::string taskKind, ryml::ConstNodeRef node)
     {
-      rejectUnknown(node, {"agent", "engine", "oracle", "risk-oracle", "authority", "params"}, "binding");
+      rejectUnknown(node, {"agent", "engine", "oracle", "risk-oracle", "params"}, "binding");
       auto result = Binding{};
       result.taskKind = std::move(taskKind);
       result.agent = scalar(required(node, "agent"), "binding agent");
@@ -686,8 +652,6 @@ namespace ao::fleet
       {
         result.optRiskOracle = scalar(risk, "binding risk oracle");
       }
-
-      result.authority = scalar(required(node, "authority"), "binding authority");
 
       if (auto params = required(node, "params"); result.engine == EngineKind::Gate)
       {
@@ -788,11 +752,6 @@ namespace ao::fleet
       {
         requireSafeIdentifier(id, "agent id");
         validatePlaceholders(agent);
-
-        if (!registry.authorities.contains(agent.defaultAuthority))
-        {
-          throw ParseFailure{std::format("agent '{}' references unknown authority '{}'", id, agent.defaultAuthority)};
-        }
       }
 
       for (auto const& [kind, binding] : registry.bindings)
@@ -807,11 +766,6 @@ namespace ao::fleet
         if (!registry.agents.contains(binding.agent))
         {
           throw ParseFailure{std::format("binding '{}' references unknown agent '{}'", kind, binding.agent)};
-        }
-
-        if (!registry.authorities.contains(binding.authority))
-        {
-          throw ParseFailure{std::format("binding '{}' references unknown authority '{}'", kind, binding.authority)};
         }
 
         if (binding.optOracle && !registry.oracles.contains(*binding.optOracle))
@@ -831,16 +785,6 @@ namespace ao::fleet
           {
             throw ParseFailure{std::format("binding '{}' roster references unknown agent '{}'", kind, member)};
           }
-        }
-      }
-
-      for (auto const& [id, authority] : registry.authorities)
-      {
-        requireSafeIdentifier(id, "authority id");
-
-        if (authority.filesystem == FilesystemAuthority::MutateRealTree)
-        {
-          throw ParseFailure{std::format("delegated authority '{}' permits mutate-real-tree", id)};
         }
       }
 
@@ -906,8 +850,7 @@ namespace ao::fleet
     try
     {
       auto root = documentRoot(parsed->tree);
-      rejectUnknown(
-        root, {"schema", "agents", "oracles", "authorities", "bindings", "escalations", "ruler-paths"}, "registry");
+      rejectUnknown(root, {"schema", "agents", "oracles", "bindings", "escalations", "ruler-paths"}, "registry");
 
       if (scalar(required(root, "schema"), "schema") != "aobus-fleet-registry/v1")
       {
@@ -929,14 +872,6 @@ namespace ao::fleet
       for (auto child : oracles.children())
       {
         result.oracles.emplace(key(child), parseOracle(key(child), child));
-      }
-
-      auto authorities = required(root, "authorities");
-      requireMap(authorities, "authorities");
-
-      for (auto child : authorities.children())
-      {
-        result.authorities.emplace(key(child), parseAuthority(key(child), child));
       }
 
       auto bindings = required(root, "bindings");
@@ -1066,7 +1001,6 @@ namespace ao::fleet
       }
 
       auto binding = bindingIt->second;
-      auto const bindingDefaultAuthority = binding.authority;
       applyBindingOverrides(binding, intent.overrides);
 
       if (binding.engine == EngineKind::Search)
@@ -1081,48 +1015,9 @@ namespace ao::fleet
         throw ParseFailure{std::format("unknown agent '{}'", binding.agent)};
       }
 
-      auto agentAuthorityIt = registry.authorities.find(agentIt->second.defaultAuthority);
-      auto bindingAuthorityIt = registry.authorities.find(bindingDefaultAuthority);
-
-      if (agentAuthorityIt == registry.authorities.end() || bindingAuthorityIt == registry.authorities.end())
-      {
-        throw ParseFailure{"resolved authority reference is invalid"};
-      }
-
-      auto engineAuthority = AuthorityPolicy{
-        .id = binding.engine == EngineKind::Gate ? "gate-requirement" : "synthesis-requirement",
-        .filesystem =
-          binding.engine == EngineKind::Gate ? FilesystemAuthority::WritableCopy : FilesystemAuthority::ReadOnly,
-        .network = NetworkAuthority::Full,
-        .contextView = ContextView::Full,
-      };
-      auto effective = intersectAuthority(agentAuthorityIt->second, bindingAuthorityIt->second, engineAuthority);
-
-      if (intent.overrides.optAuthority)
-      {
-        auto overrideIt = registry.authorities.find(*intent.overrides.optAuthority);
-
-        if (overrideIt == registry.authorities.end())
-        {
-          throw ParseFailure{std::format("unknown authority override '{}'", *intent.overrides.optAuthority)};
-        }
-
-        auto unrestricted = AuthorityPolicy{.id = "override-clamp",
-                                            .filesystem = FilesystemAuthority::MutateRealTree,
-                                            .network = NetworkAuthority::Full,
-                                            .contextView = ContextView::Full};
-        effective = intersectAuthority(effective, overrideIt->second, unrestricted);
-      }
-
-      if (effective.filesystem == FilesystemAuthority::MutateRealTree)
-      {
-        throw ParseFailure{"delegated phase resolved mutate-real-tree"};
-      }
-
       auto result = ResolvedPhase{.intent = intent,
                                   .agent = agentIt->second,
                                   .binding = binding,
-                                  .authority = effective,
                                   .optOracle = std::nullopt,
                                   .optRiskOracle = std::nullopt};
 
@@ -1273,10 +1168,6 @@ namespace ao::fleet
     out << "model: " << yamlScalar(phase.agent.model) << "\n";
     out << "oracle: " << (phase.optOracle ? yamlScalar(phase.optOracle->id) : "null") << "\n";
     out << "risk-oracle: " << (phase.optRiskOracle ? yamlScalar(phase.optRiskOracle->id) : "null") << "\n";
-    out << "authority:\n";
-    out << "  filesystem: " << toString(phase.authority.filesystem) << "\n";
-    out << "  network: " << toString(phase.authority.network) << "\n";
-    out << "  context-view: " << toString(phase.authority.contextView) << "\n";
     return out.str();
   }
 

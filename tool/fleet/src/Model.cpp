@@ -3,7 +3,6 @@
 
 #include <ao/fleet/Model.h>
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <format>
@@ -12,27 +11,6 @@
 
 namespace ao::fleet
 {
-  namespace
-  {
-    template<typename Enum>
-    constexpr Enum minAuthority(Enum lhs, Enum rhs)
-    {
-      return std::min(lhs, rhs);
-    }
-  } // namespace
-
-  AuthorityPolicy intersectAuthority(AuthorityPolicy const& agent,
-                                     AuthorityPolicy const& binding,
-                                     AuthorityPolicy const& engine)
-  {
-    return AuthorityPolicy{
-      .id = std::format("{}&{}&{}", agent.id, binding.id, engine.id),
-      .filesystem = minAuthority(minAuthority(agent.filesystem, binding.filesystem), engine.filesystem),
-      .network = minAuthority(minAuthority(agent.network, binding.network), engine.network),
-      .contextView = minAuthority(minAuthority(agent.contextView, binding.contextView), engine.contextView),
-    };
-  }
-
   std::string makePhaseId()
   {
     static auto counter = std::atomic_uint64_t{};
@@ -43,14 +21,13 @@ namespace ao::fleet
 
   std::string RouteKey::canonical() const
   {
-    return std::format("{}|{}|{}|{}|{}|{}|{}|{}",
+    return std::format("{}|{}|{}|{}|{}|{}|{}",
                        agentId,
                        modelVersion,
                        harness,
                        toString(engine),
                        oracleId,
                        oracleVersion,
-                       authority,
                        scopeRiskClass);
   }
 
@@ -74,19 +51,9 @@ namespace ao::fleet
     return enumName(kFailureReasonNames, value);
   }
 
-  std::string_view toString(FilesystemAuthority value)
+  std::string_view toString(PromptDelivery value)
   {
-    return enumName(kFilesystemAuthorityNames, value);
-  }
-
-  std::string_view toString(NetworkAuthority value)
-  {
-    return enumName(kNetworkAuthorityNames, value);
-  }
-
-  std::string_view toString(ContextView value)
-  {
-    return enumName(kContextViewNames, value);
+    return enumName(kPromptDeliveryNames, value);
   }
 
   std::string_view toString(OracleRunner value)

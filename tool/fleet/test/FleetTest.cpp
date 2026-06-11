@@ -94,24 +94,6 @@ body: |
     }
   } // namespace
 
-  TEST_CASE("Fleet model - authority intersection is subtractive", "[fleet][unit][model]")
-  {
-    auto const broad = AuthorityPolicy{.id = "broad",
-                                       .filesystem = FilesystemAuthority::WritableCopy,
-                                       .network = NetworkAuthority::Full,
-                                       .contextView = ContextView::Full};
-    auto const narrow = AuthorityPolicy{.id = "narrow",
-                                        .filesystem = FilesystemAuthority::ReadOnly,
-                                        .network = NetworkAuthority::Off,
-                                        .contextView = ContextView::Minimal};
-
-    auto const effective = intersectAuthority(broad, narrow, broad);
-
-    CHECK(effective.filesystem == FilesystemAuthority::ReadOnly);
-    CHECK(effective.network == NetworkAuthority::Off);
-    CHECK(effective.contextView == ContextView::Minimal);
-  }
-
   TEST_CASE("Fleet registry - production registry validates and resolves", "[fleet][unit][yaml]")
   {
     auto registry = loadRegistry(std::filesystem::path{AOBUS_SOURCE_DIR} / "config/agent-fleet.yaml");
@@ -121,6 +103,16 @@ body: |
     CHECK(registry->oracles.contains("test-all"));
     CHECK(registry->bindings.at("implement-plan").engine == EngineKind::Gate);
     CHECK(registry->bindings.at("council-plan").engine == EngineKind::Synthesis);
+    auto councilIntent = PhaseIntent{.id = "council-check",
+                                     .taskKind = "council-review",
+                                     .invariant = "Identify correctness and regression risks.",
+                                     .scope = {},
+                                     .dependsOn = {},
+                                     .overrides = {},
+                                     .body = "Review the change."};
+    auto resolvedCouncil = resolvePhase(*registry, councilIntent);
+    REQUIRE(resolvedCouncil);
+    CHECK(resolvedCouncil->agent.id == "claude-opus");
     CHECK_FALSE(registry->rulerPaths.empty());
     CHECK(registry->oracles.at("test-asan").runner == OracleRunner::TestAsan);
     CHECK(registry->oracles.at("test-tsan").runner == OracleRunner::TestTsan);
@@ -168,56 +160,6 @@ body: |
       REQUIRE_FALSE(result);
       CHECK(result.error().message.find("unsupported search engine") != std::string::npos);
     }
-  }
-
-  TEST_CASE("Fleet resolution - authority override cannot elevate binding", "[fleet][unit][authority]")
-  {
-    auto registry = Registry{};
-    registry.authorities.emplace("read",
-                                 AuthorityPolicy{.id = "read",
-                                                 .filesystem = FilesystemAuthority::ReadOnly,
-                                                 .network = NetworkAuthority::Off,
-                                                 .contextView = ContextView::Minimal});
-    registry.authorities.emplace("write",
-                                 AuthorityPolicy{.id = "write",
-                                                 .filesystem = FilesystemAuthority::WritableCopy,
-                                                 .network = NetworkAuthority::Full,
-                                                 .contextView = ContextView::Full});
-    registry.agents.emplace("worker",
-                            AgentDefinition{.id = "worker",
-                                            .model = "mock-v1",
-                                            .argvTemplate = {"true"},
-                                            .promptDelivery = PromptDelivery::Stdin,
-                                            .environmentWhitelist = {"PATH"},
-                                            .timeout = std::chrono::seconds{1},
-                                            .rateLimitKey = "mock",
-                                            .defaultAuthority = "write"});
-    registry.bindings.emplace("review",
-                              Binding{.taskKind = "review",
-                                      .agent = "worker",
-                                      .engine = EngineKind::Synthesis,
-                                      .optOracle = std::nullopt,
-                                      .optRiskOracle = std::nullopt,
-                                      .authority = "read",
-                                      .gate = {},
-                                      .synthesis = {.roster = {"worker"}, .depth = CouncilDepth::Panel, .quorum = 1}});
-    auto overrides = IntentOverrides{};
-    overrides.optAuthority = "write";
-
-    auto intent = PhaseIntent{.id = "phase-a",
-                              .taskKind = "review",
-                              .invariant = "read only",
-                              .scope = {},
-                              .dependsOn = {},
-                              .overrides = std::move(overrides),
-                              .body = "review"};
-
-    auto resolved = resolvePhase(registry, intent);
-
-    REQUIRE(resolved);
-    CHECK(resolved->authority.filesystem == FilesystemAuthority::ReadOnly);
-    CHECK(resolved->authority.network == NetworkAuthority::Off);
-    CHECK(resolved->authority.contextView == ContextView::Minimal);
   }
 
   TEST_CASE("Fleet intent - strict schema and round trip", "[fleet][unit][yaml]")
@@ -357,7 +299,6 @@ body: |
                                         .optEngine = EngineKind::Synthesis,
                                         .optOracle = "test-core",
                                         .optRiskOracle = "test-delta",
-                                        .optAuthority = "narrow",
                                         .optFanout = 2,
                                         .optTopK = 1,
                                         .optMaxRounds = 3,
@@ -565,7 +506,6 @@ body: |
                         .engine = EngineKind::Gate,
                         .oracleId = "test",
                         .oracleVersion = "v1",
-                        .authority = "copy",
                         .scopeRiskClass = "private"},
       .summary = "test",
       .optEscalationAction = std::nullopt,
@@ -754,10 +694,6 @@ body: |
     auto runner = NamespaceRunner{recorder};
     auto const realRepo = std::filesystem::path{"/repo/real"};
     auto const workspace = std::filesystem::path{"/work/copy"};
-    auto const authority = AuthorityPolicy{.id = "write",
-                                           .filesystem = FilesystemAuthority::WritableCopy,
-                                           .network = NetworkAuthority::Off,
-                                           .contextView = ContextView::Full};
     auto const* home = std::getenv("HOME");
     REQUIRE(home != nullptr);
 
@@ -765,8 +701,8 @@ body: |
     {
       auto request = ProcessRequest{};
       request.argv = {"agent-cli"};
-      [[maybe_unused]] auto const ignored = runner.run(
-        realRepo, workspace, authority, SandboxMounts{.writableBinds = {}, .bindHome = true}, std::move(request));
+      [[maybe_unused]] auto const ignored =
+        runner.run(realRepo, workspace, SandboxMounts{.writableBinds = {}, .bindHome = true}, std::move(request));
       REQUIRE(recorder.requests.size() == 1);
       auto const& argv = recorder.requests.front().argv;
       CHECK(containsSequence(argv, {"--bind", home, home}));
@@ -774,6 +710,7 @@ body: |
       auto const workspaceBind =
         std::ranges::search(argv, std::vector<std::string>{"--bind", workspace.string(), realRepo.string()}).begin();
       CHECK(homeBind < workspaceBind);
+      CHECK_FALSE(std::ranges::contains(argv, std::string{"--unshare-net"}));
     }
 
     SECTION("oracle mounts add writable binds after the workspace and never bind HOME")
@@ -781,7 +718,7 @@ body: |
       auto mounts = SandboxMounts{.writableBinds = {{"/host/oracle-build", "/tmp/build"}}, .bindHome = false};
       auto request = ProcessRequest{};
       request.argv = {"./build.sh", "debug"};
-      [[maybe_unused]] auto const ignored = runner.run(realRepo, workspace, authority, mounts, std::move(request));
+      [[maybe_unused]] auto const ignored = runner.run(realRepo, workspace, mounts, std::move(request));
       REQUIRE(recorder.requests.size() == 1);
       auto const& argv = recorder.requests.front().argv;
       CHECK_FALSE(containsSequence(argv, {"--bind", home, home}));
@@ -851,16 +788,6 @@ body: |
     REQUIRE(init.exitCode == 0);
 
     auto registry = Registry{};
-    registry.authorities.emplace("write",
-                                 AuthorityPolicy{.id = "write",
-                                                 .filesystem = FilesystemAuthority::WritableCopy,
-                                                 .network = NetworkAuthority::Off,
-                                                 .contextView = ContextView::Full});
-    registry.authorities.emplace("read",
-                                 AuthorityPolicy{.id = "read",
-                                                 .filesystem = FilesystemAuthority::ReadOnly,
-                                                 .network = NetworkAuthority::Off,
-                                                 .contextView = ContextView::Full});
     registry.agents.emplace(
       "editor",
       AgentDefinition{.id = "editor",
@@ -869,8 +796,7 @@ body: |
                       .promptDelivery = PromptDelivery::Stdin,
                       .environmentWhitelist = {"PATH"},
                       .timeout = std::chrono::seconds{10},
-                      .rateLimitKey = "mock-editor",
-                      .defaultAuthority = "write"});
+                      .rateLimitKey = "mock-editor"});
     registry.agents.emplace("no-op",
                             AgentDefinition{.id = "no-op",
                                             .model = "no-op-v1",
@@ -878,21 +804,39 @@ body: |
                                             .promptDelivery = PromptDelivery::Stdin,
                                             .environmentWhitelist = {"PATH"},
                                             .timeout = std::chrono::seconds{10},
-                                            .rateLimitKey = "mock-no-op",
-                                            .defaultAuthority = "write"});
+                                            .rateLimitKey = "mock-no-op"});
 
     for (auto const& id : {"member-a", "member-b", "member-c"})
     {
-      registry.agents.emplace(id,
-                              AgentDefinition{.id = id,
-                                              .model = std::string{id} + "-v1",
-                                              .argvTemplate = {"sh", "-c", std::format("printf '{} analysis\\n'", id)},
-                                              .promptDelivery = PromptDelivery::Stdin,
-                                              .environmentWhitelist = {"PATH"},
-                                              .timeout = std::chrono::seconds{10},
-                                              .rateLimitKey = id,
-                                              .defaultAuthority = "read"});
+      registry.agents.emplace(
+        id,
+        AgentDefinition{.id = id,
+                        .model = std::string{id} + "-v1",
+                        .argvTemplate = {"sh",
+                                         "-c",
+                                         std::format("prompt=$(cat); case \"$prompt\" in "
+                                                     "*\"Council round: 1 of\"*) kind=draft ;; "
+                                                     "*\"Council round: 2 of\"*) kind=challenge ;; "
+                                                     "*) kind=revision ;; esac; "
+                                                     "mkdir -p .codex && printf state > "
+                                                     ".codex/state && printf '{} stderr\\n' >&2 && "
+                                                     "printf '{} %s\\n' \"$kind\"",
+                                                     id,
+                                                     id)},
+                        .promptDelivery = PromptDelivery::Stdin,
+                        .environmentWhitelist = {"PATH"},
+                        .timeout = std::chrono::seconds{10},
+                        .rateLimitKey = id});
     }
+
+    registry.agents.emplace("member-fail",
+                            AgentDefinition{.id = "member-fail",
+                                            .model = "member-fail-v1",
+                                            .argvTemplate = {"sh", "-c", "printf 'member-fail stderr\\n' >&2; exit 9"},
+                                            .promptDelivery = PromptDelivery::Stdin,
+                                            .environmentWhitelist = {"PATH"},
+                                            .timeout = std::chrono::seconds{10},
+                                            .rateLimitKey = "member-fail"});
 
     registry.oracles.emplace("mock-build",
                              OracleDefinition{.id = "mock-build",
@@ -909,7 +853,6 @@ body: |
                                       .engine = EngineKind::Gate,
                                       .optOracle = "mock-build",
                                       .optRiskOracle = std::nullopt,
-                                      .authority = "write",
                                       .gate = {.fanout = 2, .topK = 1, .maxRounds = 1, .churnLines = 20},
                                       .synthesis = {}});
     registry.bindings.emplace("advisory",
@@ -918,26 +861,24 @@ body: |
                                       .engine = EngineKind::Gate,
                                       .optOracle = std::nullopt,
                                       .optRiskOracle = std::nullopt,
-                                      .authority = "write",
                                       .gate = {.fanout = 1, .topK = 1, .maxRounds = 1, .churnLines = 20},
                                       .synthesis = {}});
-    registry.bindings.emplace(
-      "council",
-      Binding{.taskKind = "council",
-              .agent = "member-a",
-              .engine = EngineKind::Synthesis,
-              .optOracle = std::nullopt,
-              .optRiskOracle = std::nullopt,
-              .authority = "read",
-              .gate = {},
-              .synthesis = {.roster = {"member-a", "member-b", "member-c"}, .depth = CouncilDepth::Full, .quorum = 2}});
+    registry.bindings.emplace("council",
+                              Binding{.taskKind = "council",
+                                      .agent = "member-a",
+                                      .engine = EngineKind::Synthesis,
+                                      .optOracle = std::nullopt,
+                                      .optRiskOracle = std::nullopt,
+                                      .gate = {},
+                                      .synthesis = {.roster = {"member-a", "member-b", "member-c", "member-fail"},
+                                                    .depth = CouncilDepth::Full,
+                                                    .quorum = 2}});
     registry.bindings.emplace("fallback",
                               Binding{.taskKind = "fallback",
                                       .agent = "no-op",
                                       .engine = EngineKind::Gate,
                                       .optOracle = std::nullopt,
                                       .optRiskOracle = std::nullopt,
-                                      .authority = "write",
                                       .gate = {.fanout = 1, .topK = 1, .maxRounds = 1, .churnLines = 20},
                                       .synthesis = {}});
     registry.escalations.emplace(FailureReason::NoCandidate,
@@ -950,7 +891,7 @@ body: |
     {
       return PhaseIntent{.id = std::move(id),
                          .taskKind = std::move(taskKind),
-                         .invariant = "Preserve the real repository while producing the requested artifact.",
+                         .invariant = "Produce the requested artifact within the declared scope.",
                          .scope = {ScopeRule{.path = "source.txt", .operations = {ScopeOperation::Modify}}},
                          .dependsOn = {},
                          .overrides = {},
@@ -982,17 +923,57 @@ body: |
     CHECK(fallback->route.agentId == "editor");
     // The route key carries the concrete oracle version everywhere, never a placeholder.
     CHECK(proposal->route.oracleVersion.size() == 16);
-    CHECK(readFile(out / "proposal-phase" / "manifest.yaml").find("resolved-at-run") == std::string::npos);
-    CHECK(readFile(out / "proposal-phase" / "manifest.yaml").find("escalation-action:") != std::string::npos);
+    auto const proposalManifest = readFile(out / "proposal-phase" / "manifest.yaml");
+    CHECK(proposalManifest.find("schema: aobus-fleet-manifest/v1") != std::string::npos);
+    CHECK(proposalManifest.find("resolved-at-run") == std::string::npos);
+    CHECK(proposalManifest.find("escalation-action:") != std::string::npos);
+    CHECK(proposalManifest.find("authority") == std::string::npos);
+    auto const resolvedPhase = readFile(out / "proposal-phase" / "resolved.yaml");
+    CHECK(resolvedPhase.find("schema: aobus-fleet-resolved/v1") != std::string::npos);
+    CHECK(resolvedPhase.find("authority:") == std::string::npos);
     CHECK(std::filesystem::exists(out / "proposal-phase" / "patch"));
     CHECK(std::filesystem::exists(out / "advisory-phase" / "review.md"));
     CHECK(std::filesystem::exists(out / "council-phase" / "dossier.md"));
+    CHECK_FALSE(std::filesystem::exists(out / "council-phase" / "members" / "member-a" / "r1.log"));
+    auto const memberPrompt = readFile(out / "council-phase" / "members" / "member-a" / "r1" / "prompt.md");
+    CHECK(memberPrompt.find("Council round: 1 of 3 (independent draft)") != std::string::npos);
+    CHECK(memberPrompt.find("Scope (focus on these paths and operations):\n- source.txt: modify") != std::string::npos);
+    CHECK(memberPrompt.find("you will then revise it") != std::string::npos);
+    CHECK(memberPrompt.find("real repository") == std::string::npos);
+    CHECK(memberPrompt.find("workspace is disposable") == std::string::npos);
+    CHECK(memberPrompt.find("repository copy") == std::string::npos);
+    CHECK(readFile(out / "council-phase" / "members" / "member-a" / "r1" / "stdout.txt") == "member-a draft\n");
+    CHECK(readFile(out / "council-phase" / "members" / "member-a" / "r1" / "stderr.txt") == "member-a stderr\n");
+    auto const challengePrompt = readFile(out / "council-phase" / "members" / "member-a" / "r2" / "prompt.md");
+    CHECK(challengePrompt.find("Council round: 2 of 3 (cross-challenge)") != std::string::npos);
+    CHECK(challengePrompt.find("verify their claims against the repository") != std::string::npos);
+    CHECK(challengePrompt.find("given to each draft's author for revision") != std::string::npos);
+    CHECK(challengePrompt.find("member-a draft") == std::string::npos);
+    CHECK(challengePrompt.find("member-b draft") != std::string::npos);
+    CHECK(challengePrompt.find("member-c draft") != std::string::npos);
+    auto const revisionPrompt = readFile(out / "council-phase" / "members" / "member-a" / "r3" / "prompt.md");
+    CHECK(revisionPrompt.find("Council round: 3 of 3 (revision)") != std::string::npos);
+    CHECK(revisionPrompt.find("Your prior draft:\nmember-a draft") != std::string::npos);
+    CHECK(revisionPrompt.find("Your own challenge notes from the previous round:\nmember-a challenge") !=
+          std::string::npos);
+    CHECK(revisionPrompt.find("--- member-a ---") == std::string::npos);
+    CHECK(revisionPrompt.find("member-b challenge") != std::string::npos);
+    CHECK(revisionPrompt.find("member-c challenge") != std::string::npos);
+    auto const memberResult = readFile(out / "council-phase" / "members" / "member-a" / "r1" / "result.yaml");
+    CHECK(memberResult.find("schema: aobus-fleet-member-run/v1") != std::string::npos);
+    CHECK(memberResult.find("authority:") == std::string::npos);
+    CHECK(memberResult.find("quarantined: false") != std::string::npos);
+    auto const failedResult = readFile(out / "council-phase" / "members" / "member-fail" / "r1" / "result.yaml");
+    CHECK(readFile(out / "council-phase" / "members" / "member-fail" / "r1" / "stderr.txt") == "member-fail stderr\n");
+    CHECK(failedResult.find("exit-code: 9") != std::string::npos);
+    CHECK(failedResult.find("quarantine-reason: \"non-zero-exit\"") != std::string::npos);
     CHECK(std::filesystem::exists(out / "proposal-phase" / "trace.yaml"));
     CHECK(std::filesystem::exists(out / "audit.yaml"));
     auto realSource = std::ifstream{repo / "source.txt"};
     auto realValue = std::string{};
     std::getline(realSource, realValue);
     CHECK(realValue == "original");
+    CHECK_FALSE(std::filesystem::exists(repo / ".codex"));
     auto hasJsonArtifact = false;
 
     for (auto const& entry : std::filesystem::recursive_directory_iterator{out})
@@ -1027,13 +1008,7 @@ body: |
 
     Registry schedulerRegistry()
     {
-      auto registry = Registry{};
-      registry.authorities.emplace("write",
-                                   AuthorityPolicy{.id = "write",
-                                                   .filesystem = FilesystemAuthority::WritableCopy,
-                                                   .network = NetworkAuthority::Off,
-                                                   .contextView = ContextView::Full});
-      return registry;
+      return Registry{};
     }
 
     AgentDefinition shellAgent(std::string id, std::string script)
@@ -1045,8 +1020,7 @@ body: |
                              .promptDelivery = PromptDelivery::Stdin,
                              .environmentWhitelist = {"PATH"},
                              .timeout = std::chrono::seconds{20},
-                             .rateLimitKey = {},
-                             .defaultAuthority = "write"};
+                             .rateLimitKey = {}};
     }
 
     Binding gateBinding(std::string taskKind, std::string agent, std::optional<std::string> optOracle)
@@ -1056,7 +1030,6 @@ body: |
                      .engine = EngineKind::Gate,
                      .optOracle = std::move(optOracle),
                      .optRiskOracle = std::nullopt,
-                     .authority = "write",
                      .gate = {.fanout = 1, .topK = 1, .maxRounds = 1, .churnLines = 20},
                      .synthesis = {}};
     }
@@ -1065,7 +1038,7 @@ body: |
     {
       return PhaseIntent{.id = std::move(id),
                          .taskKind = std::move(taskKind),
-                         .invariant = "Preserve the real repository.",
+                         .invariant = "Preserve source behavior.",
                          .scope = {ScopeRule{.path = "source.txt", .operations = {ScopeOperation::Modify}}},
                          .dependsOn = std::move(dependsOn),
                          .overrides = {},

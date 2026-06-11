@@ -13,11 +13,13 @@ the chair performs final synthesis and owns the verdict.
 
 ## Intent
 
+Minimal intent for repository-wide or discussion-only review:
+
 ```yaml
 schema: aobus-fleet-intent/v1
 id: optional-council-id
 task-kind: council-review
-invariant: Identify correctness risks without mutating the repository.
+invariant: Identify correctness and regression risks.
 scope: []
 depends-on: []
 overrides: {}
@@ -25,6 +27,33 @@ body: |
   Review the supplied change for correctness, regressions, and missing tests.
   Findings must cite concrete files and behavior.
 ```
+
+When the council should focus on specific files, `scope` items must be objects, not bare path strings.
+Each item needs a path and one or more operations from `create`, `modify`, and `delete`:
+
+```yaml
+schema: aobus-fleet-intent/v1
+id: custom-metadata-review
+task-kind: council-review
+invariant: Preserve the intended metadata import boundary.
+scope:
+  - path: lib/tag/mpeg/id3v2/Reader.cpp
+    operations: [modify]
+  - path: test/unit/tag/MpegFileTest.cpp
+    operations: [modify]
+  - path: doc/design/track-detail-grid.md
+    operations: [modify]
+depends-on: []
+overrides: {}
+body: |
+  Review the supplied implementation for correctness risks, regressions, and missing tests.
+```
+
+The engine injects the scope list into every member prompt ("Scope (focus on these paths and
+operations):"); the body does not need to restate it.
+
+For review-only council runs, choose operations that describe the existing change under review. Do not
+invent a `read` or `review` operation; the schema accepts only `create`, `modify`, and `delete`.
 
 Use `task-kind: council-plan` for implementation planning. Registered depths: `council-review` runs
 `challenge`, `council-plan` runs `full`. An override may only tighten — reduce depth (for example
@@ -38,6 +67,15 @@ relaxation and is rejected.
   --out /tmp/aobus-fleet/council-$(date +%s) /tmp/council-intent.yaml
 ```
 
-Read `dossier.md`, member logs, `manifest.yaml`, and `trace.yaml`. Timed-out, mutating, failed, or empty
-members are quarantined and omitted. The dossier is always `ADVISORY`; write the final plan or review
-yourself after checking claims against the repository.
+Read `dossier.md`, `manifest.yaml`, `trace.yaml`, and the per-member round artifacts under
+`members/<member>/<round>/`. Each round directory contains `prompt.md`, `stdout.txt`, `stderr.txt`, and
+`result.yaml`; inspect these when a member is missing from the dossier or when prompt/context quality is
+in question. Timed-out, failed, or empty members are quarantined and omitted from the dossier.
+The dossier is always `ADVISORY`; write the final plan or review yourself after checking claims against
+the repository.
+
+Round context is isolated per member: R1 is independent; R2 contains only other members' drafts; R3
+contains the member's own original draft and own challenge notes plus only other members' challenges.
+Each prompt states the round position and where the output goes, and instructs members to verify peer
+claims against the repository. Verify these boundaries in the saved `prompt.md` artifacts when
+diagnosing council quality.

@@ -54,7 +54,6 @@ namespace ao::fleet
       ProcessResult worker;
       PatchGuardResult guard;
       AgentDefinition agent;
-      AuthorityPolicy authority;
     };
 
     struct GateFallback final
@@ -66,8 +65,34 @@ namespace ao::fleet
     struct GateRoundConfig final
     {
       AgentDefinition agent;
-      AuthorityPolicy authority;
     };
+
+    struct CouncilArtifactInput final
+    {
+      std::string memberId;
+      std::string_view round;
+      AgentDefinition const& agent;
+      std::string_view prompt;
+      ProcessResult const* result = nullptr;
+      std::filesystem::path const* workspace = nullptr;
+      bool quarantined = true;
+      std::string_view quarantineReason;
+    };
+
+    // Artifact paths keep the stable r1/r2/r3 names; the label is the self-describing round
+    // position shown to members ("2 of 3 (cross-challenge)").
+    struct CouncilRound final
+    {
+      std::string_view directory;
+      std::string label;
+    };
+
+    using CouncilRows = std::vector<std::pair<std::string, std::string>>;
+    using CouncilContexts = std::map<std::string, std::string, std::less<>>;
+
+    constexpr std::size_t kCouncilFullRounds = 3;
+    constexpr std::size_t kCouncilChallengeRounds = 2;
+    constexpr std::size_t kCouncilPanelRounds = 1;
 
     std::string replaceAll(std::string value, std::string_view from, std::string_view to)
     {
@@ -125,15 +150,9 @@ namespace ao::fleet
       return request;
     }
 
-    std::string gatePrompt(ResolvedPhase const& phase, std::size_t round, std::string_view feedback)
+    void appendScopeRules(std::ostream& out, std::vector<ScopeRule> const& scope)
     {
-      auto out = std::ostringstream{};
-      out << "You are a delegated implementation worker. Work only in the provided repository copy.\n";
-      out << "Invariant: " << phase.intent.invariant << "\n";
-      out << "Task:\n" << phase.intent.body << "\n";
-      out << "Allowed paths and operations:\n";
-
-      for (auto const& rule : phase.intent.scope)
+      for (auto const& rule : scope)
       {
         out << "- " << rule.path.generic_string() << ":";
 
@@ -144,10 +163,15 @@ namespace ao::fleet
 
         out << '\n';
       }
+    }
 
-      out << "Do not edit the fleet, build definitions, scripts, skills, configuration, or design documentation unless "
-             "explicitly listed.\n";
-      out << "Do not write to the real repository. Do not create commits. The harness extracts the patch.\n";
+    std::string gatePrompt(ResolvedPhase const& phase, std::size_t round, std::string_view feedback)
+    {
+      auto out = std::ostringstream{};
+      out << "Invariant: " << phase.intent.invariant << "\n";
+      out << "Task:\n" << phase.intent.body << "\n";
+      out << "Allowed paths and operations:\n";
+      appendScopeRules(out, phase.intent.scope);
       out << "Round: " << round << "\n";
 
       if (!feedback.empty())
@@ -404,10 +428,6 @@ namespace ao::fleet
       auto mounts = SandboxMounts{
         .writableBinds = {{hostBuildRoot, std::filesystem::path{kOracleBuildMount}}, {hostCcache, hostCcache}},
         .bindHome = false};
-      auto authority = AuthorityPolicy{.id = "oracle",
-                                       .filesystem = FilesystemAuthority::WritableCopy,
-                                       .network = NetworkAuthority::Off,
-                                       .contextView = ContextView::Full};
       auto commands = oracleCommands(oracle);
 
       if (commands.empty())
@@ -429,8 +449,7 @@ namespace ao::fleet
         request.environmentWhitelist = {"PATH", "HOME", "USER", "NIX_PATH"};
         request.environment.emplace("BUILD_DIR", std::string{oracleBuildDir(oracle.runner)});
         request.timeout = oracle.optTimeout.value_or(std::chrono::milliseconds{kDefaultOracleTimeout});
-        process = NamespaceRunner{context.processRunner}.run(
-          context.realRepo, *workspace, authority, mounts, std::move(request));
+        process = NamespaceRunner{context.processRunner}.run(context.realRepo, *workspace, mounts, std::move(request));
         log += process.standardOutput + process.standardError;
 
         if (process.status != ProcessStatus::Exited || process.exitCode != 0)
@@ -465,8 +484,6 @@ namespace ao::fleet
         // Versions are precomputed once per run from the immutable base, so failure manifests
         // and breaker queries always agree on the same concrete route key.
         .oracleVersion = phase.optOracle ? context.oracleVersions.at(phase.optOracle->id) : "none",
-        .authority =
-          std::string{toString(phase.authority.filesystem)} + "+net-" + std::string{toString(phase.authority.network)},
         .scopeRiskClass =
           std::ranges::any_of(
             phase.intent.scope, [&](ScopeRule const& rule) { return classifier.isPublicSurface(rule.path); })
@@ -612,6 +629,171 @@ namespace ao::fleet
       }
     }
 
+    std::string councilResultYaml(CouncilArtifactInput const& input)
+    {
+      auto const* result = input.result;
+      auto out = std::ostringstream{};
+      out << "schema: aobus-fleet-member-run/v1\n";
+      out << "member: " << yamlScalar(input.memberId) << "\n";
+      out << "round: " << yamlScalar(input.round) << "\n";
+      out << "agent: " << yamlScalar(input.agent.id) << "\n";
+      out << "model: " << yamlScalar(input.agent.model) << "\n";
+      out << "prompt-delivery: " << toString(input.agent.promptDelivery) << "\n";
+      out << "workspace: " << (input.workspace != nullptr ? yamlScalar(input.workspace->string()) : std::string{"null"})
+          << "\n";
+      out << "status: " << (result != nullptr ? std::string{toString(result->status)} : "launch-failed") << "\n";
+      out << "exit-code: " << (result != nullptr ? result->exitCode : -1) << "\n";
+      out << "signal: " << (result != nullptr ? result->signal : 0) << "\n";
+      out << "elapsed-ms: " << (result != nullptr ? result->elapsed.count() : 0) << "\n";
+      out << "prompt-bytes: " << input.prompt.size() << "\n";
+      out << "stdout-bytes: " << (result != nullptr ? result->standardOutput.size() : 0) << "\n";
+      out << "stderr-bytes: " << (result != nullptr ? result->standardError.size() : 0) << "\n";
+      out << "quarantined: " << (input.quarantined ? "true" : "false") << "\n";
+      out << "quarantine-reason: "
+          << (input.quarantineReason.empty() ? std::string{"null"} : yamlScalar(input.quarantineReason)) << "\n";
+      return out.str();
+    }
+
+    void writeCouncilArtifacts(ArtifactStore const& store, CouncilArtifactInput const& input)
+    {
+      auto const base = std::filesystem::path{"members"} / input.memberId / std::string{input.round};
+      writeOrWarn(store, base / "prompt.md", input.prompt);
+      writeOrWarn(store, base / "stdout.txt", input.result != nullptr ? input.result->standardOutput : "");
+      writeOrWarn(store, base / "stderr.txt", input.result != nullptr ? input.result->standardError : "");
+      writeOrWarn(store, base / "result.yaml", councilResultYaml(input));
+    }
+
+    std::size_t councilRoundCount(CouncilDepth depth)
+    {
+      if (depth == CouncilDepth::Full)
+      {
+        return kCouncilFullRounds;
+      }
+
+      if (depth == CouncilDepth::Challenge)
+      {
+        return kCouncilChallengeRounds;
+      }
+
+      return kCouncilPanelRounds;
+    }
+
+    std::string councilScopeSection(PhaseIntent const& intent)
+    {
+      if (intent.scope.empty())
+      {
+        return {};
+      }
+
+      auto out = std::ostringstream{};
+      out << "Scope (focus on these paths and operations):\n";
+      appendScopeRules(out, intent.scope);
+      return std::move(out).str();
+    }
+
+    std::string_view draftRoundContext(CouncilDepth depth)
+    {
+      if (depth == CouncilDepth::Panel)
+      {
+        return "Produce an independent draft. The chair synthesizes the council drafts into the final result.";
+      }
+
+      if (depth == CouncilDepth::Challenge)
+      {
+        return "Produce an independent draft. Peer members will challenge it, and the chair synthesizes the "
+               "council output into the final result.";
+      }
+
+      return "Produce an independent draft. Peer members will challenge it, you will then revise it, and the "
+             "chair synthesizes the council output into the final result.";
+    }
+
+    std::string challengeRoundHeading(CouncilDepth depth)
+    {
+      auto const destination =
+        (depth == CouncilDepth::Full)
+          ? std::string{"Your challenge is given to each draft's author for revision and to the chair "
+                        "for synthesis."}
+          : std::string{"Your challenge goes to the chair for synthesis."};
+      return std::format("Challenge the peer drafts below without assuming any is correct.\n"
+                         "Judge them against the task above and verify their claims against the repository; "
+                         "identify errors, unsupported claims, and omissions.\n{}",
+                         destination);
+    }
+
+    CouncilContexts commonCouncilContexts(std::vector<std::string> const& roster, std::string_view context)
+    {
+      auto contexts = CouncilContexts{};
+
+      for (auto const& member : roster)
+      {
+        contexts.emplace(member, context);
+      }
+
+      return contexts;
+    }
+
+    CouncilContexts peerCouncilContexts(std::vector<std::string> const& roster,
+                                        std::string_view heading,
+                                        CouncilRows const& rows)
+    {
+      auto contexts = CouncilContexts{};
+
+      for (auto const& recipient : roster)
+      {
+        auto out = std::ostringstream{};
+        out << heading << '\n';
+
+        for (auto const& [member, text] : rows)
+        {
+          if (member != recipient)
+          {
+            out << "\n--- " << member << " ---\n" << text << '\n';
+          }
+        }
+
+        contexts.emplace(recipient, std::move(out).str());
+      }
+
+      return contexts;
+    }
+
+    CouncilContexts revisionCouncilContexts(std::vector<std::string> const& roster,
+                                            CouncilRows const& drafts,
+                                            CouncilRows const& challenges)
+    {
+      auto contexts = peerCouncilContexts(roster,
+                                          "Revise your prior draft after considering the peer challenges below; "
+                                          "verify their claims against the repository before accepting them.\n"
+                                          "The revision is your final statement to the chair.",
+                                          challenges);
+
+      for (auto const& recipient : roster)
+      {
+        auto const find = [&recipient](CouncilRows const& rows)
+        { return std::ranges::find(rows, recipient, &std::pair<std::string, std::string>::first); };
+        auto const draft = find(drafts);
+        auto const ownChallenge = find(challenges);
+        auto prefix = std::string{};
+
+        if (draft != drafts.end())
+        {
+          prefix += std::format("Your prior draft:\n{}\n\n", draft->second);
+        }
+
+        // The member's own challenge is restated as its own notes, never as peer review; without it
+        // the stateless revision process would lose whatever the member discovered while challenging.
+        if (ownChallenge != challenges.end())
+        {
+          prefix += std::format("Your own challenge notes from the previous round:\n{}\n\n", ownChallenge->second);
+        }
+
+        contexts[recipient] = prefix + contexts.at(recipient);
+      }
+
+      return contexts;
+    }
+
     bool isEscalation(ReviewManifest const& manifest)
     {
       return manifest.failure != FailureReason::None;
@@ -680,16 +862,10 @@ namespace ao::fleet
       return outcomes;
     }
 
-    std::string authorityLabel(AuthorityPolicy const& authority)
-    {
-      return std::string{toString(authority.filesystem)} + "+net-" + std::string{toString(authority.network)};
-    }
-
     void assignCandidateRoute(ReviewManifest& manifest, Candidate const& candidate)
     {
       manifest.route.agentId = candidate.agent.id;
       manifest.route.modelVersion = candidate.agent.model;
-      manifest.route.authority = authorityLabel(candidate.authority);
     }
 
     GateFallback gateFallback(Registry const& registry)
@@ -715,14 +891,13 @@ namespace ao::fleet
     }
 
     std::optional<GateRoundConfig> gateRoundConfig(ResolvedPhase const& phase,
-                                                   EngineContext const& context,
                                                    GateFallback const& fallback,
                                                    std::size_t round,
                                                    std::size_t primaryRounds)
     {
       if (round <= primaryRounds)
       {
-        return GateRoundConfig{.agent = phase.agent, .authority = phase.authority};
+        return GateRoundConfig{.agent = phase.agent};
       }
 
       if (!fallback.optAgent)
@@ -730,15 +905,7 @@ namespace ao::fleet
         return std::nullopt;
       }
 
-      auto const& fallbackDefault = context.registry.authorities.at(fallback.optAgent->defaultAuthority);
-      auto unrestricted = AuthorityPolicy{.id = "fallback-clamp",
-                                          .filesystem = FilesystemAuthority::MutateRealTree,
-                                          .network = NetworkAuthority::Full,
-                                          .contextView = ContextView::Full};
-      return GateRoundConfig{
-        .agent = *fallback.optAgent,
-        .authority = intersectAuthority(phase.authority, fallbackDefault, unrestricted),
-      };
+      return GateRoundConfig{.agent = *fallback.optAgent};
     }
 
     Result<std::optional<ReviewManifest>> evaluateGateBaseline(ArtifactStore const& store,
@@ -809,11 +976,8 @@ namespace ao::fleet
       auto prompt = gatePrompt(phase, round, feedback);
       auto request = agentRequest(config.agent, phase.intent, *workspace, context.realRepo, std::move(prompt));
       // Agents keep their real $HOME so model CLIs can read credentials and configuration.
-      auto worker = namespaceRunner.run(context.realRepo,
-                                        *workspace,
-                                        config.authority,
-                                        SandboxMounts{.writableBinds = {}, .bindHome = true},
-                                        std::move(request));
+      auto worker = namespaceRunner.run(
+        context.realRepo, *workspace, SandboxMounts{.writableBinds = {}, .bindHome = true}, std::move(request));
       auto patch = extractor.extract(*workspace, id);
 
       if (!patch)
@@ -823,11 +987,8 @@ namespace ao::fleet
 
       auto guard = PatchGuard::inspect(
         *patch, phase.intent.scope, phase.binding.gate.churnLines, rulerPaths(phase, context.registry));
-      return Candidate{.patch = std::move(*patch),
-                       .worker = std::move(worker),
-                       .guard = std::move(guard),
-                       .agent = config.agent,
-                       .authority = config.authority};
+      return Candidate{
+        .patch = std::move(*patch), .worker = std::move(worker), .guard = std::move(guard), .agent = config.agent};
     }
 
     void writeCandidateArtifacts(ArtifactStore const& store, Candidate const& candidate)
@@ -1046,64 +1207,94 @@ namespace ao::fleet
       return std::optional<ReviewManifest>{};
     }
 
-    std::vector<std::pair<std::string, std::string>> runCouncilRound(EngineContext const& context,
-                                                                     SnapshotProvider& snapshot,
-                                                                     NamespaceRunner& namespaceRunner,
-                                                                     ArtifactStore const& store,
-                                                                     ResolvedPhase const& phase,
-                                                                     std::vector<std::string> const& roster,
-                                                                     std::string_view round,
-                                                                     std::string const& sharedContext)
+    CouncilRows runCouncilRound(EngineContext const& context,
+                                SnapshotProvider& snapshot,
+                                NamespaceRunner& namespaceRunner,
+                                ArtifactStore const& store,
+                                ResolvedPhase const& phase,
+                                std::vector<std::string> const& roster,
+                                CouncilRound const& round,
+                                CouncilContexts const& memberContexts)
     {
+      auto const scope = councilScopeSection(phase.intent);
       auto futures = std::vector<std::future<std::optional<std::pair<std::string, std::string>>>>{};
 
-      // sharedContext can be megabytes of dossier text; capture it (and the other locals) by
+      // Member contexts can be megabytes of dossier text; capture them (and the other locals) by
       // reference — awaitAll below joins every member before this frame unwinds.
       for (auto const& memberId : roster)
       {
         futures.push_back(spawnWorker(
           context.asyncRuntime,
-          [&, memberId, round] -> std::optional<std::pair<std::string, std::string>>
+          [&, memberId] -> std::optional<std::pair<std::string, std::string>>
           {
             auto const& agent = context.registry.agents.at(memberId);
+            auto const& memberContext = memberContexts.at(memberId);
+            auto prompt = std::format("Council round: {}\nInvariant: {}\nTask:\n{}\n{}{}\nReturn only your "
+                                      "substantive analysis.\n",
+                                      round.label,
+                                      phase.intent.invariant,
+                                      phase.intent.body,
+                                      scope,
+                                      memberContext);
             auto workspace = snapshot.createWorkspace(
-              context.immutableBase, context.runRoot / ".council" / phase.intent.id / std::string{round} / memberId);
+              context.immutableBase,
+              context.runRoot / ".council" / phase.intent.id / std::string{round.directory} / memberId);
 
             if (!workspace)
             {
+              writeCouncilArtifacts(store,
+                                    CouncilArtifactInput{.memberId = memberId,
+                                                         .round = round.directory,
+                                                         .agent = agent,
+                                                         .prompt = prompt,
+                                                         .result = nullptr,
+                                                         .workspace = nullptr,
+                                                         .quarantined = true,
+                                                         .quarantineReason = "workspace-create-failed"});
               return std::nullopt;
             }
 
-            auto prompt = std::format("Council round: {}\nInvariant: {}\nTask:\n{}\n{}\nReturn only your substantive "
-                                      "analysis. Do not mutate the repository.\n",
-                                      round,
-                                      phase.intent.invariant,
-                                      phase.intent.body,
-                                      sharedContext);
-            auto request = agentRequest(agent, phase.intent, *workspace, context.realRepo, std::move(prompt));
-            auto authority = phase.authority;
-            authority.filesystem = FilesystemAuthority::ReadOnly;
-            auto result = namespaceRunner.run(context.realRepo,
-                                              *workspace,
-                                              authority,
-                                              SandboxMounts{.writableBinds = {}, .bindHome = true},
-                                              std::move(request));
-            auto text = result.standardOutput;
+            auto request = agentRequest(agent, phase.intent, *workspace, context.realRepo, prompt);
+            auto result = namespaceRunner.run(
+              context.realRepo, *workspace, SandboxMounts{.writableBinds = {}, .bindHome = true}, std::move(request));
+            auto const emptyOutput = result.standardOutput.find_first_not_of(" \t\r\n") == std::string::npos;
+            auto const quarantined = result.status != ProcessStatus::Exited || result.exitCode != 0 || emptyOutput;
 
-            if (result.status != ProcessStatus::Exited || result.exitCode != 0 ||
-                text.find_first_not_of(" \t\r\n") == std::string::npos)
+            auto reason = std::string{};
+
+            if (result.status != ProcessStatus::Exited)
+            {
+              reason = "process-not-exited";
+            }
+            else if (result.exitCode != 0)
+            {
+              reason = "non-zero-exit";
+            }
+            else if (emptyOutput)
+            {
+              reason = "empty-output";
+            }
+
+            writeCouncilArtifacts(store,
+                                  CouncilArtifactInput{.memberId = memberId,
+                                                       .round = round.directory,
+                                                       .agent = agent,
+                                                       .prompt = prompt,
+                                                       .result = &result,
+                                                       .workspace = &*workspace,
+                                                       .quarantined = quarantined,
+                                                       .quarantineReason = reason});
+
+            if (quarantined)
             {
               return std::nullopt;
             }
 
-            writeOrWarn(store,
-                        std::filesystem::path{"members"} / memberId / (std::string{round} + ".log"),
-                        text + result.standardError);
-            return std::pair{memberId, std::move(text)};
+            return std::pair{memberId, std::move(result.standardOutput)};
           }));
       }
 
-      auto output = std::vector<std::pair<std::string, std::string>>{};
+      auto output = CouncilRows{};
 
       for (auto& outcome : awaitAll(futures))
       {
@@ -1149,7 +1340,7 @@ namespace ao::fleet
         break;
       }
 
-      auto optConfig = gateRoundConfig(phase, context, fallback, round, primaryRounds);
+      auto optConfig = gateRoundConfig(phase, fallback, round, primaryRounds);
 
       if (!optConfig)
       {
@@ -1209,9 +1400,18 @@ namespace ao::fleet
       return std::unexpected{baseline.error()};
     }
 
+    auto const depth = phase.binding.synthesis.depth;
+    auto const rounds = councilRoundCount(depth);
     auto roster = phase.binding.synthesis.roster;
-    auto drafts = runCouncilRound(
-      context, snapshot, namespaceRunner, store, phase, roster, "r1", "You cannot see other members' drafts.");
+    auto drafts =
+      runCouncilRound(context,
+                      snapshot,
+                      namespaceRunner,
+                      store,
+                      phase,
+                      roster,
+                      CouncilRound{.directory = "r1", .label = std::format("1 of {} (independent draft)", rounds)},
+                      commonCouncilContexts(roster, draftRoundContext(depth)));
 
     if (drafts.size() < phase.binding.synthesis.quorum)
     {
@@ -1243,17 +1443,17 @@ namespace ao::fleet
 
     auto challenges = std::vector<std::pair<std::string, std::string>>{};
 
-    if (phase.binding.synthesis.depth >= CouncilDepth::Challenge)
+    if (depth >= CouncilDepth::Challenge)
     {
-      auto peerContext = std::ostringstream{};
-      peerContext << "Challenge the following peer drafts without assuming any is correct:\n";
-
-      for (auto const& [member, draft] : drafts)
-      {
-        peerContext << "\n--- " << member << " ---\n" << draft << '\n';
-      }
-
-      challenges = runCouncilRound(context, snapshot, namespaceRunner, store, phase, roster, "r2", peerContext.str());
+      challenges =
+        runCouncilRound(context,
+                        snapshot,
+                        namespaceRunner,
+                        store,
+                        phase,
+                        roster,
+                        CouncilRound{.directory = "r2", .label = std::format("2 of {} (cross-challenge)", rounds)},
+                        peerCouncilContexts(roster, challengeRoundHeading(depth), drafts));
       roster.clear();
 
       for (auto const& member : std::views::keys(challenges))
@@ -1264,27 +1464,25 @@ namespace ao::fleet
 
     auto revisions = std::vector<std::pair<std::string, std::string>>{};
 
-    if (phase.binding.synthesis.depth == CouncilDepth::Full && roster.size() >= phase.binding.synthesis.quorum)
+    if (depth == CouncilDepth::Full && roster.size() >= phase.binding.synthesis.quorum)
     {
-      auto challengeContext = std::ostringstream{};
-      challengeContext << "Revise your position after considering these challenges:\n";
-
-      for (auto const& [member, challenge] : challenges)
-      {
-        challengeContext << "\n--- " << member << " ---\n" << challenge << '\n';
-      }
-
-      revisions =
-        runCouncilRound(context, snapshot, namespaceRunner, store, phase, roster, "r3", challengeContext.str());
+      revisions = runCouncilRound(context,
+                                  snapshot,
+                                  namespaceRunner,
+                                  store,
+                                  phase,
+                                  roster,
+                                  CouncilRound{.directory = "r3", .label = "3 of 3 (revision)"},
+                                  revisionCouncilContexts(roster, drafts, challenges));
     }
 
     auto finalCount = std::size_t{0};
 
-    if (phase.binding.synthesis.depth == CouncilDepth::Panel)
+    if (depth == CouncilDepth::Panel)
     {
       finalCount = drafts.size();
     }
-    else if (phase.binding.synthesis.depth == CouncilDepth::Challenge)
+    else if (depth == CouncilDepth::Challenge)
     {
       finalCount = challenges.size();
     }

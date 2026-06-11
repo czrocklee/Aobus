@@ -126,43 +126,6 @@ namespace ao::fleet
     {FailureReason::RoutePaused, "route-paused"},
   }};
 
-  enum class FilesystemAuthority : std::uint8_t
-  {
-    ReadOnly,
-    WritableCopy,
-    MutateRealTree,
-  };
-
-  inline constexpr auto kFilesystemAuthorityNames = EnumNameTable<FilesystemAuthority, 3>{{
-    {FilesystemAuthority::ReadOnly, "read-only"},
-    {FilesystemAuthority::WritableCopy, "writable-copy"},
-    {FilesystemAuthority::MutateRealTree, "mutate-real-tree"},
-  }};
-
-  enum class NetworkAuthority : std::uint8_t
-  {
-    Off,
-    Vendor,
-    Full,
-  };
-
-  inline constexpr auto kNetworkAuthorityNames = EnumNameTable<NetworkAuthority, 3>{{
-    {NetworkAuthority::Off, "off"},
-    {NetworkAuthority::Vendor, "vendor"},
-    {NetworkAuthority::Full, "full"},
-  }};
-
-  enum class ContextView : std::uint8_t
-  {
-    Minimal,
-    Full,
-  };
-
-  inline constexpr auto kContextViewNames = EnumNameTable<ContextView, 2>{{
-    {ContextView::Minimal, "minimal"},
-    {ContextView::Full, "full"},
-  }};
-
   enum class PromptDelivery : std::uint8_t
   {
     Stdin,
@@ -286,7 +249,6 @@ namespace ao::fleet
     std::optional<EngineKind> optEngine;
     std::optional<std::string> optOracle;
     std::optional<std::string> optRiskOracle;
-    std::optional<std::string> optAuthority;
     std::optional<std::size_t> optFanout;
     std::optional<std::size_t> optTopK;
     std::optional<std::size_t> optMaxRounds;
@@ -317,7 +279,6 @@ namespace ao::fleet
     std::vector<std::string> environmentWhitelist;
     std::chrono::milliseconds timeout{kDefaultAgentTimeout};
     std::string rateLimitKey;
-    std::string defaultAuthority;
   };
 
   struct OracleDefinition
@@ -330,14 +291,6 @@ namespace ao::fleet
     BaselinePolicy baselinePolicy = BaselinePolicy::RequireGreen;
     std::vector<std::filesystem::path> rulerPaths;
     std::optional<std::chrono::milliseconds> optTimeout;
-  };
-
-  struct AuthorityPolicy
-  {
-    std::string id;
-    FilesystemAuthority filesystem = FilesystemAuthority::ReadOnly;
-    NetworkAuthority network = NetworkAuthority::Off;
-    ContextView contextView = ContextView::Full;
   };
 
   struct GateParameters
@@ -362,7 +315,6 @@ namespace ao::fleet
     EngineKind engine = EngineKind::Gate;
     std::optional<std::string> optOracle;
     std::optional<std::string> optRiskOracle;
-    std::string authority;
     GateParameters gate;
     SynthesisParameters synthesis;
   };
@@ -386,7 +338,6 @@ namespace ao::fleet
     visit("engine", &IntentOverrides::optEngine, OverridePolicy::Assign, &Binding::engine);
     visit("oracle", &IntentOverrides::optOracle, OverridePolicy::Assign, &Binding::optOracle);
     visit("risk-oracle", &IntentOverrides::optRiskOracle, OverridePolicy::Assign, &Binding::optRiskOracle);
-    visit("authority", &IntentOverrides::optAuthority, OverridePolicy::Assign, &Binding::authority);
     visit("fanout",
           &IntentOverrides::optFanout,
           OverridePolicy::TightenUpper,
@@ -425,7 +376,6 @@ namespace ao::fleet
   {
     std::map<std::string, AgentDefinition, std::less<>> agents;
     std::map<std::string, OracleDefinition, std::less<>> oracles;
-    std::map<std::string, AuthorityPolicy, std::less<>> authorities;
     std::map<std::string, Binding, std::less<>> bindings;
     std::map<FailureReason, EscalationRule> escalations;
     // Paths every patch guard enforces in addition to the per-oracle rulers and the
@@ -438,7 +388,6 @@ namespace ao::fleet
     PhaseIntent intent;
     AgentDefinition agent;
     Binding binding;
-    AuthorityPolicy authority;
     std::optional<OracleDefinition> optOracle;
     std::optional<OracleDefinition> optRiskOracle;
   };
@@ -510,7 +459,6 @@ namespace ao::fleet
     EngineKind engine = EngineKind::Gate;
     std::string oracleId;
     std::string oracleVersion;
-    std::string authority;
     std::string scopeRiskClass;
 
     std::string canonical() const;
@@ -531,18 +479,13 @@ namespace ao::fleet
     std::optional<EscalationAction> optEscalationAction;
   };
 
-  AuthorityPolicy intersectAuthority(AuthorityPolicy const& agent,
-                                     AuthorityPolicy const& binding,
-                                     AuthorityPolicy const& engine);
   std::string makePhaseId();
 
   std::string_view toString(ScopeOperation value);
   std::string_view toString(EngineKind value);
   std::string_view toString(OutputMode value);
   std::string_view toString(FailureReason value);
-  std::string_view toString(FilesystemAuthority value);
-  std::string_view toString(NetworkAuthority value);
-  std::string_view toString(ContextView value);
+  std::string_view toString(PromptDelivery value);
   std::string_view toString(OracleRunner value);
   std::string_view toString(BaselinePolicy value);
   std::string_view toString(EscalationAction value);

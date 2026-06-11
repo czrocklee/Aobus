@@ -29,9 +29,38 @@ intent failure. There is no apply, commit, merge, or unattended-acceptance comma
 
 All structured protocols are strict, versioned YAML. The protected registry is
 `config/agent-fleet.yaml` (`aobus-fleet-registry/v1`); chair requests are
-`aobus-fleet-intent/v1`; manifests, evidence, traces, audit records, and review outcomes each have an
-independent `aobus-fleet-*/v1` schema. Patch files remain unified diff, dossiers remain Markdown, and
-process logs remain text. JSON and JSONL are not compatibility formats.
+`aobus-fleet-intent/v1`. Manifests, evidence, traces, audit records, review outcomes, and per-member
+council run results each have an independent `aobus-fleet-*/v1` schema. Patch files remain unified
+diff, dossiers remain Markdown, and prompt/stdout/stderr artifacts remain text. JSON and JSONL are not
+supported formats.
+
+Council runs write one artifact directory per member and round:
+
+```text
+members/<member>/<round>/
+  prompt.md
+  stdout.txt
+  stderr.txt
+  result.yaml
+```
+
+These artifacts are written for successful and quarantined members. `result.yaml` records the member,
+round, prompt-delivery mode, workspace path, process status, exit code, elapsed time, byte counts, and
+quarantine reason. The dossier remains the chair-facing synthesis input and only includes successful
+member text.
+
+Agent prompts contain task semantics, scope, round context, and validation feedback only. Workspace
+topology, real-tree protection, workspace disposal, patch extraction, and commit policy are enforced by
+the harness and are not repeated in prompts.
+
+Council round context is member-specific. R1 receives no peer output. In R2, each member receives only
+the other members' R1 drafts. In R3, each member receives its own R1 draft as the revision target, its
+own R2 challenge notes (members are stateless across rounds, so insights gained while challenging would
+otherwise be lost), plus only the other members' R2 challenges. A member's own prior output is presented
+only as its own material, never as peer review. Every member prompt also carries the intent scope, the
+round position within the configured depth ("2 of 3 (cross-challenge)"), where the round's output goes
+(peer revision, chair synthesis), and an instruction to verify peer claims against the repository rather
+than critiquing text on text.
 
 ---
 
@@ -48,12 +77,12 @@ Three goals, in priority order:
    *presented as accepted, or applied to the real tree by the fleet, without chair review*. A
    conservative false rejection (escalate to the chair) is always acceptable; a false acceptance is
    never.
-2. **Flexible.** Any sane combination of *what work*, *which model*, *which acceptance check*, and
-   *which permissions* must be **expressible as data**, not require new code. "Run the lint task with a
-   strong model" and "let a cheap model attempt an oracle-less rename" must both be one-line bindings.
+2. **Flexible.** Any sane combination of *what work*, *which model*, and *which acceptance check* must
+   be **expressible as data**, not require new code. "Run the lint task with a strong model" and "let a
+   cheap model attempt an oracle-less rename" must both be one-line bindings.
 3. **Complexity-controlled.** The number of **mechanisms (code)** is small and fixed. Everything that
-   grows with usage — models, checks, task kinds, permission profiles — grows as **registry rows
-   (data)**. New capability must not mean new scripts.
+   grows with usage — models, checks, and task kinds — grows as **registry rows (data)**. New
+   capability must not mean new scripts.
 
 These goals are in tension, and the entire architecture is the resolution of that tension. The reader
 should hold goal (1) as a hard constraint and read goals (2) and (3) as "maximize, subject to (1)."
@@ -76,13 +105,13 @@ suspect.
 4. **The harness independently re-validates.** Every check that gates a result is run by the harness
    itself, on a harness-extracted artifact, against an allowlisted oracle. A worker's self-reported
    success, self-written diff, or self-declared scope is *evidence*, never the gate.
-5. **Environment is a uniform capability; authority is a per-phase clamp.** Every agent runs in the
-   same rich substrate (full repo, history, tools). What a given phase is *permitted* to do is
-   subtracted from that capability by an explicit authority policy. Capability is uniform so that
-   competence is measurable; authority is least-privilege so blast radius is bounded.
+5. **Delegated execution has one fixed boundary.** Every worker gets the same full-repository writable
+   copy, normal host network access, and the tools needed for the task. The copy is mounted at the real
+   repository path, but the real repository is never mounted as the worker's writable tree. Only the
+   chair applies reviewed changes.
 6. **Mechanisms are code; bindings are data.** A small fixed set of interpreters (substrate,
    convergence engines, scheduler) is written, tested, and versioned as code. The
-   open-ended combinatorial space (which model, which oracle, which permissions, which task) is
+   open-ended combinatorial space (which model, which oracle, which task) is
    expressed as typed, versioned, statically-validated registry data — *not* as a Turing-complete
    workflow language.
 
@@ -90,13 +119,12 @@ suspect.
 
 ## 2. The spine: output modes
 
-The organizing axis of the fleet is **not** a capability ladder. Capability, model
-power, scope, and authority are independent routing concerns. The output boundary asks one simpler
-question:
+The organizing axis of the fleet is **not** a capability ladder. Model power and scope are routing
+concerns. The output boundary asks one simpler question:
 
 > **Does the delegated artifact carry independently reproduced oracle evidence?**
 
-The answer selects one of two output modes. It does **not** grant authority to modify the real tree;
+The answer selects one of two output modes. It does **not** permit the fleet to modify the real tree;
 every delegated result still requires chair review.
 
 ### 2.1 Evidence contract
@@ -163,17 +191,16 @@ The system is a small set of **mechanisms** (code, fixed in number) operating ov
    SCHEDULER       DAG ordering · concurrency · infra retry · graph
                    expansion for search. Sees opaque phase nodes; knows no task semantics.
    ENGINES ×3      gate · synthesis · search — the only convergence interpreters.
-   SUBSTRATE       uniform full-repo snapshot + path-view + hermetic oracle isolation.
+   SUBSTRATE       uniform full-repo writable copies + path virtualization + oracle isolation.
    ── REGISTRIES (data; grows by rows, never by code) ──
-   AGENTS          {id → (harness, model, default-authority)} + measured competence/rejection rate.
+   AGENTS          {id → (harness, model)} + measured competence/rejection rate.
    ORACLES         {id → validation fn} + checked property + known gaps + isolation/risk-check links.
-   AUTHORITIES     {id → subtractive permission clamp}  (read-only | writable-copy | mutate) × net.
-   BINDINGS        {task-kind → default (agent, engine, oracle, authority, params)} + override rules.
+   BINDINGS        {task-kind → default (agent, engine, oracle, params)} + override rules.
    ESCALATIONS     {failure-reason → next action}  (the explicit, non-ordinal escalation policy).
 ```
 
 Mechanisms: **4** (Scheduler, the Engine set, Substrate, plus the Chair which is the one irreducible
-frontier). Registries: **5**. That count is the current decomposition; it
+frontier). Registries: **4**. That count is the current decomposition; it
 does not grow when the fleet learns a new model, a new check, or a new task kind.
 
 The fleet scheduler and engines use the shared `ao_async` coroutine runtime from `lib/async`. That
@@ -200,21 +227,16 @@ failures *attributable to the model* rather than to blindness.
   single-file sandboxes.
 - **All tools available** (build, test, lint, `git`, `rg`), so an agent can do real reconnaissance and
   real validation against real context.
+- Review and council workspaces are writable isolated copies. This lets model CLIs create caches, lock
+  files, and repository-local runtime state without weakening the real-tree boundary: only the chair can
+  apply a proposal or act on an advisory.
 
-### 4.2 Capability, not mandate
+### 4.2 Fixed execution behavior
 
-The rich substrate is a **capability the substrate layer always offers**, *not* a cost every phase must
-pay. A binding declares `context-view: minimal | full`. A three-line lexical fix that needs one file
-and its includes may request `minimal`; a refactor that must read callers requests `full`. The
-*mechanism* is uniform (one substrate, one snapshot/mount path); the *cost* is a per-phase choice,
-measured and defaulted per task-kind, not imposed globally. Snapshots are COW and cheap to create; the
-real cost to watch is mount-namespace setup and writable-layer growth under wide fan-out, so
-`context-view` and fan-out width are the cost levers the scheduler accounts for.
-
-> **Known gap:** `context-view` is parsed, intersected, and recorded in the route key, but the
-> namespace runner does not yet enforce `minimal` by narrowing the mounted view; both values currently
-> provision the full snapshot. The field participates in routing and competence keys so that enforcing
-> it later does not invalidate recorded statistics.
+There is no per-phase permission profile. Every delegated worker receives a writable isolated copy and
+inherits the host network. Fan-out controls resource cost; scope and patch guards control which changes
+may be returned. This deliberately favors a small, observable mechanism over a configurable security
+policy the project does not need.
 
 ### 4.3 Oracle hermeticity (the worker→oracle boundary)
 
@@ -237,9 +259,8 @@ is evidence for the chair, never input to the oracle.
 ### 4.4 Namespace binds (implementation notes)
 
 - **Agent processes bind the host `$HOME`.** The mount namespace is a path virtualizer, not a security
-  jail (§17): vendor model CLIs need their host credentials and configuration to authenticate, so
-  worker sandboxes bind `$HOME` while the repository view stays a snapshot mounted at the real path.
-  This is part of the trusted-roster assumption of §5.
+  jail: vendor model CLIs need their host credentials and configuration to authenticate, so workers
+  bind `$HOME` while the repository view stays an isolated copy mounted at the real path.
 - **Oracle processes do not bind `$HOME`.** Oracles run deterministic local toolchains and get neither
   a host home nor agent credentials.
 - **Oracle build tree.** `/tmp` inside the namespace is a tmpfs, so the harness binds a
@@ -248,43 +269,32 @@ is evidence for the chair, never input to the oracle.
   and builds it, later invocations build incrementally.
 - **ccache.** The host ccache directory is bound into the oracle namespace (via `CCACHE_DIR`) so
   repeated oracle builds stay cheap. Because trusted-roster workers could in principle reach the same
-  host cache through their `$HOME` bind, this is a declared trade-off of the trusted roster, not a
-  hermeticity proof; the untrusted-model profile of §5/§17 removes it.
+  host cache through their `$HOME` bind, this is a declared trade-off, not a hermeticity proof.
 
 ### 4.5 Real-tree canary
 
 Before and after any fan-out, the harness fingerprints the real repository (content + file mode +
 symlink targets, excluding designated noise dirs). Any change to the real tree during a delegated
 phase aborts the phase. This catches an agent that escapes its namespace and edits the real tree
-directly. It *detects and discards*; it does not *prevent* — prevention is the authority layer's job
-(§5). The chair applies an accepted proposal only after the delegated phase has ended.
+directly. It *detects and discards*; the namespace path mapping provides the ordinary prevention
+boundary. The chair applies an accepted proposal only after the delegated phase has ended.
 
 ---
 
-## 5. Authority (per-phase permission clamp)
+## 5. Fixed delegation boundary
 
-The substrate is *capable* of everything; **authority subtracts** from that capability per phase. It is
-the security and blast-radius axis, strictly separate from environment.
+The Fleet implements one execution rule rather than a general permission system:
 
-| Authority | May read | May write | Network | Who uses it |
-|---|---|---|---|---|
-| **read-only** | full snapshot | nothing | harness profile | council members; reviewers; search probes that only observe |
-| **writable-copy** | full snapshot | its own copy only | harness profile | proposers; gate workers; search workers that mutate |
-| **mutate-real-tree** | real tree | real tree | as needed | **only the chair, outside delegated phases** |
+- delegated agents and council members operate on writable isolated repository copies;
+- delegated processes inherit the host network;
+- agent processes bind host `$HOME` for model credentials and configuration;
+- oracle processes do not bind host `$HOME`, and receive only their dedicated build/cache mounts;
+- the Fleet extracts and guards patches but never applies them to the real repository;
+- only the chair may apply, modify, commit, or reject a delegated result.
 
-- Authority is **subtractive and intersected.** Effective authority for a phase is the intersection of
-  all clamps that apply (binding default ∩ engine-role requirement ∩ phase override). It can only ever
-  get *more* restrictive, never less.
-- Network policy is orthogonal to filesystem authority. Deterministic local phases run network-off.
-  Authenticated cloud-model CLIs require vendor egress and credentials, so the trusted roster uses an
-  explicit net-on profile; this is a declared exfiltration and supply-chain trust assumption.
-- **Trusted vs untrusted roster.** For a *trusted* vendor roster, namespace confinement + the canary
-  (§4.5) are sufficient. To admit *not-fully-trusted* models, authority must additionally provide a
-  hard sandbox: bind-mounts restricted to the snapshot, no host `$HOME` exposure, and either no network
-  or narrowly brokered egress. This hard-sandbox profile is a first-class authority entry, and it
-  carries real engineering cost — it is the one part of the system that is genuinely expensive (§17).
-  A fully network-isolated worker must be a local model; an untrusted cloud model requires egress
-  restricted to its vendor endpoint, with credentials held outside the worker.
+This is not a hostile-code security sandbox. The configured agents are trusted tools operating behind a
+real-tree isolation boundary. A future need to run untrusted code would require a separate design, not
+new fields in the current registry.
 
 ---
 
@@ -344,13 +354,13 @@ This keeps the D-vs-J leak from cracking: the "is this proposal actually safe" j
 
 ## 7. Agents
 
-An **agent** is a leaf: `(harness, model, default-authority)`, plus a **measured competence profile**.
+An **agent** is a leaf: `(harness, model)`, plus a **measured competence profile**.
 
 - **No ordinal rank.** Agents are not "tier 1/2/3." They carry *measured* statistics per route (§13):
   fix rate, chair rejection rate, scope-violation rate, latency. Selection consults these, it does not
   consult a hard-coded ladder.
 - **Harness adapter is encapsulated here.** Each agent knows its vendor's headless invocation, its
-  read-only mode, its prompt-delivery channel, its rate limits. This is the cross-vendor **lowest
+  prompt-delivery channel, and its rate limits. This is the cross-vendor **lowest
   common denominator**: orchestration cannot depend on any one vendor's subagent API, so the only
   primitives are *non-interactive CLI invocation* + *file-based handoff*. Engines and the scheduler
   never see vendor specifics.
@@ -375,8 +385,8 @@ propose(N agents ∥) → harness-extract patches → static guard (scope/churn)
                     → PROPOSAL | ADVISORY | retry≤K | escalate(per failure reason)
 ```
 
-- Parameters: `fanout` (parallel proposers), optional `oracle`, `risk-oracle`, `K` (validation budget), guard
-  caps, `context-view`.
+- Parameters: `fanout` (parallel proposers), optional `oracle`, `risk-oracle`, `K` (validation budget),
+  and guard caps.
 - Produces a PROPOSAL with concrete oracle evidence, or an ADVISORY when no oracle is configured.
 - `oracle: none, fanout: 1` is the degenerate draft form for simple oracle-less work. It is a parameter
   choice inside this engine, not a fourth execution path.
@@ -437,8 +447,7 @@ engine:    gate
 agent:     <agent-id>        # overridable: "fix-lint with a strong model" = override this one field
 oracle:    tidy-clean
 risk-oracle: behavior-risk   # tidy-clean alone does not prove behavior preservation
-authority: writable-copy
-params:    { fanout: 4, K: 2, context-view: minimal }
+params:    { fanout: 4, K: 2 }
 ```
 
 The **default-binding policy** gives every task-kind a complete default row, so a caller **overrides
@@ -473,7 +482,7 @@ Therefore:
 Pure orchestration over **opaque phase nodes**. It is small precisely because all task semantics live
 in engines and oracles, not here.
 
-- Input: a set of nodes, each `{inputs, engine, oracle, authority, deps, params}`. The scheduler does
+- Input: a set of nodes, each `{inputs, engine, oracle, deps, params}`. The scheduler does
   not know lint from council.
 - Responsibilities: **dependency ordering** (a DAG), **physical concurrency** (fan-out width, rate-limit
   awareness — multi-candidate work hits vendor rate limits before token budgets, so concurrency is
@@ -534,8 +543,7 @@ it is not latent in the registries defined here.**
 
 ## 13. Route competence lifecycle
 
-Route statistics optimize selection and detect poor delegation routes. They never grant authority to
-bypass chair review.
+Route statistics optimize selection and detect poor delegation routes. They never bypass chair review.
 
 ### 13.1 The competence key is a versioned tuple
 
@@ -543,7 +551,7 @@ Competence is **not** keyed on the agent alone — that is too coarse (an agent 
 lint fixes is not thereby effective for broad refactors under the same test oracle). The key is:
 
 ```
-(agent-id, model-version, harness, engine, oracle-id, oracle-version, authority, scope-risk-class)
+(agent-id, model-version, harness, engine, oracle-id, oracle-version, scope-risk-class)
 ```
 
 Any change to any component **invalidates or quarantines** the statistics for that key. Competence
@@ -584,8 +592,8 @@ How `silent-wrong = 0` is preserved, as a chain where every link is independent 
 8. **Canary** detects any real-tree mutation during a delegated phase and invalidates its output.
 9. **Competence lifecycle** removes consistently poor routes without weakening the acceptance boundary.
 
-A worker or oracle may still be wrong; the architecture does not present either as sufficient semantic
-authority. Their output remains evidence for the chair's decision.
+A worker or oracle may still be wrong; neither is sufficient for semantic acceptance. Their output
+remains evidence for the chair's decision.
 
 ---
 
@@ -593,17 +601,17 @@ authority. Their output remains evidence for the chair's decision.
 
 Each row is a binding + output mode. **Zero new code** across all of them.
 
-| Job | engine | oracle evidence | mode | agent / fanout | authority |
-|---|---|---|---|---|---|
-| Fix residual lint | gate | `tidy-clean` + behavior gap noted | PROPOSAL | 4× cheap | writable-copy |
-| Fix lint, but tricky | gate | `tidy-clean` + behavior gap noted | PROPOSAL | 1× **strong** (override) | writable-copy |
-| Implement a settled plan | gate | `test-all` + `coverage-delta` | PROPOSAL | 1× strong | writable-copy |
-| Add test coverage | gate | `test-all` + `assertion-delta` | PROPOSAL | 1× strong | writable-copy |
-| Doc comment / rename | gate (`oracle: none`) | none | ADVISORY | 1× cheap | writable-copy |
-| Coverage-guided test gen | search | objective=coverage; final `test-all` | PROPOSAL | N× ∥ | writable-copy |
-| Perf optimization | search | objective=benchmark; final `test-all` | PROPOSAL | N× ∥ | writable-copy |
-| Design / architecture | synthesis | none (absent) | (chair artifact) | cross-vendor roster | **read-only** |
-| Root-cause diagnosis | synthesis | none (absent) | (chair artifact) | cross-vendor roster | **read-only** |
+| Job | engine | oracle evidence | mode | agent / fanout |
+|---|---|---|---|---|
+| Fix residual lint | gate | `tidy-clean` + behavior gap noted | PROPOSAL | 4× cheap |
+| Fix lint, but tricky | gate | `tidy-clean` + behavior gap noted | PROPOSAL | 1× **strong** (override) |
+| Implement a settled plan | gate | `test-all` + `coverage-delta` | PROPOSAL | 1× strong |
+| Add test coverage | gate | `test-all` + `assertion-delta` | PROPOSAL | 1× strong |
+| Doc comment / rename | gate (`oracle: none`) | none | ADVISORY | 1× cheap |
+| Coverage-guided test gen | search | objective=coverage; final `test-all` | PROPOSAL | N× ∥ |
+| Perf optimization | search | objective=benchmark; final `test-all` | PROPOSAL | N× ∥ |
+| Design / architecture | synthesis | none (absent) | (chair artifact) | cross-vendor roster |
+| Root-cause diagnosis | synthesis | none (absent) | (chair artifact) | cross-vendor roster |
 
 The flexibility goal: "lint with a strong model" and "cheap model attempts an oracle-less rename" are
 both single-field overrides. Oracle-less drafting is the gate engine's degenerate form, not a fourth
@@ -623,16 +631,16 @@ changes.
 chair authors a phase intent  (task-kind, scope, invariant, overrides)
    │
    ▼
-binding resolution            (default row ∩ overrides → engine, oracle, authority, params)
+binding resolution            (default row + tightening overrides → engine, oracle, params)
    │
    ▼
-scheduler places the node     (deps, concurrency, context-view cost)
+scheduler places the node     (deps, concurrency, rate limits)
    │
    ▼
-substrate provisions          (COW snapshot @ real path; authority clamp applied)
+substrate provisions          (writable isolated copy mounted at the real repository path)
    │
    ▼
-engine runs                   (gate / synthesis / search; workers draft in writable copies or read-only)
+engine runs                   (gate / synthesis / search; workers operate in isolated copies)
    │
    ▼
 harness extracts + guards     (git-diff patch; scope/churn/ruler static checks)
@@ -652,12 +660,9 @@ record outcome against the competence key   (feeds route selection / breaker)
 
 ## 17. Open problems & non-goals
 
-- **The untrusted-model hard sandbox is genuinely expensive.** Namespace path-virtualization is a
-  performance feature, *not* a security jail (host `$HOME`, network, and environment remain visible by
-  default). Admitting not-fully-trusted models requires the restricted authority profile of §5 — no
-  network for local models, or brokered/vendor-restricted egress for cloud models, plus minimal
-  bind-mounts — and that is real work. For a trusted vendor roster, the canary + read-only/writable-copy
-  clamps suffice; this is an explicit, bounded trust assumption, not an oversight.
+- **Hostile-code isolation is a non-goal.** Namespace path virtualization protects the real repository
+  from ordinary delegated writes, but host `$HOME`, network, and selected environment variables remain
+  available to agent CLIs. Supporting untrusted workers would require a separate security design.
 - **Unattended acceptance is a non-goal for this design.** Every delegated result remains PROPOSAL or
   ADVISORY until chair review. If future evidence justifies revisiting this boundary, it requires a
   separate design rather than an extension flag in the current registries.
@@ -679,7 +684,7 @@ record outcome against the competence key   (feeds route selection / breaker)
 - **Output mode** — `PROPOSAL | ADVISORY`: whether an artifact carries independent oracle evidence.
 - **Risk-oracle** — a second registered oracle that measures a known gap left by the primary oracle;
   fires → escalate.
-- **Route** — a versioned `(agent, model, harness, engine, oracle, authority, scope-risk-class)` tuple;
+- **Route** — a versioned `(agent, model, harness, engine, oracle, scope-risk-class)` tuple;
   the unit of competence accounting.
 - **Chair** — the single in-loop frontier: policy, judgment, synthesis, acceptance, and veto.
 - **Canary** — a before/after fingerprint of the real tree that aborts on mutation during delegation.

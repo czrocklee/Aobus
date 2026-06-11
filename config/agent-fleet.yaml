@@ -11,7 +11,6 @@ agents:
     environment-whitelist: [PATH, HOME, USER, XDG_CONFIG_HOME, OPENCODE_CONFIG_DIR]
     timeout-ms: 1200000
     rate-limit-key: opencode-go
-    default-authority: trusted-writable
   codex:
     model: gpt-5.5
     argv: [codex, exec, -s, workspace-write, --skip-git-repo-check]
@@ -19,7 +18,6 @@ agents:
     environment-whitelist: [PATH, HOME, USER, CODEX_HOME]
     timeout-ms: 1200000
     rate-limit-key: openai
-    default-authority: trusted-writable
   claude-opus:
     model: opus
     argv: [claude, -p, --dangerously-skip-permissions, --no-session-persistence, --model, opus, --effort, xhigh]
@@ -27,7 +25,6 @@ agents:
     environment-whitelist: [PATH, HOME, USER, ANTHROPIC_API_KEY]
     timeout-ms: 1200000
     rate-limit-key: anthropic
-    default-authority: trusted-read-only
   gemini-pro:
     model: gemini-3.1-pro-high
     argv: [agy, -p, "", --add-dir, ., --dangerously-skip-permissions, --model, "Gemini 3.1 Pro (High)"]
@@ -35,7 +32,6 @@ agents:
     environment-whitelist: [PATH, HOME, USER, GOOGLE_API_KEY]
     timeout-ms: 1200000
     rate-limit-key: google
-    default-authority: trusted-read-only
 oracles:
   test-all:
     runner: test-all
@@ -104,31 +100,16 @@ oracles:
     known-gaps: [Private ABI and semantic contract changes are not detected.]
     baseline-policy: skip
     ruler-paths: [tool/fleet, config/agent-fleet.yaml]
-authorities:
-  trusted-read-only:
-    filesystem: read-only
-    network: vendor
-    context-view: full
-  trusted-writable:
-    filesystem: writable-copy
-    network: vendor
-    context-view: full
-  local-writable:
-    filesystem: writable-copy
-    network: off
-    context-view: full
 bindings:
   implement-plan:
     agent: dspro
     engine: gate
     oracle: test-all
     risk-oracle: test-delta
-    authority: trusted-writable
     params: {fanout: 1, top-k: 1, max-rounds: 3, churn-lines: 2000}
   draft-change:
     agent: dspro
     engine: gate
-    authority: trusted-writable
     params: {fanout: 1, top-k: 1, max-rounds: 1, churn-lines: 1000}
   # No risk-oracle: lint fixes do not have to touch tests; a clean tidy run is the gate,
   # matching the old lint_phase.sh acceptance rule.
@@ -136,12 +117,10 @@ bindings:
     agent: dspro
     engine: gate
     oracle: tidy-clean
-    authority: trusted-writable
     params: {fanout: 2, top-k: 1, max-rounds: 3, churn-lines: 500}
   council-plan:
     agent: claude-opus
     engine: synthesis
-    authority: trusted-read-only
     params:
       roster: [claude-opus, codex, gemini-pro, dspro]
       depth: full
@@ -149,7 +128,6 @@ bindings:
   council-review:
     agent: claude-opus
     engine: synthesis
-    authority: trusted-read-only
     params:
       roster: [claude-opus, codex, gemini-pro, dspro]
       depth: challenge

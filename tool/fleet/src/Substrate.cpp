@@ -337,7 +337,6 @@ namespace ao::fleet
 
   ProcessResult NamespaceRunner::run(std::filesystem::path const& realRepo,
                                      std::filesystem::path const& workspace,
-                                     AuthorityPolicy const& authority,
                                      SandboxMounts const& mounts,
                                      ProcessRequest request)
   {
@@ -355,11 +354,6 @@ namespace ao::fleet
                                          "--tmpfs",
                                          "/tmp"};
 
-    if (authority.network == NetworkAuthority::Off)
-    {
-      argv.emplace_back("--unshare-net");
-    }
-
     // Before the workspace bind: when the repository lives under $HOME, the later workspace
     // bind must still override that subtree with the isolated copy.
     if (mounts.bindHome)
@@ -372,7 +366,7 @@ namespace ao::fleet
       }
     }
 
-    argv.emplace_back(authority.filesystem == FilesystemAuthority::ReadOnly ? "--ro-bind" : "--bind");
+    argv.emplace_back("--bind");
     argv.emplace_back(workspace.string());
     argv.emplace_back(realRepo.string());
 

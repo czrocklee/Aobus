@@ -62,7 +62,6 @@ namespace ao::fleet
 
     ProcessResult run(std::filesystem::path const& realRepo,
                       std::filesystem::path const& workspace,
-                      AuthorityPolicy const& authority,
                       SandboxMounts const& mounts,
                       ProcessRequest request);
 
