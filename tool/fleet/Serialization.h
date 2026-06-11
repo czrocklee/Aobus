@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include "fleet/Model.h"
 #include <ao/Error.h>
-#include <ao/fleet/Model.h>
 
 #include <filesystem>
 #include <functional>

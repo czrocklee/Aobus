@@ -87,7 +87,7 @@ oracles:
   test-delta:
     runner: test-delta
     # Comma-separated path prefixes and file suffixes that count as test changes.
-    arguments: {test-paths: "test/,tool/fleet/test/", test-suffixes: "Test.cpp"}
+    arguments: {test-paths: "test/", test-suffixes: "Test.cpp"}
     property: The patch changes a registered test path.
     known-gaps: [A changed test may still miss the changed behavior.]
     baseline-policy: skip

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "fleet/Serialization.h"
+
+#include "fleet/Model.h"
 #include <ao/Error.h>
-#include <ao/fleet/Model.h>
-#include <ao/fleet/Serialization.h>
 #include <ao/yaml/Utils.h>
 
 #include <c4/yml/common.hpp>

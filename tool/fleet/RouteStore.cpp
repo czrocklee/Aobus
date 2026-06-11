@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "fleet/RouteStore.h"
+
+#include "fleet/Model.h"
+#include "fleet/Serialization.h"
 #include <ao/Error.h>
-#include <ao/fleet/Model.h>
-#include <ao/fleet/RouteStore.h>
-#include <ao/fleet/Serialization.h>
 
 #include <algorithm>
 #include <cstddef>

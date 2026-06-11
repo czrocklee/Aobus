@@ -152,6 +152,23 @@ target_compile_options(ao_test PRIVATE
 )
 add_test(NAME ao_test COMMAND ao_test)
 
+# ao_fleet_test: fleet tool unit and integration tests
+add_executable(ao_fleet_test
+    unit/fleet/ModelTest.cpp
+    unit/fleet/PatchGuardTest.cpp
+    unit/fleet/RouteStoreTest.cpp
+    unit/fleet/SchedulerTest.cpp
+    unit/fleet/SerializationTest.cpp
+    unit/fleet/SubstrateTest.cpp
+    integration/fleet/FleetRunnerTest.cpp
+    integration/fleet/ProcessRunnerTest.cpp
+    integration/fleet/SubstrateTest.cpp
+)
+target_include_directories(ao_fleet_test PRIVATE "${CMAKE_SOURCE_DIR}")
+target_link_libraries(ao_fleet_test PRIVATE ao_fleet Catch2::Catch2WithMain)
+target_compile_definitions(ao_fleet_test PRIVATE AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME ao_fleet_test COMMAND ao_fleet_test)
+
 # ao_integration_test: standalone integration tests (excluded from default build.sh runs)
 add_executable(ao_integration_test
     integration/audio/DecoderIntegrationTest.cpp

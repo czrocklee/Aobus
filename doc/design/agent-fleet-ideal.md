@@ -1,8 +1,8 @@
 # Aobus Agent Fleet Architecture
 
-> Status: implemented baseline. `aobus-fleet`, `ao_fleet`, and `config/agent-fleet.yaml` are the
-> production mechanism and registry. This document is the governing architecture; implementation gaps
-> are defects rather than alternate workflow contracts.
+> Status: implemented baseline. `aobus-fleet` and `config/agent-fleet.yaml` are the production
+> mechanism and registry. This document is the governing architecture; implementation gaps are defects
+> rather than alternate workflow contracts.
 >
 > Scope: vendor-neutral and harness-neutral. The fleet routes a heterogeneous set of agents
 > (frontier and cheap, across vendors) at software-engineering work on the Aobus repository.
@@ -22,6 +22,11 @@ aobus-fleet review record --out <path> --phase <id> --verdict accept|modify|reje
 aobus-fleet stats --out <path> [--window N]
 aobus-fleet route reset --out <path> --route <route-id>
 ```
+
+The Fleet is a repository tool rather than a public library. Its implementation and private headers
+are therefore flat under `tool/fleet/`; the internal `ao_fleet` CMake target exists only to share that
+implementation between the CLI and the focused Fleet suites under `test/unit/fleet/` and
+`test/integration/fleet/`.
 
 Exit `0` means a proposal, advisory, or synthesis dossier was produced; `2` is policy rejection or
 escalation; `3` is infrastructure failure; `5` is registry/configuration failure; and `64` is CLI or

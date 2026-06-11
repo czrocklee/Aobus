@@ -21,13 +21,13 @@ usage() {
 Usage: run-clang-tidy.sh [options] [<file>...]
 
 Run clang-tidy on Aobus C++ source files using project-wide configs.
-Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
+Each file is classified as STRICT (lib/app/include/tool) or RELAXED (test/).
 
 === Scope (choose one) ================================================
 
   (none)                Changed files — local main..HEAD + working tree + staged + untracked
   <file>...             Explicit list of files to check
-  --all                 Every .cpp/.h/.hpp under lib/ app/ include/ test/
+  --all                 Every .cpp/.h/.hpp under lib/ app/ include/ test/ tool/
   --folder <d>          All files under <d> (repeatable: --folder lib --folder test)
   --commit <r>          Changed files since <r> + working tree + untracked
 
@@ -68,7 +68,7 @@ Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
 
 === Config per mode ===================================================
 
-  STRICT                  All checks active (lib/app/include)
+  STRICT                  All checks active (lib/app/include/tool)
   RELAXED                 Magic numbers, cognitive complexity, identifier length,
                           reinterpret_cast, vararg, C arrays, optional-access
                           are suppressed (test/)
@@ -283,7 +283,7 @@ classify_file() {
 run_one() {
     local mode="$1" f="$2" tmp="$3"
     local checks="${EXTRA_CHECKS:-$STRICT_CHECKS}"
-    local header_filter="${EXTRA_HEADER_FILTER:-${PROJECT_ROOT}/(lib|app|include|lint)/.*}"
+    local header_filter="${EXTRA_HEADER_FILTER:-${PROJECT_ROOT}/(lib|app|include|lint|tool)/.*}"
 
     if [[ "$mode" == "RELAXED" ]]; then
         checks="${EXTRA_CHECKS:-$RELAXED_CHECKS}"
@@ -340,9 +340,9 @@ fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
     if $ALL_MODE; then
-        echo "Checking all .cpp/.h/.hpp files in lib/ app/ include/ test/ lint/" >&2
+        echo "Checking all .cpp/.h/.hpp files in lib/ app/ include/ test/ lint/ tool/" >&2
         mapfile -t FILES < <(
-            find lib app include test lint -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
+            find lib app include test lint tool -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
                 ! -path '*/test/integration/lint/*' | sort
         )
     elif [[ ${#FOLDER_DIRS[@]} -gt 0 ]]; then
