@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "DecoderTestUtils.h"
 #include <ao/audio/AacDecoderSession.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
@@ -92,10 +93,10 @@ namespace ao::audio::test
 
   TEST_CASE("AacDecoderSession - Error Paths", "[audio][unit][aac][error]")
   {
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
+
     SECTION("Rejects unsupported output bit depth")
     {
-      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
-
       if (!std::filesystem::exists(testFile))
       {
         SKIP("Test file 'basic_metadata.m4a' missing");
@@ -105,10 +106,75 @@ namespace ao::audio::test
       CHECK(!decoder.open(testFile));
     }
 
+    SECTION("Rejects float output")
+    {
+      if (!std::filesystem::exists(testFile))
+      {
+        SKIP("Test file 'basic_metadata.m4a' missing");
+      }
+
+      auto decoder = AacDecoderSession{Format{.bitDepth = 32, .isFloat = true, .isInterleaved = true}};
+      CHECK(!decoder.open(testFile));
+    }
+
+    SECTION("Rejects unsupported valid bits")
+    {
+      if (!std::filesystem::exists(testFile))
+      {
+        SKIP("Test file 'basic_metadata.m4a' missing");
+      }
+
+      auto decoder = AacDecoderSession{Format{.bitDepth = 32, .validBits = 24, .isInterleaved = true}};
+      CHECK(!decoder.open(testFile));
+    }
+
+    SECTION("Rejects planar output")
+    {
+      if (!std::filesystem::exists(testFile))
+      {
+        SKIP("Test file 'basic_metadata.m4a' missing");
+      }
+
+      auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = false}};
+      CHECK(!decoder.open(testFile));
+    }
+
+    SECTION("Rejects sample-rate conversion")
+    {
+      if (!std::filesystem::exists(testFile))
+      {
+        SKIP("Test file 'basic_metadata.m4a' missing");
+      }
+
+      auto decoder = AacDecoderSession{Format{.sampleRate = 48000, .bitDepth = 16, .isInterleaved = true}};
+      CHECK(!decoder.open(testFile));
+    }
+
+    SECTION("Rejects channel remapping")
+    {
+      if (!std::filesystem::exists(testFile))
+      {
+        SKIP("Test file 'basic_metadata.m4a' missing");
+      }
+
+      auto decoder = AacDecoderSession{Format{.channels = 1, .bitDepth = 16, .isInterleaved = true}};
+      CHECK(!decoder.open(testFile));
+    }
+
     SECTION("Seek on unopened file")
     {
       auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
       CHECK(!decoder.seek(100));
+    }
+
+    SECTION("Read on unopened file returns end of stream")
+    {
+      auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto const block = decoder.readNextBlock();
+
+      REQUIRE(block);
+      CHECK(block->endOfStream);
+      CHECK(block->bytes.empty());
     }
 
     SECTION("Non-existent file")
@@ -129,5 +195,46 @@ namespace ao::audio::test
       CHECK(!decoder.open(tempFile));
       std::filesystem::remove(tempFile);
     }
+
+    SECTION("Read after close returns end of stream")
+    {
+      if (!std::filesystem::exists(testFile))
+      {
+        SKIP("Test file 'basic_metadata.m4a' missing");
+      }
+
+      auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      REQUIRE(decoder.open(testFile));
+
+      decoder.close();
+      decoder.close();
+      checkClosedSession(decoder);
+    }
+
+    SECTION("Failed reopen clears the previous stream state")
+    {
+      auto const existingFile = requireAudioFixture("basic_metadata.m4a");
+      auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+
+      REQUIRE(decoder.open(existingFile));
+      CHECK(decoder.streamInfo().sourceFormat.sampleRate > 0);
+      CHECK(!decoder.open("/path/to/nowhere/nonexistent.m4a"));
+      checkClosedSession(decoder);
+    }
+  }
+
+  TEST_CASE("AacDecoderSession - End of stream", "[audio][unit][aac]")
+  {
+    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
+
+    if (!std::filesystem::exists(testFile))
+    {
+      SKIP("Test file 'basic_metadata.m4a' missing");
+    }
+
+    auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    REQUIRE(decoder.open(testFile));
+
+    CHECK(readUntilStableEndOfStream(decoder, 256) > 0);
   }
 } // namespace ao::audio::test

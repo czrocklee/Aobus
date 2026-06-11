@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "detail/Mp4PacketSource.h"
+#include "detail/OutputFormatValidation.h"
 #include <ao/Error.h>
 #include <ao/audio/AlacDecoderSession.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
-#include <ao/media/mp4/Demuxer.h>
 #include <ao/utility/ByteView.h>
-#include <ao/utility/MappedFile.h>
 
 #include <alac/ALACAudioTypes.h>
 #include <alac/ALACBitUtilities.h>
@@ -20,17 +20,31 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <span>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::audio
 {
-  using namespace media::mp4;
   using namespace utility;
 
   namespace
   {
     [[maybe_unused]] constexpr std::int32_t kSignExtensionMask = ~0x00FFFFFF;
     constexpr std::uint8_t kBytesPer24BitSample = 3;
+    constexpr std::size_t kAlacConfigOffset = 12;
+    constexpr std::size_t kAlacConfigSize = 24;
+    constexpr std::size_t kAlacCompatibleVersionOffset = kAlacConfigOffset + 4;
+    constexpr std::size_t kAlacBitDepthOffset = kAlacConfigOffset + 5;
+    constexpr std::size_t kAlacChannelCountOffset = kAlacConfigOffset + 9;
+    constexpr std::size_t kAlacSampleRateOffset = kAlacConfigOffset + 20;
+    constexpr std::uint32_t kMaxAlacFrameLength = 16384;
+    constexpr std::uint32_t kMaxAlacSampleRate = 384000;
+    constexpr std::uint8_t kMaxAlacChannels = 8;
+    constexpr std::size_t kBigEndian32Byte1Offset = 1;
+    constexpr std::size_t kBigEndian32Byte2Offset = 2;
+    constexpr std::size_t kBigEndian32Byte3Offset = 3;
 
     std::uint32_t bytesPerSample(std::uint8_t bitDepth) noexcept
     {
@@ -46,6 +60,38 @@ namespace ao::audio
 
       return (bitDepth > 16U) ? 4U : 2U;
     }
+
+    std::uint32_t readBigEndian32(std::span<std::byte const> bytes, std::size_t offset) noexcept
+    {
+      return (static_cast<std::uint32_t>(bytes[offset]) << 24U) |
+             (static_cast<std::uint32_t>(bytes[offset + kBigEndian32Byte1Offset]) << 16U) |
+             (static_cast<std::uint32_t>(bytes[offset + kBigEndian32Byte2Offset]) << 8U) |
+             static_cast<std::uint32_t>(bytes[offset + kBigEndian32Byte3Offset]);
+    }
+
+    Result<> validateAlacCookie(std::span<std::byte const> cookie)
+    {
+      if (cookie.size() < kAlacConfigOffset + kAlacConfigSize ||
+          utility::bytes::stringView(cookie.subspan(4, 4)) != "alac")
+      {
+        return makeError(Error::Code::InitFailed, "Malformed ALAC configuration");
+      }
+
+      auto const frameLength = readBigEndian32(cookie, kAlacConfigOffset);
+      auto const compatibleVersion = static_cast<std::uint8_t>(cookie[kAlacCompatibleVersionOffset]);
+      auto const bitDepth = static_cast<std::uint8_t>(cookie[kAlacBitDepthOffset]);
+      auto const channels = static_cast<std::uint8_t>(cookie[kAlacChannelCountOffset]);
+      auto const sampleRate = readBigEndian32(cookie, kAlacSampleRateOffset);
+      auto const supportedBitDepth = bitDepth == 16 || bitDepth == 20 || bitDepth == 24 || bitDepth == 32;
+
+      if (frameLength == 0 || frameLength > kMaxAlacFrameLength || compatibleVersion != 0 || !supportedBitDepth ||
+          channels == 0 || channels > kMaxAlacChannels || sampleRate == 0 || sampleRate > kMaxAlacSampleRate)
+      {
+        return makeError(Error::Code::InitFailed, "Invalid ALAC stream configuration");
+      }
+
+      return {};
+    }
   } // namespace
 
   struct AlacDecoderSession::Impl final
@@ -55,11 +101,7 @@ namespace ao::audio
 
     std::unique_ptr<ALACDecoder> decoderPtr;
 
-    std::uint32_t currentSampleIndex = 0;
-    std::uint32_t timescale = 0;
-
-    utility::MappedFile mappedFile;
-    std::unique_ptr<Demuxer> demuxerPtr;
+    detail::Mp4PacketSource packetSource;
 
     std::vector<std::byte> sourcePcm;
     std::vector<std::byte> targetPcm;
@@ -70,24 +112,10 @@ namespace ao::audio
       decoderPtr = std::make_unique<ALACDecoder>();
     }
 
-    std::uint64_t firstFrameIndex(std::uint32_t sampleIndex) const noexcept
+    std::uint32_t fallbackFrameLength() const noexcept
     {
-      if (!demuxerPtr)
-      {
-        return 0;
-      }
-
-      if (auto const sampleInfo = demuxerPtr->sampleInfo(sampleIndex);
-          timescale > 0 && (sampleInfo.startTime > 0 || sampleInfo.duration > 0))
-      {
-        return (sampleInfo.startTime * info.sourceFormat.sampleRate) / timescale;
-      }
-
-      auto const frameLength = decoderPtr->mConfig.frameLength > 0
-                                 ? decoderPtr->mConfig.frameLength
-                                 : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
-
-      return static_cast<std::uint64_t>(sampleIndex) * frameLength;
+      return decoderPtr->mConfig.frameLength > 0 ? decoderPtr->mConfig.frameLength
+                                                 : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
     }
   };
 
@@ -102,47 +130,47 @@ namespace ao::audio
   {
     close();
 
-    if (auto const mapResult = _implPtr->mappedFile.map(filePath); !mapResult)
+    auto failOpen = [this](Error error) -> Result<>
     {
-      return std::unexpected{mapResult.error()};
+      close();
+      return std::unexpected{std::move(error)};
+    };
+
+    if (auto const result = _implPtr->packetSource.open(filePath, "alac"); !result)
+    {
+      auto error = result.error();
+
+      if (error.code == Error::Code::FormatRejected)
+      {
+        error.code = Error::Code::InitFailed;
+      }
+
+      return failOpen(std::move(error));
     }
 
-    _implPtr->demuxerPtr = std::make_unique<Demuxer>(_implPtr->mappedFile.bytes());
+    auto const cookie = _implPtr->packetSource.magicCookie();
 
-    if (auto const demuxResult = _implPtr->demuxerPtr->parseTrack("alac"); !demuxResult)
+    if (auto const result = validateAlacCookie(cookie); !result)
     {
-      return makeError(Error::Code::InitFailed, demuxResult.error().message);
+      return failOpen(result.error());
     }
 
-    auto const cookie = _implPtr->demuxerPtr->magicCookie();
     auto const initStatus =
       _implPtr->decoderPtr->Init(layout::asLegacyPtr<std::uint8_t>(cookie), layout::size32(cookie));
 
     if (initStatus != ALAC_noErr)
     {
-      return makeError(Error::Code::InitFailed, "Failed to initialize ALAC decoder");
+      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Failed to initialize ALAC decoder"});
     }
 
     auto const& config = _implPtr->decoderPtr->mConfig;
 
     if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
     {
-      return makeError(Error::Code::InitFailed, "Invalid ALAC stream configuration");
+      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Invalid ALAC stream configuration"});
     }
 
-    _implPtr->timescale = _implPtr->demuxerPtr->timescale();
-    auto const duration = _implPtr->demuxerPtr->duration();
-
-    if (_implPtr->timescale == 0)
-    {
-      _implPtr->timescale = config.sampleRate;
-    }
-
-    if (_implPtr->timescale > 0)
-    {
-      _implPtr->info.durationMs =
-        static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000U) / _implPtr->timescale);
-    }
+    _implPtr->info.durationMs = _implPtr->packetSource.durationMs(config.sampleRate);
 
     _implPtr->info.sourceFormat.channels = config.numChannels;
     _implPtr->info.sourceFormat.sampleRate = config.sampleRate;
@@ -157,37 +185,44 @@ namespace ao::audio
       _implPtr->info.outputFormat.bitDepth = _implPtr->requestedOutput.bitDepth;
       _implPtr->info.outputFormat.validBits = (_implPtr->requestedOutput.validBits != 0)
                                                 ? _implPtr->requestedOutput.validBits
-                                                : _implPtr->requestedOutput.bitDepth;
+                                                : _implPtr->info.sourceFormat.validBits;
     }
 
-    _implPtr->currentSampleIndex = 0;
+    if (auto const result =
+          detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "ALAC");
+        !result)
+    {
+      return failOpen(result.error());
+    }
+
+    auto const sourceBitDepth = _implPtr->info.sourceFormat.bitDepth;
+    auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
+    auto const supportedConversion = sourceBitDepth == outputBitDepth ||
+                                     (sourceBitDepth == 16 && outputBitDepth == 32) ||
+                                     (sourceBitDepth == 24 && outputBitDepth == 32);
+
+    if (_implPtr->requestedOutput.isFloat || !supportedConversion ||
+        _implPtr->info.outputFormat.validBits != sourceBitDepth)
+    {
+      return failOpen(
+        Error{.code = Error::Code::NotSupported,
+              .message = std::format("Unsupported ALAC conversion: {} -> {}", sourceBitDepth, outputBitDepth)});
+    }
 
     return {};
   }
 
   void AlacDecoderSession::close()
   {
-    _implPtr->demuxerPtr.reset();
-    _implPtr->mappedFile.unmap();
-    _implPtr->currentSampleIndex = 0;
-    _implPtr->timescale = 0;
+    _implPtr->packetSource.close();
+    _implPtr->sourcePcm.clear();
+    _implPtr->targetPcm.clear();
+    _implPtr->info = {};
   }
 
   Result<> AlacDecoderSession::seek(std::uint32_t positionMs)
   {
-    if (_implPtr->timescale == 0)
-    {
-      return makeError(Error::Code::SeekFailed, "Timescale is 0");
-    }
-
-    if (!_implPtr->demuxerPtr)
-    {
-      return makeError(Error::Code::SeekFailed, "ALAC demuxerPtr is not open");
-    }
-
-    auto const targetTime = (static_cast<std::uint64_t>(positionMs) * _implPtr->timescale) / 1000U;
-    _implPtr->currentSampleIndex = _implPtr->demuxerPtr->sampleIndexAtTime(targetTime);
-    return {};
+    return _implPtr->packetSource.seek(positionMs, _implPtr->info.sourceFormat.sampleRate);
   }
 
   void AlacDecoderSession::flush()
@@ -196,13 +231,14 @@ namespace ao::audio
 
   Result<PcmBlock> AlacDecoderSession::readNextBlock()
   {
-    if (!_implPtr->demuxerPtr || _implPtr->currentSampleIndex >= _implPtr->demuxerPtr->sampleCount())
+    if (_implPtr->packetSource.atEnd())
     {
       return PcmBlock{.bytes = {}, .endOfStream = true};
     }
 
-    auto const firstFrameIndex = _implPtr->firstFrameIndex(_implPtr->currentSampleIndex);
-    auto const packet = _implPtr->demuxerPtr->samplePayload(_implPtr->currentSampleIndex);
+    auto const firstFrameIndex =
+      _implPtr->packetSource.firstFrameIndex(_implPtr->info.sourceFormat.sampleRate, _implPtr->fallbackFrameLength());
+    auto const packet = _implPtr->packetSource.packet();
 
     if (packet.empty())
     {
@@ -242,6 +278,11 @@ namespace ao::audio
         return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
       }
 
+      if (numFrames == 0 || numFrames > maxFrames)
+      {
+        return makeError(Error::Code::DecodeFailed, "Invalid ALAC decoded frame count");
+      }
+
       _implPtr->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
 
       if (sourceBps == 16 && targetBps == 32)
@@ -261,14 +302,14 @@ namespace ao::audio
           Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
       }
 
-      _implPtr->currentSampleIndex++;
+      _implPtr->packetSource.advance();
 
       return PcmBlock{
         .bytes = _implPtr->targetPcm,
         .bitDepth = targetBps,
         .frames = numFrames,
         .firstFrameIndex = firstFrameIndex,
-        .endOfStream = (_implPtr->currentSampleIndex >= _implPtr->demuxerPtr->sampleCount()),
+        .endOfStream = _implPtr->packetSource.atEnd(),
       };
     }
 
@@ -286,15 +327,20 @@ namespace ao::audio
       return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
     }
 
+    if (numFrames == 0 || numFrames > maxFrames)
+    {
+      return makeError(Error::Code::DecodeFailed, "Invalid ALAC decoded frame count");
+    }
+
     _implPtr->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
-    _implPtr->currentSampleIndex++;
+    _implPtr->packetSource.advance();
 
     return PcmBlock{
       .bytes = _implPtr->targetPcm,
       .bitDepth = targetBps,
       .frames = numFrames,
       .firstFrameIndex = firstFrameIndex,
-      .endOfStream = (_implPtr->currentSampleIndex >= _implPtr->demuxerPtr->sampleCount()),
+      .endOfStream = _implPtr->packetSource.atEnd(),
     };
   }
 

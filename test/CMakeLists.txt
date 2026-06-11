@@ -55,10 +55,18 @@ add_executable(ao_test
 
     # audio unit tests
     unit/audio/DecoderFactoryTest.cpp
+    unit/audio/detail/AacConfigParserTest.cpp
+    unit/audio/detail/MappedFileCursorTest.cpp
+    unit/audio/detail/Mp4PacketSourceTest.cpp
+    unit/audio/detail/TimeConversionTest.cpp
     unit/audio/AacDecoderSessionTest.cpp
+    unit/audio/AacDecoderMalformedMp4Test.cpp
     unit/audio/FlacDecoderSessionTest.cpp
+    unit/audio/FlacDecoderMalformedTest.cpp
     unit/audio/AlacDecoderSessionTest.cpp
+    unit/audio/AlacDecoderMalformedMp4Test.cpp
     unit/audio/Mp3DecoderSessionTest.cpp
+    unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatNegotiatorTest.cpp
     unit/audio/MemorySourceTest.cpp

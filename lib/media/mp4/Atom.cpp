@@ -70,6 +70,13 @@ namespace ao::media::mp4
 
         if (optSkip)
         {
+          if (length < kAtomHeaderSize + *optSkip)
+          {
+            parent.add(std::make_unique<LeafAtomView>(data.subspan(0, length), parent));
+            data = data.subspan(length);
+            continue;
+          }
+
           // Atom header is already defined as kAtomHeaderSize
           auto childPtr = std::make_unique<ContainerAtomView>(data.subspan(0, length), parent);
           parseAtoms(*childPtr, data.subspan(kAtomHeaderSize + *optSkip, length - kAtomHeaderSize - *optSkip));

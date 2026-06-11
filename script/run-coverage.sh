@@ -13,6 +13,7 @@ BUILD_DIR="/tmp/build/coverage"
 JOBS=$(nproc)
 TEST_FILTER=""
 SUITE="core"
+COVERAGE_CONTEXT_LIMIT="${COVERAGE_CONTEXT_LIMIT:-40}"
 
 usage() {
     cat <<'EOF'
@@ -54,8 +55,16 @@ done
 # 1. Configure for coverage if needed
 if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
     echo "Configuring coverage build in $BUILD_DIR..."
+    COVERAGE_CXX_FLAGS="--coverage"
+
+    if [[ "$(c++ -dumpfullversion -dumpversion)" =~ ^([0-9]+) ]] &&
+       [[ "${BASH_REMATCH[1]}" -ge 15 ]] &&
+       c++ --version | head -n 1 | grep -q 'GCC'; then
+        COVERAGE_CXX_FLAGS+=" -Wno-mismatched-new-delete"
+    fi
+
     cmake -S "$PROJECT_ROOT" --preset linux-debug -B "$BUILD_DIR" \
-        -DCMAKE_CXX_FLAGS="--coverage" \
+        -DCMAKE_CXX_FLAGS="$COVERAGE_CXX_FLAGS" \
         -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
         -DCMAKE_SHARED_LINKER_FLAGS="--coverage"
 fi
@@ -143,6 +152,10 @@ for gcda in "${GCDA_FILES[@]}"; do
         [[ -f "$gcov_file" ]] || continue
         
         src_file=$(head -n 1 "$gcov_file" | grep -oP "(?<=Source:).*")
+
+        if [[ "$src_file" != /* ]]; then
+            src_file=$(realpath -m "$BUILD_DIR/$src_file")
+        fi
         
         # Skip non-project files or files not in app/lib/include
         if [[ "$src_file" != "$PROJECT_ROOT"* ]]; then
@@ -172,7 +185,7 @@ for gcda in "${GCDA_FILES[@]}"; do
         if [[ "$missing_count" -gt 0 ]]; then
             echo -e "\033[33m$rel_src_file: ${percent}% ($total_executable lines) -> $missing_count missing lines\033[0m"
             # Print the first few missing lines with context
-            grep -C 6 "^ *#####:" "$gcov_file" | head -n 40 | while IFS= read -r line; do
+            grep -C 6 "^ *#####:" "$gcov_file" | head -n "$COVERAGE_CONTEXT_LIMIT" | while IFS= read -r line; do
                 echo "    $line"
             done
             if [[ "$missing_count" -gt 5 ]]; then

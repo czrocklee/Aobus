@@ -8,6 +8,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+#include <vector>
+
 namespace ao::audio::test
 {
   TEST_CASE("DecoderFactory - Creates sessions based on extension", "[audio][unit][decoder]")
@@ -31,6 +34,21 @@ namespace ao::audio::test
 
       auto session2Ptr = createDecoderSession(mp4.path, format);
       REQUIRE(session2Ptr != nullptr);
+    }
+
+    SECTION("Creates ALAC runtime when a video track appears before the audio track")
+    {
+      auto moovBody = std::vector<std::uint8_t>{};
+      auto const videoTrack = ao::test::mp4::makeVideoTrackAtom("avc1");
+      auto const audioTrack = ao::test::mp4::makeAudioTrackAtom("alac");
+      moovBody.insert(moovBody.end(), videoTrack.begin(), videoTrack.end());
+      moovBody.insert(moovBody.end(), audioTrack.begin(), audioTrack.end());
+
+      auto data = std::vector<std::uint8_t>{};
+      ao::test::mp4::addAtom(data, "moov", moovBody);
+      auto const m4a = ao::test::TempFile{data, ".m4a"};
+
+      REQUIRE(createDecoderSession(m4a.path, format) != nullptr);
     }
 
     SECTION("Creates AAC runtime for MP4 containers with AAC sample entries")

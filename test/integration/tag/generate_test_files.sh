@@ -124,6 +124,21 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -y "$OUTPUT_DIR/hires.m4a" 2>/dev/null
 echo "  Created hires.m4a (ALAC 24-bit/96kHz stereo)"
 
+# M4A ALAC 16-bit: used by decoder tests for 16-bit ALAC conversion paths
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=ALAC 16 Title" \
+    -metadata "artist=ALAC 16 Artist" \
+    -metadata "album=ALAC 16 Album" \
+    -metadata "genre=Classical" \
+    -metadata "composer=ALAC 16 Composer" \
+    -metadata "grouping=Decoder Fixtures" \
+    -metadata "track=3" \
+    -metadata "date=2026" \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -codec:a alac \
+    -y "$OUTPUT_DIR/alac16.m4a" 2>/dev/null
+echo "  Created alac16.m4a (ALAC 16-bit/44.1kHz stereo)"
+
 # ============================================================================
 # MP3 files (uses ID3v2, 128kbps/44.1kHz stereo)
 # ============================================================================

@@ -1,24 +1,27 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "detail/MappedFileCursor.h"
+#include "detail/OutputFormatValidation.h"
+#include "detail/TimeConversion.h"
 #include <ao/Error.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
 #include <ao/audio/detail/Mpg123Runtime.h>
 #include <ao/utility/ByteView.h>
-#include <ao/utility/MappedFile.h>
 
 #include <mpg123.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <expected>
 #include <filesystem>
+#include <limits>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace ao::audio
@@ -27,7 +30,7 @@ namespace ao::audio
   {
     constexpr std::uint8_t kMp3PcmBitDepth = 16;
     constexpr std::uint8_t kFloat32BitDepth = 32;
-    constexpr double kMsPerSecond = 1000.0;
+    constexpr std::uint32_t kMsPerSecond = 1000;
 
     std::uint8_t channelCountFromMpg123(std::int32_t channels) noexcept
     {
@@ -57,11 +60,11 @@ namespace ao::audio
     Format requestedOutput;
     detail::Mpg123EnvironmentGuard mpg123Environment;
     mpg123_handle* mh = nullptr;
-    utility::MappedFile mappedFile;
-    std::uint64_t currentOffset = 0;
+    detail::MappedFileCursor fileCursor;
     DecodedStreamInfo info;
     std::vector<std::byte> decodeBuffer;
     std::uint64_t nextFrameIndex = 0;
+    std::optional<Error> optTerminalError;
     bool eof = false;
 
     Impl(Format const& output)
@@ -87,40 +90,31 @@ namespace ao::audio
     static ssize_t readCb(void* handle, void* buf, size_t sz)
     {
       auto* self = static_cast<Impl*>(handle);
-      auto const bytes = self->mappedFile.bytes();
-
-      if (self->currentOffset >= bytes.size())
-      {
-        return 0;
-      }
-
-      size_t const toRead = std::min(sz, static_cast<size_t>(bytes.size() - self->currentOffset));
-      std::memcpy(buf, bytes.data() + self->currentOffset, toRead);
-      self->currentOffset += toRead;
-      return static_cast<ssize_t>(toRead);
+      auto const count = self->fileCursor.read({static_cast<std::byte*>(buf), sz});
+      return static_cast<ssize_t>(count);
     }
 
     static off_t lseekCb(void* handle, off_t offset, std::int32_t whence)
     {
       auto* self = static_cast<Impl*>(handle);
-      auto const bytes = self->mappedFile.bytes();
-      off_t newPos = 0;
+      auto origin = detail::SeekOrigin::Begin;
 
       switch (whence)
       {
-        case SEEK_SET: newPos = offset; break;
-        case SEEK_CUR: newPos = static_cast<off_t>(self->currentOffset) + offset; break;
-        case SEEK_END: newPos = static_cast<off_t>(bytes.size()) + offset; break;
+        case SEEK_SET: origin = detail::SeekOrigin::Begin; break;
+        case SEEK_CUR: origin = detail::SeekOrigin::Current; break;
+        case SEEK_END: origin = detail::SeekOrigin::End; break;
         default: return -1;
       }
 
-      if (newPos < 0 || static_cast<size_t>(newPos) > bytes.size())
+      auto const result = self->fileCursor.seek(offset, origin);
+
+      if (!result || *result > static_cast<std::uint64_t>(std::numeric_limits<off_t>::max()))
       {
         return -1;
       }
 
-      self->currentOffset = static_cast<size_t>(newPos);
-      return newPos;
+      return static_cast<off_t>(*result);
     }
 
     Result<> configureOutputFormat() const
@@ -208,6 +202,12 @@ namespace ao::audio
       info.isLossy = true;
       return {};
     }
+
+    Result<PcmBlock> failRead(Error error)
+    {
+      optTerminalError = error;
+      return std::unexpected{std::move(error)};
+    }
   };
 
   Mp3DecoderSession::Mp3DecoderSession(Format outputFormat)
@@ -221,25 +221,33 @@ namespace ao::audio
   {
     close();
 
+    auto failOpen = [this](Error error) -> Result<>
+    {
+      close();
+      return std::unexpected{std::move(error)};
+    };
+
     if (auto const configureResult = _implPtr->configureOutputFormat(); !configureResult)
     {
-      return std::unexpected{configureResult.error()};
+      return failOpen(configureResult.error());
     }
 
-    if (auto const mapResult = _implPtr->mappedFile.map(filePath); !mapResult)
+    if (auto const result = _implPtr->fileCursor.open(filePath); !result)
     {
-      return std::unexpected{mapResult.error()};
+      return failOpen(result.error());
     }
 
-    _implPtr->currentOffset = 0;
     _implPtr->eof = false;
     _implPtr->nextFrameIndex = 0;
 
-    ::mpg123_replace_reader_handle(_implPtr->mh, Impl::readCb, Impl::lseekCb, nullptr);
+    if (::mpg123_replace_reader_handle(_implPtr->mh, Impl::readCb, Impl::lseekCb, nullptr) != MPG123_OK)
+    {
+      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Failed to configure MP3 input callbacks"});
+    }
 
     if (::mpg123_open_handle(_implPtr->mh, _implPtr.get()) != MPG123_OK)
     {
-      return makeError(Error::Code::InitFailed, "Failed to open MP3 handle");
+      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Failed to open MP3 handle"});
     }
 
     // Scan for accurate length (especially for VBR)
@@ -247,29 +255,37 @@ namespace ao::audio
 
     if (auto const formatResult = _implPtr->refreshStreamInfo(); !formatResult)
     {
-      return std::unexpected{formatResult.error()};
+      return failOpen(formatResult.error());
     }
 
-    if (_implPtr->requestedOutput.sampleRate != 0 &&
-        _implPtr->requestedOutput.sampleRate != _implPtr->info.outputFormat.sampleRate)
+    if (auto const result =
+          detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "MP3");
+        !result)
     {
-      return makeError(Error::Code::NotSupported, "MP3 sample rate conversion is not supported");
+      return failOpen(result.error());
     }
 
-    if (_implPtr->requestedOutput.channels != 0 &&
-        _implPtr->requestedOutput.channels != _implPtr->info.outputFormat.channels)
+    if (_implPtr->requestedOutput.validBits != 0 &&
+        _implPtr->requestedOutput.validBits != _implPtr->info.outputFormat.validBits)
     {
-      return makeError(Error::Code::NotSupported, "MP3 channel remapping is not supported");
+      return failOpen(Error{.code = Error::Code::NotSupported, .message = "Unsupported MP3 output valid bits"});
     }
 
     // Estimate duration
     if (off_t const samples = ::mpg123_length(_implPtr->mh); samples > 0 && _implPtr->info.outputFormat.sampleRate > 0)
     {
-      _implPtr->info.durationMs = static_cast<std::uint32_t>(static_cast<double>(samples) /
-                                                             _implPtr->info.outputFormat.sampleRate * kMsPerSecond);
+      _implPtr->info.durationMs =
+        detail::durationMilliseconds(static_cast<std::uint64_t>(samples), _implPtr->info.outputFormat.sampleRate);
     }
 
-    _implPtr->decodeBuffer.resize(::mpg123_outblock(_implPtr->mh));
+    auto const outputBlockSize = ::mpg123_outblock(_implPtr->mh);
+
+    if (outputBlockSize == 0)
+    {
+      return failOpen(Error{.code = Error::Code::InitFailed, .message = "MP3 decoder reported an empty output buffer"});
+    }
+
+    _implPtr->decodeBuffer.resize(outputBlockSize);
 
     return {};
   }
@@ -281,13 +297,20 @@ namespace ao::audio
       ::mpg123_close(_implPtr->mh);
     }
 
-    _implPtr->mappedFile.unmap();
+    _implPtr->fileCursor.close();
+    _implPtr->decodeBuffer.clear();
+    _implPtr->nextFrameIndex = 0;
+    _implPtr->optTerminalError.reset();
     _implPtr->eof = false;
+    _implPtr->info = {};
   }
 
   Result<> Mp3DecoderSession::seek(std::uint32_t positionMs)
   {
-    _implPtr->eof = false;
+    if (!_implPtr->fileCursor.isOpen())
+    {
+      return makeError(Error::Code::SeekFailed, "MP3 decoder is not open");
+    }
 
     if (positionMs > _implPtr->info.durationMs)
     {
@@ -301,7 +324,7 @@ namespace ao::audio
       return makeError(Error::Code::SeekFailed, "Sample rate is 0");
     }
 
-    auto const sampleOffset = static_cast<off_t>(static_cast<double>(positionMs) / kMsPerSecond * sampleRate);
+    auto const sampleOffset = static_cast<off_t>((static_cast<std::uint64_t>(positionMs) * sampleRate) / kMsPerSecond);
 
     auto const actualOffset = ::mpg123_seek(_implPtr->mh, sampleOffset, SEEK_SET);
 
@@ -311,6 +334,8 @@ namespace ao::audio
     }
 
     _implPtr->nextFrameIndex = static_cast<std::uint64_t>(actualOffset);
+    _implPtr->optTerminalError.reset();
+    _implPtr->eof = false;
     return {};
   }
 
@@ -321,7 +346,12 @@ namespace ao::audio
 
   Result<PcmBlock> Mp3DecoderSession::readNextBlock()
   {
-    if (_implPtr->eof)
+    if (_implPtr->optTerminalError)
+    {
+      return std::unexpected{*_implPtr->optTerminalError};
+    }
+
+    if (!_implPtr->fileCursor.isOpen() || _implPtr->eof)
     {
       return PcmBlock{.bytes = {}, .endOfStream = true};
     }
@@ -349,16 +379,18 @@ namespace ao::audio
 
       if (err == MPG123_NEW_FORMAT)
       {
-        auto const previousOutput = _implPtr->info.outputFormat;
+        auto const previousInfo = _implPtr->info;
 
         if (auto const formatResult = _implPtr->refreshStreamInfo(); !formatResult)
         {
-          return std::unexpected{formatResult.error()};
+          return _implPtr->failRead(formatResult.error());
         }
 
-        if (!(_implPtr->info.outputFormat == previousOutput))
+        if (!(_implPtr->info.outputFormat == previousInfo.outputFormat))
         {
-          return makeError(Error::Code::NotSupported, "MP3 stream changed output format during playback");
+          _implPtr->info = previousInfo;
+          return _implPtr->failRead(
+            Error{.code = Error::Code::NotSupported, .message = "MP3 stream changed output format during playback"});
         }
 
         if (done == 0)
@@ -371,7 +403,7 @@ namespace ao::audio
 
       if (err != MPG123_OK)
       {
-        return makeError(Error::Code::DecodeFailed, "MP3 decode error");
+        return _implPtr->failRead(Error{.code = Error::Code::DecodeFailed, .message = "MP3 decode error"});
       }
 
       break;
@@ -388,10 +420,16 @@ namespace ao::audio
 
     if (bytesPerFrame == 0)
     {
-      return makeError(Error::Code::DecodeFailed, "Invalid MP3 output format");
+      return _implPtr->failRead(Error{.code = Error::Code::DecodeFailed, .message = "Invalid MP3 output format"});
     }
 
     std::uint32_t const frames = static_cast<std::uint32_t>(done / bytesPerFrame);
+
+    if ((done % bytesPerFrame) != 0 || frames == 0)
+    {
+      return _implPtr->failRead(Error{.code = Error::Code::DecodeFailed, .message = "Misaligned MP3 decoder output"});
+    }
+
     std::uint64_t const currentFrameIndex = _implPtr->nextFrameIndex;
     _implPtr->nextFrameIndex += frames;
 

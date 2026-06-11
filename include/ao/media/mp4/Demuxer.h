@@ -13,6 +13,8 @@
 
 namespace ao::media::mp4
 {
+  class Atom;
+
   /**
    * @brief Demuxer for extracting specific streams (like ALAC/AAC packets) from an MP4 file container.
    */
@@ -86,6 +88,7 @@ namespace ao::media::mp4
     {
       std::uint32_t firstChunk = 0;
       std::uint32_t samplesPerChunk = 0;
+      std::uint32_t sampleDescriptionIndex = 0;
     };
 
     struct TimeToSampleEntry final
@@ -94,11 +97,15 @@ namespace ao::media::mp4
       std::uint32_t sampleDelta = 0;
     };
 
-    void parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out);
-    void parseStsz(std::span<std::byte const> bytes);
-    void parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
-    void parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
-    void parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+    bool parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out);
+    bool parseStsz(std::span<std::byte const> bytes);
+    bool parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
+    bool parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+    bool parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+    bool parseSampleTable(Atom const& table,
+                          std::vector<std::uint64_t>& chunkOffsets,
+                          std::vector<SampleToChunkEntry>& sampleToChunk,
+                          std::vector<TimeToSampleEntry>& timeToSample);
 
     static bool applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample);
     static bool buildSampleOffsets(std::vector<SampleEntry>& samples,

@@ -10,7 +10,7 @@
 namespace ao::media::mp4
 {
   /**
-   * @brief Returns the first audio sample entry type from an MP4 stsd box, such as "alac" or "mp4a".
+   * @brief Returns the first audio sample entry type from an MP4 audio track, such as "alac" or "mp4a".
    */
   std::string audioSampleEntryType(std::span<std::byte const> fileData);
 } // namespace ao::media::mp4

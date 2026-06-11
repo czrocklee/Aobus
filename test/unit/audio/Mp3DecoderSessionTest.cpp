@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "DecoderTestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
@@ -8,10 +10,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <vector>
 
 namespace ao::audio::test
 {
@@ -132,31 +134,48 @@ namespace ao::audio::test
     auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
     REQUIRE(decoder.open(testFile));
 
-    bool eofReached = false;
-    std::uint64_t totalFrames = 0;
+    CHECK(readUntilStableEndOfStream(decoder, 512) == 44100);
+  }
 
-    while (true)
+  TEST_CASE("Mp3DecoderSession - rejects a midstream format change", "[audio][unit][mp3][error]")
+  {
+    auto const firstFile = requireAudioFixture("basic_metadata.mp3");
+    auto const secondFile = requireAudioFixture("hires.mp3");
+    auto data = readFileBytes(firstFile);
+    auto const secondData = readFileBytes(secondFile);
+    data.insert(data.end(), secondData.begin(), secondData.end());
+
+    auto const temp = ao::test::TempFile{data, ".mp3"};
+    auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    REQUIRE(decoder.open(temp.path));
+    auto const initialInfo = decoder.streamInfo();
+
+    auto rejectedFormatChange = false;
+
+    for (auto count = 0; count < 512 && !rejectedFormatChange; ++count)
     {
-      auto blockResult = decoder.readNextBlock();
-      REQUIRE(blockResult);
-
-      if (blockResult->endOfStream)
+      if (auto const block = decoder.readNextBlock(); !block)
       {
-        eofReached = true;
+        CHECK(block.error().code == Error::Code::NotSupported);
+        rejectedFormatChange = true;
+      }
+      else if (block->endOfStream)
+      {
         break;
       }
-
-      CHECK(blockResult->frames > 0);
-      totalFrames += blockResult->frames;
     }
 
-    CHECK(eofReached);
-    CHECK(totalFrames == 44100);
+    CHECK(rejectedFormatChange);
+    CHECK(decoder.streamInfo().outputFormat == initialInfo.outputFormat);
 
-    // Reading again should immediately return endOfStream (covers _implPtr->eof check)
-    auto blockAfterEof = decoder.readNextBlock();
-    REQUIRE(blockAfterEof);
-    CHECK(blockAfterEof->endOfStream);
+    auto const repeatedRead = decoder.readNextBlock();
+    REQUIRE_FALSE(repeatedRead);
+    CHECK(repeatedRead.error().code == Error::Code::NotSupported);
+
+    REQUIRE(decoder.seek(0));
+    auto const recoveredBlock = decoder.readNextBlock();
+    REQUIRE(recoveredBlock);
+    CHECK(recoveredBlock->frames > 0);
   }
 
   TEST_CASE("Mp3DecoderSession - Error Paths", "[audio][unit][mp3][error]")
@@ -230,6 +249,32 @@ namespace ao::audio::test
 
         CHECK(!resamplingDecoder.open(testFile));
       }
+    }
+
+    SECTION("Rejects planar output and channel remapping")
+    {
+      auto const testFile = requireAudioFixture("basic_metadata.mp3");
+
+      CHECK((!Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = false}}.open(testFile)));
+      CHECK((!Mp3DecoderSession{Format{.channels = 1, .bitDepth = 16, .isInterleaved = true}}.open(testFile)));
+      CHECK((!Mp3DecoderSession{Format{.bitDepth = 16, .validBits = 8, .isInterleaved = true}}.open(testFile)));
+      CHECK((!Mp3DecoderSession{Format{.channels = 3, .bitDepth = 16, .isInterleaved = true}}.open(testFile)));
+      CHECK((!Mp3DecoderSession{Format{.bitDepth = 64, .isFloat = true, .isInterleaved = true}}.open(testFile)));
+    }
+
+    SECTION("Close and failed reopen clear stream state")
+    {
+      auto const testFile = requireAudioFixture("basic_metadata.mp3");
+      auto lifecycleDecoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+
+      REQUIRE(lifecycleDecoder.open(testFile));
+      lifecycleDecoder.close();
+      lifecycleDecoder.close();
+      checkClosedSession(lifecycleDecoder);
+
+      REQUIRE(lifecycleDecoder.open(testFile));
+      CHECK(!lifecycleDecoder.open("/path/to/nowhere/nonexistent.mp3"));
+      checkClosedSession(lifecycleDecoder);
     }
   }
 } // namespace ao::audio::test

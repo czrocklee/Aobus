@@ -1,26 +1,32 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "detail/MappedFileCursor.h"
+#include "detail/OutputFormatValidation.h"
+#include "detail/TimeConversion.h"
 #include <ao/Error.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/utility/ByteView.h>
-#include <ao/utility/MappedFile.h>
 
 #include <FLAC/format.h>
 #include <FLAC/ordinals.h>
 #include <FLAC/stream_decoder.h>
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <expected>
 #include <filesystem>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <span>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::audio
@@ -35,6 +41,23 @@ namespace ao::audio
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
       return metadata->data.stream_info;
     }
+
+    std::int32_t alignSample(std::int32_t sample, std::uint8_t sourceBitDepth, std::uint8_t targetBitDepth) noexcept
+    {
+      if (sourceBitDepth > targetBitDepth)
+      {
+        return sample >> (sourceBitDepth - targetBitDepth);
+      }
+
+      if (sourceBitDepth < targetBitDepth)
+      {
+        auto bits = static_cast<std::uint32_t>(sample);
+        bits <<= targetBitDepth - sourceBitDepth;
+        return std::bit_cast<std::int32_t>(bits);
+      }
+
+      return sample;
+    }
   }
 
   struct FlacDecoderSession::Impl final
@@ -42,8 +65,7 @@ namespace ao::audio
     Format requestedOutput;
     ::FLAC__StreamDecoder* decoder = nullptr;
 
-    utility::MappedFile mappedFile;
-    std::uint64_t currentOffset = 0;
+    detail::MappedFileCursor fileCursor;
 
     DecodedStreamInfo info;
 
@@ -51,6 +73,8 @@ namespace ao::audio
     std::vector<std::byte> pcmBuffer;
     std::uint32_t bufferedFrames = 0;
     std::uint64_t nextFrameIndex = 0;
+    std::uint64_t totalFrames = 0;
+    std::optional<::FLAC__StreamDecoderErrorStatus> optDecodeError;
     bool eof = false;
 
     Impl(Format const& output)
@@ -103,6 +127,27 @@ namespace ao::audio
     static void errorCallback(::FLAC__StreamDecoder const* decoder,
                               ::FLAC__StreamDecoderErrorStatus status,
                               void* clientData);
+
+    Result<> checkDecodeError() const
+    {
+      if (!optDecodeError)
+      {
+        return {};
+      }
+
+      return makeError(Error::Code::DecodeFailed,
+                       std::string{"FLAC decode error: "} + ::FLAC__StreamDecoderErrorStatusString[*optDecodeError]);
+    }
+
+    Result<> checkEndOfStream() const
+    {
+      if (totalFrames != 0 && nextFrameIndex + bufferedFrames < totalFrames)
+      {
+        return makeError(Error::Code::DecodeFailed, "FLAC stream ended before the declared sample count");
+      }
+
+      return {};
+    }
   };
 
   FlacDecoderSession::FlacDecoderSession(Format outputFormat)
@@ -116,12 +161,17 @@ namespace ao::audio
   {
     close();
 
-    if (auto const mapResult = _implPtr->mappedFile.map(filePath); !mapResult)
+    auto failOpen = [this](Error error) -> Result<>
     {
-      return std::unexpected{mapResult.error()};
+      close();
+      return std::unexpected{std::move(error)};
+    };
+
+    if (auto const result = _implPtr->fileCursor.open(filePath); !result)
+    {
+      return failOpen(result.error());
     }
 
-    _implPtr->currentOffset = 0;
     _implPtr->eof = false;
     _implPtr->nextFrameIndex = 0;
 
@@ -138,13 +188,34 @@ namespace ao::audio
 
     if (initStatus != ::FLAC__STREAM_DECODER_INIT_STATUS_OK)
     {
-      return makeError(Error::Code::InitFailed, "Failed to initialize FLAC decoder");
+      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Failed to initialize FLAC decoder"});
     }
 
     // Process until metadata is read
     if (::FLAC__stream_decoder_process_until_end_of_metadata(_implPtr->decoder) == 0)
     {
-      return makeError(Error::Code::DecodeFailed, "Failed to read FLAC metadata");
+      return failOpen(Error{.code = Error::Code::DecodeFailed, .message = "Failed to read FLAC metadata"});
+    }
+
+    if (auto const result = _implPtr->checkDecodeError(); !result)
+    {
+      return failOpen(result.error());
+    }
+
+    if (auto const result =
+          detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "FLAC");
+        !result)
+    {
+      return failOpen(result.error());
+    }
+
+    auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
+    auto const expectedValidBits = std::min(_implPtr->info.sourceFormat.validBits, outputBitDepth);
+
+    if (_implPtr->requestedOutput.isFloat || (outputBitDepth != 16 && outputBitDepth != 24 && outputBitDepth != 32) ||
+        _implPtr->info.outputFormat.validBits != expectedValidBits)
+    {
+      return failOpen(Error{.code = Error::Code::NotSupported, .message = "Unsupported FLAC output sample format"});
     }
 
     return {};
@@ -157,15 +228,21 @@ namespace ao::audio
       ::FLAC__stream_decoder_finish(_implPtr->decoder);
     }
 
-    _implPtr->mappedFile.unmap();
+    _implPtr->fileCursor.close();
     _implPtr->pcmBuffer.clear();
     _implPtr->bufferedFrames = 0;
+    _implPtr->nextFrameIndex = 0;
+    _implPtr->totalFrames = 0;
+    _implPtr->optDecodeError.reset();
+    _implPtr->eof = false;
+    _implPtr->info = {};
   }
 
   Result<> FlacDecoderSession::seek(std::uint32_t positionMs)
   {
     _implPtr->pcmBuffer.clear();
     _implPtr->bufferedFrames = 0;
+    _implPtr->optDecodeError.reset();
     _implPtr->eof = false;
 
     auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
@@ -182,6 +259,11 @@ namespace ao::audio
       return makeError(Error::Code::SeekFailed, "FLAC seek failed");
     }
 
+    if (auto const result = _implPtr->checkDecodeError(); !result)
+    {
+      return result;
+    }
+
     _implPtr->nextFrameIndex = targetSample;
 
     return {};
@@ -189,13 +271,27 @@ namespace ao::audio
 
   void FlacDecoderSession::flush()
   {
-    ::FLAC__stream_decoder_flush(_implPtr->decoder);
+    if (_implPtr->fileCursor.isOpen())
+    {
+      ::FLAC__stream_decoder_flush(_implPtr->decoder);
+    }
+
     _implPtr->pcmBuffer.clear();
     _implPtr->bufferedFrames = 0;
   }
 
   Result<PcmBlock> FlacDecoderSession::readNextBlock()
   {
+    if (!_implPtr->fileCursor.isOpen())
+    {
+      return PcmBlock{.bytes = {}, .endOfStream = true};
+    }
+
+    if (auto const result = _implPtr->checkDecodeError(); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
     if (_implPtr->eof && _implPtr->bufferedFrames == 0)
     {
       return PcmBlock{.bytes = {}, .endOfStream = true};
@@ -208,6 +304,11 @@ namespace ao::audio
       {
         if (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
         {
+          if (auto const result = _implPtr->checkEndOfStream(); !result)
+          {
+            return std::unexpected{result.error()};
+          }
+
           _implPtr->eof = true;
           break;
         }
@@ -215,8 +316,18 @@ namespace ao::audio
         return makeError(Error::Code::DecodeFailed, "FLAC process single failed");
       }
 
+      if (auto const result = _implPtr->checkDecodeError(); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
       if (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
       {
+        if (auto const result = _implPtr->checkEndOfStream(); !result)
+        {
+          return std::unexpected{result.error()};
+        }
+
         _implPtr->eof = true;
         break;
       }
@@ -254,22 +365,15 @@ namespace ao::audio
                                                                          std::size_t* bytes,
                                                                          void* clientData)
   {
-    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-
-    if (auto const fileBytes = impl->mappedFile.bytes(); *bytes > 0)
+    if (auto* const impl = utility::unsafeDowncast<Impl>(clientData); *bytes > 0)
     {
-      auto const remaining = fileBytes.size() - impl->currentOffset;
+      auto const count = impl->fileCursor.read(utility::bytes::view(static_cast<void*>(buffer), *bytes));
+      *bytes = count;
 
-      if (remaining == 0)
+      if (count == 0)
       {
-        *bytes = 0;
         return ::FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;
       }
-
-      auto const toRead = std::min<std::size_t>(*bytes, remaining);
-      std::memcpy(buffer, fileBytes.data() + impl->currentOffset, toRead);
-      impl->currentOffset += toRead;
-      *bytes = toRead;
 
       return ::FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
     }
@@ -281,14 +385,12 @@ namespace ao::audio
                                                                          ::FLAC__uint64 absoluteByteOffset,
                                                                          void* clientData)
   {
-    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-
-    if (auto const fileBytes = impl->mappedFile.bytes(); absoluteByteOffset >= fileBytes.size())
+    if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
+        absoluteByteOffset > static_cast<::FLAC__uint64>(std::numeric_limits<std::int64_t>::max()) ||
+        !impl->fileCursor.seek(static_cast<std::int64_t>(absoluteByteOffset), detail::SeekOrigin::Begin))
     {
       return ::FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
     }
-
-    impl->currentOffset = absoluteByteOffset;
 
     return ::FLAC__STREAM_DECODER_SEEK_STATUS_OK;
   }
@@ -298,7 +400,7 @@ namespace ao::audio
                                                                          void* clientData)
   {
     auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-    *absoluteByteOffset = impl->currentOffset;
+    *absoluteByteOffset = impl->fileCursor.position();
 
     return ::FLAC__STREAM_DECODER_TELL_STATUS_OK;
   }
@@ -308,7 +410,7 @@ namespace ao::audio
                                                                              void* clientData)
   {
     auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-    *streamLength = impl->mappedFile.bytes().size();
+    *streamLength = impl->fileCursor.size();
 
     return ::FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
   }
@@ -317,7 +419,7 @@ namespace ao::audio
   {
     auto* const impl = utility::unsafeDowncast<Impl>(clientData);
 
-    return static_cast<::FLAC__bool>(impl->currentOffset >= impl->mappedFile.bytes().size());
+    return static_cast<::FLAC__bool>(impl->fileCursor.atEnd());
   }
 
   ::FLAC__StreamDecoderWriteStatus FlacDecoderSession::Impl::writeCallback(::FLAC__StreamDecoder const* /*decoder*/,
@@ -342,7 +444,7 @@ namespace ao::audio
       {
         for (std::uint32_t ch = 0; channels > 0 && ch < channels; ++ch)
         {
-          *out++ = static_cast<std::int16_t>(buffer[ch][i]);
+          *out++ = static_cast<std::int16_t>(alignSample(buffer[ch][i], bps, outBps));
         }
       }
     }
@@ -355,7 +457,7 @@ namespace ao::audio
       {
         for (std::uint32_t ch = 0; channels > 0 && ch < channels; ++ch)
         {
-          auto const val = static_cast<std::int32_t>(buffer[ch][i]);
+          auto const val = alignSample(buffer[ch][i], bps, outBps);
           *out++ = static_cast<std::uint8_t>(val & kLowByteMask);
           *out++ = static_cast<std::uint8_t>((val >> 8) & kLowByteMask);
           *out++ = static_cast<std::uint8_t>((val >> 16) & kLowByteMask);
@@ -407,17 +509,20 @@ namespace ao::audio
       impl->info.sourceFormat.isInterleaved = true;
 
       impl->info.outputFormat = impl->info.sourceFormat;
+      impl->totalFrames = streamInfo.total_samples;
 
       if (impl->requestedOutput.bitDepth != 0)
       {
         impl->info.outputFormat.bitDepth = impl->requestedOutput.bitDepth;
         impl->info.outputFormat.validBits =
-          (impl->requestedOutput.validBits != 0) ? impl->requestedOutput.validBits : impl->requestedOutput.bitDepth;
+          (impl->requestedOutput.validBits != 0)
+            ? impl->requestedOutput.validBits
+            : std::min(impl->info.sourceFormat.validBits, impl->requestedOutput.bitDepth);
       }
 
       if (streamInfo.sample_rate > 0)
       {
-        impl->info.durationMs = static_cast<std::uint32_t>(streamInfo.total_samples * 1000 / streamInfo.sample_rate);
+        impl->info.durationMs = detail::durationMilliseconds(streamInfo.total_samples, streamInfo.sample_rate);
       }
 
       impl->info.isLossy = false;
@@ -425,10 +530,13 @@ namespace ao::audio
   }
 
   void FlacDecoderSession::Impl::errorCallback(::FLAC__StreamDecoder const* /*decoder*/,
-                                               ::FLAC__StreamDecoderErrorStatus /*status*/,
+                                               ::FLAC__StreamDecoderErrorStatus status,
                                                void* clientData)
   {
-    [[maybe_unused]] auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-    /* TODO logging */
+    if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
+        status != ::FLAC__STREAM_DECODER_ERROR_STATUS_LOST_SYNC && !impl->optDecodeError)
+    {
+      impl->optDecodeError = status;
+    }
   }
 } // namespace ao::audio

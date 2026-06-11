@@ -5,6 +5,10 @@ add_library(ao_audio STATIC
     FlacDecoderSession.cpp
     AlacDecoderSession.cpp
     Mp3DecoderSession.cpp
+    detail/AacConfigParser.cpp
+    detail/MappedFileCursor.cpp
+    detail/Mp4PacketSource.cpp
+    detail/OutputFormatValidation.cpp
     Player.cpp
     QualityAnalyzer.cpp
     detail/Mpg123Runtime.cpp

@@ -193,6 +193,20 @@ namespace ao::tag::mp4::test
 
       return createMinimalM4aWithRawIlstAtom(trackAtom);
     }
+
+    std::vector<std::uint8_t> createMinimalM4aWithLeadingVideoTrack()
+    {
+      auto data = std::vector<std::uint8_t>{};
+      auto const videoTrack = ao::test::mp4::makeVideoTrackAtom("avc1");
+      auto const audioTrack = ao::test::mp4::makeCompleteAudioTrackAtom("mp4a", {}, 48000, 96000);
+
+      auto moovBody = std::vector<std::uint8_t>{};
+      moovBody.insert(moovBody.end(), videoTrack.begin(), videoTrack.end());
+      moovBody.insert(moovBody.end(), audioTrack.begin(), audioTrack.end());
+
+      ao::test::mp4::addAtom(data, "moov", moovBody);
+      return data;
+    }
   }
 
   TEST_CASE("MP4 File - loadTrack", "[tag][unit][mp4][file]")
@@ -289,6 +303,21 @@ namespace ao::tag::mp4::test
 
     CHECK(builder.property().codec() == library::AudioCodec::Aac);
     CHECK(builder.property().sampleRate() == 44100);
+    CHECK(builder.property().channels() == 2);
+    CHECK(builder.property().bitDepth() == 16);
+  }
+
+  TEST_CASE("MP4 File - audio properties skip leading video track", "[tag][unit][mp4][file]")
+  {
+    auto const data = createMinimalM4aWithLeadingVideoTrack();
+    auto const temp = TempFile{data};
+
+    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto builder = file.loadTrack();
+
+    CHECK(builder.property().codec() == library::AudioCodec::Aac);
+    CHECK(builder.property().sampleRate() == 48000);
+    CHECK(builder.property().durationMs() == 2000);
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
   }

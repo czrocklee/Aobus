@@ -4,9 +4,11 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <type_traits>
 
 namespace ao::audio
 {
@@ -32,7 +34,10 @@ namespace ao::audio
 
       for (std::size_t i = 0; i < count; ++i)
       {
-        destination[i] = static_cast<TDst>(source[i]) << shift;
+        using UnsignedDestination = std::make_unsigned_t<TDst>;
+        auto bits = static_cast<UnsignedDestination>(static_cast<TDst>(source[i]));
+        bits <<= shift;
+        destination[i] = std::bit_cast<TDst>(bits);
       }
     }
 
@@ -63,7 +68,10 @@ namespace ao::audio
       {
         for (std::size_t ch = 0; ch < channelCount; ++ch)
         {
-          destination[(i * channelCount) + ch] = static_cast<TDst>(channels[ch][i]) << shift;
+          using UnsignedDestination = std::make_unsigned_t<TDst>;
+          auto bits = static_cast<UnsignedDestination>(static_cast<TDst>(channels[ch][i]));
+          bits <<= shift;
+          destination[(i * channelCount) + ch] = std::bit_cast<TDst>(bits);
         }
       }
     }
@@ -89,17 +97,18 @@ namespace ao::audio
         auto const offset = i * 3;
 
         // Manual unpack for little-endian S24
-        std::int32_t val = static_cast<std::uint8_t>(source[offset]) |
-                           (static_cast<std::uint8_t>(source[offset + 1]) << 8) |
-                           (static_cast<std::uint8_t>(source[offset + 2]) << 16);
+        auto bits = static_cast<std::uint32_t>(static_cast<std::uint8_t>(source[offset])) |
+                    (static_cast<std::uint32_t>(static_cast<std::uint8_t>(source[offset + 1])) << 8U) |
+                    (static_cast<std::uint32_t>(static_cast<std::uint8_t>(source[offset + 2])) << 16U);
 
         // Sign extension from 24 to 32 bits
-        if ((val & kS24SignBit) != 0)
+        if ((bits & kS24SignBit) != 0)
         {
-          val |= static_cast<std::int32_t>(kS24SignExtensionMask);
+          bits |= kS24SignExtensionMask;
         }
 
-        destination[i] = val << shift;
+        bits <<= shift;
+        destination[i] = std::bit_cast<std::int32_t>(bits);
       }
     }
   };

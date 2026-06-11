@@ -8,6 +8,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
+#include <ao/media/mp4/TrackSelection.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/ByteView.h>
 
@@ -239,22 +240,10 @@ namespace ao::tag::mp4
       std::string_view{"ilst"},
     };
 
-    constexpr std::array kMdhdPath = {
-      std::string_view{"root"},
-      std::string_view{"moov"},
+    constexpr std::array kTrackMdhdPath = {
       std::string_view{"trak"},
       std::string_view{"mdia"},
       std::string_view{"mdhd"},
-    };
-
-    constexpr std::array kStsdPath = {
-      std::string_view{"root"},
-      std::string_view{"moov"},
-      std::string_view{"trak"},
-      std::string_view{"mdia"},
-      std::string_view{"minf"},
-      std::string_view{"stbl"},
-      std::string_view{"stsd"},
     };
 
     AudioSampleEntryLayout const* firstAudioSampleEntry(AtomView const& stsdView)
@@ -292,8 +281,17 @@ namespace ao::tag::mp4
     // Helper to extract audio properties from mdhd and stsd
     void extractAudioProperties(library::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
     {
+      auto const optSelection = findAudioTrack(root);
+
+      if (!optSelection || optSelection->track == nullptr || optSelection->stsd == nullptr)
+      {
+        return;
+      }
+
+      auto const& track = *optSelection->track;
+
       // Get mdhd for sample rate and duration
-      if (auto const* const mdhdNode = root.find(kMdhdPath); mdhdNode != nullptr)
+      if (auto const* const mdhdNode = track.find(kTrackMdhdPath); mdhdNode != nullptr)
       {
         auto const& view = utility::unsafeDowncast<AtomView const>(*mdhdNode);
         auto const& layout = view.layout<MdhdAtomLayout>();
@@ -320,41 +318,36 @@ namespace ao::tag::mp4
       }
 
       // Get stsd for channels and bit depth
-      if (auto const* const stsdNode = root.find(kStsdPath); stsdNode != nullptr)
+      auto const* const audioLayout = firstAudioSampleEntry(*optSelection->stsd);
+
+      if (audioLayout == nullptr)
       {
-        auto const& view = utility::unsafeDowncast<AtomView const>(*stsdNode);
-        auto const* const audioLayout = firstAudioSampleEntry(view);
+        return;
+      }
 
-        if (audioLayout == nullptr)
-        {
-          return;
-        }
+      auto codec = library::AudioCodec::Unknown;
 
-        auto const sampleEntryType = std::string_view{audioLayout->common.type.data(), audioLayout->common.type.size()};
-        auto codec = library::AudioCodec::Unknown;
+      if (optSelection->sampleEntryType == "alac")
+      {
+        codec = library::AudioCodec::Alac;
+      }
+      else if (optSelection->sampleEntryType == "mp4a")
+      {
+        codec = library::AudioCodec::Aac;
+      }
 
-        if (sampleEntryType == "alac")
-        {
-          codec = library::AudioCodec::Alac;
-        }
-        else if (sampleEntryType == "mp4a")
-        {
-          codec = library::AudioCodec::Aac;
-        }
+      builder.property()
+        .channels(static_cast<std::uint8_t>(audioLayout->channelCount.value()))
+        .bitDepth(static_cast<std::uint8_t>(audioLayout->sampleSize.value()))
+        .codec(codec);
 
-        builder.property()
-          .channels(static_cast<std::uint8_t>(audioLayout->channelCount.value()))
-          .bitDepth(static_cast<std::uint8_t>(audioLayout->sampleSize.value()))
-          .codec(codec);
+      // Sample rate is a 16.16 fixed point, extract integer part
+      // Only use if non-zero (ALAC may have 0 here, mdhd has correct rate)
+      constexpr std::size_t kFixedPointShift = 16;
 
-        // Sample rate is a 16.16 fixed point, extract integer part
-        // Only use if non-zero (ALAC may have 0 here, mdhd has correct rate)
-        constexpr std::size_t kFixedPointShift = 16;
-
-        if (auto const sampleRateFixed = audioLayout->sampleRate.value(); sampleRateFixed >> kFixedPointShift > 0)
-        {
-          builder.property().sampleRate(sampleRateFixed >> kFixedPointShift);
-        }
+      if (auto const sampleRateFixed = audioLayout->sampleRate.value(); sampleRateFixed >> kFixedPointShift > 0)
+      {
+        builder.property().sampleRate(sampleRateFixed >> kFixedPointShift);
       }
     }
   } // namespace
