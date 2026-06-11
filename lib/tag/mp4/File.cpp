@@ -9,19 +9,14 @@
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/media/mp4/TrackSelection.h>
-#include <ao/tag/TagFile.h>
 #include <ao/utility/ByteView.h>
-
-#include <boost/endian/buffers.hpp>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
-#include <utility>
 
 namespace ao::tag::mp4
 {
@@ -129,98 +124,6 @@ namespace ao::tag::mp4
     void handleCoverArt(library::TrackBuilder& builder, AtomView const& view)
     {
       builder.metadata().coverArtData(atomData(view));
-    }
-
-    std::string atomTypeToUtf8(std::string_view const type)
-    {
-      if (type.size() != 4)
-      {
-        return std::string{type};
-      }
-
-      // Apple-specific tags often use 0xA9 (Copyright) as a prefix.
-      // In UTF-8, Copyright is 0xC2 0xA9.
-      constexpr auto kCopyrightPrefix = static_cast<unsigned char>(0xA9);
-
-      if (static_cast<unsigned char>(type[0]) == kCopyrightPrefix)
-      {
-        auto result = std::string{"©"};
-        result += type.substr(1);
-        return result;
-      }
-
-      return std::string{type};
-    }
-
-    std::optional<std::string> atomValueToString(AtomView const& view)
-    {
-      try
-      {
-        auto const& layout = view.layout<DataAtomLayout>();
-        auto const type = layout.type.value();
-        auto const data = atomData(view);
-
-        if (type == 1) // UTF-8
-        {
-          return std::string{utility::bytes::stringView(data)};
-        }
-
-        constexpr auto kTypeSignedInteger = 21;
-        constexpr auto kTypeUnsignedInteger = 22;
-
-        if (type == kTypeSignedInteger || type == kTypeUnsignedInteger)
-        {
-          if (data.size() == 1)
-          {
-            return std::to_string(static_cast<std::uint8_t>(data[0]));
-          }
-
-          if (data.size() == 2)
-          {
-            return std::to_string(utility::layout::view<boost::endian::big_uint16_buf_t>(data)->value());
-          }
-
-          if (data.size() == 4)
-          {
-            return std::to_string(utility::layout::view<boost::endian::big_uint32_buf_t>(data)->value());
-          }
-        }
-      }
-      catch (...)
-      {
-        return std::nullopt;
-      }
-
-      return std::nullopt;
-    }
-
-    void handleFreeform(File const& file, library::TrackBuilder& builder, AtomView const& view)
-    {
-      auto nameStr = std::string{};
-      auto optValueStr = std::optional<std::string>{};
-
-      view.visitChildren(
-        [&](Atom const& child)
-        {
-          auto const& childView = utility::unsafeDowncast<AtomView const>(child);
-
-          if (auto const type = childView.type(); type == "name")
-          {
-            nameStr = std::string{utility::bytes::stringView(childView.bytes().subspan(8))};
-          }
-          else if (type == "data")
-          {
-            optValueStr = atomValueToString(childView);
-          }
-
-          return true;
-        });
-
-      if (!nameStr.empty() && optValueStr)
-      {
-        builder.custom().add(
-          detail::stashOwnedString(file, std::move(nameStr)), detail::stashOwnedString(file, std::move(*optValueStr)));
-      }
     }
 
     using AtomHandler = void (*)(library::TrackBuilder&, AtomView const&);
@@ -368,23 +271,10 @@ namespace ao::tag::mp4
           auto const& view = utility::unsafeDowncast<AtomView const>(atom);
           std::string_view const type = atom.type();
 
-          if (type == "----")
-          {
-            handleFreeform(*this, builder, view);
-            return true;
-          }
-
           if (auto const* const entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size());
               entry != nullptr)
           {
             entry->handler(builder, view);
-            return true;
-          }
-
-          if (auto optValue = atomValueToString(view); optValue)
-          {
-            builder.custom().add(detail::stashOwnedString(*this, atomTypeToUtf8(type)),
-                                 detail::stashOwnedString(*this, std::move(*optValue)));
           }
 
           return true;

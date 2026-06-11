@@ -139,23 +139,10 @@ namespace ao::tag::mpeg::id3v2
       {
         auto const key = text.substr(0, nullPos);
 
-        if (auto const value = text.substr(nullPos + 1); key == "rating")
-        {
-          if (auto const optRating = parseUnsigned<std::uint8_t>(value); optRating)
-          {
-            builder.metadata().rating(*optRating);
-          }
-        }
-        else if (key == "work" || key == "WORK" || key == "grouping" || key == "GROUPING")
+        if (auto const value = text.substr(nullPos + 1);
+            key == "work" || key == "WORK" || key == "grouping" || key == "GROUPING")
         {
           builder.metadata().work(detail::stashOwnedString(owner, std::string{value}));
-        }
-        else
-        {
-          // Store as custom pair - stash both strings
-          auto const stashedKey = detail::stashOwnedString(owner, std::string{key});
-          auto const stashedValue = detail::stashOwnedString(owner, std::string{value});
-          builder.custom().add(stashedKey, stashedValue);
         }
       }
     }

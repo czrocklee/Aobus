@@ -236,19 +236,7 @@ namespace ao::tag::mp4::test
 
     CHECK(meta.totalDiscs() == 5);
 
-    // Check custom atom
-    bool foundUnknown = false;
-
-    for (auto const& [key, value] : builder.custom().pairs())
-    {
-      if (key == "XUNK")
-      {
-        CHECK(value == "UnknownValue");
-        foundUnknown = true;
-      }
-    }
-
-    CHECK(foundUnknown);
+    CHECK(builder.custom().pairs().empty());
 
     CHECK(builder.property().sampleRate() == 44100);
     CHECK(builder.property().durationMs() == 1000);

@@ -147,21 +147,10 @@ namespace ao::tag::mpeg::test
     CHECK(meta.trackNumber() == 1);
     CHECK(meta.totalTracks() == 10);
     CHECK(meta.genre() == "Genre");
-    CHECK(meta.rating() == 4);
+    CHECK(meta.rating() == 0);
     CHECK(meta.work() == "WorkName");
 
-    bool foundCustom = false;
-
-    for (auto const& [key, value] : builder.custom().pairs())
-    {
-      if (key == "CustomKey")
-      {
-        CHECK(value == "CustomValue");
-        foundCustom = true;
-      }
-    }
-
-    CHECK(foundCustom);
+    CHECK(builder.custom().pairs().empty());
 
     REQUIRE_FALSE(meta.coverArtData().empty());
     CHECK(meta.coverArtData().size() == 2);

@@ -119,10 +119,6 @@ namespace ao::tag::flac
                 {
                   entry->handler(builder, value);
                 }
-                else
-                {
-                  builder.custom().add(key, value);
-                }
               }
             });
 

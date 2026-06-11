@@ -38,6 +38,12 @@ The Track Details panel uses an invisible interaction model. Editable controls a
 - **Add Property**: An "Add Property" button allows users to define new custom metadata keys and values. Duplicate keys already present in the selection are rejected.
 - **Delete Undo**: Deleting a custom metadata property shows a temporary (5-second) snackbar/undo bar at the bottom of the grid. Clicking "Undo" restores the property. Currently, this is only fully supported and presented when the deleted property had the same value across all selected tracks (not mixed).
 
+### Import Boundary
+
+Custom metadata represents properties created by the user inside Aobus, or explicitly provided through Aobus library import data. File tag readers do not promote unknown or vendor-specific MP4, ID3, or Vorbis fields into custom metadata; they only map fields that Aobus explicitly understands.
+
+User rating is also Aobus-owned state. File tag readers do not import ambiguous external rating fields such as ID3 user text ratings, MP4 rating atoms, or Vorbis `RATING` comments; users assign ratings inside Aobus, and Aobus library import data may restore them.
+
 ## Layout Configuration
 
 The component is registered as `track.fieldGrid`. It supports a `categories` property to filter which field types to display.
