@@ -4,14 +4,12 @@
 #include "app/AppConfig.h"
 
 #include "app/UIState.h"
-#include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/StateTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
-#include <string_view>
 
 namespace ao::gtk::test
 {
@@ -73,19 +71,6 @@ namespace ao::gtk::test
       CHECK(loadPrefs.lastBackend == "test-backend");
       CHECK(loadPrefs.lastLayoutPreset == "modern");
       CHECK(loadPrefs.lastThemePreset == "modern");
-    }
-
-    SECTION("Save and load LayoutDocument")
-    {
-      auto config = AppConfig{configPath};
-
-      auto saveLayout = layout::LayoutDocument{};
-      CHECK(config.loadShellLayout(saveLayout, "default"));
-
-      config.saveShellLayout(saveLayout, "default");
-
-      auto loadLayout = layout::LayoutDocument{};
-      CHECK(config.loadShellLayout(loadLayout, "default"));
     }
   }
 } // namespace ao::gtk::test

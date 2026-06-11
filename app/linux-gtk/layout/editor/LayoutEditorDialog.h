@@ -25,11 +25,16 @@
 #include <gtkmm/treeview.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/connection.h>
 #include <sigc++/signal.h>
 
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::layout
 {
@@ -40,6 +45,16 @@ namespace ao::gtk::layout
 
 namespace ao::gtk::layout::editor
 {
+  struct LayoutSaveResult final
+  {
+    std::map<std::string, LayoutDocument, std::less<>> modified;
+    std::vector<std::string> resets;
+    std::string activePresetId;
+    LayoutDocument activeDocument;
+  };
+
+  using LayoutLoaderFn = std::function<LayoutDocument(std::string_view presetId)>;
+
   class LayoutEditorDialog final : public AppDialog
   {
   public:
@@ -48,7 +63,8 @@ namespace ao::gtk::layout::editor
                        ActionRegistry const& actionRegistry,
                        LayoutDocument initialLayout,
                        std::string initialPresetId,
-                       std::string initialThemeId);
+                       std::string initialThemeId,
+                       LayoutLoaderFn layoutLoader);
     ~LayoutEditorDialog() override;
 
     LayoutEditorDialog(LayoutEditorDialog const&) = delete;
@@ -62,9 +78,14 @@ namespace ao::gtk::layout::editor
 
     sigc::signal<void(LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
     sigc::signal<void(std::string_view)>& signalThemePreview() { return _signalThemePreview; }
-    sigc::signal<void(LayoutDocument const&)>& signalSaveRequest() { return _signalSaveRequest; }
+    sigc::signal<void(LayoutSaveResult const&)>& signalSaveRequest() { return _signalSaveRequest; }
 
     void updateNodePosition(std::string_view nodeId, std::int32_t posX, std::int32_t posY);
+
+    // Test helper methods
+    void testAddComponent(std::string type) { addComponent(std::move(type)); }
+    void testOnResetDefault() { onResetDefault(); }
+    void testMarkEdited() { markEdited(); }
 
   private:
     // Tree Model columns
@@ -89,6 +110,7 @@ namespace ao::gtk::layout::editor
     void updatePropertiesPanel(LayoutNode* node);
     void applyPropertyChange(LayoutNode* node, std::string_view propName, LayoutValue const& value, bool isLayoutProp);
     void notifyPreview();
+    void scheduleDebouncedPreview();
 
     Gtk::Widget* renderIdSection(LayoutNode* node);
     void addSectionTitle(std::string_view text);
@@ -120,10 +142,20 @@ namespace ao::gtk::layout::editor
     void onResetDefault();
     void onPresetChanged();
 
-    bool validateDocument();
+    bool validateAllDirtyDocuments();
 
     LayoutNode* findParentOf(LayoutNode* root, LayoutNode* target);
     LayoutNode* selectedNonRootNode() const;
+
+    void markEdited();
+    void stashCurrentDocument();
+
+    struct SessionEntry final
+    {
+      LayoutDocument doc;
+      bool dirty = false;
+      bool resetPending = false;
+    };
 
     ComponentRegistry const& _registry;
     ActionRegistry const& _actionRegistry;
@@ -157,8 +189,13 @@ namespace ao::gtk::layout::editor
 
     Gtk::Paned _paned{Gtk::Orientation::HORIZONTAL};
 
+    LayoutLoaderFn _layoutLoader;
+    std::map<std::string, SessionEntry, std::less<>> _session;
+    std::string _currentPresetId;
+    sigc::connection _previewDebounceConn;
+
     sigc::signal<void(LayoutDocument const&)> _signalApplyPreview;
     sigc::signal<void(std::string_view)> _signalThemePreview;
-    sigc::signal<void(LayoutDocument const&)> _signalSaveRequest;
+    sigc::signal<void(LayoutSaveResult const&)> _signalSaveRequest;
   };
 } // namespace ao::gtk::layout::editor

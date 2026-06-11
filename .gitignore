@@ -73,4 +73,8 @@ test/test_results/
 .gemini
 .claude
 
+# Python
+__pycache__/
+*.pyc
+
 doc/plan/

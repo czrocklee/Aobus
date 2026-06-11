@@ -23,13 +23,13 @@ Do not blindly guess which lines are uncovered, and do not manually run gcov or 
 
 Run the coverage script with an optional test filter (to save time):
 ```bash
-./script/run-coverage.sh "rt::SmartListEvaluator"
+./ao coverage "rt::SmartListEvaluator"
 ```
 
 This script will automatically:
 1. Ensure the coverage build tree (`/tmp/build/coverage`) is initialized.
 2. Build the tests.
-3. Run `ao_test` with the provided filter.
+3. Run the coverage test target with the provided filter.
 4. Process all `.gcda` files and print out any files that have missing coverage (`#####:`).
 5. Output the exact missing lines with 6 lines of surrounding context so you can immediately see what logic wasn't covered.
 
@@ -74,8 +74,8 @@ When you see `#####`, analyze the C++ source file context. Here are common Aobus
 ## 4. Execution Workflow
 
 When tasked to reach 95% coverage for a file or module:
-1. **Locate & Inspect:** Run `./script/run-coverage.sh <test_filter>` to get a report of all low-coverage files and their exact missing lines + context.
+1. **Locate & Inspect:** Run `./ao coverage <test_filter>` to get a report of all low-coverage files and their exact missing lines + context.
 2. **Analyze:** Read the provided context in the terminal to understand the logical condition (e.g. an `if` branch or a `lambda`) required to reach them.
 3. **Test:** Add a new `SECTION("...")` to the corresponding Catch2 test file (e.g. `test/unit/runtime/TargetSourceFileTest.cpp`).
-4. **Verify:** Re-run the same `./script/run-coverage.sh` command. Verify that the missing lines disappear from the report and the percentage goes up.
+4. **Verify:** Re-run the same `./ao coverage` command. Verify that the missing lines disappear from the report and the percentage goes up.
 5. **Repeat** file-by-file until the module hits > 95%.

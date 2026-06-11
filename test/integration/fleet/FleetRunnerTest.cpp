@@ -4,7 +4,7 @@
 #include "fleet/Engine.h"
 #include "fleet/Model.h"
 #include "fleet/ProcessRunner.h"
-#include "test/fleet/TestUtils.h"
+#include "test/unit/fleet/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -28,7 +28,7 @@ namespace ao::fleet::test
     std::filesystem::create_directories(repo);
     writeFile(temp, "repo/source.txt", "original\n");
     auto const buildScript =
-      writeFile(temp, "repo/build.sh", "#!/bin/sh\ntest ! -e .git/poison && grep -Eq '^(original|updated)$' source.txt\n");
+      writeFile(temp, "repo/ao", "#!/bin/sh\ntest ! -e .git/poison && grep -Eq '^(original|updated)$' source.txt\n");
     std::filesystem::permissions(buildScript,
                                  std::filesystem::perms::owner_exec | std::filesystem::perms::owner_read |
                                    std::filesystem::perms::owner_write | std::filesystem::perms::group_exec |
@@ -52,7 +52,10 @@ namespace ao::fleet::test
     registry.agents.emplace(
       "editor",
       AgentDefinition{.id = "editor",
+                      .harness = "shell",
                       .model = "editor-v1",
+                      .vendor = "mock",
+                      .effort = {},
                       .argvTemplate = {"sh", "-c", "printf 'updated\\n' > source.txt; printf poison > .git/poison"},
                       .promptDelivery = PromptDelivery::Stdin,
                       .environmentWhitelist = {"PATH"},
@@ -60,7 +63,10 @@ namespace ao::fleet::test
                       .rateLimitKey = "mock-editor"});
     registry.agents.emplace("no-op",
                             AgentDefinition{.id = "no-op",
+                                            .harness = "shell",
                                             .model = "no-op-v1",
+                                            .vendor = "mock",
+                                            .effort = {},
                                             .argvTemplate = {"true"},
                                             .promptDelivery = PromptDelivery::Stdin,
                                             .environmentWhitelist = {"PATH"},
@@ -72,7 +78,10 @@ namespace ao::fleet::test
       registry.agents.emplace(
         id,
         AgentDefinition{.id = id,
+                        .harness = "shell",
                         .model = std::string{id} + "-v1",
+                        .vendor = "mock",
+                        .effort = {},
                         .argvTemplate = {"sh",
                                          "-c",
                                          std::format("prompt=$(cat); case \"$prompt\" in "
@@ -92,7 +101,10 @@ namespace ao::fleet::test
 
     registry.agents.emplace("member-fail",
                             AgentDefinition{.id = "member-fail",
+                                            .harness = "shell",
                                             .model = "member-fail-v1",
+                                            .vendor = "mock",
+                                            .effort = {},
                                             .argvTemplate = {"sh", "-c", "printf 'member-fail stderr\\n' >&2; exit 9"},
                                             .promptDelivery = PromptDelivery::Stdin,
                                             .environmentWhitelist = {"PATH"},
@@ -106,7 +118,7 @@ namespace ao::fleet::test
                                               .property = "source contains the expected update",
                                               .knownGaps = {},
                                               .baselinePolicy = BaselinePolicy::RequireGreen,
-                                              .rulerPaths = {"build.sh"},
+                                              .rulerPaths = {"ao"},
                                               .optTimeout = std::nullopt});
     registry.bindings.emplace("proposal",
                               Binding{.taskKind = "proposal",
@@ -230,6 +242,9 @@ namespace ao::fleet::test
       CHECK(memberResult.find("schema: aobus-fleet-member-run/v1") != std::string::npos);
       CHECK(memberResult.find("authority:") == std::string::npos);
       CHECK(memberResult.find("quarantined: false") != std::string::npos);
+      CHECK(memberResult.find("harness: \"shell\"") != std::string::npos);
+      CHECK(memberResult.find("vendor: \"mock\"") != std::string::npos);
+      CHECK(memberResult.find("effort: null") != std::string::npos);
       auto const failedRoot = out / "council-phase" / "members" / "member-fail" / "r1";
       CHECK(readFile(failedRoot / "stderr.txt") == "member-fail stderr\n");
       auto const failedResult = readFile(failedRoot / "result.yaml");
@@ -247,6 +262,9 @@ namespace ao::fleet::test
       auto const resolvedPhase = readFile(out / "proposal-phase" / "resolved.yaml");
       CHECK(resolvedPhase.find("schema: aobus-fleet-resolved/v1") != std::string::npos);
       CHECK(resolvedPhase.find("authority:") == std::string::npos);
+      CHECK(resolvedPhase.find("harness: \"shell\"") != std::string::npos);
+      CHECK(resolvedPhase.find("vendor: \"mock\"") != std::string::npos);
+      CHECK(resolvedPhase.find("effort: null") != std::string::npos);
       CHECK(std::filesystem::exists(out / "proposal-phase" / "trace.yaml"));
       CHECK(std::filesystem::exists(out / "audit.yaml"));
 
@@ -277,7 +295,10 @@ namespace ao::fleet::test
     {
       auto model = id + "-v1";
       return AgentDefinition{.id = std::move(id),
+                             .harness = "shell",
                              .model = std::move(model),
+                             .vendor = "mock",
+                             .effort = {},
                              .argvTemplate = {"sh", "-c", std::move(script)},
                              .promptDelivery = PromptDelivery::Stdin,
                              .environmentWhitelist = {"PATH"},

@@ -1,0 +1,38 @@
+"""ao check — the pre-commit gate: full build and every registered test suite."""
+
+import argparse
+
+from . import build, test
+
+HELP = "Build everything and run all test suites (the old ./build.sh debug flow)"
+
+EPILOG = """\
+examples:
+  ./ao check                # debug build + every registered test suite
+  ./ao check release        # same against the release tree
+  ./ao check --asan         # debug + address/undefined sanitizers
+  ./ao check --clang        # clang build tree
+"""
+
+
+def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    parser = subparsers.add_parser(
+        "check", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    build.add_build_arguments(parser)
+    parser.set_defaults(func=run_command)
+
+
+def run_command(args: argparse.Namespace) -> int:
+    if args.flavor not in ("debug", "release"):
+        print(f"Note: tests only run for debug/release; use ./ao build for {args.flavor}.")
+        return build.run_command(args)
+
+    result = build.do_build(args, targets=[])
+
+    print("Running tests...")
+    if (status := test.run_suites(test.SUITE_GROUPS["all"], result.build_dir, log=result.log)) != 0:
+        return status
+
+    build.print_summary(args, result, tests="all registered suites")
+    return 0

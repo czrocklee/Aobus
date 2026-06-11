@@ -19,6 +19,7 @@
 #include <gtkmm/flowboxchild.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
+#include <pangomm/layout.h>
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
@@ -54,30 +55,33 @@ namespace ao::gtk
       return result;
     }
 
-    class TagChip final : public Gtk::Widget
+    class TagChip final : public Gtk::Box
     {
     public:
       explicit TagChip(std::string const& tag)
-        : _label{tag}
+        : Gtk::Box{Gtk::Orientation::HORIZONTAL, kChipSpacing}, _label{tag}
       {
         set_overflow(Gtk::Overflow::HIDDEN);
-        _label.set_parent(*this);
+
+        _label.set_ellipsize(Pango::EllipsizeMode::END);
+        _label.set_hexpand(true);
+        _label.set_margin_start(kLabelMarginStart);
+        _label.add_css_class("ao-tag-chip-label");
+        append(_label);
 
         _removeBtn.set_icon_name("window-close-symbolic");
         _removeBtn.set_has_frame(false);
+        _removeBtn.set_size_request(kRemoveBtnSize, kRemoveBtnSize);
+        _removeBtn.set_valign(Gtk::Align::CENTER);
+        _removeBtn.set_margin_end(kRemoveBtnMarginEnd);
         _removeBtn.add_css_class("ao-tag-chip-remove");
-        _removeBtn.set_parent(*this);
-        _removeBtn.set_visible(true);
+        append(_removeBtn);
 
         add_css_class("ao-tag-chip");
         add_css_class("ao-tag-chip-current");
       }
 
-      ~TagChip() override
-      {
-        _removeBtn.unparent();
-        _label.unparent();
-      }
+      ~TagChip() override = default;
 
       TagChip(TagChip const&) = delete;
       TagChip& operator=(TagChip const&) = delete;
@@ -86,48 +90,10 @@ namespace ao::gtk
 
       auto signal_remove() { return _removeBtn.signal_clicked(); }
 
-    protected:
-      Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::CONSTANT_SIZE; }
-
-      void measure_vfunc(Gtk::Orientation orientation,
-                         int forSize,
-                         int& minimum,
-                         int& natural,
-                         int& minimumBaseline,
-                         int& naturalBaseline) const override
-      {
-        minimumBaseline = -1;
-        naturalBaseline = -1;
-
-        _label.measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
-
-        if (orientation == Gtk::Orientation::HORIZONTAL)
-        {
-          minimum += kLabelHorizontalPadding;
-          natural += kLabelHorizontalPadding;
-        }
-        else
-        {
-          minimum = std::max(minimum + kVerticalPadding, kMinimumVerticalHeight);
-          natural = std::max(natural + kVerticalPadding, kMinimumVerticalHeight);
-        }
-      }
-
-      void size_allocate_vfunc(int width, int height, int baseline) override
-      {
-        _label.size_allocate({kLabelLeftMargin, 0, std::max(0, width - kLabelRightReserve), height}, baseline);
-        _removeBtn.size_allocate(
-          {width - kRemoveBtnRightOffset, (height - kRemoveBtnSize) / 2, kRemoveBtnSize, kRemoveBtnSize}, baseline);
-      }
-
     private:
-      static constexpr std::int32_t kLabelHorizontalPadding = 28;
-      static constexpr std::int32_t kLabelRightReserve = 28;
-      static constexpr std::int32_t kLabelLeftMargin = 8;
-      static constexpr std::int32_t kRemoveBtnRightOffset = 24;
+      static constexpr std::int32_t kLabelMarginStart = 8;
+      static constexpr std::int32_t kRemoveBtnMarginEnd = 4;
       static constexpr std::int32_t kRemoveBtnSize = 20;
-      static constexpr std::int32_t kVerticalPadding = 4;
-      static constexpr std::int32_t kMinimumVerticalHeight = 24;
 
       Gtk::Label _label;
       Gtk::Button _removeBtn;
@@ -242,8 +208,6 @@ namespace ao::gtk
 
     _box.append(_searchEntry);
 
-    _box.append(_searchEntry);
-
     _currentTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _currentTagsBox.set_halign(Gtk::Align::START);
     _currentTagsBox.set_valign(Gtk::Align::START);
@@ -252,8 +216,6 @@ namespace ao::gtk
     _currentTagsBox.add_css_class("ao-tag-editor-current-box");
 
     _box.append(_currentTagsBox);
-    _box.append(_separator);
-
     _box.append(_separator);
 
     _availableTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);

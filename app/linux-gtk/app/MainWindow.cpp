@@ -22,11 +22,17 @@
 
 namespace ao::gtk
 {
-  MainWindow::MainWindow(rt::AppRuntime& runtime, std::shared_ptr<AppConfig> configPtr)
+  MainWindow::MainWindow(rt::AppRuntime& runtime,
+                         std::shared_ptr<AppConfig> configPtr,
+                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr)
     : _runtime{runtime}
     , _configPtr{std::move(configPtr)}
     , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configPtr)}
-    , _shellLayout{_runtime, *this, _configPtr, *_mainWindowCoordinatorPtr->themeController()}
+    , _shellLayout{_runtime,
+                   *this,
+                   _configPtr,
+                   std::move(shellLayoutStorePtr),
+                   *_mainWindowCoordinatorPtr->themeController()}
   {
     set_title("Aobus");
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
@@ -66,7 +72,6 @@ namespace ao::gtk
     try
     {
       _mainWindowCoordinatorPtr->saveSession();
-      _shellLayout.saveLayout(*_configPtr);
     }
     catch (std::exception const& e)
     {
@@ -81,7 +86,6 @@ namespace ao::gtk
   void MainWindow::on_hide()
   {
     _mainWindowCoordinatorPtr->saveSession();
-    _shellLayout.saveLayout(*_configPtr);
     Gtk::ApplicationWindow::on_hide();
   }
 

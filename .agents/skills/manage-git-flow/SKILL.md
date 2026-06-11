@@ -2,7 +2,7 @@
 name: manage-git-flow
 description: >-
   BLOCKING — Activate before git status/diff/log/add/commit/push/rebase/stash/checkout/reset/show/branch,
-  or when the user says commit, push, rebase, or diff. Enforces targeted formatting, scoped validation,
+  or when the user says commit, push, rebase, or diff. Enforces project hygiene, scoped validation,
   proposal review, and no AI attribution in commits.
 ---
 
@@ -10,29 +10,29 @@ description: >-
 
 Use this skill before every Git operation in Aobus.
 
-## Formatting
+## Hygiene Tools
 
-Do not run `clang-format` during ordinary implementation or validation. Run one targeted pass only when
-the user explicitly requests formatting or immediately before a commit:
+Mid-session formatting and lint are forbidden for the reasons in AGENTS.md Rule 8; this skill
+only owns the commit-time gate.
+
+Before committing, run the check-only gate:
 
 ```bash
-while IFS= read -r -d '' entry; do
-  st="${entry:0:2}"
-  f="${entry:3}"
-  if [[ "$st" =~ ^[RC] ]]; then IFS= read -r -d '' f || break; fi
-  if [ -f "$f" ] && { [[ "$f" == *.cpp ]] || [[ "$f" == *.h ]] || [[ "$f" == *.hpp ]]; }; then
-    clang-format -i "$f"
-    printf 'formatted %s\n' "$f"
-  fi
-done < <(git status --porcelain -z)
+./ao hygiene
 ```
 
-Report exactly which files were formatted. Do not run clang-tidy unless the user explicitly requested
-lint work.
+`./ao hygiene` never modifies files. A failing gate blocks the commit; resolve it as follows:
+
+- **Formatting findings:** run `./ao format` on the same scope (this is the one sanctioned
+  formatting pass), report exactly which files were reformatted, and re-stage them.
+- **Lint findings (clang-tidy / Ruff / mypy):** fix them manually — most C++ findings have no safe
+  auto-fix — then re-run scoped validation.
+
+Re-run `./ao hygiene` until it is clean before staging.
 
 ## Validation
 
-Run the narrowest meaningful build or test after code changes. Use `./build.sh debug` when there is no
+Run the narrowest meaningful build or test after code changes. Use `./ao check` when there is no
 safer focused check. Preserve unrelated worktree changes.
 
 ## Fleet Proposals
@@ -50,11 +50,11 @@ Route statistics affect selection and breaker state only; an oracle pass is not 
 
 1. Inspect `git status`, `git diff HEAD`, and `git log -n 3`.
 2. Confirm implementation and debugging are complete.
-3. Run the targeted formatting loop once and report its output.
-4. Re-run scoped validation after formatting.
-5. Stage only intended changes.
-6. Commit with an imperative message describing the primary technical contribution. Do not mention AI,
+3. Run `./ao hygiene`; resolve any findings as described in Hygiene Tools and re-run until clean,
+   then run scoped validation if code changed.
+4. Stage only intended changes.
+5. Commit with an imperative message describing the primary technical contribution. Do not mention AI,
    internal plans, or append co-author signatures.
-7. Run `git status` and report any remaining unrelated changes.
+6. Run `git status` and report any remaining unrelated changes.
 
 Never use destructive checkout, restore, or reset operations without explicit user approval.

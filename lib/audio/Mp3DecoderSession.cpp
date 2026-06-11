@@ -21,6 +21,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -53,6 +54,12 @@ namespace ao::audio
 
       return static_cast<std::uint8_t>(bytesPerSample * 8);
     }
+
+    std::string mpg123ErrorMessage(mpg123_handle* handle, int error)
+    {
+      char const* const detail = error == MPG123_ERR ? ::mpg123_strerror(handle) : ::mpg123_plain_strerror(error);
+      return detail != nullptr ? std::string{detail} : std::string{"Unknown mpg123 error"};
+    }
   }
 
   struct Mp3DecoderSession::Impl final
@@ -66,12 +73,17 @@ namespace ao::audio
     std::uint64_t nextFrameIndex = 0;
     std::optional<Error> optTerminalError;
     bool eof = false;
+    int initErr = MPG123_OK;
 
     Impl(Format const& output)
       : requestedOutput{output}
     {
-      int err = MPG123_OK;
-      mh = ::mpg123_new(nullptr, &err);
+      mh = ::mpg123_new(nullptr, &initErr);
+
+      if (mh != nullptr)
+      {
+        ::mpg123_param(mh, MPG123_ADD_FLAGS, MPG123_QUIET, 0.0);
+      }
     }
 
     ~Impl()
@@ -121,12 +133,13 @@ namespace ao::audio
     {
       if (mh == nullptr)
       {
-        return makeError(Error::Code::InitFailed, "Failed to create MP3 handle");
+        return makeError(
+          Error::Code::InitFailed, std::string{"Failed to create MP3 handle: "} + ::mpg123_plain_strerror(initErr));
       }
 
-      if (::mpg123_format_none(mh) != MPG123_OK)
+      if (int const err = ::mpg123_format_none(mh); err != MPG123_OK)
       {
-        return makeError(Error::Code::InitFailed, "Failed to reset MP3 output formats");
+        return makeError(Error::Code::InitFailed, "Failed to reset MP3 output formats: " + mpg123ErrorMessage(mh, err));
       }
 
       auto const encoding = [&] -> std::int32_t
@@ -159,9 +172,9 @@ namespace ao::audio
         return makeError(Error::Code::NotSupported, "Unsupported MP3 channel count");
       }
 
-      if (::mpg123_format2(mh, 0, MPG123_MONO | MPG123_STEREO, encoding) != MPG123_OK)
+      if (int const err = ::mpg123_format2(mh, 0, MPG123_MONO | MPG123_STEREO, encoding); err != MPG123_OK)
       {
-        return makeError(Error::Code::NotSupported, "Unsupported MP3 output format");
+        return makeError(Error::Code::NotSupported, "Unsupported MP3 output format: " + mpg123ErrorMessage(mh, err));
       }
 
       return {};
@@ -173,9 +186,9 @@ namespace ao::audio
       int channels = 0;
       int encoding = 0;
 
-      if (::mpg123_getformat(mh, &rate, &channels, &encoding) != MPG123_OK)
+      if (int const err = ::mpg123_getformat(mh, &rate, &channels, &encoding); err != MPG123_OK)
       {
-        return makeError(Error::Code::DecodeFailed, "Failed to get MP3 format");
+        return makeError(Error::Code::DecodeFailed, "Failed to get MP3 format: " + mpg123ErrorMessage(mh, err));
       }
 
       auto actualOutput = Format{
@@ -240,14 +253,18 @@ namespace ao::audio
     _implPtr->eof = false;
     _implPtr->nextFrameIndex = 0;
 
-    if (::mpg123_replace_reader_handle(_implPtr->mh, Impl::readCb, Impl::lseekCb, nullptr) != MPG123_OK)
+    if (int const err = ::mpg123_replace_reader_handle(_implPtr->mh, Impl::readCb, Impl::lseekCb, nullptr);
+        err != MPG123_OK)
     {
-      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Failed to configure MP3 input callbacks"});
+      return failOpen(
+        Error{.code = Error::Code::InitFailed,
+              .message = "Failed to configure MP3 input callbacks: " + mpg123ErrorMessage(_implPtr->mh, err)});
     }
 
-    if (::mpg123_open_handle(_implPtr->mh, _implPtr.get()) != MPG123_OK)
+    if (int const err = ::mpg123_open_handle(_implPtr->mh, _implPtr.get()); err != MPG123_OK)
     {
-      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Failed to open MP3 handle"});
+      return failOpen(Error{.code = Error::Code::InitFailed,
+                            .message = "Failed to open MP3 handle: " + mpg123ErrorMessage(_implPtr->mh, err)});
     }
 
     // Scan for accurate length (especially for VBR)
@@ -330,7 +347,7 @@ namespace ao::audio
 
     if (actualOffset < 0)
     {
-      return makeError(Error::Code::SeekFailed, "MP3 seek failed");
+      return makeError(Error::Code::SeekFailed, "MP3 seek failed: " + mpg123ErrorMessage(_implPtr->mh, MPG123_ERR));
     }
 
     _implPtr->nextFrameIndex = static_cast<std::uint64_t>(actualOffset);
@@ -403,7 +420,8 @@ namespace ao::audio
 
       if (err != MPG123_OK)
       {
-        return _implPtr->failRead(Error{.code = Error::Code::DecodeFailed, .message = "MP3 decode error"});
+        return _implPtr->failRead(Error{
+          .code = Error::Code::DecodeFailed, .message = "MP3 decode error: " + mpg123ErrorMessage(_implPtr->mh, err)});
       }
 
       break;

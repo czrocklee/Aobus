@@ -142,7 +142,7 @@ namespace ao::rt::test
 
       // Provide an absolute path if test is run from a different directory, or assume the working directory is correct
       // Usually CTest runs from the build directory, but `ctest` runs in `build/test/` sometimes.
-      // Aobus `ao_test` runs with CWD = repository root or build root. We'll use absolute path resolving.
+      // Aobus `ao_core_test` runs with CWD = repository root or build root. We'll use absolute path resolving.
       auto const projectRoot = std::filesystem::current_path();
       auto const absValidFile = projectRoot / validFile;
 

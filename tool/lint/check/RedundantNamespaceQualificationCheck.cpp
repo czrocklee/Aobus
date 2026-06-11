@@ -311,6 +311,11 @@ namespace clang::tidy::readability
       range.getBegin(), Lexer::getLocForEndOfToken(range.getEnd(), 0, sm, result.Context->getLangOpts()));
     auto const redundantText = Lexer::getSourceText(charRange, sm, result.Context->getLangOpts());
 
+    if (!redundantText.ends_with("::"))
+    {
+      return;
+    }
+
     diag(loc, "redundant namespace qualification '%0'") << redundantText << FixItHint::CreateRemoval(range);
   }
 } // namespace clang::tidy::readability

@@ -30,7 +30,12 @@ namespace ao::rt
 namespace ao::gtk
 {
   class AppConfig;
+  class ShellLayoutStore;
   class ThemeCoordinator;
+  namespace layout::editor
+  {
+    class LayoutEditorDialog;
+  }
 
   class ShellLayoutController final : public layout::IActionContextProvider
   {
@@ -45,6 +50,7 @@ namespace ao::gtk
     ShellLayoutController(rt::AppRuntime& runtime,
                           Gtk::Window& parentWindow,
                           std::shared_ptr<AppConfig> configPtr,
+                          std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                           ThemeCoordinator& themeCoordinator);
 
     layout::ComponentRegistry& registry() { return _registry; }
@@ -55,7 +61,6 @@ namespace ao::gtk
     void attachToWindow();
     void refreshExportedActions();
     void loadLayout(AppConfig& config);
-    void saveLayout(AppConfig& config) const;
     void openEditor(AppConfig& config);
 
     layout::ActionActivationContext getActionContext(std::string_view componentId) override;
@@ -80,9 +85,10 @@ namespace ao::gtk
     layout::LayoutDocument _activeLayout;
     std::string _activePresetId;
     std::shared_ptr<AppConfig> _configPtr;
+    std::shared_ptr<ShellLayoutStore> _layoutStorePtr;
     ThemeCoordinator& _themeCoordinator;
     std::optional<ThemeRegistrationToken> _optEditorThemeToken;
-    bool _isCustomized = false;
+    std::shared_ptr<layout::editor::LayoutEditorDialog> _editorDialogPtr;
     async::LifetimeScope _tasks;
   };
 } // namespace ao::gtk

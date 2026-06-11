@@ -29,6 +29,7 @@ add_library(aobus-gtk-lib STATIC
     app/ThemePreset.cpp
     app/MainWindowCoordinator.cpp
     app/AppConfig.cpp
+    app/ShellLayoutStore.cpp
     app/GtkLayoutConfig.cpp
     platform/AudioBackendBootstrap.cpp
 

@@ -13,7 +13,7 @@
 ### Production Interface
 
 The production executable is built at `/tmp/build/debug/tool/fleet/aobus-fleet` by
-`./build.sh debug --target aobus-fleet`. Its stable commands are:
+`./ao build --target aobus-fleet`. Its stable commands are:
 
 ```text
 aobus-fleet validate-config --registry <file>
@@ -50,8 +50,8 @@ members/<member>/<round>/
 ```
 
 These artifacts are written for successful and quarantined members. `result.yaml` records the member,
-round, prompt-delivery mode, workspace path, process status, exit code, elapsed time, byte counts, and
-quarantine reason. The dossier remains the chair-facing synthesis input and only includes successful
+round, agent identity (harness, model, vendor, effort), prompt-delivery mode, workspace path, process
+status, exit code, elapsed time, byte counts, and quarantine reason. The dossier remains the chair-facing synthesis input and only includes successful
 member text.
 
 Agent prompts contain task semantics, scope, round context, and validation feedback only. Workspace
@@ -198,7 +198,8 @@ The system is a small set of **mechanisms** (code, fixed in number) operating ov
    ENGINES ×3      gate · synthesis · search — the only convergence interpreters.
    SUBSTRATE       uniform full-repo writable copies + path virtualization + oracle isolation.
    ── REGISTRIES (data; grows by rows, never by code) ──
-   AGENTS          {id → (harness, model)} + measured competence/rejection rate.
+   HARNESSES       {id → headless CLI: argv template ({model}/{effort}), prompt delivery, quota pool}.
+   AGENTS          {id → (harness, model, vendor[, effort])} + measured competence/rejection rate.
    ORACLES         {id → validation fn} + checked property + known gaps + isolation/risk-check links.
    BINDINGS        {task-kind → default (agent, engine, oracle, params)} + override rules.
    ESCALATIONS     {failure-reason → next action}  (the explicit, non-ordinal escalation policy).
@@ -359,18 +360,30 @@ This keeps the D-vs-J leak from cracking: the "is this proposal actually safe" j
 
 ## 7. Agents
 
-An **agent** is a leaf: `(harness, model)`, plus a **measured competence profile**.
+An **agent** is a leaf: `(harness, model)`, plus a **measured competence profile**. The registry keeps
+the two halves as separate tables: a **harness** row describes a headless CLI invocation (argv template
+with a mandatory `{model}` placeholder and an optional `{effort}` knob, prompt-delivery channel,
+environment whitelist, default timeout, and the quota pool it draws from), and an **agent** row is a
+member identity referencing a harness plus the pinned model id, the vendor whose weights answer, and
+the effort level when the harness exposes one. The model declared on the agent is substituted into the
+harness argv at registry load, so it is the single source of truth for what actually runs — a claimed
+model can never silently diverge from the invoked one.
 
 - **No ordinal rank.** Agents are not "tier 1/2/3." They carry *measured* statistics per route (§13):
   fix rate, chair rejection rate, scope-violation rate, latency. Selection consults these, it does not
   consult a hard-coded ladder.
-- **Harness adapter is encapsulated here.** Each agent knows its vendor's headless invocation, its
-  prompt-delivery channel, and its rate limits. This is the cross-vendor **lowest
+- **Harness adapter is encapsulated in the harness row.** It is the cross-vendor **lowest
   common denominator**: orchestration cannot depend on any one vendor's subagent API, so the only
   primitives are *non-interactive CLI invocation* + *file-based handoff*. Engines and the scheduler
-  never see vendor specifics.
+  never see vendor specifics. The harness's `rate-limit-key` names a quota pool (gateway or vendor
+  account) — deliberately distinct from the agent's `vendor`, which identifies whose model answers.
+  Agents sharing a harness share its quota pool and are scheduled within it.
+- **Pinned model identity.** Route keys and breaker statistics key on the agent's `model` (folded with
+  `effort` when set), so models are registered under exact, versioned ids rather than vendor aliases;
+  an alias would let one route key silently span a model upgrade.
 - **Cross-vendor by default** where diversity matters (notably synthesis councils): a same-vendor panel
-  defeats the purpose.
+  defeats the purpose. The registry enforces this at load — a council roster with more than one member
+  must span at least two vendors, and rosters may not repeat a member.
 
 ---
 

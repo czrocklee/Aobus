@@ -4,6 +4,7 @@
 #include "app/ShellLayoutController.h"
 
 #include "app/AppConfig.h"
+#include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
@@ -11,7 +12,6 @@
 #include <gtkmm/applicationwindow.h>
 
 #include <memory>
-#include <vector>
 
 namespace ao::gtk::test
 {
@@ -23,8 +23,11 @@ namespace ao::gtk::test
     auto window = Gtk::ApplicationWindow{};
     window.set_application(appPtr);
 
+    auto const tempDir = fixture.tempDir().path();
+    auto const configPtr = std::make_shared<AppConfig>(tempDir / "config.yaml");
+    auto const storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
     auto themeController = ThemeCoordinator{};
-    auto controller = ShellLayoutController{runtime, window, nullptr, themeController};
+    auto controller = ShellLayoutController{runtime, window, configPtr, storePtr, themeController};
 
     SECTION("initial state")
     {
@@ -38,14 +41,9 @@ namespace ao::gtk::test
       CHECK(window.get_child() != nullptr);
     }
 
-    SECTION("loadLayout doesn't crash")
+    SECTION("loadLayout load works")
     {
-      // Allocate dynamically and keep alive indefinitely to prevent ASAN stack-use-after-scope
-      // when the async worker executes the loadLayout coroutine, and to prevent ASAN memory leak detection.
-      static std::vector<std::unique_ptr<AppConfig>> keepAlive;
-      keepAlive.push_back(std::make_unique<AppConfig>(fixture.tempDir().path()));
-
-      controller.loadLayout(*keepAlive.back());
+      controller.loadLayout(*configPtr);
       drainGtkEvents();
     }
 

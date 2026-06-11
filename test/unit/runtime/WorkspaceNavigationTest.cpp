@@ -598,7 +598,7 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto const configPath = tempDir.path() + "/bad.yaml";
+    auto const configPath = tempDir.path() / "bad.yaml";
     std::ofstream{configPath} << "workspace: \"not a map\"";
 
     auto badConfigStorePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
@@ -654,7 +654,7 @@ namespace ao::rt::test
     auto runtime = makeRuntime(tempDir);
 
     auto const listId = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "A list"});
-    auto const configPath = tempDir.path() + "/config.yaml";
+    auto const configPath = tempDir.path() / "config.yaml";
 
     {
       auto file = std::ofstream{configPath};

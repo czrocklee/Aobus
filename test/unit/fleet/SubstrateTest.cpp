@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "fleet/Substrate.h"
+
 #include "fleet/Model.h"
 #include "fleet/ProcessRunner.h"
-#include "fleet/Substrate.h"
-#include "test/fleet/TestUtils.h"
+#include "test/unit/fleet/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -106,7 +107,7 @@ namespace ao::fleet::test
     {
       auto mounts = SandboxMounts{.writableBinds = {{"/host/oracle-build", "/tmp/build"}}, .bindHome = false};
       auto request = ProcessRequest{};
-      request.argv = {"./build.sh", "debug"};
+      request.argv = {"./ao", "check"};
       [[maybe_unused]] auto const ignored = runner.run(realRepo, workspace, mounts, std::move(request));
       REQUIRE(recorder.requests.size() == 1);
       auto const& argv = recorder.requests.front().argv;

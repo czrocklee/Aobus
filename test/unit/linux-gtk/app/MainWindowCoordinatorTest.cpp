@@ -31,7 +31,7 @@ namespace ao::gtk::test
     initialPrefs.lastThemePreset = "classic";
     configPtr->saveAppPrefs(initialPrefs);
 
-    auto window = MainWindow{runtime, configPtr};
+    auto window = MainWindow{runtime, configPtr, nullptr};
     auto coordinator = MainWindowCoordinator{window, runtime, configPtr};
     coordinator.loadSession();
 

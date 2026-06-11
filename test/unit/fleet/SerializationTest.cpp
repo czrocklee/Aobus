@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "fleet/Model.h"
 #include "fleet/Serialization.h"
-#include "test/fleet/TestUtils.h"
+
+#include "fleet/Model.h"
+#include "test/unit/fleet/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::fleet::test
@@ -29,7 +32,20 @@ namespace ao::fleet::test
     auto registry = loadRegistry(std::filesystem::path{AOBUS_SOURCE_DIR} / "config/agent-fleet.yaml");
 
     REQUIRE(registry);
-    CHECK(registry->agents.contains("dspro"));
+    CHECK(registry->harnesses.contains("opencode"));
+    CHECK(registry->agents.contains("deepseek-pro"));
+    auto const& deepseek = registry->agents.at("deepseek-pro");
+    CHECK(deepseek.harness == "opencode");
+    CHECK(deepseek.vendor == "deepseek");
+    CHECK(deepseek.rateLimitKey == "opencode-go");
+    CHECK(deepseek.timeout == std::chrono::minutes{20});
+    CHECK(std::ranges::contains(deepseek.argvTemplate, std::string_view{"opencode-go/deepseek-v4-pro"}));
+    CHECK(deepseek.modelVersion() == "opencode-go/deepseek-v4-pro");
+    auto const& opus = registry->agents.at("anthropic-opus");
+    CHECK(opus.effort == "xhigh");
+    CHECK(std::ranges::contains(opus.argvTemplate, std::string_view{"xhigh"}));
+    CHECK(std::ranges::contains(opus.argvTemplate, std::string_view{"claude-opus-4-8"}));
+    CHECK(opus.modelVersion() == "claude-opus-4-8@xhigh");
     CHECK(registry->oracles.contains("test-all"));
     CHECK(registry->bindings.at("implement-plan").engine == EngineKind::Gate);
     CHECK(registry->bindings.at("council-plan").engine == EngineKind::Synthesis);
@@ -42,7 +58,7 @@ namespace ao::fleet::test
                                      .body = "Review the change."};
     auto resolvedCouncil = resolvePhase(*registry, councilIntent);
     REQUIRE(resolvedCouncil);
-    CHECK(resolvedCouncil->agent.id == "claude-opus");
+    CHECK(resolvedCouncil->agent.id == "anthropic-opus");
     CHECK_FALSE(registry->rulerPaths.empty());
     CHECK(registry->oracles.at("test-asan").runner == OracleRunner::TestAsan);
     CHECK(registry->oracles.at("test-tsan").runner == OracleRunner::TestTsan);
@@ -61,12 +77,149 @@ namespace ao::fleet::test
     SECTION("unknown agent reference")
     {
       auto source = production;
-      auto const position = source.find("agent: dspro");
+      auto const position = source.find("agent: deepseek-pro");
       REQUIRE(position != std::string::npos);
-      source.replace(position, std::string{"agent: dspro"}.size(), "agent: missing");
+      source.replace(position, std::string{"agent: deepseek-pro"}.size(), "agent: missing");
       auto result = loadRegistry(writeFile(temp, "missing-agent.yaml", source));
       REQUIRE_FALSE(result);
       CHECK(result.error().message.find("unknown agent") != std::string::npos);
+    }
+
+    SECTION("unknown harness reference")
+    {
+      auto source = production;
+      auto const position = source.find("harness: codex");
+      REQUIRE(position != std::string::npos);
+      source.replace(position, std::string{"harness: codex"}.size(), "harness: missing");
+      auto result = loadRegistry(writeFile(temp, "missing-harness.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("unknown harness") != std::string::npos);
+    }
+
+    SECTION("harness argv without the model placeholder")
+    {
+      auto source = production;
+      auto const needle = std::string{", -m, \"{model}\"]"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(position, needle.size(), "]");
+      auto result = loadRegistry(writeFile(temp, "no-model.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("must use '{model}'") != std::string::npos);
+    }
+
+    SECTION("missing effort for an effort-driven harness")
+    {
+      auto source = production;
+      auto const needle = std::string{"\n    effort: xhigh"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(position, needle.size(), "");
+      auto result = loadRegistry(writeFile(temp, "missing-effort.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("must set effort") != std::string::npos);
+    }
+
+    SECTION("effort on a harness that does not use it")
+    {
+      auto source = production;
+      auto const needle = std::string{"vendor: google"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(position, needle.size(), "vendor: google\n    effort: high");
+      auto result = loadRegistry(writeFile(temp, "stray-effort.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("does not use '{effort}'") != std::string::npos);
+    }
+
+    SECTION("empty model")
+    {
+      auto source = production;
+      auto const needle = std::string{"model: gpt-5.5"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(position, needle.size(), "model: \"\"");
+      auto result = loadRegistry(writeFile(temp, "empty-model.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("model must not be empty") != std::string::npos);
+    }
+
+    SECTION("placeholder braces inside a model id")
+    {
+      auto source = production;
+      auto const needle = std::string{"model: gpt-5.5"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(position, needle.size(), "model: \"gpt{prompt}\"");
+      auto result = loadRegistry(writeFile(temp, "brace-model.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("placeholder braces") != std::string::npos);
+    }
+
+    SECTION("empty harness rate-limit-key")
+    {
+      auto source = production;
+      auto const needle = std::string{"rate-limit-key: openai"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(position, needle.size(), "rate-limit-key: \"\"");
+      auto result = loadRegistry(writeFile(temp, "empty-rate-key.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("rate-limit-key must not be empty") != std::string::npos);
+    }
+
+    SECTION("unknown escalation route")
+    {
+      auto source = production;
+      auto const needle = std::string{"route: openai-gpt"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(position, needle.size(), "route: missing");
+      auto result = loadRegistry(writeFile(temp, "missing-route.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("unknown agent") != std::string::npos);
+    }
+
+    SECTION("duplicate roster member")
+    {
+      auto source = production;
+      auto const needle = std::string{"roster: [anthropic-opus, openai-gpt, google-gemini-pro, deepseek-pro]"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(
+        position, needle.size(), "roster: [anthropic-opus, anthropic-opus, google-gemini-pro, deepseek-pro]");
+      auto result = loadRegistry(writeFile(temp, "duplicate-roster.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("twice") != std::string::npos);
+    }
+
+    SECTION("single-vendor council roster")
+    {
+      auto source = production;
+
+      for (auto const* vendor : {"vendor: deepseek", "vendor: openai", "vendor: google"})
+      {
+        auto const position = source.find(vendor);
+        REQUIRE(position != std::string::npos);
+        source.replace(position, std::string_view{vendor}.size(), "vendor: anthropic");
+      }
+
+      auto result = loadRegistry(writeFile(temp, "single-vendor.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("cross-vendor") != std::string::npos);
+    }
+
+    SECTION("per-agent timeout override is honored")
+    {
+      auto source = production;
+      auto const needle = std::string{"vendor: openai"};
+      auto const position = source.find(needle);
+      REQUIRE(position != std::string::npos);
+      source.replace(position, needle.size(), "vendor: openai\n    timeout-ms: 60000");
+      auto result = loadRegistry(writeFile(temp, "timeout-override.yaml", source));
+      REQUIRE(result);
+      CHECK(result->agents.at("openai-gpt").timeout == std::chrono::milliseconds{60000});
+      CHECK(result->agents.at("deepseek-pro").timeout == std::chrono::minutes{20});
     }
 
     SECTION("unknown argv placeholder")
@@ -202,7 +355,7 @@ namespace ao::fleet::test
     auto intent = loadIntent(writeFile(temp, "base.yaml", intentYaml()));
     REQUIRE(intent);
 
-    intent->overrides = IntentOverrides{.optAgent = "dspro",
+    intent->overrides = IntentOverrides{.optAgent = "deepseek-pro",
                                         .optEngine = EngineKind::Synthesis,
                                         .optOracle = "test-core",
                                         .optRiskOracle = "test-delta",
@@ -260,5 +413,4 @@ namespace ao::fleet::test
     CHECK(result->outcomes.front().verdict == ReviewVerdict::Accept);
     CHECK(result->trailingCorruption);
   }
-
 } // namespace ao::fleet::test

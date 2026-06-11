@@ -4,14 +4,11 @@
 #include "AppConfig.h"
 
 #include "UIState.h"
-#include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/utility/Log.h>
 
 #include <filesystem>
-#include <format>
 #include <memory>
 
 namespace ao::gtk
@@ -59,30 +56,6 @@ namespace ao::gtk
     if (auto const res = _storePtr->flush(); !res)
     {
       APP_LOG_ERROR("AppConfig: Failed to flush app prefs: {}", res.error().message);
-    }
-  }
-
-  bool AppConfig::loadShellLayout(layout::LayoutDocument& state, std::string_view presetId) const
-  {
-    auto const key = std::format("linuxGtkLayout_{}", presetId);
-    auto const res = _storePtr->load(key, state);
-
-    if (!res && res.error().code != Error::Code::NotFound)
-    {
-      APP_LOG_DEBUG("AppConfig: Failed to load shell layout ({}): {}", key, res.error().message);
-    }
-
-    return res.has_value();
-  }
-
-  void AppConfig::saveShellLayout(layout::LayoutDocument const& state, std::string_view presetId)
-  {
-    auto const key = std::format("linuxGtkLayout_{}", presetId);
-    _storePtr->save(key, state);
-
-    if (auto const res = _storePtr->flush(); !res)
-    {
-      APP_LOG_ERROR("AppConfig: Failed to flush shell layout ({}): {}", key, res.error().message);
     }
   }
 } // namespace ao::gtk

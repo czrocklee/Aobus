@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include <ao/Exception.h>
+
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -29,7 +30,7 @@ namespace ao::test
 
       if (result == nullptr)
       {
-        throw std::runtime_error{"mkdtemp failed"};
+        throwException<Exception>("mkdtemp failed");
       }
 
       _path = result;
@@ -47,7 +48,7 @@ namespace ao::test
     TempDir(TempDir&&) = default;
     TempDir& operator=(TempDir&&) = default;
 
-    std::string path() const { return _path.string(); }
+    std::filesystem::path const& path() const { return _path; }
 
   private:
     std::filesystem::path _path;

@@ -1,0 +1,36 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "RUF", # Ruff-specific rules
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+# The ao package lives under script/, not the repo root; without this the tooling tests'
+# `from ao...` imports would be sorted as third-party.
+known-first-party = ["ao"]
+
+[tool.ruff.lint.per-file-ignores]
+# Pure clang-tidy configuration data; option values cannot be wrapped.
+"script/ao/core/tidyconfig.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = [
+    '^test/script/'
+]
+
+[[tool.mypy.overrides]]
+# Optional dependency of the test-library generator; not part of the dev shell.
+module = "mutagen.*"
+ignore_missing_imports = true

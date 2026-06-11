@@ -280,8 +280,8 @@ workspace commands, pass `NavigationOptions{.recordHistory = false}`.
 - Run:
 
 ```bash
-./build.sh debug
-./script/run-clang-tidy.sh
+./ao check
+./ao tidy
 ```
 
 For targeted iteration, preserve `/tmp/build/...` and run the failing test

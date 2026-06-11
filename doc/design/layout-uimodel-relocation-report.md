@@ -479,7 +479,7 @@ It can continue depending on `ao_app_runtime`, `ao`, and RapidYAML-related runti
 
 ## Test Reorganization
 
-### Move Portable Tests to `ao_test`
+### Move Portable Tests to `ao_core_test`
 
 Move these from `test/unit/linux-gtk/layout/...` to `test/unit/uimodel/layout/...`:
 
@@ -491,7 +491,7 @@ test/unit/linux-gtk/layout/runtime/ActionValidatorTest.cpp
   -> test/unit/uimodel/layout/ActionValidatorTest.cpp
 ```
 
-`ActionRegistryTest` currently creates GTK objects only because `ActionActivationContext` requires `Gtk::Window` and `Gtk::Widget`. After context cleanup, the test should become platform-neutral and run in `ao_test`.
+`ActionRegistryTest` currently creates GTK objects only because `ActionActivationContext` requires `Gtk::Window` and `Gtk::Widget`. After context cleanup, the test should become platform-neutral and run in `ao_core_test`.
 
 `ActionValidatorTest` is already nearly portable. It should switch from GTK `ComponentRegistry` to shared `ComponentCatalog`.
 
@@ -534,7 +534,7 @@ This test should cover:
 - classic/modern GTK layout resources decode
 - expected GTK default component tree shape
 
-### Keep GTK Tests in `ao_test_gtk`
+### Keep GTK Tests in `ao_gtk_test`
 
 Keep:
 
@@ -584,9 +584,9 @@ Add `LayoutTemplateExpanderTest`:
 
 Add new/moved portable tests to the `# ui model tests (no platform deps)` section of `test/CMakeLists.txt`.
 
-Remove those files from `ao_test_gtk`.
+Remove those files from `ao_gtk_test`.
 
-Keep GTK-specific layout runtime, component, and editor tests in `ao_test_gtk`.
+Keep GTK-specific layout runtime, component, and editor tests in `ao_gtk_test`.
 
 ## Recommended Migration Sequence
 
@@ -597,7 +597,7 @@ Keep GTK-specific layout runtime, component, and editor tests in `ao_test_gtk`.
 3. Split GTK GResource preset loading into `GtkLayoutPresets`.
 4. Update includes and namespaces.
 5. Move portable layout model tests to `test/unit/uimodel/layout`.
-6. Verify `ao_test` builds and runs without GTK.
+6. Verify `ao_core_test` builds and runs without GTK.
 
 This phase is mostly mechanical and low risk.
 
@@ -606,8 +606,8 @@ This phase is mostly mechanical and low risk.
 1. Refactor `ActionActivationContext` to remove GTK types.
 2. Move action descriptors, capabilities, state, binding context, and `ActionRegistry` to `ao::uimodel::layout`.
 3. Add/adapt GTK-side activation context plumbing for anchored/menu actions.
-4. Move `ActionRegistryTest` to `ao_test`.
-5. Keep `ActionBinderTest` and `GioActionBridgeTest` in `ao_test_gtk`.
+4. Move `ActionRegistryTest` to `ao_core_test`.
+5. Keep `ActionBinderTest` and `GioActionBridgeTest` in `ao_gtk_test`.
 
 This is the main design-sensitive phase.
 
@@ -648,7 +648,7 @@ Guardrails:
 
 - add `providesAnchor` / `providesFocusedView` or equivalent to action binding metadata
 - validate against the active shell catalog, not a global GTK catalog
-- test anchored/focused-view rejection in `ao_test`
+- test anchored/focused-view rejection in `ao_core_test`
 
 ### Risk: built-in layouts are not actually cross-platform yet
 
@@ -676,6 +676,6 @@ Proceed with the relocation, but as a deliberate split:
 
 - move `LayoutNode`, `LayoutDocument` schema/YAML, `ActionRegistry` metadata/logic, descriptor catalog, action validation, and template expansion into `ao_app_uimodel`
 - keep GTK binding, Gio bridge, GTK layout context, GTK components, GTK editor dialog, GTK preset resource loading, and shell controller in `app/linux-gtk`
-- reorganize tests so shared behavior runs under `ao_test` and GTK behavior remains under `ao_test_gtk`
+- reorganize tests so shared behavior runs under `ao_core_test` and GTK behavior remains under `ao_gtk_test`
 
 The most important precondition is removing GTK from `ActionActivationContext`; the second most important is splitting `ComponentRegistry` into shared descriptor catalog plus GTK factory registry.

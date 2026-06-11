@@ -14,8 +14,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
+#include <gtkmm/comboboxtext.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/treeview.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -247,10 +249,30 @@ namespace ao::gtk::layout::editor::test
 
     auto window = Gtk::Window{};
     auto const doc = createDefaultLayout();
+    auto const stubLoader = [](std::string_view) { return uimodel::layout::LayoutDocument{}; };
+
+    auto const findTreeView = [](auto& self, Gtk::Widget& widget) -> Gtk::TreeView*
+    {
+      if (auto* const tv = dynamic_cast<Gtk::TreeView*>(&widget); tv != nullptr)
+      {
+        return tv;
+      }
+
+      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+      {
+        if (auto* const found = self(self, *child); found != nullptr)
+        {
+          return found;
+        }
+      }
+
+      return nullptr;
+    };
 
     SECTION("Dialog constructs without crash")
     {
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
+      auto dialogPtr =
+        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
       REQUIRE(dialogPtr != nullptr);
 
       auto width = 0;
@@ -292,7 +314,8 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("document returns the initial document on construction")
     {
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
+      auto dialogPtr =
+        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
       auto const& returned = dialogPtr->document();
 
       CHECK(returned.root.type == doc.root.type);
@@ -307,8 +330,8 @@ namespace ao::gtk::layout::editor::test
       auto modified = LayoutDocument{};
       modified.root.type = "spacer";
 
-      auto dialogPtr =
-        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, modified, "classic", "modern");
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(
+        window, registry, actionRegistry, modified, "classic", "modern", stubLoader);
 
       // The dialog copies the document, so modifications to the dialog's copy
       // are reflected. Just verify the initial copy is correct.
@@ -323,8 +346,8 @@ namespace ao::gtk::layout::editor::test
       invalidDoc.root.type = "app.actionButton";
       invalidDoc.root.props["primaryAction"] = LayoutValue{"this.does.not.exist"};
 
-      auto dialogPtr =
-        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, invalidDoc, "classic", "modern");
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(
+        window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader);
 
       // Attempting to save an invalid document should fail validation and keep dialog open
       dialogPtr->response(Gtk::ResponseType::OK);
@@ -336,8 +359,8 @@ namespace ao::gtk::layout::editor::test
       validDoc.root.type = "app.actionButton";
       validDoc.root.props["primaryAction"] = LayoutValue{"none"};
 
-      auto dialogValidPtr =
-        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, validDoc, "classic", "modern");
+      auto dialogValidPtr = std::make_unique<LayoutEditorDialog>(
+        window, registry, actionRegistry, validDoc, "classic", "modern", stubLoader);
 
       // Attempting to save a valid document should succeed and close the dialog
       dialogValidPtr->response(Gtk::ResponseType::OK);
@@ -349,10 +372,10 @@ namespace ao::gtk::layout::editor::test
       invalidDoc.root.type = "app.actionButton";
       invalidDoc.root.props["primaryAction"] = LayoutValue{std::string{"this.does.not.exist"}};
 
-      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern"};
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader};
 
       auto saveCount = 0;
-      dialog.signalSaveRequest().connect([&](LayoutDocument const&) { ++saveCount; });
+      dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
 
       dialog.response(Gtk::ResponseType::OK);
 
@@ -362,12 +385,23 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("signalApplyPreview is emitted on document changes")
     {
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
-      std::int32_t count = 0;
+      auto dialogPtr =
+        std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
+      auto count = std::int32_t{0};
 
       dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
 
-      CHECK(count == 0);
+      auto* const treeView = findTreeView(findTreeView, *dialogPtr);
+      REQUIRE(treeView != nullptr);
+
+      if (auto const modelPtr = treeView->get_model(); modelPtr && !modelPtr->children().empty())
+      {
+        treeView->get_selection()->select(modelPtr->children().begin());
+      }
+
+      dialogPtr->testAddComponent("spacer");
+
+      CHECK(count > 0);
 
       dialogPtr->close();
     }
@@ -376,12 +410,272 @@ namespace ao::gtk::layout::editor::test
     {
       {
         auto dialogPtr =
-          std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern");
+          std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
         dialogPtr->present();
         dialogPtr->close();
         dialogPtr.reset();
       }
       SUCCEED(); // Reaching here without crash or GTK warnings (in a real display session) is the goal
+    }
+
+    SECTION("Session caching and dirty tracking")
+    {
+      auto loadCount = std::int32_t{0};
+      auto loadedPresets = std::vector<std::string>{};
+      auto const customLoader = [&](std::string_view presetId)
+      {
+        ++loadCount;
+        loadedPresets.emplace_back(presetId);
+
+        auto testDoc = LayoutDocument{};
+        testDoc.root.type = "box";
+        testDoc.root.id = std::string{presetId} + "_root";
+
+        return testDoc;
+      };
+
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", customLoader};
+
+      // Find the presets combo box from children
+      auto const collectCombos = [](auto& self, Gtk::Widget& widget, std::vector<Gtk::ComboBoxText*>& combos) -> void
+      {
+        if (auto* const combo = dynamic_cast<Gtk::ComboBoxText*>(&widget); combo != nullptr)
+        {
+          combos.push_back(combo);
+        }
+
+        for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+        {
+          self(self, *child, combos);
+        }
+      };
+
+      auto combos = std::vector<Gtk::ComboBoxText*>{};
+      collectCombos(collectCombos, dialog, combos);
+      REQUIRE(combos.size() == 2);
+
+      auto* const combo = combos[0]->get_active_id() == "classic" ? combos[0] : combos[1];
+      REQUIRE(combo != nullptr);
+
+      // Verify initial active preset is classic
+      CHECK(combo->get_active_id() == "classic");
+
+      auto* const treeView = findTreeView(findTreeView, dialog);
+      REQUIRE(treeView != nullptr);
+
+      if (auto const modelPtr = treeView->get_model(); modelPtr && !modelPtr->children().empty())
+      {
+        treeView->get_selection()->select(modelPtr->children().begin());
+      }
+
+      auto const initialCount = dialog.document().root.children.size();
+
+      // Edit active layout (classic) - this marks classic as dirty
+      dialog.testAddComponent("spacer");
+      CHECK(dialog.document().root.children.size() == initialCount + 1);
+
+      // Switch to modern (not cached, invokes loader)
+      combo->set_active_id("modern");
+
+      CHECK(loadCount == 1);
+      CHECK(loadedPresets.back() == "modern");
+      CHECK(dialog.document().root.id == "modern_root");
+
+      // Switch back to classic (should load from cache, not invoke loader)
+      combo->set_active_id("classic");
+      CHECK(loadCount == 1);                                             // no new load
+      CHECK(dialog.document().root.children.size() == initialCount + 1); // edit preserved!
+
+      // Save and verify result
+      auto saveResult = LayoutSaveResult{};
+      auto saveCount = 0;
+      dialog.signalSaveRequest().connect(
+        [&](LayoutSaveResult const& res)
+        {
+          saveResult = res;
+          ++saveCount;
+        });
+
+      dialog.response(Gtk::ResponseType::OK);
+      CHECK(saveCount == 1);
+      CHECK(saveResult.activePresetId == "classic");
+
+      // Since classic was edited, it should be in modified
+      CHECK(saveResult.modified.contains("classic"));
+      // Since modern was not edited, it should NOT be in modified
+      CHECK(!saveResult.modified.contains("modern"));
+      CHECK(saveResult.resets.empty());
+
+      dialog.close();
+    }
+
+    SECTION("Reset default and dirty tracking")
+    {
+      auto const customLoader = [&](std::string_view presetId)
+      {
+        auto testDoc = LayoutDocument{};
+        testDoc.root.type = "box";
+        testDoc.root.id = std::string{presetId} + "_root";
+        return testDoc;
+      };
+
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", customLoader};
+
+      // Find the presets combo box from children
+      auto const collectCombos = [](auto& self, Gtk::Widget& widget, std::vector<Gtk::ComboBoxText*>& combos) -> void
+      {
+        if (auto* const combo = dynamic_cast<Gtk::ComboBoxText*>(&widget); combo != nullptr)
+        {
+          combos.push_back(combo);
+        }
+
+        for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+        {
+          self(self, *child, combos);
+        }
+      };
+
+      auto combos = std::vector<Gtk::ComboBoxText*>{};
+      collectCombos(collectCombos, dialog, combos);
+      REQUIRE(combos.size() == 2);
+
+      auto* const combo = combos[0]->get_active_id() == "classic" ? combos[0] : combos[1];
+      REQUIRE(combo != nullptr);
+
+      // Trigger reset default on classic
+      dialog.testOnResetDefault();
+
+      // Switch to modern, edit it
+      combo->set_active_id("modern");
+
+      auto* const treeView = findTreeView(findTreeView, dialog);
+      REQUIRE(treeView != nullptr);
+
+      if (auto const modelPtr = treeView->get_model(); modelPtr && !modelPtr->children().empty())
+      {
+        treeView->get_selection()->select(modelPtr->children().begin());
+      }
+
+      dialog.testAddComponent("spacer");
+
+      // Save and verify result
+      auto saveResult = LayoutSaveResult{};
+      auto saveCount = 0;
+      dialog.signalSaveRequest().connect(
+        [&](LayoutSaveResult const& res)
+        {
+          saveResult = res;
+          ++saveCount;
+        });
+
+      dialog.response(Gtk::ResponseType::OK);
+      CHECK(saveCount == 1);
+
+      // classic should be in resets (reset default was clicked)
+      CHECK(std::ranges::contains(saveResult.resets, std::string{"classic"}));
+      // modern was edited, so it should be in modified
+      CHECK(saveResult.modified.contains("modern"));
+
+      dialog.close();
+    }
+
+    SECTION("Multi-preset validation and caching re-visit")
+    {
+      auto loadCount = std::int32_t{0};
+      auto loadedPresets = std::vector<std::string>{};
+      auto const customLoader = [&](std::string_view presetId)
+      {
+        ++loadCount;
+        loadedPresets.emplace_back(presetId);
+
+        auto testDoc = LayoutDocument{};
+
+        if (presetId == "modern")
+        {
+          testDoc.root.type = "app.actionButton";
+          testDoc.root.props["primaryAction"] = LayoutValue{"this.does.not.exist"};
+        }
+        else
+        {
+          testDoc.root.type = "box";
+          testDoc.root.id = std::string{presetId} + "_root";
+        }
+
+        return testDoc;
+      };
+
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", customLoader};
+
+      auto const collectCombos = [](auto& self, Gtk::Widget& widget, std::vector<Gtk::ComboBoxText*>& combos) -> void
+      {
+        if (auto* const combo = dynamic_cast<Gtk::ComboBoxText*>(&widget); combo != nullptr)
+        {
+          combos.push_back(combo);
+        }
+
+        for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+        {
+          self(self, *child, combos);
+        }
+      };
+
+      auto combos = std::vector<Gtk::ComboBoxText*>{};
+      collectCombos(collectCombos, dialog, combos);
+      REQUIRE(combos.size() == 2);
+
+      auto* const combo = combos[0]->get_active_id() == "classic" ? combos[0] : combos[1];
+      REQUIRE(combo != nullptr);
+
+      // Re-visit cache confirmation
+      combo->set_active_id("modern");
+      CHECK(loadCount == 1);
+      combo->set_active_id("classic");
+      CHECK(loadCount == 1);
+      combo->set_active_id("modern");
+      CHECK(loadCount == 1);
+
+      // Edit modern (currently active) to be dirty
+      dialog.testMarkEdited();
+
+      // Switch back to classic (which is valid)
+      combo->set_active_id("classic");
+
+      auto saveResult = LayoutSaveResult{};
+      auto saveCount = 0;
+      dialog.signalSaveRequest().connect(
+        [&](LayoutSaveResult const& res)
+        {
+          saveResult = res;
+          ++saveCount;
+        });
+
+      // Saving should fail validation on the dirty background preset "modern"
+      dialog.response(Gtk::ResponseType::OK);
+      CHECK(saveCount == 0);
+
+      dialog.close();
+    }
+
+    SECTION("Reset of active preset saved without switching")
+    {
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
+
+      dialog.testOnResetDefault();
+
+      auto saveResult = LayoutSaveResult{};
+      auto saveCount = 0;
+      dialog.signalSaveRequest().connect(
+        [&](LayoutSaveResult const& res)
+        {
+          saveResult = res;
+          ++saveCount;
+        });
+
+      dialog.response(Gtk::ResponseType::OK);
+      CHECK(saveCount == 1);
+      CHECK(std::ranges::contains(saveResult.resets, std::string{"classic"}));
+
+      dialog.close();
     }
   }
 

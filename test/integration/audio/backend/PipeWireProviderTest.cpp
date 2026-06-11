@@ -192,7 +192,7 @@ namespace ao::audio::backend::test
           auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
                                                                                            "support.null-audio-sink",
                                                                                            "node.name",
-                                                                                           "rs-test-dummy-sink",
+                                                                                           "ao-test-duplex-sink",
                                                                                            "media.class",
                                                                                            "Audio/Duplex",
                                                                                            "object.linger",

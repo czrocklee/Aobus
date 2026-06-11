@@ -88,3 +88,22 @@ namespace ao::rt::other
     ao::test::TempDir const t;
   }
 }
+
+namespace ao
+{
+  class BaseException
+  {
+  public:
+    BaseException(int x) {}
+  };
+}
+
+namespace ao::sub
+{
+  class DerivedException : public BaseException
+  {
+  public:
+    // NEGATIVE
+    using BaseException::BaseException;
+  };
+}

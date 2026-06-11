@@ -5,6 +5,7 @@
 
 #include "fleet/Model.h"
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/yaml/Utils.h>
 
 #include <c4/yml/common.hpp>
@@ -33,7 +34,6 @@
 #include <ranges>
 #include <set>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -51,13 +51,10 @@ namespace ao::fleet
     constexpr auto kAsciiControlBound = 0x20;
     constexpr auto kAsciiDel = 0x7F;
 
-    class ParseFailure final : public std::runtime_error
+    class ParseFailure final : public Exception
     {
     public:
-      explicit ParseFailure(std::string message)
-        : std::runtime_error{std::move(message)}
-      {
-      }
+      using Exception::Exception;
     };
 
     std::unexpected<Error> validationError(Error::Code code, std::string context, std::string message)
@@ -111,22 +108,22 @@ namespace ao::fleet
     {
       if (node.has_key_anchor() || node.has_val_anchor())
       {
-        throw ParseFailure{"YAML anchors are forbidden"};
+        throwException<ParseFailure>("YAML anchors are forbidden");
       }
 
       if (node.is_key_ref() || node.is_val_ref())
       {
-        throw ParseFailure{"YAML aliases are forbidden"};
+        throwException<ParseFailure>("YAML aliases are forbidden");
       }
 
       if (node.has_key_tag() || node.has_val_tag())
       {
-        throw ParseFailure{"YAML tags are forbidden"};
+        throwException<ParseFailure>("YAML tags are forbidden");
       }
 
       if (node.has_key() && node.key() == "<<")
       {
-        throw ParseFailure{"YAML merge keys are forbidden"};
+        throwException<ParseFailure>("YAML merge keys are forbidden");
       }
     }
 
@@ -134,7 +131,7 @@ namespace ao::fleet
     {
       if (depth > kMaxDepth)
       {
-        throw ParseFailure{"YAML nesting exceeds limit"};
+        throwException<ParseFailure>("YAML nesting exceeds limit");
       }
 
       rejectYamlExtensions(node);
@@ -149,7 +146,7 @@ namespace ao::fleet
 
           if (auto keyString = std::string{key.data(), key.size()}; !keys.insert(keyString).second)
           {
-            throw ParseFailure{std::format("duplicate key '{}'", keyString)};
+            throwException<ParseFailure>("duplicate key '{}'", keyString);
           }
         }
       }
@@ -160,7 +157,7 @@ namespace ao::fleet
 
         if (entries > kMaxCollectionEntries)
         {
-          throw ParseFailure{"YAML collection entry limit exceeded"};
+          throwException<ParseFailure>("YAML collection entry limit exceeded");
         }
 
         validateTree(child, depth + 1, entries);
@@ -210,7 +207,7 @@ namespace ao::fleet
       {
         if (root.num_children() != 1)
         {
-          throw ParseFailure{"expected exactly one YAML document"};
+          throwException<ParseFailure>("expected exactly one YAML document");
         }
 
         return root.first_child();
@@ -223,7 +220,7 @@ namespace ao::fleet
     {
       if (!node.readable() || !node.has_val() || node.is_container())
       {
-        throw ParseFailure{std::format("{} must be a scalar", context)};
+        throwException<ParseFailure>("{} must be a scalar", context);
       }
 
       return std::string{yaml::scalarView(node)};
@@ -240,7 +237,7 @@ namespace ao::fleet
 
       if (!child.readable())
       {
-        throw ParseFailure{std::format("missing required field '{}'", name)};
+        throwException<ParseFailure>("missing required field '{}'", name);
       }
 
       return child;
@@ -255,7 +252,7 @@ namespace ao::fleet
     {
       if (!node.readable() || !node.is_map())
       {
-        throw ParseFailure{std::format("{} must be a map", context)};
+        throwException<ParseFailure>("{} must be a map", context);
       }
     }
 
@@ -263,7 +260,7 @@ namespace ao::fleet
     {
       if (!node.readable() || !node.is_seq())
       {
-        throw ParseFailure{std::format("{} must be a sequence", context)};
+        throwException<ParseFailure>("{} must be a sequence", context);
       }
     }
 
@@ -275,7 +272,7 @@ namespace ao::fleet
       {
         if (auto const childKey = key(child); !std::ranges::contains(allowed, childKey))
         {
-          throw ParseFailure{std::format("unknown field '{}' in {}", childKey, context)};
+          throwException<ParseFailure>("unknown field '{}' in {}", childKey, context);
         }
       }
     }
@@ -295,7 +292,7 @@ namespace ao::fleet
 
       if (conversion.ec != std::errc{} || conversion.ptr != text.data() + text.size())
       {
-        throw ParseFailure{std::format("{} must be an unsigned integer", context)};
+        throwException<ParseFailure>("{} must be an unsigned integer", context);
       }
 
       return result;
@@ -311,7 +308,7 @@ namespace ao::fleet
         return *optValue;
       }
 
-      throw ParseFailure{std::format("invalid {} '{}'", context, text)};
+      throwException<ParseFailure>("invalid {} '{}'", context, text);
     }
 
     ScopeOperation parseOperation(ryml::ConstNodeRef node)
@@ -346,7 +343,7 @@ namespace ao::fleet
       // 'none' marks a successful phase; an escalation rule keyed on it would be meaningless.
       if (result == FailureReason::None)
       {
-        throw ParseFailure{"invalid failure reason 'none'"};
+        throwException<ParseFailure>("invalid failure reason 'none'");
       }
 
       return result;
@@ -396,14 +393,14 @@ namespace ao::fleet
 
       if (path.empty() || path.is_absolute())
       {
-        throw ParseFailure{std::format("{} must be a non-empty relative path", context)};
+        throwException<ParseFailure>("{} must be a non-empty relative path", context);
       }
 
       auto normalized = path.lexically_normal();
 
       if (normalized.empty() || *normalized.begin() == "..")
       {
-        throw ParseFailure{std::format("{} contains path traversal", context)};
+        throwException<ParseFailure>("{} contains path traversal", context);
       }
 
       return normalized;
@@ -413,7 +410,7 @@ namespace ao::fleet
     {
       if (value.empty() || value.size() > 128 || value == "." || value == "..")
       {
-        throw ParseFailure{std::format("{} must be a non-empty safe identifier", context)};
+        throwException<ParseFailure>("{} must be a non-empty safe identifier", context);
       }
 
       auto const safe = std::ranges::all_of(value,
@@ -426,7 +423,7 @@ namespace ao::fleet
 
       if (!safe)
       {
-        throw ParseFailure{std::format("{} contains unsafe characters", context)};
+        throwException<ParseFailure>("{} contains unsafe characters", context);
       }
     }
 
@@ -477,7 +474,7 @@ namespace ao::fleet
 
       if (scalar(required(root, "schema"), "schema") != "aobus-fleet-intent/v1")
       {
-        throw ParseFailure{"unsupported intent schema"};
+        throwException<ParseFailure>("unsupported intent schema");
       }
 
       auto result = PhaseIntent{};
@@ -499,7 +496,7 @@ namespace ao::fleet
 
       if (result.invariant.empty())
       {
-        throw ParseFailure{"invariant must not be empty"};
+        throwException<ParseFailure>("invariant must not be empty");
       }
 
       auto scope = required(root, "scope");
@@ -514,7 +511,7 @@ namespace ao::fleet
 
         if (!scopePaths.insert(rule.path).second)
         {
-          throw ParseFailure{std::format("duplicate scope path '{}'", rule.path.generic_string())};
+          throwException<ParseFailure>("duplicate scope path '{}'", rule.path.generic_string());
         }
 
         auto operations = required(row, "operations");
@@ -527,7 +524,7 @@ namespace ao::fleet
 
         if (rule.operations.empty())
         {
-          throw ParseFailure{"scope operations must not be empty"};
+          throwException<ParseFailure>("scope operations must not be empty");
         }
 
         result.scope.push_back(std::move(rule));
@@ -549,30 +546,138 @@ namespace ao::fleet
 
       if (result.body.empty())
       {
-        throw ParseFailure{"body must not be empty"};
+        throwException<ParseFailure>("body must not be empty");
       }
 
       return result;
     }
 
-    AgentDefinition parseAgent(std::string id, ryml::ConstNodeRef node)
+    HarnessDefinition parseHarness(std::string id, ryml::ConstNodeRef node)
     {
       rejectUnknown(
-        node, {"model", "argv", "prompt-delivery", "environment-whitelist", "timeout-ms", "rate-limit-key"}, "agent");
-      auto result = AgentDefinition{};
+        node, {"argv", "prompt-delivery", "environment-whitelist", "timeout-ms", "rate-limit-key"}, "harness");
+      auto result = HarnessDefinition{};
       result.id = std::move(id);
-      result.model = scalar(required(node, "model"), "agent model");
-      result.argvTemplate = stringSequence(required(node, "argv"), "agent argv");
+      result.argvTemplate = stringSequence(required(node, "argv"), "harness argv");
 
       if (result.argvTemplate.empty())
       {
-        throw ParseFailure{"agent argv must not be empty"};
+        throwException<ParseFailure>("harness argv must not be empty");
       }
 
       result.promptDelivery = parsePromptDelivery(required(node, "prompt-delivery"));
       result.environmentWhitelist = stringSequence(required(node, "environment-whitelist"), "environment whitelist");
       result.timeout = std::chrono::milliseconds{unsignedValue(required(node, "timeout-ms"), "timeout-ms")};
       result.rateLimitKey = scalar(required(node, "rate-limit-key"), "rate-limit-key");
+
+      if (result.rateLimitKey.empty())
+      {
+        throwException<ParseFailure>("harness '{}' rate-limit-key must not be empty", result.id);
+      }
+
+      return result;
+    }
+
+    std::string substitutePlaceholder(std::string value, std::string_view placeholder, std::string_view replacement)
+    {
+      auto cursor = std::size_t{};
+
+      while ((cursor = value.find(placeholder, cursor)) != std::string::npos)
+      {
+        value.replace(cursor, placeholder.size(), replacement);
+        cursor += replacement.size();
+      }
+
+      return value;
+    }
+
+    bool argvUsesPlaceholder(std::vector<std::string> const& argvTemplate, std::string_view placeholder)
+    {
+      return std::ranges::any_of(
+        argvTemplate, [&](std::string const& argument) { return argument.find(placeholder) != std::string::npos; });
+    }
+
+    AgentDefinition parseAgent(std::string id,
+                               ryml::ConstNodeRef node,
+                               std::map<std::string, HarnessDefinition, std::less<>> const& harnesses)
+    {
+      rejectUnknown(node, {"harness", "model", "vendor", "effort", "timeout-ms"}, "agent");
+      auto result = AgentDefinition{};
+      result.id = std::move(id);
+      result.harness = scalar(required(node, "harness"), "agent harness");
+      result.model = scalar(required(node, "model"), "agent model");
+      result.vendor = scalar(required(node, "vendor"), "agent vendor");
+
+      if (result.model.empty())
+      {
+        throwException<ParseFailure>("agent '{}' model must not be empty", result.id);
+      }
+
+      if (result.vendor.empty())
+      {
+        throwException<ParseFailure>("agent '{}' vendor must not be empty", result.id);
+      }
+
+      if (auto effort = optional(node, "effort"); effort.readable())
+      {
+        result.effort = scalar(effort, "agent effort");
+
+        if (result.effort.empty())
+        {
+          throwException<ParseFailure>("agent '{}' effort must not be empty", result.id);
+        }
+      }
+
+      // Model and effort values reach the spawned command line via placeholder substitution;
+      // braces inside them could smuggle tokens past the harness placeholder allow-list.
+      for (auto const* field : {&result.model, &result.effort})
+      {
+        if (field->find('{') != std::string::npos || field->find('}') != std::string::npos)
+        {
+          throwException<ParseFailure>("agent '{}' model and effort must not contain placeholder braces", result.id);
+        }
+      }
+
+      auto harnessIt = harnesses.find(result.harness);
+
+      if (harnessIt == harnesses.end())
+      {
+        throwException<ParseFailure>("agent '{}' references unknown harness '{}'", result.id, result.harness);
+      }
+
+      auto const& harness = harnessIt->second;
+      auto const usesEffort = argvUsesPlaceholder(harness.argvTemplate, "{effort}");
+
+      if (usesEffort && result.effort.empty())
+      {
+        throwException<ParseFailure>(
+          "agent '{}' must set effort: harness '{}' argv uses '{{effort}}'", result.id, harness.id);
+      }
+
+      if (!usesEffort && !result.effort.empty())
+      {
+        throwException<ParseFailure>(
+          "agent '{}' sets effort but harness '{}' argv does not use '{{effort}}'", result.id, harness.id);
+      }
+
+      // The model and effort are static per agent, so they resolve at load time; only the
+      // run-time placeholders (prompt, workspace, ...) survive into the engine.
+      for (auto const& argument : harness.argvTemplate)
+      {
+        auto resolved = substitutePlaceholder(argument, "{model}", result.model);
+        result.argvTemplate.push_back(substitutePlaceholder(std::move(resolved), "{effort}", result.effort));
+      }
+
+      result.promptDelivery = harness.promptDelivery;
+      result.environmentWhitelist = harness.environmentWhitelist;
+      result.timeout = harness.timeout;
+      result.rateLimitKey = harness.rateLimitKey;
+
+      if (auto timeout = optional(node, "timeout-ms"); timeout.readable())
+      {
+        result.timeout = std::chrono::milliseconds{unsignedValue(timeout, "agent timeout-ms")};
+      }
+
       return result;
     }
 
@@ -629,7 +734,7 @@ namespace ao::fleet
 
         if (!allowedArguments.contains(name))
         {
-          throw ParseFailure{std::format("oracle '{}' does not accept argument '{}'", result.id, name)};
+          throwException<ParseFailure>("oracle '{}' does not accept argument '{}'", result.id, name);
         }
       }
 
@@ -665,7 +770,7 @@ namespace ao::fleet
         if (result.gate.fanout == 0 || result.gate.topK == 0 || result.gate.topK > result.gate.fanout ||
             result.gate.maxRounds == 0)
         {
-          throw ParseFailure{"invalid gate fanout/top-k/max-rounds"};
+          throwException<ParseFailure>("invalid gate fanout/top-k/max-rounds");
         }
       }
       else if (result.engine == EngineKind::Synthesis)
@@ -677,7 +782,7 @@ namespace ao::fleet
 
         if (result.synthesis.quorum == 0 || result.synthesis.quorum > result.synthesis.roster.size())
         {
-          throw ParseFailure{"invalid synthesis quorum"};
+          throwException<ParseFailure>("invalid synthesis quorum");
         }
       }
 
@@ -700,18 +805,19 @@ namespace ao::fleet
 
       if (result.action == EscalationAction::SwitchRoute && !result.optRoute)
       {
-        throw ParseFailure{"switch-route escalation requires route"};
+        throwException<ParseFailure>("switch-route escalation requires route");
       }
 
       return result;
     }
 
-    void validatePlaceholders(AgentDefinition const& agent)
+    void validatePlaceholders(HarnessDefinition const& harness)
     {
-      auto const allowed = std::set<std::string>{"prompt", "prompt-file", "workspace", "intent", "repo"};
+      auto const allowed =
+        std::set<std::string>{"model", "effort", "prompt", "prompt-file", "workspace", "intent", "repo"};
       auto placeholders = std::set<std::string>{};
 
-      for (auto const& argument : agent.argvTemplate)
+      for (auto const& argument : harness.argvTemplate)
       {
         auto cursor = std::size_t{};
 
@@ -721,14 +827,14 @@ namespace ao::fleet
 
           if (end == std::string::npos)
           {
-            throw ParseFailure{std::format("unclosed placeholder in agent '{}'", agent.id)};
+            throwException<ParseFailure>("unclosed placeholder in harness '{}'", harness.id);
           }
 
           auto const placeholder = argument.substr(cursor + 1, end - cursor - 1);
 
           if (!allowed.contains(placeholder))
           {
-            throw ParseFailure{std::format("unknown placeholder '{{{}}}' in agent '{}'", placeholder, agent.id)};
+            throwException<ParseFailure>("unknown placeholder '{{{}}}' in harness '{}'", placeholder, harness.id);
           }
 
           placeholders.insert(placeholder);
@@ -736,23 +842,36 @@ namespace ao::fleet
         }
       }
 
-      if (agent.promptDelivery == PromptDelivery::Argument && !placeholders.contains("prompt"))
+      // The registry's model declaration must be the single source of truth for what the CLI
+      // actually runs, so every harness is forced to thread it through.
+      if (!placeholders.contains("model"))
       {
-        throw ParseFailure{std::format("agent '{}' uses argument prompt delivery without '{{prompt}}'", agent.id)};
+        throwException<ParseFailure>("harness '{}' argv must use '{{model}}'", harness.id);
       }
 
-      if (agent.promptDelivery == PromptDelivery::File && !placeholders.contains("prompt-file"))
+      if (harness.promptDelivery == PromptDelivery::Argument && !placeholders.contains("prompt"))
       {
-        throw ParseFailure{std::format("agent '{}' uses file prompt delivery without '{{prompt-file}}'", agent.id)};
+        throwException<ParseFailure>("harness '{}' uses argument prompt delivery without '{{prompt}}'", harness.id);
+      }
+
+      if (harness.promptDelivery == PromptDelivery::File && !placeholders.contains("prompt-file"))
+      {
+        throwException<ParseFailure>("harness '{}' uses file prompt delivery without '{{prompt-file}}'", harness.id);
       }
     }
 
     void validateRegistry(Registry const& registry)
     {
-      for (auto const& [id, agent] : registry.agents)
+      for (auto const& [id, harness] : registry.harnesses)
       {
+        requireSafeIdentifier(id, "harness id");
+        validatePlaceholders(harness);
+      }
+
+      for (auto const& [id, ignored] : registry.agents)
+      {
+        [[maybe_unused]] auto const _ = ignored;
         requireSafeIdentifier(id, "agent id");
-        validatePlaceholders(agent);
       }
 
       for (auto const& [kind, binding] : registry.bindings)
@@ -761,31 +880,60 @@ namespace ao::fleet
 
         if (binding.engine == EngineKind::Search)
         {
-          throw ParseFailure{std::format("binding '{}' enables unsupported search engine", kind)};
+          throwException<ParseFailure>("binding '{}' enables unsupported search engine", kind);
         }
 
         if (!registry.agents.contains(binding.agent))
         {
-          throw ParseFailure{std::format("binding '{}' references unknown agent '{}'", kind, binding.agent)};
+          throwException<ParseFailure>("binding '{}' references unknown agent '{}'", kind, binding.agent);
         }
 
         if (binding.optOracle && !registry.oracles.contains(*binding.optOracle))
         {
-          throw ParseFailure{std::format("binding '{}' references unknown oracle '{}'", kind, *binding.optOracle)};
+          throwException<ParseFailure>("binding '{}' references unknown oracle '{}'", kind, *binding.optOracle);
         }
 
         if (binding.optRiskOracle && !registry.oracles.contains(*binding.optRiskOracle))
         {
-          throw ParseFailure{
-            std::format("binding '{}' references unknown risk oracle '{}'", kind, *binding.optRiskOracle)};
+          throwException<ParseFailure>(
+            "binding '{}' references unknown risk oracle '{}'", kind, *binding.optRiskOracle);
         }
+
+        auto rosterMembers = std::set<std::string_view>{};
+        auto rosterVendors = std::set<std::string_view>{};
 
         for (auto const& member : binding.synthesis.roster)
         {
-          if (!registry.agents.contains(member))
+          auto memberIt = registry.agents.find(member);
+
+          if (memberIt == registry.agents.end())
           {
-            throw ParseFailure{std::format("binding '{}' roster references unknown agent '{}'", kind, member)};
+            throwException<ParseFailure>("binding '{}' roster references unknown agent '{}'", kind, member);
           }
+
+          if (!rosterMembers.insert(member).second)
+          {
+            throwException<ParseFailure>("binding '{}' roster lists agent '{}' twice", kind, member);
+          }
+
+          rosterVendors.insert(memberIt->second.vendor);
+        }
+
+        // A same-vendor panel defeats the diversity purpose of a synthesis council (design doc
+        // section 7), so vendor spread is a load-time invariant, not an advisory hope.
+        if (binding.synthesis.roster.size() > 1 && rosterVendors.size() < 2)
+        {
+          throwException<ParseFailure>(
+            "binding '{}' roster is single-vendor; councils require cross-vendor diversity", kind);
+        }
+      }
+
+      for (auto const& [reason, rule] : registry.escalations)
+      {
+        if (rule.optRoute && !registry.agents.contains(*rule.optRoute))
+        {
+          throwException<ParseFailure>(
+            "escalation '{}' references unknown agent '{}'", toString(reason), *rule.optRoute);
         }
       }
 
@@ -851,20 +999,29 @@ namespace ao::fleet
     try
     {
       auto root = documentRoot(parsed->tree);
-      rejectUnknown(root, {"schema", "agents", "oracles", "bindings", "escalations", "ruler-paths"}, "registry");
+      rejectUnknown(
+        root, {"schema", "harnesses", "agents", "oracles", "bindings", "escalations", "ruler-paths"}, "registry");
 
       if (scalar(required(root, "schema"), "schema") != "aobus-fleet-registry/v1")
       {
-        throw ParseFailure{"unsupported registry schema"};
+        throwException<ParseFailure>("unsupported registry schema");
       }
 
       auto result = Registry{};
+      auto harnesses = required(root, "harnesses");
+      requireMap(harnesses, "harnesses");
+
+      for (auto child : harnesses.children())
+      {
+        result.harnesses.emplace(key(child), parseHarness(key(child), child));
+      }
+
       auto agents = required(root, "agents");
       requireMap(agents, "agents");
 
       for (auto child : agents.children())
       {
-        result.agents.emplace(key(child), parseAgent(key(child), child));
+        result.agents.emplace(key(child), parseAgent(key(child), child, result.harnesses));
       }
 
       auto oracles = required(root, "oracles");
@@ -890,7 +1047,7 @@ namespace ao::fleet
       {
         if (auto rule = parseEscalation(child); !result.escalations.emplace(rule.reason, rule).second)
         {
-          throw ParseFailure{std::format("duplicate escalation reason '{}'", toString(rule.reason))};
+          throwException<ParseFailure>("duplicate escalation reason '{}'", toString(rule.reason));
         }
       }
 
@@ -977,12 +1134,12 @@ namespace ao::fleet
 
           if (policy == OverridePolicy::TightenUpper && *optValue > slot)
           {
-            throw ParseFailure{std::format("intent {} override may only tighten", name)};
+            throwException<ParseFailure>("intent {} override may only tighten", name);
           }
 
           if (policy == OverridePolicy::TightenLower && *optValue < slot)
           {
-            throw ParseFailure{std::format("intent {} override may only tighten", name)};
+            throwException<ParseFailure>("intent {} override may only tighten", name);
           }
 
           slot = *optValue;
@@ -998,7 +1155,7 @@ namespace ao::fleet
 
       if (bindingIt == registry.bindings.end())
       {
-        throw ParseFailure{std::format("no binding for task-kind '{}'", intent.taskKind)};
+        throwException<ParseFailure>("no binding for task-kind '{}'", intent.taskKind);
       }
 
       auto binding = bindingIt->second;
@@ -1006,14 +1163,14 @@ namespace ao::fleet
 
       if (binding.engine == EngineKind::Search)
       {
-        throw ParseFailure{"search engine is not supported in production registry"};
+        throwException<ParseFailure>("search engine is not supported in production registry");
       }
 
       auto agentIt = registry.agents.find(binding.agent);
 
       if (agentIt == registry.agents.end())
       {
-        throw ParseFailure{std::format("unknown agent '{}'", binding.agent)};
+        throwException<ParseFailure>("unknown agent '{}'", binding.agent);
       }
 
       auto result = ResolvedPhase{.intent = intent,
@@ -1166,7 +1323,10 @@ namespace ao::fleet
     out << "task-kind: " << yamlScalar(phase.intent.taskKind) << "\n";
     out << "engine: " << toString(phase.binding.engine) << "\n";
     out << "agent: " << yamlScalar(phase.agent.id) << "\n";
+    out << "harness: " << yamlScalar(phase.agent.harness) << "\n";
     out << "model: " << yamlScalar(phase.agent.model) << "\n";
+    out << "vendor: " << yamlScalar(phase.agent.vendor) << "\n";
+    out << "effort: " << (phase.agent.effort.empty() ? std::string{"null"} : yamlScalar(phase.agent.effort)) << "\n";
     out << "oracle: " << (phase.optOracle ? yamlScalar(phase.optOracle->id) : "null") << "\n";
     out << "risk-oracle: " << (phase.optRiskOracle ? yamlScalar(phase.optRiskOracle->id) : "null") << "\n";
     return out.str();
@@ -1396,7 +1556,7 @@ namespace ao::fleet
 
         if (auto schemaIt = values.find("schema"); schemaIt == values.end() || schemaIt->second != schema)
         {
-          throw ParseFailure{"unexpected stream schema"};
+          throwException<ParseFailure>("unexpected stream schema");
         }
 
         result.documents.push_back(std::move(values));
@@ -1439,7 +1599,7 @@ namespace ao::fleet
 
       if (scalar(required(root, "schema"), "schema") != "aobus-fleet-manifest/v1")
       {
-        throw ParseFailure{"unsupported manifest schema"};
+        throwException<ParseFailure>("unsupported manifest schema");
       }
 
       return scalar(required(root, "route-key"), "route-key");

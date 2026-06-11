@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "fleet/Substrate.h"
+
 #include "fleet/Model.h"
 #include "fleet/ProcessRunner.h"
-#include "fleet/Substrate.h"
-#include "test/fleet/TestUtils.h"
+#include "test/unit/fleet/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 

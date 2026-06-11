@@ -38,6 +38,15 @@ namespace ao::audio::test
       REQUIRE(stableBlock);
       CHECK(stableBlock->endOfStream);
       CHECK(stableBlock->bytes.empty());
+
+      auto const info = decoder.streamInfo();
+      REQUIRE(info.durationMs > 0);
+      REQUIRE(decoder.seek(0));
+
+      auto const restartedBlock = decoder.readNextBlock();
+      REQUIRE(restartedBlock);
+      CHECK(restartedBlock->frames > 0);
+      CHECK_FALSE(restartedBlock->endOfStream);
     }
 
     SECTION("Corrupt frames are skipped without hanging")

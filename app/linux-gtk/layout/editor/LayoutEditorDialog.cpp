@@ -4,6 +4,7 @@
 #include "LayoutEditorDialog.h"
 
 #include "app/AppDialog.h"
+#include "layout/document/GtkLayoutPresets.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ActionRegistry.h"
@@ -45,7 +46,6 @@
 #include <cstdint>
 #include <format>
 #include <map>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -67,7 +67,8 @@ namespace ao::gtk::layout::editor
                                          ActionRegistry const& actionRegistry,
                                          LayoutDocument initialLayout,
                                          std::string initialPresetId,
-                                         std::string initialThemeId)
+                                         std::string initialThemeId,
+                                         LayoutLoaderFn layoutLoader)
     : AppDialog{}
     , _registry{registry}
     , _actionRegistry{actionRegistry}
@@ -75,6 +76,8 @@ namespace ao::gtk::layout::editor
     , _columns{}
     , _treeStorePtr{Gtk::TreeStore::create(_columns)}
     , _actionGroupPtr{Gio::SimpleActionGroup::create()}
+    , _layoutLoader{std::move(layoutLoader)}
+    , _currentPresetId{initialPresetId}
   {
     set_title("Layout Editor");
     set_transient_for(parent);
@@ -86,6 +89,8 @@ namespace ao::gtk::layout::editor
 
     setupUi();
 
+    _session[initialPresetId] = SessionEntry{.doc = _document, .dirty = false, .resetPending = false};
+
     signal_response().connect(
       [this](std::int32_t responseId)
       {
@@ -95,9 +100,28 @@ namespace ao::gtk::layout::editor
         }
         else if (responseId == Gtk::ResponseType::OK)
         {
-          if (validateDocument())
+          stashCurrentDocument();
+
+          if (validateAllDirtyDocuments())
           {
-            _signalSaveRequest.emit(_document);
+            auto result = LayoutSaveResult{};
+
+            for (auto const& [id, entry] : _session)
+            {
+              if (entry.dirty)
+              {
+                result.modified[id] = entry.doc;
+              }
+              else if (entry.resetPending)
+              {
+                result.resets.push_back(id);
+              }
+            }
+
+            result.activePresetId = _comboPresets.get_active_id().raw();
+            result.activeDocument = _document;
+
+            _signalSaveRequest.emit(result);
             close();
           }
         }
@@ -110,17 +134,7 @@ namespace ao::gtk::layout::editor
     _comboPresets.set_active_id(initialPresetId);
     _comboThemePresets.set_active_id(initialThemeId);
 
-    _comboPresets.signal_changed().connect(
-      [this]
-      {
-        if (auto const id = _comboPresets.get_active_id(); !id.empty())
-        {
-          auto const presetId = (id.raw() == "modern") ? LayoutPresetId::Modern : LayoutPresetId::Classic;
-          _document = createBuiltInLayout(presetId);
-          populateTree();
-          _signalApplyPreview.emit(_document);
-        }
-      });
+    _comboPresets.signal_changed().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onPresetChanged));
 
     _comboThemePresets.signal_changed().connect(
       [this]
@@ -366,6 +380,7 @@ namespace ao::gtk::layout::editor
     {
       node->layout["x"] = LayoutValue{static_cast<std::int64_t>(posX)};
       node->layout["y"] = LayoutValue{static_cast<std::int64_t>(posY)};
+      markEdited();
 
       if (auto const row = _treeView.get_selection()->get_selected(); row)
       {
@@ -408,6 +423,7 @@ namespace ao::gtk::layout::editor
     std::ranges::replace(newNode.id, '.', '_');
     newNode.type = std::move(type);
 
+    markEdited();
     parentNode->children.push_back(std::move(newNode));
 
     populateTree();
@@ -443,6 +459,7 @@ namespace ao::gtk::layout::editor
         containerNode.id = containerType + "_wrap";
         containerNode.type = std::move(containerType);
 
+        markEdited();
         // Move the target node into the new container
         containerNode.children.push_back(std::move(*it));
 
@@ -492,6 +509,7 @@ namespace ao::gtk::layout::editor
 
       if (it != parentNode->children.end())
       {
+        markEdited();
         parentNode->children.erase(it);
         populateTree();
         notifyPreview();
@@ -517,6 +535,7 @@ namespace ao::gtk::layout::editor
 
       if (it != parentNode->children.end() && it != parentNode->children.begin())
       {
+        markEdited();
         std::iter_swap(it, it - 1);
         populateTree();
         notifyPreview();
@@ -542,6 +561,7 @@ namespace ao::gtk::layout::editor
 
       if (it != parentNode->children.end() && (it + 1) != parentNode->children.end())
       {
+        markEdited();
         std::iter_swap(it, it + 1);
         populateTree();
         notifyPreview();
@@ -551,13 +571,15 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onResetDefault()
   {
-    if (auto const presetId = _comboPresets.get_active_id(); presetId == "modern")
+    auto const presetId = _comboPresets.get_active_id();
+    auto const presetEnum = presetIdFromString(presetId.raw());
+    _document = createBuiltInLayout(presetEnum);
+
+    if (auto const it = _session.find(_currentPresetId); it != _session.end())
     {
-      _document = createBuiltInLayout(LayoutPresetId::Modern);
-    }
-    else
-    {
-      _document = createBuiltInLayout(LayoutPresetId::Classic);
+      it->second.doc = _document;
+      it->second.dirty = false;
+      it->second.resetPending = true;
     }
 
     populateTree();
@@ -566,60 +588,84 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::onPresetChanged()
   {
-    auto const presetId = _comboPresets.get_active_id();
+    auto const id = _comboPresets.get_active_id();
 
-    if (presetId.empty())
+    if (id.empty() || id.raw() == _currentPresetId)
     {
       return;
     }
 
-    // Ask for confirmation if there are nodes or customizations.
-    // We check if root has children to decide if it's "dirty" enough to ask.
-    // In a more complete implementation, we'd compare against the built-in default.
-    auto* const confirmation = Gtk::make_managed<Gtk::MessageDialog>(
-      *this, "Switch to " + presetId + " preset?", false, Gtk::MessageType::QUESTION, Gtk::ButtonsType::YES_NO, true);
-    confirmation->set_secondary_text("This will replace your current layout with the default " + presetId +
-                                     " preset. Any unsaved changes will be lost.");
-
-    confirmation->signal_response().connect(
-      [this, presetId, confirmation](std::int32_t response)
-      {
-        if (response == Gtk::ResponseType::YES)
-        {
-          if (presetId == "modern")
-          {
-            _document = createBuiltInLayout(LayoutPresetId::Modern);
-          }
-          else
-          {
-            _document = createBuiltInLayout(LayoutPresetId::Classic);
-          }
-
-          populateTree();
-          notifyPreview();
-        }
-        else
-        {
-          // Revert combo selection without triggering signal again
-          _comboPresets.set_active_id(_document.root.layout.contains("cssClasses") &&
-                                          std::ranges::contains(_document.root.layout.at("cssClasses").asStringList(),
-                                                                std::string_view{"ao-layout-preset-modern"})
-                                        ? "modern"
-                                        : "classic");
-        }
-
-        confirmation->close();
-      });
-
-    if (get_visible())
+    if (_previewDebounceConn)
     {
-      confirmation->show();
+      _previewDebounceConn.disconnect();
+    }
+
+    stashCurrentDocument();
+
+    if (auto const it = _session.find(id.raw()); it != _session.end())
+    {
+      _document = it->second.doc;
     }
     else
     {
-      // In headless/test mode, auto-confirm the preset change to allow testing the logic
-      confirmation->response(Gtk::ResponseType::YES);
+      _document = _layoutLoader(id.raw());
+      _session.emplace(id.raw(), SessionEntry{.doc = _document, .dirty = false, .resetPending = false});
     }
+
+    _currentPresetId = id.raw();
+    populateTree();
+    notifyPreview();
+  }
+
+  void LayoutEditorDialog::markEdited()
+  {
+    if (auto const it = _session.find(_currentPresetId); it != _session.end())
+    {
+      it->second.dirty = true;
+      it->second.resetPending = false;
+    }
+  }
+
+  void LayoutEditorDialog::stashCurrentDocument()
+  {
+    if (auto const it = _session.find(_currentPresetId); it != _session.end())
+    {
+      it->second.doc = _document;
+    }
+  }
+
+  bool LayoutEditorDialog::validateAllDirtyDocuments()
+  {
+    for (auto& [presetId, entry] : _session)
+    {
+      if (entry.dirty || presetId == _currentPresetId)
+      {
+        auto const diagnostics = validateActions(
+          entry.doc, _registry.catalog(), _actionRegistry.catalog(), resolveGtkLayoutActionBindingContext);
+
+        if (!diagnostics.empty())
+        {
+          auto const& firstError = diagnostics.front();
+          auto* const msg = Gtk::make_managed<Gtk::MessageDialog>(
+            *this, "Invalid Layout Actions", false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
+          msg->set_secondary_text(std::format("Validation failed on preset '{}' component '{}' property '{}':\n\n{}",
+                                              presetId,
+                                              firstError.componentId,
+                                              firstError.propertyName,
+                                              firstError.message));
+          msg->signal_response().connect([msg](std::int32_t) { msg->close(); });
+
+          if (get_visible())
+          {
+            msg->show();
+          }
+
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   void LayoutEditorDialog::onSelectionChanged()
@@ -632,33 +678,6 @@ namespace ao::gtk::layout::editor
     {
       updatePropertiesPanel(nullptr);
     }
-  }
-
-  bool LayoutEditorDialog::validateDocument()
-  {
-    auto const diagnostics =
-      validateActions(_document, _registry.catalog(), _actionRegistry.catalog(), resolveGtkLayoutActionBindingContext);
-
-    if (!diagnostics.empty())
-    {
-      auto const& firstError = diagnostics.front();
-      auto* const msg = Gtk::make_managed<Gtk::MessageDialog>(
-        *this, "Invalid Layout Actions", false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
-      msg->set_secondary_text(std::format("Validation failed on component '{}' property '{}':\n\n{}",
-                                          firstError.componentId,
-                                          firstError.propertyName,
-                                          firstError.message));
-      msg->signal_response().connect([msg](std::int32_t) { msg->close(); });
-
-      if (get_visible())
-      {
-        msg->show();
-      }
-
-      return false;
-    }
-
-    return true;
   }
 
   void LayoutEditorDialog::notifyPreview()
@@ -680,7 +699,26 @@ namespace ao::gtk::layout::editor
       node->props[std::string{propName}] = value;
     }
 
-    notifyPreview();
+    markEdited();
+    scheduleDebouncedPreview();
+  }
+
+  void LayoutEditorDialog::scheduleDebouncedPreview()
+  {
+    if (_previewDebounceConn)
+    {
+      _previewDebounceConn.disconnect();
+    }
+
+    constexpr int kDebounceMs = 500;
+
+    _previewDebounceConn = Glib::signal_timeout().connect(
+      [this] -> bool
+      {
+        notifyPreview();
+        return false;
+      },
+      kDebounceMs);
   }
 
   namespace
@@ -731,46 +769,33 @@ namespace ao::gtk::layout::editor
     entry->set_hexpand(true);
     entry->add_css_class("flat-entry");
 
-    auto const debounceConnPtr = std::make_shared<sigc::connection>();
-    constexpr int kDebounceMs = 500;
-
     entry->signal_changed().connect(
-      [this, node, entry, debounceConnPtr]
+      [this, node, entry]
       {
-        if (*debounceConnPtr)
+        auto const newId = std::string{entry->get_text().raw()};
+
+        if (node->id == newId)
         {
-          debounceConnPtr->disconnect();
+          return;
         }
 
-        *debounceConnPtr = Glib::signal_timeout().connect(
-          [this, node, entry] -> bool
+        node->id = newId;
+        markEdited();
+
+        if (auto const row = _treeView.get_selection()->get_selected(); row)
+        {
+          auto const optDescriptor = _registry.descriptor(node->type);
+          auto displayName = Glib::ustring{node->id};
+
+          if (displayName.empty())
           {
-            auto const newId = std::string{entry->get_text().raw()};
+            displayName = optDescriptor ? optDescriptor->displayName : node->type;
+          }
 
-            if (node->id == newId)
-            {
-              return false;
-            }
+          row->set_value(_columns.displayName, displayName);
+        }
 
-            node->id = newId;
-
-            if (auto const row = _treeView.get_selection()->get_selected(); row)
-            {
-              auto const optDescriptor = _registry.descriptor(node->type);
-              auto displayName = Glib::ustring{node->id};
-
-              if (displayName.empty())
-              {
-                displayName = optDescriptor ? optDescriptor->displayName : node->type;
-              }
-
-              row->set_value(_columns.displayName, displayName);
-            }
-
-            notifyPreview();
-            return false;
-          },
-          kDebounceMs);
+        scheduleDebouncedPreview();
       });
 
     hbox->append(*label);
@@ -934,25 +959,9 @@ namespace ao::gtk::layout::editor
     entry->set_hexpand(true);
     entry->add_css_class("flat-entry");
 
-    auto const debounceConnPtr = std::make_shared<sigc::connection>();
-    constexpr int kDebounceMs = 500;
-
     entry->signal_changed().connect(
-      [this, node, prop, entry, isLayoutProp, debounceConnPtr]
-      {
-        if (*debounceConnPtr)
-        {
-          debounceConnPtr->disconnect();
-        }
-
-        *debounceConnPtr = Glib::signal_timeout().connect(
-          [this, node, prop, entry, isLayoutProp] -> bool
-          {
-            applyPropertyChange(node, prop.name, LayoutValue{entry->get_text().raw()}, isLayoutProp);
-            return false;
-          },
-          kDebounceMs);
-      });
+      [this, node, prop, entry, isLayoutProp]
+      { applyPropertyChange(node, prop.name, LayoutValue{entry->get_text().raw()}, isLayoutProp); });
 
     return createPropertyRow(prop.label, *entry);
   }
@@ -983,6 +992,11 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::updatePropertiesPanel(LayoutNode* node)
   {
+    if (_previewDebounceConn)
+    {
+      _previewDebounceConn.disconnect();
+    }
+
     while (auto* child = _propertiesBox.get_first_child())
     {
       _propertiesBox.remove(*child);

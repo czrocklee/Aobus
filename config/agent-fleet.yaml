@@ -2,88 +2,114 @@ schema: aobus-fleet-registry/v1
 # Guard-protected paths enforced for every patch, on top of the per-oracle ruler-paths below.
 # The engine additionally hardcodes tool/fleet and config/agent-fleet.yaml (self-protection)
 # and rejects any CMakeLists.txt by basename at every directory level.
-ruler-paths: [cmake, script, .agents, doc/design, build.sh, format.sh, shell.nix, CMakePresets.json, nixpkgs.json, .clang-tidy, tool/lint]
-agents:
-  dspro:
-    model: deepseek-v4-pro
-    argv: [opencode, run, --dangerously-skip-permissions, --variant, max, -m, opencode-go/deepseek-v4-pro]
+ruler-paths: [cmake, script, .agents, doc/design, ao, shell.nix, CMakePresets.json, nixpkgs.json, .clang-tidy, tool/lint]
+# A harness is a headless CLI invocation shared by its agents. The {model} (and optional
+# {effort}) placeholders are filled from each agent at registry load, so the agent's model
+# declaration is the single source of truth for what actually runs. rate-limit-key names the
+# quota pool the harness draws from (gateway or vendor account), not the model's vendor.
+harnesses:
+  opencode:
+    argv: [opencode, run, --dangerously-skip-permissions, --variant, max, -m, "{model}"]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, XDG_CONFIG_HOME, OPENCODE_CONFIG_DIR]
     timeout-ms: 1200000
     rate-limit-key: opencode-go
   codex:
-    model: gpt-5.5
-    argv: [codex, exec, -s, workspace-write, --skip-git-repo-check]
+    # danger-full-access: the fleet namespace already isolates the workspace; codex's own
+    # workspace-write sandbox additionally blocks network, which breaks nix-shell entry.
+    argv: [codex, exec, -s, danger-full-access, --skip-git-repo-check, -m, "{model}"]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, CODEX_HOME]
     timeout-ms: 1200000
     rate-limit-key: openai
-  claude-opus:
-    model: opus
-    argv: [claude, -p, --dangerously-skip-permissions, --no-session-persistence, --model, opus, --effort, xhigh]
+  claude:
+    argv: [claude, -p, --dangerously-skip-permissions, --no-session-persistence, --model, "{model}", --effort, "{effort}"]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, ANTHROPIC_API_KEY]
     timeout-ms: 1200000
     rate-limit-key: anthropic
-  gemini-pro:
-    model: gemini-3.1-pro-high
-    argv: [agy, -p, "", --add-dir, ., --dangerously-skip-permissions, --model, "Gemini 3.1 Pro (High)"]
+  antigravity:
+    argv: [agy, -p, "", --add-dir, ., --dangerously-skip-permissions, --model, "{model}"]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, GOOGLE_API_KEY]
     timeout-ms: 1200000
     rate-limit-key: google
+# An agent is a fleet member identity: (harness, model) plus the vendor whose weights answer.
+# Models are pinned ids exactly as the harness CLI accepts them; aliases would let route-key
+# history silently span model upgrades. vendor is the diversity dimension council rosters care
+# about. effort is required iff the harness argv uses {effort}. Agent ids stay version-free:
+# the model version lives in `model` (and in route-key statistics), so a model bump must not
+# rename the id and churn every roster/binding/escalation reference.
+agents:
+  deepseek-pro:
+    harness: opencode
+    model: opencode-go/deepseek-v4-pro
+    vendor: deepseek
+  openai-gpt:
+    harness: codex
+    model: gpt-5.5
+    vendor: openai
+  anthropic-opus:
+    harness: claude
+    model: claude-opus-4-8
+    vendor: anthropic
+    effort: xhigh
+  google-gemini-pro:
+    harness: antigravity
+    model: "Gemini 3.1 Pro (High)"
+    vendor: google
 oracles:
   test-all:
     runner: test-all
     arguments: {}
-    property: The full core and GTK test suites build and pass.
+    property: The full build and every registered test suite pass.
     known-gaps: [Passing tests do not prove semantic completeness.]
     baseline-policy: require-green
-    ruler-paths: [CMakeLists.txt, cmake, build.sh, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+    ruler-paths: [CMakeLists.txt, cmake, ao, script/ao, tool/fleet, config/agent-fleet.yaml]
   test-core:
     runner: test-core
     arguments: {}
     property: The selected core tests pass.
     known-gaps: [GTK behavior is not checked.]
     baseline-policy: require-green
-    ruler-paths: [CMakeLists.txt, cmake, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+    ruler-paths: [CMakeLists.txt, cmake, ao, script/ao, tool/fleet, config/agent-fleet.yaml]
   test-gtk:
     runner: test-gtk
     arguments: {}
     property: The selected GTK tests pass headlessly.
     known-gaps: [Core-only behavior is not checked.]
     baseline-policy: require-green
-    ruler-paths: [CMakeLists.txt, cmake, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+    ruler-paths: [CMakeLists.txt, cmake, ao, script/ao, tool/fleet, config/agent-fleet.yaml]
   test-asan:
     runner: test-asan
     arguments: {}
-    property: The full test suites build and pass under address and undefined sanitizers.
+    property: The full build and every registered test suite pass under address and undefined sanitizers.
     known-gaps: [Sanitizers only catch defects on the executed paths.]
     baseline-policy: require-green
     timeout-ms: 3600000
-    ruler-paths: [CMakeLists.txt, cmake, build.sh, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+    ruler-paths: [CMakeLists.txt, cmake, ao, script/ao, tool/fleet, config/agent-fleet.yaml]
   test-tsan:
     runner: test-tsan
     arguments: {}
-    property: The full test suites build and pass under the thread sanitizer.
+    property: The full build and every registered test suite pass under the thread sanitizer.
     known-gaps: [Data races are only caught on the executed interleavings.]
     baseline-policy: require-green
     timeout-ms: 3600000
-    ruler-paths: [CMakeLists.txt, cmake, build.sh, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+    ruler-paths: [CMakeLists.txt, cmake, ao, script/ao, tool/fleet, config/agent-fleet.yaml]
   tidy-clean:
     runner: tidy-clean
     arguments: {}
     property: Registered clang-tidy checks report no diagnostics for the selected files.
     known-gaps: [Lint cleanliness does not prove behavior preservation.]
     baseline-policy: require-green
-    ruler-paths: [.clang-tidy, tool/lint, script/run-clang-tidy.sh, tool/fleet, config/agent-fleet.yaml]
+    ruler-paths: [.clang-tidy, tool/lint, ao, script/ao, tool/fleet, config/agent-fleet.yaml]
   build-debug:
     runner: build-debug
     arguments: {}
     property: The debug application target builds successfully.
     known-gaps: [Tests are not executed.]
     baseline-policy: require-green
-    ruler-paths: [CMakeLists.txt, cmake, build.sh, tool/fleet, config/agent-fleet.yaml]
+    ruler-paths: [CMakeLists.txt, cmake, ao, script/ao, tool/fleet, config/agent-fleet.yaml]
   test-delta:
     runner: test-delta
     # Comma-separated path prefixes and file suffixes that count as test changes.
@@ -102,34 +128,34 @@ oracles:
     ruler-paths: [tool/fleet, config/agent-fleet.yaml]
 bindings:
   implement-plan:
-    agent: dspro
+    agent: deepseek-pro
     engine: gate
     oracle: test-all
     risk-oracle: test-delta
     params: {fanout: 1, top-k: 1, max-rounds: 3, churn-lines: 2000}
   draft-change:
-    agent: dspro
+    agent: deepseek-pro
     engine: gate
     params: {fanout: 1, top-k: 1, max-rounds: 1, churn-lines: 1000}
   # No risk-oracle: lint fixes do not have to touch tests; a clean tidy run is the gate,
   # matching the old lint_phase.sh acceptance rule.
   fix-lint:
-    agent: dspro
+    agent: deepseek-pro
     engine: gate
     oracle: tidy-clean
     params: {fanout: 2, top-k: 1, max-rounds: 3, churn-lines: 500}
   council-plan:
-    agent: claude-opus
+    agent: anthropic-opus
     engine: synthesis
     params:
-      roster: [claude-opus, codex, gemini-pro, dspro]
+      roster: [anthropic-opus, openai-gpt, google-gemini-pro, deepseek-pro]
       depth: full
       quorum: 3
   council-review:
-    agent: claude-opus
+    agent: anthropic-opus
     engine: synthesis
     params:
-      roster: [claude-opus, codex, gemini-pro, dspro]
+      roster: [anthropic-opus, openai-gpt, google-gemini-pro, deepseek-pro]
       depth: challenge
       quorum: 3
 escalations:
@@ -138,7 +164,7 @@ escalations:
     retry-limit: 2
   - reason: no-candidate
     action: switch-route
-    route: codex
+    route: openai-gpt
     retry-limit: 1
   - reason: scope-violation
     action: return-chair

@@ -243,13 +243,13 @@ Add or update focused GTK layout tests for:
 Run:
 
 ```bash
-./script/run-tests.sh --gtk "[layout]"
+./ao test --gtk "[layout]"
 ```
 
 For broader validation after touching shared GTK component behavior, run the full debug build:
 
 ```bash
-./build.sh debug
+./ao check
 ```
 
 ## Manual Verification

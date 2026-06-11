@@ -14,7 +14,7 @@ Use this skill when the user reports a failure or asks to debug behavior. The go
 
 Stay focused on the failing behavior. Do not start documentation updates, formatting passes, lint cleanup, include cleanup, coverage work, dependency upgrades, broad refactors, or unrelated test rewrites while diagnosing. Do those only when they directly unblock the fix or the user explicitly asks.
 
-If the fix touches C++ files, also load `generate-cpp-code` before editing. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
+When the fix touches C++ files, follow the repository's local style directly and keep the edit scoped to the failing path. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
 
 ## Delegation Boundary
 
@@ -38,10 +38,13 @@ decides the diagnosis or writes to the real tree.
 Prefer the project wrapper commands from the repository root:
 
 ```bash
-./build.sh debug
-./build.sh debug --clang
+./ao check
+./ao check --clang
 nix-shell --run "cmake --build /tmp/build/debug --parallel"
-nix-shell --run "/tmp/build/debug/test/ao_test \"test filter\""
+./ao test --core "test filter"
+./ao test --gtk "test filter"
+./ao test --integration "test filter"
+./ao test --fleet "test filter"
 ```
 
 Inspect build logs instead of rerunning full builds when a previous run already captured the failure:
@@ -72,7 +75,7 @@ Use `rg` for code search. Search narrowly by symbol, error text, test name, or a
 ## Crashes And Sanitizers
 
 - Capture the crashing command, signal, sanitizer report, and top relevant stack frames.
-- Prefer debug/sanitizer builds already produced by `./build.sh debug`.
+- Prefer debug/sanitizer builds already produced by `./ao check`.
 - For AddressSanitizer/UBSan, trace ownership, lifetime, bounds, optional/result access, casts, and moved-from state.
 - For crashes without a report, use `gdb` or `lldb` inside `nix-shell` only after a narrow reproducer exists.
 - Avoid speculative rewrites. Prove the invalid object, pointer, index, enum, or lifetime before patching.
@@ -101,10 +104,10 @@ Use the narrowest passing check first, then widen according to risk:
 - Unit failure: rerun the exact failing test, then the affected test binary if needed.
 - Crash: rerun the crashing command under the same build mode.
 - Threading fix: rerun the reproducer repeatedly or under the relevant sanitizer when available.
-- Shared core behavior: run `./build.sh debug` after the focused check passes.
+- Shared core behavior: run `./ao check` after the focused check passes.
 
 Run formatting, docs, or broad coverage only after the functional issue is fixed, and only when required by the user's requested deliverable. Run clang-tidy only when the user explicitly asks for linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session.
 
 ## High-Stakes Diagnoses And Reviews (optional)
 
-For most failures, diagnose solo with the loop above. When the call is genuinely high-stakes and a wrong judgment is costly — a subtle concurrency/lifetime root cause with competing hypotheses, an error-contract or architecture decision the fix forces, or reviewing a large/risky change — you may convene a multi-model **council** instead of deciding alone: load `run-council` and run it with `mode: review` (the change/diagnosis as the body), and — since this path is reserved for the genuinely high-stakes — `depth: full` so the panel also self-revises before you synthesize. It gathers a cross-vendor frontier panel that drafts, challenges each other, and revises, then you synthesize the final verdict from the dossier. It is **opt-in and expensive** — do not use it for routine bugs.
+For most failures, diagnose solo with the loop above. When the call is genuinely high-stakes and a wrong judgment is costly — a subtle concurrency/lifetime root cause with competing hypotheses, an error-contract or architecture decision the fix forces, or reviewing a large/risky change — you may convene a multi-model **council** instead of deciding alone: load `run-council` and follow its current intent schema. It gathers a cross-vendor frontier panel that drafts, challenges each other, and returns an advisory dossier; you still synthesize the final verdict after checking claims against the repository. It is **opt-in and expensive** — do not use it for routine bugs.

@@ -4,8 +4,10 @@
 #include "ShellLayoutController.h"
 
 #include "AppConfig.h"
+#include "ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
 #include "app/ThemePreset.h"
+#include "layout/document/GtkLayoutPresets.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/ActionRegistry.h"
@@ -42,15 +44,44 @@
 
 namespace ao::gtk
 {
+  namespace
+  {
+    std::pair<std::string, layout::LayoutDocument> loadLayoutOnWorker(ShellLayoutStore& store, AppConfig& config)
+    {
+      auto prefs = rt::AppPrefsState{};
+      config.loadAppPrefs(prefs);
+
+      auto presetId = layout::LayoutPresetId::Classic;
+      auto presetIdStr = std::string{"classic"};
+
+      if (prefs.lastLayoutPreset == "modern")
+      {
+        presetId = layout::LayoutPresetId::Modern;
+        presetIdStr = "modern";
+      }
+      else if (!prefs.lastLayoutPreset.empty() && prefs.lastLayoutPreset != "classic")
+      {
+        APP_LOG_DEBUG(
+          "ShellLayoutController: Unknown layout preset '{}', falling back to classic", prefs.lastLayoutPreset);
+      }
+
+      auto optDoc = store.load(presetIdStr);
+      auto doc = optDoc ? std::move(*optDoc) : layout::createBuiltInLayout(presetId);
+
+      return {presetIdStr, std::move(doc)};
+    }
+  } // namespace
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
                                                Gtk::Window& window,
                                                std::shared_ptr<AppConfig> configPtr,
+                                               std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                                                ThemeCoordinator& themeCoordinator)
     : _registry{}
     , _actionRegistry{}
     , _context{.registry = _registry, .actionRegistry = _actionRegistry, .runtime = runtime, .parentWindow = window}
     , _host{_registry}
     , _configPtr{std::move(configPtr)}
+    , _layoutStorePtr{std::move(layoutStorePtr)}
     , _themeCoordinator{themeCoordinator}
   {
     layout::LayoutRuntime::registerStandardComponents(_registry);
@@ -379,55 +410,32 @@ namespace ao::gtk
     }
   }
 
-  void ShellLayoutController::loadLayout(AppConfig& config)
+  void ShellLayoutController::loadLayout(AppConfig& /*config*/)
   {
     auto& runtime = _context.runtime.async();
-    runtime.spawnWithLifetime(
-      &_tasks,
-      [](ShellLayoutController* self, AppConfig* cfg) -> async::Task<void>
-      {
-        APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
+    runtime.spawnWithLifetime(&_tasks,
+                              [](ShellLayoutController* self,
+                                 std::shared_ptr<ShellLayoutStore> storePtr,
+                                 std::shared_ptr<AppConfig> configPtr) -> async::Task<void>
+                              {
+                                APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
-        auto* const asyncRuntime = &self->_context.runtime.async();
-        co_await asyncRuntime->resumeOnWorker();
-        APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
+                                auto* const asyncRuntime = &self->_context.runtime.async();
+                                co_await asyncRuntime->resumeOnWorker();
+                                APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
 
-        auto prefs = rt::AppPrefsState{};
-        cfg->loadAppPrefs(prefs);
+                                if (storePtr && configPtr)
+                                {
+                                  auto result = loadLayoutOnWorker(*storePtr, *configPtr);
 
-        auto presetId = layout::LayoutPresetId::Classic;
-        auto presetIdStr = std::string{"classic"};
+                                  co_await asyncRuntime->resumeOnCallbackExecutor();
+                                  APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
 
-        if (prefs.lastLayoutPreset == "modern")
-        {
-          presetId = layout::LayoutPresetId::Modern;
-          presetIdStr = "modern";
-        }
-        else if (!prefs.lastLayoutPreset.empty() && prefs.lastLayoutPreset != "classic")
-        {
-          APP_LOG_DEBUG(
-            "ShellLayoutController: Unknown layout preset '{}', falling back to classic", prefs.lastLayoutPreset);
-        }
-
-        auto doc = layout::createBuiltInLayout(presetId);
-        auto const customized = cfg->loadShellLayout(doc, presetIdStr);
-
-        co_await asyncRuntime->resumeOnCallbackExecutor();
-        APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-
-        self->_isCustomized = customized;
-        self->_activePresetId = std::move(presetIdStr);
-        self->_activeLayout = doc;
-        self->_host.setLayout(self->_context, self->_activeLayout);
-      }(this, &config));
-  }
-
-  void ShellLayoutController::saveLayout(AppConfig& config) const
-  {
-    if (_isCustomized)
-    {
-      config.saveShellLayout(_activeLayout, _activePresetId);
-    }
+                                  self->_activePresetId = std::move(result.first);
+                                  self->_activeLayout = std::move(result.second);
+                                  self->_host.setLayout(self->_context, self->_activeLayout);
+                                }
+                              }(this, _layoutStorePtr, _configPtr));
   }
 
   void ShellLayoutController::openEditor(AppConfig& config)
@@ -438,20 +446,37 @@ namespace ao::gtk
     auto const initialPresetId = _activePresetId.empty() ? "classic" : _activePresetId;
     auto const initialThemeId = std::string{themePresetToString(_themeCoordinator.activeTheme())};
 
-    auto const dialogPtr =
+    auto loader = [storePtr = _layoutStorePtr](std::string_view id) -> layout::LayoutDocument
+    {
+      if (storePtr)
+      {
+        return storePtr->load(id).value_or(layout::createBuiltInLayout(layout::presetIdFromString(id)));
+      }
+
+      return layout::createBuiltInLayout(layout::presetIdFromString(id));
+    };
+
+    _editorDialogPtr =
       std::make_shared<layout::editor::LayoutEditorDialog>(dynamic_cast<Gtk::Window&>(_context.parentWindow),
                                                            _registry,
                                                            _actionRegistry,
                                                            _activeLayout,
                                                            initialPresetId,
-                                                           initialThemeId);
-    auto* const dialogRaw = dialogPtr.get();
+                                                           initialThemeId,
+                                                           std::move(loader));
+    auto* const dialogRaw = _editorDialogPtr.get();
 
     _optEditorThemeToken = _themeCoordinator.registerToplevel(*dialogRaw);
 
     _context.editMode = true;
-    _context.onNodeMoved = [dialogRaw](std::string const& nodeId, std::int32_t posX, std::int32_t posY)
-    { dialogRaw->updateNodePosition(nodeId, posX, posY); };
+    _context.onNodeMoved = [weakDialogPtr = std::weak_ptr{_editorDialogPtr}](
+                             std::string const& nodeId, std::int32_t posX, std::int32_t posY)
+    {
+      if (auto const sharedDialogPtr = weakDialogPtr.lock(); sharedDialogPtr != nullptr)
+      {
+        sharedDialogPtr->updateNodePosition(nodeId, posX, posY);
+      }
+    };
 
     _host.setLayout(_context, _activeLayout);
 
@@ -462,44 +487,58 @@ namespace ao::gtk
                                             { _themeCoordinator.setTheme(themePresetFromString(themeId)); });
 
     dialogRaw->signalSaveRequest().connect(
-      [this, sharedDialogPtr = dialogPtr, &config](layout::LayoutDocument const& doc)
+      [this, weakDialogPtr = std::weak_ptr{_editorDialogPtr}, configPtr = _configPtr](
+        layout::editor::LayoutSaveResult const& result)
       {
-        _activeLayout = doc;
-        _isCustomized = true;
-
-        if (auto const presetIdDialog = sharedDialogPtr->selectedPresetId(); !presetIdDialog.empty())
+        if (_layoutStorePtr)
         {
-          _activePresetId = presetIdDialog;
+          for (auto const& [id, doc] : result.modified)
+          {
+            _layoutStorePtr->save(doc, id);
+          }
 
-          auto prefsUpdate = rt::AppPrefsState{};
-          config.loadAppPrefs(prefsUpdate);
-          prefsUpdate.lastLayoutPreset = _activePresetId;
-          config.saveAppPrefs(prefsUpdate);
+          for (auto const& id : result.resets)
+          {
+            _layoutStorePtr->remove(id);
+          }
         }
 
-        if (auto const themeIdStr = sharedDialogPtr->selectedThemeId(); !themeIdStr.empty())
+        _activeLayout = result.activeDocument;
+        _activePresetId = result.activePresetId;
+
+        if (configPtr)
         {
-          _themeCoordinator.setTheme(themePresetFromString(themeIdStr));
           auto prefsUpdate = rt::AppPrefsState{};
-          config.loadAppPrefs(prefsUpdate);
-          prefsUpdate.lastThemePreset = themeIdStr;
-          config.saveAppPrefs(prefsUpdate);
+          configPtr->loadAppPrefs(prefsUpdate);
+          prefsUpdate.lastLayoutPreset = _activePresetId;
+
+          if (auto const sharedDialogPtr = weakDialogPtr.lock(); sharedDialogPtr != nullptr)
+          {
+            if (auto const themeIdStr = sharedDialogPtr->selectedThemeId(); !themeIdStr.empty())
+            {
+              _themeCoordinator.setTheme(themePresetFromString(themeIdStr));
+              prefsUpdate.lastThemePreset = themeIdStr;
+            }
+          }
+
+          configPtr->saveAppPrefs(prefsUpdate);
         }
 
         _host.setLayout(_context, _activeLayout);
-        config.saveShellLayout(_activeLayout, _activePresetId);
       });
 
     dialogRaw->signal_hide().connect(
-      [this, sharedDialogPtr = dialogPtr, oldTheme = _themeCoordinator.activeTheme()]
+      [this]
       {
         _context.editMode = false;
         _context.onNodeMoved = nullptr;
         _optEditorThemeToken.reset();
+        _editorDialogPtr.reset();
       });
 
     dialogRaw->signal_response().connect(
-      [this, sharedDialogPtr = dialogPtr, oldTheme = _themeCoordinator.activeTheme()](std::int32_t responseId)
+      [this, weakDialogPtr = std::weak_ptr{_editorDialogPtr}, oldTheme = _themeCoordinator.activeTheme()](
+        std::int32_t responseId)
       {
         if (responseId == Gtk::ResponseType::CANCEL)
         {

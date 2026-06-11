@@ -7,7 +7,7 @@ description: Write or review Aobus C++ unit tests using Catch2, FakeIt, and the 
 
 Use this skill to write behavior-focused Aobus unit tests that match the existing Catch2 + FakeIt style.
 
-If the task also modifies C++ source or test files, follow `generate-cpp-code` first, especially `references/04-test-snippets.md`.
+When the task modifies C++ source or test files, follow the repository's existing style in the nearest source and test files. Keep the test surface focused on observable behavior.
 
 ## Delegating implementation
 
@@ -79,19 +79,22 @@ Common Aobus patterns:
 Recommended checks from the project root:
 
 ```bash
-./build.sh debug
+./ao check
 ```
 
 For a focused iteration after the test binary already exists:
 
 ```bash
-nix-shell --run "/tmp/build/debug/test/ao_test \"Component - behavior\""
+./ao test --core "Component - behavior"
+./ao test --gtk "Component - behavior"
+./ao test --integration "Component - behavior"
+./ao test --fleet "Component - behavior"
 ```
 
 Do not run clang-tidy for test changes unless the user explicitly asks for linting, clang-tidy, or lint cleanup in the current session. If explicitly requested, use:
 
 ```bash
-./script/run-clang-tidy.sh
+./ao tidy
 ```
 
 If the goal is coverage improvement rather than ordinary unit-test quality, use `improve-test-coverage` instead of guessing missing lines.

@@ -7,6 +7,7 @@
 #include "gtkmm/enums.h"
 #include "gtkmm/flowbox.h"
 #include "gtkmm/flowboxchild.h"
+#include "gtkmm/label.h"
 #include "gtkmm/widget.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/Type.h>
@@ -49,6 +50,7 @@ namespace ao::gtk::test
 
   TEST_CASE("TagEditor - chip interaction", "[gtk][tag]")
   {
+    constexpr auto kLongTag = "AnExtremelyLongTagNameForNarrowLayouts";
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
@@ -62,6 +64,7 @@ namespace ao::gtk::test
       auto builder = library::TrackBuilder::createNew();
       builder.tags().add("Rock");
       builder.tags().add("90s");
+      builder.tags().add(kLongTag);
 
       auto const [hot, cold] = builder.serialize(txn, library.dictionary(), library.resources());
       auto [id, _] = writer.createHotCold(hot, cold);
@@ -118,7 +121,7 @@ namespace ao::gtk::test
         count++;
       }
 
-      CHECK(count == 2);
+      CHECK(count == 3);
 
       auto availCount = 0;
 
@@ -148,7 +151,57 @@ namespace ao::gtk::test
         count++;
       }
 
-      CHECK(count == 3);
+      CHECK(count == 4);
+    }
+
+    SECTION("Long current tag keeps a usable remove button when narrow")
+    {
+      Gtk::Widget* longChip = nullptr;
+
+      for (auto* child = currentBox->get_first_child(); child != nullptr; child = child->get_next_sibling())
+      {
+        auto* const flowChild = dynamic_cast<Gtk::FlowBoxChild*>(child);
+        REQUIRE(flowChild != nullptr);
+        auto* const chip = flowChild->get_child();
+        REQUIRE(chip != nullptr);
+        auto* const label = findWidgetByClass<Gtk::Label>(*chip, "ao-tag-chip-label");
+
+        if (label != nullptr && label->get_text() == kLongTag)
+        {
+          longChip = chip;
+          break;
+        }
+      }
+
+      REQUIRE(longChip != nullptr);
+      auto* const removeButton = findWidgetByClass<Gtk::Button>(*longChip, "ao-tag-chip-remove");
+      REQUIRE(removeButton != nullptr);
+
+      std::int32_t minWidth = 0;
+      std::int32_t natWidth = 0;
+      std::int32_t minHeight = 0;
+      std::int32_t natHeight = 0;
+      std::int32_t minBaseline = -1;
+      std::int32_t natBaseline = -1;
+      longChip->measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, natWidth, minBaseline, natBaseline);
+      longChip->measure(Gtk::Orientation::VERTICAL, minWidth, minHeight, natHeight, minBaseline, natBaseline);
+      longChip->size_allocate(Gtk::Allocation{0, 0, minWidth, natHeight}, -1);
+
+      CHECK(minWidth >= 20);
+      CHECK(natWidth > minWidth);
+      CHECK(removeButton->get_width() >= 20);
+
+      ::g_signal_emit_by_name(removeButton->gobj(), "clicked");
+      drainGtkEvents();
+
+      auto remaining = 0;
+
+      for (auto* child = currentBox->get_first_child(); child != nullptr; child = child->get_next_sibling())
+      {
+        remaining++;
+      }
+
+      CHECK(remaining == 2);
     }
 
     window.unset_child();

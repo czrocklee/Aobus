@@ -3,6 +3,7 @@
 
 #include "layout/document/GtkLayoutPresets.h"
 
+#include <ao/Exception.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
@@ -15,7 +16,6 @@
 
 #include <functional>
 #include <map>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -38,8 +38,7 @@ namespace ao::gtk::layout
 
         if (!yaml::read(tree.rootref(), doc))
         {
-          APP_LOG_CRITICAL("GtkLayoutPresets: Failed to decode built-in layout from {}", path);
-          throw std::runtime_error{"Failed to decode built-in layout"};
+          throwException<Exception>("Failed to decode built-in layout from {}", path);
         }
 
         return doc;
@@ -51,6 +50,16 @@ namespace ao::gtk::layout
       }
     }
   } // namespace
+
+  GtkLayoutPresetId presetIdFromString(std::string_view presetIdStr)
+  {
+    if (presetIdStr == "modern")
+    {
+      return GtkLayoutPresetId::Modern;
+    }
+
+    return GtkLayoutPresetId::Classic;
+  }
 
   uimodel::layout::LayoutDocument createDefaultGtkLayout()
   {

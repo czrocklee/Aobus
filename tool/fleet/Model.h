@@ -270,15 +270,38 @@ namespace ao::fleet
     std::string body;
   };
 
-  struct AgentDefinition
+  // A harness is the headless CLI invocation shared by every agent that runs through it:
+  // argv template (with the static {model}/{effort} and the run-time prompt placeholders),
+  // prompt delivery, environment, default timeout, and the quota pool it draws from.
+  struct HarnessDefinition
   {
     std::string id;
-    std::string model;
     std::vector<std::string> argvTemplate;
     PromptDelivery promptDelivery = PromptDelivery::Stdin;
     std::vector<std::string> environmentWhitelist;
     std::chrono::milliseconds timeout{kDefaultAgentTimeout};
     std::string rateLimitKey;
+  };
+
+  // An agent is a fleet member identity: (harness, model) plus the vendor whose weights answer
+  // and an optional reasoning-effort knob. The invocation fields are resolved from the harness
+  // at registry load, with {model}/{effort} already substituted into the argv template.
+  struct AgentDefinition
+  {
+    std::string id;
+    std::string harness;
+    std::string model;
+    std::string vendor;
+    std::string effort;
+    std::vector<std::string> argvTemplate;
+    PromptDelivery promptDelivery = PromptDelivery::Stdin;
+    std::vector<std::string> environmentWhitelist;
+    std::chrono::milliseconds timeout{kDefaultAgentTimeout};
+    std::string rateLimitKey;
+
+    // Route identity: the same model at a different effort level is a different actor, so the
+    // effort folds into the version the breaker and failure manifests key on.
+    std::string modelVersion() const { return effort.empty() ? model : model + "@" + effort; }
   };
 
   struct OracleDefinition
@@ -374,6 +397,7 @@ namespace ao::fleet
 
   struct Registry
   {
+    std::map<std::string, HarnessDefinition, std::less<>> harnesses;
     std::map<std::string, AgentDefinition, std::less<>> agents;
     std::map<std::string, OracleDefinition, std::less<>> oracles;
     std::map<std::string, Binding, std::less<>> bindings;

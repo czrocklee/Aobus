@@ -315,28 +315,28 @@ namespace ao::fleet
     {
       switch (auto const buildDir = std::string{kOracleBuildDir}; oracle.runner)
       {
-        case OracleRunner::TestAll: return {{"./build.sh", "debug"}};
+        case OracleRunner::TestAll: return {{"./ao", "check"}};
         case OracleRunner::TestCore:
         case OracleRunner::TestGtk:
         {
           auto const gtk = oracle.runner == OracleRunner::TestGtk;
-          auto tests = std::vector<std::string>{
-            "./script/run-tests.sh", "--no-build", "--path", buildDir, gtk ? "--gtk" : "--core"};
+          auto tests =
+            std::vector<std::string>{"./ao", "test", "--no-build", "--path", buildDir, gtk ? "--gtk" : "--core"};
 
           if (auto filter = oracle.arguments.find("filter"); filter != oracle.arguments.end())
           {
             tests.push_back(filter->second);
           }
 
-          // build.sh configures the tree when needed and builds incrementally; --target skips
-          // the script's own full test pass, run-tests.sh then runs only the requested suite.
-          return {{"./build.sh", "debug", "--target", gtk ? "ao_test_gtk" : "ao_test"}, std::move(tests)};
+          // ao build configures the tree when needed and builds only the suite target without
+          // running anything; ao test then runs only the requested suite against that tree.
+          return {{"./ao", "build", "--target", gtk ? "ao_gtk_test" : "ao_core_test"}, std::move(tests)};
         }
-        case OracleRunner::TestAsan: return {{"./build.sh", "debug", "--asan"}};
-        case OracleRunner::TestTsan: return {{"./build.sh", "debug", "--tsan"}};
+        case OracleRunner::TestAsan: return {{"./ao", "check", "--asan"}};
+        case OracleRunner::TestTsan: return {{"./ao", "check", "--tsan"}};
         case OracleRunner::TidyClean:
         {
-          auto result = std::vector<std::string>{"./script/run-clang-tidy.sh"};
+          auto result = std::vector<std::string>{"./ao", "tidy"};
 
           if (auto scope = oracle.arguments.find("scope"); scope != oracle.arguments.end())
           {
@@ -345,7 +345,7 @@ namespace ao::fleet
 
           return {std::move(result)};
         }
-        case OracleRunner::BuildDebug: return {{"./build.sh", "debug", "--target", "aobus-gtk"}};
+        case OracleRunner::BuildDebug: return {{"./ao", "build", "--target", "aobus-gtk"}};
         case OracleRunner::TestDelta:
         case OracleRunner::PublicSignatureDelta: return {};
       }
@@ -444,8 +444,8 @@ namespace ao::fleet
         auto request = ProcessRequest{};
         request.argv = std::move(argv);
         request.cwd = *workspace;
-        // IN_NIX_SHELL is deliberately absent: build.sh and run-tests.sh then re-enter
-        // nix-shell inside the namespace and reconstruct the full build environment, which is
+        // IN_NIX_SHELL is deliberately absent: the ao portal then re-enters nix-shell
+        // inside the namespace and reconstructs the full build environment, which is
         // far too large (NIX_CC, PKG_CONFIG_PATH, ...) to allowlist reliably here.
         request.environmentWhitelist = {"PATH", "HOME", "USER", "NIX_PATH"};
         request.environment.emplace("BUILD_DIR", std::string{oracleBuildDir(oracle.runner)});
@@ -478,8 +478,10 @@ namespace ao::fleet
                                                   : PathClassifier::fromArguments({});
       return RouteKey{
         .agentId = phase.agent.id,
-        .modelVersion = phase.agent.model,
-        .harness = "aobus-fleet/v1",
+        .modelVersion = phase.agent.modelVersion(),
+        // The CLI harness adapter is part of the competence key (design doc section 13.1):
+        // statistics must not survive an agent moving to a different adapter.
+        .harness = phase.agent.harness,
         .engine = phase.binding.engine,
         .oracleId = phase.optOracle ? phase.optOracle->id : "none",
         // Versions are precomputed once per run from the immutable base, so failure manifests
@@ -638,7 +640,10 @@ namespace ao::fleet
       out << "member: " << yamlScalar(input.memberId) << "\n";
       out << "round: " << yamlScalar(input.round) << "\n";
       out << "agent: " << yamlScalar(input.agent.id) << "\n";
+      out << "harness: " << yamlScalar(input.agent.harness) << "\n";
       out << "model: " << yamlScalar(input.agent.model) << "\n";
+      out << "vendor: " << yamlScalar(input.agent.vendor) << "\n";
+      out << "effort: " << (input.agent.effort.empty() ? std::string{"null"} : yamlScalar(input.agent.effort)) << "\n";
       out << "prompt-delivery: " << toString(input.agent.promptDelivery) << "\n";
       out << "workspace: " << (input.workspace != nullptr ? yamlScalar(input.workspace->string()) : std::string{"null"})
           << "\n";
@@ -866,7 +871,8 @@ namespace ao::fleet
     void assignCandidateRoute(ReviewManifest& manifest, Candidate const& candidate)
     {
       manifest.route.agentId = candidate.agent.id;
-      manifest.route.modelVersion = candidate.agent.model;
+      manifest.route.modelVersion = candidate.agent.modelVersion();
+      manifest.route.harness = candidate.agent.harness;
     }
 
     GateFallback gateFallback(Registry const& registry)

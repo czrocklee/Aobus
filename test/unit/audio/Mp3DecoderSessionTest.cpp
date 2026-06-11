@@ -200,7 +200,10 @@ namespace ao::audio::test
         ofs << "NOT AN MP3 FILE! Random garbage data...";
       }
 
-      CHECK(!decoder.open(tempFile));
+      auto const result = decoder.open(tempFile);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.contains(":"));
+      CHECK(result.error().message != "Failed to get MP3 format: A generic mpg123 error.");
       std::filesystem::remove(tempFile);
     }
 

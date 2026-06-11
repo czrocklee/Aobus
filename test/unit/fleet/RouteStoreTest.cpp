@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "fleet/Model.h"
 #include "fleet/RouteStore.h"
+
+#include "fleet/Model.h"
 #include "fleet/Serialization.h"
-#include "test/fleet/TestUtils.h"
+#include "test/unit/fleet/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -62,5 +63,4 @@ namespace ao::fleet::test
       CHECK(duplicate.error().message.find("terminal") != std::string::npos);
     }
   }
-
 } // namespace ao::fleet::test

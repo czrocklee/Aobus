@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Aobus development portal: ./ao <command> [options]
+# Re-enters nix-shell, then dispatches to the Python package in script/ao.
+#
+# Deliberately does NOT trust IN_NIX_SHELL: direnv and long-lived shells carry stale
+# environments that silently diverge from the current shell.nix (e.g. missing pkg-config
+# entries for recently added dependencies). The portal always re-enters through the
+# pinned shell.nix and uses its own sentinel to stop the recursion; export
+# AO_IN_NIX_PORTAL=1 yourself only if you know your shell matches shell.nix exactly.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
+    # cd first so shell.nix's $PWD-based hooks (ccache dir) resolve to the repository.
+    cd "$ROOT"
+    exec nix-shell "$ROOT/shell.nix" --run "AO_IN_NIX_PORTAL=1 $(printf '%q ' "$ROOT/ao" "$@")"
+fi
+
+cd "$ROOT"
+export PYTHONPATH="$ROOT/script${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m ao "$@"

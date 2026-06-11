@@ -55,6 +55,9 @@ pkgs.mkShell {
       clang
       gcc
       gdb
+      python3 # runs the ./ao development portal (script/ao)
+      python3Packages.ruff
+      python3Packages.mypy
       clang-tools
       llvmPackages.llvm.dev
       llvmPackages.clang-unwrapped.dev
@@ -94,7 +97,6 @@ pkgs.mkShell {
       pipewire
       alsa-lib
       udev
-      xvfb-run
     ]
     ++ [ lexy fakeit ];
   shellHook = ''

@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <string_view>
 
 namespace ao::gtk::layout
 {
@@ -18,6 +19,8 @@ namespace ao::gtk::layout
     Classic,
     Modern
   };
+
+  GtkLayoutPresetId presetIdFromString(std::string_view presetIdStr);
 
   uimodel::layout::LayoutDocument createDefaultGtkLayout();
 

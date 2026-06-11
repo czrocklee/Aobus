@@ -74,6 +74,13 @@ in question. Timed-out, failed, or empty members are quarantined and omitted fro
 The dossier is always `ADVISORY`; write the final plan or review yourself after checking claims against
 the repository.
 
+After closing the council — once the final plan or review is written — append a brief performance
+evaluation of each participating member. Judge from the round artifacts, not the dossier alone: draft
+quality and concreteness (R1), substance of challenges and whether peer claims were actually verified
+against the repository (R2), and responsiveness in revision (R3). One or two sentences per member is
+enough; note quarantined members and the quarantine reason. This evaluation is chair commentary for
+future roster and depth decisions, not part of the verdict.
+
 Round context is isolated per member: R1 is independent; R2 contains only other members' drafts; R3
 contains the member's own original draft and own challenge notes plus only other members' challenges.
 Each prompt states the round position and where the output goes, and instructs members to verify peer

@@ -4,7 +4,7 @@
 #include "fleet/Engine.h"
 #include "fleet/Model.h"
 #include "fleet/Serialization.h"
-#include "test/fleet/TestUtils.h"
+#include "test/unit/fleet/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 

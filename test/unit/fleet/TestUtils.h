@@ -24,7 +24,10 @@ namespace ao::fleet::test
 {
   using ao::test::TempDir;
 
-  inline std::filesystem::path tempPath(TempDir const& temp) { return temp.path(); }
+  inline std::filesystem::path tempPath(TempDir const& temp)
+  {
+    return temp.path();
+  }
 
   inline std::filesystem::path writeFile(TempDir const& temp, std::string const& name, std::string_view content)
   {
@@ -78,9 +81,7 @@ body: |
     REQUIRE(result.exitCode == 0);
   }
 
-  inline void initGitRepo(IProcessRunner& process,
-                          std::filesystem::path const& repo,
-                          std::filesystem::path const& cwd)
+  inline void initGitRepo(IProcessRunner& process, std::filesystem::path const& repo, std::filesystem::path const& cwd)
   {
     runCommand(process, cwd, {"git", "init", repo.string()});
   }

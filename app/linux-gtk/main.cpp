@@ -5,6 +5,7 @@
 #include "app/GtkMainContextExecutor.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/MainWindow.h"
+#include "app/ShellLayoutStore.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
@@ -67,7 +68,8 @@ namespace
 
   Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app,
                                         LibraryPaths paths,
-                                        std::shared_ptr<AppConfig> appConfigPtr)
+                                        std::shared_ptr<AppConfig> appConfigPtr,
+                                        std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr)
   {
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
 
@@ -80,7 +82,8 @@ namespace
                                  .databasePath = paths.databasePath,
                                  .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr)});
 
-    auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(new MainWindow{*appRuntimePtr, appConfigPtr});
+    auto windowPtr =
+      Glib::make_refptr_for_instance<MainWindow>(new MainWindow{*appRuntimePtr, appConfigPtr, shellLayoutStorePtr});
 
     // Store AppRuntime alongside window (lifetime tied to window via pointer)
     windowPtr->set_data("app-runtime",
@@ -163,12 +166,13 @@ namespace
   void handleOpenNewLibrary(std::filesystem::path const& path,
                             Glib::RefPtr<Gtk::Application> const& app,
                             std::vector<Glib::RefPtr<MainWindow>>& windows,
-                            std::shared_ptr<AppConfig> appConfigPtr)
+                            std::shared_ptr<AppConfig> appConfigPtr,
+                            std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr)
   {
     if (std::filesystem::is_directory(path))
     {
-      windows.push_back(
-        createWindow(*app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}, appConfigPtr));
+      windows.push_back(createWindow(
+        *app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}, appConfigPtr, shellLayoutStorePtr));
     }
   }
 
@@ -240,14 +244,16 @@ namespace
 
     auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
     auto appConfigPtr = std::make_shared<AppConfig>(globalConfigPath);
+    auto const layoutsDir = globalConfigPath.parent_path() / "layouts";
+    auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
 
     auto paths = resolveLibraryPaths(*appConfigPtr);
 
-    auto windowPtr = createWindow(*app, std::move(paths), appConfigPtr);
+    auto windowPtr = createWindow(*app, std::move(paths), appConfigPtr, shellLayoutStorePtr);
 
     windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary =
-      [&app, &windows, appConfigPtr](std::filesystem::path const& path)
-    { handleOpenNewLibrary(path, app, windows, appConfigPtr); };
+      [&app, &windows, appConfigPtr, shellLayoutStorePtr](std::filesystem::path const& path)
+    { handleOpenNewLibrary(path, app, windows, appConfigPtr, shellLayoutStorePtr); };
 
     windows.push_back(std::move(windowPtr));
   }

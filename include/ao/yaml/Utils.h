@@ -11,7 +11,6 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <ios>
 #include <string_view>
@@ -25,13 +24,11 @@ namespace ao::yaml
   inline void throwOnError(c4::basic_substring<char const> msg, c4::yml::ErrorDataBasic const& dat, void* userData)
   {
     auto const* const filename = userData != nullptr ? static_cast<char const*>(userData) : "<buffer>";
-    throw Exception{std::format("YAML error at {}:{}:{}: {}",
-                                filename,
-                                dat.location.line,
-                                dat.location.col,
-                                std::string_view{msg.data(), msg.size()}),
-                    __FILE__,
-                    __LINE__};
+    throwException<Exception>("YAML error at {}:{}:{}: {}",
+                              filename,
+                              dat.location.line,
+                              dat.location.col,
+                              std::string_view{msg.data(), msg.size()});
   }
 
   inline ryml::Callbacks callbacks(char const* filename = nullptr)

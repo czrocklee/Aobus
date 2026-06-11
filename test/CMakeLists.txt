@@ -1,5 +1,5 @@
-# ao_test: portable unit + integration tests
-add_executable(ao_test
+# ao_core_test: portable unit + integration tests
+add_executable(ao_core_test
     # utility tests
     unit/utility/Base64Test.cpp
     unit/utility/MappedFileTest.cpp
@@ -132,25 +132,25 @@ add_executable(ao_test
     unit/runtime/LibraryExportImportTest.cpp
 )
 
-target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_test PRIVATE ao ao_audio ao_app_uimodel ao_app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC PkgFDKAAC PkgMPG123)
+target_include_directories(ao_core_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_core_test PRIVATE ao ao_audio ao_app_uimodel ao_app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC PkgFDKAAC PkgMPG123)
 
 if(PIPEWIRE_FOUND)
-  target_compile_definitions(ao_test PRIVATE PIPEWIRE_FOUND)
-  target_link_libraries(ao_test PRIVATE PkgPipeWire)
+  target_compile_definitions(ao_core_test PRIVATE PIPEWIRE_FOUND)
+  target_link_libraries(ao_core_test PRIVATE PkgPipeWire)
 endif()
 
 if(ALSA_FOUND)
-  target_compile_definitions(ao_test PRIVATE ALSA_FOUND)
-  target_link_libraries(ao_test PRIVATE PkgALSA PkgUDEV)
+  target_compile_definitions(ao_core_test PRIVATE ALSA_FOUND)
+  target_link_libraries(ao_core_test PRIVATE PkgALSA PkgUDEV)
 endif()
 
-target_compile_definitions(ao_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
-target_compile_options(ao_test PRIVATE
+target_compile_definitions(ao_core_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
+target_compile_options(ao_core_test PRIVATE
   -Wno-array-bounds
   $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>>:-Wno-mismatched-new-delete>
 )
-add_test(NAME ao_test COMMAND ao_test)
+add_test(NAME ao_core_test COMMAND ao_core_test)
 
 # ao_fleet_test: fleet tool unit and integration tests
 add_executable(ao_fleet_test
@@ -169,7 +169,7 @@ target_link_libraries(ao_fleet_test PRIVATE ao_fleet Catch2::Catch2WithMain)
 target_compile_definitions(ao_fleet_test PRIVATE AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME ao_fleet_test COMMAND ao_fleet_test)
 
-# ao_integration_test: standalone integration tests (excluded from default build.sh runs)
+# ao_integration_test: standalone integration tests (full gate only, not the default ./ao test loop)
 add_executable(ao_integration_test
     integration/audio/DecoderIntegrationTest.cpp
     integration/audio/GraphIntegrityTest.cpp
@@ -197,8 +197,8 @@ target_compile_options(ao_integration_test PRIVATE -Wno-array-bounds)
 # or use labels/properties if preferred. For now, it's just a manual driver.
 
 
-# ao_test_gtk: Linux UI tests (require aobus-gtk-lib and GTKMM)
-add_executable(ao_test_gtk
+# ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
+add_executable(ao_gtk_test
     unit/linux-gtk/list/ListModelTest.cpp
     unit/linux-gtk/list/ListTreeModelBuilderTest.cpp
     unit/linux-gtk/list/QueryExpressionBoxTest.cpp
@@ -217,6 +217,7 @@ add_executable(ao_test_gtk
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/AppConfigTest.cpp
+    unit/linux-gtk/app/ShellLayoutStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutControllerTest.cpp
     unit/linux-gtk/app/GtkLayoutConfigTest.cpp
     unit/linux-gtk/track/TrackListModelTest.cpp
@@ -256,16 +257,16 @@ add_executable(ao_test_gtk
     unit/linux-gtk/playback/TimeLabelTest.cpp
 )
 
-target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_test_gtk PRIVATE aobus-gtk-lib)
+target_include_directories(ao_gtk_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_gtk_test PRIVATE aobus-gtk-lib)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_link_libraries(ao_test_gtk PRIVATE -Wl,-u,aobus_get_resource)
+    target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
 endif()
 
-target_link_libraries(ao_test_gtk PRIVATE ao PkgGTKMM Catch2 FakeIt::FakeIt-catch spdlog::spdlog Catch2::Catch2WithMain)
-add_test(NAME ao_test_gtk COMMAND ao_test_gtk)
+target_link_libraries(ao_gtk_test PRIVATE ao PkgGTKMM Catch2 FakeIt::FakeIt-catch spdlog::spdlog Catch2::Catch2WithMain)
+add_test(NAME ao_gtk_test COMMAND ao_gtk_test)
 
-# ao_perf_baseline: standalone performance baseline (not run by default in build.sh)
+# ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline
     unit/runtime/PerformanceBaselineTest.cpp
 )

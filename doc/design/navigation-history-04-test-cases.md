@@ -231,7 +231,7 @@ These use a headless `AppRuntime` (same pattern as `HeadlessShellTest.cpp`).
 
 **File:** `test/unit/linux-gtk/NavigationGtkTest.cpp`
 
-These require a GTK test environment (existing pattern in `ao_test_gtk` target).
+These require a GTK test environment (existing pattern in `ao_gtk_test` target).
 
 ### E.1 Mouse Buttons
 
@@ -262,13 +262,13 @@ These require a GTK test environment (existing pattern in `ao_test_gtk` target).
 
 ```bash
 # Unit tests (no GTK)
-nix-shell --run "/tmp/build/debug/test/ao_test \"[navigation]\""
+nix-shell --run "/tmp/build/debug/test/ao_core_test \"[navigation]\""
 
 # GTK integration tests
-nix-shell --run "/tmp/build/debug/test/ao_test_gtk \"[navigation]\""
+nix-shell --run "/tmp/build/debug/test/ao_gtk_test \"[navigation]\""
 
 # All tests
-nix-shell --run "/tmp/build/debug/test/ao_test"
+nix-shell --run "/tmp/build/debug/test/ao_core_test"
 ```
 
 Test tags:

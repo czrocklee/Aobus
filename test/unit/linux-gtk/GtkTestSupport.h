@@ -128,9 +128,9 @@ namespace ao::gtk::test
   public:
     GtkRuntimeFixture()
     {
-      auto const musicRoot = std::filesystem::path{_tempDir.path()} / "music";
-      auto const databasePath = std::filesystem::path{_tempDir.path()} / "db";
-      auto const configPath = std::filesystem::path{_tempDir.path()} / "config.yaml";
+      auto const musicRoot = _tempDir.path() / "music";
+      auto const databasePath = _tempDir.path() / "db";
+      auto const configPath = _tempDir.path() / "config.yaml";
 
       std::filesystem::create_directories(musicRoot);
       std::filesystem::create_directories(databasePath);
@@ -161,9 +161,8 @@ namespace ao::gtk::test
     return rt::AppRuntime{rt::AppRuntimeDependencies{
       .executorPtr = std::make_unique<GtkMainContextExecutor>(),
       .musicRoot = tempDir.path(),
-      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
-      .workspaceConfigStorePtr =
-        std::make_unique<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml"),
+      .databasePath = tempDir.path() / ".aobus" / "library",
+      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
     }};
   }
 

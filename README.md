@@ -32,14 +32,17 @@ Aobus (pronounced /'eɪ.oʊ.bʌs/) is a modern music application designed for au
 Aobus uses CMake and Nix-shell for dependency management.
 
 ```bash
-# Debug build (with sanitizers)
-./build.sh debug
+# Debug build + full test suites (the standard validation gate)
+./ao check
+
+# Incremental debug build only
+./ao build
 
 # Clean rebuild
-./build.sh debug --clean
+./ao build debug --clean
 
 # Release build for production
-./build.sh release
+./ao build release
 ```
 
 ## 🧪 Running Tests
@@ -48,10 +51,16 @@ Aobus takes stability seriously. We maintain a comprehensive suite of unit and i
 
 ```bash
 # Run core test suite
-/tmp/build/debug/test/ao_test
+/tmp/build/debug/test/ao_core_test
 
 # Run Linux-specific tests
-/tmp/build/debug/test/ao_test_gtk
+/tmp/build/debug/test/ao_gtk_test
+
+# Run every registered suite through the development portal
+./ao test --all
+
+# Run tests for the development tooling
+./ao test --tooling
 ```
 
 ## 🤖 AI Agents

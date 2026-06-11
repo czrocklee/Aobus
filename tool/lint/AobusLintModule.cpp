@@ -5,6 +5,7 @@
 #include "check/CApiGlobalQualificationCheck.h"
 #include "check/ConcreteFinalCheck.h"
 #include "check/ControlBlockSpacingCheck.h"
+#include "check/ForbidRawThrowCheck.h"
 #include "check/ForbidTrailingReturnCheck.h"
 #include "check/IdentifierNamingExtensionsCheck.h"
 #include "check/ImplicitBoolConversionInInitCheck.h"
@@ -47,6 +48,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<ControlBlockSpacingCheck>("aobus-readability-control-block-spacing");
       checkFactories.registerCheck<modernize::NodiscardUsageCheck>("aobus-modernize-nodiscard-usage");
       checkFactories.registerCheck<ForbidTrailingReturnCheck>("aobus-modernize-forbid-trailing-return");
+      checkFactories.registerCheck<ForbidRawThrowCheck>("aobus-readability-forbid-raw-throw");
       checkFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");
       checkFactories.registerCheck<aobus::ImplicitBoolConversionInInitCheck>("aobus-implicit-bool-conversion-in-init");
       checkFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");

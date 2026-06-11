@@ -17,6 +17,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class AppConfig;
+  class ShellLayoutStore;
   class MenuController;
   class MainWindowCoordinator;
   namespace portal
@@ -27,7 +28,9 @@ namespace ao::gtk
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    explicit MainWindow(rt::AppRuntime& runtime, std::shared_ptr<AppConfig> configPtr);
+    explicit MainWindow(rt::AppRuntime& runtime,
+                        std::shared_ptr<AppConfig> configPtr,
+                        std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr);
     ~MainWindow() override;
 
     MainWindow(MainWindow const&) = delete;
