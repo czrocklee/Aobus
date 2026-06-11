@@ -20,15 +20,16 @@ task-kind: council-review
 invariant: Identify correctness risks without mutating the repository.
 scope: []
 depends-on: []
-overrides:
-  depth: full
+overrides: {}
 body: |
   Review the supplied change for correctness, regressions, and missing tests.
   Findings must cite concrete files and behavior.
 ```
 
-Use `task-kind: council-plan` for implementation planning. Registered depths are `panel`, `challenge`,
-and `full`; an override may only reduce depth or increase quorum.
+Use `task-kind: council-plan` for implementation planning. Registered depths: `council-review` runs
+`challenge`, `council-plan` runs `full`. An override may only tighten — reduce depth (for example
+`depth: panel` on a review) or increase quorum; requesting `depth: full` on `council-review` is a
+relaxation and is rejected.
 
 ## Run And Synthesize
 

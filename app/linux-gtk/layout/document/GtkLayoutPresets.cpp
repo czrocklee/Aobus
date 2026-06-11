@@ -3,11 +3,11 @@
 
 #include "layout/document/GtkLayoutPresets.h"
 
-#include <ao/rt/yaml/Utils.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
 #include <ao/utility/Log.h>
+#include <ao/yaml/Utils.h>
 
 #include <giomm/resource.h>
 #include <glib.h>
@@ -31,12 +31,12 @@ namespace ao::gtk::layout
         gsize size = 0;
         auto const* const data = static_cast<char const*>(bytesPtr->get_data(size));
 
-        auto tree = ryml::Tree{rt::yaml::callbacks(std::string{path}.c_str())};
-        ryml::parse_in_arena(rt::yaml::toCsubstr(std::string_view{data, size}), &tree);
+        auto tree = ryml::Tree{yaml::callbacks(std::string{path}.c_str())};
+        ryml::parse_in_arena(yaml::toCsubstr(std::string_view{data, size}), &tree);
 
         auto doc = uimodel::layout::LayoutDocument{};
 
-        if (!rt::yaml::read(tree.rootref(), doc))
+        if (!yaml::read(tree.rootref(), doc))
         {
           APP_LOG_CRITICAL("GtkLayoutPresets: Failed to decode built-in layout from {}", path);
           throw std::runtime_error{"Failed to decode built-in layout"};

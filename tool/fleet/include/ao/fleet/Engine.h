@@ -8,31 +8,14 @@
 #include <ao/fleet/Model.h>
 #include <ao/fleet/ProcessRunner.h>
 
-#include <cstddef>
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
 namespace ao::fleet
 {
-  struct SearchRequest
-  {
-    std::string objectiveId;
-    std::size_t budget = 0;
-  };
-
-  struct ObjectiveDefinition
-  {
-    std::string id;
-    std::string property;
-  };
-
-  struct FrontierResult
-  {
-    std::string candidateId;
-    double score = 0.0;
-  };
-
   struct EngineContext
   {
     std::filesystem::path realRepo;
@@ -41,6 +24,8 @@ namespace ao::fleet
     Registry const& registry;
     IProcessRunner& processRunner;
     async::Runtime& asyncRuntime;
+    // Oracle id -> version fingerprint, resolved once per run from the immutable base.
+    std::map<std::string, std::string, std::less<>> oracleVersions;
   };
 
   class IEngine
@@ -69,10 +54,13 @@ namespace ao::fleet
     Result<ReviewManifest> execute(ResolvedPhase const& phase, EngineContext const& context) override;
   };
 
+  // Static validation of the intent dependency graph (dangling references, cycles).
+  // Execution order is decided at runtime by the completion-driven scheduler, which
+  // dispatches whichever phases become ready as their dependencies finish.
   class Scheduler final
   {
   public:
-    static Result<std::vector<std::string>> order(std::vector<PhaseIntent> const& intents);
+    static Result<> validate(std::vector<PhaseIntent> const& intents);
   };
 
   struct RunSummary

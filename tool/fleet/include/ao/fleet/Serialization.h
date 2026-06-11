@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -54,4 +55,5 @@ namespace ao::fleet
 
   std::string utcTimestamp();
   std::string yamlScalar(std::string_view value);
+  std::optional<ReviewVerdict> parseReviewVerdict(std::string_view value);
 } // namespace ao::fleet

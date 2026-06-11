@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +14,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::fleet
@@ -23,12 +25,51 @@ namespace ao::fleet
     constexpr auto kDefaultChurnLines = std::size_t{2'000};
   } // namespace
 
+  // Every enum below pairs with a kXxxNames table: the single source of truth shared by
+  // toString and the YAML parsers, so a new enumerator is wired up in exactly one place.
+  template<typename Enum, std::size_t N>
+  using EnumNameTable = std::array<std::pair<Enum, std::string_view>, N>;
+
+  template<typename Enum, std::size_t N>
+  constexpr std::string_view enumName(EnumNameTable<Enum, N> const& names, Enum value)
+  {
+    for (auto const& [item, name] : names)
+    {
+      if (item == value)
+      {
+        return name;
+      }
+    }
+
+    return "invalid";
+  }
+
+  template<typename Enum, std::size_t N>
+  constexpr std::optional<Enum> enumFromName(EnumNameTable<Enum, N> const& names, std::string_view name)
+  {
+    for (auto const& [item, itemName] : names)
+    {
+      if (itemName == name)
+      {
+        return item;
+      }
+    }
+
+    return std::nullopt;
+  }
+
   enum class ScopeOperation : std::uint8_t
   {
     Create,
     Modify,
     Delete,
   };
+
+  inline constexpr auto kScopeOperationNames = EnumNameTable<ScopeOperation, 3>{{
+    {ScopeOperation::Create, "create"},
+    {ScopeOperation::Modify, "modify"},
+    {ScopeOperation::Delete, "delete"},
+  }};
 
   enum class EngineKind : std::uint8_t
   {
@@ -37,11 +78,22 @@ namespace ao::fleet
     Search,
   };
 
+  inline constexpr auto kEngineKindNames = EnumNameTable<EngineKind, 3>{{
+    {EngineKind::Gate, "gate"},
+    {EngineKind::Synthesis, "synthesis"},
+    {EngineKind::Search, "search"},
+  }};
+
   enum class OutputMode : std::uint8_t
   {
     Proposal,
     Advisory,
   };
+
+  inline constexpr auto kOutputModeNames = EnumNameTable<OutputMode, 2>{{
+    {OutputMode::Proposal, "proposal"},
+    {OutputMode::Advisory, "advisory"},
+  }};
 
   enum class FailureReason : std::uint8_t
   {
@@ -59,12 +111,33 @@ namespace ao::fleet
     RoutePaused,
   };
 
+  inline constexpr auto kFailureReasonNames = EnumNameTable<FailureReason, 12>{{
+    {FailureReason::None, "none"},
+    {FailureReason::NoCandidate, "no-candidate"},
+    {FailureReason::ScopeViolation, "scope-violation"},
+    {FailureReason::ChurnExceeded, "churn-exceeded"},
+    {FailureReason::OracleFailed, "oracle-failed"},
+    {FailureReason::RiskOracleFired, "risk-oracle-fired"},
+    {FailureReason::BudgetExhausted, "budget-exhausted"},
+    {FailureReason::Infrastructure, "infrastructure"},
+    {FailureReason::DependencyFailed, "dependency-failed"},
+    {FailureReason::RealTreeChanged, "real-tree-changed"},
+    {FailureReason::QuorumFailed, "quorum-failed"},
+    {FailureReason::RoutePaused, "route-paused"},
+  }};
+
   enum class FilesystemAuthority : std::uint8_t
   {
     ReadOnly,
     WritableCopy,
     MutateRealTree,
   };
+
+  inline constexpr auto kFilesystemAuthorityNames = EnumNameTable<FilesystemAuthority, 3>{{
+    {FilesystemAuthority::ReadOnly, "read-only"},
+    {FilesystemAuthority::WritableCopy, "writable-copy"},
+    {FilesystemAuthority::MutateRealTree, "mutate-real-tree"},
+  }};
 
   enum class NetworkAuthority : std::uint8_t
   {
@@ -73,11 +146,22 @@ namespace ao::fleet
     Full,
   };
 
+  inline constexpr auto kNetworkAuthorityNames = EnumNameTable<NetworkAuthority, 3>{{
+    {NetworkAuthority::Off, "off"},
+    {NetworkAuthority::Vendor, "vendor"},
+    {NetworkAuthority::Full, "full"},
+  }};
+
   enum class ContextView : std::uint8_t
   {
     Minimal,
     Full,
   };
+
+  inline constexpr auto kContextViewNames = EnumNameTable<ContextView, 2>{{
+    {ContextView::Minimal, "minimal"},
+    {ContextView::Full, "full"},
+  }};
 
   enum class PromptDelivery : std::uint8_t
   {
@@ -86,16 +170,36 @@ namespace ao::fleet
     File,
   };
 
+  inline constexpr auto kPromptDeliveryNames = EnumNameTable<PromptDelivery, 3>{{
+    {PromptDelivery::Stdin, "stdin"},
+    {PromptDelivery::Argument, "argument"},
+    {PromptDelivery::File, "file"},
+  }};
+
   enum class OracleRunner : std::uint8_t
   {
     TestAll,
     TestCore,
     TestGtk,
+    TestAsan,
+    TestTsan,
     TidyClean,
     BuildDebug,
     TestDelta,
     PublicSignatureDelta,
   };
+
+  inline constexpr auto kOracleRunnerNames = EnumNameTable<OracleRunner, 9>{{
+    {OracleRunner::TestAll, "test-all"},
+    {OracleRunner::TestCore, "test-core"},
+    {OracleRunner::TestGtk, "test-gtk"},
+    {OracleRunner::TestAsan, "test-asan"},
+    {OracleRunner::TestTsan, "test-tsan"},
+    {OracleRunner::TidyClean, "tidy-clean"},
+    {OracleRunner::BuildDebug, "build-debug"},
+    {OracleRunner::TestDelta, "test-delta"},
+    {OracleRunner::PublicSignatureDelta, "public-signature-delta"},
+  }};
 
   enum class BaselinePolicy : std::uint8_t
   {
@@ -103,6 +207,12 @@ namespace ao::fleet
     AllowRed,
     Skip,
   };
+
+  inline constexpr auto kBaselinePolicyNames = EnumNameTable<BaselinePolicy, 3>{{
+    {BaselinePolicy::RequireGreen, "require-green"},
+    {BaselinePolicy::AllowRed, "allow-red"},
+    {BaselinePolicy::Skip, "skip"},
+  }};
 
   enum class EscalationAction : std::uint8_t
   {
@@ -113,12 +223,26 @@ namespace ao::fleet
     ReturnChair,
   };
 
+  inline constexpr auto kEscalationActionNames = EnumNameTable<EscalationAction, 5>{{
+    {EscalationAction::Retry, "retry"},
+    {EscalationAction::SwitchRoute, "switch-route"},
+    {EscalationAction::RequireCouncil, "require-council"},
+    {EscalationAction::StopRoute, "stop-route"},
+    {EscalationAction::ReturnChair, "return-chair"},
+  }};
+
   enum class CouncilDepth : std::uint8_t
   {
     Panel,
     Challenge,
     Full,
   };
+
+  inline constexpr auto kCouncilDepthNames = EnumNameTable<CouncilDepth, 3>{{
+    {CouncilDepth::Panel, "panel"},
+    {CouncilDepth::Challenge, "challenge"},
+    {CouncilDepth::Full, "full"},
+  }};
 
   enum class ReviewVerdict : std::uint8_t
   {
@@ -127,6 +251,12 @@ namespace ao::fleet
     Reject,
   };
 
+  inline constexpr auto kReviewVerdictNames = EnumNameTable<ReviewVerdict, 3>{{
+    {ReviewVerdict::Accept, "accept"},
+    {ReviewVerdict::Modify, "modify"},
+    {ReviewVerdict::Reject, "reject"},
+  }};
+
   enum class ProcessStatus : std::uint8_t
   {
     Exited,
@@ -134,6 +264,13 @@ namespace ao::fleet
     TimedOut,
     LaunchFailed,
   };
+
+  inline constexpr auto kProcessStatusNames = EnumNameTable<ProcessStatus, 4>{{
+    {ProcessStatus::Exited, "exited"},
+    {ProcessStatus::Signaled, "signaled"},
+    {ProcessStatus::TimedOut, "timed-out"},
+    {ProcessStatus::LaunchFailed, "launch-failed"},
+  }};
 
   struct ScopeRule
   {
@@ -156,6 +293,8 @@ namespace ao::fleet
     std::optional<std::size_t> optChurnLines;
     std::optional<CouncilDepth> optDepth;
     std::optional<std::size_t> optQuorum;
+
+    bool operator==(IntentOverrides const&) const = default;
   };
 
   struct PhaseIntent
@@ -172,12 +311,10 @@ namespace ao::fleet
   struct AgentDefinition
   {
     std::string id;
-    std::string vendor;
     std::string model;
     std::vector<std::string> argvTemplate;
     PromptDelivery promptDelivery = PromptDelivery::Stdin;
     std::vector<std::string> environmentWhitelist;
-    std::vector<std::filesystem::path> credentialMounts;
     std::chrono::milliseconds timeout{kDefaultAgentTimeout};
     std::string rateLimitKey;
     std::string defaultAuthority;
@@ -189,10 +326,10 @@ namespace ao::fleet
     OracleRunner runner = OracleRunner::TestAll;
     std::map<std::string, std::string, std::less<>> arguments;
     std::string property;
-    std::vector<std::string> prerequisites;
     std::vector<std::string> knownGaps;
     BaselinePolicy baselinePolicy = BaselinePolicy::RequireGreen;
     std::vector<std::filesystem::path> rulerPaths;
+    std::optional<std::chrono::milliseconds> optTimeout;
   };
 
   struct AuthorityPolicy
@@ -230,6 +367,52 @@ namespace ao::fleet
     SynthesisParameters synthesis;
   };
 
+  // How an intent override merges into the binding it targets.
+  enum class OverridePolicy : std::uint8_t
+  {
+    Assign,       // replaces the binding value outright
+    TightenUpper, // may only lower the binding value (budget-style caps)
+    TightenLower, // may only raise the binding value (quorum-style floors)
+  };
+
+  // Single source of truth for the intent override fields: yaml key, storage member,
+  // merge policy, and the binding slot the override applies to. Parsing, allowed-key
+  // validation, presence checks, emission, and application all iterate this list, so
+  // adding an override field is a one-entry change.
+  template<typename Visitor>
+  void forEachOverrideField(Visitor const& visit)
+  {
+    visit("agent", &IntentOverrides::optAgent, OverridePolicy::Assign, &Binding::agent);
+    visit("engine", &IntentOverrides::optEngine, OverridePolicy::Assign, &Binding::engine);
+    visit("oracle", &IntentOverrides::optOracle, OverridePolicy::Assign, &Binding::optOracle);
+    visit("risk-oracle", &IntentOverrides::optRiskOracle, OverridePolicy::Assign, &Binding::optRiskOracle);
+    visit("authority", &IntentOverrides::optAuthority, OverridePolicy::Assign, &Binding::authority);
+    visit("fanout",
+          &IntentOverrides::optFanout,
+          OverridePolicy::TightenUpper,
+          [](Binding& binding) -> auto& { return binding.gate.fanout; });
+    visit("top-k",
+          &IntentOverrides::optTopK,
+          OverridePolicy::TightenUpper,
+          [](Binding& binding) -> auto& { return binding.gate.topK; });
+    visit("max-rounds",
+          &IntentOverrides::optMaxRounds,
+          OverridePolicy::TightenUpper,
+          [](Binding& binding) -> auto& { return binding.gate.maxRounds; });
+    visit("churn-lines",
+          &IntentOverrides::optChurnLines,
+          OverridePolicy::TightenUpper,
+          [](Binding& binding) -> auto& { return binding.gate.churnLines; });
+    visit("depth",
+          &IntentOverrides::optDepth,
+          OverridePolicy::TightenUpper,
+          [](Binding& binding) -> auto& { return binding.synthesis.depth; });
+    visit("quorum",
+          &IntentOverrides::optQuorum,
+          OverridePolicy::TightenLower,
+          [](Binding& binding) -> auto& { return binding.synthesis.quorum; });
+  }
+
   struct EscalationRule
   {
     FailureReason reason = FailureReason::Infrastructure;
@@ -245,6 +428,9 @@ namespace ao::fleet
     std::map<std::string, AuthorityPolicy, std::less<>> authorities;
     std::map<std::string, Binding, std::less<>> bindings;
     std::map<FailureReason, EscalationRule> escalations;
+    // Paths every patch guard enforces in addition to the per-oracle rulers and the
+    // non-negotiable self-protection core hardcoded in the engine.
+    std::vector<std::filesystem::path> rulerPaths;
   };
 
   struct ResolvedPhase
@@ -267,11 +453,19 @@ namespace ao::fleet
     std::chrono::milliseconds elapsed{0};
   };
 
+  struct TouchedFile
+  {
+    std::filesystem::path path;
+    ScopeOperation operation = ScopeOperation::Modify;
+
+    bool operator==(TouchedFile const&) const = default;
+  };
+
   struct PatchArtifact
   {
     std::string candidateId;
     std::string patch;
-    std::vector<std::filesystem::path> touchedFiles;
+    std::vector<TouchedFile> touchedFiles;
     std::size_t addedLines = 0;
     std::size_t removedLines = 0;
   };
@@ -332,6 +526,9 @@ namespace ao::fleet
     std::vector<RiskEvidence> riskEvidence;
     RouteKey route;
     std::string summary;
+    // The registry escalation action for the failure reason, so the chair can act on the
+    // manifest without re-deriving policy; empty when the phase did not fail.
+    std::optional<EscalationAction> optEscalationAction;
   };
 
   AuthorityPolicy intersectAuthority(AuthorityPolicy const& agent,

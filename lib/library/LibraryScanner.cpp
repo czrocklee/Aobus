@@ -186,8 +186,7 @@ namespace ao::library
       {
         auto testEc = std::error_code{};
         {
-          auto const testIt = std::filesystem::directory_iterator{entry.path(), testEc};
-          std::ignore = testIt;
+          [[maybe_unused]] auto const testIt = std::filesystem::directory_iterator{entry.path(), testEc};
         }
 
         if (testEc)

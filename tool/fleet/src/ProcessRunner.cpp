@@ -10,28 +10,29 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/readable_pipe.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/writable_pipe.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/process/v2/environment.hpp>
+#include <boost/process/v2/posix/default_launcher.hpp>
 #include <boost/process/v2/process.hpp>
 #include <boost/process/v2/start_dir.hpp>
 #include <boost/process/v2/stdio.hpp>
+#include <boost/system/error_code.hpp>
 #include <unistd.h>
 
-#include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <memory>
-#include <stop_token>
 #include <string>
 #include <sys/wait.h>
-#include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -42,12 +43,73 @@ namespace ao::fleet
     namespace asio = boost::asio;
     namespace process = boost::process::v2;
 
-    constexpr auto kWatchdogPollInterval = std::chrono::milliseconds{20};
     constexpr auto kShellSignalExitBase = 128;
     constexpr auto kShellSignalExitMax = 192;
+    // Upper bound for reaping a SIGKILLed child; SIGKILL cannot be caught, so this never fires in practice.
+    constexpr auto kReapDeadline = std::chrono::hours{1};
+    constexpr auto kStandardPipeCount = 3;
 
-    asio::awaitable<void> drain(asio::readable_pipe pipe, std::shared_ptr<std::string> outputPtr)
+    // The runner writes to pipes whose read end may close at any time (a child is free to exit
+    // without reading stdin), so EPIPE must surface as an error code instead of a fatal SIGPIPE.
+    // Children spawned by the launcher get SIG_DFL back via ResetSigpipeInChild below.
+    void ignoreSigpipeOnce()
     {
+      [[maybe_unused]] static auto const installed = std::signal(SIGPIPE, SIG_IGN);
+    }
+
+    struct ResetSigpipeInChild final
+    {
+      static boost::system::error_code on_exec_setup(process::posix::default_launcher& /*launcher*/,
+                                                     boost::process::v2::filesystem::path const& /*executable*/,
+                                                     char const* const*(& /*commandLine*/))
+      {
+        // SIG_IGN survives execve, so without this the spawned tree would inherit the parent's
+        // SIGPIPE suppression and shell pipelines inside agents/oracles would change behavior.
+        std::signal(SIGPIPE, SIG_DFL);
+        return {};
+      }
+    };
+
+    // Everything below runs on the single thread driving io_context::run(), so plain members
+    // are safe without synchronization.
+    struct RunState final
+    {
+      explicit RunState(asio::io_context& context)
+        : timer{context}, outputPipe{context}, errorPipe{context}, inputPipe{context}
+      {
+      }
+
+      asio::steady_timer timer;
+      asio::readable_pipe outputPipe;
+      asio::readable_pipe errorPipe;
+      asio::writable_pipe inputPipe;
+      std::string standardOutput;
+      std::string standardError;
+      std::size_t openPipes = kStandardPipeCount;
+      bool childExited = false;
+      bool timedOut = false;
+
+      void notePipeClosed()
+      {
+        if (--openPipes == 0)
+        {
+          timer.cancel();
+        }
+      }
+
+      void forceClosePipes()
+      {
+        auto code = boost::system::error_code{};
+        std::ignore = outputPipe.close(code);
+        std::ignore = errorPipe.close(code);
+        std::ignore = inputPipe.close(code);
+      }
+    };
+
+    asio::awaitable<void> drain(std::shared_ptr<RunState> statePtr, bool isError)
+    {
+      auto& pipe = isError ? statePtr->errorPipe : statePtr->outputPipe;
+      auto& sink = isError ? statePtr->standardError : statePtr->standardOutput;
       auto buffer = std::array<char, 8192>{};
 
       while (true)
@@ -56,7 +118,7 @@ namespace ao::fleet
 
         if (count > 0)
         {
-          outputPtr->append(buffer.data(), count);
+          sink.append(buffer.data(), count);
         }
 
         if (error)
@@ -64,16 +126,90 @@ namespace ao::fleet
           break;
         }
       }
+
+      statePtr->notePipeClosed();
     }
 
-    asio::awaitable<void> writeInput(asio::writable_pipe pipe, std::string input)
+    asio::awaitable<void> writeInput(std::shared_ptr<RunState> statePtr, std::string input)
     {
       if (!input.empty())
       {
-        co_await asio::async_write(pipe, asio::buffer(input), asio::use_awaitable);
+        // A broken pipe is legal here: the child may exit (or close stdin) without reading.
+        [[maybe_unused]] auto const result =
+          co_await asio::async_write(statePtr->inputPipe, asio::buffer(input), asio::as_tuple(asio::use_awaitable));
       }
 
-      pipe.close();
+      auto code = boost::system::error_code{};
+      std::ignore = statePtr->inputPipe.close(code);
+      statePtr->notePipeClosed();
+    }
+
+    asio::awaitable<void> waitForChildExit(std::shared_ptr<process::process> childPtr,
+                                           std::shared_ptr<RunState> statePtr)
+    {
+      [[maybe_unused]] auto const result = co_await childPtr->async_wait(asio::as_tuple(asio::use_awaitable));
+      statePtr->childExited = true;
+      statePtr->timer.cancel();
+    }
+
+    // Owns the shared timer: enforces the run timeout (TERM, then KILL after the grace period)
+    // and, once the child has exited, bounds how long orphaned grandchildren may keep the
+    // stdio pipes open before the whole process group is killed and the pipes force-closed.
+    // Without that last step a backgrounded grandchild inheriting stderr would keep the drain
+    // coroutines pending and io_context::run() would never return.
+    asio::awaitable<void> supervise(std::shared_ptr<RunState> statePtr,
+                                    pid_t pid,
+                                    std::chrono::milliseconds timeout,
+                                    std::chrono::milliseconds grace)
+    {
+      auto deadline = std::chrono::steady_clock::now() + timeout;
+      auto killed = false;
+
+      while (!statePtr->childExited)
+      {
+        statePtr->timer.expires_at(deadline);
+        auto [error] = co_await statePtr->timer.async_wait(asio::as_tuple(asio::use_awaitable));
+
+        if (statePtr->childExited)
+        {
+          break;
+        }
+
+        if (error)
+        {
+          // Cancelled because all pipes closed while the child still runs; keep waiting.
+          continue;
+        }
+
+        if (!statePtr->timedOut)
+        {
+          statePtr->timedOut = true;
+          [[maybe_unused]] auto const termResult = ::kill(-pid, SIGTERM);
+          deadline = std::chrono::steady_clock::now() + grace;
+        }
+        else if (!killed)
+        {
+          killed = true;
+          [[maybe_unused]] auto const killResult = ::kill(-pid, SIGKILL);
+          deadline = std::chrono::steady_clock::now() + kReapDeadline;
+        }
+        else
+        {
+          break;
+        }
+      }
+
+      if (statePtr->openPipes > 0)
+      {
+        statePtr->timer.expires_after(grace);
+        auto [error] = co_await statePtr->timer.async_wait(asio::as_tuple(asio::use_awaitable));
+
+        if (!error)
+        {
+          [[maybe_unused]] auto const killResult = ::kill(-pid, SIGKILL);
+          statePtr->forceClosePipes();
+        }
+      }
     }
 
     std::vector<std::string> buildEnvironment(ProcessRequest const& request)
@@ -97,13 +233,6 @@ namespace ao::fleet
 
       return result;
     }
-
-    asio::awaitable<void> waitForChildExit(std::shared_ptr<process::process> childPtr,
-                                           std::shared_ptr<std::atomic_bool> completedPtr)
-    {
-      [[maybe_unused]] auto const _ = co_await childPtr->async_wait(asio::use_awaitable);
-      completedPtr->store(true, std::memory_order_release);
-    }
   } // namespace
 
   ProcessResult BoostProcessRunner::run(ProcessRequest const& request)
@@ -116,6 +245,8 @@ namespace ao::fleet
       result.standardError = "empty argv";
       return result;
     }
+
+    ignoreSigpipeOnce();
 
     try
     {
@@ -139,9 +270,7 @@ namespace ao::fleet
 
       auto arguments = std::vector<std::string>{"--wait", command.string()};
       arguments.insert(arguments.end(), request.argv.begin() + 1, request.argv.end());
-      auto outputPipe = asio::readable_pipe{context};
-      auto errorPipe = asio::readable_pipe{context};
-      auto inputPipe = asio::writable_pipe{context};
+      auto statePtr = std::make_shared<RunState>(context);
       auto environment = buildEnvironment(request);
       auto childPtr = std::make_shared<process::process>(
         context,
@@ -149,62 +278,26 @@ namespace ao::fleet
         arguments,
         process::process_environment{environment},
         process::process_start_dir{boost::filesystem::path{request.cwd}},
-        process::process_stdio{.in = inputPipe, .out = outputPipe, .err = errorPipe});
+        process::process_stdio{.in = statePtr->inputPipe, .out = statePtr->outputPipe, .err = statePtr->errorPipe},
+        ResetSigpipeInChild{});
 
       auto const pid = static_cast<pid_t>(childPtr->id());
-      auto completedPtr = std::make_shared<std::atomic_bool>(false);
-      auto timedOutPtr = std::make_shared<std::atomic_bool>(false);
-      auto stdoutDataPtr = std::make_shared<std::string>();
-      auto stderrDataPtr = std::make_shared<std::string>();
 
-      auto watchdog = std::jthread{
-        [pid, completedPtr, timedOutPtr, timeout = request.timeout, grace = request.terminationGrace](
-          std::stop_token stop)
-        {
-          auto sleepUntilStopped = [&stop](std::chrono::milliseconds duration)
-          {
-            auto const end = std::chrono::steady_clock::now() + duration;
-
-            while (!stop.stop_requested() && std::chrono::steady_clock::now() < end)
-            {
-              std::this_thread::sleep_for(std::min(
-                kWatchdogPollInterval,
-                std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now())));
-            }
-          };
-
-          sleepUntilStopped(timeout);
-
-          if (stop.stop_requested() || completedPtr->load(std::memory_order_acquire))
-          {
-            return;
-          }
-
-          timedOutPtr->store(true, std::memory_order_release);
-          [[maybe_unused]] auto const _ = ::kill(-pid, SIGTERM);
-          sleepUntilStopped(grace);
-
-          if (!completedPtr->load(std::memory_order_acquire))
-          {
-            [[maybe_unused]] auto const _ = ::kill(-pid, SIGKILL);
-          }
-        }};
-
-      asio::co_spawn(context, drain(std::move(outputPipe), stdoutDataPtr), asio::detached);
-      asio::co_spawn(context, drain(std::move(errorPipe), stderrDataPtr), asio::detached);
-      asio::co_spawn(context, writeInput(std::move(inputPipe), request.standardInput), asio::detached);
-      asio::co_spawn(context, waitForChildExit(childPtr, completedPtr), asio::detached);
+      asio::co_spawn(context, drain(statePtr, false), asio::detached);
+      asio::co_spawn(context, drain(statePtr, true), asio::detached);
+      asio::co_spawn(context, writeInput(statePtr, request.standardInput), asio::detached);
+      asio::co_spawn(context, waitForChildExit(childPtr, statePtr), asio::detached);
+      asio::co_spawn(context, supervise(statePtr, pid, request.timeout, request.terminationGrace), asio::detached);
       context.run();
-      watchdog.request_stop();
 
-      result.standardOutput = std::move(*stdoutDataPtr);
-      result.standardError = std::move(*stderrDataPtr);
+      result.standardOutput = std::move(statePtr->standardOutput);
+      result.standardError = std::move(statePtr->standardError);
       result.elapsed =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started);
       auto const nativeStatus = childPtr->native_exit_code();
       result.exitCode = childPtr->exit_code();
 
-      if (timedOutPtr->load(std::memory_order_acquire))
+      if (statePtr->timedOut)
       {
         result.status = ProcessStatus::TimedOut;
       }

@@ -3,8 +3,8 @@
 
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
-#include <ao/rt/yaml/Utils.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
+#include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -18,7 +18,7 @@
 
 namespace ao::gtk::layout::test
 {
-  namespace yaml = ao::rt::yaml;
+  namespace yaml = ao::yaml;
 
   namespace
   {
@@ -31,10 +31,10 @@ namespace ao::gtk::layout::test
     {
       auto const doc = createDefaultLayout();
       auto tree = ryml::Tree{};
-      rt::yaml::write(tree.rootref(), doc);
+      yaml::write(tree.rootref(), doc);
 
       auto decoded = LayoutDocument{};
-      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+      REQUIRE(yaml::read(tree.rootref(), decoded));
 
       CHECK(decoded.version == 1);
       CHECK(decoded.root.type == "box");
@@ -133,10 +133,10 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(c2);
 
       auto tree = ryml::Tree{};
-      rt::yaml::write(tree.rootref(), doc);
+      yaml::write(tree.rootref(), doc);
 
       auto decoded = LayoutDocument{};
-      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+      REQUIRE(yaml::read(tree.rootref(), decoded));
 
       REQUIRE(decoded.root.children.size() == 2);
       CHECK(decoded.root.children[0].type == "spacer");
@@ -159,7 +159,7 @@ namespace ao::gtk::layout::test
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
 
       auto decoded = LayoutDocument{};
-      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+      REQUIRE(yaml::read(tree.rootref(), decoded));
       CHECK(decoded.version == 1);
       CHECK(decoded.root.type == "box");
       CHECK(decoded.root.id.empty());
@@ -179,7 +179,7 @@ namespace ao::gtk::layout::test
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
 
       auto decoded = LayoutDocument{};
-      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+      REQUIRE(yaml::read(tree.rootref(), decoded));
       CHECK(decoded.root.type == "spacer");
       CHECK(decoded.root.id.empty());
     }
@@ -188,10 +188,10 @@ namespace ao::gtk::layout::test
     {
       auto const v = LayoutValue{3.14};
       auto tree = ryml::Tree{};
-      rt::yaml::write(tree.rootref(), v);
+      yaml::write(tree.rootref(), v);
 
       auto decoded = LayoutValue{};
-      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+      REQUIRE(yaml::read(tree.rootref(), decoded));
       CHECK(decoded.asDouble() == 3.14);
     }
   }

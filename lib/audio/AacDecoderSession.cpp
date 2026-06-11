@@ -34,8 +34,8 @@ namespace ao::audio
     constexpr std::uint8_t kFallbackMaxChannels = 8;
     constexpr std::uint32_t kAacEscapeObjectType = 31U;
     constexpr std::uint32_t kAacEscapeSampleRateIndex = 15U;
-    constexpr std::array<std::uint32_t, 13> kAacSampleRates = {
-      96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350};
+    constexpr std::array<std::uint32_t, 13> kAacSampleRates =
+      {96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350};
     constexpr std::array<std::uint8_t, 8> kAacChannelCounts = {0, 1, 2, 3, 4, 5, 6, 8};
 
     struct AacStreamConfig final
@@ -170,10 +170,7 @@ namespace ao::audio
     {
     }
 
-    ~Impl()
-    {
-      closeDecoder();
-    }
+    ~Impl() { closeDecoder(); }
 
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;
@@ -215,20 +212,14 @@ namespace ao::audio
       }
 
       inputBuffer.resize(magicCookie.size());
-      std::ranges::transform(magicCookie,
-                             inputBuffer.begin(),
-                             [](std::byte byte)
-                             {
-                               return static_cast<UCHAR>(byte);
-                             });
+      std::ranges::transform(magicCookie, inputBuffer.begin(), [](std::byte byte) { return static_cast<UCHAR>(byte); });
 
-      auto const configResult =
-        [&]
-        {
-          auto configData = std::array{inputBuffer.data()};
-          auto configSize = std::array{static_cast<UINT>(inputBuffer.size())};
-          return ::aacDecoder_ConfigRaw(decoder, configData.data(), configSize.data());
-        }();
+      auto const configResult = [&]
+      {
+        auto configData = std::array{inputBuffer.data()};
+        auto configSize = std::array{static_cast<UINT>(inputBuffer.size())};
+        return ::aacDecoder_ConfigRaw(decoder, configData.data(), configSize.data());
+      }();
 
       if (configResult != AAC_DEC_OK)
       {
@@ -336,8 +327,7 @@ namespace ao::audio
       }
 
       if (auto const sampleInfo = demuxerPtr->sampleInfo(sampleIndex);
-          timescale > 0 && (sampleInfo.startTime > 0 || sampleInfo.duration > 0) &&
-          info.sourceFormat.sampleRate > 0)
+          timescale > 0 && (sampleInfo.startTime > 0 || sampleInfo.duration > 0) && info.sourceFormat.sampleRate > 0)
       {
         return (sampleInfo.startTime * info.sourceFormat.sampleRate) / timescale;
       }
@@ -443,21 +433,16 @@ namespace ao::audio
     }
 
     _implPtr->inputBuffer.resize(packet.size());
-    std::ranges::transform(packet,
-                           _implPtr->inputBuffer.begin(),
-                           [](std::byte byte)
-                           {
-                             return static_cast<UCHAR>(byte);
-                           });
+    std::ranges::transform(
+      packet, _implPtr->inputBuffer.begin(), [](std::byte byte) { return static_cast<UCHAR>(byte); });
 
-    auto const fillResult =
-      [&]
-      {
-        auto inputData = std::array{_implPtr->inputBuffer.data()};
-        auto inputSize = std::array{static_cast<UINT>(_implPtr->inputBuffer.size())};
-        auto bytesValid = inputSize.front();
-        return ::aacDecoder_Fill(_implPtr->decoder, inputData.data(), inputSize.data(), &bytesValid);
-      }();
+    auto const fillResult = [&]
+    {
+      auto inputData = std::array{_implPtr->inputBuffer.data()};
+      auto inputSize = std::array{static_cast<UINT>(_implPtr->inputBuffer.size())};
+      auto bytesValid = inputSize.front();
+      return ::aacDecoder_Fill(_implPtr->decoder, inputData.data(), inputSize.data(), &bytesValid);
+    }();
 
     if (fillResult != AAC_DEC_OK)
     {
@@ -465,14 +450,12 @@ namespace ao::audio
     }
 
     auto const* streamInfoBefore = ::aacDecoder_GetStreamInfo(_implPtr->decoder);
-    auto const frameSizeBefore =
-      (streamInfoBefore != nullptr && streamInfoBefore->frameSize > 0)
-        ? static_cast<std::uint32_t>(streamInfoBefore->frameSize)
-        : kFallbackFrameSize;
-    auto const channelsBefore =
-      (streamInfoBefore != nullptr && streamInfoBefore->numChannels > 0)
-        ? static_cast<std::uint8_t>(streamInfoBefore->numChannels)
-        : kFallbackMaxChannels;
+    auto const frameSizeBefore = (streamInfoBefore != nullptr && streamInfoBefore->frameSize > 0)
+                                   ? static_cast<std::uint32_t>(streamInfoBefore->frameSize)
+                                   : kFallbackFrameSize;
+    auto const channelsBefore = (streamInfoBefore != nullptr && streamInfoBefore->numChannels > 0)
+                                  ? static_cast<std::uint8_t>(streamInfoBefore->numChannels)
+                                  : kFallbackMaxChannels;
 
     _implPtr->pcmBuffer.resize(static_cast<std::size_t>(frameSizeBefore) * channelsBefore);
 

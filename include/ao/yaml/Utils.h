@@ -17,14 +17,14 @@
 #include <string_view>
 #include <vector>
 
-namespace ao::rt::yaml
+namespace ao::yaml
 {
   /**
    * @brief Custom error callback for ryml that throws ao::Exception.
    */
   inline void throwOnError(c4::basic_substring<char const> msg, c4::yml::ErrorDataBasic const& dat, void* userData)
   {
-    auto const* const filename = userData != nullptr ? static_cast<char const*>(userData) : "unknown";
+    auto const* const filename = userData != nullptr ? static_cast<char const*>(userData) : "<buffer>";
     throw Exception{std::format("YAML error at {}:{}:{}: {}",
                                 filename,
                                 dat.location.line,
@@ -165,4 +165,4 @@ namespace ao::rt::yaml
     node >> val;
     return val;
   }
-} // namespace ao::rt::yaml
+} // namespace ao::yaml

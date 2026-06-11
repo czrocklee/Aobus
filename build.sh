@@ -117,10 +117,14 @@ if [[ "$ENABLE_ASAN" == "true" ]]; then
     ASAN_SUFFIX="-asan"
 fi
 
+if [[ "$ENABLE_TSAN" == "true" ]]; then
+    TSAN_SUFFIX="-tsan"
+fi
+
 if [[ -z "${BUILD_DIR:-}" ]]; then
     case "$BUILD_TYPE" in
         debug|release|profile)
-            BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${ASAN_SUFFIX}"
+            BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${ASAN_SUFFIX}${TSAN_SUFFIX}"
             ;;
         pgo1|pgo2)
 #PGO generate / use steps must share a build tree so profile data stays available.
@@ -163,6 +167,11 @@ fi
 if [[ "$ENABLE_ASAN" == "true" ]]; then
     echo "ASan/UBSan enabled for this build."
     CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_ASAN=ON"
+fi
+
+if [[ "$ENABLE_TSAN" == "true" ]]; then
+    echo "TSan enabled for this build."
+    CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_TSAN=ON"
 fi
 
 eval "$CONFIGURE_COMMAND" 2>&1 | tee "$BUILD_DIR/build.log"

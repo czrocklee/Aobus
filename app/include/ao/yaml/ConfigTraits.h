@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/rt/yaml/Utils.h>
 #include <ao/utility/Log.h>
+#include <ao/yaml/Utils.h>
 
 #include <boost/pfr/core.hpp>
 #include <boost/pfr/core_name.hpp>
@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::rt::yaml
+namespace ao::yaml
 {
   // ── Concepts ────────────────────────────────────────────────────────────────
 
@@ -445,4 +445,4 @@ namespace ao::rt::yaml
                                });
     return success;
   }
-} // namespace ao::rt::yaml
+} // namespace ao::yaml

@@ -16,9 +16,9 @@
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/LibraryYamlImporter.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/yaml/Utils.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Base64.h>
+#include <ao/yaml/Utils.h>
 
 #include <algorithm>
 #include <array>
@@ -518,7 +518,7 @@ namespace ao::rt
       }
       else
       {
-        auto [newTrackId, view] =
+        [[maybe_unused]] auto [newTrackId, view] =
           trackWriter.createHotCold(preparedHot.size(),
                                     preparedCold.size(),
                                     [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
@@ -527,7 +527,6 @@ namespace ao::rt
                                       preparedCold.writeTo(cold);
                                     });
         targetTrackId = newTrackId;
-        std::ignore = view;
       }
 
       auto manifestBuilder = library::FileManifestBuilder::createNew();
@@ -780,9 +779,8 @@ namespace ao::rt
   void LibraryYamlImporter::Impl::importLists(std::vector<ValidatedList> const& lists,
                                               lmdb::WriteTransaction& txn,
                                               std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                                              ImportMode strategy)
+                                              ImportMode /*strategy*/)
   {
-    std::ignore = strategy;
     auto listWriter = ml.lists().writer(txn);
     auto manifestReader = ml.manifest().reader(txn);
 
@@ -816,8 +814,7 @@ namespace ao::rt
         }
       }
 
-      auto [newListId, view] = listWriter.create(builder.serialize());
-      std::ignore = view;
+      [[maybe_unused]] auto [newListId, view] = listWriter.create(builder.serialize());
       yamlListIdToNewListId[importedList.yamlId] = newListId;
     }
 

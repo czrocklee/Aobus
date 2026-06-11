@@ -1,42 +1,38 @@
 schema: aobus-fleet-registry/v1
+# Guard-protected paths enforced for every patch, on top of the per-oracle ruler-paths below.
+# The engine additionally hardcodes tool/fleet and config/agent-fleet.yaml (self-protection)
+# and rejects any CMakeLists.txt by basename at every directory level.
+ruler-paths: [cmake, script, .agents, doc/design, build.sh, format.sh, shell.nix, CMakePresets.json, nixpkgs.json, .clang-tidy, lint]
 agents:
   dspro:
-    vendor: opencode-go
     model: deepseek-v4-pro
     argv: [opencode, run, --dangerously-skip-permissions, --variant, max, -m, opencode-go/deepseek-v4-pro]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, XDG_CONFIG_HOME, OPENCODE_CONFIG_DIR]
-    credential-mounts: []
     timeout-ms: 1200000
     rate-limit-key: opencode-go
     default-authority: trusted-writable
   codex:
-    vendor: openai
     model: gpt-5.5
     argv: [codex, exec, -s, workspace-write, --skip-git-repo-check]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, CODEX_HOME]
-    credential-mounts: []
     timeout-ms: 1200000
     rate-limit-key: openai
     default-authority: trusted-writable
   claude-opus:
-    vendor: anthropic
     model: opus
     argv: [claude, -p, --dangerously-skip-permissions, --no-session-persistence, --model, opus, --effort, xhigh]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, ANTHROPIC_API_KEY]
-    credential-mounts: []
     timeout-ms: 1200000
     rate-limit-key: anthropic
     default-authority: trusted-read-only
   gemini-pro:
-    vendor: google
     model: gemini-3.1-pro-high
     argv: [agy, -p, "", --add-dir, ., --dangerously-skip-permissions, --model, "Gemini 3.1 Pro (High)"]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, GOOGLE_API_KEY]
-    credential-mounts: []
     timeout-ms: 1200000
     rate-limit-key: google
     default-authority: trusted-read-only
@@ -45,7 +41,6 @@ oracles:
     runner: test-all
     arguments: {}
     property: The full core and GTK test suites build and pass.
-    prerequisites: [nix-shell, bubblewrap]
     known-gaps: [Passing tests do not prove semantic completeness.]
     baseline-policy: require-green
     ruler-paths: [CMakeLists.txt, cmake, build.sh, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
@@ -53,7 +48,6 @@ oracles:
     runner: test-core
     arguments: {}
     property: The selected core tests pass.
-    prerequisites: [existing-debug-build]
     known-gaps: [GTK behavior is not checked.]
     baseline-policy: require-green
     ruler-paths: [CMakeLists.txt, cmake, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
@@ -61,15 +55,29 @@ oracles:
     runner: test-gtk
     arguments: {}
     property: The selected GTK tests pass headlessly.
-    prerequisites: [existing-debug-build, xvfb]
     known-gaps: [Core-only behavior is not checked.]
     baseline-policy: require-green
     ruler-paths: [CMakeLists.txt, cmake, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+  test-asan:
+    runner: test-asan
+    arguments: {}
+    property: The full test suites build and pass under address and undefined sanitizers.
+    known-gaps: [Sanitizers only catch defects on the executed paths.]
+    baseline-policy: require-green
+    timeout-ms: 3600000
+    ruler-paths: [CMakeLists.txt, cmake, build.sh, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
+  test-tsan:
+    runner: test-tsan
+    arguments: {}
+    property: The full test suites build and pass under the thread sanitizer.
+    known-gaps: [Data races are only caught on the executed interleavings.]
+    baseline-policy: require-green
+    timeout-ms: 3600000
+    ruler-paths: [CMakeLists.txt, cmake, build.sh, script/run-tests.sh, tool/fleet, config/agent-fleet.yaml]
   tidy-clean:
     runner: tidy-clean
     arguments: {}
     property: Registered clang-tidy checks report no diagnostics for the selected files.
-    prerequisites: [compile-commands]
     known-gaps: [Lint cleanliness does not prove behavior preservation.]
     baseline-policy: require-green
     ruler-paths: [.clang-tidy, lint, script/run-clang-tidy.sh, tool/fleet, config/agent-fleet.yaml]
@@ -77,23 +85,22 @@ oracles:
     runner: build-debug
     arguments: {}
     property: The debug application target builds successfully.
-    prerequisites: [nix-shell]
     known-gaps: [Tests are not executed.]
     baseline-policy: require-green
     ruler-paths: [CMakeLists.txt, cmake, build.sh, tool/fleet, config/agent-fleet.yaml]
   test-delta:
     runner: test-delta
-    arguments: {}
+    # Comma-separated path prefixes and file suffixes that count as test changes.
+    arguments: {test-paths: "test/,tool/fleet/test/", test-suffixes: "Test.cpp"}
     property: The patch changes a registered test path.
-    prerequisites: []
     known-gaps: [A changed test may still miss the changed behavior.]
     baseline-policy: skip
     ruler-paths: [tool/fleet, config/agent-fleet.yaml]
   public-signature-delta:
     runner: public-signature-delta
-    arguments: {}
+    # Comma-separated prefixes defining the public surface and the header suffixes within it.
+    arguments: {header-prefixes: "include/,app/include/", header-suffixes: ".h,.hpp"}
     property: The patch does not change a public header signature surface.
-    prerequisites: []
     known-gaps: [Private ABI and semantic contract changes are not detected.]
     baseline-policy: skip
     ruler-paths: [tool/fleet, config/agent-fleet.yaml]
@@ -123,11 +130,12 @@ bindings:
     engine: gate
     authority: trusted-writable
     params: {fanout: 1, top-k: 1, max-rounds: 1, churn-lines: 1000}
+  # No risk-oracle: lint fixes do not have to touch tests; a clean tidy run is the gate,
+  # matching the old lint_phase.sh acceptance rule.
   fix-lint:
     agent: dspro
     engine: gate
     oracle: tidy-clean
-    risk-oracle: test-delta
     authority: trusted-writable
     params: {fanout: 2, top-k: 1, max-rounds: 3, churn-lines: 500}
   council-plan:

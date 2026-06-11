@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::fleet
@@ -44,6 +45,16 @@ namespace ao::fleet
     IProcessRunner& _runner;
   };
 
+  struct SandboxMounts
+  {
+    // Host path -> sandbox path pairs mounted writable inside the namespace, applied after the
+    // workspace bind so they can nest under the virtualized repository path or under /tmp.
+    std::vector<std::pair<std::filesystem::path, std::filesystem::path>> writableBinds;
+    // Bind $HOME read-write. The namespace is a path virtualizer, not a security boundary;
+    // model CLIs need their normal credential and config files to authenticate.
+    bool bindHome = false;
+  };
+
   class NamespaceRunner final
   {
   public:
@@ -52,6 +63,7 @@ namespace ao::fleet
     ProcessResult run(std::filesystem::path const& realRepo,
                       std::filesystem::path const& workspace,
                       AuthorityPolicy const& authority,
+                      SandboxMounts const& mounts,
                       ProcessRequest request);
 
   private:

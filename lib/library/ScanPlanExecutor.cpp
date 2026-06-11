@@ -160,7 +160,7 @@ namespace ao::library
 
       // New track
       auto [preparedHot, preparedCold] = builder.prepare(txn, dict, _ml.resources());
-      auto [newTrackId, view] = trackWriter.createHotCold(
+      [[maybe_unused]] auto [newTrackId, view] = trackWriter.createHotCold(
         preparedHot.size(),
         preparedCold.size(),
         [&preparedHot, &preparedCold](TrackId /*id*/, std::span<std::byte> hot, std::span<std::byte> cold)
@@ -168,7 +168,6 @@ namespace ao::library
           preparedHot.writeTo(hot);
           preparedCold.writeTo(cold);
         });
-      std::ignore = view;
 
       auto manifestBuilder = FileManifestBuilder::createNew();
       manifestBuilder.trackId(newTrackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);

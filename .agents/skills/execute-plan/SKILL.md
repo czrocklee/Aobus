@@ -47,7 +47,9 @@ nix-shell --run "/tmp/build/debug/tool/fleet/aobus-fleet run --registry config/a
 
 Read the phase `manifest.yaml`, `review.md`, `evidence.yaml`, harness `patch`, candidate logs, and
 `trace.yaml`. `PROPOSAL` means the registered oracle independently passed; `ADVISORY` means no oracle
-was configured. Neither means accepted.
+was configured. Neither means accepted. On failure, `manifest.yaml` carries `escalation-action:`
+(`retry`, `switch-route`, `require-council`, `stop-route`, or `return-chair`) — the registry policy
+for that failure reason; act on it instead of re-deriving policy. It is `none` for successful phases.
 
 Apply or modify an accepted patch using the ordinary repository workflow, run real-tree validation,
 then record the outcome:

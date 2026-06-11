@@ -67,7 +67,6 @@ namespace ao::rt
       case TrackField::FilePath: return TrackFieldRawValue{std::in_place_type<std::string>, view.property().uri()};
       case TrackField::Codec:
       {
-        std::ignore = dict;
         return TrackFieldRawValue{
           std::in_place_type<std::string>, std::string{library::audioCodecName(view.property().codec())}};
       }

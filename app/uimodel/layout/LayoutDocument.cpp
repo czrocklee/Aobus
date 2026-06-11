@@ -9,8 +9,8 @@
 
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/yaml/ConfigTraits.h>
-#include <ao/rt/yaml/Utils.h>
+#include <ao/yaml/ConfigTraits.h>
+#include <ao/yaml/Utils.h>
 
 #include <charconv>
 #include <cstdint>
@@ -23,7 +23,7 @@
 #include <variant>
 #include <vector>
 
-namespace ao::rt::yaml
+namespace ao::yaml
 {
   using namespace ao::uimodel::layout;
 
@@ -253,7 +253,7 @@ namespace ao::rt::yaml
 
     return true;
   }
-} // namespace ao::rt::yaml
+} // namespace ao::yaml
 
 namespace ao::uimodel::layout
 {

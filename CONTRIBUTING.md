@@ -83,6 +83,7 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.2.8. Do not use casts to suppress unused warnings.
       - 3.2.8.1. Never-used function parameters: use `Type /*name*/` (anonymous parameter).
       - 3.2.8.2. Conditionally-used parameters, local variables, and structured bindings: use `[[maybe_unused]]`.
+      - 3.2.8.3. Deliberately discarded return values: use `std::ignore = expr;` (first-class for this purpose in C++26). Do not use void casts or introduce locals just to discard a value, and do not use `std::ignore` on plain variable reads where 3.2.8.1/3.2.8.2 apply.
   - 3.3. Modern C++ Features (C++23/26)
     - 3.3.1. Use `std::expected<T, E>` for operations that can fail recoverably
       - Use the project alias `ao::Result<T>` (defaults to `ao::Result<>` for `void`), defined in `include/ao/Error.h`

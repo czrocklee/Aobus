@@ -4,6 +4,7 @@
 #include <ao/Error.h>
 #include <ao/fleet/Model.h>
 #include <ao/fleet/Serialization.h>
+#include <ao/yaml/Utils.h>
 
 #include <c4/yml/common.hpp>
 #include <ryml.hpp>
@@ -13,6 +14,7 @@
 #include <cctype>
 #include <charconv>
 #include <chrono>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -34,6 +36,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -44,6 +47,8 @@ namespace ao::fleet
     constexpr auto kMaxDocumentBytes = std::size_t{2UL * 1024 * 1024};
     constexpr auto kMaxDepth = std::size_t{32};
     constexpr auto kMaxCollectionEntries = std::size_t{20'000};
+    constexpr auto kAsciiControlBound = 0x20;
+    constexpr auto kAsciiDel = 0x7F;
 
     class ParseFailure final : public std::runtime_error
     {
@@ -53,18 +58,6 @@ namespace ao::fleet
       {
       }
     };
-
-    void onYamlError(c4::csubstr message, c4::yml::ErrorDataBasic const& /*unused*/, void* /*unused*/)
-    {
-      throw ParseFailure{std::string{message.data(), message.size()}};
-    }
-
-    ryml::Callbacks callbacks()
-    {
-      auto result = ryml::Callbacks{};
-      result.set_error_basic(onYamlError);
-      return result;
-    }
 
     std::unexpected<Error> validationError(Error::Code code, std::string context, std::string message)
     {
@@ -110,26 +103,29 @@ namespace ao::fleet
       return value;
     }
 
-    void rejectYamlExtensions(std::string_view source)
+    // Rejects YAML language extensions on the parsed tree instead of scanning raw text,
+    // so '&', '*', and '!' inside scalar content (code snippets, glob patterns) survive
+    // while real anchors, aliases, tags, and merge keys are still refused.
+    void rejectYamlExtensions(ryml::ConstNodeRef node)
     {
-      auto const forbidden = std::array{"<<:", "!!", "!<"};
-
-      for (auto const* const token : forbidden)
+      if (node.has_key_anchor() || node.has_val_anchor())
       {
-        if (source.find(token) != std::string_view::npos)
-        {
-          throw ParseFailure{std::format("YAML extension '{}' is forbidden", token)};
-        }
+        throw ParseFailure{"YAML anchors are forbidden"};
       }
 
-      auto isName = [](char value) { return std::isalnum(static_cast<unsigned char>(value)) != 0 || value == '_'; };
-
-      for (std::size_t index = 0; index + 1 < source.size(); ++index)
+      if (node.is_key_ref() || node.is_val_ref())
       {
-        if ((source[index] == '&' || source[index] == '*' || source[index] == '!') && isName(source[index + 1]))
-        {
-          throw ParseFailure{"YAML anchors, aliases, and custom tags are forbidden"};
-        }
+        throw ParseFailure{"YAML aliases are forbidden"};
+      }
+
+      if (node.has_key_tag() || node.has_val_tag())
+      {
+        throw ParseFailure{"YAML tags are forbidden"};
+      }
+
+      if (node.has_key() && node.key() == "<<")
+      {
+        throw ParseFailure{"YAML merge keys are forbidden"};
       }
     }
 
@@ -139,6 +135,8 @@ namespace ao::fleet
       {
         throw ParseFailure{"YAML nesting exceeds limit"};
       }
+
+      rejectYamlExtensions(node);
 
       if (node.is_map())
       {
@@ -174,7 +172,7 @@ namespace ao::fleet
       ryml::Tree tree;
 
       ParsedYaml()
-        : tree{callbacks()}
+        : tree{yaml::callbacks()}
       {
       }
     };
@@ -190,10 +188,9 @@ namespace ao::fleet
 
       try
       {
-        rejectYamlExtensions(*source);
         auto parsed = ParsedYaml{};
         parsed.source = std::move(*source);
-        ryml::parse_in_arena(ryml::csubstr{parsed.source.data(), parsed.source.size()}, &parsed.tree);
+        ryml::parse_in_arena(yaml::toCsubstr(parsed.source), &parsed.tree);
         auto entries = std::size_t{};
         validateTree(parsed.tree.rootref(), 0, entries);
         return parsed;
@@ -228,19 +225,17 @@ namespace ao::fleet
         throw ParseFailure{std::format("{} must be a scalar", context)};
       }
 
-      auto const value = node.val();
-      return {value.data(), value.size()};
+      return std::string{yaml::scalarView(node)};
     }
 
     std::string key(ryml::ConstNodeRef node)
     {
-      auto const value = node.key();
-      return {value.data(), value.size()};
+      return std::string{yaml::keyView(node)};
     }
 
     ryml::ConstNodeRef required(ryml::ConstNodeRef node, std::string_view name)
     {
-      auto child = node.find_child(ryml::csubstr{name.data(), name.size()});
+      auto child = yaml::findChild(node, name);
 
       if (!child.readable())
       {
@@ -252,7 +247,7 @@ namespace ao::fleet
 
     ryml::ConstNodeRef optional(ryml::ConstNodeRef node, std::string_view name)
     {
-      return node.find_child(ryml::csubstr{name.data(), name.size()});
+      return yaml::findChild(node, name);
     }
 
     void requireMap(ryml::ConstNodeRef node, std::string_view context)
@@ -271,9 +266,7 @@ namespace ao::fleet
       }
     }
 
-    void rejectUnknown(ryml::ConstNodeRef node,
-                       std::initializer_list<std::string_view> allowed,
-                       std::string_view context)
+    void rejectUnknown(ryml::ConstNodeRef node, std::vector<std::string_view> const& allowed, std::string_view context)
     {
       requireMap(node, context);
 
@@ -284,6 +277,13 @@ namespace ao::fleet
           throw ParseFailure{std::format("unknown field '{}' in {}", childKey, context)};
         }
       }
+    }
+
+    void rejectUnknown(ryml::ConstNodeRef node,
+                       std::initializer_list<std::string_view> allowed,
+                       std::string_view context)
+    {
+      rejectUnknown(node, std::vector<std::string_view>{allowed}, context);
     }
 
     std::size_t unsignedValue(ryml::ConstNodeRef node, std::string_view context)
@@ -300,19 +300,14 @@ namespace ao::fleet
       return result;
     }
 
-    template<typename Enum>
-    Enum closedEnum(ryml::ConstNodeRef node,
-                    std::string_view context,
-                    std::initializer_list<std::pair<std::string_view, Enum>> values)
+    template<typename Enum, std::size_t N>
+    Enum closedEnum(ryml::ConstNodeRef node, std::string_view context, EnumNameTable<Enum, N> const& names)
     {
       auto const text = scalar(node, context);
 
-      for (auto const& [name, value] : values)
+      if (auto const optValue = enumFromName(names, text); optValue)
       {
-        if (name == text)
-        {
-          return value;
-        }
+        return *optValue;
       }
 
       throw ParseFailure{std::format("invalid {} '{}'", context, text)};
@@ -320,115 +315,65 @@ namespace ao::fleet
 
     ScopeOperation parseOperation(ryml::ConstNodeRef node)
     {
-      return closedEnum<ScopeOperation>(
-        node,
-        "scope operation",
-        {{"create", ScopeOperation::Create}, {"modify", ScopeOperation::Modify}, {"delete", ScopeOperation::Delete}});
+      return closedEnum(node, "scope operation", kScopeOperationNames);
     }
 
     EngineKind parseEngine(ryml::ConstNodeRef node)
     {
-      return closedEnum<EngineKind>(
-        node,
-        "engine",
-        {{"gate", EngineKind::Gate}, {"synthesis", EngineKind::Synthesis}, {"search", EngineKind::Search}});
+      return closedEnum(node, "engine", kEngineKindNames);
     }
 
     FilesystemAuthority parseFilesystem(ryml::ConstNodeRef node)
     {
-      return closedEnum<FilesystemAuthority>(node,
-                                             "filesystem authority",
-                                             {{"read-only", FilesystemAuthority::ReadOnly},
-                                              {"writable-copy", FilesystemAuthority::WritableCopy},
-                                              {"mutate-real-tree", FilesystemAuthority::MutateRealTree}});
+      return closedEnum(node, "filesystem authority", kFilesystemAuthorityNames);
     }
 
     NetworkAuthority parseNetwork(ryml::ConstNodeRef node)
     {
-      return closedEnum<NetworkAuthority>(
-        node,
-        "network authority",
-        {{"off", NetworkAuthority::Off}, {"vendor", NetworkAuthority::Vendor}, {"full", NetworkAuthority::Full}});
+      return closedEnum(node, "network authority", kNetworkAuthorityNames);
     }
 
     ContextView parseContextView(ryml::ConstNodeRef node)
     {
-      return closedEnum<ContextView>(
-        node, "context view", {{"minimal", ContextView::Minimal}, {"full", ContextView::Full}});
+      return closedEnum(node, "context view", kContextViewNames);
     }
 
     PromptDelivery parsePromptDelivery(ryml::ConstNodeRef node)
     {
-      return closedEnum<PromptDelivery>(
-        node,
-        "prompt delivery",
-        {{"stdin", PromptDelivery::Stdin}, {"argument", PromptDelivery::Argument}, {"file", PromptDelivery::File}});
+      return closedEnum(node, "prompt delivery", kPromptDeliveryNames);
     }
 
     OracleRunner parseOracleRunner(ryml::ConstNodeRef node)
     {
-      return closedEnum<OracleRunner>(node,
-                                      "oracle runner",
-                                      {{"test-all", OracleRunner::TestAll},
-                                       {"test-core", OracleRunner::TestCore},
-                                       {"test-gtk", OracleRunner::TestGtk},
-                                       {"tidy-clean", OracleRunner::TidyClean},
-                                       {"build-debug", OracleRunner::BuildDebug},
-                                       {"test-delta", OracleRunner::TestDelta},
-                                       {"public-signature-delta", OracleRunner::PublicSignatureDelta}});
+      return closedEnum(node, "oracle runner", kOracleRunnerNames);
     }
 
     BaselinePolicy parseBaseline(ryml::ConstNodeRef node)
     {
-      return closedEnum<BaselinePolicy>(node,
-                                        "baseline policy",
-                                        {{"require-green", BaselinePolicy::RequireGreen},
-                                         {"allow-red", BaselinePolicy::AllowRed},
-                                         {"skip", BaselinePolicy::Skip}});
+      return closedEnum(node, "baseline policy", kBaselinePolicyNames);
     }
 
     FailureReason parseFailureReason(ryml::ConstNodeRef node)
     {
-      return closedEnum<FailureReason>(node,
-                                       "failure reason",
-                                       {{"no-candidate", FailureReason::NoCandidate},
-                                        {"scope-violation", FailureReason::ScopeViolation},
-                                        {"churn-exceeded", FailureReason::ChurnExceeded},
-                                        {"oracle-failed", FailureReason::OracleFailed},
-                                        {"risk-oracle-fired", FailureReason::RiskOracleFired},
-                                        {"budget-exhausted", FailureReason::BudgetExhausted},
-                                        {"infrastructure", FailureReason::Infrastructure},
-                                        {"dependency-failed", FailureReason::DependencyFailed},
-                                        {"real-tree-changed", FailureReason::RealTreeChanged},
-                                        {"quorum-failed", FailureReason::QuorumFailed},
-                                        {"route-paused", FailureReason::RoutePaused}});
+      auto const result = closedEnum(node, "failure reason", kFailureReasonNames);
+
+      // 'none' marks a successful phase; an escalation rule keyed on it would be meaningless.
+      if (result == FailureReason::None)
+      {
+        throw ParseFailure{"invalid failure reason 'none'"};
+      }
+
+      return result;
     }
 
     EscalationAction parseEscalationAction(ryml::ConstNodeRef node)
     {
-      return closedEnum<EscalationAction>(node,
-                                          "escalation action",
-                                          {{"retry", EscalationAction::Retry},
-                                           {"switch-route", EscalationAction::SwitchRoute},
-                                           {"require-council", EscalationAction::RequireCouncil},
-                                           {"stop-route", EscalationAction::StopRoute},
-                                           {"return-chair", EscalationAction::ReturnChair}});
+      return closedEnum(node, "escalation action", kEscalationActionNames);
     }
 
     CouncilDepth parseCouncilDepth(ryml::ConstNodeRef node)
     {
-      return closedEnum<CouncilDepth>(
-        node,
-        "synthesis depth",
-        {{"panel", CouncilDepth::Panel}, {"challenge", CouncilDepth::Challenge}, {"full", CouncilDepth::Full}});
-    }
-
-    ReviewVerdict parseReviewVerdict(ryml::ConstNodeRef node)
-    {
-      return closedEnum<ReviewVerdict>(
-        node,
-        "review verdict",
-        {{"accept", ReviewVerdict::Accept}, {"modify", ReviewVerdict::Modify}, {"reject", ReviewVerdict::Reject}});
+      return closedEnum(node, "synthesis depth", kCouncilDepthNames);
     }
 
     std::vector<std::string> stringSequence(ryml::ConstNodeRef node, std::string_view context)
@@ -501,76 +446,41 @@ namespace ao::fleet
 
     IntentOverrides parseOverrides(ryml::ConstNodeRef node)
     {
-      rejectUnknown(node,
-                    {"agent",
-                     "engine",
-                     "oracle",
-                     "risk-oracle",
-                     "authority",
-                     "fanout",
-                     "top-k",
-                     "max-rounds",
-                     "churn-lines",
-                     "depth",
-                     "quorum"},
-                    "intent overrides");
+      auto allowed = std::vector<std::string_view>{};
+      forEachOverrideField([&](std::string_view name, auto /*member*/, OverridePolicy /*policy*/, auto /*target*/)
+                           { allowed.push_back(name); });
+      rejectUnknown(node, allowed, "intent overrides");
       auto result = IntentOverrides{};
+      forEachOverrideField(
+        [&](std::string_view name, auto member, OverridePolicy /*policy*/, auto /*target*/)
+        {
+          auto child = optional(node, name);
 
-      if (auto child = optional(node, "agent"); child.readable())
-      {
-        result.optAgent = scalar(child, "agent override");
-      }
+          if (!child.readable())
+          {
+            return;
+          }
 
-      if (auto child = optional(node, "engine"); child.readable())
-      {
-        result.optEngine = parseEngine(child);
-      }
+          using Value = typename std::remove_cvref_t<decltype(result.*member)>::value_type;
 
-      if (auto child = optional(node, "oracle"); child.readable())
-      {
-        result.optOracle = scalar(child, "oracle override");
-      }
-
-      if (auto child = optional(node, "risk-oracle"); child.readable())
-      {
-        result.optRiskOracle = scalar(child, "risk oracle override");
-      }
-
-      if (auto child = optional(node, "authority"); child.readable())
-      {
-        result.optAuthority = scalar(child, "authority override");
-      }
-
-      if (auto child = optional(node, "fanout"); child.readable())
-      {
-        result.optFanout = unsignedValue(child, "fanout");
-      }
-
-      if (auto child = optional(node, "top-k"); child.readable())
-      {
-        result.optTopK = unsignedValue(child, "top-k");
-      }
-
-      if (auto child = optional(node, "max-rounds"); child.readable())
-      {
-        result.optMaxRounds = unsignedValue(child, "max-rounds");
-      }
-
-      if (auto child = optional(node, "churn-lines"); child.readable())
-      {
-        result.optChurnLines = unsignedValue(child, "churn-lines");
-      }
-
-      if (auto child = optional(node, "depth"); child.readable())
-      {
-        result.optDepth = parseCouncilDepth(child);
-      }
-
-      if (auto child = optional(node, "quorum"); child.readable())
-      {
-        result.optQuorum = unsignedValue(child, "quorum");
-      }
-
+          if constexpr (std::same_as<Value, std::string>)
+          {
+            result.*member = scalar(child, name);
+          }
+          else if constexpr (std::same_as<Value, std::size_t>)
+          {
+            result.*member = unsignedValue(child, name);
+          }
+          else if constexpr (std::same_as<Value, EngineKind>)
+          {
+            result.*member = closedEnum(child, name, kEngineKindNames);
+          }
+          else
+          {
+            static_assert(std::same_as<Value, CouncilDepth>);
+            result.*member = closedEnum(child, name, kCouncilDepthNames);
+          }
+        });
       return result;
     }
 
@@ -662,19 +572,16 @@ namespace ao::fleet
     AgentDefinition parseAgent(std::string id, ryml::ConstNodeRef node)
     {
       rejectUnknown(node,
-                    {"vendor",
-                     "model",
+                    {"model",
                      "argv",
                      "prompt-delivery",
                      "environment-whitelist",
-                     "credential-mounts",
                      "timeout-ms",
                      "rate-limit-key",
                      "default-authority"},
                     "agent");
       auto result = AgentDefinition{};
       result.id = std::move(id);
-      result.vendor = scalar(required(node, "vendor"), "agent vendor");
       result.model = scalar(required(node, "model"), "agent model");
       result.argvTemplate = stringSequence(required(node, "argv"), "agent argv");
 
@@ -685,7 +592,6 @@ namespace ao::fleet
 
       result.promptDelivery = parsePromptDelivery(required(node, "prompt-delivery"));
       result.environmentWhitelist = stringSequence(required(node, "environment-whitelist"), "environment whitelist");
-      result.credentialMounts = pathSequence(required(node, "credential-mounts"), "credential mounts");
       result.timeout = std::chrono::milliseconds{unsignedValue(required(node, "timeout-ms"), "timeout-ms")};
       result.rateLimitKey = scalar(required(node, "rate-limit-key"), "rate-limit-key");
       result.defaultAuthority = scalar(required(node, "default-authority"), "default-authority");
@@ -694,10 +600,9 @@ namespace ao::fleet
 
     OracleDefinition parseOracle(std::string id, ryml::ConstNodeRef node)
     {
-      rejectUnknown(
-        node,
-        {"runner", "arguments", "property", "prerequisites", "known-gaps", "baseline-policy", "ruler-paths"},
-        "oracle");
+      rejectUnknown(node,
+                    {"runner", "arguments", "property", "known-gaps", "baseline-policy", "ruler-paths", "timeout-ms"},
+                    "oracle");
       auto result = OracleDefinition{};
       result.id = std::move(id);
       result.runner = parseOracleRunner(required(node, "runner"));
@@ -710,10 +615,15 @@ namespace ao::fleet
       }
 
       result.property = scalar(required(node, "property"), "oracle property");
-      result.prerequisites = stringSequence(required(node, "prerequisites"), "oracle prerequisites");
       result.knownGaps = stringSequence(required(node, "known-gaps"), "oracle known gaps");
       result.baselinePolicy = parseBaseline(required(node, "baseline-policy"));
       result.rulerPaths = pathSequence(required(node, "ruler-paths"), "oracle ruler paths");
+
+      if (auto timeout = optional(node, "timeout-ms"); timeout.readable())
+      {
+        result.optTimeout = std::chrono::milliseconds{unsignedValue(timeout, "oracle timeout-ms")};
+      }
+
       auto allowedArguments = std::set<std::string>{};
 
       if (result.runner == OracleRunner::TestCore || result.runner == OracleRunner::TestGtk)
@@ -723,6 +633,16 @@ namespace ao::fleet
       else if (result.runner == OracleRunner::TidyClean)
       {
         allowedArguments.insert("scope");
+      }
+      else if (result.runner == OracleRunner::TestDelta)
+      {
+        allowedArguments.insert("test-paths");
+        allowedArguments.insert("test-suffixes");
+      }
+      else if (result.runner == OracleRunner::PublicSignatureDelta)
+      {
+        allowedArguments.insert("header-prefixes");
+        allowedArguments.insert("header-suffixes");
       }
 
       for (auto const& [name, ignored] : result.arguments)
@@ -986,7 +906,8 @@ namespace ao::fleet
     try
     {
       auto root = documentRoot(parsed->tree);
-      rejectUnknown(root, {"schema", "agents", "oracles", "authorities", "bindings", "escalations"}, "registry");
+      rejectUnknown(
+        root, {"schema", "agents", "oracles", "authorities", "bindings", "escalations", "ruler-paths"}, "registry");
 
       if (scalar(required(root, "schema"), "schema") != "aobus-fleet-registry/v1")
       {
@@ -1037,6 +958,7 @@ namespace ao::fleet
         }
       }
 
+      result.rulerPaths = pathSequence(required(root, "ruler-paths"), "registry ruler paths");
       validateRegistry(result);
       return result;
     }
@@ -1103,68 +1025,32 @@ namespace ao::fleet
 
   namespace
   {
-    template<typename Value>
-    void assignOverride(std::optional<Value> const& optValue, Value& target)
-    {
-      if (optValue)
-      {
-        target = *optValue;
-      }
-    }
-
-    template<typename Value>
-    void assignOptionalOverride(std::optional<Value> const& optValue, std::optional<Value>& target)
-    {
-      if (optValue)
-      {
-        target = *optValue;
-      }
-    }
-
-    template<typename Value>
-    void tightenUpperBound(std::optional<Value> const& optValue, Value& target, std::string_view name)
-    {
-      if (!optValue)
-      {
-        return;
-      }
-
-      if (*optValue > target)
-      {
-        throw ParseFailure{std::format("intent {} override may only tighten", name)};
-      }
-
-      target = *optValue;
-    }
-
-    void tightenQuorum(std::optional<std::size_t> optValue, std::size_t& target)
-    {
-      if (!optValue)
-      {
-        return;
-      }
-
-      if (*optValue < target)
-      {
-        throw ParseFailure{"intent quorum override may only tighten"};
-      }
-
-      target = *optValue;
-    }
-
     void applyBindingOverrides(Binding& binding, IntentOverrides const& overrides)
     {
-      assignOverride(overrides.optAgent, binding.agent);
-      assignOverride(overrides.optEngine, binding.engine);
-      assignOptionalOverride(overrides.optOracle, binding.optOracle);
-      assignOptionalOverride(overrides.optRiskOracle, binding.optRiskOracle);
-      assignOverride(overrides.optAuthority, binding.authority);
-      tightenUpperBound(overrides.optFanout, binding.gate.fanout, "fanout");
-      tightenUpperBound(overrides.optTopK, binding.gate.topK, "top-k");
-      tightenUpperBound(overrides.optMaxRounds, binding.gate.maxRounds, "max-rounds");
-      tightenUpperBound(overrides.optChurnLines, binding.gate.churnLines, "churn-lines");
-      tightenUpperBound(overrides.optDepth, binding.synthesis.depth, "depth");
-      tightenQuorum(overrides.optQuorum, binding.synthesis.quorum);
+      forEachOverrideField(
+        [&](std::string_view name, auto member, OverridePolicy policy, auto target)
+        {
+          auto const& optValue = overrides.*member;
+
+          if (!optValue)
+          {
+            return;
+          }
+
+          auto& slot = std::invoke(target, binding);
+
+          if (policy == OverridePolicy::TightenUpper && *optValue > slot)
+          {
+            throw ParseFailure{std::format("intent {} override may only tighten", name)};
+          }
+
+          if (policy == OverridePolicy::TightenLower && *optValue < slot)
+          {
+            throw ParseFailure{std::format("intent {} override may only tighten", name)};
+          }
+
+          slot = *optValue;
+        });
     }
   } // namespace
 
@@ -1271,7 +1157,19 @@ namespace ao::fleet
         case '\n': result += "\\n"; break;
         case '\r': result += "\\r"; break;
         case '\t': result += "\\t"; break;
-        default: result += character; break;
+        default:
+          // Raw C0 control bytes are invalid inside YAML double-quoted scalars and would
+          // corrupt the emitted document; agent output is untrusted, so escape them.
+          if (auto const byte = static_cast<unsigned char>(character); byte < kAsciiControlBound || byte == kAsciiDel)
+          {
+            result += std::format("\\x{:02X}", byte);
+          }
+          else
+          {
+            result += character;
+          }
+
+          break;
       }
     }
 
@@ -1283,9 +1181,10 @@ namespace ao::fleet
   {
     bool hasIntentOverrides(IntentOverrides const& overrides)
     {
-      return overrides.optAgent || overrides.optEngine || overrides.optOracle || overrides.optRiskOracle ||
-             overrides.optAuthority || overrides.optFanout || overrides.optTopK || overrides.optMaxRounds ||
-             overrides.optChurnLines || overrides.optDepth || overrides.optQuorum;
+      auto result = false;
+      forEachOverrideField([&](std::string_view /*name*/, auto member, OverridePolicy /*policy*/, auto /*target*/)
+                           { result = result || static_cast<bool>(overrides.*member); });
+      return result;
     }
 
     void emitIntentOverrides(std::ostringstream& out, IntentOverrides const& overrides)
@@ -1297,61 +1196,34 @@ namespace ao::fleet
       }
 
       out << "overrides:\n";
+      forEachOverrideField(
+        [&](std::string_view name, auto member, OverridePolicy /*policy*/, auto /*target*/)
+        {
+          auto const& optValue = overrides.*member;
 
-      if (overrides.optAgent)
-      {
-        out << "  agent: " << yamlScalar(*overrides.optAgent) << "\n";
-      }
+          if (!optValue)
+          {
+            return;
+          }
 
-      if (overrides.optEngine)
-      {
-        out << "  engine: " << toString(*overrides.optEngine) << "\n";
-      }
+          using Value = typename std::remove_cvref_t<decltype(optValue)>::value_type;
+          out << "  " << name << ": ";
 
-      if (overrides.optOracle)
-      {
-        out << "  oracle: " << yamlScalar(*overrides.optOracle) << "\n";
-      }
+          if constexpr (std::same_as<Value, std::string>)
+          {
+            out << yamlScalar(*optValue);
+          }
+          else if constexpr (std::same_as<Value, std::size_t>)
+          {
+            out << *optValue;
+          }
+          else
+          {
+            out << toString(*optValue);
+          }
 
-      if (overrides.optRiskOracle)
-      {
-        out << "  risk-oracle: " << yamlScalar(*overrides.optRiskOracle) << "\n";
-      }
-
-      if (overrides.optAuthority)
-      {
-        out << "  authority: " << yamlScalar(*overrides.optAuthority) << "\n";
-      }
-
-      if (overrides.optFanout)
-      {
-        out << "  fanout: " << *overrides.optFanout << "\n";
-      }
-
-      if (overrides.optTopK)
-      {
-        out << "  top-k: " << *overrides.optTopK << "\n";
-      }
-
-      if (overrides.optMaxRounds)
-      {
-        out << "  max-rounds: " << *overrides.optMaxRounds << "\n";
-      }
-
-      if (overrides.optChurnLines)
-      {
-        out << "  churn-lines: " << *overrides.optChurnLines << "\n";
-      }
-
-      if (overrides.optDepth)
-      {
-        out << "  depth: " << toString(*overrides.optDepth) << "\n";
-      }
-
-      if (overrides.optQuorum)
-      {
-        out << "  quorum: " << *overrides.optQuorum << "\n";
-      }
+          out << "\n";
+        });
     }
   } // namespace
 
@@ -1415,6 +1287,8 @@ namespace ao::fleet
     out << "phase-id: " << yamlScalar(manifest.phaseId) << "\n";
     out << "output-mode: " << toString(manifest.mode) << "\n";
     out << "failure: " << toString(manifest.failure) << "\n";
+    out << "escalation-action: " << (manifest.optEscalationAction ? toString(*manifest.optEscalationAction) : "none")
+        << "\n";
     out << "summary: " << yamlScalar(manifest.summary) << "\n";
     out << "route-key: " << yamlScalar(manifest.route.canonical()) << "\n";
     out << "patch:\n";
@@ -1518,81 +1392,58 @@ namespace ao::fleet
 
   Result<StreamReadResult> readReviewOutcomes(std::filesystem::path const& path)
   {
-    if (!std::filesystem::exists(path))
+    auto stream = readScalarStream(path, "aobus-fleet-review-outcome/v1");
+
+    if (!stream)
     {
-      return StreamReadResult{};
+      return std::unexpected{stream.error()};
     }
 
-    auto source = readDocument(path);
+    auto const allowed =
+      std::array<std::string_view, 7>{"schema", "event", "phase-id", "route-key", "verdict", "reason", "timestamp"};
+    auto result = StreamReadResult{.outcomes = {}, .trailingCorruption = stream->trailingCorruption};
 
-    if (!source)
+    for (auto const& document : stream->documents)
     {
-      return std::unexpected{source.error()};
-    }
-
-    auto result = StreamReadResult{};
-    auto cursor = std::size_t{};
-
-    while (cursor < source->size())
-    {
-      auto start = source->find("---\n", cursor);
-
-      if (start == std::string::npos)
+      for (auto const& name : std::views::keys(document))
       {
-        break;
-      }
-
-      start += 4;
-      auto const next = source->find("---\n", start);
-      auto const complete = next != std::string::npos || (!source->empty() && source->back() == '\n');
-
-      if (!complete)
-      {
-        result.trailingCorruption = true;
-        break;
-      }
-
-      auto const document = source->substr(start, next == std::string::npos ? source->size() - start : next - start);
-
-      try
-      {
-        rejectYamlExtensions(document);
-        auto tree = ryml::Tree{callbacks()};
-        ryml::parse_in_arena(ryml::csubstr{document.data(), document.size()}, &tree);
-        auto root = documentRoot(tree);
-        rejectUnknown(
-          root, {"schema", "event", "phase-id", "route-key", "verdict", "reason", "timestamp"}, "review outcome");
-
-        if (scalar(required(root, "schema"), "schema") != "aobus-fleet-review-outcome/v1")
+        if (!std::ranges::contains(allowed, name))
         {
-          throw ParseFailure{"unsupported review outcome schema"};
+          return validationError(path.string(), std::format("unknown field '{}' in review outcome", name));
         }
-
-        result.outcomes.push_back(ReviewOutcome{
-          .phaseId = scalar(required(root, "phase-id"), "phase-id"),
-          .route = scalar(required(root, "route-key"), "route-key"),
-          .verdict = parseReviewVerdict(required(root, "verdict")),
-          .reason = scalar(required(root, "reason"), "reason"),
-          .timestamp = scalar(required(root, "timestamp"), "timestamp"),
-        });
       }
-      catch (std::exception const& exception)
+
+      auto field = [&](std::string_view name) -> std::string const*
       {
-        if (next == std::string::npos)
-        {
-          result.trailingCorruption = true;
-          break;
-        }
+        auto const found = document.find(name);
+        return found == document.end() ? nullptr : &found->second;
+      };
 
-        return validationError(path.string(), exception.what());
-      }
+      auto const* const phaseId = field("phase-id");
+      auto const* const route = field("route-key");
+      auto const* const verdictText = field("verdict");
+      auto const* const reason = field("reason");
+      auto const* const timestamp = field("timestamp");
 
-      if (next == std::string::npos)
+      if (phaseId == nullptr || route == nullptr || verdictText == nullptr || reason == nullptr || timestamp == nullptr)
       {
-        break;
+        return validationError(path.string(), "review outcome is missing a required field");
       }
 
-      cursor = next;
+      auto const optVerdict = parseReviewVerdict(*verdictText);
+
+      if (!optVerdict)
+      {
+        return validationError(path.string(), std::format("invalid review verdict '{}'", *verdictText));
+      }
+
+      result.outcomes.push_back(ReviewOutcome{
+        .phaseId = *phaseId,
+        .route = *route,
+        .verdict = *optVerdict,
+        .reason = *reason,
+        .timestamp = *timestamp,
+      });
     }
 
     return result;
@@ -1638,9 +1489,10 @@ namespace ao::fleet
 
       try
       {
-        rejectYamlExtensions(document);
-        auto tree = ryml::Tree{callbacks()};
-        ryml::parse_in_arena(ryml::csubstr{document.data(), document.size()}, &tree);
+        auto tree = ryml::Tree{yaml::callbacks()};
+        ryml::parse_in_arena(yaml::toCsubstr(document), &tree);
+        auto entries = std::size_t{};
+        validateTree(tree.rootref(), 0, entries);
         auto root = documentRoot(tree);
         requireMap(root, "stream document");
         auto values = std::map<std::string, std::string, std::less<>>{};
@@ -1711,5 +1563,10 @@ namespace ao::fleet
     auto const now = std::chrono::system_clock::now();
     auto const seconds = std::chrono::floor<std::chrono::seconds>(now);
     return std::format("{:%FT%TZ}", seconds);
+  }
+
+  std::optional<ReviewVerdict> parseReviewVerdict(std::string_view value)
+  {
+    return enumFromName(kReviewVerdictNames, value);
   }
 } // namespace ao::fleet

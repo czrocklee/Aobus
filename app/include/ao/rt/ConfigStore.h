@@ -5,8 +5,8 @@
 
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/rt/yaml/ConfigTraits.h> // IWYU pragma: export
-#include <ao/rt/yaml/Utils.h>
+#include <ao/yaml/ConfigTraits.h> // IWYU pragma: export
+#include <ao/yaml/Utils.h>
 
 #include <cstdint>
 #include <exception>

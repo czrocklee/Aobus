@@ -108,8 +108,7 @@ namespace ao::media::mp4
       return payload.subspan(kHeaderSize);
     }
 
-    std::optional<std::vector<std::byte>> findDescriptorPayload(std::span<std::byte const> bytes,
-                                                                std::byte targetTag)
+    std::optional<std::vector<std::byte>> findDescriptorPayload(std::span<std::byte const> bytes, std::byte targetTag)
     {
       std::size_t offset = 0;
 

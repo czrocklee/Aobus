@@ -330,8 +330,7 @@ namespace ao::tag::mp4
           return;
         }
 
-        auto const sampleEntryType =
-          std::string_view{audioLayout->common.type.data(), audioLayout->common.type.size()};
+        auto const sampleEntryType = std::string_view{audioLayout->common.type.data(), audioLayout->common.type.size()};
         auto codec = library::AudioCodec::Unknown;
 
         if (sampleEntryType == "alac")

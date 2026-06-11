@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/yaml/Utils.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/layout/LayoutYaml.h> // NOLINT(misc-include-cleaner)
+#include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,7 +15,7 @@
 
 namespace ao::uimodel::layout::test
 {
-  namespace yaml = ao::rt::yaml;
+  namespace yaml = ao::yaml;
 
   TEST_CASE("LayoutValue serialization", "[layout][unit][model]")
   {
@@ -23,7 +23,7 @@ namespace ao::uimodel::layout::test
     {
       auto const v1 = LayoutValue{std::string{"hello"}};
       auto tree1 = ryml::Tree{};
-      rt::yaml::write(tree1.rootref(), v1);
+      yaml::write(tree1.rootref(), v1);
       CHECK(yaml::scalarView(tree1.rootref()) == "hello");
     }
 
@@ -31,7 +31,7 @@ namespace ao::uimodel::layout::test
     {
       auto const v2 = LayoutValue{static_cast<std::int64_t>(42)};
       auto tree2 = ryml::Tree{};
-      rt::yaml::write(tree2.rootref(), v2);
+      yaml::write(tree2.rootref(), v2);
       CHECK(yaml::asInt<std::int64_t>(tree2.rootref()) == 42);
     }
 
@@ -39,7 +39,7 @@ namespace ao::uimodel::layout::test
     {
       auto const v3 = LayoutValue{true};
       auto tree3 = ryml::Tree{};
-      rt::yaml::write(tree3.rootref(), v3);
+      yaml::write(tree3.rootref(), v3);
       CHECK(yaml::asBool(tree3.rootref()) == true);
     }
 
@@ -47,7 +47,7 @@ namespace ao::uimodel::layout::test
     {
       auto const v4 = LayoutValue{std::vector<std::string>{"a", "b"}};
       auto tree4 = ryml::Tree{};
-      rt::yaml::write(tree4.rootref(), v4);
+      yaml::write(tree4.rootref(), v4);
       auto const n4 = tree4.rootref();
       CHECK(n4.is_seq());
       CHECK(n4.num_children() == 2);
@@ -67,10 +67,10 @@ namespace ao::uimodel::layout::test
     node.children.push_back(child);
 
     auto tree = ryml::Tree{};
-    rt::yaml::write(tree.rootref(), node);
+    yaml::write(tree.rootref(), node);
 
     auto decoded = LayoutNode{};
-    REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+    REQUIRE(yaml::read(tree.rootref(), decoded));
 
     CHECK(decoded.type == "box");
     CHECK(decoded.id == "main");
@@ -99,10 +99,10 @@ namespace ao::uimodel::layout::test
     doc.root.children.push_back(c2);
 
     auto tree = ryml::Tree{};
-    rt::yaml::write(tree.rootref(), doc);
+    yaml::write(tree.rootref(), doc);
 
     auto decoded = LayoutDocument{};
-    REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+    REQUIRE(yaml::read(tree.rootref(), decoded));
 
     REQUIRE(decoded.root.children.size() == 2);
     CHECK(decoded.root.children[0].type == "spacer");
@@ -122,10 +122,10 @@ namespace ao::uimodel::layout::test
     doc.root.props["secondaryAction"] = LayoutValue{std::string{"shell.showSystemMenu"}};
 
     auto tree = ryml::Tree{};
-    rt::yaml::write(tree.rootref(), doc);
+    yaml::write(tree.rootref(), doc);
 
     auto decoded = LayoutDocument{};
-    REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+    REQUIRE(yaml::read(tree.rootref(), decoded));
 
     CHECK(decoded.root.type == "playback.qualityIndicator");
     CHECK(decoded.root.props.at("primaryAction").asString() == "playback.playPause");
@@ -144,10 +144,10 @@ namespace ao::uimodel::layout::test
     doc.root.optTooltip = BoxedLayoutNode{std::move(tooltipNode)};
 
     auto tree = ryml::Tree{};
-    rt::yaml::write(tree.rootref(), doc);
+    yaml::write(tree.rootref(), doc);
 
     auto decoded = LayoutDocument{};
-    REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+    REQUIRE(yaml::read(tree.rootref(), decoded));
 
     CHECK(decoded.root.type == "playback.qualityIndicator");
     REQUIRE(decoded.root.optTooltip.has_value());
@@ -167,7 +167,7 @@ namespace ao::uimodel::layout::test
     ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
 
     auto decoded = LayoutDocument{};
-    REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+    REQUIRE(yaml::read(tree.rootref(), decoded));
     CHECK(decoded.version == 1);
     CHECK(decoded.root.type == "box");
     CHECK(decoded.root.id.empty());
@@ -187,7 +187,7 @@ namespace ao::uimodel::layout::test
     ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
 
     auto decoded = LayoutDocument{};
-    REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+    REQUIRE(yaml::read(tree.rootref(), decoded));
     CHECK(decoded.root.type == "spacer");
     CHECK(decoded.root.id.empty());
   }
@@ -196,10 +196,10 @@ namespace ao::uimodel::layout::test
   {
     auto const v = LayoutValue{3.14};
     auto tree = ryml::Tree{};
-    rt::yaml::write(tree.rootref(), v);
+    yaml::write(tree.rootref(), v);
 
     auto decoded = LayoutValue{};
-    REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+    REQUIRE(yaml::read(tree.rootref(), decoded));
     CHECK(decoded.asDouble() == 3.14);
   }
 

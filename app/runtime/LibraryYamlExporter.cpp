@@ -17,9 +17,9 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/yaml/Utils.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Base64.h>
+#include <ao/yaml/Utils.h>
 
 #include <algorithm>
 #include <array>

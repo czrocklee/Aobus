@@ -23,7 +23,7 @@ namespace ao::tag::mp4::test
   namespace
   {
     std::vector<std::uint8_t> createMinimalM4a(char const* sampleEntryType = "mp4a",
-                                              std::vector<std::uint8_t> const& sampleEntryExtensions = {})
+                                               std::vector<std::uint8_t> const& sampleEntryExtensions = {})
     {
       auto data = std::vector<std::uint8_t>{};
 
@@ -166,16 +166,14 @@ namespace ao::tag::mp4::test
     std::vector<std::uint8_t> createMinimalM4aWithRawDiskAtom()
     {
       auto const diskAtom = std::vector<std::uint8_t>{
-        0x00, 0x00, 0x00, 0x20, // disk atom size: 32
-        'd',  'i',  's',  'k',
-        0x00, 0x00, 0x00, 0x18, // data atom size: 24
-        'd',  'a',  't',  'a',
-        0x00, 0x00, 0x00, 0x00, // type
-        0x00, 0x00, 0x00, 0x00, // reserved
-        0x00, 0x00,             // padding
-        0x00, 0x02,             // disc number
-        0x00, 0x05,             // total discs
-        0x00, 0x00              // padding
+        0x00, 0x00, 0x00, 0x20,                         // disk atom size: 32
+        'd',  'i',  's',  'k',  0x00, 0x00, 0x00, 0x18, // data atom size: 24
+        'd',  'a',  't',  'a',  0x00, 0x00, 0x00, 0x00, // type
+        0x00, 0x00, 0x00, 0x00,                         // reserved
+        0x00, 0x00,                                     // padding
+        0x00, 0x02,                                     // disc number
+        0x00, 0x05,                                     // total discs
+        0x00, 0x00                                      // padding
       };
 
       return createMinimalM4aWithRawIlstAtom(diskAtom);
@@ -184,15 +182,13 @@ namespace ao::tag::mp4::test
     std::vector<std::uint8_t> createMinimalM4aWithRawTrackAtom()
     {
       auto const trackAtom = std::vector<std::uint8_t>{
-        0x00, 0x00, 0x00, 0x1E, // trkn atom size: 30
-        't',  'r',  'k',  'n',
-        0x00, 0x00, 0x00, 0x16, // data atom size: 22
-        'd',  'a',  't',  'a',
-        0x00, 0x00, 0x00, 0x00, // type
-        0x00, 0x00, 0x00, 0x00, // reserved
-        0x00, 0x00,             // padding
-        0x00, 0x02,             // track number
-        0x00, 0x04              // total tracks
+        0x00, 0x00, 0x00, 0x1E,                         // trkn atom size: 30
+        't',  'r',  'k',  'n',  0x00, 0x00, 0x00, 0x16, // data atom size: 22
+        'd',  'a',  't',  'a',  0x00, 0x00, 0x00, 0x00, // type
+        0x00, 0x00, 0x00, 0x00,                         // reserved
+        0x00, 0x00,                                     // padding
+        0x00, 0x02,                                     // track number
+        0x00, 0x04                                      // total tracks
       };
 
       return createMinimalM4aWithRawIlstAtom(trackAtom);

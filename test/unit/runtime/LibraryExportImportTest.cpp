@@ -18,7 +18,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/LibraryYamlImporter.h>
-#include <ao/rt/yaml/Utils.h>
+#include <ao/yaml/Utils.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -43,7 +43,7 @@ namespace ao::rt::test
 {
   using namespace ao::library;
   using namespace ao::lmdb::test;
-  namespace yaml = ao::rt::yaml;
+  namespace yaml = ao::yaml;
 
   namespace
   {

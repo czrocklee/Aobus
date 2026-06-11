@@ -11,8 +11,8 @@
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/yaml/Utils.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
+#include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -624,10 +624,10 @@ namespace ao::gtk::layout::test
         primaryAction: "shell.showSystemMenu"
         primaryLongPressAction: "shell.showSoul"
       )";
-      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
       auto layoutNode = LayoutNode{};
-      REQUIRE(rt::yaml::read(tree.rootref(), layoutNode));
+      REQUIRE(yaml::read(tree.rootref(), layoutNode));
 
       std::int32_t primaryFired = 0;
       std::int32_t longPressFired = 0;
@@ -688,10 +688,10 @@ namespace ao::gtk::layout::test
         - type: playback.timeLabel
         - type: playback.volumeControl
     )";
-      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
       auto layoutNode = LayoutNode{};
-      REQUIRE(rt::yaml::read(tree.rootref(), layoutNode));
+      REQUIRE(yaml::read(tree.rootref(), layoutNode));
 
       auto const compPtr = registry.create(ctx, layoutNode);
       REQUIRE(compPtr != nullptr);
@@ -723,10 +723,10 @@ namespace ao::gtk::layout::test
             - type: playback.stopButton
             - type: playback.volumeControl
     )";
-      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
       auto layoutNode = LayoutNode{};
-      REQUIRE(rt::yaml::read(tree.rootref(), layoutNode));
+      REQUIRE(yaml::read(tree.rootref(), layoutNode));
 
       auto const compPtr = registry.create(ctx, layoutNode);
       REQUIRE(compPtr != nullptr);
@@ -752,10 +752,10 @@ namespace ao::gtk::layout::test
           - type: status.messageLabel
     )";
 
-      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
       auto doc = LayoutDocument{};
-      REQUIRE(rt::yaml::read(tree.rootref(), doc));
+      REQUIRE(yaml::read(tree.rootref(), doc));
 
       CHECK(doc.version == 1);
       CHECK(doc.root.children.size() == 4);
@@ -776,11 +776,11 @@ namespace ao::gtk::layout::test
           templateId: track.selectionDetailPane
     )";
 
-      auto tree = ryml::Tree{rt::yaml::callbacks()};
+      auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
       auto doc = LayoutDocument{};
       doc.templates = getBuiltInTemplates();
-      REQUIRE(rt::yaml::read(tree.rootref(), doc));
+      REQUIRE(yaml::read(tree.rootref(), doc));
 
       auto layoutRuntime = LayoutRuntime{registry};
       auto const compPtr = layoutRuntime.build(ctx, doc);

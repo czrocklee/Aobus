@@ -211,6 +211,11 @@ measured and defaulted per task-kind, not imposed globally. Snapshots are COW an
 real cost to watch is mount-namespace setup and writable-layer growth under wide fan-out, so
 `context-view` and fan-out width are the cost levers the scheduler accounts for.
 
+> **Known gap:** `context-view` is parsed, intersected, and recorded in the route key, but the
+> namespace runner does not yet enforce `minimal` by narrowing the mounted view; both values currently
+> provision the full snapshot. The field participates in routing and competence keys so that enforcing
+> it later does not invalidate recorded statistics.
+
 ### 4.3 Oracle hermeticity (the worker→oracle boundary)
 
 This is a hard requirement, not an optimization, and it is the most commonly missed one.
@@ -229,7 +234,24 @@ independent of everything the worker did except the source change itself.** Conc
 Anything the worker emits other than the patch — narration, self-reported diffs, self-run test logs —
 is evidence for the chair, never input to the oracle.
 
-### 4.4 Real-tree canary
+### 4.4 Namespace binds (implementation notes)
+
+- **Agent processes bind the host `$HOME`.** The mount namespace is a path virtualizer, not a security
+  jail (§17): vendor model CLIs need their host credentials and configuration to authenticate, so
+  worker sandboxes bind `$HOME` while the repository view stays a snapshot mounted at the real path.
+  This is part of the trusted-roster assumption of §5.
+- **Oracle processes do not bind `$HOME`.** Oracles run deterministic local toolchains and get neither
+  a host home nor agent credentials.
+- **Oracle build tree.** `/tmp` inside the namespace is a tmpfs, so the harness binds a
+  host-persistent, per-phase build directory (`<out>/.oracle-build/<phase-id>`) at `/tmp/build` inside
+  the oracle namespace. The worker never sees this directory; the first oracle invocation configures
+  and builds it, later invocations build incrementally.
+- **ccache.** The host ccache directory is bound into the oracle namespace (via `CCACHE_DIR`) so
+  repeated oracle builds stay cheap. Because trusted-roster workers could in principle reach the same
+  host cache through their `$HOME` bind, this is a declared trade-off of the trusted roster, not a
+  hermeticity proof; the untrusted-model profile of §5/§17 removes it.
+
+### 4.5 Real-tree canary
 
 Before and after any fan-out, the harness fingerprints the real repository (content + file mode +
 symlink targets, excluding designated noise dirs). Any change to the real tree during a delegated
@@ -257,7 +279,7 @@ the security and blast-radius axis, strictly separate from environment.
   Authenticated cloud-model CLIs require vendor egress and credentials, so the trusted roster uses an
   explicit net-on profile; this is a declared exfiltration and supply-chain trust assumption.
 - **Trusted vs untrusted roster.** For a *trusted* vendor roster, namespace confinement + the canary
-  (§4.4) are sufficient. To admit *not-fully-trusted* models, authority must additionally provide a
+  (§4.5) are sufficient. To admit *not-fully-trusted* models, authority must additionally provide a
   hard sandbox: bind-mounts restricted to the snapshot, no host `$HOME` exposure, and either no network
   or narrowly brokered egress. This hard-sandbox profile is a first-class authority entry, and it
   carries real engineering cost — it is the one part of the system that is genuinely expensive (§17).
@@ -274,7 +296,10 @@ An oracle is the load-bearing source of mechanical evidence. It does not replace
 
 A **registered, named, deterministic** function `O(base, patch) → pass | fail`, plus metadata. Oracles
 are referenced by **id**, never by arbitrary command string; their arguments are **enumerated or
-structurally typed**, so the injection surface never moves from the command to the argument.
+structurally typed**, so the injection surface never moves from the command to the argument. The
+command lines themselves are **code-owned**: the registry selects a runner id, typed arguments, and an
+optional `timeout-ms`, while the engine builds the argv — the measurement apparatus is never assembled
+from configuration strings.
 
 ### 6.2 Hard properties (all required)
 
@@ -283,13 +308,18 @@ structurally typed**, so the injection surface never moves from the command to t
 3. **Self-protecting ("ruler protection")** — an oracle must refuse to certify any change that edits
    *its own measurement apparatus*. The build system, the oracle definitions, the scripts that run
    them, and the skill/spec files that define conventions are forbidden edit surfaces for delegated
-   work, because a worker that can edit the ruler can make any change measure "clean."
+   work, because a worker that can edit the ruler can make any change measure "clean." The ruler set is
+   layered: the engine hardcodes the non-negotiable self-protection core (`tool/fleet/`,
+   `config/agent-fleet.yaml`) and rejects every `CMakeLists.txt` by basename at any depth, so a patch
+   to the registry cannot disarm the guard; the remaining base set (build and format scripts, lint
+   configuration, CI/skill surfaces) is the registry's top-level `ruler-paths:`, merged with each
+   oracle's own `ruler-paths` (which also feed that oracle's version fingerprint).
 4. **Honest about exit semantics** — a tool/config failure is *not* a clean pass; only a genuine green
    counts.
 
 ### 6.3 Evidence metadata
 
-Each oracle records the exact property it checks, its prerequisites, and known gaps. This metadata is
+Each oracle records the exact property it checks and its known gaps. This metadata is
 a chair-facing review aid, not an authorization claim. The oracle implementation remains normally
 versioned so a proposal can identify which check actually ran; no separate completeness approval or
 version-pinning ceremony exists. A materially changed oracle starts a fresh competence sample (§13).
@@ -414,6 +444,9 @@ params:    { fanout: 4, K: 2, context-view: minimal }
 The **default-binding policy** gives every task-kind a complete default row, so a caller **overrides
 one knob**, never assembles five axes by hand. This is the ergonomic that makes the system usable.
 
+Oracle definitions may also declare an optional `timeout-ms`; long-running oracles (sanitizer builds)
+raise it explicitly instead of inflating the global default.
+
 ### 9.2 What is NOT data (the anti-DSL rule)
 
 A declarative role-graph with conditional escalation, retries, quorum, fixpoint detection, and oracle
@@ -470,6 +503,9 @@ failures demand different responses, and a scalar "try a stronger model" is ofte
 - This is **not** smuggled tiers. There is no global "agent A < agent B." Selection within a reason is
   driven by *measured competence for the specific route* (§7, §13), and several reasons escalate to
   *judgment* rather than to *more power* — a distinction a scalar ladder cannot make.
+- The action resolved for a failed phase is emitted in its `manifest.yaml` as `escalation-action:`
+  (`none` for successful phases), so the chair and skills consume the registry policy directly instead
+  of re-deriving it from the failure reason.
 - Named **assurance presets** (roughly: "mechanically-validated," "implement-and-propose," "council-judgment")
   may exist as *auditable convenience rows* over these registries, but they are derived policy, **not**
   the core ontology. They name common bindings; they do not define the system.
@@ -572,6 +608,12 @@ Each row is a binding + output mode. **Zero new code** across all of them.
 The flexibility goal: "lint with a strong model" and "cheap model attempts an oracle-less rename" are
 both single-field overrides. Oracle-less drafting is the gate engine's degenerate form, not a fourth
 convergence engine.
+
+Sanitizer oracles `test-asan` and `test-tsan` are registered with raised `timeout-ms` values and build
+dedicated sanitizer trees. They are chair-selected per intent (an `oracle:` override) rather than bound
+to `implement-plan` by default: a full sanitizer rebuild costs tens of minutes, which is the wrong
+default price for ordinary plan execution but the right gate for concurrency- or lifetime-sensitive
+changes.
 
 ---
 

@@ -56,171 +56,66 @@ namespace ao::fleet
 
   std::string_view toString(ScopeOperation value)
   {
-    switch (value)
-    {
-      case ScopeOperation::Create: return "create";
-      case ScopeOperation::Modify: return "modify";
-      case ScopeOperation::Delete: return "delete";
-    }
-
-    return "invalid";
+    return enumName(kScopeOperationNames, value);
   }
 
   std::string_view toString(EngineKind value)
   {
-    switch (value)
-    {
-      case EngineKind::Gate: return "gate";
-      case EngineKind::Synthesis: return "synthesis";
-      case EngineKind::Search: return "search";
-    }
-
-    return "invalid";
+    return enumName(kEngineKindNames, value);
   }
 
   std::string_view toString(OutputMode value)
   {
-    switch (value)
-    {
-      case OutputMode::Proposal: return "proposal";
-      case OutputMode::Advisory: return "advisory";
-    }
-
-    return "invalid";
+    return enumName(kOutputModeNames, value);
   }
 
   std::string_view toString(FailureReason value)
   {
-    switch (value)
-    {
-      case FailureReason::None: return "none";
-      case FailureReason::NoCandidate: return "no-candidate";
-      case FailureReason::ScopeViolation: return "scope-violation";
-      case FailureReason::ChurnExceeded: return "churn-exceeded";
-      case FailureReason::OracleFailed: return "oracle-failed";
-      case FailureReason::RiskOracleFired: return "risk-oracle-fired";
-      case FailureReason::BudgetExhausted: return "budget-exhausted";
-      case FailureReason::Infrastructure: return "infrastructure";
-      case FailureReason::DependencyFailed: return "dependency-failed";
-      case FailureReason::RealTreeChanged: return "real-tree-changed";
-      case FailureReason::QuorumFailed: return "quorum-failed";
-      case FailureReason::RoutePaused: return "route-paused";
-    }
-
-    return "invalid";
+    return enumName(kFailureReasonNames, value);
   }
 
   std::string_view toString(FilesystemAuthority value)
   {
-    switch (value)
-    {
-      case FilesystemAuthority::ReadOnly: return "read-only";
-      case FilesystemAuthority::WritableCopy: return "writable-copy";
-      case FilesystemAuthority::MutateRealTree: return "mutate-real-tree";
-    }
-
-    return "invalid";
+    return enumName(kFilesystemAuthorityNames, value);
   }
 
   std::string_view toString(NetworkAuthority value)
   {
-    switch (value)
-    {
-      case NetworkAuthority::Off: return "off";
-      case NetworkAuthority::Vendor: return "vendor";
-      case NetworkAuthority::Full: return "full";
-    }
-
-    return "invalid";
+    return enumName(kNetworkAuthorityNames, value);
   }
 
   std::string_view toString(ContextView value)
   {
-    switch (value)
-    {
-      case ContextView::Minimal: return "minimal";
-      case ContextView::Full: return "full";
-    }
-
-    return "invalid";
+    return enumName(kContextViewNames, value);
   }
 
   std::string_view toString(OracleRunner value)
   {
-    switch (value)
-    {
-      case OracleRunner::TestAll: return "test-all";
-      case OracleRunner::TestCore: return "test-core";
-      case OracleRunner::TestGtk: return "test-gtk";
-      case OracleRunner::TidyClean: return "tidy-clean";
-      case OracleRunner::BuildDebug: return "build-debug";
-      case OracleRunner::TestDelta: return "test-delta";
-      case OracleRunner::PublicSignatureDelta: return "public-signature-delta";
-    }
-
-    return "invalid";
+    return enumName(kOracleRunnerNames, value);
   }
 
   std::string_view toString(BaselinePolicy value)
   {
-    switch (value)
-    {
-      case BaselinePolicy::RequireGreen: return "require-green";
-      case BaselinePolicy::AllowRed: return "allow-red";
-      case BaselinePolicy::Skip: return "skip";
-    }
-
-    return "invalid";
+    return enumName(kBaselinePolicyNames, value);
   }
 
   std::string_view toString(EscalationAction value)
   {
-    switch (value)
-    {
-      case EscalationAction::Retry: return "retry";
-      case EscalationAction::SwitchRoute: return "switch-route";
-      case EscalationAction::RequireCouncil: return "require-council";
-      case EscalationAction::StopRoute: return "stop-route";
-      case EscalationAction::ReturnChair: return "return-chair";
-    }
-
-    return "invalid";
+    return enumName(kEscalationActionNames, value);
   }
 
   std::string_view toString(CouncilDepth value)
   {
-    switch (value)
-    {
-      case CouncilDepth::Panel: return "panel";
-      case CouncilDepth::Challenge: return "challenge";
-      case CouncilDepth::Full: return "full";
-    }
-
-    return "invalid";
+    return enumName(kCouncilDepthNames, value);
   }
 
   std::string_view toString(ReviewVerdict value)
   {
-    switch (value)
-    {
-      case ReviewVerdict::Accept: return "accept";
-      case ReviewVerdict::Modify: return "modify";
-      case ReviewVerdict::Reject: return "reject";
-    }
-
-    return "invalid";
+    return enumName(kReviewVerdictNames, value);
   }
 
   std::string_view toString(ProcessStatus value)
   {
-    switch (value)
-    {
-      case ProcessStatus::Exited: return "exited";
-      case ProcessStatus::Signaled: return "signaled";
-      case ProcessStatus::TimedOut: return "timed-out";
-      case ProcessStatus::LaunchFailed: return "launch-failed";
-    }
-
-    return "invalid";
+    return enumName(kProcessStatusNames, value);
   }
 } // namespace ao::fleet

@@ -10,9 +10,12 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rules 3.2.8 / 3.2.8.1 / 3.2.8.2:
+  /// Enforces Rules 3.2.8 / 3.2.8.1 / 3.2.8.2 / 3.2.8.3:
   /// - No void casts to suppress unused warnings (use [[maybe_unused]] or
   ///   anonymous parameters instead).
+  /// - Void casts that discard a computed value must use 'std::ignore = expr'.
+  /// - 'std::ignore = var' on a plain variable read is the inverse misuse;
+  ///   the declaration should carry [[maybe_unused]] instead.
   class UnusedSuppressionStyleCheck : public ClangTidyCheck
   {
   public:

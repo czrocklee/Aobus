@@ -14,9 +14,7 @@
 
 namespace ao::test::mp4
 {
-  inline void addAtom(std::vector<std::uint8_t>& buffer,
-                      std::string_view type,
-                      std::vector<std::uint8_t> const& body)
+  inline void addAtom(std::vector<std::uint8_t>& buffer, std::string_view type, std::vector<std::uint8_t> const& body)
   {
     auto const length = 8U + static_cast<std::uint32_t>(body.size());
     auto lenBuf = boost::endian::big_uint32_buf_t{};

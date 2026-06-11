@@ -550,10 +550,10 @@ namespace ao::gtk::layout::editor::test
       doc.templates = getBuiltInTemplates();
 
       auto tree = ryml::Tree{};
-      rt::yaml::write(tree.rootref(), doc);
+      yaml::write(tree.rootref(), doc);
 
       auto decoded = LayoutDocument{};
-      REQUIRE(rt::yaml::read(tree.rootref(), decoded));
+      REQUIRE(yaml::read(tree.rootref(), decoded));
 
       REQUIRE(decoded.templates.contains("playback.compactControls"));
       CHECK(decoded.templates.at("playback.compactControls").type == "box");

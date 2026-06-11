@@ -12,7 +12,7 @@ namespace ao::uimodel::layout
   struct LayoutDocument;
 }
 
-namespace ao::rt::yaml
+namespace ao::yaml
 {
   void write(ryml::NodeRef node, uimodel::layout::LayoutValue const& value);
   bool read(ryml::ConstNodeRef node, uimodel::layout::LayoutValue& value);

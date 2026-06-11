@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -119,6 +121,14 @@ body: |
     CHECK(registry->oracles.contains("test-all"));
     CHECK(registry->bindings.at("implement-plan").engine == EngineKind::Gate);
     CHECK(registry->bindings.at("council-plan").engine == EngineKind::Synthesis);
+    CHECK_FALSE(registry->rulerPaths.empty());
+    CHECK(registry->oracles.at("test-asan").runner == OracleRunner::TestAsan);
+    CHECK(registry->oracles.at("test-tsan").runner == OracleRunner::TestTsan);
+    CHECK(registry->oracles.at("test-asan").optTimeout == std::chrono::milliseconds{3600000});
+    CHECK_FALSE(registry->oracles.at("test-all").optTimeout.has_value());
+    CHECK(registry->oracles.at("test-delta").arguments.contains("test-paths"));
+    CHECK(registry->oracles.at("public-signature-delta").arguments.contains("header-prefixes"));
+    CHECK_FALSE(registry->bindings.at("fix-lint").optRiskOracle.has_value());
   }
 
   TEST_CASE("Fleet registry - invalid references placeholders and search fail statically", "[fleet][unit][yaml]")
@@ -175,12 +185,10 @@ body: |
                                                  .contextView = ContextView::Full});
     registry.agents.emplace("worker",
                             AgentDefinition{.id = "worker",
-                                            .vendor = "mock",
                                             .model = "mock-v1",
                                             .argvTemplate = {"true"},
                                             .promptDelivery = PromptDelivery::Stdin,
                                             .environmentWhitelist = {"PATH"},
-                                            .credentialMounts = {},
                                             .timeout = std::chrono::seconds{1},
                                             .rateLimitKey = "mock",
                                             .defaultAuthority = "write"});
@@ -262,21 +270,50 @@ body: |
     SECTION("anchors are rejected")
     {
       auto source = intentYaml();
-      source += "# &forbidden\n";
+      source += "extra: &anchor value\n";
       auto result = loadIntent(temp.write("anchor.yaml", source));
       REQUIRE_FALSE(result);
       CHECK(result.error().message.find("anchors") != std::string::npos);
     }
 
-    SECTION("custom tags are rejected")
+    SECTION("aliases are rejected")
     {
       auto source = intentYaml();
-      auto const position = source.find("Preserve behavior.");
-      REQUIRE(position != std::string::npos);
-      source.replace(position, std::string{"Preserve behavior."}.size(), "!secret Preserve behavior.");
+      source += "extra: *anchor\n";
+      auto result = loadIntent(temp.write("alias.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("aliases") != std::string::npos);
+    }
+
+    SECTION("tags are rejected")
+    {
+      auto source = intentYaml();
+      source += "extra: !!str value\n";
       auto result = loadIntent(temp.write("tag.yaml", source));
       REQUIRE_FALSE(result);
-      CHECK(result.error().message.find("custom tags") != std::string::npos);
+      CHECK(result.error().message.find("tags") != std::string::npos);
+    }
+
+    SECTION("merge keys are rejected")
+    {
+      auto source = intentYaml();
+      source += "<<: {extra: value}\n";
+      auto result = loadIntent(temp.write("merge.yaml", source));
+      REQUIRE_FALSE(result);
+      CHECK(result.error().message.find("merge keys") != std::string::npos);
+    }
+
+    SECTION("yaml-like characters inside scalar content are accepted")
+    {
+      auto source = intentYaml();
+      source += "  Run *Test.cpp suites, keep !queue.empty() checks, pass &config by reference.\n";
+      auto result = loadIntent(temp.write("specials.yaml", source));
+      REQUIRE(result);
+      CHECK(result->body.find("*Test.cpp") != std::string::npos);
+
+      auto again = loadIntent(temp.write("specials-round-trip.yaml", emitIntent(*result)));
+      REQUIRE(again);
+      CHECK(again->body == result->body);
     }
 
     SECTION("document size is bounded")
@@ -285,6 +322,70 @@ body: |
       REQUIRE_FALSE(result);
       CHECK(result.error().message.find("2 MiB") != std::string::npos);
     }
+  }
+
+  TEST_CASE("Fleet model - enum name tables drive toString and parsing", "[fleet][unit][model]")
+  {
+    CHECK(parseReviewVerdict("accept") == ReviewVerdict::Accept);
+    CHECK(parseReviewVerdict("modify") == ReviewVerdict::Modify);
+    CHECK(parseReviewVerdict("reject") == ReviewVerdict::Reject);
+    CHECK_FALSE(parseReviewVerdict("approve").has_value());
+
+    for (auto const& [value, name] : kFailureReasonNames)
+    {
+      CHECK(toString(value) == name);
+    }
+
+    for (auto const& [value, name] : kOracleRunnerNames)
+    {
+      CHECK(toString(value) == name);
+    }
+
+    for (auto const& [value, name] : kEscalationActionNames)
+    {
+      CHECK(toString(value) == name);
+    }
+  }
+
+  TEST_CASE("Fleet intent - full override set round trips", "[fleet][unit][yaml]")
+  {
+    auto temp = TempDirectory{};
+    auto intent = loadIntent(temp.write("base.yaml", intentYaml()));
+    REQUIRE(intent);
+
+    intent->overrides = IntentOverrides{.optAgent = "dspro",
+                                        .optEngine = EngineKind::Synthesis,
+                                        .optOracle = "test-core",
+                                        .optRiskOracle = "test-delta",
+                                        .optAuthority = "narrow",
+                                        .optFanout = 2,
+                                        .optTopK = 1,
+                                        .optMaxRounds = 3,
+                                        .optChurnLines = 100,
+                                        .optDepth = CouncilDepth::Panel,
+                                        .optQuorum = 2};
+
+    auto again = loadIntent(temp.write("round.yaml", emitIntent(*intent)));
+    REQUIRE(again);
+    CHECK(again->overrides == intent->overrides);
+  }
+
+  TEST_CASE("Fleet YAML stream - control bytes in scalars round trip", "[fleet][unit][yaml]")
+  {
+    auto temp = TempDirectory{};
+    auto const path = temp.path() / "stream.yaml";
+    auto const hostile = std::string{"esc\x1b[31m bell\x07 del\x7f raw\xff end"};
+
+    auto document = std::string{"schema: aobus-fleet-trace-event/v1\nvalue: "};
+    document += yamlScalar(hostile);
+    document += "\n";
+    REQUIRE(appendYamlDocument(path, document));
+
+    auto stream = readScalarStream(path, "aobus-fleet-trace-event/v1");
+    REQUIRE(stream);
+    CHECK_FALSE(stream->trailingCorruption);
+    REQUIRE(stream->documents.size() == 1);
+    CHECK(stream->documents.front().at("value") == hostile);
   }
 
   TEST_CASE("Fleet intents - duplicate IDs and dangling dependencies fail", "[fleet][unit][scheduler]")
@@ -308,7 +409,7 @@ body: |
     }
   }
 
-  TEST_CASE("Fleet scheduler - stable dependency ordering and cycle rejection", "[fleet][unit][scheduler]")
+  TEST_CASE("Fleet scheduler - dependency graph validation and cycle rejection", "[fleet][unit][scheduler]")
   {
     auto first = PhaseIntent{.id = "a",
                              .taskKind = "test",
@@ -332,17 +433,15 @@ body: |
                              .overrides = {},
                              .body = "test"};
 
-    SECTION("orders a DAG")
+    SECTION("accepts a DAG")
     {
-      auto result = Scheduler::order({third, first, second});
-      REQUIRE(result);
-      CHECK(*result == std::vector<std::string>{"a", "b", "c"});
+      CHECK(Scheduler::validate({third, first, second}));
     }
 
     SECTION("rejects a cycle")
     {
       first.dependsOn = {"c"};
-      auto result = Scheduler::order({first, second, third});
+      auto result = Scheduler::validate({first, second, third});
       REQUIRE_FALSE(result);
       CHECK(result.error().message.find("cycle") != std::string::npos);
     }
@@ -353,7 +452,7 @@ body: |
     auto patch = PatchArtifact{
       .candidateId = "candidate-a",
       .patch = "diff --git a/lib/audio/Player.cpp b/lib/audio/Player.cpp\n",
-      .touchedFiles = {"lib/audio/Player.cpp"},
+      .touchedFiles = {TouchedFile{.path = "lib/audio/Player.cpp", .operation = ScopeOperation::Modify}},
       .addedLines = 3,
       .removedLines = 2,
     };
@@ -361,21 +460,40 @@ body: |
 
     CHECK(PatchGuard::inspect(patch, scope, 10, {"tool/fleet"}).accepted);
 
-    patch.touchedFiles = {"lib/audio/Other.cpp"};
+    patch.touchedFiles = {TouchedFile{.path = "lib/audio/Other.cpp", .operation = ScopeOperation::Modify}};
     CHECK(PatchGuard::inspect(patch, scope, 10, {}).failure == FailureReason::ScopeViolation);
 
-    patch.touchedFiles = {"lib/audio/Player.cpp"};
+    patch.touchedFiles = {TouchedFile{.path = "lib/audio/Player.cpp", .operation = ScopeOperation::Modify}};
     patch.addedLines = 20;
     CHECK(PatchGuard::inspect(patch, scope, 10, {}).failure == FailureReason::ChurnExceeded);
 
     patch.addedLines = 3;
-    patch.touchedFiles = {"tool/fleet/src/Engine.cpp"};
+    patch.touchedFiles = {TouchedFile{.path = "tool/fleet/src/Engine.cpp", .operation = ScopeOperation::Modify}};
     CHECK(
       PatchGuard::inspect(patch, {ScopeRule{"tool/fleet/src/Engine.cpp", {ScopeOperation::Modify}}}, 10, {"tool/fleet"})
         .failure == FailureReason::ScopeViolation);
 
-    patch.touchedFiles = {"lib/audio/Player.cpp"};
+    // A scope rule cannot authorize an operation the diff status does not allow.
+    patch.touchedFiles = {TouchedFile{.path = "lib/audio/Player.cpp", .operation = ScopeOperation::Delete}};
+    CHECK(PatchGuard::inspect(patch, scope, 10, {}).failure == FailureReason::ScopeViolation);
+
+    // Nested CMakeLists.txt files are ruler-protected by basename at any depth.
+    patch.touchedFiles = {TouchedFile{.path = "lib/audio/CMakeLists.txt", .operation = ScopeOperation::Modify}};
+    CHECK(
+      PatchGuard::inspect(patch, {ScopeRule{"lib/audio/CMakeLists.txt", {ScopeOperation::Modify}}}, 10, {}).failure ==
+      FailureReason::ScopeViolation);
+
+    // Forbidden markers only count at the start of a line; added source lines that merely
+    // contain the words must pass.
+    patch.touchedFiles = {TouchedFile{.path = "lib/audio/Player.cpp", .operation = ScopeOperation::Modify}};
+    patch.patch = "diff --git a/lib/audio/Player.cpp b/lib/audio/Player.cpp\n"
+                  "+  // documentation: rename from X, copy from Y, old mode bits\n";
+    CHECK(PatchGuard::inspect(patch, scope, 10, {}).accepted);
+
     patch.patch += "old mode 100644\nnew mode 100755\n";
+    CHECK(PatchGuard::inspect(patch, scope, 10, {}).failure == FailureReason::ScopeViolation);
+
+    patch.patch = "diff --git a/x b/x\nrename from lib/audio/Player.cpp\n";
     CHECK(PatchGuard::inspect(patch, scope, 10, {}).failure == FailureReason::ScopeViolation);
   }
 
@@ -450,6 +568,7 @@ body: |
                         .authority = "copy",
                         .scopeRiskClass = "private"},
       .summary = "test",
+      .optEscalationAction = std::nullopt,
     };
     auto store = RouteStore{temp.path()};
 
@@ -492,6 +611,27 @@ body: |
 
     CHECK(result.status == ProcessStatus::TimedOut);
     CHECK(result.elapsed < std::chrono::seconds{5});
+  }
+
+  TEST_CASE("Fleet process runner - children get default SIGPIPE disposition", "[fleet][integration][process]")
+  {
+    auto runner = BoostProcessRunner{};
+    // The runner ignores SIGPIPE in its own process; the launcher hook must
+    // hand SIG_DFL back to the child or shell pipelines inside spawned agents
+    // would silently change behavior. SIGPIPE is signal 13, bit 12 (4096) in
+    // the SigIgn mask of /proc/self/status.
+    auto result = runner.run(ProcessRequest{
+      .argv = {"sh", "-c", "mask=$(grep SigIgn /proc/self/status | cut -f2); test $(( 0x$mask & 4096 )) -eq 0"},
+      .cwd = std::filesystem::temp_directory_path(),
+      .standardInput = {},
+      .environmentWhitelist = {"PATH"},
+      .environment = {},
+      .timeout = std::chrono::seconds{5},
+      .terminationGrace = std::chrono::seconds{1},
+    });
+
+    CHECK(result.status == ProcessStatus::Exited);
+    CHECK(result.exitCode == 0);
   }
 
   TEST_CASE("Fleet process runner - environment is allowlisted", "[fleet][integration][process]")
@@ -541,6 +681,147 @@ body: |
     CHECK(signaled.signal == 15);
   }
 
+  TEST_CASE("Fleet process runner - orphaned pipe holders do not hang the runner", "[fleet][integration][process]")
+  {
+    auto runner = BoostProcessRunner{};
+    // The backgrounded sleep inherits the stdio pipes and outlives the shell, so the runner
+    // only returns if it force-closes the pipes after the child exits.
+    auto result = runner.run(ProcessRequest{
+      .argv = {"sh", "-c", "sleep 30 & exit 7"},
+      .cwd = std::filesystem::temp_directory_path(),
+      .standardInput = {},
+      .environmentWhitelist = {"PATH"},
+      .environment = {},
+      .timeout = std::chrono::seconds{20},
+      .terminationGrace = std::chrono::milliseconds{200},
+    });
+
+    CHECK(result.status == ProcessStatus::Exited);
+    CHECK(result.exitCode == 7);
+    CHECK(result.elapsed < std::chrono::seconds{10});
+  }
+
+  TEST_CASE("Fleet process runner - unread standard input neither kills nor hangs the runner",
+            "[fleet][integration][process]")
+  {
+    auto runner = BoostProcessRunner{};
+    // Larger than the kernel pipe buffer, so the write is still pending when the child exits.
+    auto input = std::string(static_cast<std::size_t>(1) << 20, 'x');
+    auto result = runner.run(ProcessRequest{
+      .argv = {"sh", "-c", "exit 0"},
+      .cwd = std::filesystem::temp_directory_path(),
+      .standardInput = std::move(input),
+      .environmentWhitelist = {"PATH"},
+      .environment = {},
+      .timeout = std::chrono::seconds{20},
+      .terminationGrace = std::chrono::seconds{2},
+    });
+
+    CHECK(result.status == ProcessStatus::Exited);
+    CHECK(result.exitCode == 0);
+    CHECK(result.elapsed < std::chrono::seconds{10});
+  }
+
+  namespace
+  {
+    struct RecordingRunner final : IProcessRunner
+    {
+      std::vector<ProcessRequest> requests;
+      ProcessResult result;
+
+      RecordingRunner()
+      {
+        result.status = ProcessStatus::Exited;
+        result.exitCode = 0;
+      }
+
+      ProcessResult run(ProcessRequest const& request) override
+      {
+        requests.push_back(request);
+        return result;
+      }
+    };
+
+    bool containsSequence(std::vector<std::string> const& argv, std::vector<std::string> const& sequence)
+    {
+      return std::ranges::search(argv, sequence).begin() != argv.end();
+    }
+  } // namespace
+
+  TEST_CASE("Fleet namespace runner - sandbox mounts shape the bwrap argv", "[fleet][unit][substrate]")
+  {
+    auto recorder = RecordingRunner{};
+    auto runner = NamespaceRunner{recorder};
+    auto const realRepo = std::filesystem::path{"/repo/real"};
+    auto const workspace = std::filesystem::path{"/work/copy"};
+    auto const authority = AuthorityPolicy{.id = "write",
+                                           .filesystem = FilesystemAuthority::WritableCopy,
+                                           .network = NetworkAuthority::Off,
+                                           .contextView = ContextView::Full};
+    auto const* home = std::getenv("HOME");
+    REQUIRE(home != nullptr);
+
+    SECTION("agent mounts bind HOME before the workspace")
+    {
+      auto request = ProcessRequest{};
+      request.argv = {"agent-cli"};
+      [[maybe_unused]] auto const ignored = runner.run(
+        realRepo, workspace, authority, SandboxMounts{.writableBinds = {}, .bindHome = true}, std::move(request));
+      REQUIRE(recorder.requests.size() == 1);
+      auto const& argv = recorder.requests.front().argv;
+      CHECK(containsSequence(argv, {"--bind", home, home}));
+      auto const homeBind = std::ranges::search(argv, std::vector<std::string>{"--bind", home, home}).begin();
+      auto const workspaceBind =
+        std::ranges::search(argv, std::vector<std::string>{"--bind", workspace.string(), realRepo.string()}).begin();
+      CHECK(homeBind < workspaceBind);
+    }
+
+    SECTION("oracle mounts add writable binds after the workspace and never bind HOME")
+    {
+      auto mounts = SandboxMounts{.writableBinds = {{"/host/oracle-build", "/tmp/build"}}, .bindHome = false};
+      auto request = ProcessRequest{};
+      request.argv = {"./build.sh", "debug"};
+      [[maybe_unused]] auto const ignored = runner.run(realRepo, workspace, authority, mounts, std::move(request));
+      REQUIRE(recorder.requests.size() == 1);
+      auto const& argv = recorder.requests.front().argv;
+      CHECK_FALSE(containsSequence(argv, {"--bind", home, home}));
+      auto const workspaceBind =
+        std::ranges::search(argv, std::vector<std::string>{"--bind", workspace.string(), realRepo.string()}).begin();
+      auto const buildBind =
+        std::ranges::search(argv, std::vector<std::string>{"--bind", "/host/oracle-build", "/tmp/build"}).begin();
+      CHECK(workspaceBind < buildBind);
+    }
+  }
+
+  TEST_CASE("Fleet snapshot provider - stale base destination is replaced", "[fleet][integration][substrate]")
+  {
+    auto temp = TempDirectory{};
+    auto const repo = temp.path() / "repo";
+    std::filesystem::create_directories(repo);
+    temp.write("repo/source.txt", "fresh\n");
+    auto process = BoostProcessRunner{};
+    auto init = process.run(ProcessRequest{
+      .argv = {"git", "init", repo.string()},
+      .cwd = temp.path(),
+      .standardInput = {},
+      .environmentWhitelist = {"PATH"},
+      .environment = {},
+      .timeout = std::chrono::seconds{10},
+      .terminationGrace = std::chrono::seconds{1},
+    });
+    REQUIRE(init.exitCode == 0);
+
+    auto const destination = temp.path() / "out" / ".base";
+    temp.write("out/.base/stale.txt", "left over by a crashed run\n");
+
+    auto snapshot = SnapshotProvider{process};
+    auto base = snapshot.createImmutableBase(repo, destination);
+
+    REQUIRE(base);
+    CHECK_FALSE(std::filesystem::exists(destination / "stale.txt"));
+    CHECK(std::filesystem::exists(destination / "source.txt"));
+  }
+
   TEST_CASE("Fleet runner - mock proposal advisory and full council traces", "[fleet][integration][engine]")
   {
     auto temp = TempDirectory{};
@@ -583,23 +864,19 @@ body: |
     registry.agents.emplace(
       "editor",
       AgentDefinition{.id = "editor",
-                      .vendor = "mock",
                       .model = "editor-v1",
                       .argvTemplate = {"sh", "-c", "printf 'updated\\n' > source.txt; printf poison > .git/poison"},
                       .promptDelivery = PromptDelivery::Stdin,
                       .environmentWhitelist = {"PATH"},
-                      .credentialMounts = {},
                       .timeout = std::chrono::seconds{10},
                       .rateLimitKey = "mock-editor",
                       .defaultAuthority = "write"});
     registry.agents.emplace("no-op",
                             AgentDefinition{.id = "no-op",
-                                            .vendor = "mock",
                                             .model = "no-op-v1",
                                             .argvTemplate = {"true"},
                                             .promptDelivery = PromptDelivery::Stdin,
                                             .environmentWhitelist = {"PATH"},
-                                            .credentialMounts = {},
                                             .timeout = std::chrono::seconds{10},
                                             .rateLimitKey = "mock-no-op",
                                             .defaultAuthority = "write"});
@@ -608,12 +885,10 @@ body: |
     {
       registry.agents.emplace(id,
                               AgentDefinition{.id = id,
-                                              .vendor = "mock",
                                               .model = std::string{id} + "-v1",
                                               .argvTemplate = {"sh", "-c", std::format("printf '{} analysis\\n'", id)},
                                               .promptDelivery = PromptDelivery::Stdin,
                                               .environmentWhitelist = {"PATH"},
-                                              .credentialMounts = {},
                                               .timeout = std::chrono::seconds{10},
                                               .rateLimitKey = id,
                                               .defaultAuthority = "read"});
@@ -624,10 +899,10 @@ body: |
                                               .runner = OracleRunner::BuildDebug,
                                               .arguments = {},
                                               .property = "source contains the expected update",
-                                              .prerequisites = {},
                                               .knownGaps = {},
                                               .baselinePolicy = BaselinePolicy::RequireGreen,
-                                              .rulerPaths = {"build.sh"}});
+                                              .rulerPaths = {"build.sh"},
+                                              .optTimeout = std::nullopt});
     registry.bindings.emplace("proposal",
                               Binding{.taskKind = "proposal",
                                       .agent = "editor",
@@ -705,6 +980,10 @@ body: |
     CHECK(council->mode == OutputMode::Advisory);
     CHECK(fallback->mode == OutputMode::Advisory);
     CHECK(fallback->route.agentId == "editor");
+    // The route key carries the concrete oracle version everywhere, never a placeholder.
+    CHECK(proposal->route.oracleVersion.size() == 16);
+    CHECK(readFile(out / "proposal-phase" / "manifest.yaml").find("resolved-at-run") == std::string::npos);
+    CHECK(readFile(out / "proposal-phase" / "manifest.yaml").find("escalation-action:") != std::string::npos);
     CHECK(std::filesystem::exists(out / "proposal-phase" / "patch"));
     CHECK(std::filesystem::exists(out / "advisory-phase" / "review.md"));
     CHECK(std::filesystem::exists(out / "council-phase" / "dossier.md"));
@@ -722,5 +1001,198 @@ body: |
     }
 
     CHECK_FALSE(hasJsonArtifact);
+  }
+
+  namespace
+  {
+    void runCommand(IProcessRunner& process, std::filesystem::path const& cwd, std::vector<std::string> argv)
+    {
+      auto result = process.run(ProcessRequest{
+        .argv = std::move(argv),
+        .cwd = cwd,
+        .standardInput = {},
+        .environmentWhitelist = {"PATH"},
+        .environment = {},
+        .timeout = std::chrono::seconds{10},
+        .terminationGrace = std::chrono::seconds{1},
+      });
+      REQUIRE(result.status == ProcessStatus::Exited);
+      REQUIRE(result.exitCode == 0);
+    }
+
+    void initGitRepo(IProcessRunner& process, std::filesystem::path const& repo, std::filesystem::path const& cwd)
+    {
+      runCommand(process, cwd, {"git", "init", repo.string()});
+    }
+
+    Registry schedulerRegistry()
+    {
+      auto registry = Registry{};
+      registry.authorities.emplace("write",
+                                   AuthorityPolicy{.id = "write",
+                                                   .filesystem = FilesystemAuthority::WritableCopy,
+                                                   .network = NetworkAuthority::Off,
+                                                   .contextView = ContextView::Full});
+      return registry;
+    }
+
+    AgentDefinition shellAgent(std::string id, std::string script)
+    {
+      auto model = id + "-v1";
+      return AgentDefinition{.id = std::move(id),
+                             .model = std::move(model),
+                             .argvTemplate = {"sh", "-c", std::move(script)},
+                             .promptDelivery = PromptDelivery::Stdin,
+                             .environmentWhitelist = {"PATH"},
+                             .timeout = std::chrono::seconds{20},
+                             .rateLimitKey = {},
+                             .defaultAuthority = "write"};
+    }
+
+    Binding gateBinding(std::string taskKind, std::string agent, std::optional<std::string> optOracle)
+    {
+      return Binding{.taskKind = std::move(taskKind),
+                     .agent = std::move(agent),
+                     .engine = EngineKind::Gate,
+                     .optOracle = std::move(optOracle),
+                     .optRiskOracle = std::nullopt,
+                     .authority = "write",
+                     .gate = {.fanout = 1, .topK = 1, .maxRounds = 1, .churnLines = 20},
+                     .synthesis = {}};
+    }
+
+    PhaseIntent schedulerIntent(std::string id, std::string taskKind, std::vector<std::string> dependsOn)
+    {
+      return PhaseIntent{.id = std::move(id),
+                         .taskKind = std::move(taskKind),
+                         .invariant = "Preserve the real repository.",
+                         .scope = {ScopeRule{.path = "source.txt", .operations = {ScopeOperation::Modify}}},
+                         .dependsOn = std::move(dependsOn),
+                         .overrides = {},
+                         .body = "Produce the mock result."};
+    }
+  } // namespace
+
+  TEST_CASE("Fleet scheduler - a fatal phase error still joins and audits in-flight phases",
+            "[fleet][integration][engine]")
+  {
+    auto temp = TempDirectory{};
+    auto const repo = temp.path() / "repo";
+    auto const out = temp.path() / "artifacts";
+    std::filesystem::create_directories(repo);
+    temp.write("repo/source.txt", "original\n");
+    auto process = BoostProcessRunner{};
+    initGitRepo(process, repo, temp.path());
+
+    auto registry = schedulerRegistry();
+    registry.agents.emplace("slow", shellAgent("slow", "sleep 1"));
+    registry.agents.emplace("doomed", shellAgent("doomed", "true"));
+    registry.bindings.emplace("slow-kind", gateBinding("slow-kind", "slow", std::nullopt));
+    registry.bindings.emplace("doomed-kind", gateBinding("doomed-kind", "doomed", std::nullopt));
+
+    auto intents =
+      std::vector{schedulerIntent("slow-phase", "slow-kind", {}), schedulerIntent("doomed-phase", "doomed-kind", {})};
+
+    // A directory squatting on the manifest path makes every manifest write for the doomed
+    // phase fail, which is one of the genuinely fatal (non-manifest) error paths.
+    std::filesystem::create_directories(out / "doomed-phase" / "manifest.yaml");
+
+    auto result = FleetRunner{process}.run(registry, intents, repo, out);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().message.find("cannot write") != std::string::npos);
+    // The fatal error must not abandon the in-flight sibling: it ran to completion and was audited.
+    CHECK(std::filesystem::exists(out / "slow-phase" / "manifest.yaml"));
+    CHECK(readFile(out / "audit.yaml").find("slow-phase") != std::string::npos);
+  }
+
+  TEST_CASE("Fleet scheduler - dependency failures cascade through transitive dependents",
+            "[fleet][integration][engine]")
+  {
+    auto temp = TempDirectory{};
+    auto const repo = temp.path() / "repo";
+    auto const out = temp.path() / "artifacts";
+    std::filesystem::create_directories(repo);
+    temp.write("repo/source.txt", "original\n");
+    auto process = BoostProcessRunner{};
+    initGitRepo(process, repo, temp.path());
+
+    auto registry = schedulerRegistry();
+    registry.agents.emplace("failing", shellAgent("failing", "exit 1"));
+    registry.agents.emplace("steady", shellAgent("steady", "true"));
+    registry.bindings.emplace("failing-kind", gateBinding("failing-kind", "failing", std::nullopt));
+    registry.bindings.emplace("steady-kind", gateBinding("steady-kind", "steady", std::nullopt));
+    registry.escalations.emplace(FailureReason::DependencyFailed,
+                                 EscalationRule{.reason = FailureReason::DependencyFailed,
+                                                .action = EscalationAction::ReturnChair,
+                                                .optRoute = std::nullopt,
+                                                .retryLimit = 0});
+
+    auto intents = std::vector{schedulerIntent("phase-a", "failing-kind", {}),
+                               schedulerIntent("phase-b", "steady-kind", {"phase-a"}),
+                               schedulerIntent("phase-c", "steady-kind", {"phase-b"})};
+
+    auto result = FleetRunner{process}.run(registry, intents, repo, out);
+
+    REQUIRE(result);
+    REQUIRE(result->manifests.size() == 3);
+    CHECK(result->escalated);
+    auto failureOf = [&](std::string const& id)
+    {
+      auto manifest = std::ranges::find(result->manifests, id, &ReviewManifest::phaseId);
+      REQUIRE(manifest != result->manifests.end());
+      return manifest->failure;
+    };
+    CHECK(failureOf("phase-a") == FailureReason::NoCandidate);
+    CHECK(failureOf("phase-b") == FailureReason::DependencyFailed);
+    CHECK(failureOf("phase-c") == FailureReason::DependencyFailed);
+    // Failed manifests carry the registry escalation action for the chair to act on.
+    auto const manifestB = std::ranges::find(result->manifests, std::string{"phase-b"}, &ReviewManifest::phaseId);
+    CHECK(manifestB->optEscalationAction == EscalationAction::ReturnChair);
+    CHECK(readFile(out / "phase-b" / "manifest.yaml").find("escalation-action: return-chair") != std::string::npos);
+  }
+
+  TEST_CASE("Fleet patch extractor - status letters map to scope operations", "[fleet][integration][substrate]")
+  {
+    auto temp = TempDirectory{};
+    auto const repo = temp.path() / "repo";
+    std::filesystem::create_directories(repo);
+    temp.write("repo/keep.txt", "one\n");
+    temp.write("repo/gone.txt", "two\n");
+    auto process = BoostProcessRunner{};
+    initGitRepo(process, repo, temp.path());
+    runCommand(process, repo, {"git", "-C", repo.string(), "add", "-A"});
+    runCommand(process,
+               repo,
+               {"git",
+                "-C",
+                repo.string(),
+                "-c",
+                "user.name=Fleet Test",
+                "-c",
+                "user.email=fleet@test",
+                "commit",
+                "-m",
+                "seed"});
+
+    temp.write("repo/keep.txt", "one changed\n");
+    std::filesystem::remove(repo / "gone.txt");
+    // A created path with spaces and non-ASCII bytes exercises the NUL-delimited parsing.
+    temp.write("repo/sub/añadido nuevo.txt", "three\n");
+
+    auto extractor = PatchExtractor{process};
+    auto patch = extractor.extract(repo, "candidate-z");
+
+    REQUIRE(patch);
+    REQUIRE(patch->touchedFiles.size() == 3);
+    auto operationOf = [&](std::string_view path)
+    {
+      auto found = std::ranges::find(patch->touchedFiles, std::filesystem::path{path}, &TouchedFile::path);
+      REQUIRE(found != patch->touchedFiles.end());
+      return found->operation;
+    };
+    CHECK(operationOf("keep.txt") == ScopeOperation::Modify);
+    CHECK(operationOf("gone.txt") == ScopeOperation::Delete);
+    CHECK(operationOf("sub/añadido nuevo.txt") == ScopeOperation::Create);
   }
 } // namespace ao::fleet::test

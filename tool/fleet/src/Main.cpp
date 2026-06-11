@@ -10,6 +10,7 @@
 
 #include <CLI/CLI.hpp>
 
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -26,26 +27,6 @@ namespace
   constexpr auto kConfigurationExit = std::int32_t{5};
   constexpr auto kCliExit = std::int32_t{64};
   constexpr auto kDefaultStatsWindow = std::size_t{20};
-
-  std::optional<ao::fleet::ReviewVerdict> parseVerdict(std::string const& value)
-  {
-    if (value == "accept")
-    {
-      return ao::fleet::ReviewVerdict::Accept;
-    }
-
-    if (value == "modify")
-    {
-      return ao::fleet::ReviewVerdict::Modify;
-    }
-
-    if (value == "reject")
-    {
-      return ao::fleet::ReviewVerdict::Reject;
-    }
-
-    return std::nullopt;
-  }
 
   std::int32_t handleValidate(std::filesystem::path const& registryPath)
   {
@@ -112,7 +93,7 @@ namespace
                             std::string const& verdictText,
                             std::string const& reviewReason)
   {
-    auto optVerdict = parseVerdict(verdictText);
+    auto optVerdict = ao::fleet::parseReviewVerdict(verdictText);
 
     if (!optVerdict)
     {
@@ -176,6 +157,10 @@ namespace
 
 int main(int argc, char** argv)
 {
+  // Writing to agent/oracle stdin pipes (or to our own stdout when piped to a pager) must
+  // surface EPIPE as an error code instead of terminating the whole fleet run.
+  std::signal(SIGPIPE, SIG_IGN);
+
   try
   {
     auto app = CLI::App{"Aobus delegated agent fleet"};

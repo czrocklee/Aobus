@@ -230,15 +230,13 @@ namespace ao::audio::test
 
     auto backendPtr = std::make_unique<CapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const device = Device{.id = DeviceId{"alsa-exclusive"},
-                               .displayName = "ALSA",
-                               .description = "ALSA Exclusive",
-                               .isDefault = false,
-                               .backendId = kBackendAlsa,
-                               .capabilities = {.sampleRates = {44100},
-                                                .sampleFormats = {},
-                                                .bitDepths = {32},
-                                                .channelCounts = {2}}};
+    auto const device =
+      Device{.id = DeviceId{"alsa-exclusive"},
+             .displayName = "ALSA",
+             .description = "ALSA Exclusive",
+             .isDefault = false,
+             .backendId = kBackendAlsa,
+             .capabilities = {.sampleRates = {44100}, .sampleFormats = {}, .bitDepths = {32}, .channelCounts = {2}}};
 
     auto engine = Engine{std::move(backendPtr), device};
     auto const descriptor =

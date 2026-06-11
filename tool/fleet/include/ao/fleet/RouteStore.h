@@ -8,6 +8,8 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -33,7 +35,8 @@ namespace ao::fleet
     Result<> reset(std::string_view route);
 
   private:
-    Result<std::string> latestReset(std::string_view route) const;
+    // Route key -> latest reset timestamp, read from the reset stream in one pass.
+    Result<std::map<std::string, std::string, std::less<>>> latestResets() const;
 
     std::filesystem::path _out;
   };

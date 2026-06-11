@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "Hash.h"
 #include <ao/Error.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/async/Runtime.h>
@@ -15,10 +16,11 @@
 #include <boost/interprocess/sync/file_lock.hpp>
 
 #include <algorithm>
-#include <array>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
-#include <cstdint>
+#include <deque>
+#include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -26,9 +28,11 @@
 #include <functional>
 #include <future>
 #include <ios>
+#include <iostream>
 #include <iterator>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -64,9 +68,6 @@ namespace ao::fleet
       AgentDefinition agent;
       AuthorityPolicy authority;
     };
-
-    constexpr auto kFnvOffsetBasis = std::uint64_t{1469598103934665603ULL};
-    constexpr auto kFnvPrime = std::uint64_t{1099511628211ULL};
 
     std::string replaceAll(std::string value, std::string_view from, std::string_view to)
     {
@@ -157,10 +158,13 @@ namespace ao::fleet
       return out.str();
     }
 
-    std::vector<std::filesystem::path> rulerPaths(ResolvedPhase const& phase)
+    std::vector<std::filesystem::path> rulerPaths(ResolvedPhase const& phase, Registry const& registry)
     {
-      auto result = std::vector<std::filesystem::path>{
-        "CMakeLists.txt", "cmake", "script", ".agents", "doc/design", "config/agent-fleet.yaml", "tool/fleet"};
+      // Non-negotiable self-protection core: an accepted patch must never rewrite the fleet
+      // tool or its registry, otherwise a candidate could disarm the guard reviewing it. The
+      // rest of the base set is policy and lives in the registry-level `ruler-paths:`.
+      auto result = std::vector<std::filesystem::path>{"tool/fleet", "config/agent-fleet.yaml"};
+      result.insert(result.end(), registry.rulerPaths.begin(), registry.rulerPaths.end());
 
       if (phase.optOracle)
       {
@@ -175,82 +179,136 @@ namespace ao::fleet
       return result;
     }
 
+    std::vector<std::string> argumentList(std::map<std::string, std::string, std::less<>> const& arguments,
+                                          std::string_view name,
+                                          std::vector<std::string> defaults)
+    {
+      auto const found = arguments.find(name);
+
+      if (found == arguments.end())
+      {
+        return defaults;
+      }
+
+      auto values = std::vector<std::string>{};
+
+      for (auto const part : std::views::split(std::string_view{found->second}, ','))
+      {
+        if (!part.empty())
+        {
+          values.emplace_back(std::string_view{part});
+        }
+      }
+
+      return values;
+    }
+
+    // Deterministic path patterns shared by the risk oracles and the route-key risk class, so
+    // the registry can tune them in one place without the two consumers drifting apart.
+    struct PathClassifier final
+    {
+      std::vector<std::string> testPrefixes;
+      std::vector<std::string> testSuffixes;
+      std::vector<std::string> headerPrefixes;
+      std::vector<std::string> headerSuffixes;
+
+      static PathClassifier fromArguments(std::map<std::string, std::string, std::less<>> const& arguments)
+      {
+        return PathClassifier{
+          .testPrefixes = argumentList(arguments, "test-paths", {"test/"}),
+          .testSuffixes = argumentList(arguments, "test-suffixes", {"Test.cpp"}),
+          .headerPrefixes = argumentList(arguments, "header-prefixes", {"include/", "app/include/"}),
+          .headerSuffixes = argumentList(arguments, "header-suffixes", {".h", ".hpp"}),
+        };
+      }
+
+      bool isTestPath(std::filesystem::path const& path) const
+      {
+        auto const value = path.generic_string();
+        return std::ranges::any_of(testPrefixes, [&](auto const& prefix) { return value.starts_with(prefix); }) ||
+               std::ranges::any_of(testSuffixes, [&](auto const& suffix) { return value.ends_with(suffix); });
+      }
+
+      bool isPublicSurface(std::filesystem::path const& path) const
+      {
+        auto const value = path.generic_string();
+        return std::ranges::any_of(headerPrefixes, [&](auto const& prefix) { return value.starts_with(prefix); });
+      }
+
+      bool isPublicHeader(std::filesystem::path const& path) const
+      {
+        auto const value = path.generic_string();
+        return isPublicSurface(path) &&
+               std::ranges::any_of(headerSuffixes, [&](auto const& suffix) { return value.ends_with(suffix); });
+      }
+    };
+
     std::string oracleVersion(OracleDefinition const& oracle, std::filesystem::path const& base)
     {
-      auto hash = std::uint64_t{kFnvOffsetBasis};
-      auto mix = [&hash](std::string_view value)
-      {
-        for (auto character : value)
-        {
-          hash ^= static_cast<unsigned char>(character);
-          hash *= kFnvPrime;
-        }
-      };
-      mix("aobus-fleet/v1");
-      mix(oracle.id);
-      mix(toString(oracle.runner));
-      mix(oracle.property);
+      auto hash = Fnv1a64{};
+      hash.mix("aobus-fleet/v1");
+      hash.mix(oracle.id);
+      hash.mix(toString(oracle.runner));
+      hash.mix(oracle.property);
 
       for (auto const& [name, value] : oracle.arguments)
       {
-        mix(name);
-        mix(value);
+        hash.mix(name);
+        hash.mix(value);
       }
 
       for (auto const& path : oracle.rulerPaths)
       {
-        mix(path.generic_string());
+        hash.mix(path.generic_string());
 
         if (auto const absolute = base / path; std::filesystem::is_regular_file(absolute))
         {
-          auto input = std::ifstream{absolute, std::ios::binary};
-          auto buffer = std::array<char, 8192>{};
-
-          while (input)
-          {
-            input.read(buffer.data(), buffer.size());
-            mix(std::string_view{buffer.data(), static_cast<std::size_t>(input.gcount())});
-          }
+          hash.mixFile(absolute);
         }
         else if (std::filesystem::is_directory(absolute))
         {
           if (auto fingerprint = TreeCanary::fingerprint(absolute); fingerprint)
           {
-            mix(fingerprint->value);
+            hash.mix(fingerprint->value);
           }
         }
       }
 
-      return std::format("{:016x}", hash);
+      return hash.hex();
     }
 
-    std::vector<std::string> oracleArgv(OracleDefinition const& oracle)
+    // Sandbox-side mount point for the host-persistent oracle build tree. /tmp is a tmpfs in
+    // the namespace, so without this bind every oracle invocation would rebuild from scratch
+    // into RAM and the build would not even survive into the next command.
+    constexpr auto kOracleBuildMount = std::string_view{"/tmp/build"};
+    constexpr auto kOracleBuildDir = std::string_view{"/tmp/build/debug"};
+
+    // Each oracle is a short command sequence executed in the same sandbox; the first failing
+    // command terminates the sequence and provides the oracle outcome. Test oracles build
+    // incrementally first so the candidate patch is actually compiled before tests run.
+    std::vector<std::vector<std::string>> oracleCommands(OracleDefinition const& oracle)
     {
-      switch (oracle.runner)
+      switch (auto const buildDir = std::string{kOracleBuildDir}; oracle.runner)
       {
-        case OracleRunner::TestAll: return {"./build.sh", "debug"};
+        case OracleRunner::TestAll: return {{"./build.sh", "debug"}};
         case OracleRunner::TestCore:
-        {
-          auto result = std::vector<std::string>{"./script/run-tests.sh", "--core"};
-
-          if (auto filter = oracle.arguments.find("filter"); filter != oracle.arguments.end())
-          {
-            result.push_back(filter->second);
-          }
-
-          return result;
-        }
         case OracleRunner::TestGtk:
         {
-          auto result = std::vector<std::string>{"./script/run-tests.sh", "--gtk"};
+          auto const gtk = oracle.runner == OracleRunner::TestGtk;
+          auto tests = std::vector<std::string>{
+            "./script/run-tests.sh", "--no-build", "--path", buildDir, gtk ? "--gtk" : "--core"};
 
           if (auto filter = oracle.arguments.find("filter"); filter != oracle.arguments.end())
           {
-            result.push_back(filter->second);
+            tests.push_back(filter->second);
           }
 
-          return result;
+          // build.sh configures the tree when needed and builds incrementally; --target skips
+          // the script's own full test pass, run-tests.sh then runs only the requested suite.
+          return {{"./build.sh", "debug", "--target", gtk ? "ao_test_gtk" : "ao_test"}, std::move(tests)};
         }
+        case OracleRunner::TestAsan: return {{"./build.sh", "debug", "--asan"}};
+        case OracleRunner::TestTsan: return {{"./build.sh", "debug", "--tsan"}};
         case OracleRunner::TidyClean:
         {
           auto result = std::vector<std::string>{"./script/run-clang-tidy.sh"};
@@ -260,9 +318,9 @@ namespace ao::fleet
             result.push_back(scope->second);
           }
 
-          return result;
+          return {std::move(result)};
         }
-        case OracleRunner::BuildDebug: return {"./build.sh", "debug", "--target", "aobus-gtk"};
+        case OracleRunner::BuildDebug: return {{"./build.sh", "debug", "--target", "aobus-gtk"}};
         case OracleRunner::TestDelta:
         case OracleRunner::PublicSignatureDelta: return {};
       }
@@ -270,31 +328,33 @@ namespace ao::fleet
       return {};
     }
 
+    // Sanitizer builds need their own tree: mixing -fsanitize flags into the cached plain
+    // debug configuration would silently rebuild everything and corrupt later oracles.
+    std::string_view oracleBuildDir(OracleRunner runner)
+    {
+      switch (runner)
+      {
+        case OracleRunner::TestAsan: return "/tmp/build/debug-asan";
+        case OracleRunner::TestTsan: return "/tmp/build/debug-tsan";
+        default: return kOracleBuildDir;
+      }
+    }
+
     RiskEvidence runRiskOracle(OracleDefinition const& oracle, PatchArtifact const& patch)
     {
       auto result = RiskEvidence{.oracleId = oracle.id, .fired = false, .detail = {}};
+      auto const classifier = PathClassifier::fromArguments(oracle.arguments);
 
       if (oracle.runner == OracleRunner::TestDelta)
       {
-        result.fired =
-          std::ranges::none_of(patch.touchedFiles,
-                               [](auto const& path)
-                               {
-                                 auto const value = path.generic_string();
-                                 return value.starts_with("test/") || value.find("Test.cpp") != std::string::npos;
-                               });
+        result.fired = std::ranges::none_of(
+          patch.touchedFiles, [&](TouchedFile const& touched) { return classifier.isTestPath(touched.path); });
         result.detail = result.fired ? "patch changes no registered test path" : "test path changed";
       }
       else if (oracle.runner == OracleRunner::PublicSignatureDelta)
       {
-        result.fired =
-          std::ranges::any_of(patch.touchedFiles,
-                              [](auto const& path)
-                              {
-                                auto const value = path.generic_string();
-                                return (value.starts_with("include/") || value.starts_with("app/include/")) &&
-                                       (value.ends_with(".h") || value.ends_with(".hpp"));
-                              });
+        result.fired = std::ranges::any_of(
+          patch.touchedFiles, [&](TouchedFile const& touched) { return classifier.isPublicHeader(touched.path); });
         result.detail = result.fired ? "public header changed" : "no public header changed";
       }
 
@@ -305,7 +365,7 @@ namespace ao::fleet
 
     Result<OracleEvidence> runOracle(OracleDefinition const& oracle,
                                      PatchArtifact const& patch,
-                                     [[maybe_unused]] ResolvedPhase const& phase,
+                                     ResolvedPhase const& phase,
                                      EngineContext const& context,
                                      std::filesystem::path const& destination)
     {
@@ -326,23 +386,62 @@ namespace ao::fleet
         }
       }
 
-      auto request = ProcessRequest{};
-      request.argv = oracleArgv(oracle);
-      request.cwd = *workspace;
-      request.environmentWhitelist = {
-        "PATH", "HOME", "USER", "NIX_PATH", "IN_NIX_SHELL", "GSETTINGS_SCHEMA_DIR", "CPLUS_INCLUDE_PATH"};
-      request.environment.emplace("BUILD_DIR", "/tmp/aobus-fleet-oracle-build");
-      request.timeout = kDefaultOracleTimeout;
+      // Persistent host-side build tree per phase: bind-mounted over the sandbox tmpfs so
+      // incremental state survives across rounds and candidates of the same phase.
+      auto const hostBuildRoot = context.runRoot / ".oracle-build" / phase.intent.id;
+      // shell.nix pins CCACHE_DIR to <repo>/.cache/ccache; the workspace copy excludes .cache,
+      // so bind the real cache into the virtualized repository path for full compile reuse.
+      auto const hostCcache = context.realRepo / ".cache" / "ccache";
+      auto mountError = std::error_code{};
+      std::filesystem::create_directories(hostBuildRoot, mountError);
+      std::filesystem::create_directories(hostCcache, mountError);
+
+      if (mountError)
+      {
+        return makeError(Error::Code::IoError, mountError.message());
+      }
+
+      auto mounts = SandboxMounts{
+        .writableBinds = {{hostBuildRoot, std::filesystem::path{kOracleBuildMount}}, {hostCcache, hostCcache}},
+        .bindHome = false};
       auto authority = AuthorityPolicy{.id = "oracle",
                                        .filesystem = FilesystemAuthority::WritableCopy,
                                        .network = NetworkAuthority::Off,
                                        .contextView = ContextView::Full};
-      auto process =
-        NamespaceRunner{context.processRunner}.run(context.realRepo, *workspace, authority, std::move(request));
-      auto log = process.standardOutput + process.standardError;
+      auto commands = oracleCommands(oracle);
+
+      if (commands.empty())
+      {
+        commands.emplace_back();
+      }
+
+      auto process = ProcessResult{};
+      auto log = std::string{};
+
+      for (auto& argv : commands)
+      {
+        auto request = ProcessRequest{};
+        request.argv = std::move(argv);
+        request.cwd = *workspace;
+        // IN_NIX_SHELL is deliberately absent: build.sh and run-tests.sh then re-enter
+        // nix-shell inside the namespace and reconstruct the full build environment, which is
+        // far too large (NIX_CC, PKG_CONFIG_PATH, ...) to allowlist reliably here.
+        request.environmentWhitelist = {"PATH", "HOME", "USER", "NIX_PATH"};
+        request.environment.emplace("BUILD_DIR", std::string{oracleBuildDir(oracle.runner)});
+        request.timeout = oracle.optTimeout.value_or(std::chrono::milliseconds{kDefaultOracleTimeout});
+        process = NamespaceRunner{context.processRunner}.run(
+          context.realRepo, *workspace, authority, mounts, std::move(request));
+        log += process.standardOutput + process.standardError;
+
+        if (process.status != ProcessStatus::Exited || process.exitCode != 0)
+        {
+          break;
+        }
+      }
+
       return OracleEvidence{
         .oracleId = oracle.id,
-        .oracleVersion = oracleVersion(oracle, context.immutableBase),
+        .oracleVersion = context.oracleVersions.at(oracle.id),
         .property = oracle.property,
         .passed = process.status == ProcessStatus::Exited && process.exitCode == 0,
         .infrastructureError =
@@ -353,26 +452,26 @@ namespace ao::fleet
       };
     }
 
-    RouteKey makeRoute(ResolvedPhase const& phase)
+    RouteKey makeRoute(ResolvedPhase const& phase, EngineContext const& context)
     {
+      auto const classifier = phase.optRiskOracle ? PathClassifier::fromArguments(phase.optRiskOracle->arguments)
+                                                  : PathClassifier::fromArguments({});
       return RouteKey{
         .agentId = phase.agent.id,
         .modelVersion = phase.agent.model,
         .harness = "aobus-fleet/v1",
         .engine = phase.binding.engine,
         .oracleId = phase.optOracle ? phase.optOracle->id : "none",
-        .oracleVersion = phase.optOracle ? "resolved-at-run" : "none",
+        // Versions are precomputed once per run from the immutable base, so failure manifests
+        // and breaker queries always agree on the same concrete route key.
+        .oracleVersion = phase.optOracle ? context.oracleVersions.at(phase.optOracle->id) : "none",
         .authority =
           std::string{toString(phase.authority.filesystem)} + "+net-" + std::string{toString(phase.authority.network)},
-        .scopeRiskClass = std::ranges::any_of(phase.intent.scope,
-                                              [](ScopeRule const& rule)
-                                              {
-                                                auto const value = rule.path.generic_string();
-                                                return value.starts_with("include/") ||
-                                                       value.starts_with("app/include/");
-                                              })
-                            ? "public"
-                            : "private",
+        .scopeRiskClass =
+          std::ranges::any_of(
+            phase.intent.scope, [&](ScopeRule const& rule) { return classifier.isPublicSurface(rule.path); })
+            ? "public"
+            : "private",
       };
     }
 
@@ -416,10 +515,30 @@ namespace ao::fleet
       return out.str();
     }
 
+    // Resolves the registry escalation policy for a failed manifest so the chair can act on
+    // the manifest alone; cleared again for successful phases.
+    void applyEscalationAction(Registry const& registry, ReviewManifest& manifest)
+    {
+      manifest.optEscalationAction.reset();
+
+      if (manifest.failure == FailureReason::None)
+      {
+        return;
+      }
+
+      if (auto rule = registry.escalations.find(manifest.failure); rule != registry.escalations.end())
+      {
+        manifest.optEscalationAction = rule->second.action;
+      }
+    }
+
     Result<> writeCommonArtifacts(ArtifactStore const& store,
                                   ResolvedPhase const& phase,
-                                  ReviewManifest const& manifest)
+                                  Registry const& registry,
+                                  ReviewManifest& manifest)
     {
+      applyEscalationAction(registry, manifest);
+
       if (auto value = store.write("intent.yaml", emitIntent(phase.intent)); !value)
       {
         return value;
@@ -461,6 +580,38 @@ namespace ao::fleet
       return {};
     }
 
+    // Log-class artifacts (reviews, worker/oracle logs, dossiers) are diagnostics: losing
+    // one must not fail the phase. The failure is surfaced on stderr and recorded in the
+    // phase trace instead. Evidence-class artifacts (intent, resolved, manifest, evidence,
+    // patch) keep fail-hard writes via writeCommonArtifacts and ArtifactStore::write.
+    void writeOrWarn(ArtifactStore const& store, std::filesystem::path const& relativePath, std::string_view content)
+    {
+      auto const written = store.write(relativePath, content);
+
+      if (written)
+      {
+        return;
+      }
+
+      std::cerr << std::format("fleet: warning: cannot write artifact {}: {}\n",
+                               (store.root() / relativePath).string(),
+                               written.error().message);
+      [[maybe_unused]] auto const traced =
+        store.append("trace.yaml",
+                     emitTraceEvent("artifact-write-failed",
+                                    {{"path", relativePath.generic_string()}, {"error", written.error().message}}));
+    }
+
+    void appendOrWarn(ArtifactStore const& store, std::filesystem::path const& relativePath, std::string_view document)
+    {
+      if (auto const appended = store.append(relativePath, document); !appended)
+      {
+        std::cerr << std::format("fleet: warning: cannot append artifact {}: {}\n",
+                                 (store.root() / relativePath).string(),
+                                 appended.error().message);
+      }
+    }
+
     bool isEscalation(ReviewManifest const& manifest)
     {
       return manifest.failure != FailureReason::None;
@@ -482,6 +633,51 @@ namespace ao::fleet
     auto spawnWorker(async::Runtime& runtime, Function function)
     {
       return runtime.spawn(runOnWorker(&runtime, std::move(function)));
+    }
+
+    Error errorFromCurrentException()
+    {
+      try
+      {
+        throw;
+      }
+      catch (std::exception const& exception)
+      {
+        return Error{.code = Error::Code::InvalidState, .message = std::string{"worker raised: "} + exception.what()};
+      }
+      catch (...)
+      {
+        return Error{.code = Error::Code::InvalidState, .message = "worker raised an unknown exception"};
+      }
+    }
+
+    template<typename T>
+    Result<T> awaitOutcome(std::future<T>& future)
+    {
+      try
+      {
+        return future.get();
+      }
+      catch (...)
+      {
+        return std::unexpected{errorFromCurrentException()};
+      }
+    }
+
+    // Joins every future before returning, so workers can never outlive the references they
+    // capture; a worker exception becomes a per-slot error instead of abandoning its siblings.
+    template<typename T>
+    std::vector<Result<T>> awaitAll(std::vector<std::future<T>>& futures)
+    {
+      auto outcomes = std::vector<Result<T>>{};
+      outcomes.reserve(futures.size());
+
+      for (auto& future : futures)
+      {
+        outcomes.push_back(awaitOutcome(future));
+      }
+
+      return outcomes;
     }
 
     std::string authorityLabel(AuthorityPolicy const& authority)
@@ -564,7 +760,7 @@ namespace ao::fleet
         return std::unexpected{baseline.error()};
       }
 
-      [[maybe_unused]] auto const ret = store.write("baseline.log", baseline->log);
+      writeOrWarn(store, "baseline.log", baseline->log);
 
       if (phase.optOracle->baselinePolicy != BaselinePolicy::RequireGreen || baseline->passed)
       {
@@ -578,16 +774,16 @@ namespace ao::fleet
         .optPatch = std::nullopt,
         .oracleEvidence = {*baseline},
         .riskEvidence = {},
-        .route = makeRoute(phase),
-        .summary = "The required baseline oracle is not green; no worker was launched."};
-      manifest.route.oracleVersion = baseline->oracleVersion;
+        .route = makeRoute(phase, context),
+        .summary = "The required baseline oracle is not green; no worker was launched.",
+        .optEscalationAction = std::nullopt};
 
-      if (auto written = writeCommonArtifacts(store, phase, manifest); !written)
+      if (auto written = writeCommonArtifacts(store, phase, context.registry, manifest); !written)
       {
         return std::unexpected{written.error()};
       }
 
-      [[maybe_unused]] auto const ret2 = store.write("review.md", proposalReview(phase, manifest));
+      writeOrWarn(store, "review.md", proposalReview(phase, manifest));
       return std::optional<ReviewManifest>{std::move(manifest)};
     }
 
@@ -612,7 +808,12 @@ namespace ao::fleet
 
       auto prompt = gatePrompt(phase, round, feedback);
       auto request = agentRequest(config.agent, phase.intent, *workspace, context.realRepo, std::move(prompt));
-      auto worker = namespaceRunner.run(context.realRepo, *workspace, config.authority, std::move(request));
+      // Agents keep their real $HOME so model CLIs can read credentials and configuration.
+      auto worker = namespaceRunner.run(context.realRepo,
+                                        *workspace,
+                                        config.authority,
+                                        SandboxMounts{.writableBinds = {}, .bindHome = true},
+                                        std::move(request));
       auto patch = extractor.extract(*workspace, id);
 
       if (!patch)
@@ -620,7 +821,8 @@ namespace ao::fleet
         return std::unexpected{patch.error()};
       }
 
-      auto guard = PatchGuard::inspect(*patch, phase.intent.scope, phase.binding.gate.churnLines, rulerPaths(phase));
+      auto guard = PatchGuard::inspect(
+        *patch, phase.intent.scope, phase.binding.gate.churnLines, rulerPaths(phase, context.registry));
       return Candidate{.patch = std::move(*patch),
                        .worker = std::move(worker),
                        .guard = std::move(guard),
@@ -631,9 +833,8 @@ namespace ao::fleet
     void writeCandidateArtifacts(ArtifactStore const& store, Candidate const& candidate)
     {
       auto const prefix = std::filesystem::path{"candidates"} / candidate.patch.candidateId;
-      [[maybe_unused]] auto const ret = store.write(prefix / "patch", candidate.patch.patch);
-      [[maybe_unused]] auto const ret2 =
-        store.write(prefix / "worker.log", candidate.worker.standardOutput + candidate.worker.standardError);
+      writeOrWarn(store, prefix / "patch", candidate.patch.patch);
+      writeOrWarn(store, prefix / "worker.log", candidate.worker.standardOutput + candidate.worker.standardError);
       auto candidateManifest = std::format("schema: aobus-fleet-candidate/v1\nid: {}\nagent: {}\nprocess-status: "
                                            "{}\nexit-code: {}\nguard: {}\ndetail: {}\n",
                                            yamlScalar(candidate.patch.candidateId),
@@ -642,7 +843,7 @@ namespace ao::fleet
                                            candidate.worker.exitCode,
                                            candidate.guard.accepted ? "accepted" : "rejected",
                                            yamlScalar(candidate.guard.detail));
-      [[maybe_unused]] auto const ret3 = store.write(prefix / "manifest.yaml", candidateManifest);
+      writeOrWarn(store, prefix / "manifest.yaml", candidateManifest);
     }
 
     bool acceptedCandidate(Candidate const& candidate)
@@ -663,11 +864,13 @@ namespace ao::fleet
     {
       auto futures = std::vector<std::future<Result<Candidate>>>{};
 
+      // Reference captures (config, feedback, locals) are safe: awaitAll below joins every
+      // worker before this frame unwinds.
       for (std::size_t index = 0; index < phase.binding.gate.fanout; ++index)
       {
         futures.push_back(
           spawnWorker(context.asyncRuntime,
-                      [&, round, index, feedback, config] -> Result<Candidate>
+                      [&, round, index] -> Result<Candidate>
                       {
                         return runGateCandidate(
                           phase, context, snapshot, extractor, namespaceRunner, config, round, index, feedback);
@@ -676,20 +879,19 @@ namespace ao::fleet
 
       auto accepted = std::vector<Candidate>{};
 
-      for (auto& future : futures)
+      for (auto& outcome : awaitAll(futures))
       {
-        auto candidate = future.get();
-
-        if (!candidate)
+        if (!outcome || !*outcome)
         {
           continue;
         }
 
-        writeCandidateArtifacts(store, *candidate);
+        auto& candidate = **outcome;
+        writeCandidateArtifacts(store, candidate);
 
-        if (acceptedCandidate(*candidate))
+        if (acceptedCandidate(candidate))
         {
-          accepted.push_back(std::move(*candidate));
+          accepted.push_back(std::move(candidate));
         }
       }
 
@@ -712,19 +914,21 @@ namespace ao::fleet
 
     Result<ReviewManifest> finishGateManifest(ArtifactStore const& store,
                                               ResolvedPhase const& phase,
+                                              Registry const& registry,
                                               ReviewManifest manifest)
     {
-      if (auto written = writeCommonArtifacts(store, phase, manifest); !written)
+      if (auto written = writeCommonArtifacts(store, phase, registry, manifest); !written)
       {
         return std::unexpected{written.error()};
       }
 
-      [[maybe_unused]] auto const ret = store.write("review.md", proposalReview(phase, manifest));
+      writeOrWarn(store, "review.md", proposalReview(phase, manifest));
       return manifest;
     }
 
     Result<std::optional<ReviewManifest>> acceptWithoutOracle(ArtifactStore const& store,
                                                               ResolvedPhase const& phase,
+                                                              EngineContext const& context,
                                                               Candidate const& candidate)
     {
       auto manifest = ReviewManifest{
@@ -734,12 +938,13 @@ namespace ao::fleet
         .optPatch = candidate.patch,
         .oracleEvidence = {},
         .riskEvidence = {},
-        .route = makeRoute(phase),
+        .route = makeRoute(phase, context),
         .summary = "A guarded candidate was produced without an independent oracle.",
+        .optEscalationAction = std::nullopt,
       };
       assignCandidateRoute(manifest, candidate);
 
-      auto finished = finishGateManifest(store, phase, std::move(manifest));
+      auto finished = finishGateManifest(store, phase, context.registry, std::move(manifest));
 
       if (!finished)
       {
@@ -751,6 +956,7 @@ namespace ao::fleet
 
     Result<std::optional<ReviewManifest>> acceptWithOracle(ArtifactStore const& store,
                                                            ResolvedPhase const& phase,
+                                                           EngineContext const& context,
                                                            Candidate const& candidate,
                                                            OracleEvidence const& evidence)
     {
@@ -761,11 +967,11 @@ namespace ao::fleet
         .optPatch = candidate.patch,
         .oracleEvidence = {evidence},
         .riskEvidence = {},
-        .route = makeRoute(phase),
+        .route = makeRoute(phase, context),
         .summary = "A guarded candidate passed the independent oracle.",
+        .optEscalationAction = std::nullopt,
       };
       assignCandidateRoute(manifest, candidate);
-      manifest.route.oracleVersion = evidence.oracleVersion;
 
       if (phase.optRiskOracle)
       {
@@ -779,7 +985,7 @@ namespace ao::fleet
         }
       }
 
-      auto finished = finishGateManifest(store, phase, std::move(manifest));
+      auto finished = finishGateManifest(store, phase, context.registry, std::move(manifest));
 
       if (!finished)
       {
@@ -805,7 +1011,7 @@ namespace ao::fleet
 
       if (!phase.optOracle)
       {
-        return acceptWithoutOracle(store, phase, candidates.front());
+        return acceptWithoutOracle(store, phase, context, candidates.front());
       }
 
       auto const count = std::min(phase.binding.gate.topK, candidates.size());
@@ -823,12 +1029,13 @@ namespace ao::fleet
           continue;
         }
 
-        [[maybe_unused]] auto const ret = store.write(
-          std::filesystem::path{"candidates"} / candidates[index].patch.candidateId / "oracle.log", evidence->log);
+        writeOrWarn(store,
+                    std::filesystem::path{"candidates"} / candidates[index].patch.candidateId / "oracle.log",
+                    evidence->log);
 
         if (evidence->passed)
         {
-          return acceptWithOracle(store, phase, candidates[index], *evidence);
+          return acceptWithOracle(store, phase, context, candidates[index], *evidence);
         }
 
         hadOracleFailure = true;
@@ -850,11 +1057,13 @@ namespace ao::fleet
     {
       auto futures = std::vector<std::future<std::optional<std::pair<std::string, std::string>>>>{};
 
+      // sharedContext can be megabytes of dossier text; capture it (and the other locals) by
+      // reference — awaitAll below joins every member before this frame unwinds.
       for (auto const& memberId : roster)
       {
         futures.push_back(spawnWorker(
           context.asyncRuntime,
-          [&, memberId, round, sharedContext] -> std::optional<std::pair<std::string, std::string>>
+          [&, memberId, round] -> std::optional<std::pair<std::string, std::string>>
           {
             auto const& agent = context.registry.agents.at(memberId);
             auto workspace = snapshot.createWorkspace(
@@ -874,7 +1083,11 @@ namespace ao::fleet
             auto request = agentRequest(agent, phase.intent, *workspace, context.realRepo, std::move(prompt));
             auto authority = phase.authority;
             authority.filesystem = FilesystemAuthority::ReadOnly;
-            auto result = namespaceRunner.run(context.realRepo, *workspace, authority, std::move(request));
+            auto result = namespaceRunner.run(context.realRepo,
+                                              *workspace,
+                                              authority,
+                                              SandboxMounts{.writableBinds = {}, .bindHome = true},
+                                              std::move(request));
             auto text = result.standardOutput;
 
             if (result.status != ProcessStatus::Exited || result.exitCode != 0 ||
@@ -883,19 +1096,20 @@ namespace ao::fleet
               return std::nullopt;
             }
 
-            [[maybe_unused]] auto const ret = store.write(
-              std::filesystem::path{"members"} / memberId / (std::string{round} + ".log"), text + result.standardError);
+            writeOrWarn(store,
+                        std::filesystem::path{"members"} / memberId / (std::string{round} + ".log"),
+                        text + result.standardError);
             return std::pair{memberId, std::move(text)};
           }));
       }
 
       auto output = std::vector<std::pair<std::string, std::string>>{};
 
-      for (auto& future : futures)
+      for (auto& outcome : awaitAll(futures))
       {
-        if (auto optValue = future.get(); optValue)
+        if (outcome && *outcome)
         {
-          output.push_back(std::move(*optValue));
+          output.push_back(std::move(**outcome));
         }
       }
 
@@ -967,12 +1181,13 @@ namespace ao::fleet
       .optPatch = std::nullopt,
       .oracleEvidence = {},
       .riskEvidence = {},
-      .route = makeRoute(phase),
+      .route = makeRoute(phase, context),
       .summary = hadOracleFailure ? "Candidates exhausted the oracle retry budget."
                                   : "No candidate survived the configured gate and route-switch budget.",
+      .optEscalationAction = std::nullopt,
     };
 
-    auto finished = finishGateManifest(store, phase, std::move(manifest));
+    auto finished = finishGateManifest(store, phase, context.registry, std::move(manifest));
 
     if (!finished)
     {
@@ -1006,23 +1221,23 @@ namespace ao::fleet
                                      .optPatch = std::nullopt,
                                      .oracleEvidence = {},
                                      .riskEvidence = {},
-                                     .route = makeRoute(phase),
-                                     .summary = "Council draft quorum failed."};
+                                     .route = makeRoute(phase, context),
+                                     .summary = "Council draft quorum failed.",
+                                     .optEscalationAction = std::nullopt};
 
-      if (auto written = writeCommonArtifacts(store, phase, manifest); !written)
+      if (auto written = writeCommonArtifacts(store, phase, context.registry, manifest); !written)
       {
         return std::unexpected{written.error()};
       }
 
-      [[maybe_unused]] auto const ret12 = store.write("dossier.md", synthesisDossier(phase, drafts, {}, {}));
+      writeOrWarn(store, "dossier.md", synthesisDossier(phase, drafts, {}, {}));
       return manifest;
     }
 
     roster.clear();
 
-    for (auto const& [member, ignored] : drafts)
+    for (auto const& member : std::views::keys(drafts))
     {
-      [[maybe_unused]] auto const ret13 = ignored;
       roster.push_back(member);
     }
 
@@ -1041,9 +1256,8 @@ namespace ao::fleet
       challenges = runCouncilRound(context, snapshot, namespaceRunner, store, phase, roster, "r2", peerContext.str());
       roster.clear();
 
-      for (auto const& [member, ignored] : challenges)
+      for (auto const& member : std::views::keys(challenges))
       {
-        [[maybe_unused]] auto const ret14 = ignored;
         roster.push_back(member);
       }
     }
@@ -1087,23 +1301,23 @@ namespace ao::fleet
       .optPatch = std::nullopt,
       .oracleEvidence = {},
       .riskEvidence = {},
-      .route = makeRoute(phase),
+      .route = makeRoute(phase, context),
       .summary = finalCount >= phase.binding.synthesis.quorum
                    ? "Council dossier reached quorum; chair synthesis remains required."
                    : "Council members were quarantined below quorum.",
+      .optEscalationAction = std::nullopt,
     };
 
-    if (auto written = writeCommonArtifacts(store, phase, manifest); !written)
+    if (auto written = writeCommonArtifacts(store, phase, context.registry, manifest); !written)
     {
       return std::unexpected{written.error()};
     }
 
-    [[maybe_unused]] auto const ret15 =
-      store.write("dossier.md", synthesisDossier(phase, drafts, challenges, revisions));
+    writeOrWarn(store, "dossier.md", synthesisDossier(phase, drafts, challenges, revisions));
     return manifest;
   }
 
-  Result<std::vector<std::string>> Scheduler::order(std::vector<PhaseIntent> const& intents)
+  Result<> Scheduler::validate(std::vector<PhaseIntent> const& intents)
   {
     auto indegree = std::map<std::string, std::size_t, std::less<>>{};
     auto edges = std::map<std::string, std::vector<std::string>, std::less<>>{};
@@ -1138,13 +1352,13 @@ namespace ao::fleet
       }
     }
 
-    auto result = std::vector<std::string>{};
+    auto visited = std::size_t{};
 
     while (!ready.empty())
     {
       auto id = *ready.begin();
       ready.erase(ready.begin());
-      result.push_back(id);
+      ++visited;
 
       for (auto const& dependent : edges[id])
       {
@@ -1155,16 +1369,28 @@ namespace ao::fleet
       }
     }
 
-    if (result.size() != intents.size())
+    if (visited != intents.size())
     {
       return makeError(Error::Code::InvalidState, "scheduler: intent dependency graph contains a cycle");
     }
 
-    return result;
+    return {};
   }
 
   namespace
   {
+    // Shared between the end-of-run cleanup and the start-of-run sweep that recovers from a
+    // previous crashed run (the inter-process file lock guarantees no concurrent owner).
+    void sweepTransientWorkspaces(IProcessRunner& runner, std::filesystem::path const& root)
+    {
+      auto snapshots = SnapshotProvider{runner};
+
+      for (auto const* directory : {".work", ".oracle", ".baseline", ".council", ".oracle-build", ".base"})
+      {
+        snapshots.remove(root / directory);
+      }
+    }
+
     struct WorkspaceCleanup final
     {
       IProcessRunner& runner;
@@ -1175,15 +1401,7 @@ namespace ao::fleet
       {
       }
 
-      ~WorkspaceCleanup()
-      {
-        auto snapshots = SnapshotProvider{runner};
-        snapshots.remove(root / ".work");
-        snapshots.remove(root / ".oracle");
-        snapshots.remove(root / ".baseline");
-        snapshots.remove(root / ".council");
-        snapshots.remove(root / ".base");
-      }
+      ~WorkspaceCleanup() { sweepTransientWorkspaces(runner, root); }
 
       WorkspaceCleanup(WorkspaceCleanup const&) = delete;
       WorkspaceCleanup& operator=(WorkspaceCleanup const&) = delete;
@@ -1245,35 +1463,25 @@ namespace ao::fleet
       return ArtifactStore{outputRoot}.append("audit.yaml", audit);
     }
 
-    RouteKey runRoute(ResolvedPhase const& resolved, std::filesystem::path const& base)
-    {
-      auto route = makeRoute(resolved);
-
-      if (resolved.optOracle)
-      {
-        route.oracleVersion = oracleVersion(*resolved.optOracle, base);
-      }
-
-      return route;
-    }
-
     Result<ReviewManifest> finishPhaseReview(std::filesystem::path const& outputRoot,
                                              ResolvedPhase const& resolved,
+                                             Registry const& registry,
                                              ReviewManifest manifest)
     {
       auto store = ArtifactStore{outputRoot / manifest.phaseId};
 
-      if (auto written = writeCommonArtifacts(store, resolved, manifest); !written)
+      if (auto written = writeCommonArtifacts(store, resolved, registry, manifest); !written)
       {
         return std::unexpected{written.error()};
       }
 
-      [[maybe_unused]] auto const ret = store.write("review.md", proposalReview(resolved, manifest));
+      writeOrWarn(store, "review.md", proposalReview(resolved, manifest));
       return manifest;
     }
 
     Result<std::optional<ReviewManifest>> routePausedManifest(std::filesystem::path const& outputRoot,
                                                               ResolvedPhase const& resolved,
+                                                              Registry const& registry,
                                                               RouteKey route)
     {
       auto routePaused = RouteStore{outputRoot}.paused(route.canonical());
@@ -1295,8 +1503,9 @@ namespace ao::fleet
                                      .oracleEvidence = {},
                                      .riskEvidence = {},
                                      .route = std::move(route),
-                                     .summary = "The route breaker is paused; no worker was launched."};
-      auto finished = finishPhaseReview(outputRoot, resolved, std::move(manifest));
+                                     .summary = "The route breaker is paused; no worker was launched.",
+                                     .optEscalationAction = std::nullopt};
+      auto finished = finishPhaseReview(outputRoot, resolved, registry, std::move(manifest));
 
       if (!finished)
       {
@@ -1367,12 +1576,12 @@ namespace ao::fleet
 
         if (attempt < retryLimit)
         {
-          [[maybe_unused]] auto const ret = ArtifactStore{outputRoot / resolved.intent.id}.append(
-            "trace.yaml",
-            emitTraceEvent("infrastructure-retry",
-                           {{"phase-id", resolved.intent.id},
-                            {"attempt", std::to_string(attempt + 1)},
-                            {"detail", lastError.message}}));
+          appendOrWarn(ArtifactStore{outputRoot / resolved.intent.id},
+                       "trace.yaml",
+                       emitTraceEvent("infrastructure-retry",
+                                      {{"phase-id", resolved.intent.id},
+                                       {"attempt", std::to_string(attempt + 1)},
+                                       {"detail", lastError.message}}));
         }
       }
 
@@ -1383,18 +1592,18 @@ namespace ao::fleet
                                      .oracleEvidence = {},
                                      .riskEvidence = {},
                                      .route = std::move(route),
-                                     .summary = lastError.message};
-      return finishPhaseReview(outputRoot, resolved, std::move(manifest));
+                                     .summary = lastError.message,
+                                     .optEscalationAction = std::nullopt};
+      return finishPhaseReview(outputRoot, resolved, registry, std::move(manifest));
     }
 
     Result<ReviewManifest> executeFleetPhase(Registry const& registry,
                                              std::filesystem::path const& outputRoot,
-                                             std::filesystem::path const& base,
                                              ResolvedPhase const& resolved,
                                              EngineContext const& context)
     {
-      auto route = runRoute(resolved, base);
-      auto optPaused = routePausedManifest(outputRoot, resolved, route);
+      auto route = makeRoute(resolved, context);
+      auto optPaused = routePausedManifest(outputRoot, resolved, registry, route);
 
       if (!optPaused)
       {
@@ -1441,21 +1650,6 @@ namespace ao::fleet
         intent.dependsOn, [&](auto const& dependency) { return !state.completed.at(dependency); });
     }
 
-    std::vector<std::string> readyPhaseIds(ResolvedIntentSet const& resolved, FleetScheduleState const& state)
-    {
-      auto ready = std::vector<std::string>{};
-
-      for (auto const& id : state.pending)
-      {
-        if (dependenciesAreComplete(*resolved.byId.at(id), state))
-        {
-          ready.push_back(id);
-        }
-      }
-
-      return ready;
-    }
-
     Result<> recordCompletedPhase(std::filesystem::path const& outputRoot,
                                   FleetScheduleState& state,
                                   std::string const& id,
@@ -1475,7 +1669,7 @@ namespace ao::fleet
     }
 
     Result<> recordDependencyFailure(std::filesystem::path const& outputRoot,
-                                     std::filesystem::path const& base,
+                                     EngineContext const& context,
                                      ResolvedIntentSet const& resolved,
                                      FleetScheduleState& state,
                                      std::string const& id)
@@ -1487,9 +1681,10 @@ namespace ao::fleet
                                      .optPatch = std::nullopt,
                                      .oracleEvidence = {},
                                      .riskEvidence = {},
-                                     .route = runRoute(phase, base),
-                                     .summary = "A dependency did not produce a usable result."};
-      auto finished = finishPhaseReview(outputRoot, phase, std::move(manifest));
+                                     .route = makeRoute(phase, context),
+                                     .summary = "A dependency did not produce a usable result.",
+                                     .optEscalationAction = std::nullopt};
+      auto finished = finishPhaseReview(outputRoot, phase, context.registry, std::move(manifest));
 
       if (!finished)
       {
@@ -1500,7 +1695,7 @@ namespace ao::fleet
     }
 
     Result<std::vector<std::string>> runnableReadyPhases(std::filesystem::path const& outputRoot,
-                                                         std::filesystem::path const& base,
+                                                         EngineContext const& context,
                                                          ResolvedIntentSet const& resolved,
                                                          FleetScheduleState& state,
                                                          std::vector<std::string> const& ready)
@@ -1515,7 +1710,7 @@ namespace ao::fleet
           continue;
         }
 
-        if (auto recorded = recordDependencyFailure(outputRoot, base, resolved, state, id); !recorded)
+        if (auto recorded = recordDependencyFailure(outputRoot, context, resolved, state, id); !recorded)
         {
           return std::unexpected{recorded.error()};
         }
@@ -1524,110 +1719,206 @@ namespace ao::fleet
       return runnable;
     }
 
-    std::vector<std::string> nextRunnableBatch(Registry const& registry,
-                                               ResolvedIntentSet const& resolved,
-                                               std::vector<std::string>& runnable)
+    // Single-producer-per-worker queue announcing finished phase ids to the scheduler thread.
+    struct CompletionQueue final
     {
-      auto batch = std::vector<std::string>{};
-      auto usedKeys = std::set<std::string>{};
+      std::mutex mutex;
+      std::condition_variable ready;
+      std::deque<std::string> finished;
 
-      for (auto iterator = runnable.begin(); iterator != runnable.end() && batch.size() < kGlobalConcurrency;)
+      void push(std::string id)
       {
-        auto keys = phaseRateKeys(registry, resolved.resolvedById.at(*iterator));
-        auto conflicts = std::ranges::any_of(keys, [&](auto const& key) { return usedKeys.contains(key); });
-
-        if (conflicts)
         {
-          ++iterator;
-          continue;
+          auto const lock = std::scoped_lock{mutex};
+          finished.push_back(std::move(id));
         }
 
-        usedKeys.insert(keys.begin(), keys.end());
-        batch.push_back(*iterator);
-        iterator = runnable.erase(iterator);
+        ready.notify_one();
       }
 
-      if (batch.empty())
+      std::string pop()
       {
-        batch.push_back(runnable.front());
-        runnable.erase(runnable.begin());
+        auto lock = std::unique_lock{mutex};
+        ready.wait(lock, [this] { return !finished.empty(); });
+        auto id = std::move(finished.front());
+        finished.pop_front();
+        return id;
       }
+    };
 
-      return batch;
-    }
-
-    Result<> executeRunnableBatch(Registry const& registry,
-                                  std::filesystem::path const& outputRoot,
-                                  ResolvedIntentSet const& resolved,
-                                  FleetScheduleState& state,
-                                  EngineContext const& context,
-                                  std::vector<std::string> const& batch)
+    struct InFlightPhase final
     {
-      auto futures = std::vector<std::future<std::pair<std::string, Result<ReviewManifest>>>>{};
+      std::future<Result<ReviewManifest>> future;
+      std::set<std::string> rateKeys;
+    };
 
-      for (auto const& id : batch)
+    // Every pending phase whose dependencies completed and that is not already running.
+    // Phases with a failed dependency are recorded as DependencyFailed, and the scan repeats
+    // until that cascade reaches a fixed point.
+    Result<std::vector<std::string>> collectRunnablePhases(std::filesystem::path const& outputRoot,
+                                                           EngineContext const& context,
+                                                           ResolvedIntentSet const& resolved,
+                                                           FleetScheduleState& state,
+                                                           std::map<std::string, InFlightPhase> const& inFlight)
+    {
+      while (true)
       {
-        futures.push_back(spawnWorker(
-          context.asyncRuntime,
-          [&, id]
+        auto ready = std::vector<std::string>{};
+
+        for (auto const& id : state.pending)
+        {
+          if (!inFlight.contains(id) && dependenciesAreComplete(*resolved.byId.at(id), state))
           {
-            return std::pair{
-              id,
-              executeFleetPhase(registry, outputRoot, context.immutableBase, resolved.resolvedById.at(id), context)};
-          }));
-      }
-
-      for (auto& future : futures)
-      {
-        auto [id, result] = future.get();
-
-        if (!result)
-        {
-          return std::unexpected{result.error()};
+            ready.push_back(id);
+          }
         }
 
-        if (auto recorded = recordCompletedPhase(outputRoot, state, id, std::move(*result)); !recorded)
+        auto const pendingBefore = state.pending.size();
+        auto runnable = runnableReadyPhases(outputRoot, context, resolved, state, ready);
+
+        if (!runnable || state.pending.size() == pendingBefore)
         {
-          return std::unexpected{recorded.error()};
+          return runnable;
         }
       }
-
-      return {};
     }
 
     Result<RunSummary> executeFleetSchedule(Registry const& registry,
                                             std::filesystem::path const& outputRoot,
-                                            std::vector<std::string> const& ordered,
                                             ResolvedIntentSet const& resolved,
                                             EngineContext const& context)
     {
-      auto state = FleetScheduleState{.pending = {ordered.begin(), ordered.end()}, .completed = {}, .summary = {}};
+      auto state = FleetScheduleState{.pending = {}, .completed = {}, .summary = {}};
 
-      while (!state.pending.empty())
+      for (auto const& id : std::views::keys(resolved.resolvedById))
       {
-        auto ready = readyPhaseIds(resolved, state);
+        state.pending.insert(id);
+      }
 
-        if (ready.empty())
+      auto queue = CompletionQueue{};
+      auto inFlight = std::map<std::string, InFlightPhase>{};
+      auto activeKeys = std::set<std::string>{};
+      auto runnable = std::vector<std::string>{};
+      auto optFatal = std::optional<Error>{};
+
+      auto noteFatal = [&](Error error)
+      {
+        if (!optFatal)
         {
-          return makeError(Error::Code::InvalidState, "scheduler made no dependency progress");
+          optFatal = std::move(error);
+        }
+      };
+
+      auto refillRunnable = [&]
+      {
+        if (auto collected = collectRunnablePhases(outputRoot, context, resolved, state, inFlight); collected)
+        {
+          runnable = std::move(*collected);
+        }
+        else
+        {
+          noteFatal(collected.error());
+          runnable.clear();
+        }
+      };
+
+      auto dispatch = [&](std::string const& id, std::set<std::string> keys)
+      {
+        activeKeys.insert(keys.begin(), keys.end());
+        auto future =
+          spawnWorker(context.asyncRuntime,
+                      [&context, &registry, &outputRoot, &resolved, &queue, id]
+                      {
+                        auto result = [&] -> Result<ReviewManifest>
+                        {
+                          try
+                          {
+                            return executeFleetPhase(registry, outputRoot, resolved.resolvedById.at(id), context);
+                          }
+                          catch (...)
+                          {
+                            return std::unexpected{errorFromCurrentException()};
+                          }
+                        }();
+                        queue.push(id);
+                        return result;
+                      });
+        inFlight.emplace(id, InFlightPhase{.future = std::move(future), .rateKeys = std::move(keys)});
+      };
+
+      auto fillSlots = [&]
+      {
+        if (optFatal)
+        {
+          return;
         }
 
-        auto runnable = runnableReadyPhases(outputRoot, context.immutableBase, resolved, state, ready);
+        auto iterator = runnable.begin();
 
-        if (!runnable)
+        while (iterator != runnable.end() && inFlight.size() < kGlobalConcurrency)
         {
-          return std::unexpected{runnable.error()};
-        }
+          auto keys = phaseRateKeys(registry, resolved.resolvedById.at(*iterator));
 
-        while (!runnable->empty())
-        {
-          auto batch = nextRunnableBatch(registry, resolved, *runnable);
-
-          if (auto executed = executeRunnableBatch(registry, outputRoot, resolved, state, context, batch); !executed)
+          if (std::ranges::any_of(keys, [&](auto const& key) { return activeKeys.contains(key); }))
           {
-            return std::unexpected{executed.error()};
+            ++iterator;
+          }
+          else
+          {
+            dispatch(*iterator, std::move(keys));
+            iterator = runnable.erase(iterator);
           }
         }
+      };
+
+      auto reapOne = [&]
+      {
+        auto const id = queue.pop();
+        auto entry = inFlight.find(id);
+        auto outcome = awaitOutcome(entry->second.future);
+
+        for (auto const& key : entry->second.rateKeys)
+        {
+          activeKeys.erase(key);
+        }
+
+        inFlight.erase(entry);
+
+        if (!outcome)
+        {
+          noteFatal(outcome.error());
+        }
+        else if (!*outcome)
+        {
+          noteFatal((*outcome).error());
+        }
+        else if (auto recorded = recordCompletedPhase(outputRoot, state, id, std::move(**outcome)); !recorded)
+        {
+          noteFatal(recorded.error());
+        }
+      };
+
+      while (true)
+      {
+        refillRunnable();
+        fillSlots();
+
+        if (inFlight.empty())
+        {
+          break;
+        }
+
+        reapOne();
+      }
+
+      if (optFatal)
+      {
+        return std::unexpected{*optFatal};
+      }
+
+      if (!state.pending.empty())
+      {
+        return makeError(Error::Code::InvalidState, "scheduler made no dependency progress");
       }
 
       return state.summary;
@@ -1636,6 +1927,7 @@ namespace ao::fleet
     Result<RunSummary> discardIfRealTreeChanged(TreeFingerprint const& before,
                                                 std::filesystem::path const& repo,
                                                 std::filesystem::path const& outputRoot,
+                                                Registry const& registry,
                                                 RunSummary summary)
     {
       auto after = TreeCanary::fingerprint(repo);
@@ -1655,9 +1947,20 @@ namespace ao::fleet
         manifest.failure = FailureReason::RealTreeChanged;
         manifest.optPatch.reset();
         manifest.summary = "The real-tree canary changed; all delegated results were discarded.";
+        applyEscalationAction(registry, manifest);
         auto store = ArtifactStore{outputRoot / manifest.phaseId};
-        [[maybe_unused]] auto const ret = store.write("patch", "");
-        [[maybe_unused]] auto const ret2 = store.write("manifest.yaml", emitManifest(manifest));
+
+        // Evidence-class rewrites: an on-disk manifest that still advertises the discarded
+        // result would be a lie, so failing to persist the discard is a hard error.
+        if (auto cleared = store.write("patch", ""); !cleared)
+        {
+          return std::unexpected{cleared.error()};
+        }
+
+        if (auto written = store.write("manifest.yaml", emitManifest(manifest)); !written)
+        {
+          return std::unexpected{written.error()};
+        }
       }
 
       summary.escalated = true;
@@ -1700,6 +2003,9 @@ namespace ao::fleet
       return makeError(Error::Code::IoError, "another fleet run holds the repository lock");
     }
 
+    // Recover from a crashed previous run before fingerprinting and snapshotting.
+    sweepTransientWorkspaces(_processRunner, canonicalOut);
+
     auto before = TreeCanary::fingerprint(canonicalRepo);
 
     if (!before)
@@ -1715,11 +2021,10 @@ namespace ao::fleet
     }
 
     auto const cleanup = WorkspaceCleanup{_processRunner, canonicalOut};
-    auto ordered = Scheduler::order(intents);
 
-    if (!ordered)
+    if (auto valid = Scheduler::validate(intents); !valid)
     {
-      return std::unexpected{ordered.error()};
+      return std::unexpected{valid.error()};
     }
 
     auto resolved = resolveFleetIntents(registry, intents);
@@ -1729,21 +2034,35 @@ namespace ao::fleet
       return std::unexpected{resolved.error()};
     }
 
+    // The immutable base cannot change for the rest of the run, so every oracle version is
+    // resolved exactly once here; failure manifests and breaker queries then share one key.
+    auto oracleVersions = std::map<std::string, std::string, std::less<>>{};
+
+    for (auto const& [id, oracle] : registry.oracles)
+    {
+      oracleVersions.emplace(id, oracleVersion(oracle, *base));
+    }
+
+    // The context storage is declared before the runtime so that the runtime destructor —
+    // which joins the worker pool — runs while everything a worker can reference (context,
+    // resolved set, snapshots) is still alive, even if a future were ever abandoned.
+    auto optContext = std::optional<EngineContext>{};
     auto callbackExecutor = async::ImmediateExecutor{};
     auto asyncRuntime = async::Runtime{callbackExecutor, 16};
-    auto context = EngineContext{.realRepo = canonicalRepo,
-                                 .immutableBase = *base,
-                                 .runRoot = canonicalOut,
-                                 .registry = registry,
-                                 .processRunner = _processRunner,
-                                 .asyncRuntime = asyncRuntime};
-    auto summary = executeFleetSchedule(registry, canonicalOut, *ordered, *resolved, context);
+    optContext.emplace(EngineContext{.realRepo = canonicalRepo,
+                                     .immutableBase = *base,
+                                     .runRoot = canonicalOut,
+                                     .registry = registry,
+                                     .processRunner = _processRunner,
+                                     .asyncRuntime = asyncRuntime,
+                                     .oracleVersions = std::move(oracleVersions)});
+    auto summary = executeFleetSchedule(registry, canonicalOut, *resolved, *optContext);
 
     if (!summary)
     {
       return std::unexpected{summary.error()};
     }
 
-    return discardIfRealTreeChanged(*before, canonicalRepo, canonicalOut, std::move(*summary));
+    return discardIfRealTreeChanged(*before, canonicalRepo, canonicalOut, registry, std::move(*summary));
   }
 } // namespace ao::fleet

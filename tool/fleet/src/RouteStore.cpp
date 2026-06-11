@@ -24,6 +24,36 @@ namespace ao::fleet
   {
     constexpr auto kBreakerWindow = std::size_t{5};
     constexpr auto kBreakerThreshold = std::size_t{3};
+
+    // Pure breaker decision over one route's outcomes in file order: pause when a full
+    // window of post-reset outcomes exists and it contains at least the threshold of
+    // rejects. Shared by paused() and statistics() so the two views can never disagree.
+    bool pausedFrom(std::vector<ReviewOutcome const*> const& rows, std::string_view resetTime)
+    {
+      auto window = std::vector<ReviewOutcome const*>{};
+
+      for (auto const* row : std::views::reverse(rows))
+      {
+        if (window.size() == kBreakerWindow)
+        {
+          break;
+        }
+
+        if (row->timestamp > resetTime)
+        {
+          window.push_back(row);
+        }
+      }
+
+      if (window.size() < kBreakerWindow)
+      {
+        return false;
+      }
+
+      auto const unusable = static_cast<std::size_t>(std::ranges::count_if(
+        window, [](ReviewOutcome const* outcome) { return outcome->verdict == ReviewVerdict::Reject; }));
+      return unusable >= kBreakerThreshold;
+    }
   } // namespace
 
   RouteStore::RouteStore(std::filesystem::path out)
@@ -68,7 +98,7 @@ namespace ao::fleet
     return appendYamlDocument(_out / "review-outcomes.yaml", document);
   }
 
-  Result<std::string> RouteStore::latestReset(std::string_view route) const
+  Result<std::map<std::string, std::string, std::less<>>> RouteStore::latestResets() const
   {
     auto resets = readScalarStream(_out / "route-resets.yaml", "aobus-fleet-route-reset/v1");
 
@@ -77,20 +107,22 @@ namespace ao::fleet
       return std::unexpected{resets.error()};
     }
 
-    auto latest = std::string{};
+    auto result = std::map<std::string, std::string, std::less<>>{};
 
     for (auto const& document : resets->documents)
     {
       auto routeIt = document.find("route-key");
 
-      if (auto timeIt = document.find("timestamp");
-          routeIt != document.end() && timeIt != document.end() && routeIt->second == route && timeIt->second > latest)
+      if (auto timeIt = document.find("timestamp"); routeIt != document.end() && timeIt != document.end())
       {
-        latest = timeIt->second;
+        if (auto& latest = result[routeIt->second]; timeIt->second > latest)
+        {
+          latest = timeIt->second;
+        }
       }
     }
 
-    return latest;
+    return result;
   }
 
   Result<bool> RouteStore::paused(std::string_view route) const
@@ -102,37 +134,31 @@ namespace ao::fleet
       return std::unexpected{outcomes.error()};
     }
 
-    auto resetTime = latestReset(route);
+    auto resets = latestResets();
 
-    if (!resetTime)
+    if (!resets)
     {
-      return std::unexpected{resetTime.error()};
+      return std::unexpected{resets.error()};
     }
 
-    auto recent = std::vector<ReviewOutcome>{};
+    auto rows = std::vector<ReviewOutcome const*>{};
 
-    for (auto iterator = outcomes->outcomes.rbegin();
-         iterator != outcomes->outcomes.rend() && recent.size() < kBreakerWindow;
-         ++iterator)
+    for (auto const& outcome : outcomes->outcomes)
     {
-      if (iterator->route == route && iterator->timestamp > *resetTime)
+      if (outcome.route == route)
       {
-        recent.push_back(*iterator);
+        rows.push_back(&outcome);
       }
     }
 
-    if (recent.size() < kBreakerWindow)
-    {
-      return false;
-    }
-
-    auto const unusable = static_cast<std::size_t>(std::ranges::count_if(
-      recent, [](ReviewOutcome const& outcome) { return outcome.verdict == ReviewVerdict::Reject; }));
-    return unusable >= kBreakerThreshold;
+    auto const resetIt = resets->find(route);
+    return pausedFrom(rows, resetIt == resets->end() ? std::string_view{} : resetIt->second);
   }
 
   Result<std::vector<RouteStatistics>> RouteStore::statistics(std::size_t window, bool* trailingCorruption) const
   {
+    // Both stream files are read exactly once; every per-route view below is derived
+    // from these two in-memory snapshots.
     auto outcomes = readReviewOutcomes(_out / "review-outcomes.yaml");
 
     if (!outcomes)
@@ -140,41 +166,44 @@ namespace ao::fleet
       return std::unexpected{outcomes.error()};
     }
 
+    auto resets = latestResets();
+
+    if (!resets)
+    {
+      return std::unexpected{resets.error()};
+    }
+
     if (trailingCorruption != nullptr)
     {
       *trailingCorruption = outcomes->trailingCorruption;
     }
 
-    auto grouped = std::map<std::string, std::vector<ReviewOutcome>, std::less<>>{};
+    auto grouped = std::map<std::string, std::vector<ReviewOutcome const*>, std::less<>>{};
 
     for (auto const& outcome : outcomes->outcomes)
     {
-      grouped[outcome.route].push_back(outcome);
+      grouped[outcome.route].push_back(&outcome);
     }
 
     auto result = std::vector<RouteStatistics>{};
 
     for (auto& [route, rows] : grouped)
     {
-      auto resetTime = latestReset(route);
+      auto const resetIt = resets->find(route);
+      auto const resetTime = resetIt == resets->end() ? std::string_view{} : std::string_view{resetIt->second};
+      auto statistics =
+        RouteStatistics{.route = route, .usable = 0, .unusable = 0, .paused = pausedFrom(rows, resetTime)};
 
-      if (!resetTime)
-      {
-        return std::unexpected{resetTime.error()};
-      }
-
-      std::erase_if(rows, [&](ReviewOutcome const& row) { return row.timestamp <= *resetTime; });
+      std::erase_if(rows, [&](ReviewOutcome const* row) { return row->timestamp <= resetTime; });
 
       if (rows.size() > window)
       {
         rows.erase(rows.begin(), rows.end() - static_cast<std::ptrdiff_t>(window));
       }
 
-      auto statistics = RouteStatistics{.route = route};
-
-      for (auto const& row : rows)
+      for (auto const* row : rows)
       {
-        if (row.verdict == ReviewVerdict::Reject)
+        if (row->verdict == ReviewVerdict::Reject)
         {
           ++statistics.unusable;
         }
@@ -184,14 +213,6 @@ namespace ao::fleet
         }
       }
 
-      auto routePaused = paused(route);
-
-      if (!routePaused)
-      {
-        return std::unexpected{routePaused.error()};
-      }
-
-      statistics.paused = *routePaused;
       result.push_back(std::move(statistics));
     }
 

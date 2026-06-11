@@ -104,9 +104,13 @@ namespace clang::tidy::readability
                          .bind("var"),
                        this);
 
-    // Primitive initialization (Rule 3.4.5: primitives use assignment-style)
+    // Primitive initialization (Rule 3.4.5: primitives use assignment-style).
+    // unless(isImplicit()) skips compiler-synthesized VarDecls such as the
+    // coroutine parameter-move copies, whose location lands on the first
+    // coroutine keyword of the body and which have no stylable spelling.
     finder->addMatcher(
       varDecl(unless(parmVarDecl()),
+              unless(isImplicit()),
               hasInitializer(expr().bind("init")),
               hasType(qualType(anyOf(isInteger(), booleanType(), realFloatingPointType(), isAnyCharacter()))))
         .bind("var"),
