@@ -108,7 +108,7 @@ if [[ -n "$OUTPUT_FILE" ]]; then
 fi
 
 COMPILE_DB="$BUILD_DIR/compile_commands.json"
-PLUGIN="$BUILD_DIR/lint/libAobusLintPlugin.so"
+PLUGIN="$BUILD_DIR/tool/lint/libAobusLintPlugin.so"
 
 # --- Ensure prerequisites ---------------------------------------------------
 cmake_cache="$BUILD_DIR/CMakeCache.txt"
@@ -270,7 +270,7 @@ classify_file() {
     # General classification
     if [[ "$f" == */test/main.cpp ]]; then
         echo "IGNORE $f"
-    elif [[ "$f" == */lint/* ]]; then
+    elif [[ "$f" == */tool/lint/* ]]; then
         echo "STRICT $f"
     elif [[ "$f" == */test/* ]]; then
         echo "RELAXED $f"
@@ -283,7 +283,7 @@ classify_file() {
 run_one() {
     local mode="$1" f="$2" tmp="$3"
     local checks="${EXTRA_CHECKS:-$STRICT_CHECKS}"
-    local header_filter="${EXTRA_HEADER_FILTER:-${PROJECT_ROOT}/(lib|app|include|lint|tool)/.*}"
+    local header_filter="${EXTRA_HEADER_FILTER:-${PROJECT_ROOT}/(lib|app|include|tool/lint|tool)/.*}"
 
     if [[ "$mode" == "RELAXED" ]]; then
         checks="${EXTRA_CHECKS:-$RELAXED_CHECKS}"
@@ -340,9 +340,9 @@ fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
     if $ALL_MODE; then
-        echo "Checking all .cpp/.h/.hpp files in lib/ app/ include/ test/ lint/ tool/" >&2
+        echo "Checking all .cpp/.h/.hpp files in lib/ app/ include/ test/ tool/lint/ tool/" >&2
         mapfile -t FILES < <(
-            find lib app include test lint tool -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
+            find lib app include test tool/lint tool -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
                 ! -path '*/test/integration/lint/*' | sort
         )
     elif [[ ${#FOLDER_DIRS[@]} -gt 0 ]]; then

@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 export BUILD_DIR="/tmp/build/debug-clang-tidy"
-PLUGIN="$BUILD_DIR/lint/libAobusLintPlugin.so"
+PLUGIN="$BUILD_DIR/tool/lint/libAobusLintPlugin.so"
 
 echo "=== [1] Building AobusLintPlugin Module ==="
 cmake --build "$BUILD_DIR" --target AobusLintPlugin -j$(nproc)

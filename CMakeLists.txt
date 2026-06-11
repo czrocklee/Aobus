@@ -14,9 +14,7 @@ configure_file(cmake/AppVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/ao/A
 
 enable_testing()
 
-add_subdirectory(lint)
-
 add_subdirectory(lib)
 add_subdirectory(app)
-add_subdirectory(tool/fleet)
+add_subdirectory(tool)
 add_subdirectory(test)

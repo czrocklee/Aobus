@@ -33,11 +33,13 @@ namespace clang::tidy::readability
         diag(decl->getLocation(), "pointer variable '%0' must not use Hungarian notation ('p' prefix)") << name;
         return true;
       }
+
       if (name.starts_with("_p") && name.size() > 2 && std::isupper(static_cast<unsigned char>(name[2])))
       {
         diag(decl->getLocation(), "pointer variable '%0' must not use Hungarian notation ('_p' prefix)") << name;
         return true;
       }
+
       return false;
     };
 

@@ -2,7 +2,7 @@ schema: aobus-fleet-registry/v1
 # Guard-protected paths enforced for every patch, on top of the per-oracle ruler-paths below.
 # The engine additionally hardcodes tool/fleet and config/agent-fleet.yaml (self-protection)
 # and rejects any CMakeLists.txt by basename at every directory level.
-ruler-paths: [cmake, script, .agents, doc/design, build.sh, format.sh, shell.nix, CMakePresets.json, nixpkgs.json, .clang-tidy, lint]
+ruler-paths: [cmake, script, .agents, doc/design, build.sh, format.sh, shell.nix, CMakePresets.json, nixpkgs.json, .clang-tidy, tool/lint]
 agents:
   dspro:
     model: deepseek-v4-pro
@@ -76,7 +76,7 @@ oracles:
     property: Registered clang-tidy checks report no diagnostics for the selected files.
     known-gaps: [Lint cleanliness does not prove behavior preservation.]
     baseline-policy: require-green
-    ruler-paths: [.clang-tidy, lint, script/run-clang-tidy.sh, tool/fleet, config/agent-fleet.yaml]
+    ruler-paths: [.clang-tidy, tool/lint, script/run-clang-tidy.sh, tool/fleet, config/agent-fleet.yaml]
   build-debug:
     runner: build-debug
     arguments: {}

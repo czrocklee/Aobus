@@ -29,7 +29,7 @@ Analyzer diagnostics are report-only by default; tool failures still return non-
 
   (none)                Changed files — local main..HEAD + working tree + staged + untracked
   <file>...             Explicit list of files to analyze
-  --all                 Every .cpp/.h/.hpp under lib/ app/ include/ test/ lint/
+  --all                 Every .cpp/.h/.hpp under lib/ app/ include/ test/ tool/lint/
   --folder <d>          All files under <d> (repeatable: --folder lib --folder app)
   --commit <r>          Changed files since <r> + working tree + untracked
 
@@ -187,7 +187,7 @@ classify_file() {
 
 run_one() {
     local f="$1" tmp="$2"
-    local header_filter="${PROJECT_ROOT}/(lib|app|include|test|lint)/.*"
+    local header_filter="${PROJECT_ROOT}/(lib|app|include|test|tool/lint)/.*"
     local checks="$ANALYZER_CHECKS"
     local extra_args=()
     while IFS= read -r arg; do
@@ -226,9 +226,9 @@ cd "$PROJECT_ROOT"
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
     if $ALL_MODE; then
-        echo "Analyzing all .cpp/.h/.hpp files in lib/ app/ include/ test/ lint/" >&2
+        echo "Analyzing all .cpp/.h/.hpp files in lib/ app/ include/ test/ tool/lint/" >&2
         mapfile -t FILES < <(
-            find lib app include test lint -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
+            find lib app include test tool/lint -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
                 ! -path '*/test/integration/lint/*' | sort
         )
     elif [[ ${#FOLDER_DIRS[@]} -gt 0 ]]; then

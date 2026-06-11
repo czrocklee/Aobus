@@ -32,7 +32,7 @@ Always prioritize integration tests. You must define the expected behavior befor
 
 ## Shared Helpers — Check These Before Writing Your Own
 
-Header-only helpers live in `lint/check/*.h` under `namespace clang::tidy::aobus` (no CMake changes needed). Reuse them; do not re-implement per-check copies:
+Header-only helpers live in `tool/lint/check/*.h` under `namespace clang::tidy::aobus` (no CMake changes needed). Reuse them; do not re-implement per-check copies:
 
 - **`AstUtil.h`**: `getExprSourceText`, `stripImplicitNodes` (implicit cast/construct/materialize chains), `isInMacro` (FixIt safety), `refersToVarDecl` (canonical-decl identity), `isWithinRewrittenOperator` (C++20 rewritten comparisons), `getRangesCpoName` (ranges niebloid identification), `isEndCall` / `verifyEndObject` (algo-vs-end comparison checks).
 - **`CalleeQualificationUtil.h`**: C standard library function list, callee extraction for qualification FixIts.
@@ -88,9 +88,9 @@ nix-shell -p clang-tools --run "clang++ -std=c++26 -fsyntax-only -Xclang -ast-du
 
 ## 3. Implementation Steps
 
-1.  **Create Source Files**: Add your `MyCheck.h` and `MyCheck.cpp` in `lint/check/`.
+1.  **Create Source Files**: Add your `MyCheck.h` and `MyCheck.cpp` in `tool/lint/check/`.
 2.  **Namespace**: Place your check in the correct namespace (usually `clang::tidy::readability` or `clang::tidy::modernize`).
 3.  **Register the Check**:
-    -   Include your header and register it via `checkFactories.registerCheck<MyCheck>("aobus-your-alias");` in `lint/AobusLintModule.cpp`.
-    -   Add `check/MyCheck.cpp` to the `lint/CMakeLists.txt`.
+    -   Include your header and register it via `checkFactories.registerCheck<MyCheck>("aobus-your-alias");` in `tool/lint/AobusLintModule.cpp`.
+    -   Add `check/MyCheck.cpp` to the `tool/lint/CMakeLists.txt`.
 4.  **Verify**: Re-run the integration test script. The test runner will automatically rebuild `libAobusLintPlugin.so`, run `clang-tidy`, apply `--fix`, and compile the fixed output to guarantee valid C++ code generation.
