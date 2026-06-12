@@ -113,6 +113,11 @@ pkgs.mkShell {
     export CCACHE_COMPRESS=1
     export CCACHE_SLOPPINESS="time_macros"
 
+    # Auto-configure git hooks path
+    if [ -d .git ]; then
+      git config core.hooksPath script/git-hook
+    fi
+
     echo "Using nixpkgs pinned (see nixpkgs.json)"
     echo "Using GCC by default"
   '';
