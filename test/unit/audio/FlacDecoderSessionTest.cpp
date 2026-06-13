@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -34,13 +35,13 @@ namespace ao::audio::test
 
     auto const info = decoder.streamInfo();
     REQUIRE(info.sourceFormat.sampleRate > 0);
-    REQUIRE(info.durationMs > 0);
+    REQUIRE(info.duration > std::chrono::milliseconds{0});
 
     auto const firstBlock = decoder.readNextBlock();
     REQUIRE(firstBlock);
     CHECK(firstBlock->firstFrameIndex == 0);
 
-    REQUIRE(decoder.seek(500));
+    REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
     auto const soughtBlock = decoder.readNextBlock();
     REQUIRE(soughtBlock);
     CHECK(soughtBlock->firstFrameIndex > 0);
@@ -114,7 +115,7 @@ namespace ao::audio::test
 
     SECTION("Seek on unopened file")
     {
-      CHECK(!decoder.seek(100)); // Should fail gracefully
+      CHECK(!decoder.seek(std::chrono::milliseconds{100})); // Should fail gracefully
     }
 
     SECTION("Non-existent file")

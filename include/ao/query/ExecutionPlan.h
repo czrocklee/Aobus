@@ -24,7 +24,7 @@ namespace ao::query
     Uri = 1,
 
     // Property fields (@ prefix) - audio technical properties
-    DurationMs = 2,
+    Duration = 2,
     Bitrate = 3,
     SampleRate = 4,
     Channels = 5,

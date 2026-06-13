@@ -6,9 +6,11 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/MemorySource.h>
+#include <ao/audio/Types.h>
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -55,14 +57,15 @@ namespace ao::audio
       return static_cast<std::uint64_t>(format.sampleRate) * frameBytes(format);
     }
 
-    std::uint32_t bufferedDurationMs(std::size_t byteCount, std::uint64_t bytesPerSecondValue) noexcept
+    std::chrono::milliseconds calculateBufferedDuration(std::size_t byteCount,
+                                                        std::uint64_t bytesPerSecondValue) noexcept
     {
       if (bytesPerSecondValue == 0)
       {
-        return 0;
+        return std::chrono::milliseconds{0};
       }
 
-      return static_cast<std::uint32_t>((static_cast<std::uint64_t>(byteCount) * 1000U) / bytesPerSecondValue);
+      return std::chrono::milliseconds{(static_cast<std::uint64_t>(byteCount) * 1000U) / bytesPerSecondValue};
     }
   } // namespace
 
@@ -75,8 +78,8 @@ namespace ao::audio
 
   Result<> MemorySource::initialize()
   {
-    auto const estimatedBytes =
-      (static_cast<std::uint64_t>(_streamInfo.durationMs) * bytesPerSecond(_streamInfo.outputFormat)) / 1000U;
+    auto const estimatedBytes = durationToSamples(_streamInfo.duration, _streamInfo.outputFormat.sampleRate) *
+                                frameBytes(_streamInfo.outputFormat);
 
     if (estimatedBytes > 0 && estimatedBytes < static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
     {
@@ -127,19 +130,19 @@ namespace ao::audio
     return _readOffset.load(std::memory_order_acquire) >= _pcmBytes.size();
   }
 
-  std::uint32_t MemorySource::bufferedMs() const noexcept
+  std::chrono::milliseconds MemorySource::bufferedDuration() const noexcept
   {
     auto const remaining = _pcmBytes.size() - _readOffset.load(std::memory_order_acquire);
-    return bufferedDurationMs(remaining, _bytesPerSecond);
+    return calculateBufferedDuration(remaining, _bytesPerSecond);
   }
 
-  Result<> MemorySource::seek(std::uint32_t positionMs)
+  Result<> MemorySource::seek(std::chrono::milliseconds offset)
   {
-    _readOffset.store(positionToByteOffset(positionMs), std::memory_order_release);
+    _readOffset.store(timeToByteOffset(offset), std::memory_order_release);
     return {};
   }
 
-  std::size_t MemorySource::positionToByteOffset(std::uint32_t positionMs) const noexcept
+  std::size_t MemorySource::timeToByteOffset(std::chrono::milliseconds offset) const noexcept
   {
     auto const frameByteCount = frameBytes(_streamInfo.outputFormat);
 
@@ -148,7 +151,7 @@ namespace ao::audio
       return 0;
     }
 
-    auto const frameIndex = (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000U;
+    auto const frameIndex = durationToSamples(offset, _streamInfo.outputFormat.sampleRate);
     auto const byteOffset = frameIndex * frameByteCount;
     auto const clampedOffset = std::min<std::uint64_t>(byteOffset, _pcmBytes.size());
     return static_cast<std::size_t>(clampedOffset - (clampedOffset % frameByteCount));

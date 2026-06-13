@@ -38,7 +38,7 @@ namespace ao::gtk::test
       std::uint16_t year = 2020;
       std::uint16_t trackNumber = 1;
       std::uint16_t discNumber = 1;
-      std::uint32_t durationMs = 180000;
+      std::chrono::milliseconds duration = std::chrono::minutes{3};
     };
 
     class TestMusicLibrary final
@@ -68,7 +68,7 @@ namespace ao::gtk::test
           .discNumber(spec.discNumber);
         builder.property()
           .uri("/tmp/test.flac")
-          .durationMs(spec.durationMs)
+          .duration(spec.duration)
           .bitrate(320000)
           .sampleRate(44100)
           .channels(2)
@@ -100,11 +100,11 @@ namespace ao::gtk::test
       spec1.genre = "Genre 1";
       spec1.year = 2021;
       spec1.trackNumber = 1;
-      spec1.durationMs = 180000;
+      spec1.duration = std::chrono::minutes{3};
 
       auto spec2 = TrackSpec{};
       spec2.title = "Track 2";
-      spec2.durationMs = 240000;
+      spec2.duration = std::chrono::minutes{4};
 
       auto const id1 = testLibrary.addTrack(spec1);
       auto const id2 = testLibrary.addTrack(spec2);
@@ -119,12 +119,12 @@ namespace ao::gtk::test
       CHECK(row1Ptr->fieldText(rt::TrackField::Genre) == "Genre 1");
       CHECK(row1Ptr->year() == 2021);
       CHECK(row1Ptr->trackNumber() == 1);
-      CHECK(row1Ptr->duration().count() == 180000);
+      CHECK(row1Ptr->duration() == std::chrono::minutes{3});
 
       auto const row2Ptr = provider.trackRow(id2);
       REQUIRE(row2Ptr);
       CHECK(row2Ptr->fieldText(rt::TrackField::Title) == "Track 2");
-      CHECK(row2Ptr->duration().count() == 240000);
+      CHECK(row2Ptr->duration() == std::chrono::minutes{4});
 
       // Verify playing properties and setters/getters
       CHECK_FALSE(row1Ptr->isPlaying());
@@ -157,7 +157,7 @@ namespace ao::gtk::test
     SECTION("Cache helper methods")
     {
       auto spec = TrackSpec{};
-      spec.durationMs = 120000;
+      spec.duration = std::chrono::minutes{2};
       auto const id = testLibrary.addTrack(spec);
 
       auto provider = TrackRowCache{testLibrary.library()};
@@ -168,7 +168,7 @@ namespace ao::gtk::test
 
       auto const optDesc = provider.playbackDescriptor(id);
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->durationMs == 120000);
+      CHECK(optDesc->duration == std::chrono::minutes{2});
 
       auto const optCover = provider.coverArtId(id);
       CHECK_FALSE(optCover.has_value());

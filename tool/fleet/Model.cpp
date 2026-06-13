@@ -14,8 +14,9 @@ namespace ao::fleet
   std::string makePhaseId()
   {
     static auto counter = std::atomic_uint64_t{};
-    auto const now = std::chrono::system_clock::now().time_since_epoch();
-    auto const micros = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+    auto const micros =
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
     return std::format("phase-{}-{}", micros, counter.fetch_add(1, std::memory_order_relaxed));
   }
 

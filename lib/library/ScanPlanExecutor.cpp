@@ -135,7 +135,7 @@ namespace ao::library
         {
           auto merged = TrackBuilder::fromView(*optExisting, dict);
           merged.property()
-            .durationMs(builder.property().durationMs())
+            .duration(builder.property().duration())
             .bitrate(builder.property().bitrate())
             .sampleRate(builder.property().sampleRate())
             .channels(builder.property().channels())

@@ -6,6 +6,7 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -22,8 +23,8 @@ namespace ao::uimodel::playback
 
   struct PlaybackTimeViewState final
   {
-    std::uint32_t durationMs = 0;
-    std::uint32_t positionMs = 0;
+    std::chrono::milliseconds duration{0};
+    std::chrono::milliseconds elapsed{0};
     bool isPlaying = false;
     bool isPreviewing = false;
     bool immediateUpdate = false;
@@ -42,12 +43,14 @@ namespace ao::uimodel::playback
     ~PlaybackTimeViewModel() = default;
 
     static std::string describeTimeTemplate(PlaybackTimeMode mode);
-    static std::string formatPlaybackTime(PlaybackTimeMode mode, std::uint32_t posMs, std::uint32_t durMs);
+    static std::string formatPlaybackTime(PlaybackTimeMode mode,
+                                          std::chrono::milliseconds elapsed,
+                                          std::chrono::milliseconds duration);
 
   private:
     void refresh(bool immediateUpdate,
                  bool isPreviewing,
-                 std::optional<std::uint32_t> optOverridePosition = std::nullopt);
+                 std::optional<std::chrono::milliseconds> optOverrideElapsed = std::nullopt);
 
     rt::PlaybackService& _playback;
     std::function<void(PlaybackTimeViewState const&)> _onRender;

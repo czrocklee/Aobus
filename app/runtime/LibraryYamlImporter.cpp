@@ -627,7 +627,7 @@ namespace ao::rt
         {
           auto const& props = fileBuilder.property();
           optBuilder->property()
-            .durationMs(props.durationMs())
+            .duration(props.duration())
             .bitrate(props.bitrate())
             .sampleRate(props.sampleRate())
             .codec(props.codec())
@@ -739,7 +739,8 @@ namespace ao::rt
     };
 
     constexpr auto kPropertyDispatch = std::to_array<Dispatch>({
-      {.field = rt::TrackField::Duration, .u32Setter = [](auto& prop, auto value) { prop.durationMs(value); }},
+      {.field = rt::TrackField::Duration,
+       .u32Setter = [](auto& prop, auto value) { prop.duration(std::chrono::milliseconds{value}); }},
       {.field = rt::TrackField::Bitrate, .u32Setter = [](auto& prop, auto value) { prop.bitrate(value); }},
       {.field = rt::TrackField::SampleRate, .u32Setter = [](auto& prop, auto value) { prop.sampleRate(value); }},
       {.field = rt::TrackField::Channels, .u8Setter = [](auto& prop, auto value) { prop.channels(value); }},

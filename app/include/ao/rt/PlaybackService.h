@@ -10,6 +10,7 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/Types.h>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -61,7 +62,7 @@ namespace ao::rt
 
     struct SeekUpdate final
     {
-      std::uint32_t positionMs = 0;
+      std::chrono::milliseconds elapsed{0};
       SeekMode mode = SeekMode::Final;
     };
 
@@ -105,7 +106,7 @@ namespace ao::rt
     void stop();
     void setShuffleMode(ShuffleMode mode);
     void setRepeatMode(RepeatMode mode);
-    void seek(std::uint32_t positionMs, SeekMode mode = SeekMode::Final);
+    void seek(std::chrono::milliseconds elapsed, SeekMode mode = SeekMode::Final);
     void setOutput(audio::BackendId const& backendId,
                    audio::DeviceId const& deviceId,
                    audio::ProfileId const& profileId);

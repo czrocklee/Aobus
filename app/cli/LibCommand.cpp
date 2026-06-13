@@ -70,9 +70,9 @@ namespace ao::cli
       return result;
     }
 
-    std::string formatTimestamp(std::uint64_t unixMs)
+    std::string formatTimestamp(std::chrono::sys_time<std::chrono::milliseconds> timestamp)
     {
-      auto const tp = std::chrono::system_clock::time_point{std::chrono::milliseconds{unixMs}};
+      auto const tp = std::chrono::system_clock::time_point{timestamp.time_since_epoch()};
       return std::format("{:%Y-%m-%d %H:%M:%S}", tp);
     }
 
@@ -83,7 +83,7 @@ namespace ao::cli
       os << "Library ID:    " << formatUuid(header.libraryId) << "\n";
       os << "Library Version:  " << header.libraryVersion << "\n";
       os << "Flags:       0x" << std::hex << header.flags << std::dec << "\n";
-      os << "Created:      " << formatTimestamp(header.createdAtUnixMs) << "\n";
+      os << "Created:      " << formatTimestamp(header.createdTime) << "\n";
     }
 
     void exportLib(library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
@@ -172,7 +172,7 @@ namespace ao::cli
         os << "  libraryId: \"" << formatUuid(header.libraryId) << "\"\n"
            << "  libraryVersion: " << header.libraryVersion << "\n"
            << "  flags: \"0x" << std::hex << header.flags << std::dec << "\"\n"
-           << "  createdAt: \"" << formatTimestamp(header.createdAtUnixMs) << "\"\n";
+           << "  createdTime: \"" << formatTimestamp(header.createdTime) << "\"\n";
       }
       else if (raw)
       {

@@ -17,6 +17,7 @@
 #include <lmdb.h>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -96,7 +97,7 @@ namespace ao::library::test
       builder.metadata().totalTracks(header.totalTracks);
       builder.metadata().discNumber(header.discNumber);
       builder.metadata().totalDiscs(header.totalDiscs);
-      builder.property().durationMs(header.durationMs);
+      builder.property().duration(header.duration);
       builder.property().bitrate(header.bitrate);
       builder.property().channels(header.channels);
 
@@ -244,14 +245,14 @@ namespace ao::library::test
   TEST_CASE("TrackView - Cold Audio Format", "[library][unit][track]")
   {
     auto header = TrackColdHeader{};
-    header.durationMs = 180000;
+    header.duration = std::chrono::minutes{3};
     header.bitrate = 320000;
     header.channels = 2;
 
     auto const data = createColdData(header, {}, "");
     auto const view = makeColdView(data);
 
-    CHECK(view.property().durationMs() == 180000);
+    CHECK(view.property().duration() == std::chrono::minutes{3});
     CHECK(view.property().bitrate() == 320000);
     CHECK(view.property().channels() == 2);
   }

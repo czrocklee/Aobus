@@ -14,6 +14,7 @@
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/object.h>
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -65,14 +66,14 @@ namespace ao::gtk
           _scrollBubbleTimeout.disconnect();
         }
 
-        constexpr int kScrollBubbleTimeoutMs = 500;
+        constexpr auto kScrollBubbleTimeout = std::chrono::milliseconds{500};
         _scrollBubbleTimeout = Glib::signal_timeout().connect(
           [this]
           {
             _scrollBubble.popdown();
             return false;
           },
-          kScrollBubbleTimeoutMs);
+          kScrollBubbleTimeout.count());
 
         return true;
       },

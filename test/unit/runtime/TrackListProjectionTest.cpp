@@ -1213,10 +1213,10 @@ namespace ao::rt::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(
-      TrackSpec{.title = "A", .genre = "Pop", .composer = "Mozart", .work = "Opus 1", .durationMs = 5000});
-    auto id2 = env.lib.addTrack(
-      TrackSpec{.title = "B", .genre = "Rock", .composer = "Bach", .work = "Opus 2", .durationMs = 3000});
+    auto id1 = env.lib.addTrack(TrackSpec{
+      .title = "A", .genre = "Pop", .composer = "Mozart", .work = "Opus 1", .duration = std::chrono::seconds{5}});
+    auto id2 = env.lib.addTrack(TrackSpec{
+      .title = "B", .genre = "Rock", .composer = "Bach", .work = "Opus 2", .duration = std::chrono::seconds{3}});
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});

@@ -39,7 +39,7 @@ namespace ao::uimodel::track
 
   std::string formatDuration(std::chrono::milliseconds duration)
   {
-    if (duration.count() <= 0)
+    if (duration <= std::chrono::milliseconds{0})
     {
       return {};
     }

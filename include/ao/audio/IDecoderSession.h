@@ -6,7 +6,7 @@
 #include <ao/Error.h>
 #include <ao/audio/DecoderTypes.h>
 
-#include <cstdint>
+#include <chrono>
 #include <filesystem>
 
 namespace ao::audio
@@ -36,9 +36,9 @@ namespace ao::audio
     virtual void close() = 0;
 
     /**
-     * @brief Seeks to a specific position in milliseconds.
+     * @brief Seeks to a specific playback position.
      */
-    virtual Result<> seek(std::uint32_t positionMs) = 0;
+    virtual Result<> seek(std::chrono::milliseconds offset) = 0;
 
     /**
      * @brief Flushes internal decoder buffers.

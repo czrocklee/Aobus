@@ -3,26 +3,29 @@
 
 #pragma once
 
-#include <cstdint>
+#include <ao/uimodel/FrameClock.h>
+
+#include <chrono>
+#include <optional>
 
 namespace ao::uimodel::playback
 {
   class PlaybackPositionInterpolator final
   {
   public:
-    void updateState(std::uint32_t positionMs, std::uint32_t durationMs, bool isPlaying) noexcept;
+    void updateState(std::chrono::milliseconds elapsed, std::chrono::milliseconds duration, bool isPlaying) noexcept;
 
     void reset() noexcept;
 
-    std::uint32_t interpolate(std::int64_t frameTime) noexcept;
+    std::chrono::milliseconds interpolateElapsed(FrameClock::TimePoint frameTime) noexcept;
 
     bool isPlaying() const noexcept { return _isPlaying; }
-    std::uint32_t lastDurationMs() const noexcept { return _lastDurationMs; }
+    std::chrono::milliseconds lastDuration() const noexcept { return _lastDuration; }
 
   private:
-    std::uint32_t _lastPositionMs = 0;
-    std::uint32_t _lastDurationMs = 0;
+    std::chrono::milliseconds _lastElapsed{0};
+    std::chrono::milliseconds _lastDuration{0};
     bool _isPlaying = false;
-    std::int64_t _firstFrameTime = 0;
+    std::optional<FrameClock::TimePoint> _optFirstFrameTime;
   };
 } // namespace ao::uimodel::playback

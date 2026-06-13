@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -179,7 +180,7 @@ namespace ao::audio::test
       auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
       REQUIRE(decoder.open(testFile));
 
-      REQUIRE(decoder.seek(100)); // Seek to 100ms
+      REQUIRE(decoder.seek(std::chrono::milliseconds{100})); // Seek to 100ms
       auto const block = decoder.readNextBlock();
 
       REQUIRE(block);
@@ -250,9 +251,9 @@ namespace ao::audio::test
         auto decoder = Mp3DecoderSession{Format{.bitDepth = 16}};
         REQUIRE(decoder.open(testFile));
 
-        if (auto const info = decoder.streamInfo(); info.durationMs > 10)
+        if (auto const info = decoder.streamInfo(); info.duration > std::chrono::milliseconds{10})
         {
-          REQUIRE(decoder.seek(info.durationMs - 10));
+          REQUIRE(decoder.seek(info.duration - std::chrono::milliseconds{10}));
 
           if (auto const block = decoder.readNextBlock(); block && !block->endOfStream)
           {
@@ -271,9 +272,9 @@ namespace ao::audio::test
         auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
         REQUIRE(decoder.open(testFile));
 
-        if (auto const info = decoder.streamInfo(); info.durationMs > 10)
+        if (auto const info = decoder.streamInfo(); info.duration > std::chrono::milliseconds{10})
         {
-          REQUIRE(decoder.seek(info.durationMs - 10));
+          REQUIRE(decoder.seek(info.duration - std::chrono::milliseconds{10}));
           // Should either get some frames or EOF immediately
           if (auto const block = decoder.readNextBlock(); block)
           {

@@ -15,6 +15,7 @@
 #include <ao/utility/Log.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -323,8 +324,8 @@ namespace ao::audio
       source = std::move(session.sourcePtr);
       backendFormat = session.backendFormat;
 
-      status.durationMs = session.info.durationMs;
-      status.positionMs = 0;
+      status.duration = session.info.duration;
+      status.elapsed = std::chrono::milliseconds{0};
       accumulatedFrames.store(0, std::memory_order_relaxed);
       routeTracker.setDecoder(session.info.sourceFormat, session.info.outputFormat, session.info.isLossy);
       routeTracker.setEngineFormat(session.info.outputFormat);
@@ -350,7 +351,7 @@ namespace ao::audio
     struct State
     {
       std::optional<TrackPlaybackDescriptor> optTrack;
-      std::uint32_t positionMs = 0;
+      std::chrono::milliseconds elapsed{0};
       bool wasPlaying = false;
     };
 
@@ -359,12 +360,12 @@ namespace ao::audio
       auto const lock = std::scoped_lock{_implPtr->stateMutex};
       return State{
         .optTrack = _implPtr->optCurrentTrack,
-        .positionMs =
+        .elapsed =
           [this]
         {
           auto const frames = _implPtr->accumulatedFrames.load(std::memory_order_relaxed);
           auto const sr = _implPtr->engineSampleRate.load(std::memory_order_relaxed);
-          return sr > 0 ? static_cast<std::uint32_t>((frames * 1000) / sr) : 0;
+          return samplesToDuration(frames, sr);
         }(),
         .wasPlaying = (_implPtr->status.transport == Transport::Playing),
       };
@@ -384,7 +385,7 @@ namespace ao::audio
     {
       AUDIO_LOG_INFO("Resuming track '{}' after backend switch", state.optTrack->title);
       play(*state.optTrack);
-      seek(state.positionMs);
+      seek(state.elapsed);
 
       if (!state.wasPlaying)
       {
@@ -434,10 +435,10 @@ namespace ao::audio
     auto snap = Engine::Status{_implPtr->status};
     auto const totalFrames = _implPtr->accumulatedFrames.load(std::memory_order_relaxed);
     auto const sampleRate = _implPtr->engineSampleRate.load(std::memory_order_relaxed);
-    snap.positionMs = sampleRate > 0 ? static_cast<std::uint32_t>((totalFrames * 1000) / sampleRate) : 0;
+    snap.elapsed = samplesToDuration(totalFrames, sampleRate);
     snap.routeState = _implPtr->routeTracker.state();
     snap.backendId = _implPtr->backendPtr->backendId();
-    snap.bufferedMs = sourcePtr ? sourcePtr->bufferedMs() : 0;
+    snap.bufferedDuration = sourcePtr ? sourcePtr->bufferedDuration() : std::chrono::milliseconds{0};
     snap.underrunCount = _implPtr->underrunCount.load(std::memory_order_relaxed);
     return snap;
   }
@@ -496,9 +497,10 @@ namespace ao::audio
       _implPtr->syncBackendStatus();
     }
 
-    auto const bufferedMs = sourcePtr ? sourcePtr->bufferedMs() : 0;
+    auto const bufferedDuration = sourcePtr ? sourcePtr->bufferedDuration() : std::chrono::milliseconds{0};
 
-    if (auto const drained = !sourcePtr || sourcePtr->isDrained(); drained && bufferedMs == 0)
+    if (auto const drained = !sourcePtr || sourcePtr->isDrained();
+        drained && bufferedDuration == std::chrono::milliseconds{0})
     {
       _implPtr->backendPtr->stop();
       _implPtr->backendPtr->close();
@@ -557,7 +559,8 @@ namespace ao::audio
       return;
     }
 
-    if (auto const drained = !srcPtr || srcPtr->isDrained(); drained && (srcPtr ? srcPtr->bufferedMs() : 0) == 0)
+    if (auto const drained = !srcPtr || srcPtr->isDrained();
+        drained && (srcPtr ? srcPtr->bufferedDuration() : std::chrono::milliseconds{0}) == std::chrono::milliseconds{0})
     {
       _implPtr->source.store({}, std::memory_order_release);
       _implPtr->resetEngine();
@@ -584,9 +587,9 @@ namespace ao::audio
     _implPtr->source.store({}, std::memory_order_release);
   }
 
-  void Engine::seek(std::uint32_t positionMs)
+  void Engine::seek(std::chrono::milliseconds offset)
   {
-    AUDIO_LOG_INFO("Seek requested: {} ms", positionMs);
+    AUDIO_LOG_INFO("Seek requested: {} ms", offset.count());
     auto const sourcePtr = _implPtr->source.load(std::memory_order_acquire);
 
     if (!sourcePtr)
@@ -599,10 +602,9 @@ namespace ao::audio
       auto const lock = std::scoped_lock{_implPtr->stateMutex};
       wasPaused = (_implPtr->status.transport == Transport::Paused);
       _implPtr->status.transport = Transport::Buffering;
-      _implPtr->status.positionMs = positionMs;
+      _implPtr->status.elapsed = offset;
       auto const sr = _implPtr->engineSampleRate.load(std::memory_order_relaxed);
-      _implPtr->accumulatedFrames.store(
-        sr > 0 ? (static_cast<std::uint64_t>(positionMs) * sr) / 1000 : 0, std::memory_order_relaxed);
+      _implPtr->accumulatedFrames.store(durationToSamples(offset, sr), std::memory_order_relaxed);
       _implPtr->status.statusText.clear();
     }
 
@@ -611,18 +613,18 @@ namespace ao::audio
     _implPtr->backendStarted = false;
     _implPtr->playbackDrainPending = false;
 
-    if (auto const seekResult = sourcePtr->seek(positionMs); !seekResult)
+    if (auto const seekResult = sourcePtr->seek(offset); !seekResult)
     {
-      AUDIO_LOG_ERROR("Seek failed at {} ms: {}", positionMs, seekResult.error().message);
+      AUDIO_LOG_ERROR("Seek failed at {} ms: {}", offset.count(), seekResult.error().message);
       auto const lock = std::scoped_lock{_implPtr->stateMutex};
       _implPtr->status.transport = Transport::Error;
       _implPtr->status.statusText = seekResult.error().message;
       return;
     }
 
-    auto const bufferedMs = sourcePtr->bufferedMs();
+    auto const bufferedDuration = sourcePtr->bufferedDuration();
 
-    if (auto const drained = sourcePtr->isDrained(); drained && bufferedMs == 0)
+    if (auto const drained = sourcePtr->isDrained(); drained && bufferedDuration == std::chrono::milliseconds{0})
     {
       _implPtr->backendPtr->stop();
       _implPtr->backendPtr->close();

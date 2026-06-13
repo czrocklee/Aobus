@@ -1,49 +1,49 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/PlaybackPositionInterpolator.h>
 
 #include <algorithm>
-#include <cstdint>
+#include <chrono>
 
 namespace ao::uimodel::playback
 {
-  void PlaybackPositionInterpolator::updateState(std::uint32_t positionMs,
-                                                 std::uint32_t durationMs,
+  void PlaybackPositionInterpolator::updateState(std::chrono::milliseconds elapsed,
+                                                 std::chrono::milliseconds duration,
                                                  bool isPlaying) noexcept
   {
-    _lastPositionMs = positionMs;
-    _lastDurationMs = durationMs;
+    _lastElapsed = elapsed;
+    _lastDuration = duration;
     _isPlaying = isPlaying;
-    _firstFrameTime = 0;
+    _optFirstFrameTime.reset();
   }
 
   void PlaybackPositionInterpolator::reset() noexcept
   {
-    _lastPositionMs = 0;
-    _lastDurationMs = 0;
+    _lastElapsed = std::chrono::milliseconds{0};
+    _lastDuration = std::chrono::milliseconds{0};
     _isPlaying = false;
-    _firstFrameTime = 0;
+    _optFirstFrameTime.reset();
   }
 
-  std::uint32_t PlaybackPositionInterpolator::interpolate(std::int64_t frameTime) noexcept
+  std::chrono::milliseconds PlaybackPositionInterpolator::interpolateElapsed(FrameClock::TimePoint frameTime) noexcept
   {
     if (!_isPlaying)
     {
-      _firstFrameTime = 0;
-      return _lastPositionMs;
+      _optFirstFrameTime.reset();
+      return _lastElapsed;
     }
 
-    if (_firstFrameTime == 0 || frameTime < _firstFrameTime)
+    if (!_optFirstFrameTime || frameTime < *_optFirstFrameTime)
     {
-      _firstFrameTime = frameTime;
-      return _lastPositionMs;
+      _optFirstFrameTime = frameTime;
+      return _lastElapsed;
     }
 
-    constexpr double kMsScale = 1000.0;
-    auto const elapsedMs = static_cast<std::uint32_t>(static_cast<double>(frameTime - _firstFrameTime) / kMsScale);
-    auto const displayPos = _lastPositionMs + elapsedMs;
+    auto const delta = std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - *_optFirstFrameTime);
+    auto const displayElapsed = _lastElapsed + delta;
 
-    return std::min(displayPos, _lastDurationMs);
+    return std::min(displayElapsed, _lastDuration);
   }
 } // namespace ao::uimodel::playback

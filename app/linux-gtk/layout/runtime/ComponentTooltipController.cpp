@@ -10,7 +10,7 @@
 #include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/widget.h>
 
-#include <cstdint>
+#include <chrono>
 #include <string_view>
 
 namespace ao::gtk::layout
@@ -18,7 +18,7 @@ namespace ao::gtk::layout
   namespace
   {
     constexpr std::string_view kPopoverShellClassPrefix = "ao-popover-";
-    constexpr std::uint32_t kDefaultHoverDelayMs = 500;
+    constexpr auto kDefaultHoverDelay = std::chrono::milliseconds{500};
   } // namespace
 
   ComponentTooltipController::ComponentTooltipController() = default;
@@ -74,7 +74,7 @@ namespace ao::gtk::layout
 
         return false; // run once
       },
-      kDefaultHoverDelayMs);
+      kDefaultHoverDelay.count());
   }
 
   void ComponentTooltipController::onLeave()

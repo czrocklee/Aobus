@@ -14,6 +14,7 @@
 #include <ao/audio/Types.h>
 #include <ao/utility/Log.h>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -25,8 +26,8 @@ namespace ao::audio::detail
 {
   namespace
   {
-    constexpr std::uint32_t kPrerollTargetMs = 500;
-    constexpr std::uint32_t kDecodeHighWatermarkMs = 1500;
+    constexpr auto kPrerollDuration = std::chrono::milliseconds{500};
+    constexpr auto kDecodeHighWatermarkThreshold = std::chrono::milliseconds{1500};
     // MemorySource synchronously decodes the entire track on the caller's thread
     // during initialization. We disable it by setting the budget to 0 to avoid
     // blocking the GTK main thread. All tracks now use StreamingSource, which
@@ -194,7 +195,7 @@ namespace ao::audio::detail
     }
 
     auto const streamingSourcePtr = std::make_shared<StreamingSource>(
-      std::move(decoderPtr), info, std::move(onSourceError), kPrerollTargetMs, kDecodeHighWatermarkMs);
+      std::move(decoderPtr), info, std::move(onSourceError), kPrerollDuration, kDecodeHighWatermarkThreshold);
 
     if (auto const initResult = streamingSourcePtr->initialize(); !initResult)
     {
@@ -207,7 +208,13 @@ namespace ao::audio::detail
 
   bool TrackSession::shouldUseMemoryPcmSource(DecodedStreamInfo const& info)
   {
-    auto const estimatedBytes = static_cast<double>(bytesPerSecond(info.outputFormat)) * (info.durationMs / 1000.0);
+    if (info.outputFormat.sampleRate == 0)
+    {
+      return false;
+    }
+
+    auto const estimatedBytes = static_cast<double>(durationToSamples(info.duration, info.outputFormat.sampleRate)) *
+                                (static_cast<double>(bytesPerSecond(info.outputFormat)) / info.outputFormat.sampleRate);
     return estimatedBytes > 0 && estimatedBytes <= kMemoryPcmSourceBudgetBytes;
   }
 } // namespace ao::audio::detail

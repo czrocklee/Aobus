@@ -3,6 +3,7 @@
 
 #include "app/AobusSoul.h"
 
+#include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
 
 #include <gdkmm/frameclock.h>
@@ -16,11 +17,13 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <numbers>
+#include <optional>
 
 namespace ao::gtk
 {
@@ -58,14 +61,14 @@ namespace ao::gtk
     Gdk::RGBA amber{"#F97316"};
     Gdk::RGBA aura{cyan};
 
-    double timeSec = 0.0;
+    std::chrono::duration<double> time{0.0};
     bool isStopped = true;
     bool showFullLogo = false;
 
     float baseStrokeWidth = 9.0F;
     float innerGlyphScale = 1.0F;
 
-    std::int64_t firstFrameTime = 0;
+    std::optional<uimodel::FrameClock::TimePoint> optFirstFrameTime;
     std::uint32_t tickId = 0;
     bool isBreathing = false;
 
@@ -141,20 +144,19 @@ namespace ao::gtk
       {
         if (_implPtr->isBreathing)
         {
-          auto const frameTime = clock->get_frame_time();
+          auto const frameTime = uimodel::FrameClock::fromMicros(clock->get_frame_time());
 
-          if (_implPtr->firstFrameTime == 0)
+          if (!_implPtr->optFirstFrameTime)
           {
-            _implPtr->firstFrameTime = frameTime;
+            _implPtr->optFirstFrameTime = frameTime;
           }
 
-          static constexpr double kMicrosecondsPerSecond = 1'000'000.0;
-          _implPtr->timeSec = static_cast<double>(frameTime - _implPtr->firstFrameTime) / kMicrosecondsPerSecond;
+          _implPtr->time = frameTime - *_implPtr->optFirstFrameTime;
           _implPtr->isStopped = false;
         }
         else
         {
-          _implPtr->timeSec = 0.0;
+          _implPtr->time = std::chrono::duration<double>::zero();
           _implPtr->isStopped = true;
         }
 
@@ -182,7 +184,7 @@ namespace ao::gtk
 
     if (!breathing)
     {
-      _implPtr->firstFrameTime = 0;
+      _implPtr->optFirstFrameTime.reset();
     }
 
     queue_draw();
@@ -445,15 +447,17 @@ namespace ao::gtk
 
     if (!_implPtr->isStopped)
     {
-      rotationAngle = static_cast<float>(
-        std::fmod(_implPtr->timeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees));
+      auto const timeSec = std::chrono::duration<double>{_implPtr->time}.count();
+
+      rotationAngle =
+        static_cast<float>(std::fmod(timeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees));
       double const breathingPhase =
-        std::fmod(_implPtr->timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
+        std::fmod(timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
       currentStrokeBase = static_cast<float>(
         _implPtr->baseStrokeWidth + (strokeWidthVariance * ((std::sin(breathingPhase) * kPhaseShift) + kPhaseShift)));
 
       double const opacityPhase =
-        std::fmod(_implPtr->timeSec * (2.0 * std::numbers::pi / kOpacityPeriodSec), 2.0 * std::numbers::pi);
+        std::fmod(timeSec * (2.0 * std::numbers::pi / kOpacityPeriodSec), 2.0 * std::numbers::pi);
       // Golden Ratio Opacity: range [0.618, 1.0]
       static constexpr double kOpacityBase = 0.809;
       static constexpr double kOpacityVariance = 0.191;
@@ -481,9 +485,10 @@ namespace ao::gtk
 
     if (!_implPtr->isStopped)
     {
-      float const huePhase = std::fmod(
-        static_cast<float>(_implPtr->timeSec) * (2.0F * std::numbers::pi_v<float> / static_cast<float>(kHuePeriodSec)),
-        2.0F * std::numbers::pi_v<float>);
+      auto const timeSec = std::chrono::duration<double>{_implPtr->time}.count();
+      float const huePhase =
+        std::fmod(static_cast<float>(timeSec) * (2.0F * std::numbers::pi_v<float> / static_cast<float>(kHuePeriodSec)),
+                  2.0F * std::numbers::pi_v<float>);
       static constexpr float kMaxHueShift = 10.0F;
       hueShift = kMaxHueShift * std::sin(huePhase);
     }

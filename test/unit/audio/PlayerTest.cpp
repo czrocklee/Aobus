@@ -14,6 +14,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
+#include <chrono>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -260,10 +261,10 @@ namespace ao::audio::test
 
     SECTION("Seek is propagated to engine")
     {
-      // Even with NullBackend, positionMs should be updated in Engine status
+      // Even with NullBackend, elapsed should be updated in Engine status
       // wait, Engine::seek returns early if no source.
-      player.seek(1000);
-      REQUIRE(player.status().engine.positionMs == 0);
+      player.seek(std::chrono::seconds{1});
+      REQUIRE(player.status().engine.elapsed == std::chrono::milliseconds{0});
     }
 
     SECTION("Volume and mute are propagated to engine and status")

@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <vector>
 
@@ -40,8 +41,8 @@ namespace ao::audio::test
       CHECK(stableBlock->bytes.empty());
 
       auto const info = decoder.streamInfo();
-      REQUIRE(info.durationMs > 0);
-      REQUIRE(decoder.seek(0));
+      REQUIRE(info.duration > std::chrono::milliseconds{0});
+      REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
 
       auto const restartedBlock = decoder.readNextBlock();
       REQUIRE(restartedBlock);

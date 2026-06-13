@@ -10,6 +10,7 @@
 #include <ao/media/flac/MetadataBlock.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <string_view>
@@ -22,8 +23,6 @@ namespace ao::tag::flac
   {
     // Bits per byte for bitrate calculation
     constexpr std::uint32_t kBitsPerByte = 8;
-    // Milliseconds per second
-    constexpr std::uint32_t kMsPerSecond = 1000;
 
     using TextSetter =
       library::TrackBuilder::MetadataBuilder& (library::TrackBuilder::MetadataBuilder::*)(std::string_view);
@@ -93,12 +92,13 @@ namespace ao::tag::flac
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {
-            if (auto const durationMs = static_cast<std::uint32_t>((totalSamples * kMsPerSecond) / view.sampleRate());
-                durationMs > 0)
+            if (auto const duration =
+                  std::chrono::milliseconds{(totalSamples * std::chrono::milliseconds::period::den) /
+                                            view.sampleRate()};
+                duration > std::chrono::milliseconds{0})
             {
-              builder.property()
-                .durationMs(durationMs)
-                .bitrate(static_cast<std::uint32_t>((size() * kBitsPerByte * kMsPerSecond) / durationMs));
+              builder.property().duration(duration).bitrate(static_cast<std::uint32_t>(
+                (size() * kBitsPerByte * std::chrono::milliseconds::period::den) / duration.count()));
             }
           }
 

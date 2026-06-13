@@ -22,6 +22,7 @@
 #include <lmdb.h>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -55,7 +56,7 @@ namespace ao::query::test
       std::uint16_t totalTracks = 0;
       std::uint16_t discNumber = 0;
       std::uint16_t totalDiscs = 0;
-      std::uint32_t durationMs = 180000;
+      std::chrono::milliseconds duration = std::chrono::seconds{180};
       std::uint32_t bitrate = 320000;
       std::uint32_t sampleRate = 44100;
       std::uint8_t channels = 2;
@@ -87,7 +88,7 @@ namespace ao::query::test
                    std::string uri = "/path/to/track.flac",
                    std::uint16_t year = 2020,
                    std::uint16_t trackNumber = 5,
-                   std::uint32_t durationMs = 180000,
+                   std::uint32_t durationMillis = 180000,
                    std::uint32_t bitrate = 320000,
                    std::uint32_t sampleRate = 44100,
                    std::uint8_t channels = 2,
@@ -106,7 +107,7 @@ namespace ao::query::test
         spec.uri = std::move(uri);
         spec.year = year;
         spec.trackNumber = trackNumber;
-        spec.durationMs = durationMs;
+        spec.duration = std::chrono::milliseconds{durationMillis};
         spec.bitrate = bitrate;
         spec.sampleRate = sampleRate;
         spec.channels = channels;
@@ -161,7 +162,7 @@ namespace ao::query::test
         builder.metadata().totalDiscs(spec.totalDiscs);
 
         builder.property().uri(spec.uri);
-        builder.property().durationMs(spec.durationMs);
+        builder.property().duration(spec.duration);
         builder.property().bitrate(spec.bitrate);
         builder.property().sampleRate(spec.sampleRate);
         builder.property().channels(spec.channels);
@@ -1268,8 +1269,8 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Unit Scaling Logic", "[query][unit][plan_evaluator]")
   {
     auto const spec = TrackSpec{
-      .durationMs = 185000, // 3m 5s
-      .bitrate = 320000     // 320k
+      .duration = std::chrono::minutes{3} + std::chrono::seconds{5}, // 3m 5s
+      .bitrate = 320000                                              // 320k
     };
 
     auto track = TrackFixture{spec};

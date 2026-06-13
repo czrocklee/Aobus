@@ -11,6 +11,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -244,7 +245,7 @@ namespace ao::audio::test
 
       auto const info = decoder.streamInfo();
       CHECK(info.sourceFormat.sampleRate == 44100);
-      CHECK(info.durationMs == 1000);
+      CHECK(info.duration == std::chrono::seconds{1});
     }
 
     SECTION("Uses frame length when sample timing is absent")

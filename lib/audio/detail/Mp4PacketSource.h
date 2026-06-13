@@ -7,6 +7,7 @@
 #include <ao/media/mp4/Demuxer.h>
 #include <ao/utility/MappedFile.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -22,7 +23,7 @@ namespace ao::audio::detail
     Result<> open(std::filesystem::path const& filePath, std::string_view sampleEntry);
     void close() noexcept;
 
-    Result<> seek(std::uint32_t positionMs, std::uint32_t fallbackTimescale = 0);
+    Result<> seek(std::chrono::milliseconds offset, std::uint32_t fallbackTimescale = 0);
 
     bool isOpen() const noexcept;
     bool atEnd() const noexcept;
@@ -31,7 +32,7 @@ namespace ao::audio::detail
     media::mp4::Demuxer::SampleEntry sampleInfo() const;
     std::uint32_t sampleIndex() const noexcept;
     std::uint32_t timescale(std::uint32_t fallback = 0) const noexcept;
-    std::uint32_t durationMs(std::uint32_t fallbackTimescale = 0) const noexcept;
+    std::chrono::milliseconds duration(std::uint32_t fallbackTimescale = 0) const noexcept;
     std::uint64_t firstFrameIndex(std::uint32_t sampleRate, std::uint32_t fallbackFramesPerPacket) const noexcept;
 
     void advance() noexcept;

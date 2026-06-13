@@ -73,7 +73,7 @@ namespace ao::fleet
         .environmentWhitelist = {"PATH", "HOME", "USER", "TMPDIR", "NIX_PATH", "GIT_CONFIG_NOSYSTEM"},
         .environment = {},
         .timeout = kDefaultLocalTimeout,
-        .terminationGrace = std::chrono::seconds{2},
+        .terminationGracePeriod = std::chrono::seconds{2},
       };
     }
 

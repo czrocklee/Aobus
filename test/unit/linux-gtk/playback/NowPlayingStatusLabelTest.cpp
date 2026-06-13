@@ -53,8 +53,8 @@ namespace ao::gtk::test
     REQUIRE(gtkLabel);
 
     // Just verify it wires up and doesn't crash
-    auto desc =
-      audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .title = "Song", .artist = "Artist", .durationMs = 1000};
+    auto desc = audio::TrackPlaybackDescriptor{
+      .trackId = TrackId{1}, .title = "Song", .artist = "Artist", .duration = std::chrono::seconds{1}};
 
     playback.play(desc, ListId{1});
     drainGtkEvents();

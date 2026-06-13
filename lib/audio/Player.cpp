@@ -13,6 +13,7 @@
 #include <ao/utility/Log.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -394,9 +395,9 @@ namespace ao::audio
     _implPtr->enginePtr->stop();
   }
 
-  void Player::seek(std::uint32_t positionMs)
+  void Player::seek(std::chrono::milliseconds offset)
   {
-    _implPtr->enginePtr->seek(positionMs);
+    _implPtr->enginePtr->seek(offset);
   }
 
   void Player::setVolume(float vol)

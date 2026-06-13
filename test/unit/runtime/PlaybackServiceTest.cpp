@@ -22,6 +22,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string_view>
@@ -132,8 +133,8 @@ namespace ao::rt::test
       auto const& state = playbackService.state();
       CHECK(state.trackId == kInvalidTrackId);
       CHECK(state.sourceListId == kInvalidListId);
-      CHECK(state.durationMs == 0);
-      CHECK(state.positionMs == 0);
+      CHECK(state.duration == std::chrono::milliseconds{0});
+      CHECK(state.elapsed == std::chrono::milliseconds{0});
       CHECK(state.shuffleMode == ShuffleMode::Off);
       CHECK(state.repeatMode == RepeatMode::Off);
     }
@@ -188,7 +189,7 @@ namespace ao::rt::test
         .filePath = "/fake/path.flac",
         .title = "Fake Track",
         .artist = "Fake Artist",
-        .durationMs = 120000,
+        .duration = std::chrono::minutes{2},
       };
 
       playbackService.play(desc, ListId{1});
@@ -231,11 +232,11 @@ namespace ao::rt::test
         [&](auto const& ev)
         {
           seekFired = true;
-          CHECK(ev.positionMs == 1000);
+          CHECK(ev.elapsed == std::chrono::seconds{1});
           CHECK(ev.mode == PlaybackService::SeekMode::Final);
         });
 
-      playbackService.seek(1000, PlaybackService::SeekMode::Final);
+      playbackService.seek(std::chrono::seconds{1}, PlaybackService::SeekMode::Final);
       CHECK(seekFired);
     }
 
@@ -406,7 +407,7 @@ namespace ao::rt::test
         .filePath = "/fake/path.flac",
         .title = "Fake Track",
         .artist = "Fake Artist",
-        .durationMs = 120000,
+        .duration = std::chrono::minutes{2},
       };
 
       freshService.play(desc, ListId{1});

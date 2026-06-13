@@ -12,6 +12,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
 
+#include <chrono>
+
 namespace ao::gtk::test
 {
   TEST_CASE("NowPlayingFieldLabel - smoke test", "[gtk][playback][viewmodel]")
@@ -26,7 +28,8 @@ namespace ao::gtk::test
     REQUIRE(gtkLabel);
 
     // Just verify it wires up and doesn't crash
-    auto desc = audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .title = "Test Song", .durationMs = 1000};
+    auto desc =
+      audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .title = "Test Song", .duration = std::chrono::seconds{1}};
 
     playback.play(desc, ListId{1});
     drainGtkEvents();

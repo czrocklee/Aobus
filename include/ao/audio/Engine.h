@@ -8,6 +8,7 @@
 #include <ao/audio/Types.h>
 #include <ao/audio/detail/RouteTracker.h>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -33,9 +34,9 @@ namespace ao::audio
       Transport transport = Transport::Idle;
       BackendId backendId;
       ProfileId profileId;
-      std::uint32_t positionMs = 0;
-      std::uint32_t durationMs = 0;
-      std::uint32_t bufferedMs = 0;
+      std::chrono::milliseconds elapsed{0};
+      std::chrono::milliseconds duration{0};
+      std::chrono::milliseconds bufferedDuration{0};
       std::uint32_t underrunCount = 0;
       std::string statusText;
       DeviceId currentDeviceId;
@@ -79,7 +80,7 @@ namespace ao::audio
     void pause();
     void resume();
     void stop();
-    void seek(std::uint32_t positionMs);
+    void seek(std::chrono::milliseconds offset);
 
     void setVolume(float volume);
     float volume() const;

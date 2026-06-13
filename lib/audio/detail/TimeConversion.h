@@ -4,6 +4,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <limits>
 
@@ -36,9 +37,10 @@ namespace ao::audio::detail
     return whole + fraction;
   }
 
-  inline std::uint32_t durationMilliseconds(std::uint64_t duration, std::uint32_t timescale) noexcept
+  inline std::chrono::milliseconds convertToDuration(std::uint64_t duration, std::uint32_t timescale) noexcept
   {
     auto const milliseconds = saturatingScale(duration, 1000, timescale);
-    return static_cast<std::uint32_t>(std::min<std::uint64_t>(milliseconds, std::numeric_limits<std::uint32_t>::max()));
+    return std::chrono::milliseconds{
+      static_cast<std::uint32_t>(std::min<std::uint64_t>(milliseconds, std::numeric_limits<std::uint32_t>::max()))};
   }
 } // namespace ao::audio::detail

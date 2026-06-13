@@ -257,10 +257,13 @@ namespace ao::uimodel::playback::test
     SECTION("Next/Previous/Shuffle/CycleRepeat with queue")
     {
       auto const trackId = testLib.addTrack({.title = "Q Test", .artist = "Artist", .album = "Album"});
-      auto queueModel = PlaybackQueueModel{
-        playback,
-        [&](TrackId) -> std::optional<audio::TrackPlaybackDescriptor>
-        { return audio::TrackPlaybackDescriptor{.trackId = trackId, .filePath = "test.flac", .durationMs = 5000}; }};
+      auto queueModel =
+        PlaybackQueueModel{playback,
+                           [&](TrackId) -> std::optional<audio::TrackPlaybackDescriptor>
+                           {
+                             return audio::TrackPlaybackDescriptor{
+                               .trackId = trackId, .filePath = "test.flac", .duration = std::chrono::seconds{5}};
+                           }};
 
       auto const trackIds = std::vector{trackId, TrackId{999}, TrackId{1000}};
       queueModel.playQueue(trackIds, trackId, kInvalidListId);
@@ -323,7 +326,8 @@ namespace ao::uimodel::playback::test
 
     SECTION("onPreparing triggers refresh")
     {
-      auto desc = audio::TrackPlaybackDescriptor{.trackId = trackId, .filePath = "test.flac", .durationMs = 5000};
+      auto desc = audio::TrackPlaybackDescriptor{
+        .trackId = trackId, .filePath = "test.flac", .duration = std::chrono::seconds{5}};
       playback.play(desc, kInvalidListId);
 
       CHECK(log.states.size() > initialCount);

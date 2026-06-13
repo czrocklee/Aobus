@@ -9,6 +9,7 @@
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
+#include <ao/audio/Types.h>
 #include <ao/utility/ByteView.h>
 
 #include <FLAC/format.h>
@@ -17,6 +18,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -238,7 +240,7 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
-  Result<> FlacDecoderSession::seek(std::uint32_t positionMs)
+  Result<> FlacDecoderSession::seek(std::chrono::milliseconds offset)
   {
     _implPtr->pcmBuffer.clear();
     _implPtr->bufferedFrames = 0;
@@ -252,7 +254,7 @@ namespace ao::audio
       return makeError(Error::Code::SeekFailed, "Sample rate is 0");
     }
 
-    auto const targetSample = static_cast<::FLAC__uint64>(positionMs) * sampleRate / 1000;
+    auto const targetSample = static_cast<::FLAC__uint64>(durationToSamples(offset, sampleRate));
 
     if (::FLAC__stream_decoder_seek_absolute(_implPtr->decoder, targetSample) == 0)
     {
@@ -522,7 +524,7 @@ namespace ao::audio
 
       if (streamInfo.sample_rate > 0)
       {
-        impl->info.durationMs = detail::durationMilliseconds(streamInfo.total_samples, streamInfo.sample_rate);
+        impl->info.duration = detail::convertToDuration(streamInfo.total_samples, streamInfo.sample_rate);
       }
 
       impl->info.isLossy = false;

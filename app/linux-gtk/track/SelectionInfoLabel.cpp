@@ -18,9 +18,9 @@ namespace ao::gtk
 {
   namespace
   {
-    std::string formatDuration(std::chrono::milliseconds ms)
+    std::string formatDuration(std::chrono::milliseconds duration)
     {
-      auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(ms).count();
+      auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
       auto const hours = totalSeconds / 3600;
       auto const minutes = (totalSeconds % 3600) / 60;
       auto const seconds = totalSeconds % 60;

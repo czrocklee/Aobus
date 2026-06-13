@@ -8,6 +8,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -46,7 +47,7 @@ namespace ao::audio::test
 
   inline void checkClosedSession(IDecoderSession& decoder)
   {
-    CHECK(!decoder.seek(1));
+    CHECK(!decoder.seek(std::chrono::milliseconds{1}));
 
     auto const block = decoder.readNextBlock();
     REQUIRE(block);
@@ -56,7 +57,7 @@ namespace ao::audio::test
     auto const info = decoder.streamInfo();
     CHECK(info.sourceFormat == Format{});
     CHECK(info.outputFormat == Format{});
-    CHECK(info.durationMs == 0);
+    CHECK(info.duration == std::chrono::milliseconds{0});
     CHECK_FALSE(info.isLossy);
   }
 

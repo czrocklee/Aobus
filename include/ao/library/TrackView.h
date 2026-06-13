@@ -10,6 +10,7 @@
 
 #include <gsl-lite/gsl-lite.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -84,7 +85,7 @@ namespace ao::library
       std::uint32_t sampleRate() const noexcept { return _track.hotHeader().sampleRate; }
 
       // Technical properties (from cold)
-      std::uint32_t durationMs() const noexcept { return _track.coldHeader().durationMs; }
+      std::chrono::milliseconds duration() const noexcept { return _track.coldHeader().duration; }
       std::uint32_t bitrate() const noexcept { return _track.coldHeader().bitrate; }
       std::uint8_t channels() const noexcept { return _track.coldHeader().channels; }
       std::string_view uri() const { return _track.coldUri(); }

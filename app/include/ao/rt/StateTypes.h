@@ -85,8 +85,8 @@ namespace ao::rt
     ViewId sourceViewId = kInvalidViewId;
     std::string trackTitle{};
     std::string trackArtist{};
-    std::uint32_t positionMs = 0;
-    std::uint32_t durationMs = 0;
+    std::chrono::milliseconds elapsed{0};
+    std::chrono::milliseconds duration{0};
     float volume = 1.0F;
     bool muted = false;
     bool volumeAvailable = false;

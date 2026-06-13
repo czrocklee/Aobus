@@ -13,6 +13,7 @@
 #include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/widget.h>
 
+#include <chrono>
 #include <cstdint>
 #include <format>
 #include <optional>
@@ -25,7 +26,7 @@ namespace ao::gtk::layout::track_field_grid
 {
   namespace
   {
-    constexpr auto kUndoTimeoutMs = 5000;
+    constexpr auto kUndoTimeout = std::chrono::seconds{5};
 
     std::string trimmedCopy(std::string_view text)
     {
@@ -89,7 +90,7 @@ namespace ao::gtk::layout::track_field_grid
         clear();
         return false;
       },
-      kUndoTimeoutMs);
+      kUndoTimeout.count());
   }
 
   std::optional<UndoState> CustomPropertyUndoBar::takePendingUndo()

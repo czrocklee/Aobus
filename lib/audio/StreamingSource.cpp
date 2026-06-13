@@ -25,7 +25,7 @@ namespace ao::audio
 {
   namespace
   {
-    constexpr auto kDecodeBackoff = std::chrono::milliseconds{5};
+    constexpr auto kDecodeBackoffInterval = std::chrono::milliseconds{5};
     constexpr std::uint8_t kBytesPer24BitSample = 3;
 
     std::uint64_t bytesPerSecond(Format const& format) noexcept
@@ -49,28 +49,29 @@ namespace ao::audio
       return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
     }
 
-    std::uint32_t bufferedDurationMs(std::size_t byteCount, std::uint64_t bytesPerSecondValue) noexcept
+    std::chrono::milliseconds calculateBufferedDuration(std::size_t byteCount,
+                                                        std::uint64_t bytesPerSecondValue) noexcept
     {
       if (bytesPerSecondValue == 0)
       {
-        return 0;
+        return std::chrono::milliseconds{0};
       }
 
-      return static_cast<std::uint32_t>((static_cast<std::uint64_t>(byteCount) * 1000U) / bytesPerSecondValue);
+      return std::chrono::milliseconds{(static_cast<std::uint64_t>(byteCount) * 1000U) / bytesPerSecondValue};
     }
   } // namespace
 
   StreamingSource::StreamingSource(std::unique_ptr<IDecoderSession> decoderPtr,
                                    DecodedStreamInfo streamInfo,
                                    std::function<void(Error const&)> onError,
-                                   std::uint32_t prerollTargetMs,
-                                   std::uint32_t decodeHighWatermarkMs)
+                                   std::chrono::milliseconds prerollDuration,
+                                   std::chrono::milliseconds decodeHighWatermarkThreshold)
     : _decoderPtr{std::move(decoderPtr)}
     , _streamInfo{streamInfo}
     , _onError{std::move(onError)}
     , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
-    , _prerollTargetMs{prerollTargetMs}
-    , _decodeHighWatermarkMs{decodeHighWatermarkMs}
+    , _prerollDuration{prerollDuration}
+    , _decodeHighWatermarkThreshold{decodeHighWatermarkThreshold}
   {
   }
 
@@ -83,7 +84,7 @@ namespace ao::audio
   {
     auto const seekToken = _seekStopSource.get_token();
 
-    if (auto const fillResult = fillUntil(_prerollTargetMs, seekToken); !fillResult)
+    if (auto const fillResult = fillUntil(_prerollDuration, seekToken); !fillResult)
     {
       return fillResult;
     }
@@ -95,8 +96,9 @@ namespace ao::audio
 
     if (_failed.load(std::memory_order_relaxed))
     {
-      return std::unexpected(
-        Error{.code = Error::Code::Generic, .message = "Streaming source failed during initialization"});
+      auto const lock = std::scoped_lock{_errorMutex};
+      return std::unexpected(_optLastError.value_or(
+        Error{.code = Error::Code::Generic, .message = "Streaming source failed during initialization"}));
     }
 
     return {};
@@ -112,12 +114,12 @@ namespace ao::audio
     return _decoderReachedEof.load(std::memory_order_relaxed) && _ringBuffer.size() == 0;
   }
 
-  std::uint32_t StreamingSource::bufferedMs() const noexcept
+  std::chrono::milliseconds StreamingSource::bufferedDuration() const noexcept
   {
-    return bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond);
+    return calculateBufferedDuration(_ringBuffer.size(), _bytesPerSecond);
   }
 
-  Result<> StreamingSource::seek(std::uint32_t positionMs)
+  Result<> StreamingSource::seek(std::chrono::milliseconds offset)
   {
     stopDecodeThread();
 
@@ -125,28 +127,41 @@ namespace ao::audio
     _seekStopSource = std::stop_source{};
     auto const seekToken = _seekStopSource.get_token();
 
-    _failed = false;
+    {
+      auto const lock = std::scoped_lock{_errorMutex};
+      _optLastError.reset();
+      _failed.store(false, std::memory_order_relaxed);
+    }
     _decoderReachedEof = false;
     _ringBuffer.clear();
 
+    auto seekResult = Result<>{};
+    bool failedExchanged = false;
     {
       auto lock = std::scoped_lock{_decoderMutex};
 
-      if (auto const seekResult = _decoderPtr->seek(positionMs); !seekResult)
+      if (auto const res = _decoderPtr->seek(offset); !res)
       {
-        if (!_failed.exchange(true, std::memory_order_relaxed))
         {
-          if (_onError)
-          {
-            _onError(seekResult.error());
-          }
+          auto const lock = std::scoped_lock{_errorMutex};
+          _optLastError = res.error();
         }
-
-        return seekResult;
+        failedExchanged = !_failed.exchange(true, std::memory_order_relaxed);
+        seekResult = std::unexpected{res.error()};
       }
     }
 
-    if (auto const fillResult = fillUntil(_prerollTargetMs, seekToken); !fillResult)
+    if (!seekResult)
+    {
+      if (failedExchanged && _onError)
+      {
+        _onError(seekResult.error());
+      }
+
+      return seekResult;
+    }
+
+    if (auto const fillResult = fillUntil(_prerollDuration, seekToken); !fillResult)
     {
       return fillResult;
     }
@@ -158,7 +173,9 @@ namespace ao::audio
 
     if (_failed.load(std::memory_order_relaxed))
     {
-      return std::unexpected(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"});
+      auto const lock = std::scoped_lock{_errorMutex};
+      return std::unexpected(
+        _optLastError.value_or(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"}));
     }
 
     return {};
@@ -191,9 +208,9 @@ namespace ao::audio
     while (!threadStopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
            !_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested())
     {
-      if (bufferedMs() >= _decodeHighWatermarkMs)
+      if (bufferedDuration() >= _decodeHighWatermarkThreshold)
       {
-        std::this_thread::sleep_for(kDecodeBackoff);
+        std::this_thread::sleep_for(kDecodeBackoffInterval);
         continue;
       }
 
@@ -201,6 +218,11 @@ namespace ao::audio
 
       if (!result)
       {
+        {
+          auto const lock = std::scoped_lock{_errorMutex};
+          _optLastError = result.error();
+        }
+
         if (!_failed.exchange(true, std::memory_order_relaxed))
         {
           if (_onError)
@@ -219,15 +241,21 @@ namespace ao::audio
     }
   }
 
-  Result<> StreamingSource::fillUntil(std::uint32_t targetBufferedMs, std::stop_token const& seekToken)
+  Result<> StreamingSource::fillUntil(std::chrono::milliseconds targetBufferedThreshold,
+                                      std::stop_token const& seekToken)
   {
     while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
-           !seekToken.stop_requested() && bufferedMs() < targetBufferedMs)
+           !seekToken.stop_requested() && bufferedDuration() < targetBufferedThreshold)
     {
       auto const result = decodeNextBlock(seekToken, nullptr);
 
       if (!result)
       {
+        {
+          auto const lock = std::scoped_lock{_errorMutex};
+          _optLastError = result.error();
+        }
+
         if (!_failed.exchange(true, std::memory_order_relaxed))
         {
           if (_onError)
@@ -247,7 +275,9 @@ namespace ao::audio
 
     if (_failed.load(std::memory_order_relaxed))
     {
-      return std::unexpected(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"});
+      auto const lock = std::scoped_lock{_errorMutex};
+      return std::unexpected(
+        _optLastError.value_or(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"}));
     }
 
     return {};

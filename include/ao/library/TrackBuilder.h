@@ -10,6 +10,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -116,7 +117,7 @@ namespace ao::library
     class PropertyBuilder
     {
     public:
-      PropertyBuilder& durationMs(std::uint32_t durationMs);
+      PropertyBuilder& duration(std::chrono::milliseconds duration);
       PropertyBuilder& bitrate(std::uint32_t bitrate);
       PropertyBuilder& sampleRate(std::uint32_t sampleRate);
       PropertyBuilder& codec(AudioCodec codec);
@@ -126,7 +127,7 @@ namespace ao::library
 
       // Accessors
       std::string_view uri() const { return _uri; }
-      std::uint32_t durationMs() const { return _durationMs; }
+      std::chrono::milliseconds duration() const { return _duration; }
       std::uint32_t bitrate() const { return _bitrate; }
       std::uint32_t sampleRate() const { return _sampleRate; }
       AudioCodec codec() const { return _codec; }
@@ -137,7 +138,7 @@ namespace ao::library
       friend class TrackBuilder;
 
       // Property numerics
-      std::uint32_t _durationMs = 0;
+      std::chrono::milliseconds _duration{0};
       std::uint32_t _bitrate = 0;
       std::uint32_t _sampleRate = 0;
       AudioCodec _codec = AudioCodec::Unknown;

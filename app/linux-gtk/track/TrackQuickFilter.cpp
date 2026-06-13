@@ -14,13 +14,14 @@
 #include <gtkmm/entry.h>
 #include <sigc++/functors/mem_fun.h>
 
+#include <chrono>
 #include <string>
 
 namespace ao::gtk
 {
   namespace
   {
-    constexpr auto kFilterDebounceMs = 200;
+    constexpr auto kFilterDebounceInterval = std::chrono::milliseconds{200};
   }
 
   TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime)
@@ -77,7 +78,7 @@ namespace ao::gtk
         _controller.updateFilter(get_text().raw());
         return false;
       },
-      kFilterDebounceMs);
+      kFilterDebounceInterval.count());
   }
 
   void TrackQuickFilter::applyState(ao::uimodel::track::TrackFilterViewState const& view)

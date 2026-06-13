@@ -10,6 +10,7 @@
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -58,7 +59,7 @@ namespace ao::audio
     void pause();
     void resume();
     void stop();
-    void seek(std::uint32_t positionMs);
+    void seek(std::chrono::milliseconds offset);
 
     void setVolume(float vol);
     void setMuted(bool muted);

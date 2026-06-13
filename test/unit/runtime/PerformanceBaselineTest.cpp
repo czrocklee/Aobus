@@ -29,10 +29,10 @@ namespace ao::rt::test
   {
     struct Timings final
     {
-      std::chrono::milliseconds createProjection{};
-      std::chrono::milliseconds setTitleSort{};
-      std::chrono::milliseconds evaluateMembers{};
-      std::chrono::microseconds indexOfLookup{};
+      std::chrono::milliseconds createProjectionDuration{};
+      std::chrono::milliseconds setTitleSortDuration{};
+      std::chrono::milliseconds evaluateMembersDuration{};
+      std::chrono::microseconds indexOfLookupDuration{};
     };
 
     struct ScaleBench final
@@ -55,7 +55,9 @@ namespace ao::rt::test
           .year = static_cast<std::uint16_t>(1990 + (idx % 35)),
           .discNumber = static_cast<std::uint16_t>(1 + (idx % 3)),
           .trackNumber = static_cast<std::uint16_t>(1 + (idx % 20)),
-          .durationMs = 180000 + static_cast<std::uint32_t>((idx * 137) % 420000),
+          .duration = std::chrono::minutes{3} + std::chrono::milliseconds{static_cast<std::uint32_t>(
+                                                  (static_cast<std::int64_t>(idx) * 137) %
+                                                  std::chrono::milliseconds{std::chrono::minutes{7}}.count())},
         };
         bench.ids.push_back(bench.lib.addTrack(spec));
       }
@@ -103,8 +105,8 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
       auto const t2 = std::chrono::steady_clock::now();
 
-      t.createProjection = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
-      t.setTitleSort = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+      t.createProjectionDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+      t.setTitleSortDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
       // 2. SmartListEvaluator evaluateMembers (simulates expression filter via SmartListSource)
       auto evaluator = SmartListEvaluator{lib};
@@ -117,7 +119,7 @@ namespace ao::rt::test
       filtered.reload();
       auto const t4 = std::chrono::steady_clock::now();
 
-      t.evaluateMembers = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3);
+      t.evaluateMembersDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3);
 
       // 3. indexOf — 10k iterations at a fixed position
       auto const midId = proj.trackIdAt(static_cast<std::size_t>(trackCount / 2));
@@ -133,7 +135,7 @@ namespace ao::rt::test
 
       auto const t6 = std::chrono::steady_clock::now();
 
-      t.indexOfLookup = std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5);
+      t.indexOfLookupDuration = std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5);
 
       return t;
     }
@@ -150,21 +152,21 @@ namespace ao::rt::test
     buildLibrary(bench, kN);
     auto const t1 = std::chrono::steady_clock::now();
 
-    auto const buildMs = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
-    APP_LOG_INFO("  Library build: {} ms", buildMs.count());
+    auto const buildDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+    APP_LOG_INFO("  Library build: {} ms", buildDuration.count());
 
     auto const t = measureScale(bench, kN);
 
-    APP_LOG_INFO("  Projection construct: {} ms", t.createProjection.count());
-    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSort.count());
-    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembers.count());
-    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookup.count());
+    APP_LOG_INFO("  Projection construct: {} ms", t.createProjectionDuration.count());
+    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSortDuration.count());
+    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembersDuration.count());
+    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
 
     // Regression thresholds — deliberately generous to avoid flakes
-    CHECK(t.createProjection.count() < 5000);
-    CHECK(t.setTitleSort.count() < 5000);
-    CHECK(t.evaluateMembers.count() < 10000);
-    CHECK(t.indexOfLookup.count() < 500000);
+    CHECK(t.createProjectionDuration < std::chrono::seconds{5});
+    CHECK(t.setTitleSortDuration < std::chrono::seconds{5});
+    CHECK(t.evaluateMembersDuration < std::chrono::seconds{10});
+    CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 
   TEST_CASE("Phase 0 — 100k Baseline", "[baseline][unit]")
@@ -178,21 +180,21 @@ namespace ao::rt::test
     buildLibrary(bench, kN);
     auto const t1 = std::chrono::steady_clock::now();
 
-    auto const buildMs = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
-    APP_LOG_INFO("  Library build: {} ms", buildMs.count());
+    auto const buildDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+    APP_LOG_INFO("  Library build: {} ms", buildDuration.count());
 
     auto const t = measureScale(bench, kN);
 
-    APP_LOG_INFO("  Projection construct: {} ms", t.createProjection.count());
-    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSort.count());
-    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembers.count());
-    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookup.count());
+    APP_LOG_INFO("  Projection construct: {} ms", t.createProjectionDuration.count());
+    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSortDuration.count());
+    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembersDuration.count());
+    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
 
     // Regression thresholds — deliberately generous to avoid flakes
-    CHECK(t.createProjection.count() < 30000);
-    CHECK(t.setTitleSort.count() < 30000);
-    CHECK(t.evaluateMembers.count() < 60000);
-    CHECK(t.indexOfLookup.count() < 500000);
+    CHECK(t.createProjectionDuration < std::chrono::seconds{30});
+    CHECK(t.setTitleSortDuration < std::chrono::seconds{30});
+    CHECK(t.evaluateMembersDuration < std::chrono::minutes{1});
+    CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 
   TEST_CASE("Phase 0 — 1M Baseline", "[baseline][unit]")
@@ -206,20 +208,20 @@ namespace ao::rt::test
     buildLibrary(bench, kN);
     auto const t1 = std::chrono::steady_clock::now();
 
-    auto const buildMs = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
-    APP_LOG_INFO("  Library build: {} ms", buildMs.count());
+    auto const buildDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+    APP_LOG_INFO("  Library build: {} ms", buildDuration.count());
 
     auto const t = measureScale(bench, kN);
 
-    APP_LOG_INFO("  Projection construct: {} ms", t.createProjection.count());
-    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSort.count());
-    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembers.count());
-    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookup.count());
+    APP_LOG_INFO("  Projection construct: {} ms", t.createProjectionDuration.count());
+    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSortDuration.count());
+    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembersDuration.count());
+    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
 
     // Regression thresholds — deliberately generous to avoid flakes
-    CHECK(t.createProjection.count() < 300000);
-    CHECK(t.setTitleSort.count() < 300000);
-    CHECK(t.evaluateMembers.count() < 600000);
-    CHECK(t.indexOfLookup.count() < 500000);
+    CHECK(t.createProjectionDuration < std::chrono::minutes{5});
+    CHECK(t.setTitleSortDuration < std::chrono::minutes{5});
+    CHECK(t.evaluateMembersDuration < std::chrono::minutes{10});
+    CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 }

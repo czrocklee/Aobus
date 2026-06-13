@@ -5,8 +5,8 @@
 
 #include <ao/Error.h>
 
+#include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <span>
 
 namespace ao::audio
@@ -21,10 +21,10 @@ namespace ao::audio
     ISource(ISource&&) = delete;
     ISource& operator=(ISource&&) = delete;
 
-    virtual Result<> seek(std::uint32_t positionMs) = 0;
+    virtual Result<> seek(std::chrono::milliseconds offset) = 0;
     virtual std::size_t read(std::span<std::byte> output) noexcept = 0;
     virtual bool isDrained() const noexcept = 0;
-    virtual std::uint32_t bufferedMs() const noexcept = 0;
+    virtual std::chrono::milliseconds bufferedDuration() const noexcept = 0;
 
   protected:
     ISource() = default;

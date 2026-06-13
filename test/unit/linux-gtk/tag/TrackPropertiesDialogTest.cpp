@@ -17,6 +17,7 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <chrono>
 #include <vector>
 
 namespace ao::gtk::test
@@ -48,7 +49,7 @@ namespace ao::gtk::test
         .discNumber(1);
       builder1.property()
         .uri("/music/track1.flac")
-        .durationMs(1000)
+        .duration(std::chrono::seconds{1})
         .sampleRate(44100)
         .bitrate(320)
         .channels(2)
@@ -69,7 +70,7 @@ namespace ao::gtk::test
         .discNumber(1);
       builder2.property()
         .uri("/music/track2.flac")
-        .durationMs(2000)
+        .duration(std::chrono::seconds{2})
         .sampleRate(48000)
         .bitrate(320)
         .channels(2)

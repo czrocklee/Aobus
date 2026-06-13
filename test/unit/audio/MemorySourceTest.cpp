@@ -9,6 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <expected>
 #include <memory>
@@ -21,7 +22,8 @@ namespace ao::audio::test
   {
     auto const format =
       Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
-    auto const info = DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .durationMs = 10};
+    auto const info =
+      DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .duration = std::chrono::milliseconds{10}};
 
     SECTION("Initialize buffers all blocks until EOS and closes decoder")
     {
@@ -35,7 +37,7 @@ namespace ao::audio::test
       auto source = MemorySource{std::move(decoderPtr), info};
       REQUIRE(source.initialize());
       REQUIRE(decoderRaw->isClosed());
-      REQUIRE(source.bufferedMs() == 2); // 4 bytes / (1000 Hz * 2 bytes/frame) = 2 ms
+      REQUIRE(source.bufferedDuration() == std::chrono::milliseconds{2}); // 4 bytes / (1000 Hz * 2 bytes/frame) = 2 ms
     }
 
     SECTION("Initialize converts decoder failure to DecodeFailed")
@@ -67,7 +69,7 @@ namespace ao::audio::test
       REQUIRE(out1[0] == std::byte{1});
       REQUIRE(out1[1] == std::byte{2});
 
-      REQUIRE(source.bufferedMs() == 1);
+      REQUIRE(source.bufferedDuration() == std::chrono::milliseconds{1});
 
       auto out2 = std::vector<std::byte>(10);
       REQUIRE(source.read(out2) == 2);
@@ -75,14 +77,15 @@ namespace ao::audio::test
       REQUIRE(out2[1] == std::byte{4});
 
       REQUIRE(source.isDrained());
-      REQUIRE(source.bufferedMs() == 0);
+      REQUIRE(source.bufferedDuration() == std::chrono::milliseconds{0});
     }
 
     SECTION("Seek aligns 24-bit stereo offsets and clamps")
     {
       auto const format24 =
         Format{.sampleRate = 1000, .channels = 2, .bitDepth = 24, .isFloat = false, .isInterleaved = true};
-      auto const info24 = DecodedStreamInfo{.sourceFormat = format24, .outputFormat = format24, .durationMs = 100};
+      auto const info24 = DecodedStreamInfo{
+        .sourceFormat = format24, .outputFormat = format24, .duration = std::chrono::milliseconds{100}};
 
       auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info24);
       auto data = std::vector(60, std::byte{0}); // 10 frames of 6 bytes each = 10ms
@@ -92,19 +95,20 @@ namespace ao::audio::test
       REQUIRE(source.initialize());
 
       // Seek to 1 ms = offset 6
-      REQUIRE(source.seek(1));
+      REQUIRE(source.seek(std::chrono::milliseconds{1}));
       auto out = std::vector<std::byte>(6);
       REQUIRE(source.read(out) == 6);
 
       // Seek beyond end
-      REQUIRE(source.seek(500));
+      REQUIRE(source.seek(std::chrono::milliseconds{500}));
       REQUIRE(source.isDrained());
     }
 
     SECTION("Zeroed output format yields zero buffered duration and zero seek offset")
     {
       auto const zeroFormat = Format{.sampleRate = 0, .channels = 0, .bitDepth = 0};
-      auto const zeroInfo = DecodedStreamInfo{.sourceFormat = zeroFormat, .outputFormat = zeroFormat, .durationMs = 0};
+      auto const zeroInfo = DecodedStreamInfo{
+        .sourceFormat = zeroFormat, .outputFormat = zeroFormat, .duration = std::chrono::milliseconds{0}};
 
       auto decoderPtr = std::make_unique<ScriptedDecoderSession>(zeroInfo);
       decoderPtr->setReadScript({{{}, true}});
@@ -112,8 +116,8 @@ namespace ao::audio::test
       auto source = MemorySource{std::move(decoderPtr), zeroInfo};
       REQUIRE(source.initialize());
 
-      REQUIRE(source.bufferedMs() == 0);
-      REQUIRE(source.seek(100));
+      REQUIRE(source.bufferedDuration() == std::chrono::milliseconds{0});
+      REQUIRE(source.seek(std::chrono::milliseconds{100}));
       REQUIRE(source.isDrained());
     }
   }

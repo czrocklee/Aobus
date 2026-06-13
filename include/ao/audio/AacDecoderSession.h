@@ -8,7 +8,7 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 
-#include <cstdint>
+#include <chrono>
 #include <filesystem>
 #include <memory>
 
@@ -27,7 +27,7 @@ namespace ao::audio
 
     Result<> open(std::filesystem::path const& filePath) override;
     void close() override;
-    Result<> seek(std::uint32_t positionMs) override;
+    Result<> seek(std::chrono::milliseconds offset) override;
     void flush() override;
 
     Result<PcmBlock> readNextBlock() override;

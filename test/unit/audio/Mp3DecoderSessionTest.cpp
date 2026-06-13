@@ -9,6 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -35,7 +36,7 @@ namespace ao::audio::test
     REQUIRE(info.outputFormat.sampleRate == info.sourceFormat.sampleRate);
     REQUIRE(info.outputFormat.channels == info.sourceFormat.channels);
     REQUIRE(info.outputFormat.bitDepth == 16);
-    REQUIRE(info.durationMs > 0);
+    REQUIRE(info.duration > std::chrono::milliseconds{0});
 
     auto const firstBlock = decoder.readNextBlock();
     REQUIRE(firstBlock);
@@ -43,7 +44,7 @@ namespace ao::audio::test
     CHECK(firstBlock->frames > 0);
     CHECK(!firstBlock->bytes.empty());
 
-    REQUIRE(decoder.seek(500));
+    REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
     auto const soughtBlock = decoder.readNextBlock();
     REQUIRE(soughtBlock);
     CHECK(soughtBlock->firstFrameIndex > 0);
@@ -172,7 +173,7 @@ namespace ao::audio::test
     REQUIRE_FALSE(repeatedRead);
     CHECK(repeatedRead.error().code == Error::Code::NotSupported);
 
-    REQUIRE(decoder.seek(0));
+    REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
     auto const recoveredBlock = decoder.readNextBlock();
     REQUIRE(recoveredBlock);
     CHECK(recoveredBlock->frames > 0);
@@ -184,7 +185,7 @@ namespace ao::audio::test
 
     SECTION("Seek on unopened file")
     {
-      CHECK(!decoder.seek(100));
+      CHECK(!decoder.seek(std::chrono::milliseconds{100}));
     }
 
     SECTION("Non-existent file")
@@ -215,7 +216,7 @@ namespace ao::audio::test
       {
         REQUIRE(decoder.open(testFile));
         // Seek to 1 hour (much longer than basic_metadata.mp3)
-        CHECK(!decoder.seek(3600 * 1000));
+        CHECK(!decoder.seek(std::chrono::hours{1}));
       }
     }
 

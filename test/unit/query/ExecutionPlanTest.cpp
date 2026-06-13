@@ -312,7 +312,7 @@ namespace ao::query::test
     CHECK(static_cast<std::uint8_t>(Field::Uri) == 1);
 
     // Property fields
-    CHECK(static_cast<std::uint8_t>(Field::DurationMs) == 2);
+    CHECK(static_cast<std::uint8_t>(Field::Duration) == 2);
     CHECK(static_cast<std::uint8_t>(Field::Bitrate) == 3);
     CHECK(static_cast<std::uint8_t>(Field::SampleRate) == 4);
 
@@ -400,7 +400,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - AccessProfile DurationMs is ColdOnly", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - AccessProfile Duration is ColdOnly", "[query][unit][execution_plan]")
   {
     auto expr = parse("@duration > 180000");
     auto compiler = QueryCompiler{};
@@ -720,8 +720,8 @@ namespace ao::query::test
       std::string name;
       Field expected;
     };
-    auto cases = {Case{.name = "duration", .expected = Field::DurationMs},
-                  Case{.name = "l", .expected = Field::DurationMs},
+    auto cases = {Case{.name = "duration", .expected = Field::Duration},
+                  Case{.name = "l", .expected = Field::Duration},
                   Case{.name = "bitrate", .expected = Field::Bitrate},
                   Case{.name = "br", .expected = Field::Bitrate},
                   Case{.name = "sampleRate", .expected = Field::SampleRate},

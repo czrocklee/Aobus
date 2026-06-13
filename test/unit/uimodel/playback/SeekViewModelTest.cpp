@@ -35,23 +35,23 @@ namespace ao::uimodel::playback::test
     {
       REQUIRE(!log.empty());
       CHECK(log.last().enabled == false);
-      CHECK(log.last().durationMs == 0);
-      CHECK(log.last().positionMs == 0);
+      CHECK(log.last().duration == std::chrono::milliseconds{0});
+      CHECK(log.last().elapsed == std::chrono::milliseconds{0});
     }
 
     SECTION("refresh with override")
     {
       log.clear();
-      viewModel.refresh(true, 5000);
+      viewModel.refresh(true, std::chrono::seconds{5});
       REQUIRE(!log.empty());
-      CHECK(log.last().positionMs == 5000);
+      CHECK(log.last().elapsed == std::chrono::seconds{5});
       CHECK(log.last().immediateUpdate == true);
     }
 
     SECTION("seekPreview/Final")
     {
-      viewModel.seekPreview(1000);
-      viewModel.seekFinal(2000);
+      viewModel.seekPreview(std::chrono::seconds{1});
+      viewModel.seekFinal(std::chrono::seconds{2});
     }
   }
 } // namespace ao::uimodel::playback::test

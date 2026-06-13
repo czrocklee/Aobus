@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -192,7 +193,7 @@ namespace ao::library::test
 
     // Create cold header
     auto coldHeader = TrackColdHeader{};
-    coldHeader.durationMs = 180000;
+    coldHeader.duration = std::chrono::minutes{3};
     coldHeader.trackNumber = 1;
     coldHeader.totalTracks = 10;
 
@@ -209,7 +210,7 @@ namespace ao::library::test
     auto rtxn = ReadTransaction{env};
     auto optView = store.reader(rtxn).get(id);
     REQUIRE(optView.has_value());
-    REQUIRE(optView->property().durationMs() == 180000);
+    REQUIRE(optView->property().duration() == std::chrono::minutes{3});
     REQUIRE(optView->metadata().trackNumber() == 1);
     REQUIRE(optView->metadata().totalTracks() == 10);
   }
@@ -229,7 +230,7 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.durationMs = 180000;
+    coldHeader.duration = std::chrono::minutes{3};
 
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
@@ -250,7 +251,7 @@ namespace ao::library::test
 
     // Update cold only
     auto coldHeader2 = TrackColdHeader{};
-    coldHeader2.durationMs = 200000;
+    coldHeader2.duration = std::chrono::seconds{200};
     coldHeader2.trackNumber = 2;
 
     auto coldData2 = std::vector<std::byte>(sizeof(TrackColdHeader));
@@ -264,7 +265,7 @@ namespace ao::library::test
     auto rtxn = ReadTransaction{env};
     auto optView = store.reader(rtxn).get(id);
     REQUIRE(optView.has_value());
-    REQUIRE(optView->property().durationMs() == 200000);
+    REQUIRE(optView->property().duration() == std::chrono::seconds{200});
     REQUIRE(optView->metadata().trackNumber() == 2);
   }
 
@@ -317,7 +318,7 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.durationMs = 240000;
+    coldHeader.duration = std::chrono::minutes{4};
     coldHeader.coverArtId = 42;
 
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
@@ -339,7 +340,7 @@ namespace ao::library::test
     REQUIRE(optCold.has_value());
     REQUIRE(!optCold->isHotValid());
     REQUIRE(optCold->isColdValid());
-    REQUIRE(optCold->property().durationMs() == 240000);
+    REQUIRE(optCold->property().duration() == std::chrono::minutes{4});
     REQUIRE(optCold->metadata().coverArtId() == 42);
   }
 
@@ -399,7 +400,7 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.durationMs = 180000;
+    coldHeader.duration = std::chrono::minutes{3};
     coldHeader.trackNumber = 5;
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
@@ -434,7 +435,7 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.durationMs = 240000;
+    coldHeader.duration = std::chrono::minutes{4};
     coldHeader.trackNumber = 3;
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
@@ -470,7 +471,7 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.durationMs = 300000;
+    coldHeader.duration = std::chrono::minutes{5};
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
@@ -487,7 +488,7 @@ namespace ao::library::test
     REQUIRE(trackId == id);
     REQUIRE(trackView.isHotValid());
     REQUIRE(trackView.isColdValid());
-    REQUIRE(trackView.property().durationMs() == 300000);
+    REQUIRE(trackView.property().duration() == std::chrono::minutes{5});
     REQUIRE(trackView.metadata().trackNumber() == 0); // default
   }
 
@@ -539,7 +540,7 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     auto coldHeader = TrackColdHeader{};
-    coldHeader.durationMs = 360000;
+    coldHeader.duration = std::chrono::minutes{6};
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
@@ -553,7 +554,7 @@ namespace ao::library::test
     REQUIRE(optView.has_value());
     REQUIRE(!optView->isHotValid());
     REQUIRE(optView->isColdValid());
-    REQUIRE(optView->property().durationMs() == 360000);
+    REQUIRE(optView->property().duration() == std::chrono::minutes{6});
   }
 
   TEST_CASE("TrackStore - LoadMode::Cold multi-record iteration", "[library][unit][track]")
@@ -576,7 +577,7 @@ namespace ao::library::test
       std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
       auto coldHeader = TrackColdHeader{};
-      coldHeader.durationMs = static_cast<std::uint32_t>(180000 + (i * 10000));
+      coldHeader.duration = std::chrono::seconds{180 + (i * 10)};
       coldHeader.trackNumber = i + 1;
       auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
       std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));

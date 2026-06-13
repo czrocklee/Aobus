@@ -5,8 +5,10 @@
 
 #include "TimeConversion.h"
 #include <ao/Error.h>
+#include <ao/audio/Types.h>
 #include <ao/media/mp4/Demuxer.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -46,7 +48,7 @@ namespace ao::audio::detail
     _sampleIndex = 0;
   }
 
-  Result<> Mp4PacketSource::seek(std::uint32_t positionMs, std::uint32_t fallbackTimescale)
+  Result<> Mp4PacketSource::seek(std::chrono::milliseconds offset, std::uint32_t fallbackTimescale)
   {
     if (!_demuxerPtr)
     {
@@ -60,7 +62,7 @@ namespace ao::audio::detail
       return makeError(Error::Code::SeekFailed, "Timescale is 0");
     }
 
-    auto const targetTime = (static_cast<std::uint64_t>(positionMs) * effectiveTimescale) / 1000U;
+    auto const targetTime = durationToSamples(offset, effectiveTimescale);
     _sampleIndex = _demuxerPtr->sampleIndexAtTime(targetTime);
     return {};
   }
@@ -105,16 +107,16 @@ namespace ao::audio::detail
     return fallback;
   }
 
-  std::uint32_t Mp4PacketSource::durationMs(std::uint32_t fallbackTimescale) const noexcept
+  std::chrono::milliseconds Mp4PacketSource::duration(std::uint32_t fallbackTimescale) const noexcept
   {
     auto const effectiveTimescale = timescale(fallbackTimescale);
 
     if (!_demuxerPtr || effectiveTimescale == 0)
     {
-      return 0;
+      return std::chrono::milliseconds{0};
     }
 
-    return durationMilliseconds(_demuxerPtr->duration(), effectiveTimescale);
+    return convertToDuration(_demuxerPtr->duration(), effectiveTimescale);
   }
 
   std::uint64_t Mp4PacketSource::firstFrameIndex(std::uint32_t sampleRate,

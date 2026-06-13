@@ -172,8 +172,8 @@ namespace ao::tag::mpeg::test
     auto const file = File{temp.path, TagFile::Mode::ReadOnly};
     auto builder = file.loadTrack();
 
-    REQUIRE(builder.property().durationMs() >= 1000);
-    CHECK(builder.property().durationMs() <= 1010);
+    REQUIRE(builder.property().duration() >= std::chrono::seconds{1});
+    CHECK(builder.property().duration() <= std::chrono::milliseconds{1010});
     CHECK(builder.property().codec() == library::AudioCodec::Mp3);
     CHECK(builder.property().bitDepth() == 16);
   }
@@ -243,7 +243,7 @@ namespace ao::tag::mpeg::test
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
       auto builder = file.loadTrack();
-      CHECK(builder.property().durationMs() == 0);
+      CHECK(builder.property().duration() == std::chrono::milliseconds{0});
     }
   }
 } // namespace ao::tag::mpeg::test

@@ -11,6 +11,7 @@
 #include <gtkmm/widget.h>
 #include <sigc++/connection.h>
 
+#include <chrono>
 #include <cstdint>
 
 namespace ao::gtk::test
@@ -51,15 +52,15 @@ namespace ao::gtk
     void previewSeekFromScale();
     void commitSeekFromScale();
     void executeDebouncedFinalSeek();
-    void setScaleRange(std::uint32_t durationMs);
-    void setScaleValue(std::uint32_t positionMs);
-    std::uint32_t scalePositionMs() const noexcept;
+    void setScaleRange(std::chrono::milliseconds duration);
+    void setScaleValue(std::chrono::milliseconds elapsed);
+    std::chrono::milliseconds scaleElapsed() const noexcept;
     void reset();
 
     Gtk::Scale _scale;
     uimodel::playback::PlaybackPositionInterpolator _interpolator;
 
-    std::uint32_t _durationMs = 0;
+    std::chrono::milliseconds _duration{0};
     InteractionState _interactionState = InteractionState::Idle;
     bool _pendingFinalSeek = false;
     bool _updatingScale = false;

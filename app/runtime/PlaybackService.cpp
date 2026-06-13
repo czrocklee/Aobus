@@ -13,7 +13,7 @@
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 
-#include <cstdint>
+#include <chrono>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -81,8 +81,8 @@ namespace ao::rt
       return PlaybackState{
         .transport = status.engine.transport,
         .trackId = {},
-        .positionMs = status.engine.positionMs,
-        .durationMs = status.engine.durationMs,
+        .elapsed = status.engine.elapsed,
+        .duration = status.engine.duration,
         .volume = status.volume,
         .muted = status.muted,
         .volumeAvailable = status.volumeAvailable,
@@ -115,7 +115,7 @@ namespace ao::rt
     RepeatMode repeatMode = RepeatMode::Off;
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
-    std::uint32_t currentTrackDurationMs = 0;
+    std::chrono::milliseconds currentTrackDuration{0};
     Signal<> preparingSignal;
     Signal<> startedSignal;
     Signal<> pausedSignal;
@@ -174,9 +174,9 @@ namespace ao::rt
       snapshot.shuffleMode = shuffleMode;
       snapshot.repeatMode = repeatMode;
 
-      if (snapshot.durationMs == 0)
+      if (snapshot.duration == std::chrono::milliseconds{0})
       {
-        snapshot.durationMs = currentTrackDurationMs;
+        snapshot.duration = currentTrackDuration;
       }
 
       return snapshot;
@@ -351,7 +351,7 @@ namespace ao::rt
     _implPtr->currentSourceListId = sourceListId;
     _implPtr->currentTrackTitle = descriptor.title;
     _implPtr->currentTrackArtist = descriptor.artist;
-    _implPtr->currentTrackDurationMs = descriptor.durationMs;
+    _implPtr->currentTrackDuration = descriptor.duration;
     _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
     _implPtr->startedSignal.emit();
 
@@ -391,7 +391,7 @@ namespace ao::rt
         .trackId = trackId,
         .filePath = filePath,
         .title = std::string{optView->metadata().title()},
-        .durationMs = optView->coldHeader().durationMs,
+        .duration = optView->coldHeader().duration,
       };
 
       play(desc, state.listId);
@@ -425,7 +425,7 @@ namespace ao::rt
     _implPtr->currentSourceListId = {};
     _implPtr->currentTrackTitle.clear();
     _implPtr->currentTrackArtist.clear();
-    _implPtr->currentTrackDurationMs = 0;
+    _implPtr->currentTrackDuration = std::chrono::milliseconds{0};
     _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
     _implPtr->stoppedSignal.emit();
     _implPtr->idleSignal.emit();
@@ -449,15 +449,15 @@ namespace ao::rt
     _implPtr->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode});
   }
 
-  void PlaybackService::seek(std::uint32_t const positionMs, SeekMode const mode)
+  void PlaybackService::seek(std::chrono::milliseconds const elapsed, SeekMode const mode)
   {
     if (mode == SeekMode::Final)
     {
-      _implPtr->playerPtr->seek(positionMs);
+      _implPtr->playerPtr->seek(elapsed);
       _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
     }
 
-    _implPtr->seekUpdateSignal.emit(SeekUpdate{.positionMs = positionMs, .mode = mode});
+    _implPtr->seekUpdateSignal.emit(SeekUpdate{.elapsed = elapsed, .mode = mode});
   }
 
   void PlaybackService::setOutput(audio::BackendId const& backendId,

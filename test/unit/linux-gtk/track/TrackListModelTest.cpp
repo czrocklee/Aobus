@@ -22,6 +22,7 @@
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -47,7 +48,7 @@ namespace ao::gtk::test
       std::uint16_t year = 2020;
       std::uint16_t trackNumber = 1;
       std::uint16_t discNumber = 1;
-      std::uint32_t durationMs = 180000;
+      std::chrono::milliseconds duration = std::chrono::minutes{3};
     };
 
     TrackSpec makeTrackSpec(std::string_view title,
@@ -90,7 +91,7 @@ namespace ao::gtk::test
           .discNumber(spec.discNumber);
         builder.property()
           .uri("/tmp/test.flac")
-          .durationMs(spec.durationMs)
+          .duration(spec.duration)
           .bitrate(320000)
           .sampleRate(44100)
           .channels(2)

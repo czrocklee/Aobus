@@ -221,7 +221,8 @@ namespace ao::rt
     };
 
     constexpr auto kPropertyDispatch = std::to_array<PropertyDispatch>({
-      {.field = TrackField::Duration, .u32Get = [](auto const& prop) { return prop.durationMs(); }},
+      {.field = TrackField::Duration,
+       .u32Get = [](auto const& prop) { return static_cast<std::uint32_t>(prop.duration().count()); }},
       {.field = TrackField::Bitrate, .u32Get = [](auto const& prop) { return prop.bitrate(); }},
       {.field = TrackField::SampleRate, .u32Get = [](auto const& prop) { return prop.sampleRate(); }},
       {.field = TrackField::Codec, .stringGet = [](auto const& prop) { return library::audioCodecName(prop.codec()); }},

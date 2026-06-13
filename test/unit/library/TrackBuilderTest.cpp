@@ -13,6 +13,7 @@
 #include <lmdb.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <span>
@@ -49,7 +50,7 @@ namespace ao::library::test
     CHECK(builder.metadata().genre().empty());
     CHECK(builder.property().uri().empty());
     CHECK(builder.property().bitDepth() == 0);
-    CHECK(builder.property().durationMs() == 0);
+    CHECK(builder.property().duration() == std::chrono::milliseconds{0});
     CHECK(builder.tags().names().empty());
     CHECK(builder.custom().pairs().empty());
   }
@@ -92,7 +93,7 @@ namespace ao::library::test
     auto builder = TrackBuilder::createNew();
     builder.property()
       .uri("file:///home/user/music/test.flac")
-      .durationMs(180500)
+      .duration(std::chrono::minutes{3} + std::chrono::milliseconds{500})
       .bitrate(320000)
       .sampleRate(44100)
       .codec(AudioCodec::Alac)
@@ -100,7 +101,7 @@ namespace ao::library::test
       .bitDepth(16);
 
     CHECK(builder.property().uri() == "file:///home/user/music/test.flac");
-    CHECK(builder.property().durationMs() == 180500);
+    CHECK(builder.property().duration() == std::chrono::minutes{3} + std::chrono::milliseconds{500});
     CHECK(builder.property().bitrate() == 320000);
     CHECK(builder.property().sampleRate() == 44100);
     CHECK(builder.property().codec() == AudioCodec::Alac);
@@ -320,7 +321,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(5).totalTracks(10).discNumber(1).totalDiscs(2);
-    builder.property().uri("/path/to/file.flac").durationMs(180000);
+    builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{3});
 
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -330,7 +331,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
     auto const* header = reinterpret_cast<TrackColdHeader const*>(coldData.data());
-    CHECK(header->durationMs == 180000);
+    CHECK(header->duration == std::chrono::minutes{3});
     CHECK(header->trackNumber == 5);
     CHECK(header->totalTracks == 10);
     CHECK(header->discNumber == 1);
@@ -362,7 +363,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(3);
-    builder.property().uri("/path/to/file.flac").durationMs(240000);
+    builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{4});
     builder.custom().add("key1", "value1").add("key2", "value2");
 
     auto const temp = TempDir{};
@@ -374,7 +375,7 @@ namespace ao::library::test
 
     // Verify cold view can parse it
     auto view = TrackView{std::span<std::byte const>{}, coldData};
-    CHECK(view.property().durationMs() == 240000);
+    CHECK(view.property().duration() == std::chrono::minutes{4});
     CHECK(view.metadata().trackNumber() == 3);
   }
 

@@ -20,9 +20,9 @@ namespace ao::uimodel::track::test
   {
     using std::chrono::milliseconds;
     REQUIRE(formatDuration(milliseconds{0}).empty());
-    REQUIRE(formatDuration(milliseconds{1000}) == "0:01");
-    REQUIRE(formatDuration(milliseconds{61000}) == "1:01");
-    REQUIRE(formatDuration(milliseconds{3600000}) == "1:0:00"); // 60 minutes
+    REQUIRE(formatDuration(std::chrono::seconds{1}) == "0:01");
+    REQUIRE(formatDuration(std::chrono::seconds{61}) == "1:01");
+    REQUIRE(formatDuration(std::chrono::minutes{60}) == "1:0:00"); // 60 minutes
   }
 
   TEST_CASE("TrackFieldFormatter - uint16 formatting", "[uimodel][track][formatter]")

@@ -36,24 +36,25 @@ namespace ao::uimodel::playback::test
     SECTION("Initial render")
     {
       REQUIRE(!log.empty());
-      CHECK(log.last().positionMs == 0);
-      CHECK(log.last().durationMs == 0);
+      CHECK(log.last().elapsed == std::chrono::milliseconds{0});
+      CHECK(log.last().duration == std::chrono::milliseconds{0});
     }
 
     SECTION("onSeekUpdate triggers refresh with Preview and Final modes")
     {
       auto const trackId = testLib.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
-      auto desc = audio::TrackPlaybackDescriptor{.trackId = trackId, .filePath = "test.flac", .durationMs = 30000};
+      auto desc = audio::TrackPlaybackDescriptor{
+        .trackId = trackId, .filePath = "test.flac", .duration = std::chrono::seconds{30}};
       playback.play(desc, kInvalidListId);
 
       log.clear();
-      playback.seek(5000, PlaybackService::SeekMode::Final);
+      playback.seek(std::chrono::seconds{5}, PlaybackService::SeekMode::Final);
       REQUIRE(!log.empty());
-      CHECK(log.last().positionMs > 0);
+      CHECK(log.last().elapsed > std::chrono::milliseconds{0});
       CHECK(log.last().immediateUpdate == true);
 
       log.clear();
-      playback.seek(10000, PlaybackService::SeekMode::Preview);
+      playback.seek(std::chrono::seconds{10}, PlaybackService::SeekMode::Preview);
       REQUIRE(!log.empty());
     }
   }

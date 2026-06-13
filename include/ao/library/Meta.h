@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -21,11 +22,11 @@ namespace ao::library
 
   struct MetaHeader final
   {
-    std::uint32_t magic;
-    std::uint32_t libraryVersion;
-    std::uint32_t flags;
-    std::uint64_t createdAtUnixMs;
-    std::array<std::byte, 16> libraryId;
+    std::uint32_t magic{};
+    std::uint32_t libraryVersion{};
+    std::uint32_t flags{};
+    std::chrono::sys_time<std::chrono::milliseconds> createdTime{};
+    std::array<std::byte, 16> libraryId{};
   };
 
   static_assert(sizeof(MetaHeader) == kMetaHeaderByteCount, "MetaHeader must be exactly 40 bytes");

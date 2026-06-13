@@ -41,7 +41,7 @@ namespace ao::gtk::test
     SECTION("SeekControl and TimeLabel initialization")
     {
       auto seekControl = SeekControl{playback};
-      auto timeLabel = TimeLabel{playback};
+      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
 
       auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
       auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());

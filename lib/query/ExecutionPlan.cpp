@@ -129,7 +129,7 @@ namespace ao::query
         case Field::DiscNumber:  // cold: TrackColdHeader
         case Field::TotalDiscs:  // cold: TrackColdHeader
         case Field::Custom:      // cold: custom KV storage
-        case Field::DurationMs:  // cold: TrackColdHeader
+        case Field::Duration:    // cold: TrackColdHeader
         case Field::Bitrate:     // cold: TrackColdHeader
         case Field::Channels:    // cold: TrackColdHeader
           return true;
@@ -226,7 +226,7 @@ namespace ao::query
     {
       switch (field)
       {
-        case Field::DurationMs: return "duration";
+        case Field::Duration: return "duration";
         case Field::Bitrate: return "bitrate";
         case Field::SampleRate: return "sampleRate";
         case Field::Channels: return "channels";
@@ -305,7 +305,7 @@ namespace ao::query
 
       switch (field)
       {
-        case Field::DurationMs:
+        case Field::Duration:
         {
           if (auto const* entry = unit_dispatch::Table::lookupUnit(normalized.data(), normalized.size());
               entry != nullptr && entry->durationMultiplier != 0)

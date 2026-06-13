@@ -13,6 +13,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <chrono>
+
 namespace ao::library::test
 {
   using namespace ao::lmdb;
@@ -30,7 +32,7 @@ namespace ao::library::test
 
     auto const reopened = MusicLibrary{temp.path(), temp.path()};
     REQUIRE(reopened.metaHeader().libraryId == firstHeader.libraryId);
-    REQUIRE(reopened.metaHeader().createdAtUnixMs == firstHeader.createdAtUnixMs);
+    REQUIRE(reopened.metaHeader().createdTime == firstHeader.createdTime);
   }
 
   TEST_CASE("MusicLibrary rejects unsupported library versions", "[library][unit]")
@@ -43,7 +45,7 @@ namespace ao::library::test
     auto header = MetaHeader{.magic = kLibraryMetaMagic,
                              .libraryVersion = kLibraryVersion + 1,
                              .flags = 0,
-                             .createdAtUnixMs = 1,
+                             .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}},
                              .libraryId = {}};
     metaStore.create(txn, header);
     txn.commit();

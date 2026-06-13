@@ -7,8 +7,8 @@
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -21,7 +21,7 @@ namespace ao::uimodel::playback
 {
   namespace
   {
-    constexpr std::uint32_t kRestartThresholdMs = 3000;
+    constexpr auto kRestartThreshold = std::chrono::seconds{3};
   }
 
   PlaybackQueueModel::PlaybackQueueModel(rt::PlaybackService& playback, DescriptorProvider descriptorProvider)
@@ -102,7 +102,7 @@ namespace ao::uimodel::playback
 
     auto const& state = _playback.state();
 
-    if (state.positionMs > kRestartThresholdMs)
+    if (state.elapsed > kRestartThreshold)
     {
       return true;
     }
@@ -135,7 +135,7 @@ namespace ao::uimodel::playback
     auto const& state = _playback.state();
 
     // If we are more than 3 seconds into the song, just restart it
-    if (state.positionMs > kRestartThresholdMs)
+    if (state.elapsed > kRestartThreshold)
     {
       if (auto const optDesc = _descriptorProvider(_queueStatePtr->trackIds[_queueStatePtr->currentIndex]); optDesc)
       {

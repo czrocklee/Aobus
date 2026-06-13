@@ -113,7 +113,7 @@ namespace ao::tag::flac::test
     CHECK(prop.channels() == 2);
     CHECK(prop.bitDepth() == 16);
     CHECK(prop.codec() == library::AudioCodec::Flac);
-    CHECK(prop.durationMs() == 1000);
+    CHECK(prop.duration() == std::chrono::seconds{1});
   }
 
   TEST_CASE("FLAC File - Malformed Data", "[tag][unit][flac][file]")

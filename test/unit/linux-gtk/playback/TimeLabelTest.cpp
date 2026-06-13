@@ -5,7 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdint>
+#include <chrono>
 
 namespace ao::gtk::test
 {
@@ -22,12 +22,12 @@ namespace ao::gtk::test
 
     SECTION("formatPlaybackTime")
     {
-      std::uint32_t const posMs = 65000;   // 1:05
-      std::uint32_t const durMs = 3661000; // 61:01 (1h 1m 1s)
+      auto const elapsed = std::chrono::seconds{65}; // 1:05
+      auto const duration = std::chrono::hours{1} + std::chrono::minutes{1} + std::chrono::seconds{1};
 
-      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Elapsed, posMs, durMs) == "1:05");
-      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Duration, posMs, durMs) == "61:01");
-      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Default, posMs, durMs) == "1:05 / 61:01");
+      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Elapsed, elapsed, duration) == "1:05");
+      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Duration, elapsed, duration) == "61:01");
+      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Default, elapsed, duration) == "1:05 / 61:01");
     }
   }
 } // namespace ao::gtk::test

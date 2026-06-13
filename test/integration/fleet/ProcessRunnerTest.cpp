@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "fleet/Model.h"
 #include "fleet/ProcessRunner.h"
+
+#include "fleet/Model.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -25,7 +26,7 @@ namespace ao::fleet::test
       .environmentWhitelist = {"PATH"},
       .environment = {},
       .timeout = std::chrono::milliseconds{100},
-      .terminationGrace = std::chrono::milliseconds{100},
+      .terminationGracePeriod = std::chrono::milliseconds{100},
     };
 
     auto result = runner.run(request);
@@ -48,7 +49,7 @@ namespace ao::fleet::test
       .environmentWhitelist = {"PATH"},
       .environment = {},
       .timeout = std::chrono::seconds{5},
-      .terminationGrace = std::chrono::seconds{1},
+      .terminationGracePeriod = std::chrono::seconds{1},
     });
 
     CHECK(result.status == ProcessStatus::Exited);
@@ -66,7 +67,7 @@ namespace ao::fleet::test
       .environmentWhitelist = {"PATH"},
       .environment = {},
       .timeout = std::chrono::seconds{5},
-      .terminationGrace = std::chrono::seconds{1},
+      .terminationGracePeriod = std::chrono::seconds{1},
     });
 
     CHECK(result.status == ProcessStatus::Exited);
@@ -85,7 +86,7 @@ namespace ao::fleet::test
       .environmentWhitelist = {"PATH"},
       .environment = {},
       .timeout = std::chrono::seconds{1},
-      .terminationGrace = std::chrono::seconds{1},
+      .terminationGracePeriod = std::chrono::seconds{1},
     });
     CHECK(missing.status == ProcessStatus::LaunchFailed);
 
@@ -96,7 +97,7 @@ namespace ao::fleet::test
       .environmentWhitelist = {"PATH"},
       .environment = {},
       .timeout = std::chrono::seconds{5},
-      .terminationGrace = std::chrono::seconds{1},
+      .terminationGracePeriod = std::chrono::seconds{1},
     });
     CHECK(signaled.status == ProcessStatus::Signaled);
     CHECK(signaled.signal == 15);
@@ -114,7 +115,7 @@ namespace ao::fleet::test
       .environmentWhitelist = {"PATH"},
       .environment = {},
       .timeout = std::chrono::seconds{20},
-      .terminationGrace = std::chrono::milliseconds{200},
+      .terminationGracePeriod = std::chrono::milliseconds{200},
     });
 
     CHECK(result.status == ProcessStatus::Exited);
@@ -135,7 +136,7 @@ namespace ao::fleet::test
       .environmentWhitelist = {"PATH"},
       .environment = {},
       .timeout = std::chrono::seconds{20},
-      .terminationGrace = std::chrono::seconds{2},
+      .terminationGracePeriod = std::chrono::seconds{2},
     });
 
     CHECK(result.status == ProcessStatus::Exited);

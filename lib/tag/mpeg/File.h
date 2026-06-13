@@ -6,7 +6,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
 
-#include <cstdint>
+#include <chrono>
 
 namespace ao::tag::mpeg
 {
@@ -20,6 +20,6 @@ namespace ao::tag::mpeg
     library::TrackBuilder loadTrack() const override;
 
   private:
-    std::uint32_t calculateDuration(FrameView const& frame, bool hasId3v1) const;
+    std::chrono::milliseconds calculateDuration(FrameView const& frame, bool hasId3v1) const;
   };
 }

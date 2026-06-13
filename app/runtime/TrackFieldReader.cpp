@@ -61,8 +61,7 @@ namespace ao::rt
         return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().totalTracks()};
 
       case TrackField::Duration:
-        return TrackFieldRawValue{
-          std::in_place_type<TrackFieldDuration>, std::chrono::milliseconds{view.property().durationMs()}};
+        return TrackFieldRawValue{std::in_place_type<TrackFieldDuration>, view.property().duration()};
 
       case TrackField::FilePath: return TrackFieldRawValue{std::in_place_type<std::string>, view.property().uri()};
       case TrackField::Codec:

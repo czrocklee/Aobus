@@ -14,6 +14,7 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -83,11 +84,7 @@ namespace ao::library
     if (view.isColdValid())
     {
       auto prop = view.property();
-      builder.property()
-        .uri(prop.uri())
-        .durationMs(prop.durationMs())
-        .bitrate(prop.bitrate())
-        .channels(prop.channels());
+      builder.property().uri(prop.uri()).duration(prop.duration()).bitrate(prop.bitrate()).channels(prop.channels());
 
       auto meta = view.metadata();
       builder.metadata()
@@ -250,9 +247,9 @@ namespace ao::library
   // PropertyBuilder
   //=============================================================================
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::durationMs(std::uint32_t durationMs)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::duration(std::chrono::milliseconds duration)
   {
-    _durationMs = durationMs;
+    _duration = duration;
     return *this;
   }
 
@@ -545,7 +542,7 @@ namespace ao::library
 
     {
       new (out.data()) TrackColdHeader{
-        .durationMs = prop._durationMs,
+        .duration = std::chrono::duration_cast<TrackDuration>(prop._duration),
         .coverArtId = _coverArtId,
         .bitrate = prop._bitrate,
         .workId = _workId,

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -41,7 +42,7 @@ namespace ao::rt
       std::uint16_t year = 0;
       std::uint16_t discNumber = 0;
       std::uint16_t trackNumber = 0;
-      std::uint32_t durationMs = 0;
+      std::chrono::milliseconds duration{0};
       std::string_view titleKey{};
       std::string_view artistKey{};
       std::string_view albumKey{};
@@ -191,7 +192,7 @@ namespace ao::rt
         case TrackSortField::Year: return compareNumeric(lhs.year, rhs.year);
         case TrackSortField::DiscNumber: return compareNumeric(lhs.discNumber, rhs.discNumber);
         case TrackSortField::TrackNumber: return compareNumeric(lhs.trackNumber, rhs.trackNumber);
-        case TrackSortField::Duration: return compareNumeric(lhs.durationMs, rhs.durationMs);
+        case TrackSortField::Duration: return compareNumeric(lhs.duration, rhs.duration);
         case TrackSortField::Title: return lhs.titleKey.compare(rhs.titleKey);
         case TrackSortField::Artist: return lhs.artistKey.compare(rhs.artistKey);
         case TrackSortField::Album: return lhs.albumKey.compare(rhs.albumKey);
@@ -259,7 +260,7 @@ namespace ao::rt
           case TrackSortField::Year: keys.year = view.metadata().year(); break;
           case TrackSortField::DiscNumber: keys.discNumber = view.metadata().discNumber(); break;
           case TrackSortField::TrackNumber: keys.trackNumber = view.metadata().trackNumber(); break;
-          case TrackSortField::Duration: keys.durationMs = view.property().durationMs(); break;
+          case TrackSortField::Duration: keys.duration = view.property().duration(); break;
           case TrackSortField::Title:
             keys.titleKey = intern(stringPool, normalizeTitle(view.metadata().title()));
             break;

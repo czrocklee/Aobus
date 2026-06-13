@@ -86,7 +86,7 @@ namespace ao::rt::test
     CHECK(proj.size() == kTrackCount);
     // Initial 10k sort + normalization should be reasonably fast with our cache.
     // We expect it to be well under 500ms on a typical dev machine.
-    CHECK(duration.count() < 1000);
+    CHECK(duration < std::chrono::seconds{1});
 
     SECTION("Batch insertion performance (incremental merge)")
     {
@@ -107,7 +107,7 @@ namespace ao::rt::test
 
       CHECK(proj.size() == kTrackCount + 100);
       // Merging 100 into 10k should be very fast (< 50ms)
-      CHECK(batchDuration.count() < 100);
+      CHECK(batchDuration < std::chrono::milliseconds{100});
     }
 
     SECTION("indexOf O(1) lookup performance")
@@ -139,14 +139,14 @@ namespace ao::rt::test
       auto const lastDuration = measureIndexOf(lastId);
 
       // All lookups should be fast regardless of position
-      CHECK(firstDuration.count() < 5000);
-      CHECK(midDuration.count() < 5000);
-      CHECK(lastDuration.count() < 5000);
+      CHECK(firstDuration < std::chrono::microseconds{5000});
+      CHECK(midDuration < std::chrono::microseconds{5000});
+      CHECK(lastDuration < std::chrono::microseconds{5000});
 
       // O(1) property: mid and last should be within 2x of first
-      auto const baseline = std::max(std::int64_t{1}, firstDuration.count());
-      auto const ratioMid = static_cast<double>(midDuration.count()) / static_cast<double>(baseline);
-      auto const ratioLast = static_cast<double>(lastDuration.count()) / static_cast<double>(baseline);
+      auto const baselineDuration = std::max(std::chrono::microseconds{1}, firstDuration);
+      auto const ratioMid = static_cast<double>(midDuration.count()) / static_cast<double>(baselineDuration.count());
+      auto const ratioLast = static_cast<double>(lastDuration.count()) / static_cast<double>(baselineDuration.count());
       CHECK(ratioMid < 2.0);
       CHECK(ratioLast < 2.0);
     }
@@ -181,7 +181,7 @@ namespace ao::rt::test
 
       CHECK(receivedReset);
       CHECK(receivedSize == projSize);
-      CHECK(resetDuration.count() < 2000);
+      CHECK(resetDuration < std::chrono::seconds{2});
     }
   }
 }

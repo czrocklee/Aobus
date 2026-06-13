@@ -47,7 +47,7 @@ namespace ao::fleet
     constexpr auto kShellSignalExitBase = 128;
     constexpr auto kShellSignalExitMax = 192;
     // Upper bound for reaping a SIGKILLed child; SIGKILL cannot be caught, so this never fires in practice.
-    constexpr auto kReapDeadline = std::chrono::hours{1};
+    constexpr auto kReapInterval = std::chrono::hours{1};
     constexpr auto kStandardPipeCount = 3;
 
     // The runner writes to pipes whose read end may close at any time (a child is free to exit
@@ -161,7 +161,7 @@ namespace ao::fleet
     asio::awaitable<void> supervise(std::shared_ptr<RunState> statePtr,
                                     pid_t pid,
                                     std::chrono::milliseconds timeout,
-                                    std::chrono::milliseconds grace)
+                                    std::chrono::milliseconds gracePeriod)
     {
       auto deadline = std::chrono::steady_clock::now() + timeout;
       auto killed = false;
@@ -186,13 +186,13 @@ namespace ao::fleet
         {
           statePtr->timedOut = true;
           [[maybe_unused]] auto const termResult = ::kill(-pid, SIGTERM);
-          deadline = std::chrono::steady_clock::now() + grace;
+          deadline = std::chrono::steady_clock::now() + gracePeriod;
         }
         else if (!killed)
         {
           killed = true;
           [[maybe_unused]] auto const killResult = ::kill(-pid, SIGKILL);
-          deadline = std::chrono::steady_clock::now() + kReapDeadline;
+          deadline = std::chrono::steady_clock::now() + kReapInterval;
         }
         else
         {
@@ -202,7 +202,7 @@ namespace ao::fleet
 
       if (statePtr->openPipes > 0)
       {
-        statePtr->timer.expires_after(grace);
+        statePtr->timer.expires_after(gracePeriod);
         auto [error] = co_await statePtr->timer.async_wait(asio::as_tuple(asio::use_awaitable));
 
         if (!error)
@@ -239,7 +239,7 @@ namespace ao::fleet
   ProcessResult BoostProcessRunner::run(ProcessRequest const& request)
   {
     auto result = ProcessResult{};
-    auto const started = std::chrono::steady_clock::now();
+    auto const start = std::chrono::steady_clock::now();
 
     if (request.argv.empty())
     {
@@ -288,13 +288,13 @@ namespace ao::fleet
       asio::co_spawn(context, drain(statePtr, true), asio::detached);
       asio::co_spawn(context, writeInput(statePtr, request.standardInput), asio::detached);
       asio::co_spawn(context, waitForChildExit(childPtr, statePtr), asio::detached);
-      asio::co_spawn(context, supervise(statePtr, pid, request.timeout, request.terminationGrace), asio::detached);
+      asio::co_spawn(
+        context, supervise(statePtr, pid, request.timeout, request.terminationGracePeriod), asio::detached);
       context.run();
 
       result.standardOutput = std::move(statePtr->standardOutput);
       result.standardError = std::move(statePtr->standardError);
-      result.elapsed =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started);
+      result.elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
       auto const nativeStatus = childPtr->native_exit_code();
       result.exitCode = childPtr->exit_code();
 
@@ -322,8 +322,7 @@ namespace ao::fleet
     catch (std::exception const& exception)
     {
       result.standardError = exception.what();
-      result.elapsed =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started);
+      result.elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
       return result;
     }
   }

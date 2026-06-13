@@ -8,6 +8,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <vector>
 
@@ -42,7 +43,7 @@ namespace ao::audio::detail::test
     CHECK(source.packet().size() == 4);
     CHECK(source.magicCookie().size() == 11);
     CHECK(source.timescale() == 44100);
-    CHECK(source.durationMs() == 2000);
+    CHECK(source.duration() == std::chrono::seconds{2});
     CHECK(source.firstFrameIndex(44100, 4096) == 0);
 
     source.advance();
@@ -53,7 +54,7 @@ namespace ao::audio::detail::test
     source.close();
     CHECK_FALSE(source.isOpen());
     CHECK(source.atEnd());
-    CHECK(!source.seek(10));
+    CHECK(!source.seek(std::chrono::milliseconds{10}));
   }
 
   TEST_CASE("Mp4PacketSource - handles selection failures and timescale fallback", "[audio][unit][detail][mp4]")
@@ -76,10 +77,10 @@ namespace ao::audio::detail::test
       REQUIRE(source.open(temp.path, "alac"));
       CHECK(source.timescale() == 0);
       CHECK(source.timescale(44100) == 44100);
-      CHECK(source.durationMs() == 0);
-      CHECK(source.durationMs(44100) == 2000);
-      CHECK(!source.seek(1000));
-      REQUIRE(source.seek(1000, 44100));
+      CHECK(source.duration() == std::chrono::milliseconds{0});
+      CHECK(source.duration(44100) == std::chrono::seconds{2});
+      CHECK(!source.seek(std::chrono::seconds{1}));
+      REQUIRE(source.seek(std::chrono::seconds{1}, 44100));
       CHECK(source.atEnd());
     }
   }

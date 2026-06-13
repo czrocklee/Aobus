@@ -26,6 +26,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -77,7 +78,7 @@ namespace ao::rt::test
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property()
         .uri("song.flac")
-        .durationMs(180000)
+        .duration(std::chrono::minutes{3})
         .sampleRate(96000)
         .bitDepth(24)
         .codec(AudioCodec::Flac);
@@ -231,7 +232,7 @@ namespace ao::rt::test
       auto& dict = ml1.dictionary();
 
       auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri("full-fields.flac").durationMs(240000);
+      trackBuilder.property().uri("full-fields.flac").duration(std::chrono::minutes{4});
 
       trackBuilder.metadata().title("Test Title").artist("Test Artist").composer("Test Composer").work("Test Work");
 
@@ -285,7 +286,7 @@ namespace ao::rt::test
 
       REQUIRE(std::string{view.property().uri()} == "full-fields.flac");
 
-      REQUIRE(view.property().durationMs() == 240000);
+      REQUIRE(view.property().duration() == std::chrono::minutes{4});
 
       REQUIRE(std::string{view.metadata().title()} == "Test Title");
       REQUIRE(std::string{dict.get(view.metadata().artistId())} == "Test Artist");

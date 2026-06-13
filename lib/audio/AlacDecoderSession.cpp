@@ -14,6 +14,7 @@
 #include <alac/ALACBitUtilities.h>
 #include <alac/ALACDecoder.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -170,7 +171,7 @@ namespace ao::audio
       return failOpen(Error{.code = Error::Code::InitFailed, .message = "Invalid ALAC stream configuration"});
     }
 
-    _implPtr->info.durationMs = _implPtr->packetSource.durationMs(config.sampleRate);
+    _implPtr->info.duration = _implPtr->packetSource.duration(config.sampleRate);
 
     _implPtr->info.sourceFormat.channels = config.numChannels;
     _implPtr->info.sourceFormat.sampleRate = config.sampleRate;
@@ -220,9 +221,9 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
-  Result<> AlacDecoderSession::seek(std::uint32_t positionMs)
+  Result<> AlacDecoderSession::seek(std::chrono::milliseconds offset)
   {
-    return _implPtr->packetSource.seek(positionMs, _implPtr->info.sourceFormat.sampleRate);
+    return _implPtr->packetSource.seek(offset, _implPtr->info.sourceFormat.sampleRate);
   }
 
   void AlacDecoderSession::flush()

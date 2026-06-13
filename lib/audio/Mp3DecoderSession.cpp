@@ -8,11 +8,13 @@
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/audio/Types.h>
 #include <ao/audio/detail/Mpg123Runtime.h>
 #include <ao/utility/ByteView.h>
 
 #include <mpg123.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -31,7 +33,6 @@ namespace ao::audio
   {
     constexpr std::uint8_t kMp3PcmBitDepth = 16;
     constexpr std::uint8_t kFloat32BitDepth = 32;
-    constexpr std::uint32_t kMsPerSecond = 1000;
 
     std::uint8_t channelCountFromMpg123(std::int32_t channels) noexcept
     {
@@ -291,8 +292,8 @@ namespace ao::audio
     // Estimate duration
     if (off_t const samples = ::mpg123_length(_implPtr->mh); samples > 0 && _implPtr->info.outputFormat.sampleRate > 0)
     {
-      _implPtr->info.durationMs =
-        detail::durationMilliseconds(static_cast<std::uint64_t>(samples), _implPtr->info.outputFormat.sampleRate);
+      _implPtr->info.duration =
+        detail::convertToDuration(static_cast<std::uint64_t>(samples), _implPtr->info.outputFormat.sampleRate);
     }
 
     auto const outputBlockSize = ::mpg123_outblock(_implPtr->mh);
@@ -322,16 +323,16 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
-  Result<> Mp3DecoderSession::seek(std::uint32_t positionMs)
+  Result<> Mp3DecoderSession::seek(std::chrono::milliseconds offset)
   {
     if (!_implPtr->fileCursor.isOpen())
     {
       return makeError(Error::Code::SeekFailed, "MP3 decoder is not open");
     }
 
-    if (positionMs > _implPtr->info.durationMs)
+    if (offset > _implPtr->info.duration)
     {
-      return makeError(Error::Code::SeekFailed, "Seek position out of bounds");
+      return makeError(Error::Code::SeekFailed, "Seek offset out of bounds");
     }
 
     auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
@@ -341,7 +342,7 @@ namespace ao::audio
       return makeError(Error::Code::SeekFailed, "Sample rate is 0");
     }
 
-    auto const sampleOffset = static_cast<off_t>((static_cast<std::uint64_t>(positionMs) * sampleRate) / kMsPerSecond);
+    auto const sampleOffset = static_cast<off_t>(durationToSamples(offset, sampleRate));
 
     auto const actualOffset = ::mpg123_seek(_implPtr->mh, sampleOffset, SEEK_SET);
 

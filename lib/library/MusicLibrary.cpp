@@ -39,10 +39,9 @@ namespace ao::library
     constexpr std::uint32_t kLmdbFileMode = 0664;
     constexpr std::size_t kLibraryIdBytes = 16;
 
-    std::uint64_t nowUnixMs()
+    std::chrono::sys_time<std::chrono::milliseconds> currentTimestamp()
     {
-      auto const now = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
-      return static_cast<std::uint64_t>(now.time_since_epoch().count());
+      return std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
     }
 
     std::array<std::byte, kLibraryIdBytes> generateLibraryId()
@@ -55,11 +54,11 @@ namespace ao::library
 
     MetaHeader makeMetaHeader()
     {
-      auto const timestamp = nowUnixMs();
+      auto const timestamp = currentTimestamp();
       return MetaHeader{.magic = kLibraryMetaMagic,
                         .libraryVersion = kLibraryVersion,
                         .flags = 0,
-                        .createdAtUnixMs = timestamp,
+                        .createdTime = timestamp,
                         .libraryId = generateLibraryId()};
     }
 

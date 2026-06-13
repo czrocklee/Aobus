@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/PlaybackPositionInterpolator.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdint>
+#include <chrono>
 
 namespace ao::uimodel::playback::test
 {
@@ -16,42 +17,57 @@ namespace ao::uimodel::playback::test
     SECTION("Initial state is zero and not playing")
     {
       CHECK(interpolator.isPlaying() == false);
-      CHECK(interpolator.interpolate(1000) == 0);
+      CHECK(interpolator.interpolateElapsed(FrameClock::fromMicros(1000)) == std::chrono::milliseconds{0});
     }
 
     SECTION("Interpolation while playing")
     {
-      std::uint32_t const pos = 1000;
-      std::uint32_t const dur = 5000;
-      interpolator.updateState(pos, dur, true);
+      auto const elapsed = std::chrono::seconds{1};
+      auto const duration = std::chrono::seconds{5};
+      interpolator.updateState(elapsed, duration, true);
 
       CHECK(interpolator.isPlaying() == true);
 
-      // First frame sets the base time
-      std::int64_t const t0 = 1000000;
-      CHECK(interpolator.interpolate(t0) == pos);
+      // First frame establishes the base timestamp and reports the known elapsed.
+      auto const startTime = FrameClock::fromMicros(1'000'000);
+      CHECK(interpolator.interpolateElapsed(startTime) == elapsed);
 
-      // 500ms later (500,000 microseconds)
-      CHECK(interpolator.interpolate(t0 + 500000) == pos + 500);
+      // 500ms later
+      CHECK(interpolator.interpolateElapsed(startTime + std::chrono::milliseconds{500}) ==
+            elapsed + std::chrono::milliseconds{500});
 
-      // Past duration
-      CHECK(interpolator.interpolate(t0 + 10000000) == dur);
+      // Past duration is clamped
+      CHECK(interpolator.interpolateElapsed(startTime + std::chrono::seconds{10}) == duration);
+    }
+
+    SECTION("Frame clock moving backwards re-bases the interpolation")
+    {
+      interpolator.updateState(std::chrono::seconds{1}, std::chrono::seconds{5}, true);
+
+      auto const startTime = FrameClock::fromMicros(2'000'000);
+      CHECK(interpolator.interpolateElapsed(startTime) == std::chrono::seconds{1});
+
+      // An earlier timestamp re-bases instead of producing a negative delta.
+      auto const earlierTime = FrameClock::fromMicros(1'000'000);
+      CHECK(interpolator.interpolateElapsed(earlierTime) == std::chrono::seconds{1});
+      CHECK(interpolator.interpolateElapsed(earlierTime + std::chrono::milliseconds{250}) ==
+            std::chrono::milliseconds{1250});
     }
 
     SECTION("Static value while paused")
     {
-      interpolator.updateState(2000, 5000, false);
+      interpolator.updateState(std::chrono::seconds{2}, std::chrono::seconds{5}, false);
       CHECK(interpolator.isPlaying() == false);
-      CHECK(interpolator.interpolate(1000000) == 2000);
-      CHECK(interpolator.interpolate(2000000) == 2000);
+      CHECK(interpolator.interpolateElapsed(FrameClock::fromMicros(1'000'000)) == std::chrono::seconds{2});
+      CHECK(interpolator.interpolateElapsed(FrameClock::fromMicros(2'000'000)) == std::chrono::seconds{2});
     }
 
     SECTION("Reset clears state")
     {
-      interpolator.updateState(1000, 5000, true);
+      interpolator.updateState(std::chrono::seconds{1}, std::chrono::seconds{5}, true);
       interpolator.reset();
       CHECK(interpolator.isPlaying() == false);
-      CHECK(interpolator.interpolate(1000000) == 0);
+      CHECK(interpolator.interpolateElapsed(FrameClock::fromMicros(1'000'000)) == std::chrono::milliseconds{0});
     }
   }
 } // namespace ao::uimodel::playback::test

@@ -5,7 +5,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/PlaybackTimeViewModel.h>
 
-#include <cstdint>
+#include <chrono>
 #include <format>
 #include <functional>
 #include <optional>
@@ -43,11 +43,11 @@ namespace ao::uimodel::playback
 
         if (!isPreview)
         {
-          refresh(true, false, ev.positionMs);
+          refresh(true, false, ev.elapsed);
         }
         else
         {
-          refresh(false, true, ev.positionMs);
+          refresh(false, true, ev.elapsed);
         }
       });
 
@@ -56,13 +56,13 @@ namespace ao::uimodel::playback
 
   void PlaybackTimeViewModel::refresh(bool immediateUpdate,
                                       bool isPreviewing,
-                                      std::optional<std::uint32_t> optOverridePosition)
+                                      std::optional<std::chrono::milliseconds> optOverrideElapsed)
   {
     auto const& state = _playback.state();
 
     auto view = PlaybackTimeViewState{};
-    view.durationMs = state.durationMs;
-    view.positionMs = optOverridePosition.value_or(state.positionMs);
+    view.duration = state.duration;
+    view.elapsed = optOverrideElapsed.value_or(state.elapsed);
     view.isPlaying = isAdvancingTransport(state.transport);
     view.isPreviewing = isPreviewing;
     view.immediateUpdate = immediateUpdate;
@@ -84,23 +84,27 @@ namespace ao::uimodel::playback
     }
   }
 
-  std::string PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode mode, std::uint32_t posMs, std::uint32_t durMs)
+  std::string PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode mode,
+                                                        std::chrono::milliseconds elapsed,
+                                                        std::chrono::milliseconds duration)
   {
-    constexpr int kMsInSec = 1000;
     constexpr int kSecInMin = 60;
 
-    auto const posSec = posMs / kMsInSec;
+    auto const elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
 
-    switch (auto const durSec = durMs / kMsInSec; mode)
+    switch (auto const durSec = std::chrono::duration_cast<std::chrono::seconds>(duration).count(); mode)
     {
-      case PlaybackTimeMode::Elapsed: return std::format("{:d}:{:02d}", posSec / kSecInMin, posSec % kSecInMin);
+      case PlaybackTimeMode::Elapsed: return std::format("{:d}:{:02d}", elapsedSec / kSecInMin, elapsedSec % kSecInMin);
 
       case PlaybackTimeMode::Duration: return std::format("{:d}:{:02d}", durSec / kSecInMin, durSec % kSecInMin);
 
       case PlaybackTimeMode::Default:
       default:
-        return std::format(
-          "{:d}:{:02d} / {:d}:{:02d}", posSec / kSecInMin, posSec % kSecInMin, durSec / kSecInMin, durSec % kSecInMin);
+        return std::format("{:d}:{:02d} / {:d}:{:02d}",
+                           elapsedSec / kSecInMin,
+                           elapsedSec % kSecInMin,
+                           durSec / kSecInMin,
+                           durSec % kSecInMin);
     }
   }
 } // namespace ao::uimodel::playback

@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -26,16 +27,16 @@ namespace ao::audio::test
 
     auto const info = decoder.streamInfo();
     REQUIRE(info.sourceFormat.sampleRate > 0);
-    REQUIRE(info.durationMs > 500);
+    REQUIRE(info.duration > std::chrono::milliseconds{500});
 
     auto const firstBlock = decoder.readNextBlock();
     REQUIRE(firstBlock);
     CHECK(firstBlock->firstFrameIndex == 0);
 
-    constexpr std::uint32_t kSeekPositionMs = 500;
-    auto const targetFrame = (static_cast<std::uint64_t>(kSeekPositionMs) * info.sourceFormat.sampleRate) / 1000U;
+    constexpr auto kSeekOffset = std::chrono::milliseconds{500};
+    auto const targetFrame = (static_cast<std::uint64_t>(kSeekOffset.count()) * info.sourceFormat.sampleRate) / 1000U;
 
-    REQUIRE(decoder.seek(kSeekPositionMs));
+    REQUIRE(decoder.seek(kSeekOffset));
     auto const soughtBlock = decoder.readNextBlock();
 
     REQUIRE(soughtBlock);
@@ -44,7 +45,7 @@ namespace ao::audio::test
     CHECK(soughtBlock->firstFrameIndex <= targetFrame);
     CHECK(soughtBlock->firstFrameIndex + soughtBlock->frames > targetFrame);
 
-    REQUIRE(decoder.seek(0));
+    REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
     auto const resetBlock = decoder.readNextBlock();
 
     REQUIRE(resetBlock);

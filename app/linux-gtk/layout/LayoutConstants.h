@@ -16,9 +16,6 @@ namespace ao::gtk::layout
   constexpr int kIconSizeSmall = 16;
   constexpr int kIconSizeXSmall = 12;
 
-  // Transition/animation durations (milliseconds)
-  constexpr int kTransitionDurationMs = 250;
-
   // UI Element sizing
   constexpr int kDefaultListPaneWidth = 330;
   constexpr int kMinCoverArtHeight = 50;

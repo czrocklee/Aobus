@@ -7,11 +7,20 @@
 #include <ao/library/AudioCodec.h>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <ratio>
 
 namespace ao::library
 {
+  /**
+   * Storage representation for a track's duration: a millisecond span backed by a 32-bit
+   * signed integer. Sized to fit the on-disk header (4 bytes, same byte layout as the
+   * previous std::uint32_t); the signed int32 range (~24.8 days) is far beyond any real
+   * track. Widens implicitly and losslessly to std::chrono::milliseconds at use sites.
+   */
+  using TrackDuration = std::chrono::duration<std::int32_t, std::milli>;
   /**
    * TrackHotHeader - POD struct for hot track storage.
    * Hot fields are used for fast filtering/sorting operations.
@@ -74,7 +83,7 @@ namespace ao::library
    * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
    *
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
-   *   - durationMs, bitrate, channels: audio properties
+   *   - duration, bitrate, channels: audio properties
    *   - coverArtId: display only
    *   - trackNumber, totalTracks, discNumber, totalDiscs: display only
    *   - workId: classical metadata
@@ -85,7 +94,7 @@ namespace ao::library
    * Layout:
    *   ┌─────────────────────────────────────┐  ← cold data begin
    *   │        TrackColdHeader (32B)        │
-   *   │  durationMs, coverArtId, bitrate,   │
+   *   │  duration, coverArtId, bitrate,     │
    *   │  workId                             │
    *   │  trackNumber, totalTracks,          │
    *   │  discNumber, totalDiscs             │
@@ -104,7 +113,7 @@ namespace ao::library
   struct TrackColdHeader final
   {
     // 4-byte section
-    std::uint32_t durationMs{}; // Track duration in milliseconds
+    TrackDuration duration{};   // Track duration (millisecond span)
     std::uint32_t coverArtId{}; // ResourceStore ID for cover art
     std::uint32_t bitrate{};    // Bitrate in bps
     DictionaryId workId{};      // Dictionary ID for work

@@ -28,6 +28,7 @@ extern "C"
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -42,7 +43,7 @@ namespace ao::audio::backend
 
   namespace
   {
-    constexpr int kUdevPollTimeoutMs = 500;
+    constexpr auto kUdevPollTimeout = std::chrono::milliseconds{500};
   }
 
   struct AlsaProvider::Impl final
@@ -103,7 +104,8 @@ namespace ao::audio::backend
         fds[0].fd = fd;
         fds[0].events = POLLIN;
 
-        if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), kUdevPollTimeoutMs) > 0 &&
+        if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), static_cast<std::int32_t>(kUdevPollTimeout.count())) >
+              0 &&
             (fds[0].revents & POLLIN) != 0)
         {
           auto devPtr = utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitorPtr.get()));

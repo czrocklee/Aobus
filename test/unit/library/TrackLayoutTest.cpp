@@ -46,7 +46,7 @@ namespace ao::library::test
   TEST_CASE("TrackColdHeader - Field Offsets", "[library][unit][track]")
   {
     // 4-byte section
-    CHECK(offsetof(TrackColdHeader, durationMs) == 0);
+    CHECK(offsetof(TrackColdHeader, duration) == 0);
     CHECK(offsetof(TrackColdHeader, coverArtId) == 4);
     CHECK(offsetof(TrackColdHeader, bitrate) == 8);
     CHECK(offsetof(TrackColdHeader, workId) == 12);

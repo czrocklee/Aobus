@@ -132,9 +132,9 @@ namespace ao::gtk
 
     std::string formatDurationValue(TrackFieldRawValue const& raw)
     {
-      if (auto const* dur = std::get_if<Duration>(&raw); dur != nullptr)
+      if (auto const* duration = std::get_if<Duration>(&raw); duration != nullptr)
       {
-        return uimodel::track::formatDuration(*dur);
+        return uimodel::track::formatDuration(*duration);
       }
 
       return {};
@@ -465,10 +465,7 @@ namespace ao::gtk
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const&,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          {
-            return TrackFieldRawValue{
-              std::in_place_type<Duration>, std::chrono::milliseconds{view.property().durationMs()}};
-          },
+          { return TrackFieldRawValue{std::in_place_type<Duration>, view.property().duration()}; },
           .formatValue = formatDurationValue,
         },
         // ---- Tags ----

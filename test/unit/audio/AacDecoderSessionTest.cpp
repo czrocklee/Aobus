@@ -8,6 +8,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -29,7 +30,7 @@ namespace ao::audio::test
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
-    CHECK(info.durationMs >= 950);
+    CHECK(info.duration >= std::chrono::milliseconds{950});
     CHECK(info.sourceFormat.bitDepth == 16);
     CHECK(info.sourceFormat.isInterleaved);
     CHECK(info.isLossy);
@@ -55,9 +56,9 @@ namespace ao::audio::test
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
-    REQUIRE(info.durationMs > 500);
+    REQUIRE(info.duration > std::chrono::milliseconds{500});
 
-    REQUIRE(decoder.seek(500));
+    REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
     auto const block = decoder.readNextBlock();
 
     REQUIRE(block);
@@ -164,7 +165,7 @@ namespace ao::audio::test
     SECTION("Seek on unopened file")
     {
       auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
-      CHECK(!decoder.seek(100));
+      CHECK(!decoder.seek(std::chrono::milliseconds{100}));
     }
 
     SECTION("Read on unopened file returns end of stream")

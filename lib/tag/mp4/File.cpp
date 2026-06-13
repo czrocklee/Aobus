@@ -12,6 +12,7 @@
 #include <ao/utility/ByteView.h>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -205,16 +206,16 @@ namespace ao::tag::mp4
 
           if (auto const duration = layout.duration.value(); duration > 0)
           {
-            constexpr std::uint32_t kMsPerSecond = 1000;
             constexpr std::uint32_t kBitsPerByte = 8;
-            auto const durationMs =
-              static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * kMsPerSecond) / timescale);
+            auto const trackDuration = std::chrono::milliseconds{
+              (static_cast<std::uint64_t>(duration) * std::chrono::milliseconds::period::den) / timescale};
 
-            if (durationMs > 0)
+            if (trackDuration > std::chrono::milliseconds{0})
             {
               builder.property()
-                .durationMs(durationMs)
-                .bitrate(static_cast<std::uint32_t>((fileSize * kMsPerSecond * kBitsPerByte) / durationMs));
+                .duration(trackDuration)
+                .bitrate(static_cast<std::uint32_t>((fileSize * std::chrono::milliseconds::period::den * kBitsPerByte) /
+                                                    trackDuration.count()));
             }
           }
         }

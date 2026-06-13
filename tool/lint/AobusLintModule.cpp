@@ -3,6 +3,7 @@
 
 #include "check/BracedInitializationCheck.h"
 #include "check/CApiGlobalQualificationCheck.h"
+#include "check/ChronoNamingConventionCheck.h"
 #include "check/ConcreteFinalCheck.h"
 #include "check/ControlBlockSpacingCheck.h"
 #include "check/ForbidRawThrowCheck.h"
@@ -53,6 +54,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<aobus::ImplicitBoolConversionInInitCheck>("aobus-implicit-bool-conversion-in-init");
       checkFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");
       checkFactories.registerCheck<PointerNamingConventionCheck>("aobus-readability-pointer-naming-convention");
+      checkFactories.registerCheck<ChronoNamingConventionCheck>("aobus-readability-chrono-naming-convention");
       checkFactories.registerCheck<LocalInitializationStyleCheck>("aobus-modernize-local-initialization-style");
       checkFactories.registerCheck<BracedInitializationCheck>("aobus-modernize-braced-initialization");
       checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");

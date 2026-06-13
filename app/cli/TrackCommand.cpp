@@ -160,7 +160,7 @@ namespace ao::cli
 
         if (view.isColdValid())
         {
-          os << "    duration: " << view.property().durationMs() << "\n"
+          os << "    duration: " << view.property().duration().count() << "\n"
              << "    sampleRate: " << view.property().sampleRate() << "\n"
              << "    uri: \"" << view.property().uri() << "\"\n";
         }
@@ -218,7 +218,7 @@ namespace ao::cli
 
         if (view.isColdValid())
         {
-          os << "  Duration: " << view.property().durationMs() << "ms\n"
+          os << "  Duration: " << view.property().duration().count() << "ms\n"
              << "  Sample Rate: " << view.property().sampleRate() << "Hz\n"
              << "  URI: " << view.property().uri() << "\n";
 

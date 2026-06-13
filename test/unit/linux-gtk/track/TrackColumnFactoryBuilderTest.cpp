@@ -77,7 +77,7 @@ namespace ao::gtk::test
         auto writer = library.tracks().writer(txn);
         auto builder = library::TrackBuilder::createNew();
         builder.metadata().title("Test Title").artist("Test Artist");
-        builder.property().durationMs(120000);
+        builder.property().duration(std::chrono::minutes{2});
         auto const [hot, cold] = builder.serialize(txn, library.dictionary(), library.resources());
         trackId = writer.createHotCold(hot, cold).first;
         txn.commit();

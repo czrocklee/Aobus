@@ -62,7 +62,7 @@ namespace ao::fleet::test
     CHECK_FALSE(registry->rulerPaths.empty());
     CHECK(registry->oracles.at("test-asan").runner == OracleRunner::TestAsan);
     CHECK(registry->oracles.at("test-tsan").runner == OracleRunner::TestTsan);
-    CHECK(registry->oracles.at("test-asan").optTimeout == std::chrono::milliseconds{3600000});
+    CHECK(registry->oracles.at("test-asan").optTimeout == std::chrono::hours{1});
     CHECK_FALSE(registry->oracles.at("test-all").optTimeout.has_value());
     CHECK(registry->oracles.at("test-delta").arguments.contains("test-paths"));
     CHECK(registry->oracles.at("public-signature-delta").arguments.contains("header-prefixes"));
@@ -218,7 +218,7 @@ namespace ao::fleet::test
       source.replace(position, needle.size(), "vendor: openai\n    timeout-ms: 60000");
       auto result = loadRegistry(writeFile(temp, "timeout-override.yaml", source));
       REQUIRE(result);
-      CHECK(result->agents.at("openai-gpt").timeout == std::chrono::milliseconds{60000});
+      CHECK(result->agents.at("openai-gpt").timeout == std::chrono::minutes{1});
       CHECK(result->agents.at("deepseek-pro").timeout == std::chrono::minutes{20});
     }
 

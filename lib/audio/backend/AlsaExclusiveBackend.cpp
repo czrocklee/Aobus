@@ -40,8 +40,8 @@ extern "C"
 
 namespace ao::audio::backend
 {
-  constexpr int kAlsaWaitTimeoutMs = 500;
-  constexpr int kPollRetryDelayMs = 10;
+  constexpr auto kAlsaWaitTimeout = std::chrono::milliseconds{500};
+  constexpr auto kPollRetryDelay = std::chrono::milliseconds{10};
   constexpr std::size_t kDefaultPeriodSize = 1024;
 
   namespace
@@ -499,7 +499,7 @@ namespace ao::audio::backend
     {
       if (paused.load(std::memory_order_relaxed))
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds{kPollRetryDelayMs});
+        std::this_thread::sleep_for(kPollRetryDelay);
         continue;
       }
 
@@ -599,7 +599,7 @@ namespace ao::audio::backend
       // so we fall back to a short sleep to keep the loop responsive.
       if (::snd_pcm_state(pcmPtr.get()) == SND_PCM_STATE_RUNNING)
       {
-        ::snd_pcm_wait(pcmPtr.get(), kAlsaWaitTimeoutMs);
+        ::snd_pcm_wait(pcmPtr.get(), static_cast<std::int32_t>(kAlsaWaitTimeout.count()));
       }
       else
       {
@@ -628,7 +628,7 @@ namespace ao::audio::backend
     {
       while (::snd_pcm_resume(pcmPtr.get()) == -EAGAIN)
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds{kPollRetryDelayMs});
+        std::this_thread::sleep_for(kPollRetryDelay);
       }
     }
     else if (err == -ENODEV || err == -EBADF)

@@ -10,11 +10,13 @@
 #include <ao/audio/PcmRingBuffer.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <thread>
@@ -27,8 +29,8 @@ namespace ao::audio
     StreamingSource(std::unique_ptr<IDecoderSession> decoderPtr,
                     DecodedStreamInfo streamInfo,
                     std::function<void(Error const&)> onError,
-                    std::uint32_t prerollTargetMs,
-                    std::uint32_t decodeHighWatermarkMs);
+                    std::chrono::milliseconds prerollDuration,
+                    std::chrono::milliseconds decodeHighWatermarkThreshold);
     StreamingSource(StreamingSource const&) = delete;
     StreamingSource& operator=(StreamingSource const&) = delete;
     StreamingSource(StreamingSource&&) = delete;
@@ -37,17 +39,17 @@ namespace ao::audio
     ~StreamingSource() override;
 
     Result<> initialize();
-    Result<> seek(std::uint32_t positionMs) override;
+    Result<> seek(std::chrono::milliseconds offset) override;
 
     std::size_t read(std::span<std::byte> output) noexcept override;
     bool isDrained() const noexcept override;
-    std::uint32_t bufferedMs() const noexcept override;
+    std::chrono::milliseconds bufferedDuration() const noexcept override;
 
   private:
     void startDecodeThread();
     void stopDecodeThread();
     void decodeLoop(std::stop_token const& threadStopToken);
-    Result<> fillUntil(std::uint32_t targetBufferedMs, std::stop_token const& seekToken);
+    Result<> fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken);
     Result<bool> decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
     bool writeBlock(std::span<std::byte const> bytes,
                     std::stop_token const& seekToken,
@@ -62,8 +64,10 @@ namespace ao::audio
     std::stop_source _seekStopSource;
     std::atomic<bool> _decoderReachedEof = false;
     std::atomic<bool> _failed = false;
+    mutable std::mutex _errorMutex;
+    std::optional<Error> _optLastError;
     std::uint64_t _bytesPerSecond = 0;
-    std::uint32_t _prerollTargetMs = 0;
-    std::uint32_t _decodeHighWatermarkMs = 0;
+    std::chrono::milliseconds _prerollDuration{0};
+    std::chrono::milliseconds _decodeHighWatermarkThreshold{0};
   };
 } // namespace ao::audio

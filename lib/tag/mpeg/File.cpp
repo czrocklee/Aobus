@@ -9,32 +9,33 @@
 #include <ao/library/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <string_view>
 
 namespace ao::tag::mpeg
 {
-  std::uint32_t File::calculateDuration(FrameView const& frame, bool hasId3v1) const
+  std::chrono::milliseconds File::calculateDuration(FrameView const& frame, bool hasId3v1) const
   {
     constexpr std::uint32_t kMsPerSecond = 1000;
     constexpr std::uint32_t kBitsPerByte = 8;
     constexpr std::size_t kId3v1TagSize = 128;
 
-    std::uint32_t durationMs = 0;
+    auto duration = std::chrono::milliseconds{0};
 
     // 1. Prefer Xing/Info header if present for accurate duration (especially VBR)
     if (auto optXing = frame.xingInfo(); optXing)
     {
       if (optXing->frames > 0 && frame.sampleRate() > 0)
       {
-        durationMs = static_cast<std::uint32_t>(
-          (static_cast<std::uint64_t>(optXing->frames) * frame.samplesPerFrame() * kMsPerSecond) / frame.sampleRate());
+        duration = std::chrono::milliseconds{
+          (static_cast<std::uint64_t>(optXing->frames) * frame.samplesPerFrame() * kMsPerSecond) / frame.sampleRate()};
       }
     }
 
     // 2. Fallback to estimation from file size if Xing/Info not present or failed
-    if (durationMs == 0 && frame.bitrate() > 0)
+    if (duration == std::chrono::milliseconds{0} && frame.bitrate() > 0)
     {
       auto const* frameStart = static_cast<std::uint8_t const*>(frame.data());
       auto const* bufferEnd = static_cast<std::uint8_t const*>(address()) + size();
@@ -47,11 +48,11 @@ namespace ao::tag::mpeg
       if (bufferEnd > frameStart)
       {
         std::uint64_t const actualAudioBytes = static_cast<std::uint64_t>(bufferEnd - frameStart);
-        durationMs = static_cast<std::uint32_t>((actualAudioBytes * kMsPerSecond * kBitsPerByte) / frame.bitrate());
+        duration = std::chrono::milliseconds{(actualAudioBytes * kMsPerSecond * kBitsPerByte) / frame.bitrate()};
       }
     }
 
-    return durationMs;
+    return duration;
   }
 
   library::TrackBuilder File::loadTrack() const
@@ -110,7 +111,6 @@ namespace ao::tag::mpeg
     if (auto optFrameView = locate(audioStart, audioSize); optFrameView)
     {
       auto bitrate = optFrameView->bitrate();
-      std::uint32_t durationMs = 0;
 
       builder.property()
         .sampleRate(optFrameView->sampleRate())
@@ -119,16 +119,17 @@ namespace ao::tag::mpeg
         .bitDepth(16)
         .codec(library::AudioCodec::Mp3);
 
-      durationMs = calculateDuration(*optFrameView, hasId3v1);
-      builder.property().durationMs(durationMs);
+      auto const duration = calculateDuration(*optFrameView, hasId3v1);
+      builder.property().duration(duration);
 
       // If Xing/Info provides total bytes, we can refine the bitrate
-      if (auto optXing = optFrameView->xingInfo(); optXing && optXing->bytes > 0 && durationMs > 0)
+      if (auto optXing = optFrameView->xingInfo();
+          optXing && optXing->bytes > 0 && duration > std::chrono::milliseconds{0})
       {
         constexpr std::uint32_t kMsPerSecond = 1000;
         constexpr std::uint32_t kBitsPerByte = 8;
         bitrate = static_cast<std::uint32_t>(
-          (static_cast<std::uint64_t>(optXing->bytes) * kMsPerSecond * kBitsPerByte) / durationMs);
+          (static_cast<std::uint64_t>(optXing->bytes) * kMsPerSecond * kBitsPerByte) / duration.count());
         builder.property().bitrate(bitrate);
       }
     }

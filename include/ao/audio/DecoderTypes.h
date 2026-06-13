@@ -5,6 +5,7 @@
 
 #include <ao/audio/Format.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -27,7 +28,7 @@ namespace ao::audio
   {
     Format sourceFormat;
     Format outputFormat;
-    std::uint32_t durationMs = 0;
+    std::chrono::milliseconds duration{0};
     bool isLossy = false;
   };
 } // namespace ao::audio

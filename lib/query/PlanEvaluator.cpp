@@ -172,7 +172,7 @@ namespace ao::query
       switch (field)
       {
         // Property fields (@ prefix)
-        case Field::DurationMs: return static_cast<std::int64_t>(track.property().durationMs());
+        case Field::Duration: return static_cast<std::int64_t>(track.property().duration().count());
         case Field::Bitrate: return static_cast<std::int64_t>(track.property().bitrate());
         case Field::SampleRate: return static_cast<std::int64_t>(track.property().sampleRate());
         case Field::Channels: return static_cast<std::int64_t>(track.property().channels());

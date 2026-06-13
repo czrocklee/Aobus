@@ -42,6 +42,7 @@
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -710,7 +711,7 @@ namespace ao::gtk::layout::editor
       _previewDebounceConn.disconnect();
     }
 
-    constexpr int kDebounceMs = 500;
+    constexpr auto kDebounceInterval = std::chrono::milliseconds{500};
 
     _previewDebounceConn = Glib::signal_timeout().connect(
       [this] -> bool
@@ -718,7 +719,7 @@ namespace ao::gtk::layout::editor
         notifyPreview();
         return false;
       },
-      kDebounceMs);
+      kDebounceInterval.count());
   }
 
   namespace

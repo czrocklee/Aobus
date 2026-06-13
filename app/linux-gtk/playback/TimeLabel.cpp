@@ -4,12 +4,14 @@
 #include "playback/TimeLabel.h"
 
 #include <ao/rt/PlaybackService.h>
+#include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/PlaybackTimeViewModel.h>
 
 #include <gdkmm/frameclock.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
 
+#include <chrono>
 #include <cstdint>
 
 namespace ao::gtk
@@ -43,8 +45,9 @@ namespace ao::gtk
       {
         if (_interpolator.isPlaying() && !_isPreviewing)
         {
-          auto const displayPos = _interpolator.interpolate(clock->get_frame_time());
-          updateLabel(displayPos, _interpolator.lastDurationMs());
+          auto const displayElapsed =
+            _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clock->get_frame_time()));
+          updateLabel(displayElapsed, _interpolator.lastDuration());
         }
 
         return true;
@@ -57,7 +60,7 @@ namespace ao::gtk
 
   void TimeLabel::applyState(ao::uimodel::playback::PlaybackTimeViewState const& view)
   {
-    if (view.durationMs == 0)
+    if (view.duration == std::chrono::milliseconds{0})
     {
       reset();
       return;
@@ -67,12 +70,12 @@ namespace ao::gtk
 
     if (!_isPreviewing)
     {
-      _interpolator.updateState(view.positionMs, view.durationMs, view.isPlaying);
-      updateLabel(view.positionMs, view.durationMs);
+      _interpolator.updateState(view.elapsed, view.duration, view.isPlaying);
+      updateLabel(view.elapsed, view.duration);
     }
     else
     {
-      updateLabel(view.positionMs, _interpolator.lastDurationMs());
+      updateLabel(view.elapsed, _interpolator.lastDuration());
     }
   }
 
@@ -83,27 +86,26 @@ namespace ao::gtk
     _interpolator.reset();
     _isPreviewing = false;
     _dirty = true;
-    _lastPosSec = 0;
-    _lastDurSec = 0;
+    _lastElapsed = std::chrono::seconds{0};
+    _lastDuration = std::chrono::seconds{0};
   }
 
-  void TimeLabel::updateLabel(std::uint32_t posMs, std::uint32_t durMs)
+  void TimeLabel::updateLabel(std::chrono::milliseconds elapsed, std::chrono::milliseconds duration)
   {
-    int const msInSec = 1000;
-    auto const posSec = posMs / msInSec;
-    auto const durSec = durMs / msInSec;
+    auto const coarseElapsed = std::chrono::duration_cast<std::chrono::seconds>(elapsed);
+    auto const coarseDuration = std::chrono::duration_cast<std::chrono::seconds>(duration);
 
     switch (_mode)
     {
       case Mode::Elapsed:
-        if (!_dirty && posSec == _lastPosSec)
+        if (!_dirty && coarseElapsed == _lastElapsed)
         {
           return;
         }
 
         break;
       case Mode::Duration:
-        if (!_dirty && durSec == _lastDurSec)
+        if (!_dirty && coarseDuration == _lastDuration)
         {
           return;
         }
@@ -111,7 +113,7 @@ namespace ao::gtk
         break;
       case Mode::Default:
       default:
-        if (!_dirty && posSec == _lastPosSec && durSec == _lastDurSec)
+        if (!_dirty && coarseElapsed == _lastElapsed && coarseDuration == _lastDuration)
         {
           return;
         }
@@ -119,10 +121,10 @@ namespace ao::gtk
         break;
     }
 
-    _lastPosSec = posSec;
-    _lastDurSec = durSec;
+    _lastElapsed = coarseElapsed;
+    _lastDuration = coarseDuration;
     _dirty = false;
 
-    _label.set_text(ao::uimodel::playback::PlaybackTimeViewModel::formatPlaybackTime(_mode, posMs, durMs));
+    _label.set_text(ao::uimodel::playback::PlaybackTimeViewModel::formatPlaybackTime(_mode, elapsed, duration));
   }
 } // namespace ao::gtk

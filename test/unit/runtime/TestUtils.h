@@ -38,7 +38,7 @@ namespace ao::rt::test
     std::uint16_t year = 2020;
     std::uint16_t discNumber = 1;
     std::uint16_t trackNumber = 1;
-    std::uint32_t durationMs = 200000;
+    std::chrono::milliseconds duration = std::chrono::seconds{200};
   };
 
   inline TrackSpec makeSpec(std::string_view title, std::uint16_t year)
@@ -75,7 +75,7 @@ namespace ao::rt::test
         .trackNumber(spec.trackNumber);
       builder.property()
         .uri("/tmp/test.flac")
-        .durationMs(spec.durationMs)
+        .duration(spec.duration)
         .bitrate(320000)
         .sampleRate(44100)
         .channels(2)

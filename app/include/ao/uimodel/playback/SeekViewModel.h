@@ -6,7 +6,7 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 
-#include <cstdint>
+#include <chrono>
 #include <functional>
 #include <optional>
 
@@ -14,8 +14,8 @@ namespace ao::uimodel::playback
 {
   struct SeekViewState final
   {
-    std::uint32_t durationMs = 0;
-    std::uint32_t positionMs = 0;
+    std::chrono::milliseconds duration{0};
+    std::chrono::milliseconds elapsed{0};
     bool isPlaying = false;
     bool enabled = false;
     bool immediateUpdate = false;
@@ -33,10 +33,10 @@ namespace ao::uimodel::playback
 
     ~SeekViewModel() = default;
 
-    void seekPreview(std::uint32_t positionMs);
-    void seekFinal(std::uint32_t positionMs);
+    void seekPreview(std::chrono::milliseconds elapsed);
+    void seekFinal(std::chrono::milliseconds elapsed);
 
-    void refresh(bool immediateUpdate, std::optional<std::uint32_t> optOverridePosition = std::nullopt);
+    void refresh(bool immediateUpdate, std::optional<std::chrono::milliseconds> optOverrideElapsed = std::nullopt);
 
   private:
     rt::PlaybackService& _playback;

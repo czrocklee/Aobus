@@ -12,6 +12,13 @@ extern "C" void my_local_c_function()
 
 namespace
 {
+  template<auto Fn>
+  int callThroughTemplateParam()
+  {
+    // NEGATIVE - routed through a non-type template parameter, not a C function
+    return Fn();
+  }
+
   void testCApiQualification()
   {
     // POSITIVE: FIX-TO: ::getpid();
@@ -28,6 +35,9 @@ namespace
 
     // NEGATIVE - Declared in the project, not system headers
     my_local_c_function();
+
+    // Force instantiation so the check visits the template body above
+    (void)callThroughTemplateParam<::getpid>();
   }
 } // namespace
 

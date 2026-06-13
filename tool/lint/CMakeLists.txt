@@ -31,7 +31,9 @@ add_library(AobusLintPlugin MODULE
   check/UnusedSuppressionStyleCheck.cpp
   check/UseIfInitStatementCheck.cpp
   check/LambdaParamsCheck.cpp
-  check/PointerNamingConventionCheck.cpp  check/MemberOrderCheck.cpp
+  check/PointerNamingConventionCheck.cpp
+  check/ChronoNamingConventionCheck.cpp
+  check/MemberOrderCheck.cpp
   check/UseEraseIfCheck.cpp
   check/UseStdNumbersCheck.cpp
   check/StrictForwardDeclarationCheck.cpp

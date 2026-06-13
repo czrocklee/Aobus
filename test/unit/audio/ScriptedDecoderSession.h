@@ -7,6 +7,7 @@
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/IDecoderSession.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -43,9 +44,9 @@ namespace ao::audio::test
     void close() override { _closed = true; }
     void flush() override { _flushed = true; }
 
-    Result<> seek(std::uint32_t positionMs) override
+    Result<> seek(std::chrono::milliseconds offset) override
     {
-      _lastSeekPosition = positionMs;
+      _lastSeekOffset = offset;
       _scriptIdx = 0;
       return _seekResult;
     }
@@ -79,7 +80,7 @@ namespace ao::audio::test
     bool isOpened() const { return _opened; }
     bool isClosed() const { return _closed; }
     bool isFlushed() const { return _flushed; }
-    std::uint32_t lastSeekPosition() const { return _lastSeekPosition; }
+    std::chrono::milliseconds lastSeekOffset() const { return _lastSeekOffset; }
     std::filesystem::path const& lastOpenedPath() const { return _lastOpenedPath; }
     std::size_t readCount() const { return _readCount; }
 
@@ -98,7 +99,7 @@ namespace ao::audio::test
     bool _opened = false;
     bool _closed = false;
     bool _flushed = false;
-    std::uint32_t _lastSeekPosition = 0;
+    std::chrono::milliseconds _lastSeekOffset{0};
     std::filesystem::path _lastOpenedPath;
     std::size_t _readCount = 0;
   };

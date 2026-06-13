@@ -239,7 +239,7 @@ namespace ao::tag::mp4::test
     CHECK(builder.custom().pairs().empty());
 
     CHECK(builder.property().sampleRate() == 44100);
-    CHECK(builder.property().durationMs() == 1000);
+    CHECK(builder.property().duration() == std::chrono::seconds{1});
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
     CHECK(builder.property().codec() == library::AudioCodec::Aac);
@@ -305,7 +305,7 @@ namespace ao::tag::mp4::test
 
     CHECK(builder.property().codec() == library::AudioCodec::Aac);
     CHECK(builder.property().sampleRate() == 48000);
-    CHECK(builder.property().durationMs() == 2000);
+    CHECK(builder.property().duration().count() == 2000);
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
   }

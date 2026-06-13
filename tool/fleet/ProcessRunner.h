@@ -17,7 +17,7 @@ namespace ao::fleet
   namespace
   {
     constexpr auto kDefaultProcessTimeout = std::chrono::minutes{20};
-    constexpr auto kDefaultTerminationGrace = std::chrono::seconds{2};
+    constexpr auto kDefaultTerminationGracePeriod = std::chrono::seconds{2};
   } // namespace
 
   struct ProcessRequest
@@ -28,7 +28,7 @@ namespace ao::fleet
     std::vector<std::string> environmentWhitelist;
     std::map<std::string, std::string, std::less<>> environment;
     std::chrono::milliseconds timeout{kDefaultProcessTimeout};
-    std::chrono::milliseconds terminationGrace{kDefaultTerminationGrace};
+    std::chrono::milliseconds terminationGracePeriod{kDefaultTerminationGracePeriod};
   };
 
   class IProcessRunner

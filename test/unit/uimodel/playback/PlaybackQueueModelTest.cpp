@@ -43,8 +43,11 @@ namespace ao::uimodel::playback::test
         return std::nullopt; // simulate failure
       }
 
-      return audio::TrackPlaybackDescriptor{
-        .trackId = id, .filePath = "/test/path", .title = "Test", .artist = "Artist", .durationMs = 120000};
+      return audio::TrackPlaybackDescriptor{.trackId = id,
+                                            .filePath = "/test/path",
+                                            .title = "Test",
+                                            .artist = "Artist",
+                                            .duration = std::chrono::minutes{2}};
     };
 
     auto queueModel = PlaybackQueueModel{playbackService, descriptorProvider};

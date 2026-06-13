@@ -17,7 +17,6 @@
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
-#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -116,7 +115,7 @@ namespace ao::gtk
                      metadata.composerId(),
                      metadata.workId(),
                      joinResolvedTags(view.tags(), _dict),
-                     std::chrono::milliseconds{view.property().durationMs()},
+                     view.property().duration(),
                      metadata.year(),
                      metadata.discNumber(),
                      metadata.totalDiscs(),
@@ -232,7 +231,7 @@ namespace ao::gtk
     auto const& property = view.property();
 
     auto desc = audio::TrackPlaybackDescriptor{.trackId = id,
-                                               .durationMs = property.durationMs(),
+                                               .duration = property.duration(),
                                                .sampleRateHint = property.sampleRate(),
                                                .channelsHint = property.channels(),
                                                .bitDepthHint = property.bitDepth()};

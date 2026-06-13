@@ -30,14 +30,14 @@
 #include <gtkmm/widget.h>
 #include <sigc++/signal.h>
 
-#include <cstdint>
+#include <chrono>
 #include <filesystem>
 
 namespace ao::gtk
 {
   namespace
   {
-    constexpr std::uint32_t kReloadDebounceMs = 150;
+    constexpr auto kReloadDebounceInterval = std::chrono::milliseconds{150};
 
     bool schemaExists(char const* schemaId)
     {
@@ -91,7 +91,7 @@ namespace ao::gtk
         _refreshedSignal.emit();
         return false;
       },
-      kReloadDebounceMs);
+      kReloadDebounceInterval.count());
   }
 
   sigc::signal<void()>& GtkStyleRuntime::signalRefreshed()

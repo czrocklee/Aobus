@@ -15,8 +15,8 @@ struct Entry
   Field field;
 };
 %%
-duration, Field::DurationMs
-l, Field::DurationMs
+duration, Field::Duration
+l, Field::Duration
 bitrate, Field::Bitrate
 br, Field::Bitrate
 sampleRate, Field::SampleRate

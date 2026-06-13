@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -31,23 +32,26 @@ namespace ao::rt::test
   {
     using namespace ao::library;
     using namespace ao::lmdb::test;
+
     struct TrackSpec final
     {
       std::string title = "Track";
       std::string artist = "Artist";
       std::uint16_t year = 0;
       std::uint16_t trackNumber = 0;
-      std::uint32_t durationMs = 180000;
+      std::chrono::milliseconds duration = std::chrono::seconds{180};
       std::string customKey;
       std::string customValue;
     };
 
-    TrackSpec makeTrackSpec(std::string_view title, std::uint16_t year, std::uint32_t durationMs = 180000)
+    TrackSpec makeTrackSpec(std::string_view title,
+                            std::uint16_t year,
+                            std::chrono::milliseconds duration = std::chrono::seconds{180})
     {
       auto spec = TrackSpec{};
       spec.title = title;
       spec.year = year;
-      spec.durationMs = durationMs;
+      spec.duration = duration;
       return spec;
     }
 
@@ -201,7 +205,7 @@ namespace ao::rt::test
           .trackNumber(spec.trackNumber);
         builder.property()
           .uri("/tmp/test.flac")
-          .durationMs(spec.durationMs)
+          .duration(spec.duration)
           .bitrate(320000)
           .sampleRate(44100)
           .channels(2)
@@ -278,8 +282,8 @@ namespace ao::rt::test
     SECTION("reloading one list does not reset sibling lists sharing a source")
     {
       auto testLibrary = TestMusicLibrary{};
-      auto first = testLibrary.addTrack(makeTrackSpec("first", 2020, 180000));
-      auto second = testLibrary.addTrack(makeTrackSpec("second", 2022, 260000));
+      auto first = testLibrary.addTrack(makeTrackSpec("first", 2020, std::chrono::seconds{180}));
+      auto second = testLibrary.addTrack(makeTrackSpec("second", 2022, std::chrono::seconds{260}));
 
       auto source = MutableTrackSource{};
       source.addInitial(first);
@@ -290,7 +294,7 @@ namespace ao::rt::test
       auto coldList = SmartListSource{source, testLibrary.library(), engine};
       hotList.setExpression("$year >= 2021");
       hotList.reload();
-      coldList.setExpression("@duration >= 240000");
+      coldList.setExpression("@duration >= 4m");
       coldList.reload();
 
       auto hotSpy = ObserverSpy{};
@@ -316,7 +320,7 @@ namespace ao::rt::test
     SECTION("source insert emits inserted notifications instead of bucket resets")
     {
       auto testLibrary = TestMusicLibrary{};
-      auto original = testLibrary.addTrack(makeTrackSpec("old", 2020, 180000));
+      auto original = testLibrary.addTrack(makeTrackSpec("old", 2020, std::chrono::seconds{180}));
 
       auto source = MutableTrackSource{};
       source.addInitial(original);
@@ -326,7 +330,7 @@ namespace ao::rt::test
       auto coldList = SmartListSource{source, testLibrary.library(), engine};
       hotList.setExpression("$year >= 2021");
       hotList.reload();
-      coldList.setExpression("@duration >= 240000");
+      coldList.setExpression("@duration >= 4m");
       coldList.reload();
 
       auto hotSpy = ObserverSpy{};
@@ -334,7 +338,7 @@ namespace ao::rt::test
       hotList.attach(&hotSpy);
       coldList.attach(&coldSpy);
 
-      auto inserted = testLibrary.addTrack(makeTrackSpec("new", 2023, 250000));
+      auto inserted = testLibrary.addTrack(makeTrackSpec("new", 2023, std::chrono::seconds{250}));
       source.insert(inserted, 1);
 
       REQUIRE(hotSpy.events.size() == 1);
@@ -405,8 +409,8 @@ namespace ao::rt::test
     SECTION("child filtered lists track parent membership as their source")
     {
       auto testLibrary = TestMusicLibrary{};
-      auto legacy = testLibrary.addTrack(makeTrackSpec("legacy", 2020, 180000));
-      auto modern = testLibrary.addTrack(makeTrackSpec("modern", 2022, 250000));
+      auto legacy = testLibrary.addTrack(makeTrackSpec("legacy", 2020, std::chrono::seconds{180}));
+      auto modern = testLibrary.addTrack(makeTrackSpec("modern", 2022, std::chrono::seconds{250}));
 
       auto source = MutableTrackSource{};
       source.addInitial(legacy);
@@ -418,7 +422,7 @@ namespace ao::rt::test
       parent.reload();
 
       auto child = SmartListSource{parent, testLibrary.library(), engine};
-      child.setExpression("@duration >= 240000");
+      child.setExpression("@duration >= 4m");
       child.reload();
 
       REQUIRE(parent.size() == 1);
@@ -429,7 +433,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       child.attach(&spy);
 
-      auto fresh = testLibrary.addTrack(makeTrackSpec("fresh", 2023, 260000));
+      auto fresh = testLibrary.addTrack(makeTrackSpec("fresh", 2023, std::chrono::seconds{260}));
       source.insert(fresh, 2);
 
       REQUIRE(spy.events.size() == 1);
@@ -585,9 +589,9 @@ namespace ao::rt::test
       hotList.setExpression("$year >= 2020"); // Hot metadata
 
       auto coldList = SmartListSource{source, testLibrary.library(), engine};
-      coldList.setExpression("@duration >= 180000"); // Cold property
+      coldList.setExpression("@duration >= 3m"); // Cold property
 
-      auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, 200000));
+      auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, std::chrono::seconds{200}));
       auto const batchArray = std::array{t1};
       source.batchInsert(batchArray);
 
@@ -686,10 +690,10 @@ namespace ao::rt::test
 
       auto list = SmartListSource{source, testLibrary.library(), engine};
       // Requires both metadata and property reader
-      list.setExpression("$year >= 2020 && @duration >= 180000");
+      list.setExpression("$year >= 2020 && @duration >= 3m");
 
-      auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, 200000));
-      auto t2 = testLibrary.addTrack(makeTrackSpec("Bad", 2022, 1000));
+      auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, std::chrono::seconds{200}));
+      auto t2 = testLibrary.addTrack(makeTrackSpec("Bad", 2022, std::chrono::seconds{1}));
       auto const batchArray = std::array{t1, t2};
       source.batchInsert(batchArray);
 

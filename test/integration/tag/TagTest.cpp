@@ -80,8 +80,8 @@ namespace ao::tag::test
     auto& prop = builder.property();
 
     // Duration ~1 second sine wave (allow some tolerance for encoding)
-    CHECK(prop.durationMs() >= 950);
-    CHECK(prop.durationMs() <= 1050);
+    CHECK(prop.duration() >= std::chrono::milliseconds{950});
+    CHECK(prop.duration() <= std::chrono::milliseconds{1050});
 
     // Standard sample rates
     CHECK(prop.sampleRate() == 44100);
@@ -106,8 +106,8 @@ namespace ao::tag::test
     auto& prop = builder.property();
 
     // Duration ~1 second sine wave (allow some tolerance for encoding)
-    CHECK(prop.durationMs() >= 950);
-    CHECK(prop.durationMs() <= 1050);
+    CHECK(prop.duration() >= std::chrono::milliseconds{950});
+    CHECK(prop.duration() <= std::chrono::milliseconds{1050});
 
     // HiRes sample rates
     if (std::string{format} == "mp3")
@@ -191,7 +191,7 @@ namespace ao::tag::test
     auto& prop = builder.property();
 
     // Empty files should still have audio properties
-    CHECK(prop.durationMs() > 0);
+    CHECK(prop.duration() > std::chrono::milliseconds{0});
     CHECK(prop.sampleRate() > 0);
     CHECK(prop.channels() > 0);
 

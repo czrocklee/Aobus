@@ -75,7 +75,7 @@ body: |
       .environmentWhitelist = {"PATH"},
       .environment = {},
       .timeout = std::chrono::seconds{10},
-      .terminationGrace = std::chrono::seconds{1},
+      .terminationGracePeriod = std::chrono::seconds{1},
     });
     REQUIRE(result.status == ProcessStatus::Exited);
     REQUIRE(result.exitCode == 0);

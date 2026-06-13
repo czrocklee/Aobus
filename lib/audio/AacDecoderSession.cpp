@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -239,7 +240,7 @@ namespace ao::audio
       return failOpen(result.error());
     }
 
-    _implPtr->info.durationMs = _implPtr->packetSource.durationMs();
+    _implPtr->info.duration = _implPtr->packetSource.duration();
 
     if (auto const result = _implPtr->validateRequestedOutput(); !result)
     {
@@ -259,9 +260,9 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
-  Result<> AacDecoderSession::seek(std::uint32_t positionMs)
+  Result<> AacDecoderSession::seek(std::chrono::milliseconds offset)
   {
-    if (auto const result = _implPtr->packetSource.seek(positionMs); !result)
+    if (auto const result = _implPtr->packetSource.seek(offset); !result)
     {
       return std::unexpected{result.error()};
     }

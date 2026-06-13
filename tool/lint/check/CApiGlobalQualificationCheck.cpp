@@ -8,6 +8,7 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/ExprCXX.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
@@ -37,6 +38,32 @@ namespace clang::tidy::readability
     if (SourceLocation const loc = call->getBeginLoc(); loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
     {
       return;
+    }
+
+    // Skip calls routed through a non-type template parameter (e.g. `Fn(ptr)`
+    // where a C function is passed as a template argument). The call site spells
+    // the parameter name, not the function, so `::` cannot be inserted there.
+    // Walk the cast/paren chain explicitly because IgnoreParenCasts() strips the
+    // SubstNonTypeTemplateParmExpr node and would unwrap past the marker.
+    for (Expr const* callee = call->getCallee(); callee != nullptr;)
+    {
+      if (isa<SubstNonTypeTemplateParmExpr>(callee))
+      {
+        return;
+      }
+
+      if (auto const* cast = dyn_cast<CastExpr>(callee); cast != nullptr)
+      {
+        callee = cast->getSubExpr();
+      }
+      else if (auto const* paren = dyn_cast<ParenExpr>(callee); paren != nullptr)
+      {
+        callee = paren->getSubExpr();
+      }
+      else
+      {
+        break;
+      }
     }
 
     // Skip functions defined in the main file — these are project-local

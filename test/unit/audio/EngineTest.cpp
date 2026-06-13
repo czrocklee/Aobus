@@ -339,8 +339,8 @@ namespace ao::audio::test
     {
       auto const factory = [](auto const&, auto const& fmt)
       {
-        auto decPtr = std::make_unique<ScriptedDecoderSession>(
-          DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
+        auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+          .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
 
         decPtr->setOpenResult(std::unexpected(Error{.message = "open failed"}));
         return decPtr;
@@ -367,7 +367,7 @@ namespace ao::audio::test
         auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
           .sourceFormat = fmt,
           .outputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true},
-          .durationMs = 0,
+          .duration = std::chrono::milliseconds{0},
           .isLossy = false});
 
         decPtr->setReadScript({{{}, true}});
@@ -398,8 +398,8 @@ namespace ao::audio::test
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(
-        DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
 
       // provide some data for preroll
       auto data = std::vector(100, std::byte{0});
@@ -444,8 +444,8 @@ namespace ao::audio::test
     auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true}; // 2 bytes = 1ms
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(
-        DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(200, std::byte{0}); // 100ms
 
       decPtr->setReadScript({{data, false}, {data, false}, {{}, true}});
@@ -458,15 +458,15 @@ namespace ao::audio::test
 
     SECTION("Seek before play is no-op")
     {
-      engine.seek(100);
-      REQUIRE(engine.status().positionMs == 0);
+      engine.seek(std::chrono::milliseconds{100});
+      REQUIRE(engine.status().elapsed == std::chrono::milliseconds{0});
     }
 
     SECTION("Active seek success")
     {
       engine.play(desc);
-      engine.seek(50);
-      REQUIRE(engine.status().positionMs == 50);
+      engine.seek(std::chrono::milliseconds{50});
+      REQUIRE(engine.status().elapsed == std::chrono::milliseconds{50});
       REQUIRE(engine.status().transport == Transport::Playing);
     }
   }
@@ -484,8 +484,8 @@ namespace ao::audio::test
     auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(
-        DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(20, std::byte{0}); // 10ms
 
       decPtr->setReadScript({{data, false}, {{}, true}});
@@ -545,8 +545,8 @@ namespace ao::audio::test
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(
-        DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 1000, .isLossy = false});
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::seconds{1}, .isLossy = false});
       decPtr->setReadScript({{.data = std::vector<std::byte>(88200, std::byte{0}), .endOfStream = false}});
       return decPtr;
     };
@@ -702,8 +702,8 @@ namespace ao::audio::test
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(
-        DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(100, std::byte{0});
 
       decPtr->setReadScript({{data, false}, {{}, true}});
@@ -812,8 +812,8 @@ namespace ao::audio::test
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(
-        DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 1000, .isLossy = false});
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::seconds{1}, .isLossy = false});
 
       // First block succeeds (preroll), second block fails
       // 100,000 bytes at 44.1kHz stereo 16-bit is ~566ms, satisfying the 500ms preroll

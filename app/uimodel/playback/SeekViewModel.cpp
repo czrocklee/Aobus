@@ -5,7 +5,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/SeekViewModel.h>
 
-#include <cstdint>
+#include <chrono>
 #include <functional>
 #include <optional>
 #include <utility>
@@ -38,36 +38,36 @@ namespace ao::uimodel::playback
       {
         if (ev.mode == rt::PlaybackService::SeekMode::Final)
         {
-          refresh(true, ev.positionMs);
+          refresh(true, ev.elapsed);
         }
         else if (ev.mode == rt::PlaybackService::SeekMode::Preview)
         {
-          refresh(false, ev.positionMs);
+          refresh(false, ev.elapsed);
         }
       });
 
     refresh(true);
   }
 
-  void SeekViewModel::seekPreview(std::uint32_t positionMs)
+  void SeekViewModel::seekPreview(std::chrono::milliseconds elapsed)
   {
-    _playback.seek(positionMs, rt::PlaybackService::SeekMode::Preview);
+    _playback.seek(elapsed, rt::PlaybackService::SeekMode::Preview);
   }
 
-  void SeekViewModel::seekFinal(std::uint32_t positionMs)
+  void SeekViewModel::seekFinal(std::chrono::milliseconds elapsed)
   {
-    _playback.seek(positionMs, rt::PlaybackService::SeekMode::Final);
+    _playback.seek(elapsed, rt::PlaybackService::SeekMode::Final);
   }
 
-  void SeekViewModel::refresh(bool immediateUpdate, std::optional<std::uint32_t> optOverridePosition)
+  void SeekViewModel::refresh(bool immediateUpdate, std::optional<std::chrono::milliseconds> optOverrideElapsed)
   {
     auto const& state = _playback.state();
 
     auto view = SeekViewState{};
-    view.durationMs = state.durationMs;
-    view.positionMs = optOverridePosition.value_or(state.positionMs);
+    view.duration = state.duration;
+    view.elapsed = optOverrideElapsed.value_or(state.elapsed);
     view.isPlaying = isAdvancingTransport(state.transport);
-    view.enabled = state.durationMs > 0;
+    view.enabled = state.duration > std::chrono::milliseconds{0};
     view.immediateUpdate = immediateUpdate;
 
     if (_onRender)

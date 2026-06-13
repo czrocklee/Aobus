@@ -9,6 +9,7 @@
 #include <ao/audio/ISource.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -30,14 +31,14 @@ namespace ao::audio
     ~MemorySource() override = default;
 
     Result<> initialize();
-    Result<> seek(std::uint32_t positionMs) override;
+    Result<> seek(std::chrono::milliseconds offset) override;
 
     std::size_t read(std::span<std::byte> output) noexcept override;
     bool isDrained() const noexcept override;
-    std::uint32_t bufferedMs() const noexcept override;
+    std::chrono::milliseconds bufferedDuration() const noexcept override;
 
   private:
-    std::size_t positionToByteOffset(std::uint32_t positionMs) const noexcept;
+    std::size_t timeToByteOffset(std::chrono::milliseconds offset) const noexcept;
 
     std::unique_ptr<IDecoderSession> _decoderPtr;
     DecodedStreamInfo _streamInfo;

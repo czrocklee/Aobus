@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -48,8 +49,11 @@ namespace ao::library::test
     auto db = Database{wtxn, "meta"};
     auto store = MetaStore{db};
 
-    auto header =
-      MetaHeader{.magic = 0xDEADBEEF, .libraryVersion = 42, .flags = 0, .createdAtUnixMs = 1234567890, .libraryId = {}};
+    auto header = MetaHeader{.magic = 0xDEADBEEF,
+                             .libraryVersion = 42,
+                             .flags = 0,
+                             .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1234567890}},
+                             .libraryId = {}};
     store.create(wtxn, header);
     wtxn.commit();
 
@@ -58,7 +62,7 @@ namespace ao::library::test
     REQUIRE(optLoaded.has_value());
     CHECK(optLoaded->magic == 0xDEADBEEF);
     CHECK(optLoaded->libraryVersion == 42);
-    CHECK(optLoaded->createdAtUnixMs == 1234567890);
+    CHECK(optLoaded->createdTime.time_since_epoch().count() == 1234567890);
   }
 
   TEST_CASE("MetaStore - Update header overwrites previous values", "[library][unit][meta_store]")
@@ -69,8 +73,11 @@ namespace ao::library::test
     auto db = Database{wtxn, "meta"};
     auto store = MetaStore{db};
 
-    auto header =
-      MetaHeader{.magic = 0xAAAAAAAA, .libraryVersion = 1, .flags = 0, .createdAtUnixMs = 100, .libraryId = {}};
+    auto header = MetaHeader{.magic = 0xAAAAAAAA,
+                             .libraryVersion = 1,
+                             .flags = 0,
+                             .createdTime = std::chrono::sys_time{std::chrono::milliseconds{100}},
+                             .libraryId = {}};
     store.create(wtxn, header);
     wtxn.commit();
 
