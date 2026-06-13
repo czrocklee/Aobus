@@ -9,6 +9,7 @@ from unittest import mock
 
 from ao.__main__ import main, make_parser
 from ao.command import check as check_command
+from ao.command import run as run_command_mod
 from ao.command import test as test_command
 from ao.command import tidy as tidy_command
 from ao.command.build import BuildResult
@@ -22,7 +23,7 @@ class CliParseTest(unittest.TestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             self.assertEqual(main(["help"]), 0)
-        for command in ("build", "check", "test", "coverage", "tidy", "analyze", "format", "hygiene"):
+        for command in ("build", "check", "test", "coverage", "tidy", "analyze", "format", "hygiene", "run"):
             self.assertIn(command, buffer.getvalue())
         self.assertNotIn("selftest", buffer.getvalue())
         self.assertNotIn("pycheck", buffer.getvalue())
@@ -216,8 +217,34 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.commit, "HEAD~3")
         self.assertEqual(args.jobs, 4)
 
+    def test_run_parsing_and_no_build(self):
+        args = self.parse(["run", "-n", "--clang", "cli", "release", "arg1", "arg2"])
+        self.assertEqual(args.app, "cli")
+        self.assertEqual(args.flavor, "release")
+        self.assertTrue(args.no_build)
+        self.assertTrue(args.clang)
+        self.assertEqual(args.app_args, ["arg1", "arg2"])
+
+    def test_run_command_builds_and_execs(self):
+        args = self.parse(["run", "cli"])
+        with mock.patch.object(run_command_mod.build, "do_build") as do_build:
+            with mock.patch.object(run_command_mod.os, "execvp") as execvp:
+                with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
+                    run_command_mod.run_command(args)
+        do_build.assert_called_once_with(args, ["aobus"])
+        execvp.assert_called_once()
+
+    def test_run_command_no_build_skips_build(self):
+        args = self.parse(["run", "-n", "gtk"])
+        with mock.patch.object(run_command_mod.build, "do_build") as do_build:
+            with mock.patch.object(run_command_mod.os, "execvp") as execvp:
+                with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
+                    run_command_mod.run_command(args)
+        do_build.assert_not_called()
+        execvp.assert_called_once()
+
     def test_help_exits_zero(self):
-        for argv in (["--help"], ["build", "--help"], ["tidy", "--help"]):
+        for argv in (["--help"], ["build", "--help"], ["tidy", "--help"], ["run", "--help"]):
             buffer = io.StringIO()
             with contextlib.redirect_stdout(buffer), self.assertRaises(SystemExit) as caught:
                 make_parser().parse_args(argv)
