@@ -8,9 +8,11 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
+#include "layout/component/track/TrackDetailScope.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ProjectionTypes.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
 #include <ao/yaml/Utils.h>
 
@@ -27,6 +29,7 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/signal.h>
 
 #include <algorithm>
 #include <array>
@@ -34,6 +37,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::gtk::layout::test
 {
@@ -66,6 +70,23 @@ namespace ao::gtk::layout::test
         orientation, forSize, result.minimum, result.natural, result.minimumBaseline, result.naturalBaseline);
       return result;
     }
+
+    class MockDetailScope final : public ITrackDetailScope
+    {
+    public:
+      rt::TrackDetailSnapshot const& snapshot() const override { return _snapshot; }
+      sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() override { return _signal; }
+
+      void setSnapshot(rt::TrackDetailSnapshot snapshot)
+      {
+        _snapshot = std::move(snapshot);
+        _signal.emit(_snapshot);
+      }
+
+    private:
+      rt::TrackDetailSnapshot _snapshot;
+      sigc::signal<void(rt::TrackDetailSnapshot const&)> _signal;
+    };
 
     void walkWidgets(Gtk::Widget& root, auto const& visit)
     {
@@ -483,6 +504,30 @@ namespace ao::gtk::layout::test
       CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
     }
 
+    SECTION("track.selectionRegion can retain a disabled no-selection placeholder")
+    {
+      auto scope = MockDetailScope{};
+      ctx.track.detailScope = &scope;
+
+      auto node = LayoutNode{.type = "track.selectionRegion",
+                             .props = {{"showPlaceholder", LayoutValue{true}}},
+                             .children = {LayoutNode{.type = "spacer"}}};
+      auto const compPtr = registry.create(ctx, node);
+      REQUIRE(compPtr != nullptr);
+
+      auto& widget = compPtr->widget();
+      CHECK(widget.get_visible());
+      CHECK_FALSE(widget.get_sensitive());
+
+      auto selected = rt::TrackDetailSnapshot{};
+      selected.selectionKind = rt::SelectionKind::Single;
+      selected.trackIds = {TrackId{1}};
+      scope.setSnapshot(std::move(selected));
+
+      CHECK(widget.get_visible());
+      CHECK(widget.get_sensitive());
+    }
+
     SECTION("track.coverArt creates a stable responsive square slot")
     {
       auto node = LayoutNode{.type = "track.coverArt"};
@@ -548,6 +593,18 @@ namespace ao::gtk::layout::test
 
       REQUIRE(compPtr != nullptr);
       CHECK(!compPtr->widget().get_name().empty());
+    }
+
+    SECTION("track.tagEditor keeps its empty-selection footprint")
+    {
+      auto scope = MockDetailScope{};
+      ctx.track.detailScope = &scope;
+
+      auto const node = LayoutNode{.type = "track.tagEditor"};
+      auto const compPtr = registry.create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      CHECK(compPtr->widget().get_visible());
     }
   }
 

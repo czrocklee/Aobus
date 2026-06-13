@@ -12,6 +12,7 @@
 #include <gtkmm/button.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
+#include <gtkmm/overlay.h>
 
 #include <cstdint>
 #include <string>
@@ -28,11 +29,9 @@ namespace ao::gtk::layout::track_field_grid
     Gtk::Label label{};
     FixedHeightWidgetSlot labelSlot;
     Gtk::Box valueBox{Gtk::Orientation::HORIZONTAL, 0};
-    FieldInlineEditor valueEditable{};
-    FieldValueWrapper valueClip;
+    DetailFieldEditor valueEditor{};
     FixedHeightWidgetSlot valueSlot;
     bool editable = false;
-    bool discardNextEdit = false;
 
     explicit BuiltInRow(rt::TrackField field);
   };
@@ -47,21 +46,16 @@ namespace ao::gtk::layout::track_field_grid
 
     Gtk::Box valueBox{Gtk::Orientation::HORIZONTAL, kCompositeFieldSpacing};
 
-    FieldInlineEditor primaryEditable{};
-    FieldValueWrapper primaryClip;
+    DetailFieldEditor primaryEditor{};
 
     Gtk::Label separatorLabel{"/"};
 
-    FieldInlineEditor secondaryEditable{};
-    FieldValueWrapper secondaryClip;
+    DetailFieldEditor secondaryEditor{};
 
     FixedHeightWidgetSlot valueSlot;
 
     bool primaryEditableFlag = false;
     bool secondaryEditableFlag = false;
-    bool discardNextEditPrimary = false;
-    bool discardNextEditSecondary = false;
-
     CompositeBuiltInRow(rt::TrackField primary, rt::TrackField secondary);
   };
 
@@ -71,12 +65,10 @@ namespace ao::gtk::layout::track_field_grid
     Gtk::Label label{};
     FixedHeightWidgetSlot labelSlot;
     Gtk::Box valueBox{Gtk::Orientation::HORIZONTAL, 0};
-    FieldInlineEditor editable{};
+    DetailFieldEditor editor{};
     Gtk::Button deleteButton{};
-    FieldValueWrapper valueClip;
     Gtk::Image partialIcon{};
     FixedHeightWidgetSlot valueSlot;
-    bool discardNextEdit = false;
 
     CustomRow(std::string key, std::int32_t actionSpacing);
   };
@@ -84,7 +76,7 @@ namespace ao::gtk::layout::track_field_grid
   struct SectionHeaderRow final
   {
     Gtk::Button button{};
-    Gtk::Box box{Gtk::Orientation::HORIZONTAL, 0};
+    Gtk::Overlay overlay{};
     Gtk::Box line{Gtk::Orientation::HORIZONTAL, 0};
     Gtk::Image icon{};
 

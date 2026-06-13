@@ -15,8 +15,8 @@ For an end-collapsing horizontal split, the widget tree is:
 ```text
 Gtk::Box
 |-- workspace child
-|-- Gtk::Box resizeGrip
-|-- Gtk::Button toggleButton
+|-- Gtk::Box gutterBox
+|   `-- Gtk::Button toggleButton
 `-- Gtk::Revealer
     `-- Gtk::Box paneSizer
         `-- detail child
@@ -24,8 +24,12 @@ Gtk::Box
 
 The non-collapsible child expands along the split orientation. The collapsible
 child is wrapped in `paneSizer`, and only that wrapper reports the pane size
-along the split orientation. The resize grip and toggle button are distinct
-widgets so drag and click handling do not share the same GTK event target.
+along the split orientation. The gutter box and toggle button share the same
+drag space, with the toggle button also handling clicks. The toggle keeps its
+full hit area, while hover highlighting is confined to its icon rather than the
+button's full cross-axis allocation. Padding around the icon provides a compact
+but visible hover surface. The full-height gutter remains visually transparent
+when hovered; its larger allocation exists only for resize input.
 
 ## Behavior
 
@@ -36,19 +40,21 @@ widgets so drag and click handling do not share the same GTK event target.
   deliberately.
 - Invalid or non-positive `position` values fall back to the default pane size.
 - Clicking the toggle button toggles `Gtk::Revealer::set_reveal_child()`.
-- Dragging the resize grip updates the paneSizer size along the split
-  orientation.
+- Dragging the gutter (including the button area) updates the paneSizer size
+  along the split orientation.
+- The capture-phase drag gesture claims the pointer sequence only after the
+  drag threshold is crossed, so a press and release still activates the button.
 - The collapsible child is allocated inside that remembered pane size even when
   its contents request a larger minimum size. Content updates, including track
   selection changes in the detail panel, must not override the user's last
   dragged size.
 - The pane wrapper clips overflow so oversized child content does not draw past
   the remembered pane boundary.
-- The drag controller is attached to the outer container, not the resize grip.
+- The drag controller is attached to the outer container, not the gutter box.
   This keeps drag offsets in a stable coordinate space while resizing moves the
-  grip itself.
+  gutter itself.
 - During drag, the native surface cursor is temporarily set to the resize cursor
-  so the cursor stays stable even if the pointer leaves the narrow resize grip.
+  so the cursor stays stable even if the pointer leaves the gutter area.
 
 `resizeStart`, `resizeEnd`, `shrinkStart`, and `shrinkEnd` are intentionally not
 part of this component. Those properties belong to the regular `split`

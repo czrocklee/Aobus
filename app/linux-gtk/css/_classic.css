@@ -76,45 +76,45 @@
   padding-bottom: 0;
 }
 
-/* ===== Classic Detail Pane (High Information Density) ===== */
+/* ===== Classic Detail Pane — "Embedded Data Panel" (maximum density) ===== */
 .ao-theme-classic .ao-detail-pane {
   /* 使用标准窗口背景色，与主列表形成明确的物理切割感 */
   background: @theme_bg_color;
   
   /* 极致压缩内边距，最大化信息展示面积 */
-  padding: 8px 12px;
-  
+  padding: 6px 10px;
+
   /* 明确且硬朗的左侧结构线，无任何冗余阴影 */
-  border-left: 1px solid alpha(currentColor, 0.15);
+  border-left: 1px solid alpha(currentColor, 0.2);
   box-shadow: none;
 }
 
 /* 封面去装饰化 */
 .ao-theme-classic .ao-detail-pane .ao-hero-cover {
   box-shadow: none;
-  border: 1px solid alpha(currentColor, 0.12);
-  border-radius: 4px; /* 更硬朗的小圆角 */
-  margin-bottom: 8px; /* 缩减底部留白 */
+  border: 1px solid alpha(currentColor, 0.2);
+  border-radius: 0; /* hard square edge, true to the classic language */
+  margin-bottom: 6px;
 }
 
 /* 属性字段排版紧凑化 */
 .ao-theme-classic .ao-detail-pane .ao-inline-editor-stack {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .ao-theme-classic .ao-detail-pane .ao-inline-editor-label {
-  font-size: 0.8rem; 
-  opacity: 0.8; /* 提高对比度，比 muted 更清晰 */
-  margin-bottom: 2px; 
+  font-size: 0.78rem; 
+  opacity: 0.85; /* higher contrast than muted — reads like a data label */
+  margin-bottom: 1px; 
 }
 
 /* 标签 (Tags) 极简化 */
 .ao-theme-classic .ao-tag-chip {
-  padding: 2px 8px; /* 更加紧凑的方块形标签 */
-  border-radius: 4px;
+  padding: 1px 6px; /* tighter square chip */
+  border-radius: 2px;
   font-size: 0.8rem;
   border: 1px solid alpha(currentColor, 0.15);
-  background: transparent; /* 去除背景色块，避免视觉干扰 */
+  background: transparent;
 }
 
 .ao-theme-classic .ao-tag-chip-current,
@@ -122,5 +122,45 @@
   background: @theme_selected_bg_color;
   color: @theme_selected_fg_color;
   border-color: @theme_selected_bg_color;
+}
+
+.ao-theme-classic .ao-tag-chip-suggested {
+  color: alpha(currentColor, 0.55);
+}
+
+.ao-theme-classic .ao-tag-add-trigger {
+  border-radius: 2px;
+  padding: 1px 6px;
+  font-size: 0.8rem;
+}
+
+.ao-theme-classic .ao-tags-entry {
+  border-radius: 2px;
+  padding: 1px 6px;
+  font-size: 0.8rem;
+}
+
+/* Inline field editor: flat 2px square, no soft accent pill. */
+.ao-theme-classic .ao-detail-pane .ao-inline-editor-entry {
+  border-radius: 2px;
+  min-height: 22px;
+  padding: 0 4px;
+}
+
+/* Field rows/values: zero radius + full hard highlight, echoing the columnview selection. */
+.ao-theme-classic .ao-detail-field-row {
+  border-radius: 0;
+  padding: 0 2px;
+}
+
+.ao-theme-classic .ao-detail-field-value {
+  border-radius: 0;
+  margin: 0;
+  padding: 1px 4px;
+}
+
+.ao-theme-classic .ao-detail-field-value.ao-detail-field-editable:hover,
+.ao-theme-classic .ao-detail-field-value.ao-detail-field-editable:focus-within {
+  background: alpha(@theme_selected_bg_color, 0.18);
 }
 

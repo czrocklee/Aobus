@@ -9,18 +9,24 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 
+#include <gdk/gdkkeysyms.h>
+#include <gdkmm/enums.h>
 #include <glibmm/regex.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerfocus.h>
-#include <gtkmm/eventcontrollermotion.h>
-#include <gtkmm/flowbox.h>
-#include <gtkmm/flowboxchild.h>
+#include <gtkmm/eventcontrollerkey.h>
+#include <gtkmm/gestureclick.h>
+#include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
+#include <gtkmm/window.h>
 #include <pangomm/layout.h>
 #include <sigc++/functors/mem_fun.h>
+#include <sigc++/signal.h>
 
 #include <algorithm>
 #include <array>
@@ -36,9 +42,15 @@ namespace ao::gtk
 {
   namespace
   {
-    constexpr int kBoxSpacing = layout::kSpacingLarge;  // 8
     constexpr int kChipSpacing = layout::kSpacingSmall; // 4
     constexpr std::size_t kMaxAvailableTags = 50;
+
+    // Tag names must match query parser identifier rules: [a-zA-Z_][a-zA-Z0-9_]*
+    Glib::RefPtr<Glib::Regex> tagNamePattern()
+    {
+      static auto const patternPtr = Glib::Regex::create("^[a-zA-Z_][a-zA-Z0-9_]*$");
+      return patternPtr;
+    }
 
     struct MeasureResult final
     {
@@ -55,6 +67,122 @@ namespace ao::gtk
       return result;
     }
 
+    std::string toLower(std::string value)
+    {
+      std::ranges::transform(value, value.begin(), [](unsigned char ch) { return std::tolower(ch); });
+      return value;
+    }
+
+    struct FlowSize final
+    {
+      std::int32_t naturalWidth = 0;
+      std::int32_t height = 0;
+    };
+
+    // A self-contained left-to-right wrapping flow over a widget's visible children. Unlike
+    // GtkFlowBox (a grid that sizes every column to its widest child, so a chip inherits the width
+    // of whatever shares its column), each child is allocated exactly its own natural width with a
+    // fixed gap; a child wider than the line is clamped to the line width so its label can ellipsize.
+    // Rows are sized to their tallest child and children centre vertically (via their valign), so a
+    // taller neighbour (the open entry) never stretches the chips beside it.
+    //
+    // `place(child, x, y, width, height)` is invoked for every laid-out child; pass a no-op to only
+    // measure. Returns the natural (single longest row) width and the total wrapped height.
+    template<typename WidgetT, typename PlaceFn>
+    FlowSize layoutFlow(WidgetT* first, std::int32_t availableWidth, std::int32_t spacing, PlaceFn place)
+    {
+      struct Item final
+      {
+        WidgetT* widget;
+        std::int32_t x;
+        std::int32_t width;
+        std::int32_t row;
+      };
+
+      auto items = std::vector<Item>{};
+      auto rowHeights = std::vector<std::int32_t>{0};
+      auto cursorX = std::int32_t{0};
+      auto row = std::int32_t{0};
+
+      for (auto* child = first; child != nullptr; child = child->get_next_sibling())
+      {
+        if (!child->get_visible())
+        {
+          continue;
+        }
+
+        auto const horizontal = measureWidget(*child, Gtk::Orientation::HORIZONTAL, -1);
+        auto const naturalWidth = horizontal.natural;
+
+        if (cursorX > 0 && cursorX + naturalWidth > availableWidth)
+        {
+          cursorX = 0;
+          ++row;
+          rowHeights.push_back(0);
+        }
+
+        // Natural width, clamped to the line but never below the child's own minimum (a child wider
+        // than the line keeps its minimum and is clipped by the editor's overflow).
+        auto const allocWidth = std::max(horizontal.minimum, std::min(naturalWidth, std::max(availableWidth, 0)));
+        auto const height = measureWidget(*child, Gtk::Orientation::VERTICAL, allocWidth).natural;
+
+        items.push_back({child, cursorX, allocWidth, row});
+        rowHeights[static_cast<std::size_t>(row)] = std::max(rowHeights[static_cast<std::size_t>(row)], height);
+        cursorX += allocWidth + spacing;
+      }
+
+      auto rowTops = std::vector<std::int32_t>(rowHeights.size(), 0);
+      auto yPos = std::int32_t{0};
+
+      for (auto rowIdx = std::size_t{0}; rowIdx < rowHeights.size(); ++rowIdx)
+      {
+        if (rowIdx > 0)
+        {
+          yPos += spacing;
+        }
+
+        rowTops[rowIdx] = yPos;
+        yPos += rowHeights[rowIdx];
+      }
+
+      auto size = FlowSize{.naturalWidth = 0, .height = yPos};
+
+      for (auto const& item : items)
+      {
+        auto const rowIdx = static_cast<std::size_t>(item.row);
+        place(item.widget, item.x, rowTops[rowIdx], item.width, rowHeights[rowIdx]);
+        size.naturalWidth = std::max(size.naturalWidth, item.x + item.width);
+      }
+
+      return size;
+    }
+
+    // A width that no realistic chip run reaches, so layoutFlow never wraps — used to measure the
+    // single-row natural width/height when the caller imposes no width constraint.
+    constexpr std::int32_t kUnconstrainedWidth = 1 << 24;
+
+    // Inter-chip gap used by the wrapping flow (both the horizontal gap between chips and the
+    // vertical gap between wrapped rows). This is theme-aware: the airy "modern" theme spaces chips
+    // out generously, while "classic" stays dense. The theme class lives on the toplevel window, so
+    // we read it from the widget's root; before the widget is rooted (e.g. headless tests) we fall
+    // back to the dense gap. Distinct from kChipSpacing, which is the intra-chip composition gap
+    // (label-to-remove-button etc.) and must not grow with the theme.
+    std::int32_t chipFlowGap(Gtk::Widget const& widget)
+    {
+      if (auto const* const root = widget.get_root(); root != nullptr)
+      {
+        // Mirrors themeCssClass(ThemePresetId::Modern); kept as a literal to avoid per-measure churn.
+        if (auto const* rootWidget = dynamic_cast<Gtk::Widget const*>(root);
+            rootWidget != nullptr && rootWidget->has_css_class("ao-theme-modern"))
+        {
+          return layout::kSpacingLarge; // 8 — generous breathing for the floating-card theme
+        }
+      }
+
+      return kChipSpacing; // 4 — classic density (and the default before the widget is rooted)
+    }
+
+    // Type A: an existing tag on the selected tracks. Solid fill, with an explicit remove button.
     class TagChip final : public Gtk::Box
     {
     public:
@@ -79,6 +207,10 @@ namespace ao::gtk
 
         add_css_class("ao-tag-chip");
         add_css_class("ao-tag-chip-current");
+
+        // Centre within the flow row's height so a taller neighbour (the open inline add entry)
+        // never stretches the chip vertically.
+        set_valign(Gtk::Align::CENTER);
       }
 
       ~TagChip() override = default;
@@ -99,6 +231,7 @@ namespace ao::gtk
       Gtk::Button _removeBtn;
     };
 
+    // Type B: a suggested/high-frequency tag not yet on the selection. Outlined, adds on click.
     class AvailableTagChip final : public Gtk::Button
     {
     public:
@@ -106,35 +239,233 @@ namespace ao::gtk
         : _tag{tag}, _label{tag}
       {
         _icon.set_from_icon_name("list-add-symbolic");
-        _box.set_spacing(4);
+        _icon.set_pixel_size(kAddIconSize); // default 16px reads too heavy next to the small label
+        _icon.set_valign(Gtk::Align::CENTER);
+        _box.set_spacing(kChipSpacing);
         _box.append(_icon);
         _box.append(_label);
         set_child(_box);
+        set_has_frame(false);
         add_css_class("ao-tag-chip");
+        add_css_class("ao-tag-chip-suggested");
+        set_valign(Gtk::Align::CENTER);
       }
 
       std::string const& getTag() const { return _tag; }
 
     private:
+      static constexpr int kAddIconSize = 12;
+
       std::string _tag;
       Gtk::Box _box{Gtk::Orientation::HORIZONTAL};
       Gtk::Image _icon;
       Gtk::Label _label;
     };
-  }
+  } // namespace
+
+  // Type C: the inline add trigger. A lightweight button that swaps in place for a text entry on
+  // demand, committing on Enter (and staying open for rapid adds) while Escape or focus-out
+  // dismiss it without committing.
+  class AddTagTrigger final : public Gtk::Box
+  {
+  public:
+    using SubmitSignal = sigc::signal<void(std::string const&)>;
+    using FilterSignal = sigc::signal<void()>;
+
+    AddTagTrigger()
+      : Gtk::Box{Gtk::Orientation::HORIZONTAL, 0}
+    {
+      add_css_class("ao-tag-add");
+      set_valign(Gtk::Align::CENTER);
+
+      // A bare "Add…" label (no "+") keeps this reading as an action and avoids echoing the "+"
+      // glyph the suggested chips use; the frameless ghost styling sets it apart from the pills.
+      _button.set_label("Add…");
+      _button.set_has_frame(false);
+      _button.add_css_class("ao-tag-add-trigger");
+      _button.signal_clicked().connect(sigc::mem_fun(*this, &AddTagTrigger::openEntry));
+      append(_button);
+
+      _entry.set_placeholder_text("Add tag…");
+      _entry.add_css_class("ao-tags-entry");
+      // A comfortable typing width; longer input scrolls within the entry. The flow layout sizes
+      // each child independently, so a wider entry no longer stretches neighbouring chips (the
+      // reason this was previously kept artificially narrow under GtkFlowBox's grid columns).
+      _entry.set_width_chars(kEntryWidthChars);
+      _entry.set_max_width_chars(kEntryMaxWidthChars);
+      _entry.set_visible(false);
+      _entry.signal_activate().connect(sigc::mem_fun(*this, &AddTagTrigger::onActivate));
+      _entry.signal_changed().connect([this] { _filterChanged.emit(); });
+      _entry.signal_insert_text().connect(
+        [this](Glib::ustring const& text, int const* position)
+        {
+          auto candidate = _entry.get_text();
+          candidate.insert(*position, text);
+
+          if (!candidate.empty() && !tagNamePattern()->match(candidate))
+          {
+            ::g_signal_stop_emission_by_name(_entry.gobj(), "insert-text");
+          }
+        },
+        false);
+
+      auto focusControllerPtr = Gtk::EventControllerFocus::create();
+      focusControllerPtr->signal_leave().connect(sigc::mem_fun(*this, &AddTagTrigger::onFocusLeave));
+      _entry.add_controller(focusControllerPtr);
+
+      auto keyControllerPtr = Gtk::EventControllerKey::create();
+      keyControllerPtr->signal_key_pressed().connect(
+        [this](guint keyval, guint, Gdk::ModifierType) -> bool
+        {
+          if (keyval == GDK_KEY_Escape)
+          {
+            collapse();
+            return true;
+          }
+
+          return false;
+        },
+        false);
+      _entry.add_controller(keyControllerPtr);
+
+      append(_entry);
+    }
+
+    ~AddTagTrigger() override { removeOutsideWatch(); }
+
+    AddTagTrigger(AddTagTrigger const&) = delete;
+    AddTagTrigger& operator=(AddTagTrigger const&) = delete;
+    AddTagTrigger(AddTagTrigger&&) = delete;
+    AddTagTrigger& operator=(AddTagTrigger&&) = delete;
+
+    SubmitSignal& signalSubmit() { return _submit; }
+    FilterSignal& signalFilterChanged() { return _filterChanged; }
+
+    std::string entryText() const { return _entry.get_text().raw(); }
+    bool isEntryOpen() const { return _entry.get_visible(); }
+
+    void openEntry()
+    {
+      _button.set_visible(false);
+      _entry.set_visible(true);
+      _entry.grab_focus();
+      installOutsideWatch();
+      _filterChanged.emit(); // re-run the flow filter so current chips drop out of add/search mode
+    }
+
+  private:
+    void collapse()
+    {
+      removeOutsideWatch();
+      _entry.set_text("");
+      _entry.set_visible(false);
+      _button.set_visible(true);
+      _filterChanged.emit();
+    }
+
+    // Clicking blank, non-focusable areas never moves keyboard focus, so a focus-leave watch alone
+    // can leave the entry stuck open. While open, watch the toplevel for any press landing outside
+    // this trigger and dismiss on it — mirroring the detail-field editors' outside-click handling.
+    void installOutsideWatch()
+    {
+      if (_outsideClickPtr)
+      {
+        return;
+      }
+
+      auto* const window = dynamic_cast<Gtk::Window*>(get_root());
+
+      if (window == nullptr)
+      {
+        return;
+      }
+
+      _watchedWindow = window;
+      _outsideClickPtr = Gtk::GestureClick::create();
+      _outsideClickPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+      _outsideClickPtr->signal_pressed().connect(
+        [this](std::int32_t, double const xPos, double const yPos)
+        {
+          if (!_entry.get_visible())
+          {
+            return;
+          }
+
+          auto const* target = _watchedWindow->pick(xPos, yPos);
+
+          for (; target != nullptr; target = target->get_parent())
+          {
+            if (target == static_cast<Gtk::Widget const*>(this))
+            {
+              return; // press landed inside the trigger — keep editing
+            }
+          }
+
+          collapse();
+        });
+      _watchedWindow->add_controller(_outsideClickPtr);
+    }
+
+    void removeOutsideWatch()
+    {
+      if (_outsideClickPtr && _watchedWindow != nullptr)
+      {
+        _watchedWindow->remove_controller(_outsideClickPtr);
+      }
+
+      _outsideClickPtr = nullptr;
+      _watchedWindow = nullptr;
+    }
+
+    void onActivate()
+    {
+      auto const text = _entry.get_text().raw();
+
+      if (text.empty())
+      {
+        return;
+      }
+
+      _submit.emit(text);
+      _entry.set_text(""); // Keep the entry open and focused for rapid successive adds.
+      _entry.grab_focus();
+    }
+
+    // Clicking away dismisses the inline entry without committing — same as Escape — so the add
+    // box never feels stuck open. Enter is the only path that commits a tag.
+    void onFocusLeave()
+    {
+      if (_entry.get_visible())
+      {
+        collapse();
+      }
+    }
+
+    static constexpr int kEntryWidthChars = 12;
+    static constexpr int kEntryMaxWidthChars = 20;
+
+    Gtk::Button _button;
+    Gtk::Entry _entry;
+    SubmitSignal _submit;
+    FilterSignal _filterChanged;
+    Glib::RefPtr<Gtk::GestureClick> _outsideClickPtr;
+    Gtk::Window* _watchedWindow = nullptr;
+  };
 
   TagEditor::TagEditor()
   {
     set_overflow(Gtk::Overflow::HIDDEN);
-    _box.set_spacing(kBoxSpacing);
-    _box.set_overflow(Gtk::Overflow::HIDDEN);
-    _box.set_parent(*this);
     setupUi();
   }
 
   TagEditor::~TagEditor()
   {
-    _box.unparent();
+    for (auto* child = get_first_child(); child != nullptr;)
+    {
+      auto* const next = child->get_next_sibling();
+      child->unparent();
+      child = next;
+    }
   }
 
   Gtk::SizeRequestMode TagEditor::get_request_mode_vfunc() const
@@ -152,22 +483,30 @@ namespace ao::gtk
     minimumBaseline = -1;
     naturalBaseline = -1;
 
+    auto const noPlace = [](Gtk::Widget const*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {};
+
     if (orientation == Gtk::Orientation::HORIZONTAL)
     {
-      auto const measured = measureWidget(_box, orientation, forSize);
+      // Stay fully compressible for narrow detail panes; natural is the whole run on a single line.
       minimum = 0;
-      natural = measured.natural;
+      natural = layoutFlow(get_first_child(), kUnconstrainedWidth, chipFlowGap(*this), noPlace).naturalWidth;
       return;
     }
 
-    auto const boxMinWidth = measureWidget(_box, Gtk::Orientation::HORIZONTAL, -1).minimum;
-    _box.measure(orientation, std::max({0, forSize, boxMinWidth}), minimum, natural, minimumBaseline, naturalBaseline);
+    auto const width = forSize < 0 ? kUnconstrainedWidth : forSize;
+    auto const height = layoutFlow(get_first_child(), width, chipFlowGap(*this), noPlace).height;
+    minimum = forSize < 0 ? 0 : height;
+    natural = height;
   }
 
-  void TagEditor::size_allocate_vfunc(int width, int height, int baseline)
+  void TagEditor::size_allocate_vfunc(int width, int /*height*/, int /*baseline*/)
   {
-    auto const measured = measureWidget(_box, Gtk::Orientation::HORIZONTAL, -1);
-    _box.size_allocate({0, 0, std::max(width, measured.minimum), height}, baseline);
+    layoutFlow(
+      get_first_child(),
+      width,
+      chipFlowGap(*this),
+      [](Gtk::Widget* child, std::int32_t xPos, std::int32_t yPos, std::int32_t childWidth, std::int32_t childHeight)
+      { child->size_allocate(Gtk::Allocation{xPos, yPos, childWidth, childHeight}, -1); });
   }
 
   void TagEditor::setup(library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds)
@@ -176,76 +515,24 @@ namespace ao::gtk
     _selectedTrackIds = std::move(selectedTrackIds);
 
     collectTagData();
-    rebuildCurrentTags();
-    rebuildAvailableTags();
+    rebuildChips();
   }
 
   void TagEditor::setupUi()
   {
     add_css_class("ao-tag-editor");
-    _box.add_css_class("ao-tag-editor");
 
-    _searchEntry.set_placeholder_text("Search or add tags...");
-    _searchEntry.add_css_class("ao-tags-entry");
-    _searchEntry.signal_activate().connect(sigc::mem_fun(*this, &TagEditor::onEntryActivated));
-    _searchEntry.signal_changed().connect([this] { _availableTagsBox.invalidate_filter(); });
+    _addTrigger = Gtk::make_managed<AddTagTrigger>();
+    _addTrigger->set_parent(*this);
+    _addTrigger->signalSubmit().connect(sigc::mem_fun(*this, &TagEditor::onAddSubmitted));
+    _addTrigger->signalFilterChanged().connect([this] { applyFilter(); });
+  }
 
-    // Tag names must match query parser identifier rules: [a-zA-Z_][a-zA-Z0-9_]*
-    static auto const kTagNamePatternPtr = Glib::Regex::create("^[a-zA-Z_][a-zA-Z0-9_]*$");
-
-    _searchEntry.signal_insert_text().connect(
-      [this](Glib::ustring const& text, int const* position)
-      {
-        auto candidate = _searchEntry.get_text();
-        candidate.insert(*position, text);
-
-        if (!candidate.empty() && !kTagNamePatternPtr->match(candidate))
-        {
-          ::g_signal_stop_emission_by_name(_searchEntry.gobj(), "insert-text");
-        }
-      },
-      false);
-
-    _box.append(_searchEntry);
-
-    _currentTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
-    _currentTagsBox.set_halign(Gtk::Align::START);
-    _currentTagsBox.set_valign(Gtk::Align::START);
-    _currentTagsBox.set_row_spacing(kChipSpacing);
-    _currentTagsBox.set_column_spacing(kChipSpacing);
-    _currentTagsBox.add_css_class("ao-tag-editor-current-box");
-
-    _box.append(_currentTagsBox);
-    _box.append(_separator);
-
-    _availableTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
-    _availableTagsBox.set_halign(Gtk::Align::START);
-    _availableTagsBox.set_valign(Gtk::Align::START);
-    _availableTagsBox.set_row_spacing(kChipSpacing);
-    _availableTagsBox.set_column_spacing(kChipSpacing);
-    _availableTagsBox.add_css_class("ao-tag-editor-available-box");
-
-    _availableTagsBox.set_filter_func(
-      [this](Gtk::FlowBoxChild* child) -> bool
-      {
-        auto const text = _searchEntry.get_text();
-
-        if (text.empty())
-        {
-          return true;
-        }
-
-        auto const tagName = tagNameFromChild(child);
-        auto lowerTag = std::string{tagName};
-        auto lowerSearch = std::string{text};
-
-        std::ranges::transform(lowerTag, lowerTag.begin(), [](unsigned char ch) { return std::tolower(ch); });
-        std::ranges::transform(lowerSearch, lowerSearch.begin(), [](unsigned char ch) { return std::tolower(ch); });
-
-        return lowerTag.find(lowerSearch) != std::string::npos;
-      });
-
-    _box.append(_availableTagsBox);
+  void TagEditor::insertBeforeTrigger(Gtk::Widget& child)
+  {
+    // Parents `child` (sinking the floating ref of a freshly make_managed chip) and positions it
+    // immediately before the persistent add trigger, keeping the trigger the trailing child.
+    child.insert_before(*this, *_addTrigger);
   }
 
   void TagEditor::collectTagData()
@@ -326,25 +613,44 @@ namespace ao::gtk
     }
   }
 
-  void TagEditor::rebuildCurrentTags()
+  void TagEditor::rebuildChips()
   {
-    while (auto* const child = _currentTagsBox.get_first_child())
+    // Remove every chip, keeping the persistent add trigger as the trailing child so its open
+    // state and focus survive across rebuilds.
+    auto stale = std::vector<Gtk::Widget*>{};
+
+    for (auto* child = get_first_child(); child != nullptr; child = child->get_next_sibling())
     {
-      _currentTagsBox.remove(*child);
+      if (child != static_cast<Gtk::Widget*>(_addTrigger))
+      {
+        stale.push_back(child);
+      }
     }
 
-    auto const addChip = [this](std::string const& tag)
+    for (auto* const child : stale)
+    {
+      child->unparent();
+    }
+
+    auto const addCurrentChip = [this](std::string const& tag)
     {
       auto* const chip = Gtk::make_managed<TagChip>(tag);
       chip->signal_remove().connect([this, tag] { onTagRemoveClicked(tag); });
-      _currentTagsBox.append(*chip);
+      insertBeforeTrigger(*chip);
+    };
+
+    auto const addAvailableChip = [this](std::string const& tag)
+    {
+      auto* const chip = Gtk::make_managed<AvailableTagChip>(tag);
+      chip->signal_clicked().connect([this, tag] { onAvailableTagClicked(tag); });
+      insertBeforeTrigger(*chip);
     };
 
     for (auto const& tag : _currentTags)
     {
       if (!std::ranges::contains(_pendingRemoves, tag))
       {
-        addChip(tag);
+        addCurrentChip(tag);
       }
     }
 
@@ -352,34 +658,13 @@ namespace ao::gtk
     {
       if (!std::ranges::contains(_currentTags, tag))
       {
-        addChip(tag);
+        addCurrentChip(tag);
       }
     }
-  }
-
-  void TagEditor::rebuildAvailableTags()
-  {
-    while (auto* const child = _availableTagsBox.get_first_child())
-    {
-      _availableTagsBox.remove(*child);
-    }
-
-    auto const addAvailableChip = [this](std::string const& tag, bool isHighlighted)
-    {
-      auto* const btn = Gtk::make_managed<AvailableTagChip>(tag);
-
-      if (!isHighlighted)
-      {
-        btn->add_css_class("dim-label");
-      }
-
-      btn->signal_clicked().connect([this, tag] { onAvailableTagClicked(tag); });
-      _availableTagsBox.append(*btn);
-    };
 
     for (auto const& tag : _pendingRemoves)
     {
-      addAvailableChip(tag, false);
+      addAvailableChip(tag);
     }
 
     for (auto const& [tag, freq] : _availableTagsByFrequency)
@@ -390,10 +675,10 @@ namespace ao::gtk
         continue;
       }
 
-      addAvailableChip(tag, false);
+      addAvailableChip(tag);
     }
 
-    _availableTagsBox.invalidate_filter();
+    applyFilter();
   }
 
   void TagEditor::onTagRemoveClicked(std::string const& tag)
@@ -405,8 +690,7 @@ namespace ao::gtk
 
     std::erase(_pendingAdds, tag);
 
-    rebuildCurrentTags();
-    rebuildAvailableTags();
+    rebuildChips();
 
     _tagsChanged.emit(_pendingAdds, _pendingRemoves);
   }
@@ -420,50 +704,56 @@ namespace ao::gtk
 
     std::erase(_pendingRemoves, tag);
 
-    rebuildCurrentTags();
-    rebuildAvailableTags();
+    rebuildChips();
 
     _tagsChanged.emit(_pendingAdds, _pendingRemoves);
   }
 
-  void TagEditor::onEntryActivated()
+  void TagEditor::onAddSubmitted(std::string const& tag)
   {
-    auto const text = _searchEntry.get_text();
-
-    if (text.empty())
+    if (tag.empty())
     {
       return;
     }
 
-    auto const& tagStr = text.raw();
-
-    if (!std::ranges::contains(_pendingAdds, tagStr))
+    if (!std::ranges::contains(_pendingAdds, tag))
     {
-      _pendingAdds.push_back(tagStr);
+      _pendingAdds.push_back(tag);
     }
 
-    std::erase(_pendingRemoves, tagStr);
-    _searchEntry.set_text("");
+    std::erase(_pendingRemoves, tag);
 
-    rebuildCurrentTags();
-    rebuildAvailableTags();
+    rebuildChips();
 
-    auto const toAdd = std::array{std::string{tagStr}};
-    _tagsChanged.emit(toAdd, {});
+    _tagsChanged.emit(_pendingAdds, _pendingRemoves);
   }
 
-  std::string TagEditor::tagNameFromChild(Gtk::FlowBoxChild* child)
+  void TagEditor::applyFilter()
   {
-    if (child == nullptr)
+    auto const open = (_addTrigger != nullptr) && _addTrigger->isEntryOpen();
+    auto const search = open ? toLower(_addTrigger->entryText()) : std::string{};
+
+    for (auto* child = get_first_child(); child != nullptr; child = child->get_next_sibling())
     {
-      return {};
+      if (child == static_cast<Gtk::Widget*>(_addTrigger))
+      {
+        continue; // the add trigger is always visible
+      }
+
+      if (auto const* const avail = dynamic_cast<AvailableTagChip*>(child); avail != nullptr)
+      {
+        // Suggested chips live-filter by a case-insensitive substring of the entry text; with no
+        // query (entry closed or empty) every suggestion is shown.
+        child->set_visible(search.empty() || toLower(avail->getTag()).find(search) != std::string::npos);
+      }
+      else
+      {
+        // Current chips (Type A) hide while the inline entry is open so add/search mode shows only
+        // the suggestions and the entry, and reappear once it is dismissed.
+        child->set_visible(!open);
+      }
     }
 
-    if (auto* const btn = dynamic_cast<AvailableTagChip*>(child->get_child()); btn != nullptr)
-    {
-      return btn->getTag();
-    }
-
-    return "";
+    queue_resize();
   }
 } // namespace ao::gtk

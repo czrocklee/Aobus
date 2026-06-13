@@ -114,10 +114,10 @@ namespace ao::gtk::layout
       return protectCompositeMixedText && agg.mixed && newValue == kCompositeMixedText;
     }
 
-    class KeyColumnWidthAnchor final : public Gtk::Widget
+    class ColumnWidthAnchor final : public Gtk::Widget
     {
     public:
-      KeyColumnWidthAnchor()
+      explicit ColumnWidthAnchor(std::string_view cssClass)
       {
         set_halign(Gtk::Align::FILL);
         set_hexpand(false);
@@ -126,12 +126,12 @@ namespace ao::gtk::layout
         set_overflow(Gtk::Overflow::HIDDEN);
         set_size_request(0, -1);
         set_visible(true);
-        add_css_class("ao-key-column-width-anchor");
+        add_css_class(std::string{cssClass});
       }
 
-      void setLabels(std::vector<Gtk::Label*> labels)
+      void setWidgets(std::vector<Gtk::Widget*> widgets)
       {
-        _labels = std::move(labels);
+        _widgets = std::move(widgets);
         queue_resize();
       }
 
@@ -155,9 +155,9 @@ namespace ao::gtk::layout
           return;
         }
 
-        for (auto* const label : _labels)
+        for (auto* const widget : _widgets)
         {
-          if (label == nullptr)
+          if (widget == nullptr)
           {
             continue;
           }
@@ -166,7 +166,7 @@ namespace ao::gtk::layout
           auto labelNatural = 0;
           auto labelMinimumBaseline = -1;
           auto labelNaturalBaseline = -1;
-          label->measure(
+          widget->measure(
             Gtk::Orientation::HORIZONTAL, -1, labelMinimum, labelNatural, labelMinimumBaseline, labelNaturalBaseline);
           natural = std::max(natural, labelNatural);
         }
@@ -175,7 +175,7 @@ namespace ao::gtk::layout
       void size_allocate_vfunc(int /*width*/, int /*height*/, int /*baseline*/) override {}
 
     private:
-      std::vector<Gtk::Label*> _labels;
+      std::vector<Gtk::Widget*> _widgets;
     };
 
     using track_field_grid::AddCustomPropertyRow;
@@ -184,7 +184,8 @@ namespace ao::gtk::layout
     using track_field_grid::ConstrainedGridBox;
     using track_field_grid::CustomPropertyUndoBar;
     using track_field_grid::CustomRow;
-    using track_field_grid::FieldInlineEditor;
+    using track_field_grid::DetailEditCoordinator;
+    using track_field_grid::DetailFieldEditor;
     using track_field_grid::FixedHeightMinimum;
     using track_field_grid::FixedHeightWidgetSlot;
     using track_field_grid::SectionHeaderRow;
@@ -193,7 +194,8 @@ namespace ao::gtk::layout
     {
     public:
       TrackFieldGridComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _mutation{ctx.runtime.mutation()}
+        : _editCoordinator{ctx.parentWindow}
+        , _mutation{ctx.runtime.mutation()}
         , _scope{ctx.track.detailScope}
         , _mainBox{Gtk::Orientation::VERTICAL, 0}
         , _compositePrimarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
@@ -227,6 +229,7 @@ namespace ao::gtk::layout
         _grid.set_row_spacing(4);
         _grid.set_valign(Gtk::Align::START);
         _grid.set_vexpand(true);
+        _valueColumnWidthAnchor.set_hexpand(true);
 
         auto const requestedCategories =
           node.getProp<std::vector<std::string>>("categories", {"metadata", "technical"});
@@ -421,29 +424,25 @@ namespace ao::gtk::layout
         row.label.add_css_class("ao-property-label");
 
         configureValueBox(row.valueBox);
-        configureValueEditable(row.valueEditable);
-        row.valueEditable.add_css_class("ao-property-value");
-        row.valueBox.append(row.valueClip);
+        configureValueEditor(row.valueEditor);
+        row.valueEditor.add_css_class("ao-property-value");
+        _editCoordinator.registerEditor(row.valueEditor);
 
         if (isTechnical)
         {
           row.label.add_css_class("ao-detail-field-technical");
-          row.valueEditable.add_css_class("ao-detail-field-technical-value");
+          row.valueEditor.add_css_class("ao-detail-field-technical-value");
         }
 
         if (row.editable)
         {
-          row.valueEditable.add_css_class("ao-property-editable");
-          row.valueEditable.setEditable(true);
-          row.valueEditable.signalEditingChanged().connect([this, field = row.field]
-                                                           { onBuiltInEditingChanged(field); });
-          row.valueEditable.signalEditingCanceled().connect(
+          row.valueEditor.add_css_class("ao-property-editable");
+          row.valueEditor.signalCommitted().connect([this, field = row.field] { onBuiltInEdited(field); });
+          row.valueEditor.signalCanceled().connect(
             [this, field = row.field]
             {
               if (auto* row = findBuiltInRow(field); row != nullptr)
               {
-                row->discardNextEdit = true;
-
                 if (_scope != nullptr)
                 {
                   updateBuiltInRow(*row, _scope->snapshot());
@@ -465,34 +464,33 @@ namespace ao::gtk::layout
         configureValueBox(row.valueBox);
         row.separatorLabel.set_opacity(kLabelOpacity);
 
-        configureValueEditable(row.primaryEditable);
-        row.primaryEditable.add_css_class("ao-property-value");
-        row.primaryEditable.removeMaxWidthConstraint();
-        row.primaryClip.set_hexpand(false);
-        row.primaryClip.set_halign(Gtk::Align::START);
-        _compositePrimarySizeGroupPtr->add_widget(row.primaryClip);
+        configureValueEditor(row.primaryEditor);
+        row.primaryEditor.add_css_class("ao-property-value");
+        row.primaryEditor.removeMaxWidthConstraint();
+        row.primaryEditor.set_hexpand(false);
+        row.primaryEditor.set_halign(Gtk::Align::START);
+        _compositePrimarySizeGroupPtr->add_widget(row.primaryEditor);
 
-        configureValueEditable(row.secondaryEditable);
-        row.secondaryEditable.add_css_class("ao-property-value");
-        row.secondaryEditable.removeMaxWidthConstraint();
-        row.secondaryClip.set_hexpand(false);
-        row.secondaryClip.set_halign(Gtk::Align::START);
-        _compositeSecondarySizeGroupPtr->add_widget(row.secondaryClip);
+        configureValueEditor(row.secondaryEditor);
+        row.secondaryEditor.add_css_class("ao-property-value");
+        row.secondaryEditor.removeMaxWidthConstraint();
+        row.secondaryEditor.set_hexpand(false);
+        row.secondaryEditor.set_halign(Gtk::Align::START);
+        _compositeSecondarySizeGroupPtr->add_widget(row.secondaryEditor);
 
-        auto bindEditor = [this](FieldInlineEditor& editable, bool isEditable, rt::TrackField field, bool& discardFlag)
+        auto bindEditor = [this](DetailFieldEditor& editor, bool isEditable, rt::TrackField field)
         {
+          _editCoordinator.registerEditor(editor);
+
           if (isEditable)
           {
-            editable.add_css_class("ao-property-editable");
-            editable.setEditable(true);
-            editable.signalEditingChanged().connect([this, field] { onCompositeEditingChanged(field); });
-            editable.signalEditingCanceled().connect(
-              [this, field, &discardFlag]
+            editor.add_css_class("ao-property-editable");
+            editor.signalCommitted().connect([this, field] { onCompositeEdited(field); });
+            editor.signalCanceled().connect(
+              [this, field]
               {
                 if (auto* row = findCompositeBuiltInRow(field); row != nullptr)
                 {
-                  discardFlag = true;
-
                   if (_scope != nullptr)
                   {
                     updateCompositeRow(*row, _scope->snapshot());
@@ -502,58 +500,38 @@ namespace ao::gtk::layout
           }
         };
 
-        bindEditor(row.primaryEditable, row.primaryEditableFlag, row.primaryField, row.discardNextEditPrimary);
-        bindEditor(row.secondaryEditable, row.secondaryEditableFlag, row.secondaryField, row.discardNextEditSecondary);
+        bindEditor(row.primaryEditor, row.primaryEditableFlag, row.primaryField);
+        bindEditor(row.secondaryEditor, row.secondaryEditableFlag, row.secondaryField);
       }
 
       void updateBuiltInRow(BuiltInRow& row, rt::TrackDetailSnapshot const& snap)
       {
-        if (row.valueEditable.getEditing())
+        if (row.valueEditor.getEditing())
         {
           return;
         }
 
         auto const displayText = validUtf8Text(displayTextForField(row.field, snap, kMultipleValuesText, true));
-        row.valueEditable.setText(displayText);
-        row.valueEditable.set_tooltip_text(displayText);
+        row.valueEditor.setText(displayText);
+        row.valueEditor.set_tooltip_text(displayText);
       }
 
       void updateCompositeRow(CompositeBuiltInRow& row, rt::TrackDetailSnapshot const& snap)
       {
-        auto updateField = [](FieldInlineEditor& editable, rt::TrackField field, rt::TrackDetailSnapshot const& snap)
+        auto updateField = [](DetailFieldEditor& editor, rt::TrackField field, rt::TrackDetailSnapshot const& snap)
         {
-          if (editable.getEditing())
+          if (editor.getEditing())
           {
             return;
           }
 
           auto const displayText = validUtf8Text(displayTextForField(field, snap, kCompositeMixedText, false));
-          editable.setText(displayText);
-          editable.set_tooltip_text(displayText);
+          editor.setText(displayText);
+          editor.set_tooltip_text(displayText);
         };
 
-        updateField(row.primaryEditable, row.primaryField, snap);
-        updateField(row.secondaryEditable, row.secondaryField, snap);
-      }
-
-      void onBuiltInEditingChanged(rt::TrackField field)
-      {
-        auto* row = findBuiltInRow(field);
-
-        if (row == nullptr || !row->editable || row->valueEditable.getEditing())
-        {
-          return;
-        }
-
-        auto const discardEdit = row->discardNextEdit;
-        row->discardNextEdit = false;
-
-        if (discardEdit)
-        {
-          return;
-        }
-
-        onBuiltInEdited(field);
+        updateField(row.primaryEditor, row.primaryField, snap);
+        updateField(row.secondaryEditor, row.secondaryField, snap);
       }
 
       bool applyFieldEdit(rt::TrackField field, std::string_view newValue, rt::TrackDetailSnapshot const& snap)
@@ -592,7 +570,7 @@ namespace ao::gtk::layout
       {
         auto* row = findBuiltInRow(field);
 
-        if (row == nullptr || !row->editable || row->valueEditable.getEditing() || _scope == nullptr)
+        if (row == nullptr || !row->editable || row->valueEditor.getEditing() || _scope == nullptr)
         {
           return;
         }
@@ -604,7 +582,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const newValue = row->valueEditable.getText().raw();
+        auto const newValue = row->valueEditor.getText().raw();
 
         if (isProtectedFieldEditValue(field, snap, newValue, false))
         {
@@ -615,36 +593,6 @@ namespace ao::gtk::layout
         {
           updateBuiltInRow(*row, snap);
         }
-      }
-
-      void onCompositeEditingChanged(rt::TrackField field)
-      {
-        auto* row = findCompositeBuiltInRow(field);
-
-        if (row == nullptr)
-        {
-          return;
-        }
-
-        bool const isPrimary = (row->primaryField == field);
-        bool const editable = isPrimary ? row->primaryEditableFlag : row->secondaryEditableFlag;
-        auto& editor = isPrimary ? row->primaryEditable : row->secondaryEditable;
-        auto& discardFlag = isPrimary ? row->discardNextEditPrimary : row->discardNextEditSecondary;
-
-        if (!editable || editor.getEditing())
-        {
-          return;
-        }
-
-        auto const discardEdit = discardFlag;
-        discardFlag = false;
-
-        if (discardEdit || _scope == nullptr)
-        {
-          return;
-        }
-
-        onCompositeEdited(field);
       }
 
       void onCompositeEdited(rt::TrackField field)
@@ -658,7 +606,7 @@ namespace ao::gtk::layout
 
         bool const isPrimary = (row->primaryField == field);
         bool const editable = isPrimary ? row->primaryEditableFlag : row->secondaryEditableFlag;
-        auto& editor = isPrimary ? row->primaryEditable : row->secondaryEditable;
+        auto& editor = isPrimary ? row->primaryEditor : row->secondaryEditor;
 
         if (!editable || editor.getEditing())
         {
@@ -697,6 +645,11 @@ namespace ao::gtk::layout
 
         if (keysChanged)
         {
+          for (auto& row : _customRows)
+          {
+            _editCoordinator.forgetEditor(row.editor);
+          }
+
           _customRows.clear();
 
           for (auto const& item : snap.customMetadata)
@@ -725,27 +678,22 @@ namespace ao::gtk::layout
         row.label.add_css_class("ao-property-label");
 
         configureValueBox(row.valueBox);
-        configureValueEditable(row.editable);
-        row.editable.add_css_class("ao-property-value");
-        row.editable.add_css_class("ao-property-editable");
-        row.editable.setEditable(true);
-        row.editable.signalEditingChanged().connect([this, key = row.key] { onCustomEditingChanged(key); });
-        row.editable.signalEditingCanceled().connect(
+        configureValueEditor(row.editor);
+        row.editor.add_css_class("ao-property-value");
+        row.editor.add_css_class("ao-property-editable");
+        _editCoordinator.registerEditor(row.editor);
+        row.editor.signalCommitted().connect([this, key = row.key] { onCustomEdited(key); });
+        row.editor.signalCanceled().connect(
           [this, key = row.key]
           {
             if (auto* row = findCustomRow(key); row != nullptr)
             {
-              row->discardNextEdit = true;
-
               if (_scope != nullptr)
               {
                 updateCustomRows(_scope->snapshot());
               }
             }
           });
-
-        row.valueBox.append(row.valueClip);
-        row.valueBox.append(row.partialIcon);
 
         row.deleteButton.set_icon_name("user-trash-symbolic");
         row.deleteButton.set_halign(Gtk::Align::END);
@@ -763,7 +711,7 @@ namespace ao::gtk::layout
 
       void updateCustomRow(CustomRow& row, rt::CustomMetadataItem const& item)
       {
-        if (row.editable.getEditing())
+        if (row.editor.getEditing())
         {
           return;
         }
@@ -780,42 +728,22 @@ namespace ao::gtk::layout
         }
 
         auto const displayText = validUtf8Text(text);
-        row.editable.setText(displayText);
-        row.editable.set_tooltip_text(displayText);
+        row.editor.setText(displayText);
+        row.editor.set_tooltip_text(displayText);
         row.partialIcon.set_visible(!item.presentOnAll);
-      }
-
-      void onCustomEditingChanged(std::string const& key)
-      {
-        auto* row = findCustomRow(key);
-
-        if (row == nullptr || row->editable.getEditing())
-        {
-          return;
-        }
-
-        auto const discardEdit = row->discardNextEdit;
-        row->discardNextEdit = false;
-
-        if (discardEdit)
-        {
-          return;
-        }
-
-        onCustomEdited(key);
       }
 
       void onCustomEdited(std::string const& key)
       {
         auto* row = findCustomRow(key);
 
-        if (row == nullptr || row->editable.getEditing() || _scope == nullptr)
+        if (row == nullptr || row->editor.getEditing() || _scope == nullptr)
         {
           return;
         }
 
         auto const snap = _scope->snapshot();
-        auto const newValue = row->editable.getText().raw();
+        auto const newValue = row->editor.getText().raw();
 
         if (newValue == kMultipleValuesText)
         {
@@ -910,8 +838,9 @@ namespace ao::gtk::layout
         clearGrid();
         std::int32_t rowIdx = 0;
 
-        refreshKeyColumnWidthAnchor();
+        refreshColumnWidthAnchors();
         _grid.attach(_keyColumnWidthAnchor, 0, 0, 1, 1);
+        _grid.attach(_valueColumnWidthAnchor, 1, 0, kValueColWidth, 1);
 
         bool const hasMetadata = !_metadataRows.empty() || !_compositeRows.empty();
 
@@ -996,32 +925,41 @@ namespace ao::gtk::layout
         _grid.attach(_addPropertyRow.valueSlot(), 1, rowIdx, kValueColWidth, 1);
       }
 
-      void refreshKeyColumnWidthAnchor()
+      void refreshColumnWidthAnchors()
       {
-        auto labels = std::vector<Gtk::Label*>{};
-        labels.reserve(_metadataRows.size() + _compositeRows.size() + _technicalRows.size() + _customRows.size());
+        auto keyWidgets = std::vector<Gtk::Widget*>{};
+        auto valueWidgets = std::vector<Gtk::Widget*>{};
+        auto const rowCount = _metadataRows.size() + _compositeRows.size() + _technicalRows.size() + _customRows.size();
+        keyWidgets.reserve(rowCount);
+        valueWidgets.reserve(rowCount + 1);
 
         for (auto& row : _metadataRows)
         {
-          labels.push_back(&row.label);
+          keyWidgets.push_back(&row.label);
+          valueWidgets.push_back(&row.valueBox);
         }
 
         for (auto& row : _compositeRows)
         {
-          labels.push_back(&row.label);
+          keyWidgets.push_back(&row.label);
+          valueWidgets.push_back(&row.valueBox);
         }
 
         for (auto& row : _technicalRows)
         {
-          labels.push_back(&row.label);
+          keyWidgets.push_back(&row.label);
+          valueWidgets.push_back(&row.valueBox);
         }
 
         for (auto& row : _customRows)
         {
-          labels.push_back(&row.label);
+          keyWidgets.push_back(&row.label);
+          valueWidgets.push_back(&row.valueBox);
         }
 
-        _keyColumnWidthAnchor.setLabels(std::move(labels));
+        valueWidgets.push_back(_addPropertyRow.valueSlot().get_first_child());
+        _keyColumnWidthAnchor.setWidgets(std::move(keyWidgets));
+        _valueColumnWidthAnchor.setWidgets(std::move(valueWidgets));
       }
 
       void configureValueBox(Gtk::Widget& box)
@@ -1044,13 +982,12 @@ namespace ao::gtk::layout
         label.set_lines(1);
       }
 
-      void configureValueEditable(FieldInlineEditor& editable)
+      void configureValueEditor(DetailFieldEditor& editor)
       {
-        editable.set_halign(Gtk::Align::FILL);
-        editable.set_hexpand(true);
-        editable.set_overflow(Gtk::Overflow::HIDDEN);
-        editable.set_size_request(0, -1);
-        editable.setEditable(false);
+        editor.set_halign(Gtk::Align::FILL);
+        editor.set_hexpand(true);
+        editor.set_overflow(Gtk::Overflow::HIDDEN);
+        editor.set_size_request(0, -1);
       }
 
       void setupAddPropertyUi()
@@ -1107,6 +1044,7 @@ namespace ao::gtk::layout
       }
 
       Gtk::Grid _grid;
+      DetailEditCoordinator _editCoordinator;
       rt::LibraryMutationService& _mutation;
       ITrackDetailScope* _scope;
       std::deque<BuiltInRow> _metadataRows;
@@ -1130,7 +1068,8 @@ namespace ao::gtk::layout
 
       AddCustomPropertyRow _addPropertyRow{kGridColumnSpacing};
 
-      KeyColumnWidthAnchor _keyColumnWidthAnchor;
+      ColumnWidthAnchor _keyColumnWidthAnchor{"ao-key-column-width-anchor"};
+      ColumnWidthAnchor _valueColumnWidthAnchor{"ao-value-column-width-anchor"};
 
       sigc::connection _scopeConn;
 

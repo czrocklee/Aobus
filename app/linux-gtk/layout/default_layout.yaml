@@ -129,6 +129,7 @@ templates:
       - type: track.selectionRegion
         props:
           showWhen: any
+          showPlaceholder: true
         layout:
           vexpand: true
         children:

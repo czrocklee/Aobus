@@ -32,7 +32,6 @@ namespace ao::gtk::layout
   {
     constexpr std::int32_t kDefaultCollapsibleSplitSize = 300;
     constexpr std::int32_t kMinCollapsibleSplitSize = 50;
-    constexpr std::int32_t kResizeGripThickness = 4;
     constexpr double kCollapsibleSplitDragThreshold = 3.0;
 
     class FixedSplitPane final : public Gtk::Widget
@@ -174,26 +173,6 @@ namespace ao::gtk::layout
         bool const initiallyRevealed = node.getProp<bool>("revealed", true);
         _revealer.set_reveal_child(initiallyRevealed);
 
-        _resizeGrip.add_css_class("ao-detail-resize-grip");
-        _resizeGrip.set_can_target(true);
-        _resizeGrip.set_cursor(resizeCursor());
-
-        _toggleButton.add_css_class("ao-detail-handle");
-        _toggleButton.set_valign(Gtk::Align::CENTER);
-        _toggleButton.set_focus_on_click(false);
-        _toggleButton.set_cursor(Gdk::Cursor::create("pointer"));
-
-        if (_orientation == Gtk::Orientation::HORIZONTAL)
-        {
-          _resizeGrip.set_size_request(kResizeGripThickness, -1);
-          _resizeGrip.set_vexpand(true);
-        }
-        else
-        {
-          _resizeGrip.set_size_request(-1, kResizeGripThickness);
-          _resizeGrip.set_hexpand(true);
-        }
-
         // Setup expansion
         if (_collapseSide == Side::End)
         {
@@ -227,12 +206,17 @@ namespace ao::gtk::layout
 
         // Layout assembly
         _gutterBox.set_orientation(_orientation);
+        _gutterBox.add_css_class("ao-detail-resize-grip");
         _gutterBox.set_cursor(resizeCursor());
+
+        _toggleButton.add_css_class("ao-detail-handle");
+        _toggleButton.set_valign(Gtk::Align::CENTER);
+        _toggleButton.set_focus_on_click(false);
+        _toggleButton.set_cursor(Gdk::Cursor::create("pointer"));
 
         if (_collapseSide == Side::Start)
         {
           _gutterBox.append(_toggleButton);
-          _gutterBox.append(_resizeGrip);
 
           _container.append(_revealer);
           _container.append(_gutterBox);
@@ -240,7 +224,6 @@ namespace ao::gtk::layout
         }
         else
         {
-          _gutterBox.append(_resizeGrip);
           _gutterBox.append(_toggleButton);
 
           _container.append(_startChildPtr->widget());
@@ -249,6 +232,28 @@ namespace ao::gtk::layout
         }
 
         // Drag logic
+        setupDragGesture();
+
+        _toggleButton.signal_clicked().connect([this] { toggleRevealed(); });
+
+        updateHandleIcon();
+      }
+
+      ~CollapsibleSplitComponent() override { _paneSizer.clearChild(); }
+
+      CollapsibleSplitComponent(CollapsibleSplitComponent const&) = delete;
+      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent const&) = delete;
+      CollapsibleSplitComponent(CollapsibleSplitComponent&&) = delete;
+      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent&&) = delete;
+
+      Gtk::Widget& widget() override
+      {
+        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_container);
+      }
+
+    private:
+      void setupDragGesture()
+      {
         _dragGesturePtr = Gtk::GestureDrag::create();
         _dragGesturePtr->set_button(1);
         _dragGesturePtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
@@ -265,10 +270,8 @@ namespace ao::gtk::layout
               return;
             }
 
-            _dragGesturePtr->set_state(Gtk::EventSequenceState::CLAIMED);
             _startSizeOnDrag =
               (_orientation == Gtk::Orientation::HORIZONTAL) ? _paneSizer.get_width() : _paneSizer.get_height();
-            applyDragCursor();
           });
 
         _dragGesturePtr->signal_drag_update().connect(
@@ -281,9 +284,21 @@ namespace ao::gtk::layout
 
             double const delta = (_orientation == Gtk::Orientation::HORIZONTAL) ? offsetX : offsetY;
 
-            if (double const absDelta = std::abs(delta); absDelta < kCollapsibleSplitDragThreshold)
+            if (!_dragActive)
             {
-              return;
+              if (double const absDelta = std::abs(delta); absDelta < kCollapsibleSplitDragThreshold)
+              {
+                return;
+              }
+
+              if (!_revealer.get_reveal_child())
+              {
+                return;
+              }
+
+              _dragGesturePtr->set_state(Gtk::EventSequenceState::CLAIMED);
+              _dragActive = true;
+              applyDragCursor();
             }
 
             if (!_revealer.get_reveal_child())
@@ -309,32 +324,16 @@ namespace ao::gtk::layout
         _dragGesturePtr->signal_drag_end().connect(
           [this](double, double)
           {
-            if (_dragAccepted)
+            if (_dragActive)
             {
               restoreDragCursor();
             }
 
             _dragAccepted = false;
+            _dragActive = false;
           });
-
-        _toggleButton.signal_clicked().connect([this] { toggleRevealed(); });
-
-        updateHandleIcon();
       }
 
-      ~CollapsibleSplitComponent() override { _paneSizer.clearChild(); }
-
-      CollapsibleSplitComponent(CollapsibleSplitComponent const&) = delete;
-      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent const&) = delete;
-      CollapsibleSplitComponent(CollapsibleSplitComponent&&) = delete;
-      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent&&) = delete;
-
-      Gtk::Widget& widget() override
-      {
-        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_container);
-      }
-
-    private:
       Gtk::RevealerTransitionType getTransitionType()
       {
         if (_orientation == Gtk::Orientation::HORIZONTAL)
@@ -364,22 +363,7 @@ namespace ao::gtk::layout
           return false;
         }
 
-        if (!_gutterBox.contains(gutterX, gutterY))
-        {
-          return false;
-        }
-
-        double btnX = 0.0;
-
-        if (double btnY = 0.0; _container.translate_coordinates(_toggleButton, containerX, containerY, btnX, btnY))
-        {
-          if (_toggleButton.contains(btnX, btnY))
-          {
-            return false;
-          }
-        }
-
-        return true;
+        return _gutterBox.contains(gutterX, gutterY);
       }
 
       void applyDragCursor()
@@ -439,7 +423,6 @@ namespace ao::gtk::layout
 
       Gtk::Box _container;
       Gtk::Box _gutterBox;
-      Gtk::Box _resizeGrip;
       Gtk::Button _toggleButton;
       Gtk::Revealer _revealer;
       FixedSplitPane _paneSizer;
@@ -450,6 +433,7 @@ namespace ao::gtk::layout
       std::int32_t _currentSize = kDefaultCollapsibleSplitSize;
       std::int32_t _startSizeOnDrag = kDefaultCollapsibleSplitSize;
       bool _dragAccepted = false;
+      bool _dragActive = false;
 
       Gtk::Widget* _collapsibleWidget = nullptr;
       std::unique_ptr<Gtk::Label> _errorPtr;

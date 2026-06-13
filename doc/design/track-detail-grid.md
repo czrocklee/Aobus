@@ -24,6 +24,10 @@ The grid is driven by the `TrackDetailSnapshot`, which aggregates field values a
 
 ### Display Rules
 
+- **No Selection**: The default detail pane keeps the same cover, field-grid,
+  and tag-editor layout visible with an empty snapshot. The region is disabled,
+  so the placeholder cannot submit edits. Selecting a track enables the same
+  widget tree in place without moving the panel contents.
 - **Mixed Values**: When selected tracks have different values for a field, the grid displays `<Multiple Values>`.
 - **Unknown Values**: For technical fields, missing data is displayed as `Unknown`. For metadata fields, missing data is displayed as an empty string.
 
@@ -31,10 +35,11 @@ The grid is driven by the `TrackDetailSnapshot`, which aggregates field values a
 
 The Track Details panel uses an invisible interaction model. Editable controls appear only where the pointer or keyboard focus indicates intent.
 
-- **Built-in Metadata**: Editable inline. They appear as plain text until hovered or focused, at which point an edit hint (`document-edit-symbolic`) and subtle background highlight appear. Built-in metadata cannot be removed, only cleared (set to empty string).
-- **Custom Metadata**: Editable inline and removable. Like built-in metadata, the value shows an edit hint on hover/focus. The row itself also shows a delete button (`user-trash-symbolic`) at the right edge when the row is hovered or receives focus.
+- **Built-in Metadata**: Editable inline. They appear as plain text until hovered or focused, at which point an edit button (`document-edit-symbolic`) and subtle background highlight appear. Editing starts only from that button; clicking the value text does not activate the editor. Built-in metadata cannot be removed, only cleared (set to empty string).
+- **Custom Metadata**: Editable inline and removable. Like built-in metadata, the value shows an edit button on hover/focus, and only that button activates editing. The row itself also shows a delete button (`user-trash-symbolic`) at the right edge when the row is hovered or receives focus.
 - **Technical Fields**: Objective read-only properties (e.g., Sample Rate, Bitrate, File Path). They are styled slightly dimmer than editable fields and have no hover, focus, or cursor affordances.
-- **Inline Editing**: Metadata and custom fields use a detail-field inline editor that displays as an ellipsizing label and switches to an entry while editing. Pressing `Enter` commits the change, while `Esc` cancels it. The UI refuses to save literal `<Multiple Values>`.
+- **Inline Editing**: Metadata and custom fields use a detail-field inline editor that displays as an ellipsizing label and switches to an entry while editing. Pressing `Enter` or clicking outside the active entry commits the change, while `Esc` cancels it. Outside-click handling does not depend on the clicked widget accepting keyboard focus. The UI refuses to save literal `<Multiple Values>`.
+- **Single Edit Session**: Detail field editors are standard GTK compositions (`Gtk::Box`, `Gtk::Stack`, `Gtk::Label`, `Gtk::Entry`, and `Gtk::Button`). A shared coordinator allows only one active editor in the detail grid; activating another field commits the previous field before opening the next one.
 - **Add Property**: An "Add Property" button allows users to define new custom metadata keys and values. Duplicate keys already present in the selection are rejected.
 - **Delete Undo**: Deleting a custom metadata property shows a temporary (5-second) snackbar/undo bar at the bottom of the grid. Clicking "Undo" restores the property. Currently, this is only fully supported and presented when the deleted property had the same value across all selected tracks (not mixed).
 
@@ -87,6 +92,16 @@ audio properties are collapsed by default. Collapsing a section hides its field
 rows but keeps the section header in the grid, so users can restore the section
 without changing the surrounding layout.
 
+A section header is a borderless full-width button that, at rest, renders only a
+single full-bleed hairline rule spanning the row — the panel is dense, so no
+section title text is shown. The disclosure chevron (`pan-down` when expanded,
+`pan-end` when collapsed) is overlaid on the leading end of the rule rather than
+placed before it, so it never displaces the line; it stays fully transparent at
+rest and fades in only on hover or keyboard focus, at which point the whole
+header strip also highlights. This keeps the divider clean and consistently
+aligned while still surfacing the collapse affordance and current state on
+demand.
+
 Every grid cell is hosted by a clipped fixed-height slot. Row height is stable
 across field values and font metrics; if a child widget internally asks for more
 height, it is allocated enough height inside the clipped slot instead of
@@ -109,8 +124,10 @@ the grid's minimum width. Editable fields (metadata and custom) switch to a
 `Gtk::Entry` only while editing; read-only technical values keep the display-only
 contract.
 
-When hovered or focused, editable values receive an active editor affordance
-with a subtle background and border, indicating they can be clicked to edit.
+When hovered or focused, editable values reveal an edit button. Hover and
+keyboard-focus highlighting is confined to that button; the rest of the value
+area remains visually unchanged. The button is the only pointer target that
+enters edit mode; clicking the displayed value leaves it in display mode.
 Read-only technical values do not show any hover affordance.
 
 Text loaded from tags or custom metadata is normalized at the GTK display
@@ -125,11 +142,12 @@ Key-column slots do not request horizontal expansion, and the add-property key
 entry uses only a one-character natural-width hint so it fills the existing key
 column without making that column compete with values during split-pane resize.
 
-The key column includes a zero-minimum width anchor that measures all key labels,
-including labels in collapsed sections, and contributes only a natural width to
-GTK's grid allocation. This keeps the value column from jumping when technical
-audio properties are expanded or collapsed, while preserving the panel's ability
-to report a zero horizontal minimum and fit extremely narrow split-pane widths.
+The key and value columns include zero-minimum width anchors that measure row
+content from every section, including collapsed sections, and contribute only
+natural widths to GTK's grid allocation. This keeps both columns from jumping
+when metadata, custom properties, or technical audio properties are expanded or
+collapsed, while preserving the panel's ability to report a zero horizontal
+minimum and fit extremely narrow split-pane widths.
 
 The field grid wrapper treats the detail panel allocation as the hard horizontal
 limit. It does not report the grid's content-driven minimum or natural width to

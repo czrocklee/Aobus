@@ -7,12 +7,14 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
+#include <gtkmm/box.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerfocus.h>
 #include <gtkmm/eventcontrollerkey.h>
-#include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/grid.h>
+#include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
 #include <algorithm>
@@ -40,11 +42,6 @@ namespace ao::gtk::layout::track_field_grid
     std::int32_t minimumWidth(Gtk::Widget const& widget)
     {
       return std::max(0, measureWidget(widget, Gtk::Orientation::HORIZONTAL, -1).minimum);
-    }
-
-    std::int32_t naturalWidth(Gtk::Widget const& widget)
-    {
-      return std::max(0, measureWidget(widget, Gtk::Orientation::HORIZONTAL, -1).natural);
     }
 
     std::int32_t widthAtLeastMinimum(Gtk::Widget const& widget, std::int32_t const width)
@@ -107,16 +104,14 @@ namespace ao::gtk::layout::track_field_grid
       return;
     }
 
-    auto const requestedWidth = forSize > 0 ? forSize : _lastAllocatedWidth;
+    if (forSize <= 0)
+    {
+      minimum = 0;
+      natural = 0;
+      return;
+    }
 
-    if (auto const width = std::max(0, requestedWidth); width > 0)
-    {
-      _grid->measure(orientation, width, minimum, natural, minimumBaseline, naturalBaseline);
-    }
-    else
-    {
-      _grid->measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
-    }
+    _grid->measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
   }
 
   void ConstrainedGridBox::size_allocate_vfunc(int width, int height, int baseline)
@@ -129,12 +124,21 @@ namespace ao::gtk::layout::track_field_grid
     }
   }
 
-  FieldInlineEditor::FieldInlineEditor()
+  DetailFieldEditor::DetailFieldEditor()
+    : Gtk::Box{Gtk::Orientation::HORIZONTAL, 4}
   {
     set_halign(Gtk::Align::FILL);
     set_hexpand(true);
     set_overflow(Gtk::Overflow::HIDDEN);
     set_size_request(0, -1);
+    add_css_class("ao-detail-field-value");
+    add_css_class("ao-detail-field-editor");
+
+    _stack.set_halign(Gtk::Align::FILL);
+    _stack.set_hexpand(true);
+    _stack.set_hhomogeneous(false);
+    _stack.set_vhomogeneous(false);
+    _stack.set_overflow(Gtk::Overflow::HIDDEN);
 
     _displayLabel.set_halign(Gtk::Align::FILL);
     _displayLabel.set_xalign(0.0F);
@@ -145,15 +149,29 @@ namespace ao::gtk::layout::track_field_grid
     _displayLabel.set_ellipsize(Pango::EllipsizeMode::END);
     _displayLabel.set_wrap(false);
     _displayLabel.set_lines(1);
-    _displayLabel.set_parent(*this);
+    _stack.add(_displayLabel, "display");
 
     _entry.set_halign(Gtk::Align::FILL);
     _entry.set_hexpand(true);
     _entry.set_overflow(Gtk::Overflow::HIDDEN);
     _entry.set_size_request(0, -1);
-    _entry.set_visible(false);
-    _entry.set_parent(*this);
+    _entry.set_width_chars(0);
+    _entry.add_css_class("ao-detail-field-entry");
+    _stack.add(_entry, "edit");
+    _stack.set_visible_child("display");
     _entry.signal_activate().connect([this] { stopEditing(true); });
+
+    _editButton.set_icon_name("document-edit-symbolic");
+    _editButton.set_has_frame(false);
+    _editButton.set_focusable(true);
+    _editButton.add_css_class("ao-icon-button");
+    _editButton.add_css_class("ao-detail-field-edit-hint");
+    _editButton.set_tooltip_text("Edit Value");
+    _editButton.set_visible(false);
+    _editButton.signal_clicked().connect([this] { startEditing(); });
+
+    append(_stack);
+    append(_editButton);
 
     auto const keyPtr = Gtk::EventControllerKey::create();
     keyPtr->signal_key_pressed().connect(
@@ -161,7 +179,6 @@ namespace ao::gtk::layout::track_field_grid
       {
         if (keyval == GDK_KEY_Escape)
         {
-          _editingCanceled.emit();
           stopEditing(false);
           return true;
         }
@@ -174,19 +191,9 @@ namespace ao::gtk::layout::track_field_grid
     auto const focusPtr = Gtk::EventControllerFocus::create();
     focusPtr->signal_leave().connect([this] { stopEditing(true); });
     _entry.add_controller(focusPtr);
-
-    auto const clickPtr = Gtk::GestureClick::create();
-    clickPtr->signal_pressed().connect([this](std::int32_t, double, double) { startEditing(); });
-    add_controller(clickPtr);
   }
 
-  FieldInlineEditor::~FieldInlineEditor()
-  {
-    _entry.unparent();
-    _displayLabel.unparent();
-  }
-
-  void FieldInlineEditor::setText(Glib::ustring const& text)
+  void DetailFieldEditor::setText(Glib::ustring const& text)
   {
     _text = text;
     _displayLabel.set_text(_text);
@@ -197,48 +204,60 @@ namespace ao::gtk::layout::track_field_grid
     }
   }
 
-  Glib::ustring FieldInlineEditor::getText() const
+  Glib::ustring DetailFieldEditor::getText() const
   {
     return _editing ? _entry.get_text() : _text;
   }
 
-  void FieldInlineEditor::setEditable(bool editable)
+  void DetailFieldEditor::setEditable(bool editable)
   {
     _editable = editable;
+    _editButton.set_visible(_editable && !_editing);
+
+    if (_editable)
+    {
+      add_css_class("ao-detail-field-editable");
+    }
+    else
+    {
+      remove_css_class("ao-detail-field-editable");
+    }
   }
 
-  bool FieldInlineEditor::getEditable() const
+  bool DetailFieldEditor::getEditable() const
   {
     return _editable;
   }
 
-  bool FieldInlineEditor::getEditing() const
+  bool DetailFieldEditor::getEditing() const
   {
     return _editing;
   }
 
-  void FieldInlineEditor::startEditing()
+  void DetailFieldEditor::startEditing()
   {
     if (!_editable || _editing)
     {
       return;
     }
 
+    _editStarted.emit();
     _editing = true;
     _entry.set_text(_text);
-    _displayLabel.set_visible(false);
-    _entry.set_visible(true);
-    _editingChanged.emit();
+    _stack.set_visible_child("edit");
+    _editButton.set_visible(false);
     _entry.grab_focus();
     _entry.select_region(0, -1);
   }
 
-  void FieldInlineEditor::stopEditing(bool commit)
+  void DetailFieldEditor::stopEditing(bool commit)
   {
     if (!_editing)
     {
       return;
     }
+
+    _editing = false;
 
     if (commit)
     {
@@ -250,92 +269,103 @@ namespace ao::gtk::layout::track_field_grid
       _entry.set_text(_text);
     }
 
-    _editing = false;
-    _entry.set_visible(false);
-    _displayLabel.set_visible(true);
-    _editingChanged.emit();
+    _stack.set_visible_child("display");
+    _editButton.set_visible(_editable);
+
+    if (commit)
+    {
+      _committed.emit();
+    }
+    else
+    {
+      _canceled.emit();
+    }
   }
 
-  sigc::signal<void()>& FieldInlineEditor::signalEditingChanged()
+  sigc::signal<void()>& DetailFieldEditor::signalEditStarted()
   {
-    return _editingChanged;
+    return _editStarted;
   }
 
-  sigc::signal<void()>& FieldInlineEditor::signalEditingCanceled()
+  sigc::signal<void()>& DetailFieldEditor::signalCommitted()
   {
-    return _editingCanceled;
+    return _committed;
   }
 
-  void FieldInlineEditor::removeMaxWidthConstraint()
+  sigc::signal<void()>& DetailFieldEditor::signalCanceled()
+  {
+    return _canceled;
+  }
+
+  void DetailFieldEditor::removeMaxWidthConstraint()
   {
     _displayLabel.set_max_width_chars(-1);
   }
 
-  Gtk::SizeRequestMode FieldInlineEditor::get_request_mode_vfunc() const
+  DetailEditCoordinator::DetailEditCoordinator(Gtk::Window& parentWindow)
+    : _parentWindow{parentWindow}, _outsideClickPtr{Gtk::GestureClick::create()}
   {
-    return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH;
+    _outsideClickPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+    _outsideClickPtr->signal_pressed().connect(
+      [this](std::int32_t, double const xPos, double const yPos)
+      {
+        if (auto* const target = _parentWindow.pick(xPos, yPos);
+            _activeEditor != nullptr && !isDescendantOf(target, *_activeEditor))
+        {
+          _activeEditor->stopEditing(true);
+        }
+      });
+    _parentWindow.add_controller(_outsideClickPtr);
   }
 
-  void FieldInlineEditor::measure_vfunc(Gtk::Orientation orientation,
-                                        int forSize,
-                                        int& minimum,
-                                        int& natural,
-                                        int& minimumBaseline,
-                                        int& naturalBaseline) const
+  DetailEditCoordinator::~DetailEditCoordinator()
   {
-    minimumBaseline = -1;
-    naturalBaseline = -1;
+    _parentWindow.remove_controller(_outsideClickPtr);
+  }
 
-    if (orientation == Gtk::Orientation::HORIZONTAL)
+  void DetailEditCoordinator::registerEditor(DetailFieldEditor& editor)
+  {
+    editor.signalEditStarted().connect(
+      [this, &editor]
+      {
+        if (_activeEditor != nullptr && _activeEditor != &editor)
+        {
+          _activeEditor->stopEditing(true);
+        }
+
+        _activeEditor = &editor;
+      });
+
+    auto clearActive = [this, &editor]
     {
-      auto const measured = measureWidget(visibleChild(), orientation, forSize);
-      minimum = 0;
-      natural = measured.natural;
-      return;
+      if (_activeEditor == &editor)
+      {
+        _activeEditor = nullptr;
+      }
+    };
+    editor.signalCommitted().connect(clearActive);
+    editor.signalCanceled().connect(clearActive);
+  }
+
+  void DetailEditCoordinator::forgetEditor(DetailFieldEditor& editor)
+  {
+    if (_activeEditor == &editor)
+    {
+      _activeEditor = nullptr;
+    }
+  }
+
+  bool DetailEditCoordinator::isDescendantOf(Gtk::Widget const* widget, Gtk::Widget const& ancestor)
+  {
+    for (auto const* current = widget; current != nullptr; current = current->get_parent())
+    {
+      if (current == &ancestor)
+      {
+        return true;
+      }
     }
 
-    auto const width = widthForVisibleChild(std::max(0, forSize));
-    visibleChild().measure(orientation, width, minimum, natural, minimumBaseline, naturalBaseline);
-  }
-
-  void FieldInlineEditor::size_allocate_vfunc(int width, int height, int baseline)
-  {
-    visibleChild().size_allocate({0, 0, widthForVisibleChild(width), height}, baseline);
-  }
-
-  Gtk::Widget& FieldInlineEditor::visibleChild()
-  {
-    if (_editing)
-    {
-      return _entry;
-    }
-
-    return _displayLabel;
-  }
-
-  Gtk::Widget const& FieldInlineEditor::visibleChild() const
-  {
-    if (_editing)
-    {
-      return _entry;
-    }
-
-    return _displayLabel;
-  }
-
-  std::int32_t FieldInlineEditor::widthForVisibleChild(std::int32_t const width) const
-  {
-    if (!_editing)
-    {
-      return std::max({0, width, displayLabelMinimumWidth()});
-    }
-
-    return widthAtLeastMinimum(_entry, width);
-  }
-
-  std::int32_t FieldInlineEditor::displayLabelMinimumWidth() const
-  {
-    return minimumWidth(_displayLabel);
+    return false;
   }
 
   FixedHeightWidgetSlot::FixedHeightWidgetSlot(Gtk::Widget& child,
@@ -400,169 +430,5 @@ namespace ao::gtk::layout::track_field_grid
     auto const childWidth = widthAtLeastMinimum(_child, width);
     auto const childHeight = heightAtLeastMinimum(_child, childWidth, height);
     _child.size_allocate({0, 0, childWidth, childHeight}, baseline);
-  }
-
-  FieldValueWrapper::FieldValueWrapper(Gtk::Widget& valueWidget,
-                                       bool const editable,
-                                       bool const technical,
-                                       bool const showEditHint,
-                                       bool const propagateNaturalWidth,
-                                       Gtk::Widget* const actionWidget)
-    : _valueWidget{valueWidget}
-    , _actionWidget{actionWidget}
-    , _editable{editable}
-    , _showEditHint{showEditHint}
-    , _propagateNaturalWidth{propagateNaturalWidth}
-  {
-    set_halign(Gtk::Align::FILL);
-    set_hexpand(true);
-    set_overflow(Gtk::Overflow::HIDDEN);
-    set_size_request(0, -1);
-    _valueWidget.set_parent(*this);
-
-    if (_actionWidget != nullptr)
-    {
-      _actionWidget->set_parent(*this);
-    }
-
-    add_css_class("ao-detail-field-value");
-
-    if (_editable)
-    {
-      add_css_class("ao-detail-field-editable");
-
-      if (_showEditHint)
-      {
-        _editHint.set_from_icon_name("document-edit-symbolic");
-        _editHint.add_css_class("ao-detail-field-edit-hint");
-        _editHint.set_parent(*this);
-      }
-    }
-
-    if (_editable)
-    {
-      auto motionPtr = Gtk::EventControllerMotion::create();
-      motionPtr->signal_enter().connect([this](double, double) { updateHover(true); });
-      motionPtr->signal_leave().connect([this] { updateHover(false); });
-      add_controller(motionPtr);
-
-      auto focusPtr = Gtk::EventControllerFocus::create();
-      focusPtr->signal_enter().connect([this] { updateHover(true); });
-      focusPtr->signal_leave().connect([this] { updateHover(false); });
-      add_controller(focusPtr);
-    }
-
-    if (technical)
-    {
-      add_css_class("ao-detail-field-technical");
-    }
-  }
-
-  FieldValueWrapper::~FieldValueWrapper()
-  {
-    if (_editable && _showEditHint)
-    {
-      _editHint.unparent();
-    }
-
-    if (_actionWidget != nullptr)
-    {
-      _actionWidget->unparent();
-    }
-
-    _valueWidget.unparent();
-  }
-
-  void FieldValueWrapper::updateHover(bool hovered)
-  {
-    if (hovered)
-    {
-      add_css_class("ao-hover");
-    }
-    else
-    {
-      remove_css_class("ao-hover");
-    }
-  }
-
-  Gtk::SizeRequestMode FieldValueWrapper::get_request_mode_vfunc() const
-  {
-    return Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH;
-  }
-
-  void FieldValueWrapper::measure_vfunc(Gtk::Orientation orientation,
-                                        int forSize,
-                                        int& minimum,
-                                        int& natural,
-                                        int& minimumBaseline,
-                                        int& naturalBaseline) const
-  {
-    minimumBaseline = -1;
-    naturalBaseline = -1;
-
-    if (orientation == Gtk::Orientation::HORIZONTAL)
-    {
-      minimum = 0;
-      natural = 0;
-
-      if (_propagateNaturalWidth)
-      {
-        natural = naturalWidth(_valueWidget);
-
-        if (_editable && _showEditHint)
-        {
-          natural += naturalWidth(_editHint) + 4;
-        }
-
-        if (_actionWidget != nullptr)
-        {
-          natural += naturalWidth(*_actionWidget) + 4;
-        }
-      }
-
-      return;
-    }
-
-    auto const childWidth = widthAtLeastMinimum(_valueWidget, std::max(0, forSize));
-    _valueWidget.measure(orientation, childWidth, minimum, natural, minimumBaseline, naturalBaseline);
-  }
-
-  void FieldValueWrapper::size_allocate_vfunc(int width, int height, int baseline)
-  {
-    auto const childWidth = widthAtLeastMinimum(_valueWidget, width);
-    _valueWidget.size_allocate({0, 0, childWidth, height}, baseline);
-
-    auto rightEdge = width - 4;
-
-    if (_actionWidget != nullptr)
-    {
-      auto min = 0;
-      auto nat = 0;
-      auto minB = -1;
-      auto natB = -1;
-      _actionWidget->measure(Gtk::Orientation::HORIZONTAL, -1, min, nat, minB, natB);
-      auto const actionWidth = nat;
-      _actionWidget->measure(Gtk::Orientation::VERTICAL, actionWidth, min, nat, minB, natB);
-      auto const actionHeight = nat;
-
-      rightEdge -= actionWidth;
-      _actionWidget->size_allocate({rightEdge, (height - actionHeight) / 2, actionWidth, actionHeight}, baseline);
-      rightEdge -= 4;
-    }
-
-    if (_editable && _showEditHint)
-    {
-      auto min = 0;
-      auto nat = 0;
-      auto minB = -1;
-      auto natB = -1;
-      _editHint.measure(Gtk::Orientation::HORIZONTAL, -1, min, nat, minB, natB);
-      auto const hintWidth = nat;
-      _editHint.measure(Gtk::Orientation::VERTICAL, hintWidth, min, nat, minB, natB);
-      auto const hintHeight = nat;
-
-      rightEdge -= hintWidth;
-      _editHint.size_allocate({rightEdge, (height - hintHeight) / 2, hintWidth, hintHeight}, baseline);
-    }
   }
 } // namespace ao::gtk::layout::track_field_grid

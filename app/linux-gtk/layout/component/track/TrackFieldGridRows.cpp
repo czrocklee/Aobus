@@ -30,39 +30,43 @@ namespace ao::gtk::layout::track_field_grid
   } // namespace
 
   BuiltInRow::BuiltInRow(rt::TrackField field)
-    : field{field}
-    , labelSlot{label, false}
-    , valueClip{valueEditable, isFieldEditable(field), isFieldTechnical(field)}
-    , valueSlot{valueBox, true}
-    , editable{isFieldEditable(field)}
+    : field{field}, labelSlot{label, false}, valueSlot{valueBox, true}, editable{isFieldEditable(field)}
   {
     labelSlot.set_hexpand(false);
+    valueEditor.setEditable(editable);
+
+    if (isFieldTechnical(field))
+    {
+      valueEditor.add_css_class("ao-detail-field-technical");
+    }
+
+    valueBox.append(valueEditor);
   }
 
   CompositeBuiltInRow::CompositeBuiltInRow(rt::TrackField primary, rt::TrackField secondary)
     : primaryField{primary}
     , secondaryField{secondary}
     , labelSlot{label, false}
-    , primaryClip{primaryEditable, isFieldEditable(primary), isFieldTechnical(primary), false, true}
-    , secondaryClip{secondaryEditable, isFieldEditable(secondary), isFieldTechnical(secondary), false, true}
     , valueSlot{valueBox, true}
     , primaryEditableFlag{isFieldEditable(primary)}
     , secondaryEditableFlag{isFieldEditable(secondary)}
   {
-    valueBox.append(primaryClip);
+    primaryEditor.setEditable(primaryEditableFlag);
+    secondaryEditor.setEditable(secondaryEditableFlag);
+    valueBox.append(primaryEditor);
     valueBox.append(separatorLabel);
-    valueBox.append(secondaryClip);
+    valueBox.append(secondaryEditor);
   }
 
   CustomRow::CustomRow(std::string key, std::int32_t const /*actionSpacing*/)
-    : key{std::move(key)}
-    , labelSlot{label, false}
-    , editable{}
-    , deleteButton{}
-    , valueClip{editable, true, false, true, false, &deleteButton}
-    , valueSlot{valueBox, true}
+    : key{std::move(key)}, labelSlot{label, false}, deleteButton{}, valueSlot{valueBox, true}
   {
     labelSlot.set_hexpand(false);
+    editor.setEditable(true);
+    valueBox.add_css_class("ao-detail-custom-row");
+    valueBox.append(editor);
+    valueBox.append(partialIcon);
+    valueBox.append(deleteButton);
   }
 
   SectionHeaderRow::SectionHeaderRow([[maybe_unused]] std::string_view title)
@@ -77,17 +81,21 @@ namespace ao::gtk::layout::track_field_grid
     line.set_valign(Gtk::Align::CENTER);
     line.add_css_class("ao-track-detail-section-line");
 
-    icon.set_halign(Gtk::Align::END);
-    icon.set_margin_start(4);
+    // The disclosure chevron floats over the leading end of the full-bleed line so it never
+    // displaces it. CSS keeps it invisible until the header is hovered or focused, leaving a
+    // clean uninterrupted rule at rest while still exposing the collapse affordance on demand.
+    icon.set_halign(Gtk::Align::START);
+    icon.set_valign(Gtk::Align::CENTER);
+    icon.set_margin_start(2);
+    icon.add_css_class("ao-track-detail-section-chevron");
 
-    box.set_hexpand(true);
-    box.set_halign(Gtk::Align::FILL);
-    box.set_margin_top(0);
-    box.set_margin_bottom(0);
-    box.append(line);
-    box.append(icon);
+    overlay.set_hexpand(true);
+    overlay.set_halign(Gtk::Align::FILL);
+    overlay.set_child(line);
+    overlay.add_overlay(icon);
+    overlay.set_measure_overlay(icon, true);
 
-    button.set_child(box);
+    button.set_child(overlay);
     setExpanded(true);
   }
 

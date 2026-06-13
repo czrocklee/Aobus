@@ -282,6 +282,33 @@ namespace ao::gtk::layout::test
       CHECK(titleValueSlot->get_width() == collapsedValueWidth);
     }
 
+    SECTION("Section separators keep the panel width when all sections are collapsed")
+    {
+      auto* const metaHeader = findHeaderByClass("ao-track-detail-section-meta");
+      auto* const customHeader = findHeaderByClass("ao-track-detail-section-custom");
+      auto* const techHeader = findHeaderByClass("ao-track-detail-section-tech");
+      REQUIRE(metaHeader != nullptr);
+      REQUIRE(customHeader != nullptr);
+      REQUIRE(techHeader != nullptr);
+
+      allocate(320, 1000);
+      auto const expandedMetaWidth = metaHeader->get_width();
+      auto const expandedCustomWidth = customHeader->get_width();
+      auto const expandedTechWidth = techHeader->get_width();
+      REQUIRE(expandedMetaWidth > 0);
+      REQUIRE(expandedCustomWidth > 0);
+      REQUIRE(expandedTechWidth > 0);
+
+      ::g_signal_emit_by_name(metaHeader->gobj(), "clicked");
+      ::g_signal_emit_by_name(customHeader->gobj(), "clicked");
+      ao::gtk::test::drainGtkEvents();
+      allocate(320, 1000);
+
+      CHECK(metaHeader->get_width() == expandedMetaWidth);
+      CHECK(customHeader->get_width() == expandedCustomWidth);
+      CHECK(techHeader->get_width() == expandedTechWidth);
+    }
+
     SECTION("Empty sections suppress headers")
     {
       // Create a grid with no requested categories
@@ -318,8 +345,77 @@ namespace ao::gtk::layout::test
     {
       auto customSnap = rt::TrackDetailSnapshot{};
       customSnap.trackIds = {TrackId{1}};
-      customSnap.customMetadata.push_back({.key = "MyKey", .presentOnAll = true});
+      customSnap.customMetadata.push_back({.key = "A Much Longer Custom Metadata Key", .presentOnAll = true});
       scope.setSnapshot(customSnap);
+
+      auto findSlotsForLabel = [&](std::string_view text) -> std::pair<Gtk::Widget*, Gtk::Widget*>
+      {
+        Gtk::Widget* labelSlot = nullptr;
+
+        walkWidgets(*grid,
+                    [&](Gtk::Widget& w)
+                    {
+                      auto* const label = dynamic_cast<Gtk::Label*>(&w);
+
+                      if (labelSlot != nullptr || label == nullptr || !label->has_css_class("ao-property-label"))
+                      {
+                        return;
+                      }
+
+                      if (auto const labelText = label->get_text().raw();
+                          std::string_view{labelText.data(), labelText.size()} == text)
+                      {
+                        labelSlot = label->get_parent();
+                      }
+                    });
+
+        REQUIRE(labelSlot != nullptr);
+
+        auto keyLeft = 0;
+        auto keyTop = 0;
+        auto keyWidth = 0;
+        auto keyHeight = 0;
+        grid->query_child(*labelSlot, keyLeft, keyTop, keyWidth, keyHeight);
+
+        for (auto* child = grid->get_first_child(); child != nullptr; child = child->get_next_sibling())
+        {
+          auto left = 0;
+          auto top = 0;
+          auto width = 0;
+          auto height = 0;
+          grid->query_child(*child, left, top, width, height);
+
+          if (left == 1 && top == keyTop)
+          {
+            return {labelSlot, child};
+          }
+        }
+
+        return {labelSlot, nullptr};
+      };
+
+      auto* const wrapper = grid->get_parent();
+      REQUIRE(wrapper != nullptr);
+
+      auto measureMinimumHeight = [](Gtk::Widget& widget, std::int32_t const width)
+      {
+        auto minimum = 0;
+        auto natural = 0;
+        auto minimumBaseline = -1;
+        auto naturalBaseline = -1;
+        widget.measure(Gtk::Orientation::VERTICAL, width, minimum, natural, minimumBaseline, naturalBaseline);
+        return minimum;
+      };
+
+      allocate(316, 320);
+      CHECK(measureMinimumHeight(*wrapper, -1) == 0);
+      auto const [titleKeySlot, titleValueSlot] = findSlotsForLabel("Title");
+      REQUIRE(titleValueSlot != nullptr);
+      auto const keyWidthBeforeCollapse = titleKeySlot->get_width();
+      auto valueLeftBeforeCollapse = 0.0;
+      auto valueTopBeforeCollapse = 0.0;
+      REQUIRE(titleValueSlot->translate_coordinates(*grid, 0.0, 0.0, valueLeftBeforeCollapse, valueTopBeforeCollapse));
+      auto const valueWidthBeforeCollapse = titleValueSlot->get_width();
 
       auto* customHeader = findHeaderByClass("ao-track-detail-section-custom");
       REQUIRE(customHeader != nullptr);
@@ -331,7 +427,8 @@ namespace ao::gtk::layout::test
                   {
                     if (w.has_css_class("ao-property-label"))
                     {
-                      if (auto* label = dynamic_cast<Gtk::Label*>(&w); label && label->get_text().raw() == "MyKey")
+                      if (auto* label = dynamic_cast<Gtk::Label*>(&w);
+                          label && label->get_text().raw() == "A Much Longer Custom Metadata Key")
                       {
                         foundCustom = w.get_parent() && w.get_parent()->get_visible();
                       }
@@ -341,6 +438,9 @@ namespace ao::gtk::layout::test
 
       // Collapse custom
       ::g_signal_emit_by_name(customHeader->gobj(), "clicked");
+      ao::gtk::test::drainGtkEvents();
+      allocate(316, 320);
+      CHECK(measureMinimumHeight(*wrapper, -1) == 0);
 
       bool foundHiddenCustom = false;
       walkWidgets(*grid,
@@ -348,13 +448,20 @@ namespace ao::gtk::layout::test
                   {
                     if (w.has_css_class("ao-property-label"))
                     {
-                      if (auto* label = dynamic_cast<Gtk::Label*>(&w); label && label->get_text().raw() == "MyKey")
+                      if (auto* label = dynamic_cast<Gtk::Label*>(&w);
+                          label && label->get_text().raw() == "A Much Longer Custom Metadata Key")
                       {
                         foundHiddenCustom = w.get_parent() && !w.get_parent()->get_visible();
                       }
                     }
                   });
       CHECK(foundHiddenCustom);
+      CHECK(titleKeySlot->get_width() == keyWidthBeforeCollapse);
+      auto valueLeftAfterCollapse = 0.0;
+      auto valueTopAfterCollapse = 0.0;
+      REQUIRE(titleValueSlot->translate_coordinates(*grid, 0.0, 0.0, valueLeftAfterCollapse, valueTopAfterCollapse));
+      CHECK(valueLeftAfterCollapse == valueLeftBeforeCollapse);
+      CHECK(titleValueSlot->get_width() == valueWidthBeforeCollapse);
     }
   }
 }

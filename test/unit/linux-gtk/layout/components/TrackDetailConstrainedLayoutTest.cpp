@@ -8,6 +8,7 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailSizing.h"
+#include "layout/component/track/TrackFieldGridWidgets.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
@@ -24,6 +25,7 @@
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/grid.h>
+#include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/window.h>
@@ -90,6 +92,19 @@ namespace ao::gtk::layout::test
                   });
 
       return result;
+    }
+
+    Gtk::Widget* findAncestorWithClass(Gtk::Widget* widget, std::string_view const className)
+    {
+      for (auto* current = widget; current != nullptr; current = current->get_parent())
+      {
+        if (current->has_css_class(std::string{className}))
+        {
+          return current;
+        }
+      }
+
+      return nullptr;
     }
 
     std::string invalidUtf8Text(std::string text)
@@ -163,22 +178,24 @@ namespace ao::gtk::layout::test
                       return;
                     }
 
-                    if (auto* const editor = label->get_parent();
-                        editor != nullptr && editor->has_css_class("ao-property-editable"))
+                    for (auto* editor = label->get_parent(); editor != nullptr; editor = editor->get_parent())
                     {
-                      result = editor;
+                      if (editor->has_css_class("ao-property-editable"))
+                      {
+                        result = editor;
+                        break;
+                      }
                     }
                   });
 
       return result;
     }
 
-    void pressEditable(Gtk::Widget& editor)
+    bool hasClickGesture(Gtk::Widget& widget)
     {
-      auto const controllersPtr = editor.observe_controllers();
+      auto const controllersPtr = widget.observe_controllers();
       REQUIRE(controllersPtr);
 
-      auto emitted = false;
       auto const count = controllersPtr->get_n_items();
 
       for (auto i = 0U; i < count; ++i)
@@ -193,19 +210,64 @@ namespace ao::gtk::layout::test
         if (::g_type_check_instance_is_a(reinterpret_cast<GTypeInstance*>(object), ::gtk_gesture_click_get_type()) !=
             FALSE)
         {
-          ::g_signal_emit_by_name(object, "pressed", 1, 1.0, 1.0);
-          emitted = true;
+          ::g_object_unref(object);
+          return true;
+        }
+
+        ::g_object_unref(object);
+      }
+
+      return false;
+    }
+
+    bool emitClickGesture(Gtk::Widget& widget, double const x = 1.0, double const y = 1.0)
+    {
+      auto const controllersPtr = widget.observe_controllers();
+      REQUIRE(controllersPtr);
+
+      auto const count = controllersPtr->get_n_items();
+
+      for (auto i = 0U; i < count; ++i)
+      {
+        auto* const object = ::g_list_model_get_object(controllersPtr->gobj(), i);
+
+        if (object == nullptr)
+        {
+          continue;
+        }
+
+        auto const isClick = ::g_type_check_instance_is_a(
+                               reinterpret_cast<GTypeInstance*>(object), ::gtk_gesture_click_get_type()) != FALSE;
+
+        if (isClick)
+        {
+          ::g_signal_emit_by_name(object, "pressed", 1, x, y);
         }
 
         ::g_object_unref(object);
 
-        if (emitted)
+        if (isClick)
         {
-          break;
+          return true;
         }
       }
 
-      REQUIRE(emitted);
+      return false;
+    }
+
+    Gtk::Button* findEditButton(Gtk::Widget& editor)
+    {
+      Gtk::Button* result = nullptr;
+      walkWidgets(editor,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (auto* const button = dynamic_cast<Gtk::Button*>(&widget);
+                        button != nullptr && button->has_css_class("ao-detail-field-edit-hint"))
+                    {
+                      result = button;
+                    }
+                  });
+      return result;
     }
 
     bool trackHasCustomKey(rt::AppRuntime& runtime, TrackId const trackId, std::string_view const key)
@@ -241,6 +303,48 @@ namespace ao::gtk::layout::test
     CHECK(coverArtSideForWidth(250, targetSize) == targetSize);
     CHECK(coverArtSideForWidth(400, targetSize) == targetSize);
     CHECK(coverArtSideForWidth(180, 0) == 0);
+  }
+
+  TEST_CASE("DetailFieldEditor coordinates edit sessions", "[layout][unit][components][track]")
+  {
+    auto const appPtr = Gtk::Application::create("io.github.aobus.detail_editor_test");
+    auto window = Gtk::Window{};
+    auto coordinator = track_field_grid::DetailEditCoordinator{window};
+    auto first = track_field_grid::DetailFieldEditor{};
+    auto second = track_field_grid::DetailFieldEditor{};
+
+    first.setEditable(true);
+    first.setText("first");
+    second.setEditable(true);
+    second.setText("second");
+    coordinator.registerEditor(first);
+    coordinator.registerEditor(second);
+
+    auto* const firstButton = findEditButton(first);
+    auto* const secondButton = findEditButton(second);
+    auto* const firstEntry = findWidget<Gtk::Entry>(first);
+    auto* const secondEntry = findWidget<Gtk::Entry>(second);
+    REQUIRE(firstButton != nullptr);
+    REQUIRE(secondButton != nullptr);
+    REQUIRE(firstEntry != nullptr);
+    REQUIRE(secondEntry != nullptr);
+    CHECK(first.has_css_class("ao-detail-field-editable"));
+    CHECK(firstButton->has_css_class("ao-detail-field-edit-hint"));
+
+    ::g_signal_emit_by_name(firstButton->gobj(), "clicked");
+    REQUIRE(first.getEditing());
+    firstEntry->set_text("committed first");
+
+    ::g_signal_emit_by_name(secondButton->gobj(), "clicked");
+    CHECK_FALSE(first.getEditing());
+    CHECK(first.getText() == "committed first");
+    CHECK(second.getEditing());
+    CHECK_FALSE(firstEntry->get_child_visible());
+    CHECK(secondEntry->get_child_visible());
+
+    REQUIRE(emitClickGesture(window));
+    CHECK_FALSE(second.getEditing());
+    CHECK_FALSE(secondEntry->get_child_visible());
   }
 
   TEST_CASE("TrackFieldGrid constrained layout behavior", "[layout][components][constrained]")
@@ -352,6 +456,54 @@ namespace ao::gtk::layout::test
       CHECK(grid->get_width() <= 320);
     }
 
+    SECTION("Section header rule is full-bleed with the chevron overlaid")
+    {
+      allocate(320, 2000);
+
+      Gtk::Widget* headerButton = nullptr;
+
+      for (auto* child = grid->get_first_child(); child != nullptr; child = child->get_next_sibling())
+      {
+        if (child->has_css_class("ao-track-detail-section-header"))
+        {
+          headerButton = child;
+          break;
+        }
+      }
+
+      REQUIRE(headerButton != nullptr);
+
+      Gtk::Widget* line = nullptr;
+      Gtk::Image* chevron = nullptr;
+
+      walkWidgets(*headerButton,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (line == nullptr && widget.has_css_class("ao-track-detail-section-line"))
+                    {
+                      line = &widget;
+                    }
+
+                    if (chevron == nullptr)
+                    {
+                      chevron = dynamic_cast<Gtk::Image*>(&widget);
+                    }
+                  });
+
+      REQUIRE(line != nullptr);
+      REQUIRE(chevron != nullptr);
+
+      // The chevron is an overlay child, so it must not push the rule rightward: the line
+      // begins at or before the chevron and spans the full header width. A regression that
+      // returns the chevron to the box flow would start the line after it instead.
+      auto const optLinePoint = line->compute_point(*headerButton, Gdk::Graphene::Point{0.0F, 0.0F});
+      auto const optChevronPoint = chevron->compute_point(*headerButton, Gdk::Graphene::Point{0.0F, 0.0F});
+      REQUIRE(optLinePoint);
+      REQUIRE(optChevronPoint);
+      CHECK(optLinePoint->get_x() <= optChevronPoint->get_x());
+      CHECK(line->get_width() > chevron->get_width());
+    }
+
     SECTION("Inner grid can be allocated to the panel width")
     {
       auto const gridMinWidth = measureGridMinWidth();
@@ -389,6 +541,10 @@ namespace ao::gtk::layout::test
       auto const [rootMinHeight, rootNatHeight] = measureHeight(root, 320);
       CHECK(rootMinHeight == 0);
       CHECK(rootNatHeight == expectedViewportHeight);
+
+      auto const [wrapperOverallMinHeight, wrapperOverallNatHeight] = measureHeight(*wrapper, -1);
+      CHECK(wrapperOverallMinHeight == 0);
+      CHECK(wrapperOverallNatHeight == 0);
 
       auto const expandedHeight = 600;
       allocate(320, expandedHeight);
@@ -429,10 +585,10 @@ namespace ao::gtk::layout::test
 
                       CHECK(width == 0);
                       CHECK(height == -1);
-                      CHECK(widget.get_halign() == Gtk::Align::FILL);
+                      CHECK((widget.get_halign() == Gtk::Align::FILL || widget.get_halign() == Gtk::Align::START));
                       CHECK(widget.get_overflow() == Gtk::Overflow::HIDDEN);
 
-                      auto* const displayLabel = dynamic_cast<Gtk::Label*>(widget.get_first_child());
+                      auto* const displayLabel = findWidget<Gtk::Label>(widget);
                       REQUIRE(displayLabel != nullptr);
                       CHECK(displayLabel->get_ellipsize() == Pango::EllipsizeMode::END);
                       CHECK((displayLabel->get_width_chars() == 0 || displayLabel->get_width_chars() == 2));
@@ -479,7 +635,8 @@ namespace ao::gtk::layout::test
         std::int32_t height = 0;
         grid->query_child(*child, left, top, width, height);
 
-        bool const isWidthAnchor = child->has_css_class("ao-key-column-width-anchor");
+        bool const isWidthAnchor =
+          child->has_css_class("ao-key-column-width-anchor") || child->has_css_class("ao-value-column-width-anchor");
 
         if (child->has_css_class("ao-track-detail-section-header"))
         {
@@ -592,32 +749,22 @@ namespace ao::gtk::layout::test
 
           if (auto* label = dynamic_cast<Gtk::Label*>(&widget); label != nullptr && label->get_text() == customValue)
           {
-            if (auto* const editor = label->get_parent();
-                editor != nullptr && editor->has_css_class("ao-property-value"))
+            if (auto* const editor = findAncestorWithClass(label->get_parent(), "ao-property-value"); editor != nullptr)
             {
               customValueLabel = label;
               customValueEditor = editor;
-
-              if (auto* const valueClip = editor->get_parent(); valueClip != nullptr)
-              {
-                customValueBox = valueClip->get_parent();
-              }
+              customValueBox = editor->get_parent();
             }
           }
 
           if (auto* label = dynamic_cast<Gtk::Label*>(&widget);
               label != nullptr && label->get_text() == "reference title")
           {
-            if (auto* const editor = label->get_parent();
-                editor != nullptr && editor->has_css_class("ao-property-value"))
+            if (auto* const editor = findAncestorWithClass(label->get_parent(), "ao-property-value"); editor != nullptr)
             {
               builtInValueLabel = label;
               builtInValueEditor = editor;
-
-              if (auto* const valueClip = editor->get_parent(); valueClip != nullptr)
-              {
-                builtInValueBox = valueClip->get_parent();
-              }
+              builtInValueBox = editor->get_parent();
             }
           }
         });
@@ -645,7 +792,6 @@ namespace ao::gtk::layout::test
       CHECK(customValueEditor->get_parent()->get_width() > 0);
 
       auto const optBuiltInPoint = builtInValueBox->compute_point(*scopedGrid, Gdk::Graphene::Point{0.0F, 0.0F});
-      auto const optControlsPoint = customControlsBox->compute_point(*scopedGrid, Gdk::Graphene::Point{0.0F, 0.0F});
       auto const optCustomPoint = customValueBox->compute_point(*scopedGrid, Gdk::Graphene::Point{0.0F, 0.0F});
       auto const optDeletePoint = deleteButton->compute_point(*scopedGrid, Gdk::Graphene::Point{0.0F, 0.0F});
       REQUIRE(optBuiltInPoint);
@@ -667,6 +813,25 @@ namespace ao::gtk::layout::test
       CHECK(customValueEditor->get_width() <= customValueEditor->get_parent()->get_width());
       CHECK(builtInValueEditor->get_width() <= builtInValueEditor->get_parent()->get_width());
       CHECK(builtInValueLabel->get_width() <= builtInValueEditor->get_width());
+
+      auto* const editButton = findEditButton(*builtInValueEditor);
+      REQUIRE(editButton != nullptr);
+      auto* const entry = findWidget<Gtk::Entry>(*builtInValueEditor);
+      REQUIRE(entry != nullptr);
+      ::g_signal_emit_by_name(editButton->gobj(), "clicked");
+      scopedRoot.measure(Gtk::Orientation::VERTICAL, narrowPanelWidth, minHeight, natHeight, minWidth, natWidth);
+      scopedRoot.size_allocate(Gtk::Allocation{0, 0, narrowPanelWidth, 2000}, -1);
+
+      CHECK(entry->get_child_visible());
+      CHECK(entry->get_width_chars() == 0);
+      CHECK(entry->has_css_class("ao-detail-field-entry"));
+      CHECK_FALSE(editButton->get_visible());
+      CHECK(entry->get_width() <= builtInValueEditor->get_width());
+      CHECK(entry->get_height() <= builtInValueEditor->get_height());
+
+      REQUIRE(emitClickGesture(window));
+      CHECK_FALSE(entry->get_child_visible());
+      CHECK(editButton->get_visible());
     }
 
     SECTION("Partial custom metadata delete does not offer single-value undo")
@@ -832,9 +997,12 @@ namespace ao::gtk::layout::test
       REQUIRE(mixedEditor != nullptr);
       auto* const entry = findWidget<Gtk::Entry>(*mixedEditor);
       REQUIRE(entry != nullptr);
+      CHECK_FALSE(hasClickGesture(*mixedEditor));
 
-      pressEditable(*mixedEditor);
-      CHECK(entry->get_visible());
+      auto* const editButton = findEditButton(*mixedEditor);
+      REQUIRE(editButton != nullptr);
+      ::g_signal_emit_by_name(editButton->gobj(), "clicked");
+      CHECK(entry->get_child_visible());
       ::g_signal_emit_by_name(entry->gobj(), "activate");
       ao::gtk::test::drainGtkEvents();
 
@@ -938,9 +1106,10 @@ namespace ao::gtk::layout::test
           continue;
         }
 
-        // Skip non-standard rows (headers and the zero-height key-column width anchor)
+        // Skip non-standard rows (headers and zero-height column width anchors)
         bool const isSpecial = child->has_css_class("ao-track-detail-section-header") ||
                                child->has_css_class("ao-key-column-width-anchor") ||
+                               child->has_css_class("ao-value-column-width-anchor") ||
                                dynamic_cast<Gtk::Button*>(child) != nullptr;
 
         if (isSpecial)

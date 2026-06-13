@@ -5,14 +5,17 @@
   --ao-surface-shadow: 0 8px 24px alpha(black, 0.08);
 
   /* Unify Geometry: Softer, larger corners for everything */
-  --ao-radius-sm: 8px;   /* 原本是 4px，提升到 8px 让悬浮项更圆润 */
-  --ao-radius-md: 12px;  /* 原本是 8px，提升到 12px */
+  --ao-radius-sm: 8px;
+  /* 原本是 4px，提升到 8px 让悬浮项更圆润 */
+  --ao-radius-md: 12px;
+  /* 原本是 8px，提升到 12px */
   --ao-card-radius: 16px;
-  --ao-card-padding: 20px;
+  --ao-card-padding: 16px;
 
   --ao-row-min-height: 52px;
   --ao-list-row-min-height: 36px;
-  --ao-row-radius: 8px; /* 进一步柔化列表行边缘 */
+  --ao-row-radius: 8px;
+  /* 进一步柔化列表行边缘 */
   --ao-row-hover-bg: alpha(currentColor, 0.04);
   --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.1);
 
@@ -133,8 +136,8 @@
 }
 
 /* Modern Popover Unified Aesthetics */
-.ao-theme-modern popover > contents,
-.ao-theme-modern popover.menu > contents {
+.ao-theme-modern popover>contents,
+.ao-theme-modern popover.menu>contents {
   border-radius: 16px;
   background: alpha(@view_bg_color, 0.95);
   box-shadow: 0 12px 32px alpha(black, 0.15);
@@ -146,19 +149,21 @@
   background: alpha(@view_bg_color, 0.95);
   border: 1px solid alpha(currentColor, 0.08);
   box-shadow: 0 8px 24px alpha(black, 0.15);
-  border-radius: 12px; /* 比 Popover 稍微精巧一点的圆角 */
-  color: @theme_fg_color; /* 强制覆盖 GTK 默认的白字/黑字，保持与 Popover 一致的色系 */
+  border-radius: 12px;
+  /* 比 Popover 稍微精巧一点的圆角 */
+  color: @theme_fg_color;
+  /* 强制覆盖 GTK 默认的白字/黑字，保持与 Popover 一致的色系 */
   padding: 6px 10px;
 }
 
-.ao-theme-modern popover > arrow {
+.ao-theme-modern popover>arrow {
   background: alpha(@view_bg_color, 0.95);
   border: none;
 }
 
 /* Ensure components inside popovers don't block the glassmorphism */
 .ao-theme-modern popover scrolledwindow,
-.ao-theme-modern popover scrolledwindow > viewport,
+.ao-theme-modern popover scrolledwindow>viewport,
 .ao-theme-modern popover list,
 .ao-theme-modern popover listview {
   background: transparent;
@@ -178,7 +183,7 @@
 }
 
 /* 隐藏 GTK 默认的 Paned (Split) 分割线，让阴影成为唯一的空间分割 */
-.ao-theme-modern paned > separator {
+.ao-theme-modern paned>separator {
   background-color: transparent;
   background-image: none;
   border: none;
@@ -187,7 +192,8 @@
 
 .ao-theme-modern .ao-list-pane-modern listview {
   background: transparent;
-  padding-right: 4px; /* 稍微推开一点，避免高亮药丸被右侧阴影覆盖 */
+  padding-right: 4px;
+  /* 稍微推开一点，避免高亮药丸被右侧阴影覆盖 */
 }
 
 .ao-theme-modern .ao-list-pane-modern listview>row {
@@ -217,8 +223,10 @@
 .ao-theme-modern .ao-list-pane-modern listview>row:selected {
   background-image: none;
   background-color: alpha(@theme_selected_bg_color, 0.15);
-  border-color: transparent; /* 防止跳动 */
-  border-radius: 8px; /* 恢复饱满的圆角 */
+  border-color: transparent;
+  /* 防止跳动 */
+  border-radius: 8px;
+  /* 恢复饱满的圆角 */
   color: inherit;
 }
 
@@ -237,7 +245,8 @@
   background: alpha(@theme_base_color, 0.5);
   border-radius: var(--ao-radius-md);
   margin: var(--ao-spacing-md);
-  border: none; /* 去掉突兀的物理边框，依靠色彩对和右侧的景深阴影自然分割 */
+  border: none;
+  /* 去掉突兀的物理边框，依靠色彩对和右侧的景深阴影自然分割 */
 }
 
 /* Modern Track Controls Bar (The Header Island) */
@@ -389,9 +398,12 @@
 /* Specific styling for the playing row in Modern mode */
 .ao-theme-modern columnview row.ao-playing-row {
   background-image: none;
-  background-color: alpha(@warning_bg_color, 0.08); /* 极低透明度的环境光背景 */
-  border-color: transparent; /* 绝对不能用 border: none，否则会吃掉系统默认的 1px 边框宽度导致跳帧！ */
-  border-radius: 8px; /* 统一为饱满的圆角药丸 */
+  background-color: alpha(@warning_bg_color, 0.08);
+  /* 极低透明度的环境光背景 */
+  border-color: transparent;
+  /* 绝对不能用 border: none，否则会吃掉系统默认的 1px 边框宽度导致跳帧！ */
+  border-radius: 8px;
+  /* 统一为饱满的圆角药丸 */
 }
 
 .ao-theme-modern .ao-playing-title {
@@ -486,7 +498,7 @@ listview>row:first-child .ao-track-section-box {
 }
 
 /* Eliminate the standard GTK button shadow/border nodes */
-.ao-volume-button-modern > border {
+.ao-volume-button-modern>border {
   border: none;
   box-shadow: none;
   background: transparent;
@@ -494,14 +506,14 @@ listview>row:first-child .ao-track-section-box {
   margin: 0;
 }
 
-.ao-volume-popover > contents {
+.ao-volume-popover>contents {
   padding: 4px;
   border: none;
 }
 
 /* If the theme forces a border on popover, override it here */
-.ao-volume-popover > arrow,
-.ao-volume-popover > contents {
+.ao-volume-popover>arrow,
+.ao-volume-popover>contents {
   border: none;
 }
 
@@ -594,24 +606,66 @@ listview>row:first-child .ao-track-section-box {
 
 /* .ao-track-section-cover styling handled by tokens */
 
-/* ===== Detail Panel (Floating Card) ===== */
+/* ===== Detail Panel — "Floating Glass Card" ===== */
 .ao-theme-modern .ao-detail-pane {
-  background: alpha(@theme_base_color, 0.85); 
+  background: alpha(@theme_base_color, 0.78);
+  /* Tighter margin: integrates better with the main window while keeping a clear physical gap */
   margin: 12px 12px 12px 0;
+  padding: var(--ao-card-padding);
+  /* Reduced from 20px to 16px to maintain concentric geometry with the tighter outer margin */
   border-radius: 16px;
-  border: 1px solid alpha(currentColor, 0.06); 
+  border: 1px solid alpha(currentColor, 0.07);
+  /* Shallower, crisper shadow to eliminate the heavy bottom-right pool */
+  box-shadow: 0 4px 12px alpha(black, 0.08);
+}
+
+/* The cover floats inside the card with its own soft drop shadow and large radius. */
+.ao-theme-modern .ao-detail-pane .ao-hero-cover {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px alpha(black, 0.18);
+  margin-bottom: 16px;
+}
+
+/* Editorial micro-label: upper-case, low-emphasis — premium magazine feel, with air to its value. */
+.ao-theme-modern .ao-detail-pane .ao-inline-editor-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  font-weight: 600;
+  opacity: 0.45;
+  margin-bottom: 4px;
+}
+
+/* Roomier vertical rhythm between field stacks. */
+.ao-theme-modern .ao-detail-pane .ao-inline-editor-stack {
+  margin-bottom: 16px;
+}
+
+/* Soft, rounded hover lift on editable values (radius-sm resolves to 8px under modern). */
+.ao-theme-modern .ao-detail-field-value {
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+.ao-theme-modern .ao-detail-field-value.ao-detail-field-editable:hover,
+.ao-theme-modern .ao-detail-field-value.ao-detail-field-editable:focus-within {
+  background: alpha(currentColor, 0.04);
+  /* Remove the inset box-shadow to prevent a harsh ring; let the soft background do the work */
+  box-shadow: none;
 }
 
 /* 统一 Detail Pane 内的编辑框风格为圆润拟态 */
 .ao-theme-modern .ao-detail-pane .ao-inline-editor-entry {
   border-radius: 8px;
-  background: alpha(currentColor, 0.04); /* 放弃纯底色，改用轻度玻璃质感 */
+  background: alpha(currentColor, 0.04);
+  /* 放弃纯底色，改用轻度玻璃质感 */
   border: 1px solid alpha(currentColor, 0.06);
   padding: 4px 8px;
   transition: all 200ms ease;
 }
 
-.ao-theme-modern .ao-detail-pane .ao-inline-editor-entry:focus {
+.ao-theme-modern .ao-detail-pane .ao-inline-editor-entry:focus,
+.ao-theme-modern .ao-tags-entry:focus {
   background: @theme_base_color;
   border-color: alpha(@accent_color, 0.5);
   box-shadow: 0 4px 12px alpha(black, 0.1);
@@ -624,7 +678,8 @@ listview>row:first-child .ao-track-section-box {
 }
 
 .ao-theme-modern .ao-track-detail-section-meta {
-  margin-top: 0; /* Consistency */
+  margin-top: 0;
+  /* Consistency */
 }
 
 .ao-theme-modern .ao-track-detail-section-header label {
@@ -636,4 +691,3 @@ listview>row:first-child .ao-track-section-box {
 .ao-theme-modern .ao-track-detail-section-line {
   background-color: alpha(currentColor, 0.15);
 }
-

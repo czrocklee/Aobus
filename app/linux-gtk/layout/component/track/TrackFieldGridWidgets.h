@@ -4,11 +4,15 @@
 #pragma once
 
 #include <glibmm/ustring.h>
+#include <gtkmm/box.h>
+#include <gtkmm/button.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/image.h>
+#include <gtkmm/gestureclick.h>
 #include <gtkmm/label.h>
+#include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
+#include <gtkmm/window.h>
 #include <sigc++/signal.h>
 
 #include <cstdint>
@@ -58,16 +62,16 @@ namespace ao::gtk::layout::track_field_grid
     std::int32_t _lastAllocatedWidth = 0;
   };
 
-  class FieldInlineEditor final : public Gtk::Widget
+  class DetailFieldEditor final : public Gtk::Box
   {
   public:
-    FieldInlineEditor();
-    ~FieldInlineEditor() override;
+    DetailFieldEditor();
+    ~DetailFieldEditor() override = default;
 
-    FieldInlineEditor(FieldInlineEditor const&) = delete;
-    FieldInlineEditor& operator=(FieldInlineEditor const&) = delete;
-    FieldInlineEditor(FieldInlineEditor&&) = delete;
-    FieldInlineEditor& operator=(FieldInlineEditor&&) = delete;
+    DetailFieldEditor(DetailFieldEditor const&) = delete;
+    DetailFieldEditor& operator=(DetailFieldEditor const&) = delete;
+    DetailFieldEditor(DetailFieldEditor&&) = delete;
+    DetailFieldEditor& operator=(DetailFieldEditor&&) = delete;
 
     void setText(Glib::ustring const& text);
     Glib::ustring getText() const;
@@ -79,37 +83,45 @@ namespace ao::gtk::layout::track_field_grid
     void startEditing();
     void stopEditing(bool commit);
 
-    sigc::signal<void()>& signalEditingChanged();
-    sigc::signal<void()>& signalEditingCanceled();
+    sigc::signal<void()>& signalEditStarted();
+    sigc::signal<void()>& signalCommitted();
+    sigc::signal<void()>& signalCanceled();
 
     void removeMaxWidthConstraint();
 
-  protected:
-    Gtk::SizeRequestMode get_request_mode_vfunc() const override;
-
-    void measure_vfunc(Gtk::Orientation orientation,
-                       int forSize,
-                       int& minimum,
-                       int& natural,
-                       int& minimumBaseline,
-                       int& naturalBaseline) const override;
-
-    void size_allocate_vfunc(int width, int height, int baseline) override;
-
   private:
-    Gtk::Widget& visibleChild();
-    Gtk::Widget const& visibleChild() const;
-
-    std::int32_t widthForVisibleChild(std::int32_t width) const;
-    std::int32_t displayLabelMinimumWidth() const;
-
+    Gtk::Stack _stack;
     Gtk::Label _displayLabel;
     Gtk::Entry _entry;
+    Gtk::Button _editButton;
     Glib::ustring _text;
-    sigc::signal<void()> _editingChanged;
-    sigc::signal<void()> _editingCanceled;
+    sigc::signal<void()> _editStarted;
+    sigc::signal<void()> _committed;
+    sigc::signal<void()> _canceled;
     bool _editable = false;
     bool _editing = false;
+  };
+
+  class DetailEditCoordinator final
+  {
+  public:
+    explicit DetailEditCoordinator(Gtk::Window& parentWindow);
+    ~DetailEditCoordinator();
+
+    DetailEditCoordinator(DetailEditCoordinator const&) = delete;
+    DetailEditCoordinator& operator=(DetailEditCoordinator const&) = delete;
+    DetailEditCoordinator(DetailEditCoordinator&&) = delete;
+    DetailEditCoordinator& operator=(DetailEditCoordinator&&) = delete;
+
+    void registerEditor(DetailFieldEditor& editor);
+    void forgetEditor(DetailFieldEditor& editor);
+
+  private:
+    static bool isDescendantOf(Gtk::Widget const* widget, Gtk::Widget const& ancestor);
+
+    Gtk::Window& _parentWindow;
+    Glib::RefPtr<Gtk::GestureClick> _outsideClickPtr;
+    DetailFieldEditor* _activeEditor = nullptr;
   };
 
   class FixedHeightWidgetSlot final : public Gtk::Widget
@@ -145,44 +157,5 @@ namespace ao::gtk::layout::track_field_grid
     bool _propagateNatural = true;
     std::int32_t _minimumHeight;
     std::int32_t _height;
-  };
-
-  class FieldValueWrapper final : public Gtk::Widget
-  {
-  public:
-    FieldValueWrapper(Gtk::Widget& valueWidget,
-                      bool editable,
-                      bool technical = false,
-                      bool showEditHint = true,
-                      bool propagateNaturalWidth = false,
-                      Gtk::Widget* actionWidget = nullptr);
-    ~FieldValueWrapper() override;
-
-    FieldValueWrapper(FieldValueWrapper const&) = delete;
-    FieldValueWrapper& operator=(FieldValueWrapper const&) = delete;
-    FieldValueWrapper(FieldValueWrapper&&) = delete;
-    FieldValueWrapper& operator=(FieldValueWrapper&&) = delete;
-
-    void updateHover(bool hovered);
-
-  protected:
-    Gtk::SizeRequestMode get_request_mode_vfunc() const override;
-
-    void measure_vfunc(Gtk::Orientation orientation,
-                       int forSize,
-                       int& minimum,
-                       int& natural,
-                       int& minimumBaseline,
-                       int& naturalBaseline) const override;
-
-    void size_allocate_vfunc(int width, int height, int baseline) override;
-
-  private:
-    Gtk::Widget& _valueWidget;
-    Gtk::Widget* _actionWidget = nullptr;
-    Gtk::Image _editHint;
-    bool _editable;
-    bool _showEditHint;
-    bool _propagateNaturalWidth;
   };
 } // namespace ao::gtk::layout::track_field_grid

@@ -26,7 +26,9 @@ namespace ao::gtk::layout
     {
     public:
       TrackSelectionRegionComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _box{Gtk::Orientation::VERTICAL, 0}, _showWhen{node.getProp<std::string>("showWhen", "any")}
+        : _box{Gtk::Orientation::VERTICAL, 0}
+        , _showWhen{node.getProp<std::string>("showWhen", "any")}
+        , _showPlaceholder{node.getProp<bool>("showPlaceholder", false)}
       {
         for (auto const& childNode : node.children)
         {
@@ -48,6 +50,7 @@ namespace ao::gtk::layout
     private:
       void updateVisibility(rt::TrackDetailSnapshot const& snap)
       {
+        auto const hasSelection = snap.selectionKind != rt::SelectionKind::None;
         bool visible = false;
 
         if (_showWhen == "none")
@@ -64,15 +67,17 @@ namespace ao::gtk::layout
         }
         else if (_showWhen == "any")
         {
-          visible = (snap.selectionKind != rt::SelectionKind::None);
+          visible = hasSelection || _showPlaceholder;
         }
 
         _box.set_visible(visible);
+        _box.set_sensitive(hasSelection || !_showPlaceholder);
       }
 
       Gtk::Box _box;
       std::vector<std::unique_ptr<ILayoutComponent>> _children;
       std::string _showWhen;
+      bool _showPlaceholder = false;
       sigc::connection _scopeConn;
     };
 
@@ -90,7 +95,11 @@ namespace ao::gtk::layout
        .category = "Tracks",
        .container = true,
        .props =
-         {{.name = "showWhen", .kind = PropertyKind::String, .label = "Show When", .defaultValue = LayoutValue{"any"}}},
+         {{.name = "showWhen", .kind = PropertyKind::String, .label = "Show When", .defaultValue = LayoutValue{"any"}},
+          {.name = "showPlaceholder",
+           .kind = PropertyKind::Bool,
+           .label = "Show Placeholder",
+           .defaultValue = LayoutValue{false}}},
        .layoutProps = {},
        .minChildren = 1,
        .optMaxChildren = 0},

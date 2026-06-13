@@ -23,7 +23,7 @@
 }
 
 button.ao-track-detail-section-header {
-  padding: 0 4px;
+  padding: 0;
   min-height: 12px;
   background: transparent;
   border: none;
@@ -40,8 +40,14 @@ button.ao-track-detail-section-header:hover {
 
 button.ao-track-detail-section-header image {
   -gtk-icon-size: 12px;
-  opacity: 0.7;
+  opacity: 0;
   color: inherit;
+  transition: opacity var(--ao-transition-base);
+}
+
+button.ao-track-detail-section-header:hover image,
+button.ao-track-detail-section-header:focus-within image {
+  opacity: 0.7;
 }
 
 .ao-track-detail-section-line {
@@ -363,10 +369,6 @@ listboxrow:first-child .ao-menu-header {
   background: transparent;
 }
 
-.ao-detail-resize-grip:hover {
-  background: alpha(currentColor, 0.14);
-}
-
 .ao-detail-handle {
   min-width: 12px;
   min-height: 48px;
@@ -375,19 +377,22 @@ listboxrow:first-child .ao-menu-header {
   border: none;
   border-radius: 6px;
   background: transparent;
-  transition: background 0.2s;
 }
 
 .ao-detail-handle:hover {
-  background: alpha(currentColor, 0.08);
+  background: transparent;
 }
 
 .ao-detail-handle image {
+  padding: 8px 2px;
+  border-radius: 6px;
+  background: transparent;
   opacity: 0.4;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, background 0.2s;
 }
 
 .ao-detail-handle:hover image {
+  background: alpha(currentColor, 0.08);
   opacity: 1.0;
 }
 
@@ -400,6 +405,9 @@ listboxrow:first-child .ao-menu-header {
 .ao-tag-chip {
   border-radius: 100px;
   padding: var(--ao-spacing-sm) var(--ao-spacing-lg);
+  /* Shared content height so every pill (current/suggested chips, the add trigger and the entry)
+     is exactly the same height regardless of its inner content (remove button, icon, text). */
+  min-height: 24px;
   font-size: 0.85rem;
   font-weight: 500;
   background: alpha(currentColor, 0.05);
@@ -415,9 +423,43 @@ togglebutton.ao-tag-chip:checked {
   border-color: alpha(currentColor, 0.1);
 }
 
+/* Type B: suggested tags read as lightweight placeholders waiting to be added. */
+.ao-tag-chip-suggested {
+  background: alpha(currentColor, 0.04);
+  border-color: transparent;
+  color: alpha(currentColor, 0.75);
+}
+
 .ao-tag-chip:hover,
 togglebutton.ao-tag-chip:hover {
   background: alpha(currentColor, 0.2);
+}
+
+.ao-tag-chip-suggested:hover {
+  background: alpha(currentColor, 0.08);
+  color: alpha(currentColor, 0.85);
+  border-color: alpha(currentColor, 0.1);
+}
+
+/* Type C: inline add trigger is a low-emphasis ghost action, not a tag pill. */
+.ao-tag-add-trigger {
+  padding: var(--ao-spacing-sm) var(--ao-spacing-lg);
+  border-radius: 100px;
+  background: transparent;
+  /* No fill or border at rest so it recedes behind the chips and reads as an action rather than a
+     selectable tag. The transparent 1px plus the shared min-height keep its box — and the hover
+     background — exactly the same height as the chip pills beside it. */
+  border: 1px solid transparent;
+  color: alpha(currentColor, 0.65);
+  font-size: 0.85rem;
+  font-weight: 500;
+  min-height: 24px;
+}
+
+.ao-tag-add-trigger:hover {
+  /* A faint rounded background appears only on hover to signal it is clickable. */
+  background: alpha(currentColor, 0.08);
+  color: alpha(currentColor, 0.85);
 }
 
 .ao-tag-remove,
@@ -439,13 +481,15 @@ togglebutton.ao-tag-chip:hover {
   background: alpha(@error_color, 0.1);
 }
 
+/* Inline add entry: sized to sit flush with the chips it shares the flow with. */
 .ao-tags-entry {
   background: alpha(currentColor, 0.05);
   border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 6px 12px;
+  border-radius: 100px;
+  padding: var(--ao-spacing-sm) var(--ao-spacing-lg);
+  min-height: 24px; /* match the chip pills so the row height doesn't jump when the entry opens */
   transition: background-color var(--ao-transition-base), border-color var(--ao-transition-base);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .ao-tags-entry:focus {
@@ -600,24 +644,45 @@ columnview row.ao-missing-row label {
   border-radius: var(--ao-radius-sm);
   padding: 2px 6px;
   margin: 1px; /* Small positive margin to prevent border clipping */
-  transition: background 0.15s ease, border-color 0.15s ease;
   border: 1px solid transparent;
 }
 
-.ao-detail-field-value.ao-detail-field-editable.ao-hover,
-.ao-detail-field-value.ao-detail-field-editable:focus-within {
-  background: alpha(@theme_selected_bg_color, 0.06);
-  border-color: alpha(@theme_selected_bg_color, 0.15);
-}
-
 .ao-detail-field-edit-hint {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  margin: 0;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
 
-.ao-detail-field-value.ao-detail-field-editable.ao-hover .ao-detail-field-edit-hint,
+.ao-detail-field-value.ao-detail-field-editable:hover .ao-detail-field-edit-hint,
 .ao-detail-field-value.ao-detail-field-editable:focus-within .ao-detail-field-edit-hint {
   opacity: 0.4;
+}
+
+.ao-detail-field-value.ao-detail-field-editable:hover .ao-detail-field-edit-hint:hover,
+.ao-detail-field-value.ao-detail-field-editable:focus-within .ao-detail-field-edit-hint:focus-visible {
+  opacity: 1;
+  color: @theme_selected_bg_color;
+  background: alpha(@theme_selected_bg_color, 0.16);
+  box-shadow: inset 0 0 0 1px alpha(@theme_selected_bg_color, 0.22);
+}
+
+.ao-detail-field-entry {
+  min-width: 0;
+  min-height: 0;
+  margin: 2px 0;
+  padding: 0 4px;
+  border-width: 1px;
+  box-shadow: none;
+}
+
+.ao-detail-field-entry text {
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .ao-detail-field-delete {
@@ -625,7 +690,9 @@ columnview row.ao-missing-row label {
   transition: opacity 0.15s ease;
 }
 
-.ao-detail-field-value.ao-hover .ao-detail-field-delete,
+.ao-detail-custom-row:hover .ao-detail-field-delete,
+.ao-detail-custom-row:focus-within .ao-detail-field-delete,
+.ao-detail-field-value:hover .ao-detail-field-delete,
 .ao-detail-field-value:focus-within .ao-detail-field-delete {
   opacity: 0.6;
 }

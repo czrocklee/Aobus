@@ -331,22 +331,24 @@ namespace ao::gtk::layout::test
       REQUIRE(workspace != nullptr);
       CHECK(workspace->get_hexpand() == true);
 
-      auto* const gutterBox = workspace->get_next_sibling();
+      auto* const gutterBox = dynamic_cast<Gtk::Box*>(workspace->get_next_sibling());
       REQUIRE(gutterBox != nullptr);
-      CHECK(dynamic_cast<Gtk::Box*>(gutterBox) != nullptr);
+      CHECK(gutterBox->has_css_class("ao-detail-resize-grip"));
 
-      auto* const resizeGrip = gutterBox->get_first_child();
-      REQUIRE(resizeGrip != nullptr);
-      CHECK(resizeGrip->has_css_class("ao-detail-resize-grip"));
-
-      auto* const handleWidget = resizeGrip->get_next_sibling();
+      auto* const handleWidget = gutterBox->get_first_child();
       REQUIRE(handleWidget != nullptr);
-      CHECK(dynamic_cast<Gtk::Button*>(handleWidget) != nullptr);
+      auto* const handleButton = dynamic_cast<Gtk::Button*>(handleWidget);
+      REQUIRE(handleButton != nullptr);
+      CHECK(handleButton->get_valign() == Gtk::Align::CENTER);
+      CHECK_FALSE(handleButton->get_vexpand());
 
       auto* const revealer = dynamic_cast<Gtk::Revealer*>(gutterBox->get_next_sibling());
       REQUIRE(revealer != nullptr);
       CHECK(revealer->get_reveal_child() == false);
       CHECK(revealer->get_transition_type() == Gtk::RevealerTransitionType::SLIDE_LEFT);
+
+      ::g_signal_emit_by_name(handleButton->gobj(), "clicked");
+      CHECK(revealer->get_reveal_child() == true);
 
       auto* const paneSizer = revealer->get_child();
       REQUIRE(paneSizer != nullptr);
@@ -417,17 +419,17 @@ namespace ao::gtk::layout::test
       CHECK(revealer->get_reveal_child() == true);
       CHECK(revealer->get_transition_type() == Gtk::RevealerTransitionType::SLIDE_DOWN);
 
-      auto* const gutterBox = revealer->get_next_sibling();
+      auto* const gutterBox = dynamic_cast<Gtk::Box*>(revealer->get_next_sibling());
       REQUIRE(gutterBox != nullptr);
-      CHECK(dynamic_cast<Gtk::Box*>(gutterBox) != nullptr);
+      CHECK(gutterBox->has_css_class("ao-detail-resize-grip"));
 
       auto* const handleWidget = gutterBox->get_first_child();
       REQUIRE(handleWidget != nullptr);
-      CHECK(dynamic_cast<Gtk::Button*>(handleWidget) != nullptr);
+      auto* const handleButton = dynamic_cast<Gtk::Button*>(handleWidget);
+      REQUIRE(handleButton != nullptr);
 
-      auto* const resizeGrip = handleWidget->get_next_sibling();
-      REQUIRE(resizeGrip != nullptr);
-      CHECK(resizeGrip->has_css_class("ao-detail-resize-grip"));
+      ::g_signal_emit_by_name(handleButton->gobj(), "clicked");
+      CHECK(revealer->get_reveal_child() == false);
 
       auto* const paneSizer = revealer->get_child();
       REQUIRE(paneSizer != nullptr);

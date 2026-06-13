@@ -121,7 +121,6 @@ namespace ao::gtk::layout::track_field_grid
   }
 
   AddCustomPropertyRow::AddCustomPropertyRow(std::int32_t const /*actionSpacing*/)
-    : _valueClip{_valueEntry, true, false, false, false, &_submitButton}
   {
     _keySlot.set_halign(Gtk::Align::FILL);
     _keySlot.set_hexpand(false);
@@ -151,6 +150,12 @@ namespace ao::gtk::layout::track_field_grid
 
     _keyEntry.property_text().signal_changed().connect([this] { _keyEntry.remove_css_class("error"); });
     _valueEntry.property_text().signal_changed().connect([this] { _valueEntry.remove_css_class("error"); });
+
+    _valueBox.set_hexpand(true);
+    _valueBox.set_overflow(Gtk::Overflow::HIDDEN);
+    _valueBox.add_css_class("ao-detail-field-value");
+    _valueBox.append(_valueEntry);
+    _valueBox.append(_submitButton);
   }
 
   FixedHeightWidgetSlot& AddCustomPropertyRow::keySlot()

@@ -5,11 +5,7 @@
 
 #include <ao/Type.h>
 
-#include <gtkmm/box.h>
-#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/flowbox.h>
-#include <gtkmm/separator.h>
 #include <gtkmm/widget.h>
 #include <sigc++/signal.h>
 
@@ -25,15 +21,19 @@ namespace ao::library
   class MusicLibrary;
 }
 
-namespace Gtk
-{
-  class FlowBoxChild;
-}
-
 namespace ao::gtk
 {
+  class AddTagTrigger;
+
   /**
    * @brief TagEditor is a reusable widget for viewing and editing track tags.
+   *
+   * Current tags, suggested tags, and an inline add trigger are direct children laid out by a
+   * custom flow/wrap algorithm (see measure/size_allocate), so each chip keeps its own natural
+   * width and they wrap together seamlessly — unlike GtkFlowBox, whose grid columns force chips
+   * sharing a column to a common width. Current chips are solid with an explicit remove button;
+   * suggested chips are outlined and add their tag on click; the add trigger swaps a lightweight
+   * button for an entry on demand.
    */
   class TagEditor final : public Gtk::Widget
   {
@@ -66,23 +66,22 @@ namespace ao::gtk
   private:
     void setupUi();
     void collectTagData();
-    void rebuildCurrentTags();
-    void rebuildAvailableTags();
+    void rebuildChips();
+    void insertBeforeTrigger(Gtk::Widget& child);
 
     void onTagRemoveClicked(std::string const& tag);
     void onAvailableTagClicked(std::string const& tag);
-    void onEntryActivated();
+    void onAddSubmitted(std::string const& tag);
 
-    std::string tagNameFromChild(Gtk::FlowBoxChild* child);
+    // Show/hide chips for the current add/search state (current chips hide while the entry is open;
+    // suggested chips live-filter by the entry text), then reflow.
+    void applyFilter();
 
     library::MusicLibrary* _musicLibrary = nullptr;
     std::vector<TrackId> _selectedTrackIds;
 
-    Gtk::Box _box{Gtk::Orientation::VERTICAL};
-    Gtk::Entry _searchEntry;
-    Gtk::FlowBox _currentTagsBox;
-    Gtk::FlowBox _availableTagsBox;
-    Gtk::Separator _separator{Gtk::Orientation::HORIZONTAL};
+    // Chips are direct children inserted before _addTrigger, which is the persistent trailing child.
+    AddTagTrigger* _addTrigger = nullptr; // owned by this widget (make_managed + set_parent)
 
     std::vector<std::string> _currentTags;
     std::map<std::string, std::size_t> _tagMembershipCounts;
