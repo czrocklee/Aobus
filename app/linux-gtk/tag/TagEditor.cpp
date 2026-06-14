@@ -11,7 +11,6 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
-#include <glibmm/regex.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
@@ -44,13 +43,6 @@ namespace ao::gtk
   {
     constexpr int kChipSpacing = layout::kSpacingSmall; // 4
     constexpr std::size_t kMaxAvailableTags = 50;
-
-    // Tag names must match query parser identifier rules: [a-zA-Z_][a-zA-Z0-9_]*
-    Glib::RefPtr<Glib::Regex> tagNamePattern()
-    {
-      static auto const patternPtr = Glib::Regex::create("^[a-zA-Z_][a-zA-Z0-9_]*$");
-      return patternPtr;
-    }
 
     struct MeasureResult final
     {
@@ -296,19 +288,6 @@ namespace ao::gtk
       _entry.set_visible(false);
       _entry.signal_activate().connect(sigc::mem_fun(*this, &AddTagTrigger::onActivate));
       _entry.signal_changed().connect([this] { _filterChanged.emit(); });
-      _entry.signal_insert_text().connect(
-        [this](Glib::ustring const& text, int const* position)
-        {
-          auto candidate = _entry.get_text();
-          candidate.insert(*position, text);
-
-          if (!candidate.empty() && !tagNamePattern()->match(candidate))
-          {
-            ::g_signal_stop_emission_by_name(_entry.gobj(), "insert-text");
-          }
-        },
-        false);
-
       auto focusControllerPtr = Gtk::EventControllerFocus::create();
       focusControllerPtr->signal_leave().connect(sigc::mem_fun(*this, &AddTagTrigger::onFocusLeave));
       _entry.add_controller(focusControllerPtr);

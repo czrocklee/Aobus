@@ -14,28 +14,39 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("Serializer - Serializes Metadata Variable Prefix", "[query][unit][serializer]")
+  TEST_CASE("Serializer - Serializes System Variable Prefixes", "[query][unit][serializer]")
   {
-    auto const var = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
-    CHECK(serialize(var) == "$artist");
+    CHECK(serialize(VariableExpression{.type = VariableType::Metadata, .name = "artist"}) == "$artist");
+    CHECK(serialize(VariableExpression{.type = VariableType::Property, .name = "duration"}) == "@duration");
   }
 
-  TEST_CASE("Serializer - Serializes Property Variable Prefix", "[query][unit][serializer]")
+  TEST_CASE("Serializer - Serializes User Variable Names", "[query][unit][serializer]")
   {
-    auto const var = VariableExpression{.type = VariableType::Property, .name = "duration"};
-    CHECK(serialize(var) == "@duration");
-  }
+    SECTION("Simple names stay bare")
+    {
+      CHECK(serialize(VariableExpression{.type = VariableType::Tag, .name = "rock"}) == "#rock");
+      CHECK(serialize(VariableExpression{.type = VariableType::Custom, .name = "isrc"}) == "%isrc");
+    }
 
-  TEST_CASE("Serializer - Serializes Tag Variable Prefix", "[query][unit][serializer]")
-  {
-    auto const var = VariableExpression{.type = VariableType::Tag, .name = "rock"};
-    CHECK(serialize(var) == "#rock");
-  }
+    SECTION("Numeric names stay bare")
+    {
+      CHECK(serialize(VariableExpression{.type = VariableType::Tag, .name = "123"}) == "#123");
+      CHECK(serialize(VariableExpression{.type = VariableType::Custom, .name = "123"}) == "%123");
+    }
 
-  TEST_CASE("Serializer - Serializes Custom Variable Prefix", "[query][unit][serializer]")
-  {
-    auto const var = VariableExpression{.type = VariableType::Custom, .name = "isrc"};
-    CHECK(serialize(var) == "%isrc");
+    SECTION("Complex names are quoted and escaped")
+    {
+      auto const escaped = VariableExpression{.type = VariableType::Custom, .name = "quote\"and\\slash"};
+
+      CHECK(serialize(VariableExpression{.type = VariableType::Tag, .name = "90s Rock"}) == R"(#"90s Rock")");
+      CHECK(serialize(escaped) == R"(%"quote\"and\\slash")");
+    }
+
+    SECTION("Quoted names round-trip")
+    {
+      auto const var = VariableExpression{.type = VariableType::Custom, .name = "Replay Gain"};
+      CHECK(serialize(parse(serialize(var))) == serialize(var));
+    }
   }
 
   TEST_CASE("Serializer - Serializes Boolean Constant", "[query][unit][serializer]")
@@ -129,7 +140,8 @@ namespace ao::query::test
     auto queries = {R"($artist = "Bach" and $year >= 2020)",
                     "not ($year = 2020)",
                     R"($title ~ "Bach" or $composer ~ "Mozart")",
-                    R"(%isrc = "X" and @duration >= 3m)"};
+                    R"(%isrc = "X" and @duration >= 3m)",
+                    R"(#"90s Rock" and %"Replay Gain" = "high")"};
 
     for (auto const& q : queries)
     {

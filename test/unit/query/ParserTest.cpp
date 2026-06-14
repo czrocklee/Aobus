@@ -110,7 +110,7 @@ namespace ao::query::test
     CHECK("[c{s}Artist]" == canonicalize(parse("'Artist'")));
   }
 
-  TEST_CASE("Parser - Variable", "[query][unit][parser]")
+  TEST_CASE("Parser - System Variable", "[query][unit][parser]")
   {
     CHECK("[v{m}title]" == canonicalize(parse("$title")));
     CHECK("[v{m}artist]" == canonicalize(parse("$artist")));
@@ -118,9 +118,42 @@ namespace ao::query::test
     CHECK("[v{m}work]" == canonicalize(parse("$work")));
     CHECK("[v{m}w]" == canonicalize(parse("$w")));
     CHECK("[v{p}duration]" == canonicalize(parse("@duration")));
-    CHECK("[v{t}Tag]" == canonicalize(parse("#Tag")));
-    CHECK("[v{c}isrc]" == canonicalize(parse("%isrc")));
-    CHECK("[v{c}replaygaintrackgaindb]" == canonicalize(parse("%replaygaintrackgaindb")));
+  }
+
+  TEST_CASE("Parser - User Variable Name", "[query][unit][parser]")
+  {
+    SECTION("Bare tag and custom names allow numeric starts")
+    {
+      CHECK("[v{t}Tag]" == canonicalize(parse("#Tag")));
+      CHECK("[v{t}123]" == canonicalize(parse("#123")));
+      CHECK("[v{c}isrc]" == canonicalize(parse("%isrc")));
+      CHECK("[v{c}123]" == canonicalize(parse("%123")));
+      CHECK("[v{c}replaygaintrackgaindb]" == canonicalize(parse("%replaygaintrackgaindb")));
+    }
+
+    SECTION("Quoted names support spaces, Unicode, and escapes")
+    {
+      CHECK("[v{t}90s Rock]" == canonicalize(parse(R"(#"90s Rock")")));
+      CHECK("[v{t}你说得对]" == canonicalize(parse(R"(#"你说得对")")));
+      CHECK("[v{c}Replay Gain]" == canonicalize(parse(R"(%"Replay Gain")")));
+      CHECK("[v{c}quote\"and\\slash]" == canonicalize(parse(R"(%"quote\"and\\slash")")));
+    }
+
+    SECTION("Bracketed quoted accepted as well")
+    {
+      CHECK("[v{t}90s Rock]" == canonicalize(parse(R"(#["90s Rock"])")));
+      CHECK("[v{c}Replay Gain]" == canonicalize(parse(R"(%["Replay Gain"])")));
+    }
+  }
+
+  TEST_CASE("Parser - Invalid Variable Name", "[query][unit][parser]")
+  {
+    CHECK_THROWS(parse(R"(#"")"));
+    CHECK_THROWS(parse(R"(%"")"));
+    CHECK_THROWS(parse(R"(#[""])"));
+    CHECK_THROWS(parse(R"(%[""])"));
+    CHECK_THROWS(parse("$123"));
+    CHECK_THROWS(parse("@123"));
   }
 
   TEST_CASE("Parser - Variable Shortcuts", "[query][unit][parser]")

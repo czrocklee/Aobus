@@ -18,11 +18,13 @@
 #include <lexy/callback/forward.hpp>
 #include <lexy/callback/noop.hpp>
 #include <lexy/callback/object.hpp>
+#include <lexy/callback/string.hpp>
 #include <lexy/dsl/ascii.hpp>
 #include <lexy/dsl/brackets.hpp>
 #include <lexy/dsl/branch.hpp>
 #include <lexy/dsl/capture.hpp>
 #include <lexy/dsl/choice.hpp>
+#include <lexy/dsl/delimited.hpp>
 #include <lexy/dsl/digit.hpp>
 #include <lexy/dsl/eof.hpp>
 #include <lexy/dsl/error.hpp>
@@ -40,7 +42,9 @@
 #include <lexy/dsl/sign.hpp>
 #include <lexy/dsl/symbol.hpp>
 #include <lexy/dsl/token.hpp>
+#include <lexy/dsl/unicode.hpp>
 #include <lexy/dsl/until.hpp>
+#include <lexy/encoding.hpp>
 #include <lexy/grammar.hpp>
 #include <lexy/input/string_input.hpp>
 
@@ -59,11 +63,11 @@ namespace
   namespace dsl = lexy::dsl;
   using namespace ao::query;
 
-  constexpr auto kVarTypes = lexy::symbol_table<VariableType>
-    .map<LEXY_SYMBOL("$")>(VariableType::Metadata)
-    .map<LEXY_SYMBOL("@")>(VariableType::Property)
-    .map<LEXY_SYMBOL("#")>(VariableType::Tag)
-    .map<LEXY_SYMBOL("%")>(VariableType::Custom);
+  constexpr auto kSystemVarTypes =
+    lexy::symbol_table<VariableType>.map<LEXY_SYMBOL("$")>(VariableType::Metadata).map<LEXY_SYMBOL("@")>(VariableType::Property);
+
+  constexpr auto kUserVarTypes =
+    lexy::symbol_table<VariableType>.map<LEXY_SYMBOL("#")>(VariableType::Tag).map<LEXY_SYMBOL("%")>(VariableType::Custom);
 
   constexpr auto kBoolTable = lexy::symbol_table<bool>.map<LEXY_SYMBOL("true")>(true).map<LEXY_SYMBOL("false")>(false);
 
@@ -74,12 +78,53 @@ namespace
     return id.reserve(LEXY_KEYWORD("and", id), LEXY_KEYWORD("or", id), LEXY_KEYWORD("not", id));
   }();
 
-  struct Variable : lexy::token_production
+  struct SystemVariable : lexy::token_production
   {
-    static constexpr auto rule = dsl::symbol<kVarTypes> >>
+    static constexpr auto rule = dsl::symbol<kSystemVarTypes> >>
                                  dsl::identifier(dsl::ascii::alpha_underscore, dsl::ascii::alpha_digit_underscore);
     static constexpr auto value = lexy::callback<VariableExpression>(
       [](VariableType type, auto lexeme) { return VariableExpression{type, lexeme | std::ranges::to<std::string>()}; });
+  };
+
+  struct SimpleUserVariableName : lexy::token_production
+  {
+    static constexpr auto rule = dsl::identifier(dsl::ascii::alpha_digit_underscore);
+    static constexpr auto value =
+      lexy::callback<std::string>([](auto lexeme) { return lexeme | std::ranges::to<std::string>(); });
+  };
+
+  struct QuotedUserVariableName : lexy::token_production
+  {
+    static constexpr auto kEscape = dsl::backslash_escape.capture(dsl::lit_c<'"'> / dsl::lit_c<'\\'>);
+    static constexpr auto rule =
+      dsl::peek(dsl::lit_c<'"'>) >> (dsl::peek_not(LEXY_LIT("\"\"")) + dsl::quoted(-dsl::unicode::control, kEscape));
+    static constexpr auto value = lexy::as_string<std::string>;
+  };
+
+  struct BracketedQuotedUserVariableName final
+  {
+    static constexpr auto rule = dsl::square_bracketed(dsl::p<QuotedUserVariableName>);
+    static constexpr auto value = lexy::forward<std::string>;
+  };
+
+  struct UserVariableName final
+  {
+    static constexpr auto rule =
+      dsl::p<QuotedUserVariableName> | dsl::p<BracketedQuotedUserVariableName> | dsl::p<SimpleUserVariableName>;
+    static constexpr auto value = lexy::forward<std::string>;
+  };
+
+  struct UserVariable : lexy::token_production
+  {
+    static constexpr auto rule = dsl::symbol<kUserVarTypes> >> dsl::p<UserVariableName>;
+    static constexpr auto value = lexy::callback<VariableExpression>(
+      [](VariableType type, std::string name) { return VariableExpression{.type = type, .name = std::move(name)}; });
+  };
+
+  struct Variable final
+  {
+    static constexpr auto rule = dsl::p<SystemVariable> | dsl::p<UserVariable>;
+    static constexpr auto value = lexy::forward<VariableExpression>;
   };
 
   struct BooleanConstant : lexy::token_production
@@ -247,7 +292,7 @@ namespace ao::query
 {
   Expression parse(std::string_view expr)
   {
-    auto const input = lexy::string_input{expr};
+    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr}; // NOLINT(aobus-modernize-use-ctad)
 
     if (auto optResult = lexy::parse<Stmt>(input, lexy::noop); optResult)
     {

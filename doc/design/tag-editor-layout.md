@@ -36,8 +36,10 @@ Three chip kinds share that flow, ordered current → suggested → add trigger:
   approach the detail-field editors use), installed only while the entry is open. While the entry
   is open the current chips are filtered out of the flow, so add/search mode presents only the
   (live-filtered) suggestions and the entry; the current chips reappear on dismissal. Typing in
-  the entry live-filters the suggested chips (case-insensitive substring) and validates input
-  against the query-parser identifier rule `[a-zA-Z_][a-zA-Z0-9_]*`. The trigger is the persistent
+  the entry live-filters the suggested chips (case-insensitive substring). Any non-empty tag name
+  is accepted; query serialization uses a bare `#name` for ASCII alphanumeric/underscore names and
+  a quoted form such as `#"90s Rock"` for other names; see
+  [query-expression-language.md](query-expression-language.md) for the full syntax. The trigger is the persistent
   trailing child of the flow, so its open state and focus survive chip rebuilds.
 
 Each chip and the trigger centre vertically within their flow row (via `valign`), so a taller

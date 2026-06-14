@@ -943,6 +943,19 @@ namespace ao::query::test
     CHECK(result == true);
   }
 
+  TEST_CASE("PlanEvaluator - Numeric Tag And Quoted Custom Key", "[query][unit][plan_evaluator]")
+  {
+    auto spec = TrackSpec{};
+    spec.tags.emplace_back("123");
+    spec.customPairs.emplace_back("Replay Gain", "high");
+    auto track = TestTrack{spec};
+
+    auto const expression = parse(R"(#123 and %"Replay Gain" = "high")");
+    auto const plan = QueryCompiler{&track.dictionary()}.compile(expression);
+
+    CHECK(PlanEvaluator{}.evaluateFull(plan, track.view()));
+  }
+
   TEST_CASE("PlanEvaluator - Tag Query - With Non-Matching Tag", "[query][unit][plan_evaluator]")
   {
     // Dictionary: "rock" -> ID 10, but track has tag ID 20

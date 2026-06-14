@@ -47,6 +47,12 @@ The Track Details panel uses an invisible interaction model. Editable controls a
 
 Custom metadata represents properties created by the user inside Aobus, or explicitly provided through Aobus library import data. File tag readers do not promote unknown or vendor-specific MP4, ID3, or Vorbis fields into custom metadata; they only map fields that Aobus explicitly understands.
 
+Custom keys are queryable regardless of their first character. ASCII alphanumeric/underscore keys
+use the compact `%key` form, including numeric names such as `%123`; other keys use a quoted form
+such as `%"Replay Gain"`. Metadata (`$`) and technical property (`@`) variables remain system
+identifiers and must begin with an ASCII letter or underscore. See
+[query-expression-language.md](query-expression-language.md) for the full syntax.
+
 ## Layout Configuration
 
 The component is registered as `track.fieldGrid`. It supports a `categories` property to filter which field types to display.

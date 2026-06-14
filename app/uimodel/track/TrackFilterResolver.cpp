@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/uimodel/track/TrackFilterResolver.h>
 
 #include <boost/algorithm/string/classification.hpp>
@@ -20,33 +22,6 @@ namespace ao::uimodel::track
 {
   namespace
   {
-    bool isQueryableIdentifier(std::string_view value)
-    {
-      if (value.empty())
-      {
-        return false;
-      }
-
-      auto const isIdentifierStart = [](char ch)
-      {
-        auto const uch = static_cast<unsigned char>(ch);
-        return std::isalpha(uch) != 0 || ch == '_';
-      };
-
-      auto const isIdentifierChar = [](char ch)
-      {
-        auto const uch = static_cast<unsigned char>(ch);
-        return std::isalnum(uch) != 0 || ch == '_';
-      };
-
-      if (!isIdentifierStart(value.front()))
-      {
-        return false;
-      }
-
-      return std::ranges::all_of(value, isIdentifierChar);
-    }
-
     bool looksLikeExpression(std::string_view value)
     {
       return std::ranges::any_of(value,
@@ -147,10 +122,9 @@ namespace ao::uimodel::track
                                     "{0} or $composer ~ {0} or $work ~ {0})",
                                     quoted);
 
-      if (isQueryableIdentifier(term))
-      {
-        expression.insert(expression.size() - 1, std::format(" or #{0}", term));
-      }
+      auto const tagExpression =
+        query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{term}});
+      expression.insert(expression.size() - 1, std::format(" or {}", tagExpression));
 
       return expression;
     }

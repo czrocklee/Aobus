@@ -245,7 +245,7 @@ namespace ao::gtk::test
       CHECK(countChipsByClass(editor, "ao-tag-chip-suggested") == 0);
     }
 
-    SECTION("Add trigger expands inline and submits a new tag")
+    SECTION("Add trigger expands inline and submits tag names")
     {
       auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
       auto* const entry = findWidgetByClass<Gtk::Entry>(editor, "ao-tags-entry");
@@ -264,6 +264,18 @@ namespace ao::gtk::test
       CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 4);
       CHECK(entry->get_text().empty()); // cleared for rapid successive adds
       CHECK(entry->get_visible());      // stays open
+
+      auto position = 0;
+      entry->insert_text("123 Mix", -1, position);
+      CHECK(entry->get_text() == "123 Mix");
+
+      ::g_signal_emit_by_name(entry->gobj(), "activate");
+      drainGtkEvents();
+
+      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 5);
+      CHECK(currentChipWithLabel(editor, "123 Mix") != nullptr);
+      CHECK(entry->get_text().empty());
+      CHECK(entry->get_visible());
     }
 
     SECTION("Clicking outside the open entry dismisses it without committing")

@@ -38,6 +38,14 @@ namespace ao::uimodel::track::test
       auto const resolved = resolveTrackFilterExpression("\"the beatles\"");
       CHECK(resolved.mode == TrackFilterMode::Quick);
       CHECK(resolved.expression.contains("\"the beatles\""));
+      CHECK(resolved.expression.contains(R"(#"the beatles")"));
+    }
+
+    SECTION("Numeric terms are valid tag names")
+    {
+      auto const resolved = resolveTrackFilterExpression("123");
+      CHECK(resolved.mode == TrackFilterMode::Quick);
+      CHECK(resolved.expression.contains("or #123"));
     }
   }
 

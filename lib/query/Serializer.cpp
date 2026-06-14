@@ -5,6 +5,7 @@
 #include <ao/query/Serializer.h>
 #include <ao/utility/VariantVisitor.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -17,6 +18,39 @@ namespace ao::query
 {
   namespace
   {
+    bool isSimpleUserVariableName(std::string_view name)
+    {
+      return !name.empty() && std::ranges::all_of(name,
+                                                  [](char ch)
+                                                  {
+                                                    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                                                           (ch >= '0' && ch <= '9') || ch == '_';
+                                                  });
+    }
+
+    void serializeUserVariableName(std::ostringstream& oss, std::string_view name)
+    {
+      if (isSimpleUserVariableName(name))
+      {
+        oss << name;
+        return;
+      }
+
+      oss << '"';
+
+      for (auto const ch : name)
+      {
+        if (ch == '"' || ch == '\\')
+        {
+          oss << '\\';
+        }
+
+        oss << ch;
+      }
+
+      oss << '"';
+    }
+
     struct [[nodiscard]] ParenthesisGuard final
     {
       ParenthesisGuard(std::ostringstream& oss, bool apply)
@@ -80,13 +114,13 @@ namespace ao::query
       {
         switch (variable.type)
         {
-          case VariableType::Metadata: oss << '$'; break;
-          case VariableType::Property: oss << '@'; break;
+          case VariableType::Metadata: oss << '$' << variable.name; return;
+          case VariableType::Property: oss << '@' << variable.name; return;
           case VariableType::Tag: oss << '#'; break;
           case VariableType::Custom: oss << '%'; break;
         }
 
-        oss << variable.name;
+        serializeUserVariableName(oss, variable.name);
       }
 
       void operator()(ConstantExpression const& constant)

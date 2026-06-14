@@ -6,6 +6,8 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -80,26 +82,10 @@ namespace ao::gtk
       "codec",
     });
 
-    bool isIdentifierStart(char ch)
-    {
-      auto const uch = static_cast<unsigned char>(ch);
-      return std::isalpha(uch) != 0 || ch == '_';
-    }
-
     bool isIdentifierChar(char ch)
     {
       auto const uch = static_cast<unsigned char>(ch);
       return std::isalnum(uch) != 0 || ch == '_';
-    }
-
-    bool isQueryableIdentifier(std::string_view value)
-    {
-      if (value.empty() || !isIdentifierStart(value.front()))
-      {
-        return false;
-      }
-
-      return std::ranges::all_of(value, isIdentifierChar);
     }
 
     bool startsWithInsensitive(std::string_view candidate, std::string_view prefix)
@@ -312,7 +298,8 @@ namespace ao::gtk
         {
           if (startsWithInsensitive(tag, optQuery->prefix))
           {
-            suggestions.emplace_back("#" + tag);
+            suggestions.emplace_back(
+              query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = tag}));
           }
         }
 
@@ -322,7 +309,8 @@ namespace ao::gtk
         {
           if (startsWithInsensitive(key, optQuery->prefix))
           {
-            suggestions.emplace_back("%" + key);
+            suggestions.emplace_back(
+              query::serialize(query::VariableExpression{.type = query::VariableType::Custom, .name = key}));
           }
         }
 
@@ -414,7 +402,7 @@ namespace ao::gtk
     {
       for (auto const tagId : view.tags())
       {
-        if (auto const tag = dictionary.get(tagId); isQueryableIdentifier(tag))
+        if (auto const tag = dictionary.get(tagId); !tag.empty())
         {
           uniqueTags.emplace(tag);
         }
@@ -422,7 +410,7 @@ namespace ao::gtk
 
       for (auto const& [dictId, _] : view.customMetadata())
       {
-        if (auto const key = dictionary.get(dictId); isQueryableIdentifier(key))
+        if (auto const key = dictionary.get(dictId); !key.empty())
         {
           uniqueCustomKeys.emplace(key);
         }
