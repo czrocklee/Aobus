@@ -170,8 +170,7 @@ namespace ao::gtk::test
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->duration == std::chrono::minutes{2});
 
-      auto const optCover = provider.coverArtId(id);
-      CHECK_FALSE(optCover.has_value());
+      CHECK(provider.coverArtId(id) == kInvalidResourceId);
 
       provider.clearCache();
       provider.remove(id);

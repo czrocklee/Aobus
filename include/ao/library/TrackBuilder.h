@@ -5,6 +5,7 @@
 
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackView.h>
@@ -16,6 +17,7 @@
 #include <span>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::library
@@ -38,7 +40,7 @@ namespace ao::library
    *   builder.metadata().title("Song").artist("Artist").album("Album");
    *   builder.property().fileSize(fs).bitDepth(BitDepth{16});
    *   builder.tags().add("rock");
-   *   builder.custom().add("key", "value");
+   *   builder.customMetadata().add("key", "value");
    *   auto [hot, cold] = builder.serialize(txn, dict, resources);
    *   writer.createHotCold(hot, cold);
    */
@@ -70,8 +72,6 @@ namespace ao::library
       MetadataBuilder& totalTracks(std::uint16_t count);
       MetadataBuilder& discNumber(std::uint16_t number);
       MetadataBuilder& totalDiscs(std::uint16_t count);
-      MetadataBuilder& coverArtId(std::uint32_t id);
-      MetadataBuilder& coverArtData(std::span<std::byte const> data);
 
       // Accessors
       std::string_view title() const { return _title; }
@@ -86,8 +86,6 @@ namespace ao::library
       std::uint16_t totalTracks() const { return _totalTracks; }
       std::uint16_t discNumber() const { return _discNumber; }
       std::uint16_t totalDiscs() const { return _totalDiscs; }
-      std::uint32_t coverArtId() const { return _coverArtId; }
-      std::span<std::byte const> coverArtData() const { return _embeddedCoverArt; }
 
     private:
       friend class TrackBuilder;
@@ -107,8 +105,6 @@ namespace ao::library
       std::uint16_t _totalTracks = 0;
       std::uint16_t _discNumber = 0;
       std::uint16_t _totalDiscs = 0;
-      std::uint32_t _coverArtId = 0;
-      mutable std::span<std::byte const> _embeddedCoverArt;
     };
 
     class PropertyBuilder
@@ -162,12 +158,34 @@ namespace ao::library
       std::vector<std::string_view> _tagNames;
     };
 
-    class CustomBuilder
+    class CoverArtBuilder
     {
     public:
-      CustomBuilder& add(std::string_view key, std::string_view value);
-      CustomBuilder& remove(std::string_view key);
-      CustomBuilder& clear();
+      struct PendingCoverArt
+      {
+        PictureType type = PictureType::FrontCover;
+        std::variant<ResourceId, std::span<std::byte const>> source;
+      };
+
+      CoverArtBuilder& add(PictureType type, ResourceId resourceId);
+      CoverArtBuilder& add(PictureType type, std::span<std::byte const> data);
+      CoverArtBuilder& erase(std::size_t index);
+      CoverArtBuilder& clear();
+
+      std::vector<PendingCoverArt> const& entries() const { return _entries; }
+
+    private:
+      friend class TrackBuilder;
+
+      std::vector<PendingCoverArt> _entries;
+    };
+
+    class CustomMetadataBuilder
+    {
+    public:
+      CustomMetadataBuilder& add(std::string_view key, std::string_view value);
+      CustomMetadataBuilder& remove(std::string_view key);
+      CustomMetadataBuilder& clear();
 
       std::vector<std::pair<std::string_view, std::string_view>> const& pairs() const { return _customPairs; }
 
@@ -188,8 +206,11 @@ namespace ao::library
     TagsBuilder& tags();
     TagsBuilder const& tags() const;
 
-    CustomBuilder& custom();
-    CustomBuilder const& custom() const;
+    CoverArtBuilder& coverArt();
+    CoverArtBuilder const& coverArt() const;
+
+    CustomMetadataBuilder& customMetadata();
+    CustomMetadataBuilder const& customMetadata() const;
 
     // Full serialization - resolves all strings to DictionaryIds
     std::pair<std::vector<std::byte>, std::vector<std::byte>> serialize(lmdb::WriteTransaction& txn,
@@ -248,9 +269,10 @@ namespace ao::library
 
       TrackBuilder const* _builder;
       std::vector<std::pair<DictionaryId, std::string_view>> _resolvedPairs;
+      std::vector<CoverArt> _coverArt;
       std::uint16_t _uriOffset = 0;
-      std::uint16_t _uriLen = 0;
-      std::uint32_t _coverArtId = 0;
+      std::uint16_t _uriLength = 0;
+      std::uint16_t _customOffset = 0;
       DictionaryId _workId = kInvalidDictionaryId;
       std::size_t _size = 0;
 
@@ -274,6 +296,7 @@ namespace ao::library
     MetadataBuilder _metadataBuilder{};
     PropertyBuilder _propertyBuilder{};
     TagsBuilder _tagsBuilder{};
-    CustomBuilder _customBuilder{};
+    CoverArtBuilder _coverArtBuilder{};
+    CustomMetadataBuilder _customMetadataBuilder{};
   };
 } // namespace ao::library

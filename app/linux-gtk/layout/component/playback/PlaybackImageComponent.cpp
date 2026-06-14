@@ -236,14 +236,16 @@ namespace ao::gtk::layout
 
         if (optView)
         {
-          _imageWidgetPtr->loadImage(ResourceId{optView->metadata().coverArtId()});
-          _button.set_visible(true);
+          if (auto const optPrimary = optView->coverArt().primary(); optPrimary)
+          {
+            _imageWidgetPtr->loadImage(optPrimary->resourceId);
+            _button.set_visible(true);
+            return;
+          }
         }
-        else
-        {
-          _imageWidgetPtr->clearImage();
-          _button.set_visible(false);
-        }
+
+        _imageWidgetPtr->clearImage();
+        _button.set_visible(false);
       }
 
       rt::AppRuntime& _runtime;

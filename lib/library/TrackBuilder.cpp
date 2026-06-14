@@ -3,6 +3,7 @@
 
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -20,6 +21,7 @@
 #include <cstring>
 #include <span>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::library
@@ -87,20 +89,24 @@ namespace ao::library
 
       auto meta = view.metadata();
       builder.metadata()
-        .coverArtId(meta.coverArtId())
         .trackNumber(meta.trackNumber())
         .totalTracks(meta.totalTracks())
         .discNumber(meta.discNumber())
         .totalDiscs(meta.totalDiscs());
+
+      for (auto const cover : view.coverArt())
+      {
+        builder.coverArt().add(cover.type, cover.resourceId);
+      }
 
       if (auto workId = meta.workId(); workId.raw() > 0)
       {
         builder.metadata().work(dict.get(workId));
       }
 
-      for (auto const& [dictId, value] : view.custom())
+      for (auto const& [dictId, value] : view.customMetadata())
       {
-        builder.custom().add(dict.get(dictId), value);
+        builder.customMetadata().add(dict.get(dictId), value);
       }
     }
 
@@ -137,14 +143,24 @@ namespace ao::library
     return _tagsBuilder;
   }
 
-  TrackBuilder::CustomBuilder& TrackBuilder::custom()
+  TrackBuilder::CoverArtBuilder& TrackBuilder::coverArt()
   {
-    return _customBuilder;
+    return _coverArtBuilder;
   }
 
-  TrackBuilder::CustomBuilder const& TrackBuilder::custom() const
+  TrackBuilder::CoverArtBuilder const& TrackBuilder::coverArt() const
   {
-    return _customBuilder;
+    return _coverArtBuilder;
+  }
+
+  TrackBuilder::CustomMetadataBuilder& TrackBuilder::customMetadata()
+  {
+    return _customMetadataBuilder;
+  }
+
+  TrackBuilder::CustomMetadataBuilder const& TrackBuilder::customMetadata() const
+  {
+    return _customMetadataBuilder;
   }
 
   //=============================================================================
@@ -223,19 +239,6 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtId(std::uint32_t id)
-  {
-    _coverArtId = id;
-    _embeddedCoverArt = {};
-    return *this;
-  }
-
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtData(std::span<std::byte const> data)
-  {
-    _embeddedCoverArt = data;
-    return *this;
-  }
-
   //=============================================================================
   // PropertyBuilder
   //=============================================================================
@@ -305,22 +308,60 @@ namespace ao::library
   }
 
   //=============================================================================
-  // CustomBuilder
+  // CoverArtBuilder
   //=============================================================================
 
-  TrackBuilder::CustomBuilder& TrackBuilder::CustomBuilder::add(std::string_view key, std::string_view value)
+  TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::add(PictureType type, ResourceId resourceId)
+  {
+    if (resourceId != kInvalidResourceId)
+    {
+      _entries.push_back({.type = type, .source = resourceId});
+    }
+
+    return *this;
+  }
+
+  TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::add(PictureType type, std::span<std::byte const> data)
+  {
+    if (!data.empty())
+    {
+      _entries.push_back({.type = type, .source = data});
+    }
+
+    return *this;
+  }
+
+  TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::erase(std::size_t index)
+  {
+    gsl_Expects(index < _entries.size());
+    _entries.erase(_entries.begin() + static_cast<std::ptrdiff_t>(index));
+    return *this;
+  }
+
+  TrackBuilder::CoverArtBuilder& TrackBuilder::CoverArtBuilder::clear()
+  {
+    _entries.clear();
+    return *this;
+  }
+
+  //=============================================================================
+  // CustomMetadataBuilder
+  //=============================================================================
+
+  TrackBuilder::CustomMetadataBuilder& TrackBuilder::CustomMetadataBuilder::add(std::string_view key,
+                                                                                std::string_view value)
   {
     _customPairs.emplace_back(key, value);
     return *this;
   }
 
-  TrackBuilder::CustomBuilder& TrackBuilder::CustomBuilder::remove(std::string_view key)
+  TrackBuilder::CustomMetadataBuilder& TrackBuilder::CustomMetadataBuilder::remove(std::string_view key)
   {
     std::erase_if(_customPairs, [&key](auto const& pair) { return pair.first == key; });
     return *this;
   }
 
-  TrackBuilder::CustomBuilder& TrackBuilder::CustomBuilder::clear()
+  TrackBuilder::CustomMetadataBuilder& TrackBuilder::CustomMetadataBuilder::clear()
   {
     _customPairs.clear();
     return *this;
@@ -436,8 +477,8 @@ namespace ao::library
       .composerId = _composerId,
       .sampleRate = builder._propertyBuilder._sampleRate,
       .year = builder._metadataBuilder._year,
-      .titleLen = static_cast<std::uint16_t>(builder._metadataBuilder._title.size()),
-      .tagLen = static_cast<std::uint16_t>(_tagIds.size() * sizeof(DictionaryId)),
+      .titleLength = static_cast<std::uint16_t>(builder._metadataBuilder._title.size()),
+      .tagLength = static_cast<std::uint16_t>(_tagIds.size() * sizeof(DictionaryId)),
       .bitDepth = builder._propertyBuilder._bitDepth,
       .codec = builder._propertyBuilder._codec,
     };
@@ -471,26 +512,15 @@ namespace ao::library
                                            ResourceStore& resources)
     : _builder{builder}
   {
-    // Handle embedded cover art - store resolved ID in PreparedCold
-    if (!_builder->_metadataBuilder._embeddedCoverArt.empty())
-    {
-      auto writer = resources.writer(txn);
-      _coverArtId = writer.create(_builder->_metadataBuilder._embeddedCoverArt).raw();
-    }
-    else
-    {
-      _coverArtId = _builder->_metadataBuilder._coverArtId;
-    }
-
     if (!_builder->_metadataBuilder._work.empty())
     {
       _workId = dict.put(txn, _builder->_metadataBuilder._work);
     }
 
     // Resolve custom keys to DictionaryIds
-    _resolvedPairs.reserve(_builder->_customBuilder._customPairs.size());
+    _resolvedPairs.reserve(_builder->_customMetadataBuilder._customPairs.size());
 
-    for (auto const& [key, value] : _builder->_customBuilder._customPairs)
+    for (auto const& [key, value] : _builder->_customMetadataBuilder._customPairs)
     {
       auto dictId = dict.put(txn, key);
       _resolvedPairs.emplace_back(dictId, value);
@@ -498,6 +528,25 @@ namespace ao::library
 
     // Sort by dictId for binary search
     std::ranges::sort(_resolvedPairs, {}, &std::pair<DictionaryId, std::string_view>::first);
+
+    // Resolve pending cover blobs into ResourceStore
+    {
+      auto writer = resources.writer(txn);
+      _coverArt.reserve(_builder->_coverArtBuilder._entries.size());
+
+      for (auto const& pending : _builder->_coverArtBuilder._entries)
+      {
+        if (auto const* ptrResourceId = std::get_if<ResourceId>(&pending.source); ptrResourceId != nullptr)
+        {
+          _coverArt.push_back({.resourceId = *ptrResourceId, .type = pending.type});
+        }
+        else
+        {
+          auto const data = std::get<std::span<std::byte const>>(pending.source);
+          _coverArt.push_back({.resourceId = writer.create(data), .type = pending.type});
+        }
+      }
+    }
 
     // Compute sizes
     std::size_t const entryCount = _resolvedPairs.size();
@@ -508,17 +557,17 @@ namespace ao::library
       totalValueSize += resolvedPair.second.size();
     }
 
-    _uriLen = static_cast<std::uint16_t>(_builder->_propertyBuilder._uri.size());
+    _uriLength = static_cast<std::uint16_t>(_builder->_propertyBuilder._uri.size());
 
-    // Cold layout: header(52) + entries(N*8) + values + uri
-    std::size_t size = sizeof(TrackColdHeader);
     constexpr std::size_t kEntrySize = 8;
-    size += entryCount * kEntrySize;
-    size += totalValueSize;
-    size += _uriLen;
-    size = (size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
+    std::size_t const coverArea = (_coverArt.size() * kEntrySize);
+    _customOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + coverArea);
 
-    _uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + (entryCount * kEntrySize) + totalValueSize);
+    std::size_t const customArea = (entryCount * kEntrySize) + totalValueSize;
+    _uriOffset = static_cast<std::uint16_t>(_customOffset + customArea);
+
+    std::size_t size = _uriOffset + _uriLength;
+    size = (size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
     _size = size;
   }
 
@@ -534,7 +583,6 @@ namespace ao::library
     {
       new (out.data()) TrackColdHeader{
         .duration = std::chrono::duration_cast<TrackDuration>(prop._duration),
-        .coverArtId = _coverArtId,
         .bitrate = prop._bitrate,
         .workId = _workId,
         .trackNumber = meta._trackNumber,
@@ -543,7 +591,9 @@ namespace ao::library
         .totalDiscs = meta._totalDiscs,
         .customCount = static_cast<std::uint16_t>(_resolvedPairs.size()),
         .uriOffset = _uriOffset,
-        .uriLen = _uriLen,
+        .uriLength = _uriLength,
+        .coverCount = static_cast<std::uint16_t>(_coverArt.size()),
+        .customOffset = _customOffset,
         .channels = prop._channels,
         .padding = {},
       };
@@ -551,26 +601,27 @@ namespace ao::library
 
     auto pos = sizeof(TrackColdHeader);
 
-    // Write entries: dictId(4) + offset(2) + len(2) each, all 4-byte aligned
-    struct Entry
+    // Write cover table immediately after header: resourceId(4) + type(1) + reserved(3) each
+    for (auto const& cover : _coverArt)
     {
-      DictionaryId dictId;
-      std::uint16_t offset = 0;
-      std::uint16_t len = 0;
-    };
+      new (out.data() + pos) CoverArtEntry{.id = cover.resourceId, .type = static_cast<std::uint8_t>(cover.type)};
+      pos += sizeof(CoverArtEntry);
+    }
 
-    std::size_t valueOffset = sizeof(TrackColdHeader) + (_resolvedPairs.size() * 8);
+    gsl_Assert(pos == _customOffset);
+
+    std::size_t valueOffset = _customOffset + (_resolvedPairs.size() * sizeof(CustomMetadataEntry));
 
     for (auto const& [dictId, value] : _resolvedPairs)
     {
-      new (out.data() + pos) Entry{.dictId = dictId,
-                                   .offset = static_cast<std::uint16_t>(valueOffset),
-                                   .len = static_cast<std::uint16_t>(value.size())};
-      pos += sizeof(Entry);
+      new (out.data() + pos) CustomMetadataEntry{.keyId = dictId,
+                                                 .valueOffset = static_cast<std::uint16_t>(valueOffset),
+                                                 .valueLength = static_cast<std::uint16_t>(value.size())};
+      pos += sizeof(CustomMetadataEntry);
       valueOffset += value.size();
     }
 
-    // Write all values contiguously
+    // Write all custom values contiguously
     for (auto const& resolvedPair : _resolvedPairs)
     {
       auto const& value = resolvedPair.second;
@@ -583,11 +634,13 @@ namespace ao::library
       pos += value.size();
     }
 
+    gsl_Assert(pos == _uriOffset);
+
     // Write uri
-    if (_uriLen > 0)
+    if (_uriLength > 0)
     {
-      std::memcpy(out.data() + pos, _builder->_propertyBuilder._uri.data(), _uriLen);
-      pos += _uriLen;
+      std::memcpy(out.data() + pos, _builder->_propertyBuilder._uri.data(), _uriLength);
+      pos += _uriLength;
     }
 
     // Pad to 4 bytes

@@ -8,7 +8,6 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <optional>
 #include <string>
 
 namespace ao::audio
@@ -35,7 +34,7 @@ namespace ao::audio
     std::string title{};
     std::string artist{};
     std::string album{};
-    std::optional<ResourceId> optCoverArtId{};
+    ResourceId coverArtId{kInvalidResourceId};
     std::chrono::milliseconds duration{0};
     std::uint32_t sampleRateHint = 0;
     std::uint8_t channelsHint = 0;

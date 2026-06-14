@@ -499,8 +499,8 @@ namespace ao::query
         .field = instrField,
         .operand = static_cast<std::int32_t>(rightReg),
         .constValue = 0,
-        .strLen = 0,
-        .strData = nullptr,
+        .size = 0,
+        .data = nullptr,
       });
 
       // After binary op, the result is stored in the left register (rightReg - 1)
@@ -519,8 +519,8 @@ namespace ao::query
       .field = 0,
       .operand = static_cast<std::int32_t>(_nextReg - 1),
       .constValue = 0,
-      .strLen = 0,
-      .strData = nullptr,
+      .size = 0,
+      .data = nullptr,
     });
   }
 
@@ -544,8 +544,8 @@ namespace ao::query
           .field = static_cast<std::uint8_t>(Field::Tag),
           .operand = static_cast<std::int32_t>(_nextReg++),
           .constValue = 0,
-          .strLen = 0,
-          .strData = nullptr,
+          .size = 0,
+          .data = nullptr,
         });
 
         // Then load the tag ID as constant
@@ -554,8 +554,8 @@ namespace ao::query
           .field = 0,
           .operand = static_cast<std::int32_t>(_nextReg++),
           .constValue = static_cast<std::int64_t>(tagId.raw()),
-          .strLen = 0,
-          .strData = nullptr,
+          .size = 0,
+          .data = nullptr,
         });
 
         // Eq instruction - PlanEvaluator will detect Tag field and use tags.has()
@@ -564,8 +564,8 @@ namespace ao::query
           .field = 0,
           .operand = static_cast<std::int32_t>(_nextReg - 1), // Right operand
           .constValue = 0,
-          .strLen = 0,
-          .strData = nullptr,
+          .size = 0,
+          .data = nullptr,
         });
 
         _nextReg--; // Eq result is in the left register
@@ -608,8 +608,8 @@ namespace ao::query
       .field = static_cast<std::uint8_t>(field),
       .operand = static_cast<std::int32_t>(_nextReg++),
       .constValue = constValue,
-      .strLen = 0,
-      .strData = nullptr,
+      .size = 0,
+      .data = nullptr,
     });
   }
 
@@ -623,8 +623,8 @@ namespace ao::query
                      .field = 0,
                      .operand = static_cast<std::int32_t>(_nextReg++),
                      .constValue = val ? 1 : 0,
-                     .strLen = 0,
-                     .strData = nullptr,
+                     .size = 0,
+                     .data = nullptr,
                    });
                  },
                  [this](std::int64_t val)
@@ -634,8 +634,8 @@ namespace ao::query
                      .field = 0,
                      .operand = static_cast<std::int32_t>(_nextReg++),
                      .constValue = val,
-                     .strLen = 0,
-                     .strData = nullptr,
+                     .size = 0,
+                     .data = nullptr,
                    });
                  },
                  [this](UnitConstantExpression const& val)
@@ -646,8 +646,8 @@ namespace ao::query
                      .field = 0,
                      .operand = static_cast<std::int32_t>(_nextReg++),
                      .constValue = scaled,
-                     .strLen = 0,
-                     .strData = nullptr,
+                     .size = 0,
+                     .data = nullptr,
                    });
                  },
                  [this](std::string const& val)
@@ -661,8 +661,8 @@ namespace ao::query
                          .field = 0,
                          .operand = static_cast<std::int32_t>(_nextReg++),
                          .constValue = library::audioCodecStorageValue(*optCodec),
-                         .strLen = 0,
-                         .strData = nullptr,
+                         .size = 0,
+                         .data = nullptr,
                        });
                        return;
                      }
@@ -682,8 +682,8 @@ namespace ao::query
                        .field = 0,
                        .operand = static_cast<std::int32_t>(_nextReg++),
                        .constValue = resolvedId,
-                       .strLen = 0,
-                       .strData = nullptr,
+                       .size = 0,
+                       .data = nullptr,
                      });
                    }
                    else
@@ -695,8 +695,8 @@ namespace ao::query
                        .field = 0,
                        .operand = static_cast<std::int32_t>(_nextReg++),
                        .constValue = static_cast<std::int64_t>(idx),
-                       .strLen = static_cast<std::uint32_t>(val.size()),
-                       .strData = nullptr,
+                       .size = static_cast<std::uint32_t>(val.size()),
+                       .data = nullptr,
                      });
                    }
                  }),

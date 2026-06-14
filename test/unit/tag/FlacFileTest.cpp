@@ -106,7 +106,7 @@ namespace ao::tag::flac::test
     CHECK(meta.discNumber() == 2);
     CHECK(meta.totalDiscs() == 5);
     CHECK(meta.year() == 2024);
-    CHECK(builder.custom().pairs().empty());
+    CHECK(builder.customMetadata().pairs().empty());
 
     auto const prop = builder.property();
     CHECK(prop.sampleRate() == 44100);
@@ -142,6 +142,23 @@ namespace ao::tag::flac::test
       // 2. Out-of-bounds VorbisComment block (not the last block so increment runs)
       addBlockHeader(data, MetadataBlockType::VorbisComment, false, 1000);
       data.insert(data.end(), 34, 0); // Only provide 34 bytes
+
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
+    }
+
+    SECTION("Picture block is truncated after picture type")
+    {
+      auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
+
+      addBlockHeader(data, MetadataBlockType::StreamInfo, false, 34);
+      auto si = StreamInfoLayout{};
+      auto const* siAddr = reinterpret_cast<std::uint8_t const*>(&si);
+      data.insert(data.end(), siAddr, siAddr + 34);
+
+      addBlockHeader(data, MetadataBlockType::Picture, true, 4);
+      data.insert(data.end(), 4, 0);
 
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};

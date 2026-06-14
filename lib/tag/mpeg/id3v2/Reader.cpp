@@ -5,6 +5,7 @@
 
 #include "Frame.h"
 #include "Layout.h"
+#include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/ByteView.h>
@@ -110,8 +111,14 @@ namespace ao::tag::mpeg::id3v2
       }
 
       ++ptr; // skip null terminator
-      // Skip picture type
+
+      // Read picture type byte
+      auto const rawType = static_cast<std::uint8_t>(*ptr);
+      auto const picType = rawType <= static_cast<std::uint8_t>(library::PictureType::PublisherLogo)
+                             ? static_cast<library::PictureType>(rawType)
+                             : library::PictureType::Other;
       ++ptr;
+
       // Skip description (null-terminated)
       while (*ptr != '\0')
       {
@@ -122,7 +129,7 @@ namespace ao::tag::mpeg::id3v2
 
       auto const offset = static_cast<std::size_t>(ptr - frameData);
       std::size_t const imageSize = size - offset;
-      builder.metadata().coverArtData(utility::bytes::view(ptr, imageSize));
+      builder.coverArt().add(picType, utility::bytes::view(ptr, imageSize));
     }
 
     void handleTxxx(library::TrackBuilder& builder, TagFile const& owner, void const* data, std::size_t size)

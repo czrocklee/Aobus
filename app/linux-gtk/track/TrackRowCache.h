@@ -12,7 +12,6 @@
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
-#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <unordered_map>
@@ -64,7 +63,7 @@ namespace ao::gtk
     /**
      * Get cover art resource ID for a track (direct from DB).
      */
-    std::optional<std::uint32_t> coverArtId(TrackId id) const;
+    ResourceId coverArtId(TrackId id) const;
 
     /**
      * Get URI path for a track (direct from DB).

@@ -4,6 +4,7 @@
 #include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
@@ -37,6 +38,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
@@ -161,6 +163,14 @@ namespace ao::rt
                       std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                       ImportMode strategy,
                       ExportMode payloadMode);
+    void importTrackRecord(ValidatedTrack const& validatedTrack,
+                           lmdb::WriteTransaction& txn,
+                           library::TrackStore::Writer& trackWriter,
+                           library::FileManifestStore::Writer& manifestWriter,
+                           library::FileManifestStore::Reader const& manifestReader,
+                           ImportMode strategy,
+                           ExportMode payloadMode,
+                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
     void loadTrackBaseline(std::string_view uriStr,
                            std::optional<TrackId> const& optExistingTrackId,
                            ExportMode payloadMode,
@@ -458,110 +468,149 @@ namespace ao::rt
     auto trackWriter = ml.tracks().writer(txn);
     auto manifestWriter = ml.manifest().writer(txn);
     auto manifestReader = ml.manifest().reader(txn);
-    auto& dict = ml.dictionary();
-    auto& resources = ml.resources();
 
     for (auto const& validatedTrack : tracks)
     {
-      auto const& trackNode = validatedTrack.node;
-      std::string_view const& uriStr = validatedTrack.uri;
+      importTrackRecord(validatedTrack,
+                        txn,
+                        trackWriter,
+                        manifestWriter,
+                        manifestReader,
+                        strategy,
+                        payloadMode,
+                        yamlTrackIdToInternalId);
+    }
+  }
 
-      auto optExistingTrackId = std::optional<TrackId>{};
+  void LibraryYamlImporter::Impl::importTrackRecord(ValidatedTrack const& validatedTrack,
+                                                    lmdb::WriteTransaction& txn,
+                                                    library::TrackStore::Writer& trackWriter,
+                                                    library::FileManifestStore::Writer& manifestWriter,
+                                                    library::FileManifestStore::Reader const& manifestReader,
+                                                    ImportMode strategy,
+                                                    ExportMode payloadMode,
+                                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
+  {
+    auto& dict = ml.dictionary();
+    auto& resources = ml.resources();
 
-      if (strategy == ImportMode::Merge)
-      {
-        if (auto const optManifestView = manifestReader.get(uriStr); optManifestView)
-        {
-          optExistingTrackId = optManifestView->trackId();
-        }
-      }
+    auto const& trackNode = validatedTrack.node;
+    std::string_view const& uriStr = validatedTrack.uri;
 
-      auto optBuilder = std::optional<library::TrackBuilder>{};
-      auto keepAliveTagFilePtr = std::unique_ptr<tag::TagFile>{};
+    auto optExistingTrackId = std::optional<TrackId>{};
 
-      loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, keepAliveTagFilePtr, trackWriter);
-
-      auto builder = optBuilder ? *optBuilder : library::TrackBuilder::createNew();
-
-      if (!optBuilder)
-      {
-        builder.property().uri(uriStr);
-      }
-
-      overlayMetadata(builder, trackNode);
-      overlayCustomData(builder, trackNode);
-      overlayTechnicalProperties(builder, trackNode);
-
-      auto coverArtBinary = std::vector<std::byte>{};
-
-      if (auto const coverArtNode = yaml::findChild(trackNode, "coverArtBase64"); coverArtNode.readable())
-      {
-        auto const b64 = yaml::scalarView(coverArtNode);
-        coverArtBinary = utility::base64Decode(b64);
-
-        if (!coverArtBinary.empty())
-        {
-          builder.metadata().coverArtData(coverArtBinary);
-        }
-      }
-
-      auto [preparedHot, preparedCold] = builder.prepare(txn, dict, resources);
-      auto targetTrackId = TrackId{};
-
-      if (optExistingTrackId)
-      {
-        targetTrackId = *optExistingTrackId;
-        trackWriter.updateHot(
-          targetTrackId, preparedHot.size(), [&](std::span<std::byte> hot) { preparedHot.writeTo(hot); });
-        trackWriter.updateCold(
-          targetTrackId, preparedCold.size(), [&](std::span<std::byte> cold) { preparedCold.writeTo(cold); });
-      }
-      else
-      {
-        [[maybe_unused]] auto [newTrackId, view] =
-          trackWriter.createHotCold(preparedHot.size(),
-                                    preparedCold.size(),
-                                    [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                    {
-                                      preparedHot.writeTo(hot);
-                                      preparedCold.writeTo(cold);
-                                    });
-        targetTrackId = newTrackId;
-      }
-
-      auto manifestBuilder = library::FileManifestBuilder::createNew();
-      manifestBuilder.trackId(targetTrackId);
-
+    if (strategy == ImportMode::Merge)
+    {
       if (auto const optManifestView = manifestReader.get(uriStr); optManifestView)
       {
-        manifestBuilder.fileSize(optManifestView->fileSize());
-        manifestBuilder.mtime(optManifestView->mtime());
+        optExistingTrackId = optManifestView->trackId();
       }
-      else if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
-      {
-        manifestBuilder.fileSize(std::filesystem::file_size(fullPath));
-        manifestBuilder.mtime(
-          static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                       std::filesystem::last_write_time(fullPath).time_since_epoch())
-                                       .count()));
-      }
+    }
 
-      if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
-      {
-        manifestBuilder.fileSize(yaml::asInt<uint64_t>(fileSizeNode));
-      }
+    auto optBuilder = std::optional<library::TrackBuilder>{};
+    auto keepAliveTagFilePtr = std::unique_ptr<tag::TagFile>{};
 
-      if (auto mtimeNode = yaml::findChild(trackNode, "mtime"); mtimeNode.readable())
-      {
-        manifestBuilder.mtime(yaml::asInt<uint64_t>(mtimeNode));
-      }
+    loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, keepAliveTagFilePtr, trackWriter);
 
-      manifestWriter.put(uriStr, manifestBuilder.serialize());
+    auto builder = optBuilder ? *optBuilder : library::TrackBuilder::createNew();
 
-      if (validatedTrack.yamlId != 0)
+    if (!optBuilder)
+    {
+      builder.property().uri(uriStr);
+    }
+
+    overlayMetadata(builder, trackNode);
+    overlayCustomData(builder, trackNode);
+    overlayTechnicalProperties(builder, trackNode);
+
+    auto decodedCoverBlobs = std::vector<std::vector<std::byte>>{};
+
+    if (auto const coversNode = yaml::findChild(trackNode, "covers"); coversNode.readable() && coversNode.is_seq())
+    {
+      builder.coverArt().clear();
+      decodedCoverBlobs.reserve(coversNode.num_children());
+
+      for (auto const coverNode : coversNode)
       {
-        yamlTrackIdToInternalId[validatedTrack.yamlId] = targetTrackId;
+        auto const typeNode = yaml::findChild(coverNode, "type");
+        auto const dataNode = yaml::findChild(coverNode, "data");
+
+        if (!typeNode.readable() || !dataNode.readable())
+        {
+          continue;
+        }
+
+        std::uint32_t rawType = 0;
+        typeNode >> rawType;
+        auto const picType = rawType <= static_cast<std::uint32_t>(library::PictureType::PublisherLogo)
+                               ? static_cast<library::PictureType>(rawType)
+                               : library::PictureType::Other;
+
+        auto const b64 = yaml::scalarView(dataNode);
+        decodedCoverBlobs.push_back(utility::base64Decode(b64));
+
+        if (auto const& blob = decodedCoverBlobs.back(); !blob.empty())
+        {
+          builder.coverArt().add(picType, blob);
+        }
       }
+    }
+
+    auto [preparedHot, preparedCold] = builder.prepare(txn, dict, resources);
+    auto targetTrackId = TrackId{};
+
+    if (optExistingTrackId)
+    {
+      targetTrackId = *optExistingTrackId;
+      trackWriter.updateHot(
+        targetTrackId, preparedHot.size(), [&](std::span<std::byte> hot) { preparedHot.writeTo(hot); });
+      trackWriter.updateCold(
+        targetTrackId, preparedCold.size(), [&](std::span<std::byte> cold) { preparedCold.writeTo(cold); });
+    }
+    else
+    {
+      [[maybe_unused]] auto [newTrackId, view] =
+        trackWriter.createHotCold(preparedHot.size(),
+                                  preparedCold.size(),
+                                  [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                  {
+                                    preparedHot.writeTo(hot);
+                                    preparedCold.writeTo(cold);
+                                  });
+      targetTrackId = newTrackId;
+    }
+
+    auto manifestBuilder = library::FileManifestBuilder::createNew();
+    manifestBuilder.trackId(targetTrackId);
+
+    if (auto const optManifestView = manifestReader.get(uriStr); optManifestView)
+    {
+      manifestBuilder.fileSize(optManifestView->fileSize());
+      manifestBuilder.mtime(optManifestView->mtime());
+    }
+    else if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
+    {
+      manifestBuilder.fileSize(std::filesystem::file_size(fullPath));
+      manifestBuilder.mtime(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                         std::filesystem::last_write_time(fullPath).time_since_epoch())
+                                                         .count()));
+    }
+
+    if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
+    {
+      manifestBuilder.fileSize(yaml::asInt<uint64_t>(fileSizeNode));
+    }
+
+    if (auto mtimeNode = yaml::findChild(trackNode, "mtime"); mtimeNode.readable())
+    {
+      manifestBuilder.mtime(yaml::asInt<uint64_t>(mtimeNode));
+    }
+
+    manifestWriter.put(uriStr, manifestBuilder.serialize());
+
+    if (validatedTrack.yamlId != 0)
+    {
+      yamlTrackIdToInternalId[validatedTrack.yamlId] = targetTrackId;
     }
   }
 
@@ -619,7 +668,7 @@ namespace ao::rt
               .discNumber(0)
               .totalDiscs(0);
             optBuilder->tags().clear();
-            optBuilder->custom().clear();
+            optBuilder->customMetadata().clear();
           }
         }
         else
@@ -635,9 +684,12 @@ namespace ao::rt
 
           if (payloadMode == ExportMode::Delta)
           {
-            if (optBuilder->metadata().coverArtId() == 0)
+            if (optBuilder->coverArt().entries().empty())
             {
-              optBuilder->metadata().coverArtData(fileBuilder.metadata().coverArtData());
+              for (auto const& pending : fileBuilder.coverArt().entries())
+              {
+                std::visit([&](auto source) { optBuilder->coverArt().add(pending.type, source); }, pending.source);
+              }
             }
           }
         }
@@ -708,11 +760,11 @@ namespace ao::rt
 
     if (auto customNode = yaml::findChild(trackNode, "custom"); customNode.readable())
     {
-      builder.custom().clear();
+      builder.customMetadata().clear();
 
       for (auto const& it : customNode.children())
       {
-        builder.custom().add(yaml::keyView(it), yaml::scalarView(it));
+        builder.customMetadata().add(yaml::keyView(it), yaml::scalarView(it));
       }
     }
   }

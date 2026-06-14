@@ -125,11 +125,11 @@ namespace ao::rt
           continue;
         }
 
-        builder.custom().remove(key);
+        builder.customMetadata().remove(key);
 
         if (optValue)
         {
-          builder.custom().add(key, *optValue);
+          builder.customMetadata().add(key, *optValue);
         }
 
         result.changedCold = true;

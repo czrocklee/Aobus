@@ -5,6 +5,7 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
@@ -35,7 +36,8 @@ namespace ao::library::test
   {
 #if defined(__GNUC__) && !defined(__clang__)
     static_assert(std::ranges::view<TrackView::TagProxy>);
-    static_assert(std::ranges::view<TrackView::CustomProxy>);
+    static_assert(std::ranges::view<TrackView::CustomMetadataProxy>);
+    static_assert(std::ranges::view<TrackView::CoverArtProxy>);
 #endif
 
     using namespace ao::lmdb::test;
@@ -53,8 +55,8 @@ namespace ao::library::test
       h.year = 2020;
       h.codec = AudioCodec::Unknown;
       h.bitDepth = BitDepth{16};
-      h.tagLen = 0;
-      h.titleLen = 0;
+      h.tagLength = 0;
+      h.titleLength = 0;
 
       return serializeHeader(h);
     }
@@ -71,10 +73,10 @@ namespace ao::library::test
       h.year = 2020;
       h.codec = AudioCodec::Unknown;
       h.bitDepth = BitDepth{16};
-      h.tagLen = 0; // no tags
+      h.tagLength = 0; // no tags
 
-      // In new layout: tags first (at sizeof(TrackHotHeader)), title after (at sizeof(TrackHotHeader) + tagLen)
-      h.titleLen = static_cast<std::uint16_t>(title.size());
+      // In new layout: tags first (at sizeof(TrackHotHeader)), title after (at sizeof(TrackHotHeader) + tagLength)
+      h.titleLength = static_cast<std::uint16_t>(title.size());
 
       auto data = serializeHeader(h);
 
@@ -90,7 +92,7 @@ namespace ao::library::test
     {
       auto builder = TrackBuilder::createNew();
       builder.property().uri(uri);
-      builder.metadata().coverArtId(header.coverArtId);
+      // Cover entries are serialized separately from the fixed header.
       builder.metadata().trackNumber(header.trackNumber);
       builder.metadata().totalTracks(header.totalTracks);
       builder.metadata().discNumber(header.discNumber);
@@ -101,7 +103,7 @@ namespace ao::library::test
 
       for (auto const& [key, value] : customPairs)
       {
-        builder.custom().add(key, value);
+        builder.customMetadata().add(key, value);
       }
 
       auto temp = TempDir{};
@@ -171,13 +173,23 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - Cold Cover Art", "[library][unit][track]")
   {
-    auto header = TrackColdHeader{};
-    header.coverArtId = 42;
+    auto builder = TrackBuilder::createNew();
+    builder.coverArt().add(PictureType::BackCover, ResourceId{42});
 
-    auto const data = createColdData(header, {}, "");
-    auto const view = makeColdView(data);
+    auto temp = TempDir{};
+    auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = lmdb::WriteTransaction{env};
+    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
+    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
+    auto const coldData = builder.serializeCold(wtxn, dict, resources);
 
-    CHECK(view.metadata().coverArtId() == 42);
+    auto const view = makeColdView(coldData);
+    REQUIRE(view.coverArt().count() == 1);
+    CHECK(view.coverArt().at(0).resourceId == ResourceId{42});
+    CHECK(view.coverArt().at(0).type == PictureType::BackCover);
+    REQUIRE(view.coverArt().primary());
+    CHECK(view.coverArt().primary()->resourceId == ResourceId{42});
+    CHECK(view.coverArt().primary()->type == PictureType::BackCover);
   }
 
   TEST_CASE("TrackView - Cold Uri", "[library][unit][track]")
@@ -185,7 +197,7 @@ namespace ao::library::test
     auto const data = createColdData({}, {}, "/path/to/file.flac");
     auto const view = makeColdView(data);
 
-    CHECK(view.metadata().coverArtId() == 0);
+    CHECK_FALSE(view.coverArt().primary().has_value());
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
@@ -273,10 +285,10 @@ namespace ao::library::test
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
     h.bitDepth = BitDepth{16};
-    h.tagLen = 8; // 2 tags * 4 bytes
+    h.tagLength = 8; // 2 tags * 4 bytes
 
     auto const title = std::string{"Test Title"};
-    h.titleLen = static_cast<std::uint16_t>(title.size());
+    h.titleLength = static_cast<std::uint16_t>(title.size());
 
     auto data = serializeHeader(h);
 
@@ -303,10 +315,10 @@ namespace ao::library::test
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
     h.bitDepth = BitDepth{16};
-    h.tagLen = 8; // 2 tags * 4 bytes
+    h.tagLength = 8; // 2 tags * 4 bytes
 
     auto const title = std::string{"Test Title"};
-    h.titleLen = static_cast<std::uint16_t>(title.size());
+    h.titleLength = static_cast<std::uint16_t>(title.size());
 
     auto data = serializeHeader(h);
 
@@ -337,7 +349,7 @@ namespace ao::library::test
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
     h.bitDepth = BitDepth{16};
-    h.tagLen = 8;
+    h.tagLength = 8;
 
     auto data = serializeHeader(h);
     auto const tag1 = std::uint32_t{10};
@@ -364,7 +376,7 @@ namespace ao::library::test
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
     h.bitDepth = BitDepth{16};
-    h.tagLen = 8;
+    h.tagLength = 8;
 
     auto data = serializeHeader(h);
     auto const tag1 = std::uint32_t{10};
@@ -386,7 +398,7 @@ namespace ao::library::test
 
     std::int32_t count = 0;
 
-    for ([[maybe_unused]] auto const& [k, v] : view.custom())
+    for ([[maybe_unused]] auto const& [k, v] : view.customMetadata())
     {
       ++count;
     }
@@ -402,7 +414,7 @@ namespace ao::library::test
 
     std::int32_t count = 0;
 
-    for (auto const& [k, v] : view.custom())
+    for (auto const& [k, v] : view.customMetadata())
     {
       CHECK(k == DictionaryId{1});
       CHECK(v == "value1");
@@ -432,7 +444,7 @@ namespace ao::library::test
 
     auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
 
-    for (auto const& [k, v] : view.custom())
+    for (auto const& [k, v] : view.customMetadata())
     {
       result.emplace_back(k, v);
     }
@@ -453,7 +465,7 @@ namespace ao::library::test
 
     std::int32_t count = 0;
 
-    for ([[maybe_unused]] auto const& [key, value] : view.custom())
+    for ([[maybe_unused]] auto const& [key, value] : view.customMetadata())
     {
       ++count;
     }
@@ -470,7 +482,7 @@ namespace ao::library::test
 
     std::int32_t count = 0;
 
-    for (auto const& [key, value] : view.custom())
+    for (auto const& [key, value] : view.customMetadata())
     {
       CHECK(key == DictionaryId{1});
       CHECK(value == "value1");
@@ -487,7 +499,7 @@ namespace ao::library::test
     auto const data = createColdData({}, pairs, "");
     auto const view = makeColdView(data);
 
-    for (auto const& [key, value] : view.custom())
+    for (auto const& [key, value] : view.customMetadata())
     {
       CHECK(key == DictionaryId{1});
       CHECK(value == "Hello, World! 你好");
@@ -508,7 +520,7 @@ namespace ao::library::test
 
     auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
 
-    for (auto const& [key, value] : view.custom())
+    for (auto const& [key, value] : view.customMetadata())
     {
       result.emplace_back(key, value);
     }
@@ -531,7 +543,7 @@ namespace ao::library::test
     auto const view = makeColdView(data);
 
     // DictionaryStore assigns: replaygain->1, isrc->2
-    auto const optValue = view.custom().get(DictionaryId{2});
+    auto const optValue = view.customMetadata().get(DictionaryId{2});
     CHECK(optValue.has_value() == true);
     CHECK(*optValue == "USSM19999999");
   }
@@ -544,7 +556,7 @@ namespace ao::library::test
     auto const view = makeColdView(data);
 
     // ID 99 was never assigned
-    auto const optValue = view.custom().get(DictionaryId{99});
+    auto const optValue = view.customMetadata().get(DictionaryId{99});
     CHECK(optValue.has_value() == false);
   }
 
@@ -556,7 +568,7 @@ namespace ao::library::test
     auto const view = makeColdView(data);
 
     // "ISRC" is stored at ID 1, looking up by ID 1 returns the value
-    auto const optValue = view.custom().get(DictionaryId{1});
+    auto const optValue = view.customMetadata().get(DictionaryId{1});
     CHECK(optValue.has_value() == true);
     CHECK(*optValue == "USSM19999999");
   }
@@ -575,15 +587,15 @@ namespace ao::library::test
     auto const view = makeColdView(data);
 
     // First entry (dictId=1)
-    CHECK(view.custom().get(DictionaryId{1}).value() == "value0");
+    CHECK(view.customMetadata().get(DictionaryId{1}).value() == "value0");
     // Middle entry (dictId=50)
-    CHECK(view.custom().get(DictionaryId{50}).value() == "value49");
+    CHECK(view.customMetadata().get(DictionaryId{50}).value() == "value49");
     // Last entry (dictId=100)
-    CHECK(view.custom().get(DictionaryId{100}).value() == "value99");
+    CHECK(view.customMetadata().get(DictionaryId{100}).value() == "value99");
     // Not found
-    CHECK(view.custom().get(DictionaryId{199}).has_value() == false);
+    CHECK(view.customMetadata().get(DictionaryId{199}).has_value() == false);
     // Before first (0 = null, should throw)
-    CHECK(view.custom().get(kInvalidDictionaryId).has_value() == false);
+    CHECK(view.customMetadata().get(kInvalidDictionaryId).has_value() == false);
   }
 
   TEST_CASE("TrackView - Custom Empty Key And Value", "[library][unit][track]")
@@ -595,7 +607,7 @@ namespace ao::library::test
 
     std::int32_t count = 0;
 
-    for (auto const& [k, v] : view.custom())
+    for (auto const& [k, v] : view.customMetadata())
     {
       CHECK(k == DictionaryId{1});
       CHECK(v.empty());
@@ -612,7 +624,7 @@ namespace ao::library::test
     auto const data = createColdData({}, pairs, "");
     auto const view = makeColdView(data);
 
-    for (auto const& [k, v] : view.custom())
+    for (auto const& [k, v] : view.customMetadata())
     {
       CHECK(k == DictionaryId{1});
       CHECK(v == "Hello, World! 你好");

@@ -42,17 +42,17 @@ namespace ao::library
 
   std::string_view ListView::name() const
   {
-    return getString(header()->nameOffset, header()->nameLen);
+    return getString(header()->nameOffset, header()->nameLength);
   }
 
   std::string_view ListView::description() const
   {
-    return getString(header()->descOffset, header()->descLen);
+    return getString(header()->descOffset, header()->descLength);
   }
 
   std::string_view ListView::filter() const
   {
-    return getString(header()->filterOffset, header()->filterLen);
+    return getString(header()->filterOffset, header()->filterLength);
   }
 
   ListId ListView::parentId() const noexcept

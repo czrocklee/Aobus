@@ -260,9 +260,8 @@ namespace ao::cli
       {
         os << "resources:\n";
 
-        for (auto const& [key, val] : reader)
+        for (auto const& [resId, val] : reader)
         {
-          auto const resId = *utility::layout::view<std::uint32_t>(key);
           os << "  - id: " << resId << "\n"
              << "    size: " << val.size() << "\n";
         }
@@ -271,9 +270,8 @@ namespace ao::cli
       {
         os << "--- Resources ---\n";
 
-        for (auto const& [key, val] : reader)
+        for (auto const& [resId, val] : reader)
         {
-          auto const resId = *utility::layout::view<std::uint32_t>(key);
           os << "Resource ID: " << resId << " (Size: " << val.size() << ")\n";
           hexDump(val, os);
         }
@@ -284,9 +282,9 @@ namespace ao::cli
         std::size_t count = 0;
         std::size_t totalBytes = 0;
 
-        for (auto const& [key, val] : reader)
+        for (auto const& entry : reader)
         {
-          totalBytes += val.size();
+          totalBytes += entry.second.size();
           count++;
         }
 
@@ -294,9 +292,8 @@ namespace ao::cli
 
         constexpr std::size_t kPreviewByteLimit = 64;
 
-        for (auto const& [key, val] : reader)
+        for (auto const& [resId, val] : reader)
         {
-          auto const resId = *utility::layout::view<std::uint32_t>(key);
           os << "  Resource ID: " << resId << " (Size: " << val.size() << ")\n";
           os << "  Preview:\n";
           hexDump(val.subspan(0, std::min<std::size_t>(kPreviewByteLimit, val.size())), os);

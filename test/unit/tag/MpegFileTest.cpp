@@ -7,13 +7,16 @@
 #include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -47,6 +50,26 @@ namespace ao::tag::mpeg::test
       data.insert(data.end(), value.begin(), value.end());
     }
 
+    void addPictureFrame(std::vector<std::uint8_t>& data,
+                         std::uint8_t pictureType,
+                         std::array<std::uint8_t, 2> imageData)
+    {
+      auto body = std::vector<std::uint8_t>{};
+      body.push_back(0); // Latin1
+      body.insert(body.end(), {'i', 'm', 'g', '/', 'j', 'p', 'e', 'g', 0});
+      body.push_back(pictureType);
+      body.push_back(0); // Empty description
+      body.insert(body.end(), imageData.begin(), imageData.end());
+
+      auto header = id3v2::V23CommonFrameLayout{};
+      std::memcpy(header.id.data(), "APIC", 4);
+      header.size = static_cast<std::uint32_t>(body.size());
+      data.insert(data.end(),
+                  reinterpret_cast<std::uint8_t const*>(&header),
+                  reinterpret_cast<std::uint8_t const*>(&header) + sizeof(header));
+      data.insert(data.end(), body.begin(), body.end());
+    }
+
     std::vector<std::uint8_t> createMp3WithTags()
     {
       auto body = std::vector<std::uint8_t>{};
@@ -60,30 +83,8 @@ namespace ao::tag::mpeg::test
       addTxxxFrame(body, "work", "WorkName");
       addTxxxFrame(body, "CustomKey", "CustomValue");
 
-      // APIC frame (Cover Art)
-      auto apicBody = std::vector<std::uint8_t>{};
-      apicBody.push_back(0); // Latin1
-      apicBody.push_back('i');
-      apicBody.push_back('m');
-      apicBody.push_back('g');
-      apicBody.push_back('/');
-      apicBody.push_back('j');
-      apicBody.push_back('p');
-      apicBody.push_back('e');
-      apicBody.push_back('g');
-      apicBody.push_back(0); // Null terminator for mime type
-      apicBody.push_back(3); // Front cover
-      apicBody.push_back(0); // Null terminator for description
-      apicBody.push_back(0xAA);
-      apicBody.push_back(0xBB); // Fake image data
-
-      auto apicHdr = id3v2::V23CommonFrameLayout{};
-      std::memcpy(apicHdr.id.data(), "APIC", 4);
-      apicHdr.size = static_cast<std::uint32_t>(apicBody.size());
-      body.insert(body.end(),
-                  reinterpret_cast<std::uint8_t const*>(&apicHdr),
-                  reinterpret_cast<std::uint8_t const*>(&apicHdr) + 10);
-      body.insert(body.end(), apicBody.begin(), apicBody.end());
+      addPictureFrame(body, 3, {0xAA, 0xBB}); // Front cover
+      addPictureFrame(body, 4, {0xCC, 0xDD}); // Back cover
 
       // Padding
       body.insert(body.end(), 10, 0);
@@ -148,11 +149,18 @@ namespace ao::tag::mpeg::test
     CHECK(meta.genre() == "Genre");
     CHECK(meta.work() == "WorkName");
 
-    CHECK(builder.custom().pairs().empty());
+    CHECK(builder.customMetadata().pairs().empty());
 
-    REQUIRE_FALSE(meta.coverArtData().empty());
-    CHECK(meta.coverArtData().size() == 2);
-    CHECK(static_cast<std::uint8_t>(meta.coverArtData()[0]) == 0xAA);
+    auto const& covers = builder.coverArt().entries();
+    REQUIRE(covers.size() == 2);
+    CHECK(covers[0].type == library::PictureType::FrontCover);
+    auto const firstData = std::get<std::span<std::byte const>>(covers[0].source);
+    REQUIRE_FALSE(firstData.empty());
+    CHECK(firstData.size() == 2);
+    CHECK(static_cast<std::uint8_t>(firstData[0]) == 0xAA);
+    CHECK(covers[1].type == library::PictureType::BackCover);
+    auto const secondData = std::get<std::span<std::byte const>>(covers[1].source);
+    CHECK(static_cast<std::uint8_t>(secondData[0]) == 0xCC);
 
     auto const prop = builder.property();
     CHECK(prop.codec() == library::AudioCodec::Mp3);

@@ -2,7 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/lmdb/Database.h>
@@ -13,6 +15,7 @@
 #include <lmdb.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstring>
@@ -52,7 +55,34 @@ namespace ao::library::test
     CHECK(builder.property().bitDepth() == 0);
     CHECK(builder.property().duration() == std::chrono::milliseconds{0});
     CHECK(builder.tags().names().empty());
-    CHECK(builder.custom().pairs().empty());
+    CHECK(builder.coverArt().entries().empty());
+    CHECK(builder.customMetadata().pairs().empty());
+  }
+
+  TEST_CASE("TrackBuilder - CoverArtBuilder edits ordered entries", "[library][unit][track][cover]")
+  {
+    auto builder = TrackBuilder::createNew();
+    auto const data = std::array{std::byte{0x12}, std::byte{0x34}};
+
+    builder.coverArt().add(PictureType::BackCover, ResourceId{41}).add(PictureType::FrontCover, data);
+
+    REQUIRE(builder.coverArt().entries().size() == 2);
+    CHECK(builder.coverArt().entries()[0].type == PictureType::BackCover);
+    CHECK(std::get<ResourceId>(builder.coverArt().entries()[0].source) == ResourceId{41});
+    CHECK(std::ranges::equal(std::get<std::span<std::byte const>>(builder.coverArt().entries()[1].source), data));
+
+    builder.coverArt().erase(0);
+
+    REQUIRE(builder.coverArt().entries().size() == 1);
+    CHECK(builder.coverArt().entries()[0].type == PictureType::FrontCover);
+
+    builder.coverArt().clear();
+    CHECK(builder.coverArt().entries().empty());
+
+    builder.coverArt()
+      .add(PictureType::Other, kInvalidResourceId)
+      .add(PictureType::Other, std::span<std::byte const>{});
+    CHECK(builder.coverArt().entries().empty());
   }
 
   TEST_CASE("TrackBuilder - MetadataBuilder fluent setters", "[library][unit][track]")
@@ -69,8 +99,8 @@ namespace ao::library::test
       .trackNumber(5)
       .totalTracks(10)
       .discNumber(2)
-      .totalDiscs(3)
-      .coverArtId(42);
+      .totalDiscs(3);
+    builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
 
     CHECK(builder.metadata().title() == "Test Title");
     CHECK(builder.metadata().artist() == "Test Artist");
@@ -83,7 +113,12 @@ namespace ao::library::test
     CHECK(builder.metadata().totalTracks() == 10);
     CHECK(builder.metadata().discNumber() == 2);
     CHECK(builder.metadata().totalDiscs() == 3);
-    CHECK(builder.metadata().coverArtId() == 42);
+    REQUIRE(builder.coverArt().entries().size() == 1);
+    CHECK(std::get<ResourceId>(builder.coverArt().entries()[0].source) == ResourceId{42});
+    CHECK(builder.coverArt().entries()[0].type == PictureType::FrontCover);
+
+    builder.coverArt().clear();
+    CHECK(builder.coverArt().entries().empty());
   }
 
   TEST_CASE("TrackBuilder - PropertyBuilder fluent setters", "[library][unit][track]")
@@ -131,25 +166,25 @@ namespace ao::library::test
     CHECK(builder.tags().names().empty());
   }
 
-  TEST_CASE("TrackBuilder - CustomBuilder add/remove/clear", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - CustomMetadataBuilder add/remove/clear", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
     // Add custom pairs
-    builder.custom().add("replaygain_track_gain_db", "-6.5");
-    builder.custom().add("isrc", "USSM19999999");
+    builder.customMetadata().add("replaygain_track_gain_db", "-6.5");
+    builder.customMetadata().add("isrc", "USSM19999999");
 
-    CHECK(builder.custom().pairs().size() == 2);
+    CHECK(builder.customMetadata().pairs().size() == 2);
 
     // Remove a pair
-    builder.custom().remove("isrc");
-    CHECK(builder.custom().pairs().size() == 1);
-    CHECK(builder.custom().pairs()[0].first == "replaygain_track_gain_db");
-    CHECK(builder.custom().pairs()[0].second == "-6.5");
+    builder.customMetadata().remove("isrc");
+    CHECK(builder.customMetadata().pairs().size() == 1);
+    CHECK(builder.customMetadata().pairs()[0].first == "replaygain_track_gain_db");
+    CHECK(builder.customMetadata().pairs()[0].second == "-6.5");
 
     // Clear
-    builder.custom().clear();
-    CHECK(builder.custom().pairs().empty());
+    builder.customMetadata().clear();
+    CHECK(builder.customMetadata().pairs().empty());
   }
 
   TEST_CASE("TrackBuilder - Chained API", "[library][unit][track]")
@@ -159,14 +194,14 @@ namespace ao::library::test
     builder.metadata().title("Song").artist("Artist").album("Album");
     builder.property().bitDepth(BitDepth{16});
     builder.tags().add("rock").add("jazz");
-    builder.custom().add("key", "value");
+    builder.customMetadata().add("key", "value");
 
     CHECK(builder.metadata().title() == "Song");
     CHECK(builder.metadata().artist() == "Artist");
     CHECK(builder.metadata().album() == "Album");
     CHECK(builder.property().bitDepth() == 16);
     CHECK(builder.tags().names().size() == 2);
-    CHECK(builder.custom().pairs().size() == 1);
+    CHECK(builder.customMetadata().pairs().size() == 1);
   }
 
   TEST_CASE("TrackBuilder - Serialize Empty Builder", "[library][unit][track]")
@@ -192,7 +227,7 @@ namespace ao::library::test
     // Parse the serialized data back
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
 
-    CHECK(header->titleLen == 11); // "Hello World"
+    CHECK(header->titleLength == 11); // "Hello World"
     CHECK(header->year == 2021);
 
     // Verify strings are in the payload
@@ -228,7 +263,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->titleLen == std::strlen(title));
+    CHECK(header->titleLength == std::strlen(title));
   }
 
   TEST_CASE("TrackBuilder - Serialize Preserves Data", "[library][unit][track]")
@@ -254,7 +289,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLen == 0);
+    CHECK(header->tagLength == 0);
     CHECK(header->tagBloom == 0);
   }
 
@@ -273,8 +308,8 @@ namespace ao::library::test
     auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLen == 12);  // 3 tags * 4 bytes each
-    CHECK(header->tagBloom != 0); // Bloom should be computed from tag IDs
+    CHECK(header->tagLength == 12); // 3 tags * 4 bytes each
+    CHECK(header->tagBloom != 0);   // Bloom should be computed from tag IDs
   }
 
   TEST_CASE("TrackBuilder - Tag Serialization - Single Tag", "[library][unit][track]")
@@ -292,7 +327,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLen == 4); // 1 tag * 4 bytes
+    CHECK(header->tagLength == 4); // 1 tag * 4 bytes
   }
 
   TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags", "[library][unit][track]")
@@ -310,7 +345,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLen == 20); // 5 tags * 4 bytes each
+    CHECK(header->tagLength == 20); // 5 tags * 4 bytes each
     CHECK(header->tagBloom != 0);
   }
 
@@ -350,7 +385,7 @@ namespace ao::library::test
 
     // Verify hot header
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLen == 8); // 2 tags * 4 bytes
+    CHECK(header->tagLength == 8); // 2 tags * 4 bytes
 
     // Verify bloom is computed
     CHECK(header->tagBloom != 0);
@@ -361,7 +396,7 @@ namespace ao::library::test
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(3);
     builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{4});
-    builder.custom().add("key1", "value1").add("key2", "value2");
+    builder.customMetadata().add("key1", "value1").add("key2", "value2");
 
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -374,6 +409,40 @@ namespace ao::library::test
     auto view = TrackView{std::span<std::byte const>{}, coldData};
     CHECK(view.property().duration() == std::chrono::minutes{4});
     CHECK(view.metadata().trackNumber() == 3);
+  }
+
+  TEST_CASE("TrackBuilder - aligns cover table after custom values", "[library][unit][track][cover]")
+  {
+    auto builder = TrackBuilder::createNew();
+    builder.property().uri("song.flac");
+    builder.customMetadata().add("odd", "abc");
+    builder.coverArt().add(PictureType::BackCover, ResourceId{41});
+    builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
+
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = WriteTransaction{env};
+    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
+    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
+    auto const coldData = builder.serializeCold(wtxn, dict, resources);
+
+    auto const view = TrackView{std::span<std::byte const>{}, coldData};
+    REQUIRE(view.coverArt().count() == 2);
+    CHECK(view.coverArt().at(0).type == PictureType::BackCover);
+    CHECK(view.coverArt().at(1).type == PictureType::FrontCover);
+    REQUIRE(view.coverArt().primary());
+    CHECK(view.coverArt().primary()->resourceId == ResourceId{42});
+
+    auto iterated = std::vector<CoverArt>{};
+
+    for (auto const cover : view.coverArt())
+    {
+      iterated.push_back(cover);
+    }
+
+    REQUIRE(iterated.size() == 2);
+    CHECK(iterated[0].resourceId == ResourceId{41});
+    CHECK(iterated[1].resourceId == ResourceId{42});
   }
 
   TEST_CASE("TrackBuilder - fromTrackView", "[library][unit][track]")
@@ -417,10 +486,10 @@ namespace ao::library::test
       .totalTracks(10)
       .discNumber(2)
       .totalDiscs(3)
-      .coverArtId(42)
       .album("Album")
       .genre("Genre")
       .albumArtist("Album Artist");
+    builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
     builder.tags().add("tag1").add("tag2");
 
     auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
@@ -430,7 +499,8 @@ namespace ao::library::test
     CHECK(view.metadata().totalTracks() == 10);
     CHECK(view.metadata().discNumber() == 2);
     CHECK(view.metadata().totalDiscs() == 3);
-    CHECK(view.metadata().coverArtId() == 42);
+    REQUIRE(view.coverArt().primary());
+    CHECK(view.coverArt().primary()->resourceId == ResourceId{42});
     CHECK(view.metadata().albumId() == dict.getId("Album"));
     CHECK(view.metadata().genreId() == dict.getId("Genre"));
     CHECK(view.metadata().albumArtistId() == dict.getId("Album Artist"));

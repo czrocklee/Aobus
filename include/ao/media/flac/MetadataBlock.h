@@ -144,6 +144,7 @@ namespace ao::media::flac
   public:
     using MetadataBlockView::MetadataBlockView;
 
+    std::uint32_t pictureType() const;
     std::span<std::byte const> blob() const;
   };
 

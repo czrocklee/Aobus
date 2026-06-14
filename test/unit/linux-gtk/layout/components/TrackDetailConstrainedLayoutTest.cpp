@@ -127,7 +127,7 @@ namespace ao::gtk::layout::test
       auto writer = runtime.musicLibrary().tracks().writer(txn);
 
       auto builder = library::TrackBuilder::createNew();
-      builder.metadata().title(std::string{title});
+      builder.metadata().title(title);
       builder.metadata().trackNumber(trackNumber);
       builder.metadata().totalTracks(12);
       auto const [hot, cold] =
@@ -281,7 +281,7 @@ namespace ao::gtk::layout::test
         return false;
       }
 
-      for (auto const& [dictId, /*value*/ _] : optView->custom())
+      for (auto const& [dictId, /*value*/ _] : optView->customMetadata())
       {
         if (runtime.musicLibrary().dictionary().get(dictId) == key)
         {
@@ -845,7 +845,7 @@ namespace ao::gtk::layout::test
 
         auto builder1 = library::TrackBuilder::createNew();
         builder1.metadata().title("Track With Partial Custom");
-        builder1.custom().add("partial", "value");
+        builder1.customMetadata().add("partial", "value");
         auto const [hot1, cold1] =
           builder1.serialize(txn, runtime.musicLibrary().dictionary(), runtime.musicLibrary().resources());
         trackId1 = writer.createHotCold(hot1, cold1).first;

@@ -157,7 +157,7 @@ namespace ao::query
           if (instr != nullptr && instr->constValue > 0)
           {
             auto dictId = DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
-            return track.custom().get(dictId).value_or("");
+            return track.customMetadata().get(dictId).value_or("");
           }
 
           return {};
@@ -186,7 +186,8 @@ namespace ao::query
         case Field::AlbumArtistId: return static_cast<std::int64_t>(track.metadata().albumArtistId().raw());
         case Field::ComposerId: return static_cast<std::int64_t>(track.metadata().composerId().raw());
         case Field::WorkId: return static_cast<std::int64_t>(track.metadata().workId().raw());
-        case Field::CoverArtId: return static_cast<std::int64_t>(track.metadata().coverArtId());
+        case Field::CoverArtId:
+          return static_cast<std::int64_t>(track.coverArt().primary().value_or(library::CoverArt{}).resourceId.raw());
 
         // Metadata numeric fields
         case Field::Year: return static_cast<std::int64_t>(track.metadata().year());

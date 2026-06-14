@@ -19,11 +19,11 @@ namespace ao::library::test
   {
     CHECK(offsetof(ListHeader, trackIdsCount) == 0);
     CHECK(offsetof(ListHeader, nameOffset) == 4);
-    CHECK(offsetof(ListHeader, nameLen) == 6);
+    CHECK(offsetof(ListHeader, nameLength) == 6);
     CHECK(offsetof(ListHeader, descOffset) == 8);
-    CHECK(offsetof(ListHeader, descLen) == 10);
+    CHECK(offsetof(ListHeader, descLength) == 10);
     CHECK(offsetof(ListHeader, filterOffset) == 12);
-    CHECK(offsetof(ListHeader, filterLen) == 14);
+    CHECK(offsetof(ListHeader, filterLength) == 14);
     CHECK(offsetof(ListHeader, parentId) == 16);
   }
 } // namespace ao::library::test

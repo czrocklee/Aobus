@@ -17,7 +17,6 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
-#include <optional>
 
 namespace ao::gtk
 {
@@ -40,7 +39,7 @@ namespace ao::gtk
 
     std::chrono::milliseconds duration() const { return _duration; }
 
-    std::uint64_t resourceId() const { return _optResourceId.value_or(0); }
+    ResourceId resourceId() const { return _resourceId; }
 
     std::uint32_t sampleRate() const { return _sampleRate; }
     std::uint8_t channels() const { return _channels; }
@@ -86,7 +85,7 @@ namespace ao::gtk
                   std::uint16_t totalDiscs,
                   std::uint16_t trackNumber,
                   std::uint16_t totalTracks,
-                  std::optional<std::uint64_t> optResourceId,
+                  ResourceId resourceId,
                   std::uint32_t sampleRate,
                   std::uint8_t channels,
                   std::uint8_t bitDepth,
@@ -113,7 +112,7 @@ namespace ao::gtk
     std::uint16_t _totalDiscs = 0;
     std::uint16_t _trackNumber = 0;
     std::uint16_t _totalTracks = 0;
-    std::optional<std::uint64_t> _optResourceId;
+    ResourceId _resourceId{kInvalidResourceId};
 
     std::uint32_t _sampleRate = 0;
     std::uint8_t _channels = 0;

@@ -8,6 +8,9 @@
 #include <ao/lmdb/Transaction.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <optional>
 #include <span>
 #include <utility>
 
@@ -16,7 +19,7 @@ namespace ao::library
   class ResourceStore
   {
   public:
-    using Reader = lmdb::Database::Reader;
+    class Reader;
     class Writer;
 
     explicit ResourceStore(lmdb::Database db)
@@ -24,12 +27,87 @@ namespace ao::library
     {
     }
 
-    Reader reader(lmdb::ReadTransaction const& txn) const { return _database.reader(txn); };
+    Reader reader(lmdb::ReadTransaction const& txn) const;
     Writer writer(lmdb::WriteTransaction& txn);
 
   private:
     lmdb::Database _database;
   };
+
+  class ResourceStore::Reader final
+  {
+  public:
+    using Value = std::pair<ResourceId, std::span<std::byte const>>;
+    using EndSentinel = lmdb::Database::Reader::EndSentinel;
+    class Iterator;
+
+    Iterator begin() const;
+    EndSentinel end() const { return {}; }
+
+    std::optional<std::span<std::byte const>> get(ResourceId id) const { return _reader.get(id.raw()); }
+    ResourceId maxKey() const { return ResourceId{_reader.maxKey()}; }
+
+  private:
+    explicit Reader(lmdb::Database::Reader reader)
+      : _reader{std::move(reader)}
+    {
+    }
+
+    lmdb::Database::Reader _reader;
+    friend class ResourceStore;
+  };
+
+  class ResourceStore::Reader::Iterator final
+  {
+  public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = Reader::Value;
+    using difference_type = std::ptrdiff_t;
+    using pointer = value_type const*;
+    using reference = value_type const&;
+
+    explicit Iterator(lmdb::Database::Reader::Iterator iterator)
+      : _iterator{std::move(iterator)}
+    {
+    }
+
+    reference operator*() const
+    {
+      refresh();
+      return _value;
+    }
+
+    pointer operator->() const
+    {
+      refresh();
+      return &_value;
+    }
+
+    Iterator& operator++()
+    {
+      ++_iterator;
+      return *this;
+    }
+
+    void operator++(std::int32_t) { ++*this; }
+    bool operator==(EndSentinel sentinel) const { return _iterator == sentinel; }
+
+  private:
+    void refresh() const { _value = {ResourceId{static_cast<std::uint32_t>(_iterator->first)}, _iterator->second}; }
+
+    lmdb::Database::Reader::Iterator _iterator;
+    mutable value_type _value{};
+  };
+
+  inline ResourceStore::Reader::Iterator ResourceStore::Reader::begin() const
+  {
+    return Iterator{_reader.begin()};
+  }
+
+  inline ResourceStore::Reader ResourceStore::reader(lmdb::ReadTransaction const& txn) const
+  {
+    return Reader{_database.reader(txn)};
+  }
 
   class ResourceStore::Writer
   {
@@ -39,12 +117,11 @@ namespace ao::library
     void clear() { _writer.clear(); }
 
   private:
-    explicit Writer(lmdb::Database::Reader&& reader, lmdb::Database::Writer&& writer)
-      : _reader{std::move(reader)}, _writer{std::move(writer)}
+    explicit Writer(lmdb::Database::Writer writer)
+      : _writer{std::move(writer)}
     {
     }
 
-    lmdb::Database::Reader _reader;
     lmdb::Database::Writer _writer;
     friend class ResourceStore;
   };

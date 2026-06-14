@@ -84,8 +84,8 @@ namespace ao::library
   {
     auto const pair = *_it;
     auto const keyView = utility::bytes::stringView(pair.first);
-    auto const actualLen = keyView.find('\0');
-    auto const uri = actualLen == std::string_view::npos ? keyView : keyView.substr(0, actualLen);
+    auto const actualLength = keyView.find('\0');
+    auto const uri = actualLength == std::string_view::npos ? keyView : keyView.substr(0, actualLength);
 
     return {uri, FileManifestView{pair.second}};
   }

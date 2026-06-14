@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/CoverArt.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/library/TrackLayout.h>
+#include <ao/library/TrackView.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/tag/TagFile.h>
@@ -167,9 +168,13 @@ namespace ao::tag::test
     CHECK(!hotData.empty());
     CHECK(!coldData.empty());
 
-    // Check cover art ID directly from serialized cold header
-    auto const* const coldHdr = reinterpret_cast<library::TrackColdHeader const*>(coldData.data());
-    CHECK(coldHdr->coverArtId > 0);
+    // Check cover art is present via TrackView
+    auto const view = library::TrackView{hotData, coldData};
+    CHECK(view.coverArt().count() > 0);
+    auto const expectedType =
+      std::string_view{format} == "m4a" ? library::PictureType::FrontCover : library::PictureType::Other;
+    CHECK(view.coverArt().at(0).type == expectedType);
+    CHECK(view.coverArt().primary().has_value());
 
     // Cleanup - transaction will abort if not committed
     fs::remove_all(tempDir);

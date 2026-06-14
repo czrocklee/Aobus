@@ -6,6 +6,7 @@
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
 #include <ao/audio/Types.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
@@ -121,7 +122,10 @@ namespace ao::gtk
                      metadata.totalDiscs(),
                      metadata.trackNumber(),
                      metadata.totalTracks(),
-                     metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt,
+                     view.coverArt()
+                       .primary()
+                       .transform([](library::CoverArt cover) { return cover.resourceId; })
+                       .value_or(kInvalidResourceId),
                      view.property().sampleRate().raw(),
                      view.property().channels().raw(),
                      view.property().bitDepth().raw(),
@@ -175,26 +179,25 @@ namespace ao::gtk
     return rowPtr;
   }
 
-  std::optional<std::uint32_t> TrackRowCache::coverArtId(TrackId id) const
+  ResourceId TrackRowCache::coverArtId(TrackId id) const
   {
-    // Need cold data for coverArtId
     auto const txn = _ml.readTransaction();
     auto const reader = _store.reader(txn);
     auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
-      return std::nullopt;
+      return kInvalidResourceId;
     }
 
-    auto const coverArtId = optView->metadata().coverArtId();
+    auto const optPrimary = optView->coverArt().primary();
 
-    if (coverArtId == 0)
+    if (!optPrimary)
     {
-      return std::nullopt;
+      return kInvalidResourceId;
     }
 
-    return coverArtId;
+    return optPrimary->resourceId;
   }
 
   std::optional<std::filesystem::path> TrackRowCache::uriPath(TrackId id) const
@@ -258,9 +261,9 @@ namespace ao::gtk
     }
 
     // Cover art
-    if (auto const coverArtId = metadata.coverArtId(); coverArtId != 0)
+    if (auto const optPrimary = view.coverArt().primary(); optPrimary)
     {
-      desc.optCoverArtId = ResourceId{coverArtId};
+      desc.coverArtId = optPrimary->resourceId;
     }
 
     return desc;

@@ -5,6 +5,7 @@
 #include "ScriptedDecoderSession.h"
 #include "TestUtility.h"
 #include <ao/Error.h>
+#include <ao/Type.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Engine.h>
@@ -327,7 +328,7 @@ namespace ao::audio::test
     {
       auto engine = Engine{std::make_unique<CapturingBackend>(), device};
       auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.txt", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+        .filePath = "song.txt", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
 
       engine.play(desc);
 
@@ -348,7 +349,7 @@ namespace ao::audio::test
 
       auto engine = Engine{std::make_unique<CapturingBackend>(), device, factory};
       auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+        .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
 
       engine.play(desc);
 
@@ -376,7 +377,7 @@ namespace ao::audio::test
 
       auto engine = Engine{std::move(backendPtr), device, factory};
       auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+        .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
 
       engine.play(desc);
 
@@ -410,7 +411,7 @@ namespace ao::audio::test
 
     auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{
-      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
 
     engine.play(desc);
     REQUIRE(engine.status().transport == Transport::Playing);
@@ -454,7 +455,7 @@ namespace ao::audio::test
 
     auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{
-      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
 
     SECTION("Seek before play is no-op")
     {
@@ -494,7 +495,7 @@ namespace ao::audio::test
 
     auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{
-      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
 
     bool trackEnded = false;
     engine.setOnTrackEnded([&] { trackEnded = true; });
@@ -715,7 +716,7 @@ namespace ao::audio::test
     SECTION("Backend error transitions to Error state")
     {
       auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .optCoverArtId = std::nullopt};
+        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .coverArtId = kInvalidResourceId};
 
       engine.play(desc);
 
@@ -732,7 +733,7 @@ namespace ao::audio::test
     SECTION("Route ready updates snapshot")
     {
       auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .optCoverArtId = std::nullopt};
+        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .coverArtId = kInvalidResourceId};
 
       engine.play(desc);
 
@@ -749,7 +750,7 @@ namespace ao::audio::test
     SECTION("Playback status callbacks update engine internals")
     {
       auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .optCoverArtId = std::nullopt};
+        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .coverArtId = kInvalidResourceId};
 
       engine.play(desc);
       auto* const target = backendRaw->target();
@@ -825,7 +826,7 @@ namespace ao::audio::test
 
     auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = TrackPlaybackDescriptor{
-      .filePath = "fail.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+      .filePath = "fail.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
 
     auto errorPromise = std::promise<void>{};
     auto errorFuture = errorPromise.get_future();

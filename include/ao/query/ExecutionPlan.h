@@ -91,8 +91,8 @@ namespace ao::query
 
     // For string constants, we store the length and a pointer to the data
     // The actual string data will be stored separately in the plan
-    std::uint32_t strLen = 0;
-    char const* strData = nullptr;
+    std::uint32_t size = 0;
+    char const* data = nullptr;
   };
 
   /**

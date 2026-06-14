@@ -3,11 +3,12 @@
 
 #include "image/ImageCache.h"
 
+#include <ao/Type.h>
+
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
 
 #include <cstddef>
-#include <cstdint>
 
 namespace ao::gtk
 {
@@ -18,7 +19,7 @@ namespace ao::gtk
 
   ImageCache::~ImageCache() = default;
 
-  Glib::RefPtr<Gdk::Pixbuf> ImageCache::get(std::uint64_t resourceId)
+  Glib::RefPtr<Gdk::Pixbuf> ImageCache::get(ResourceId resourceId)
   {
     auto const it = _cacheMap.find(resourceId);
 
@@ -32,7 +33,7 @@ namespace ao::gtk
     return it->second->pixbufPtr;
   }
 
-  void ImageCache::put(std::uint64_t resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+  void ImageCache::put(ResourceId resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
   {
     if (!pixbufPtr)
     {

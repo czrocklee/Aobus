@@ -420,7 +420,7 @@ namespace ao::gtk
         }
       }
 
-      for (auto const& [dictId, _] : view.custom())
+      for (auto const& [dictId, _] : view.customMetadata())
       {
         if (auto const key = dictionary.get(dictId); isQueryableIdentifier(key))
         {

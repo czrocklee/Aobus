@@ -27,10 +27,10 @@ namespace ao::library
    * Layout:
    *   ┌─────────────────────────────────────┐  ← header begin
    *   │        ListHeader (20B)             │
-   *   │  trackIdsCount (4B)                 │
-   *   │  nameOffset, nameLen (4B)           │
-   *   │  descOffset, descLen (4B)           │
-   *   │  filterOffset, filterLen (4B)       │
+   *   │  trackIdsCount (4B)                │
+   *   │  nameOffset, nameLength (4B)        │
+   *   │  descOffset, descLength (4B)        │
+   *   │  filterOffset, filterLength (4B)    │
    *   │  parentId (4B)                      │
    *   ├─────────────────────────────────────┤  ← trackIds begin = sizeof(ListHeader)
    *   │  track ID 1 (4B)                    │
@@ -51,11 +51,11 @@ namespace ao::library
 
     // 2-byte section
     std::uint16_t nameOffset = 0;   // Byte offset from the track-id region start to the name string
-    std::uint16_t nameLen = 0;      // Length of name string
+    std::uint16_t nameLength = 0;   // Length of name string
     std::uint16_t descOffset = 0;   // Byte offset from the track-id region start to the description string
-    std::uint16_t descLen = 0;      // Length of description string
+    std::uint16_t descLength = 0;   // Length of description string
     std::uint16_t filterOffset = 0; // Byte offset from the track-id region start to the filter expression
-    std::uint16_t filterLen = 0;    // Length of filter expression string
+    std::uint16_t filterLength = 0; // Length of filter expression string
     std::uint32_t parentId = 0;     // Parent list id, 0 = All Tracks
   };
 

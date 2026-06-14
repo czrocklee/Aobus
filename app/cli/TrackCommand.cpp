@@ -222,7 +222,7 @@ namespace ao::cli
              << "  Sample Rate: " << view.property().sampleRate() << "Hz\n"
              << "  URI: " << view.property().uri() << "\n";
 
-          for (auto const& [customId, val] : view.custom())
+          for (auto const& [customId, val] : view.customMetadata())
           {
             os << "  Custom [" << resolveDict(dict, customId) << "]: " << val << "\n";
           }

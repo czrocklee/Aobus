@@ -21,17 +21,37 @@ namespace ao::media::flac
     return comments;
   }
 
+  namespace
+  {
+    char const* picturePayloadStart(void const* blockData)
+    {
+      return static_cast<char const*>(blockData) + sizeof(MetadataBlockLayout);
+    }
+  }
+
+  std::uint32_t PictureBlockView::pictureType() const
+  {
+    char const* ptr = picturePayloadStart(data());
+    char const* const end = ptr + size() - sizeof(MetadataBlockLayout);
+    return detail::parseLength<std::uint32_t>(ptr, end);
+  }
+
   std::span<std::byte const> PictureBlockView::blob() const
   {
     // Number of 32-bit fields for picture metadata (width, height, depth, colors)
     constexpr std::size_t kPictureMetaFieldCount = 4;
 
-    char const* ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
+    char const* ptr = picturePayloadStart(data());
     char const* end = ptr + size() - sizeof(MetadataBlockLayout);
-    ptr += 4;                                              // picture type
-    detail::parseString<std::uint32_t>(ptr, end);          // MIME type
-    detail::parseString<std::uint32_t>(ptr, end);          // description
-    ptr += kPictureMetaFieldCount * sizeof(std::uint32_t); // width/height/color depth/color count
+    detail::parseLength<std::uint32_t>(ptr, end); // picture type
+    detail::parseString<std::uint32_t>(ptr, end); // MIME type
+    detail::parseString<std::uint32_t>(ptr, end); // description
+
+    for (std::size_t i = 0; i < kPictureMetaFieldCount; ++i)
+    {
+      detail::parseLength<std::uint32_t>(ptr, end); // width/height/color depth/color count
+    }
+
     std::string_view const blob = detail::parseString<std::uint32_t>(ptr, end);
     return utility::bytes::view(blob);
   }

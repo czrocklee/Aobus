@@ -30,9 +30,11 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <variant>
 
 namespace ao::rt
 {
@@ -189,7 +191,7 @@ namespace ao::rt
         }
       }
 
-      if (auto const custom = view.custom(); !custom.empty())
+      if (auto const custom = view.customMetadata(); !custom.empty())
       {
         auto customNode = node.append_child();
         yaml::setKey(customNode, "custom");
@@ -273,53 +275,83 @@ namespace ao::rt
 
     void emitTrackCover(ryml::NodeRef& node,
                         lmdb::ReadTransaction const& txn,
-                        library::TrackView::MetadataProxy const& metadata,
+                        library::TrackView const& view,
                         std::optional<library::TrackBuilder> const& optBaseline,
                         ExportMode mode,
                         std::unordered_map<ResourceId, std::string>& exportedCovers,
                         library::ResourceStore& resources)
     {
-      bool const isDelta = (mode == ExportMode::Delta);
-      bool shouldExportCover = (mode == ExportMode::Metadata || mode == ExportMode::Full);
+      auto const covers = view.coverArt();
+      auto const coverCount = covers.count();
+      bool shouldExportCovers = (mode == ExportMode::Metadata || mode == ExportMode::Full);
+      auto const resReader = resources.reader(txn);
 
-      if (isDelta && optBaseline)
+      if (mode == ExportMode::Delta)
       {
-        if (metadata.coverArtId() != 0)
+        if (!optBaseline)
         {
-          if (auto const optDbData = resources.reader(txn).get(metadata.coverArtId()); optDbData)
+          shouldExportCovers = true;
+        }
+        else
+        {
+          auto const& baseCovers = optBaseline->coverArt().entries();
+          shouldExportCovers = coverCount != baseCovers.size();
+
+          for (std::uint16_t i = 0; !shouldExportCovers && i < coverCount; ++i)
           {
-            if (auto const fileData = optBaseline->metadata().coverArtData(); !std::ranges::equal(*optDbData, fileData))
+            auto const cover = covers.at(i);
+            auto const& pending = baseCovers[i];
+            auto const optDbData = resReader.get(cover.resourceId);
+            auto const* baselineResourceId = std::get_if<ResourceId>(&pending.source);
+            auto const* baselineData = std::get_if<std::span<std::byte const>>(&pending.source);
+
+            if (pending.type != cover.type ||
+                (baselineResourceId != nullptr && *baselineResourceId != cover.resourceId) ||
+                (baselineData != nullptr && (!optDbData || !std::ranges::equal(*optDbData, *baselineData))))
             {
-              shouldExportCover = true;
+              shouldExportCovers = true;
             }
           }
         }
       }
 
-      if (shouldExportCover)
+      if (!shouldExportCovers)
       {
-        if (auto const rid = metadata.coverArtId(); rid != 0)
+        return;
+      }
+
+      auto coversNode = node.append_child();
+      yaml::setKey(coversNode, "covers");
+      coversNode |= ryml::SEQ;
+
+      for (std::uint16_t i = 0; i < coverCount; ++i)
+      {
+        auto const cover = covers.at(i);
+        auto const resId = cover.resourceId;
+        auto const typeValue = static_cast<std::uint8_t>(cover.type);
+
+        auto coverNode = coversNode.append_child();
+        coverNode |= ryml::MAP;
+
+        coverNode.append_child() << ryml::key("type") << static_cast<std::uint32_t>(typeValue);
+
+        if (auto const it = exportedCovers.find(resId); it != exportedCovers.end())
         {
-          auto const resId = ResourceId{rid};
-
-          if (auto const it = exportedCovers.find(resId); it != exportedCovers.end())
+          auto dataNode = coverNode.append_child();
+          dataNode << ryml::key("data");
+          dataNode.set_val_ref(yaml::copyToArena(dataNode, it->second));
+        }
+        else
+        {
+          if (auto const optData = resReader.get(resId); optData && !optData->empty())
           {
-            auto child = node.append_child();
-            child << ryml::key("coverArtBase64");
-            child.set_val_ref(yaml::copyToArena(child, it->second));
-          }
-          else
-          {
-            if (auto const optData = resources.reader(txn).get(rid); optData && !optData->empty())
-            {
-              auto const b64 = utility::base64Encode(*optData);
-              auto const anchorName = "cover_" + std::to_string(rid);
+            auto const b64 = utility::base64Encode(*optData);
+            auto const anchorName = "cover_" + std::to_string(resId.raw());
 
-              auto child = node.append_child();
-              child << ryml::key("coverArtBase64") << b64;
-              child.set_val_anchor(yaml::copyToArena(child, anchorName));
-              exportedCovers[resId] = anchorName;
-            }
+            auto dataNode = coverNode.append_child();
+            dataNode << ryml::key("data") << b64;
+            dataNode.set_val_anchor(yaml::copyToArena(dataNode, anchorName));
+            exportedCovers[resId] = anchorName;
           }
         }
       }
@@ -454,7 +486,6 @@ namespace ao::rt
     auto const property = view.property();
     appendString(trackNode, "uri", property.uri());
 
-    auto const metadata = view.metadata();
     auto optBaseline = std::optional<library::TrackBuilder>{};
     auto tagFilePtr = std::unique_ptr<tag::TagFile>{};
 
@@ -481,7 +512,7 @@ namespace ao::rt
       emitTrackProperties(trackNode, property, manifestReader);
     }
 
-    emitTrackCover(trackNode, txn, metadata, optBaseline, mode, exportedCovers, resources);
+    emitTrackCover(trackNode, txn, view, optBaseline, mode, exportedCovers, resources);
     emitTrackCommon(trackNode, view.tags(), dict);
   }
 

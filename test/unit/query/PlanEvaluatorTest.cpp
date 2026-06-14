@@ -5,6 +5,7 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -61,7 +62,7 @@ namespace ao::query::test
       std::uint32_t sampleRate = 44100;
       std::uint8_t channels = 2;
       std::uint8_t bitDepth = 16;
-      std::uint32_t coverArtId = 0;
+      ResourceId coverArtId{kInvalidResourceId};
       library::AudioCodec codec = library::AudioCodec::Unknown;
       std::uint32_t artistId = 0;
       std::uint32_t albumId = 0;
@@ -167,7 +168,11 @@ namespace ao::query::test
         builder.property().channels(Channels{spec.channels});
         builder.property().bitDepth(BitDepth{spec.bitDepth});
         builder.property().codec(spec.codec);
-        builder.metadata().coverArtId(spec.coverArtId);
+
+        if (spec.coverArtId != kInvalidResourceId)
+        {
+          builder.coverArt().add(PictureType::FrontCover, spec.coverArtId);
+        }
 
         for (auto const& name : spec.tags)
         {
@@ -176,7 +181,7 @@ namespace ao::query::test
 
         for (auto const& [k, v] : spec.customPairs)
         {
-          builder.custom().add(k, v);
+          builder.customMetadata().add(k, v);
         }
 
         _hotData = builder.serializeHot(wtxn, *dict);
@@ -238,7 +243,7 @@ namespace ao::query::test
       header.albumId = albumId;
       header.genreId = genreId;
       header.albumArtistId = albumArtistId;
-      header.tagLen = static_cast<std::uint16_t>(tagIds.size_bytes());
+      header.tagLength = static_cast<std::uint16_t>(tagIds.size_bytes());
 
       for (auto const tagId : tagIds)
       {
@@ -666,7 +671,7 @@ namespace ao::query::test
     spec.totalTracks = 12;
     spec.discNumber = 1;
     spec.totalDiscs = 2;
-    spec.coverArtId = 99;
+    spec.coverArtId = ResourceId{99};
     spec.album = "Test Album";
     spec.genre = "Test Genre";
     spec.albumArtist = "Test Album Artist";

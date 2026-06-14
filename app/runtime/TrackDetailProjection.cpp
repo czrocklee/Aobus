@@ -70,6 +70,57 @@ namespace ao::rt
 
       return {.optValue = firstValue};
     }
+
+    struct CustomAggregationState final
+    {
+      std::size_t presentCount = 0;
+      std::optional<std::string> optFirstValue{};
+      bool mixed = false;
+    };
+
+    void aggregateFields(library::TrackView const& view,
+                         library::DictionaryStore const& dict,
+                         library::FileManifestStore::Reader const* manifestReader,
+                         std::array<std::vector<TrackFieldRawValue>, kTrackFieldCount>& fieldValues)
+    {
+      for (auto const& def : trackFieldDefinitions())
+      {
+        if (def.synthetic || def.category == TrackFieldCategory::Tag)
+        {
+          continue;
+        }
+
+        auto val = readTrackFieldRawValue(def.field, view, dict, manifestReader);
+        trackFieldArrayAt(fieldValues, def.field).push_back(std::move(val));
+      }
+    }
+
+    void aggregateCustom(library::TrackView const& view,
+                         library::DictionaryStore const& dict,
+                         std::map<std::string, CustomAggregationState>& customMap)
+    {
+      for (auto const& [dictId, value] : view.customMetadata())
+      {
+        auto const key = std::string{dict.getOrDefault(dictId)};
+
+        if (key.empty())
+        {
+          continue;
+        }
+
+        auto& state = customMap[key];
+        state.presentCount++;
+
+        if (!state.optFirstValue)
+        {
+          state.optFirstValue = std::string{value};
+        }
+        else if (value != *state.optFirstValue)
+        {
+          state.mixed = true;
+        }
+      }
+    }
   }
 
   struct TrackDetailProjection::Impl final
@@ -239,13 +290,6 @@ namespace ao::rt
     auto const& dict = _implPtr->library.dictionary();
 
     auto fieldValues = std::array<std::vector<TrackFieldRawValue>, kTrackFieldCount>{};
-
-    struct CustomAggregationState
-    {
-      std::size_t presentCount = 0;
-      std::optional<std::string> optFirstValue{};
-      bool mixed = false;
-    };
     auto customMap = std::map<std::string, CustomAggregationState>{};
     std::size_t loadedCount = 0;
 
@@ -259,43 +303,15 @@ namespace ao::rt
       }
 
       loadedCount++;
-
-      for (auto const& def : trackFieldDefinitions())
-      {
-        if (def.synthetic || def.category == TrackFieldCategory::Tag)
-        {
-          continue;
-        }
-
-        auto val = readTrackFieldRawValue(def.field, *optView, dict, &manifestReader);
-        trackFieldArrayAt(fieldValues, def.field).push_back(std::move(val));
-      }
-
-      for (auto const& [dictId, value] : optView->custom())
-      {
-        auto key = std::string{dict.getOrDefault(dictId)};
-
-        if (key.empty())
-        {
-          continue;
-        }
-
-        auto& state = customMap[key];
-        state.presentCount++;
-
-        if (!state.optFirstValue)
-        {
-          state.optFirstValue = std::string{value};
-        }
-        else if (value != *state.optFirstValue)
-        {
-          state.mixed = true;
-        }
-      }
+      aggregateFields(*optView, dict, &manifestReader, fieldValues);
+      aggregateCustom(*optView, dict, customMap);
 
       if (ids.size() == 1)
       {
-        snap.singleCoverArtId = ResourceId{optView->metadata().coverArtId()};
+        if (auto const optPrimary = optView->coverArt().primary(); optPrimary)
+        {
+          snap.singleCoverArtId = optPrimary->resourceId;
+        }
 
         for (auto const tagId : optView->tags())
         {

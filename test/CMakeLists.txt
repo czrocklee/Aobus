@@ -42,6 +42,7 @@ add_executable(ao_core_test
     unit/library/ScanPlanExecutorTest.cpp
     unit/library/LibraryScannerTest.cpp
     unit/library/ListStoreTest.cpp
+    unit/library/ResourceStoreTest.cpp
 
     unit/library/TrackStoreTest.cpp
     unit/library/ListStoreTest.cpp

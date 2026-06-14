@@ -269,7 +269,7 @@ namespace ao::gtk::test
       auto const smallPixbufPtr = makePixbuf(40, 40);
       auto const largePixbufPtr = makePixbuf(200, 200);
 
-      imageCache.put(resourceId.raw(), smallPixbufPtr);
+      imageCache.put(resourceId, smallPixbufPtr);
       widget.setTargetSize(56);
       widget.loadImage(resourceId);
       drainGtkEvents();
@@ -279,7 +279,7 @@ namespace ao::gtk::test
       CHECK(paintablePtr->get_intrinsic_width() == 40);
       CHECK(paintablePtr->get_intrinsic_height() == 40);
 
-      imageCache.put(resourceId.raw(), largePixbufPtr);
+      imageCache.put(resourceId, largePixbufPtr);
       widget.loadImage(resourceId);
       drainGtkEvents();
 

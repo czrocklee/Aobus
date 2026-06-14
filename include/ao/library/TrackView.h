@@ -5,6 +5,7 @@
 
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
 
@@ -58,11 +59,58 @@ namespace ao::library
       std::uint16_t totalTracks() const noexcept { return _track.coldHeader().totalTracks; }
       std::uint16_t discNumber() const noexcept { return _track.coldHeader().discNumber; }
       std::uint16_t totalDiscs() const noexcept { return _track.coldHeader().totalDiscs; }
-      std::uint32_t coverArtId() const noexcept { return _track.coldHeader().coverArtId; }
       DictionaryId workId() const noexcept { return _track.coldHeader().workId; }
 
     private:
       TrackView const& _track;
+    };
+
+    /**
+     * CoverArtProxy - Ordered, typed cover art entries backed by ResourceStore IDs.
+     * The primary cover is the first front cover, or entry 0 when no front cover exists.
+     */
+    class CoverArtProxy final : public std::ranges::view_interface<CoverArtProxy>
+    {
+    public:
+      explicit CoverArtProxy(std::span<std::byte const> coldData)
+        : _coldData{coldData}
+      {
+      }
+
+      std::uint16_t count() const noexcept { return coldHeader().coverCount; }
+
+      CoverArt at(std::uint16_t index) const noexcept
+      {
+        gsl_Expects(index < count());
+        auto const& entry = entries()[index];
+        return {.resourceId = entry.id, .type = static_cast<PictureType>(entry.type)};
+      }
+
+      /** Returns the front-cover entry, or the first entry, or nullopt if empty. */
+      std::optional<CoverArt> primary() const noexcept;
+
+      class Iterator;
+      Iterator begin() const;
+      Iterator end() const;
+
+    private:
+      TrackColdHeader const& coldHeader() const
+      {
+        gsl_Expects(_coldData.size() >= sizeof(TrackColdHeader));
+        return *utility::layout::view<TrackColdHeader>(_coldData);
+      }
+
+      std::span<CoverArtEntry const> entries() const
+      {
+        auto const& hdr = coldHeader();
+        auto const entryBytes = static_cast<std::size_t>(hdr.coverCount) * sizeof(CoverArtEntry);
+        constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
+
+        gsl_Expects(kHeaderSize + entryBytes <= _coldData.size());
+        return utility::layout::viewArray<CoverArtEntry>(_coldData.subspan(kHeaderSize, entryBytes));
+      }
+
+      std::span<std::byte const> _coldData;
     };
 
     /**
@@ -107,7 +155,7 @@ namespace ao::library
       std::uint8_t count() const noexcept
       {
         auto const& header = hotHeader();
-        return static_cast<std::uint8_t>(header.tagLen / sizeof(DictionaryId));
+        return static_cast<std::uint8_t>(header.tagLength / sizeof(DictionaryId));
       }
 
       std::uint32_t bloom() const noexcept { return hotHeader().tagBloom; }
@@ -121,52 +169,31 @@ namespace ao::library
       DictionaryId const* begin() const noexcept
       {
         auto const& header = hotHeader();
-        return utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), header.tagLen)).data();
+        return utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), header.tagLength))
+          .data();
       }
 
       DictionaryId const* end() const noexcept { return begin() + count(); }
       bool has(DictionaryId tagIdToCheck) const noexcept;
 
     private:
-      TrackHotHeader const& hotHeader() const
-      {
-        gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
-
-        auto const* header = utility::layout::view<TrackHotHeader>(_hotData);
-        gsl_Assert(header != nullptr);
-
-        if (header == nullptr)
-        {
-          std::unreachable();
-        }
-
-        return *header;
-      }
+      TrackHotHeader const& hotHeader() const;
 
       std::span<std::byte const> _hotData;
     };
 
     /**
-     * CustomProxy - Accessors for custom key-value metadata.
+     * CustomMetadataProxy - Accessors for custom key-value metadata.
      */
-    class CustomProxy final : public std::ranges::view_interface<CustomProxy>
+    class CustomMetadataProxy final : public std::ranges::view_interface<CustomMetadataProxy>
     {
     public:
-      explicit CustomProxy(std::span<std::byte const> coldData)
+      explicit CustomMetadataProxy(std::span<std::byte const> coldData)
         : _coldData{coldData}
       {
       }
 
-      /**
-       * Entry - Fixed-size entry in the custom metadata index.
-       * 8 bytes total, 4-byte aligned.
-       */
-      struct Entry
-      {
-        DictionaryId dictId;      // 4 bytes
-        std::uint16_t offset = 0; // 2 bytes - byte offset from header start to value
-        std::uint16_t len = 0;    // 2 bytes - value length in bytes
-      };
+      using Entry = CustomMetadataEntry;
 
       class Iterator;
       Iterator begin() const;
@@ -182,11 +209,12 @@ namespace ao::library
 
       std::span<Entry const> entries() const
       {
-        constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
-        gsl_Expects(_coldData.size() >= kHeaderSize);
-        auto const entryBytes = static_cast<std::size_t>(coldHeader().customCount) * sizeof(Entry);
-        gsl_Expects(kHeaderSize + entryBytes <= _coldData.size());
-        return utility::layout::viewArray<Entry>(_coldData.subspan(kHeaderSize, entryBytes));
+        auto const& hdr = coldHeader();
+        auto const entryBytes = static_cast<std::size_t>(hdr.customCount) * sizeof(Entry);
+        auto const customOffset = static_cast<std::size_t>(hdr.customOffset);
+
+        gsl_Expects(customOffset + entryBytes <= _coldData.size());
+        return utility::layout::viewArray<Entry>(_coldData.subspan(customOffset, entryBytes));
       }
 
       std::span<std::byte const> _coldData;
@@ -226,41 +254,16 @@ namespace ao::library
     MetadataProxy metadata() const { return MetadataProxy{*this}; }
     PropertyProxy property() const { return PropertyProxy{*this}; }
     TagProxy tags() const { return TagProxy{_hotData}; }
-    CustomProxy custom() const { return CustomProxy{_coldData}; }
+    CustomMetadataProxy customMetadata() const { return CustomMetadataProxy{_coldData}; }
+    CoverArtProxy coverArt() const { return CoverArtProxy{_coldData}; }
 
     // Direct header access
     std::span<std::byte const> hotData() const noexcept { return _hotData; }
     std::span<std::byte const> coldData() const noexcept { return _coldData; }
 
-    TrackHotHeader const& hotHeader() const
-    {
-      gsl_Expects(isHotValid());
+    TrackHotHeader const& hotHeader() const;
 
-      auto const* header = utility::layout::view<TrackHotHeader>(_hotData);
-      gsl_Assert(header != nullptr);
-
-      if (header == nullptr)
-      {
-        std::unreachable();
-      }
-
-      return *header;
-    }
-
-    TrackColdHeader const& coldHeader() const
-    {
-      gsl_Expects(isColdValid());
-
-      auto const* header = utility::layout::view<TrackColdHeader>(_coldData);
-      gsl_Assert(header != nullptr);
-
-      if (header == nullptr)
-      {
-        std::unreachable();
-      }
-
-      return *header;
-    }
+    TrackColdHeader const& coldHeader() const;
 
   private:
     std::string_view hotTitle() const;
@@ -273,7 +276,7 @@ namespace ao::library
     std::span<std::byte const> _coldData;
   };
 
-  class TrackView::CustomProxy::Iterator final
+  class TrackView::CustomMetadataProxy::Iterator final
   {
   public:
     // Standard iterator traits
@@ -285,7 +288,7 @@ namespace ao::library
 
     Iterator() = default;
 
-    Iterator(CustomProxy::Entry const* pos, std::byte const* coldDataBase);
+    Iterator(CustomMetadataProxy::Entry const* pos, std::byte const* coldDataBase);
 
     value_type operator*() const;
 
@@ -303,7 +306,43 @@ namespace ao::library
     bool operator==(Iterator const& other) const { return _pos == other._pos; }
 
   private:
-    CustomProxy::Entry const* _pos = nullptr;
+    CustomMetadataProxy::Entry const* _pos = nullptr;
     std::byte const* _coldDataBase = nullptr;
+  };
+
+  class TrackView::CoverArtProxy::Iterator final
+  {
+  public:
+    using difference_type = std::ptrdiff_t;
+    using value_type = CoverArt;
+    using reference = value_type;
+    using pointer = void;
+    using iterator_category = std::forward_iterator_tag;
+
+    Iterator() = default;
+    explicit Iterator(CoverArtEntry const* pos)
+      : _pos{pos}
+    {
+    }
+
+    value_type operator*() const { return {.resourceId = _pos->id, .type = static_cast<PictureType>(_pos->type)}; }
+
+    Iterator& operator++()
+    {
+      ++_pos;
+      return *this;
+    }
+
+    Iterator operator++(std::int32_t)
+    {
+      auto result = *this;
+      ++_pos;
+      return result;
+    }
+
+    bool operator==(Iterator const& other) const { return _pos == other._pos; }
+
+  private:
+    CoverArtEntry const* _pos = nullptr;
   };
 } // namespace ao::library

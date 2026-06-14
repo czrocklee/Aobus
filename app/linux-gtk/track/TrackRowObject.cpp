@@ -18,7 +18,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 
 namespace ao::gtk
 {
@@ -108,7 +107,7 @@ namespace ao::gtk
                                 std::uint16_t totalDiscs,
                                 std::uint16_t trackNumber,
                                 std::uint16_t totalTracks,
-                                std::optional<std::uint64_t> optResourceId,
+                                ResourceId resourceId,
                                 std::uint32_t sampleRate,
                                 std::uint8_t channels,
                                 std::uint8_t bitDepth,
@@ -133,7 +132,7 @@ namespace ao::gtk
     _totalDiscs = totalDiscs;
     _trackNumber = trackNumber;
     _totalTracks = totalTracks;
-    _optResourceId = optResourceId;
+    _resourceId = resourceId;
 
     _sampleRate = sampleRate;
     _channels = channels;

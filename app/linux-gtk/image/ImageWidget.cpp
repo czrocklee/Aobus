@@ -193,14 +193,13 @@ namespace ao::gtk
       return;
     }
 
-    auto const rid = static_cast<std::uint64_t>(coverArtId.raw());
-    auto cachedPtr = _cache.get(rid);
+    auto cachedPtr = _cache.get(coverArtId);
 
     if (!cachedPtr)
     {
       auto const txn = _library.readTransaction();
       auto const resReader = _library.resources().reader(txn);
-      auto const optData = resReader.get(rid);
+      auto const optData = resReader.get(coverArtId);
 
       if (!optData)
       {
@@ -213,7 +212,7 @@ namespace ao::gtk
         auto const memStreamPtr = Gio::MemoryInputStream::create();
         memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
         cachedPtr = Gdk::Pixbuf::create_from_stream(memStreamPtr);
-        _cache.put(rid, cachedPtr);
+        _cache.put(coverArtId, cachedPtr);
       }
       catch (Glib::Error const&)
       {

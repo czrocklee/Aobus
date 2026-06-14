@@ -213,7 +213,7 @@ namespace ao::rt::test
 
         if (!spec.customKey.empty())
         {
-          builder.custom().add(spec.customKey, spec.customValue);
+          builder.customMetadata().add(spec.customKey, spec.customValue);
         }
 
         auto hotData = builder.serializeHot(txn, _library.dictionary());

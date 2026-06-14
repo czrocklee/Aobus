@@ -18,7 +18,7 @@ namespace ao::library
 
   Writer ResourceStore::writer(lmdb::WriteTransaction& txn)
   {
-    return Writer{_database.reader(txn), _database.writer(txn)};
+    return Writer{_database.writer(txn)};
   }
 
   namespace
@@ -26,7 +26,7 @@ namespace ao::library
     // FNV-1a 32-bit hash
     // Created by Glenn Fowler, Landon Curt Noll, and Peter Vo in 1991
     // Simple, fast, and good distribution for content-addressable storage
-    std::uint32_t fnv1a(std::span<std::byte const> data)
+    ResourceId fnv1a(std::span<std::byte const> data)
     {
       constexpr std::uint32_t kFnvOffsetBasis = 2166136261U;
       constexpr std::uint32_t kFnvPrime = 16777619U;
@@ -39,32 +39,51 @@ namespace ao::library
         hash *= kFnvPrime;
       }
 
-      return hash;
+      return ResourceId{hash};
     }
   }
 
   ResourceId Writer::create(std::span<std::byte const> data)
   {
-    for (std::uint32_t key = fnv1a(data);; ++key)
+    ResourceId key = fnv1a(data);
+
+    if (key == kInvalidResourceId)
     {
-      auto optValue = _writer.get(key);
+      key = ResourceId{1};
+    }
+
+    auto const firstKey = key;
+
+    while (true)
+    {
+      auto optValue = _writer.get(key.raw());
 
       if (!optValue)
       {
-        _writer.create(key, data);
-        return ResourceId{key};
+        _writer.create(key.raw(), data);
+        return key;
       }
 
       if (std::ranges::equal(*optValue, data)) [[likely]]
       {
-        return ResourceId{key};
+        return key;
       }
 
-      // Prevent infinite loop (though extremely unlikely with 32-bit hash space)
-      if (key == std::numeric_limits<std::uint32_t>::max())
+      if (key == ResourceId{std::numeric_limits<std::uint32_t>::max()})
       {
-        ao::throwException<Exception>("Hash table full");
+        key = ResourceId{1};
+      }
+      else
+      {
+        ++key;
+      }
+
+      if (key == firstKey)
+      {
+        break;
       }
     }
+
+    ao::throwException<Exception>("Hash table full");
   }
 }

@@ -74,7 +74,7 @@ namespace ao::rt
 
     using Comparator = std::move_only_function<bool(OrderEntry const&, OrderEntry const&)>;
 
-    constexpr std::size_t kArticleAnLen = 3;
+    constexpr std::size_t kArticleAnLength = 3;
 
     bool iStartsWith(std::string_view str, std::string_view prefix)
     {
@@ -108,7 +108,7 @@ namespace ao::rt
       }
       else if (iStartsWith(title, "an "))
       {
-        offset = kArticleAnLen;
+        offset = kArticleAnLength;
       }
 
       auto result = std::string{title.substr(offset)};
@@ -364,7 +364,12 @@ namespace ao::rt
         case TrackGroupKey::Album:
           entry.groupKey =
             intern(stringPool, std::string{entry.keys.albumArtistKey} + "\x1F" + std::string{entry.keys.albumKey});
-          entry.imageId = ResourceId{view.metadata().coverArtId()};
+
+          if (auto const optPrimary = view.coverArt().primary(); optPrimary)
+          {
+            entry.imageId = optPrimary->resourceId;
+          }
+
           {
             auto album = std::string{dict.getOrDefault(view.metadata().albumId())};
             auto albumArtist = std::string{dict.getOrDefault(view.metadata().albumArtistId())};

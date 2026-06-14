@@ -5,6 +5,7 @@
 
 #include "../detail/Decoder.h"
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
@@ -124,7 +125,7 @@ namespace ao::tag::mp4
 
     void handleCoverArt(library::TrackBuilder& builder, AtomView const& view)
     {
-      builder.metadata().coverArtData(atomData(view));
+      builder.coverArt().add(library::PictureType::FrontCover, atomData(view));
     }
 
     using AtomHandler = void (*)(library::TrackBuilder&, AtomView const&);

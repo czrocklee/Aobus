@@ -32,19 +32,19 @@ namespace ao::library
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← hot data begin
-   *   │        TrackHotHeader (36B)         |
+   *   │        TrackHotHeader (36B)         │
    *   │  tagBloom, sampleRate,              │
    *   │  artistId, albumId,                 │
    *   │  genreId, albumArtistId,            │
    *   │  composerId, year,                  │
-   *   │  titleLen, tagLen,                  │
+   *   │  titleLength, tagLength,            │
    *   │  bitDepth, codec                    │
    *   ├─────────────────────────────────────┤  ← tags begin = header + sizeof(header)
    *   │  tag ID 1 (4B)                      │
    *   │  tag ID 2 (4B)                      │
-   *   │  ... (tagLen bytes total)           │
-   *   ├─────────────────────────────────────┤  ← title begin = tags begin + tagLen
-   *   │  title... (titleLen bytes)          │
+   *   │  ... (tagLength bytes total)        │
+   *   ├─────────────────────────────────────┤  ← title begin = tags begin + tagLength
+   *   │  title... (titleLength bytes)       │
    *   │  '\0'                               │
    *   └─────────────────────────────────────┘  ← hot data end
    */
@@ -60,9 +60,9 @@ namespace ao::library
     SampleRate sampleRate{};      // Sample rate in Hz
 
     // 2-byte section
-    std::uint16_t year{};     // Release year
-    std::uint16_t titleLen{}; // Length of title string
-    std::uint16_t tagLen{};   // Length of tags blob in bytes
+    std::uint16_t year{};        // Release year
+    std::uint16_t titleLength{}; // Length of title string
+    std::uint16_t tagLength{};   // Length of tags blob in bytes
 
     // 1-byte section
     BitDepth bitDepth{}; // Bits per sample
@@ -76,54 +76,85 @@ namespace ao::library
   static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 36 bytes");
   static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 4-byte alignment");
 
+  /** Storage representation for one typed cover-art resource reference. */
+  struct CoverArtEntry final
+  {
+    ResourceId id{};     // 4 bytes - Links to the blob in ResourceStore
+    std::uint8_t type{}; // 1 byte - PictureType enum value
+    std::array<std::uint8_t, 3> reserved{};
+  };
+
+  static_assert(sizeof(CoverArtEntry) == 8, "CoverArtEntry must be exactly 8 bytes");
+  static_assert(alignof(CoverArtEntry) == 4, "CoverArtEntry must have 4-byte alignment");
+
+  /**
+   * CustomMetadataEntry - Binary entry for custom key-value metadata in TrackColdHeader.
+   * 8 bytes total, 4-byte aligned.
+   */
+  struct CustomMetadataEntry final
+  {
+    DictionaryId keyId{};          // 4 bytes - Links to the key string in DictionaryStore
+    std::uint16_t valueOffset = 0; // 2 bytes - byte offset from header start to value
+    std::uint16_t valueLength = 0; // 2 bytes - value length in bytes
+  };
+
+  static_assert(sizeof(CustomMetadataEntry) == 8, "CustomMetadataEntry must be exactly 8 bytes");
+  static_assert(alignof(CustomMetadataEntry) == 4, "CustomMetadataEntry must have 4-byte alignment");
+
   /**
    * TrackColdHeader - POD struct for cold track fixed fields.
    * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
    *
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
    *   - duration, bitrate, channels: audio properties
-   *   - coverArtId: display only
    *   - trackNumber, totalTracks, discNumber, totalDiscs: display only
    *   - workId: classical metadata
    *   - uri: playback path, not filtered
+   *   - covers: ordered list of typed cover art ResourceStore references
    *
    * Total size: 32 bytes with 4-byte alignment.
+   *
+   * Cover entries are 8 bytes each: [resourceId(4), type(1), reserved(3)].
+   * The primary cover is the first front cover, or entry 0 when no front cover exists.
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← cold data begin
    *   │        TrackColdHeader (32B)        │
-   *   │  duration, coverArtId, bitrate,     │
-   *   │  workId                             │
+   *   │  duration, bitrate, workId          │
    *   │  trackNumber, totalTracks,          │
    *   │  discNumber, totalDiscs             │
-   *   │  customCount, uriOffset, uriLen     │
+   *   │  customCount, uriOffset, uriLength  │
+   *   │  coverCount, customOffset           │
    *   │  channels, padding                  │
-   *   ├─────────────────────────────────────┤  ← entries = customCount * 8 bytes
-   *   │  [dictId(4), off(2), len(2)] × N   │
+   *   ├─────────────────────────────────────┤  ← coverCount * 8 bytes
+   *   │  [id(4), type(1), rsv(3)] × M       │
+   *   ├─────────────────────────────────────┤  ← customOffset
+   *   │  [keyId(4), off(2), len(2)] × N     │
    *   ├─────────────────────────────────────┤  ← values start
-   *   │  value 1                           │
-   *   │  value 2                           │
-   *   │  ...                               │
+   *   │  value 1                            │
+   *   │  value 2                            │
+   *   │  ...                                │
    *   ├─────────────────────────────────────┤  ← uri starts at uriOffset
-   *   │  uri data... (uriLen bytes)         │
+   *   │  uri data... (uriLength bytes)      │
    *   └─────────────────────────────────────┘  ← cold data end
    */
   struct TrackColdHeader final
   {
     // 4-byte section
-    TrackDuration duration{};   // Track duration (millisecond span)
-    std::uint32_t coverArtId{}; // ResourceStore ID for cover art
-    Bitrate bitrate{};          // Bitrate in bps
-    DictionaryId workId{};      // Dictionary ID for work
+    TrackDuration duration{}; // Track duration (millisecond span)
+    Bitrate bitrate{};        // Bitrate in bps
+    DictionaryId workId{};    // Dictionary ID for work
 
     // 2-byte section
-    std::uint16_t trackNumber{}; // Track number
-    std::uint16_t totalTracks{}; // Total tracks in album
-    std::uint16_t discNumber{};  // Disc number
-    std::uint16_t totalDiscs{};  // Total discs in album
-    std::uint16_t customCount{}; // Number of custom key-value entries
-    std::uint16_t uriOffset{};   // Byte offset from header start to uri string
-    std::uint16_t uriLen{};      // Length of URI string
+    std::uint16_t trackNumber{};  // Track number
+    std::uint16_t totalTracks{};  // Total tracks in album
+    std::uint16_t discNumber{};   // Disc number
+    std::uint16_t totalDiscs{};   // Total discs in album
+    std::uint16_t customCount{};  // Number of custom key-value entries
+    std::uint16_t uriOffset{};    // Byte offset from header start to uri string
+    std::uint16_t uriLength{};    // Length of URI string
+    std::uint16_t coverCount{};   // Number of cover art entries
+    std::uint16_t customOffset{}; // Byte offset from header start to custom table
 
     // 1-byte section
     Channels channels{}; // Number of audio channels

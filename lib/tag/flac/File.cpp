@@ -6,6 +6,7 @@
 #include "../detail/Decoder.h"
 #include <ao/Exception.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlock.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
@@ -127,7 +128,12 @@ namespace ao::tag::flac
 
         case MetadataBlockType::Picture:
         {
-          builder.metadata().coverArtData(PictureBlockView{iter->data()}.blob());
+          auto const pic = PictureBlockView{iter->data()};
+          auto const rawType = pic.pictureType();
+          auto const picType = rawType <= static_cast<std::uint32_t>(library::PictureType::PublisherLogo)
+                                 ? static_cast<library::PictureType>(rawType)
+                                 : library::PictureType::Other;
+          builder.coverArt().add(picType, pic.blob());
           break;
         }
 

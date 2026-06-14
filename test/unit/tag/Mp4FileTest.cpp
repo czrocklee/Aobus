@@ -5,13 +5,16 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/media/mp4/TestAtoms.h"
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -71,7 +74,7 @@ namespace ao::tag::mp4::test
                   "Grouping");
       addTextAtom("aART", "AlbumArtist");
 
-      // covr atom
+      auto addCoverAtom = [&](std::uint8_t firstByte)
       {
         auto covrData = std::vector<std::uint8_t>{};
         auto dataLayout = DataAtomLayout{};
@@ -80,12 +83,14 @@ namespace ao::tag::mp4::test
         dataLayout.type = 13; // JPEG
         auto const* dlAddr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
         covrData.insert(covrData.end(), dlAddr + 8, dlAddr + 24);
-        covrData.push_back(0xCC);
-        covrData.push_back(0xDD);
+        covrData.push_back(firstByte);
+        covrData.push_back(static_cast<std::uint8_t>(firstByte + 1));
         auto atom = std::vector<std::uint8_t>{};
         ao::test::mp4::addAtom(atom, "covr", covrData);
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
-      }
+      };
+      addCoverAtom(0xCC);
+      addCoverAtom(0xEE);
 
       // trkn atom (Track)
       {
@@ -230,13 +235,20 @@ namespace ao::tag::mp4::test
     CHECK(meta.discNumber() == 2);
     CHECK(meta.totalDiscs() == 5);
 
-    REQUIRE_FALSE(meta.coverArtData().empty());
-    CHECK(meta.coverArtData().size() == 2);
-    CHECK(static_cast<std::uint8_t>(meta.coverArtData()[0]) == 0xCC);
+    auto const& covers = builder.coverArt().entries();
+    REQUIRE(covers.size() == 2);
+    CHECK(covers[0].type == library::PictureType::FrontCover);
+    auto const firstData = std::get<std::span<std::byte const>>(covers[0].source);
+    REQUIRE_FALSE(firstData.empty());
+    CHECK(firstData.size() == 2);
+    CHECK(static_cast<std::uint8_t>(firstData[0]) == 0xCC);
+    CHECK(covers[1].type == library::PictureType::FrontCover);
+    auto const secondData = std::get<std::span<std::byte const>>(covers[1].source);
+    CHECK(static_cast<std::uint8_t>(secondData[0]) == 0xEE);
 
     CHECK(meta.totalDiscs() == 5);
 
-    CHECK(builder.custom().pairs().empty());
+    CHECK(builder.customMetadata().pairs().empty());
 
     CHECK(builder.property().sampleRate() == 44100);
     CHECK(builder.property().duration() == std::chrono::seconds{1});

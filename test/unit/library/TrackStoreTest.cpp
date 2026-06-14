@@ -319,7 +319,6 @@ namespace ao::library::test
 
     auto coldHeader = TrackColdHeader{};
     coldHeader.duration = std::chrono::minutes{4};
-    coldHeader.coverArtId = 42;
 
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
@@ -341,7 +340,7 @@ namespace ao::library::test
     REQUIRE(!optCold->isHotValid());
     REQUIRE(optCold->isColdValid());
     REQUIRE(optCold->property().duration() == std::chrono::minutes{4});
-    REQUIRE(optCold->metadata().coverArtId() == 42);
+    REQUIRE(optCold->coverArt().count() == 0);
   }
 
   TEST_CASE("TrackStore - unified TrackView iteration", "[library][unit][track]")

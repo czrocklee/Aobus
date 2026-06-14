@@ -88,7 +88,7 @@ namespace ao::rt::test
       auto const optView =
         testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
-      auto const custom = optView->custom();
+      auto const custom = optView->customMetadata();
       CHECK(std::ranges::distance(custom) == 1);
       auto const first = *custom.begin();
       CHECK(testLib.library().dictionary().get(first.first) == "MyKey");
@@ -115,7 +115,7 @@ namespace ao::rt::test
       auto const optView =
         testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
-      CHECK(std::ranges::distance(optView->custom()) == 0);
+      CHECK(std::ranges::distance(optView->customMetadata()) == 0);
     }
   }
 

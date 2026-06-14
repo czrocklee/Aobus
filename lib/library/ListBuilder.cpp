@@ -108,18 +108,18 @@ namespace ao::library
     auto const& expression = _filter;
     auto const& trackIds = _tracksBuilder._trackIds;
 
-    auto const nameLen = name.size();
-    auto const descLen = description.size();
-    auto const filterLen = expression.size();
+    auto const nameLength = name.size();
+    auto const descLength = description.size();
+    auto const filterLength = expression.size();
     auto const trackIdsSize = trackIds.size() * sizeof(TrackId);
 
     // Offsets are relative to kListHeaderSize (start of trackIds array)
     // No internal alignment, just pack fields consecutively
-    auto const descOffset = trackIdsSize + nameLen;
-    auto const filterOffset = descOffset + descLen;
+    auto const descOffset = trackIdsSize + nameLength;
+    auto const filterOffset = descOffset + descLength;
 
     // Total payload size, aligned to 4 bytes for LMDB
-    auto const totalSize = kListHeaderSize + trackIdsSize + nameLen + descLen + filterLen;
+    auto const totalSize = kListHeaderSize + trackIdsSize + nameLength + descLength + filterLength;
     auto const payloadSize = (totalSize + 3) & ~3ULL;
 
     auto result = std::vector<std::byte>{};
@@ -129,11 +129,11 @@ namespace ao::library
     auto header = ListHeader{};
     header.trackIdsCount = static_cast<std::uint32_t>(trackIds.size());
     header.nameOffset = static_cast<std::uint16_t>(trackIdsSize);
-    header.nameLen = static_cast<std::uint16_t>(nameLen);
+    header.nameLength = static_cast<std::uint16_t>(nameLength);
     header.descOffset = static_cast<std::uint16_t>(descOffset);
-    header.descLen = static_cast<std::uint16_t>(descLen);
+    header.descLength = static_cast<std::uint16_t>(descLength);
     header.filterOffset = static_cast<std::uint16_t>(filterOffset);
-    header.filterLen = static_cast<std::uint16_t>(filterLen);
+    header.filterLength = static_cast<std::uint16_t>(filterLength);
     header.parentId = _parentId.raw();
 
     // Copy header

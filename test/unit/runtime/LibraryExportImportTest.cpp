@@ -5,6 +5,7 @@
 #include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -82,9 +83,10 @@ namespace ao::rt::test
         .sampleRate(SampleRate{96000})
         .bitDepth(BitDepth{24})
         .codec(AudioCodec::Flac);
-      trackBuilder.metadata().title("Test Title").artist("Test Artist").coverArtId(resId.raw());
+      trackBuilder.metadata().title("Test Title").artist("Test Artist");
+      trackBuilder.coverArt().add(PictureType::FrontCover, resId);
       trackBuilder.tags().add("rock").add("favorite");
-      trackBuilder.custom().add("mood", "happy");
+      trackBuilder.customMetadata().add("mood", "happy");
 
       auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
       auto trackWriter = ml1.tracks().writer(txn);
@@ -181,7 +183,7 @@ namespace ao::rt::test
       REQUIRE(std::ranges::contains(tagNames, std::string_view{"favorite"}));
 
       // Check custom
-      auto const custom = view.custom();
+      auto const custom = view.customMetadata();
       bool foundMood = false;
 
       for (auto [k, v] : custom)
@@ -301,7 +303,9 @@ namespace ao::rt::test
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
 
     auto const coverData = createTestData(1024);
+    auto const backCoverData = createTestData(257);
     auto resId = kInvalidResourceId;
+    auto backResId = kInvalidResourceId;
 
     // 1. Setup initial library with shared cover art
     {
@@ -309,14 +313,18 @@ namespace ao::rt::test
       auto& dict = ml1.dictionary();
 
       resId = ml1.resources().writer(txn).create(coverData);
+      backResId = ml1.resources().writer(txn).create(backCoverData);
 
       auto trackBuilder1 = TrackBuilder::createNew();
       trackBuilder1.property().uri("song1.flac");
-      trackBuilder1.metadata().title("Song 1").coverArtId(resId.raw());
+      trackBuilder1.metadata().title("Song 1");
+      trackBuilder1.coverArt().add(PictureType::BackCover, backResId);
+      trackBuilder1.coverArt().add(PictureType::FrontCover, resId);
 
       auto trackBuilder2 = TrackBuilder::createNew();
       trackBuilder2.property().uri("song2.flac");
-      trackBuilder2.metadata().title("Song 2").coverArtId(resId.raw());
+      trackBuilder2.metadata().title("Song 2");
+      trackBuilder2.coverArt().add(PictureType::FrontCover, resId);
 
       auto trackWriter = ml1.tracks().writer(txn);
 
@@ -367,24 +375,127 @@ namespace ao::rt::test
       auto reader = ml2.tracks().reader(txn);
       auto& resources = ml2.resources();
 
-      auto tracks = std::vector<TrackView>{};
+      auto tracks = std::unordered_map<std::string, TrackView>{};
 
       for (auto const& [id, view] : reader)
       {
-        tracks.push_back(view);
+        tracks.emplace(view.property().uri(), view);
       }
 
       REQUIRE(tracks.size() == 2);
-      auto const rid1 = ResourceId{tracks[0].metadata().coverArtId()};
-      auto const rid2 = ResourceId{tracks[1].metadata().coverArtId()};
+      auto const& track1 = tracks.at("song1.flac");
+      auto const& track2 = tracks.at("song2.flac");
+      auto const optPrimary1 = track1.coverArt().primary();
+      auto const optPrimary2 = track2.coverArt().primary();
 
-      REQUIRE(rid1 != kInvalidResourceId);
-      REQUIRE(rid1 == rid2); // Deduplicated by CAS ResourceStore
+      REQUIRE(optPrimary1);
+      REQUIRE(optPrimary2);
+      REQUIRE(optPrimary1->resourceId == optPrimary2->resourceId); // Deduplicated by CAS ResourceStore
+      REQUIRE(track1.coverArt().count() == 2);
+      CHECK(track1.coverArt().at(0).type == PictureType::BackCover);
+      CHECK(track1.coverArt().at(1).type == PictureType::FrontCover);
 
-      auto const optImportedData = resources.reader(txn).get(rid1.raw());
+      auto const optImportedData = resources.reader(txn).get(optPrimary1->resourceId);
       REQUIRE(optImportedData);
       REQUIRE(optImportedData->size() == coverData.size());
       REQUIRE(std::ranges::equal(*optImportedData, coverData));
+
+      auto const optBackData = resources.reader(txn).get(track1.coverArt().at(0).resourceId);
+      REQUIRE(optBackData);
+      REQUIRE(std::ranges::equal(*optBackData, backCoverData));
+    }
+  }
+
+  TEST_CASE("Library Import replaces and removes cover art", "[app][unit][core][yaml][cover]")
+  {
+    auto const temp = TempDir{};
+    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto const uri = std::string{"song.flac"};
+
+    {
+      auto txn = ml.writeTransaction();
+      auto& dict = ml.dictionary();
+      auto resWriter = ml.resources().writer(txn);
+      auto const frontId = resWriter.create(createTestData(8));
+      auto const backId = resWriter.create(createTestData(9));
+
+      auto builder = TrackBuilder::createNew();
+      builder.property().uri(uri);
+      builder.coverArt().add(PictureType::FrontCover, frontId);
+      builder.coverArt().add(PictureType::BackCover, backId);
+      auto const [hot, cold] = builder.prepare(txn, dict, ml.resources());
+      auto const createResult =
+        ml.tracks().writer(txn).createHotCold(hot.size(),
+                                              cold.size(),
+                                              [&](TrackId, std::span<std::byte> hotOut, std::span<std::byte> coldOut)
+                                              {
+                                                hot.writeTo(hotOut);
+                                                cold.writeTo(coldOut);
+                                              });
+      auto const trackId = createResult.first;
+
+      auto manifest = FileManifestBuilder::createNew();
+      manifest.trackId(trackId);
+      ml.manifest().writer(txn).put(uri, manifest.serialize());
+      txn.commit();
+    }
+
+    auto const yamlPath = std::filesystem::path{temp.path()} / "covers.yaml";
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 1
+export_mode: full
+library:
+  tracks:
+    - uri: song.flac
+      covers:
+        - type: 4
+          data: BAUG
+  lists: []
+)";
+    }
+
+    auto importer = LibraryYamlImporter{ml};
+    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+
+    {
+      auto txn = ml.readTransaction();
+      auto const optManifest = ml.manifest().reader(txn).get(uri);
+      REQUIRE(optManifest);
+      auto const optView = ml.tracks().reader(txn).get(optManifest->trackId(), TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      REQUIRE(optView->coverArt().count() == 1);
+      CHECK(optView->coverArt().at(0).type == PictureType::BackCover);
+
+      auto const optData = ml.resources().reader(txn).get(optView->coverArt().at(0).resourceId);
+      REQUIRE(optData);
+      REQUIRE(optData->size() == 3);
+      CHECK((*optData)[0] == std::byte{4});
+      CHECK((*optData)[1] == std::byte{5});
+      CHECK((*optData)[2] == std::byte{6});
+    }
+
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 1
+export_mode: delta
+library:
+  tracks:
+    - uri: song.flac
+      covers: []
+  lists: []
+)";
+    }
+
+    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+
+    {
+      auto txn = ml.readTransaction();
+      auto const optManifest = ml.manifest().reader(txn).get(uri);
+      REQUIRE(optManifest);
+      auto const optView = ml.tracks().reader(txn).get(optManifest->trackId(), TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      CHECK(optView->coverArt().count() == 0);
     }
   }
 
@@ -814,7 +925,9 @@ version: 1
 library:
   tracks:
     - uri: "song1.flac"
-      coverArtBase64: "Not!Valid@Base#64$"
+      covers:
+        - type: 3
+          data: "Not!Valid@Base#64$"
   lists: []
 )";
       }
@@ -824,8 +937,8 @@ library:
       auto const it = reader.begin();
       REQUIRE(it != reader.end());
       auto const& [tid, view] = *it;
-      // Cover art ID should be 0 because it was skipped
-      CHECK(view.metadata().coverArtId() == 0);
+      // Cover art should be absent because it was skipped
+      CHECK_FALSE(view.coverArt().primary().has_value());
     }
   }
 
@@ -837,6 +950,7 @@ library:
     auto trackId1 = kInvalidTrackId;
     auto trackId2 = kInvalidTrackId;
     auto trackId3 = kInvalidTrackId;
+    auto trackId4 = kInvalidTrackId;
     {
       auto txn = ml.writeTransaction();
       auto& dict = ml.dictionary();
@@ -869,7 +983,7 @@ library:
       trackBuilder3.property().uri("cover.flac");
       trackBuilder3.metadata().title("Different Title");
       auto coverData = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
-      trackBuilder3.metadata().coverArtData(coverData);
+      trackBuilder3.coverArt().add(PictureType::FrontCover, coverData);
       auto const [p3h, p3c] = trackBuilder3.prepare(txn, dict, ml.resources());
       std::tie(trackId3, std::ignore) = ml.tracks().writer(txn).createHotCold(p3h.size(),
                                                                               p3c.size(),
@@ -879,11 +993,24 @@ library:
                                                                                 p3c.writeTo(c);
                                                                               });
 
+      auto trackBuilder4 = TrackBuilder::createNew();
+      trackBuilder4.property().uri("cover-removed.flac");
+      auto const [p4h, p4c] = trackBuilder4.prepare(txn, dict, ml.resources());
+      std::tie(trackId4, std::ignore) = ml.tracks().writer(txn).createHotCold(p4h.size(),
+                                                                              p4c.size(),
+                                                                              [&](TrackId, auto h, auto c)
+                                                                              {
+                                                                                p4h.writeTo(h);
+                                                                                p4c.writeTo(c);
+                                                                              });
+
       txn.commit();
     }
 
     std::filesystem::copy_file(std::filesystem::current_path() / "test/integration/tag/test_data/with_cover.flac",
                                std::filesystem::path{temp.path()} / "cover.flac");
+    std::filesystem::copy_file(std::filesystem::current_path() / "test/integration/tag/test_data/with_cover.flac",
+                               std::filesystem::path{temp.path()} / "cover-removed.flac");
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";
     auto exporter = LibraryYamlExporter{ml};
@@ -895,12 +1022,15 @@ library:
       auto root = tree.rootref();
       auto tracks = root["library"]["tracks"];
       REQUIRE(tracks.is_seq());
-      REQUIRE(tracks.num_children() == 3);
+      REQUIRE(tracks.num_children() == 4);
 
       CHECK(yaml::scalarView(tracks[0]["title"]) == "Should Export Fully");
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
       CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
-      CHECK(tracks[2].has_child("coverArtBase64"));
+      CHECK(tracks[2].has_child("covers"));
+      REQUIRE(tracks[3].has_child("covers"));
+      CHECK(tracks[3]["covers"].is_seq());
+      CHECK(tracks[3]["covers"].num_children() == 0);
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
     }
   }
