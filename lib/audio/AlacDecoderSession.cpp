@@ -33,7 +33,6 @@ namespace ao::audio
   namespace
   {
     [[maybe_unused]] constexpr std::int32_t kSignExtensionMask = ~0x00FFFFFF;
-    constexpr std::uint8_t kBytesPer24BitSample = 3;
     constexpr std::size_t kAlacConfigOffset = 12;
     constexpr std::size_t kAlacConfigSize = 24;
     constexpr std::size_t kAlacCompatibleVersionOffset = kAlacConfigOffset + 4;
@@ -51,7 +50,7 @@ namespace ao::audio
     {
       if (bitDepth == 24U)
       {
-        return kBytesPer24BitSample;
+        return 3U;
       }
 
       if (bitDepth == 32U)

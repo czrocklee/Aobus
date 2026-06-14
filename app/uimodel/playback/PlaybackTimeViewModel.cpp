@@ -88,23 +88,17 @@ namespace ao::uimodel::playback
                                                         std::chrono::milliseconds elapsed,
                                                         std::chrono::milliseconds duration)
   {
-    constexpr int kSecInMin = 60;
-
     auto const elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
 
     switch (auto const durSec = std::chrono::duration_cast<std::chrono::seconds>(duration).count(); mode)
     {
-      case PlaybackTimeMode::Elapsed: return std::format("{:d}:{:02d}", elapsedSec / kSecInMin, elapsedSec % kSecInMin);
+      case PlaybackTimeMode::Elapsed: return std::format("{:d}:{:02d}", elapsedSec / 60, elapsedSec % 60);
 
-      case PlaybackTimeMode::Duration: return std::format("{:d}:{:02d}", durSec / kSecInMin, durSec % kSecInMin);
+      case PlaybackTimeMode::Duration: return std::format("{:d}:{:02d}", durSec / 60, durSec % 60);
 
       case PlaybackTimeMode::Default:
       default:
-        return std::format("{:d}:{:02d} / {:d}:{:02d}",
-                           elapsedSec / kSecInMin,
-                           elapsedSec % kSecInMin,
-                           durSec / kSecInMin,
-                           durSec % kSecInMin);
+        return std::format("{:d}:{:02d} / {:d}:{:02d}", elapsedSec / 60, elapsedSec % 60, durSec / 60, durSec % 60);
     }
   }
 } // namespace ao::uimodel::playback

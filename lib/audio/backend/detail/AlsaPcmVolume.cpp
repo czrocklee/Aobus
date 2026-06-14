@@ -63,8 +63,6 @@ namespace ao::audio::backend::detail
       constexpr std::uint32_t kSignExtendMask = 0xFF000000;
       constexpr std::uint32_t kSignBit24 = 0x800000;
       constexpr std::uint32_t kByteMask = 0xFF;
-      constexpr std::int32_t kShift8 = 8;
-      constexpr std::int32_t kShift16 = 16;
 
       for (std::size_t i = 0; i + 2 < pcm.size(); i += kS243LeBytes)
       {
@@ -72,7 +70,7 @@ namespace ao::audio::backend::detail
         std::uint32_t const b0 = static_cast<std::uint8_t>(pcm[i]);
         std::uint32_t const b1 = static_cast<std::uint8_t>(pcm[i + 1]);
         std::uint32_t const b2 = static_cast<std::uint8_t>(pcm[i + 2]);
-        std::uint32_t uSample = b0 | (b1 << kShift8) | (b2 << kShift16);
+        std::uint32_t uSample = b0 | (b1 << 8) | (b2 << 16);
 
         // Sign extend from 24 to 32 bits
         if ((uSample & kSignBit24) != 0)
@@ -89,8 +87,8 @@ namespace ao::audio::backend::detail
 
         // Repack 3 bytes
         pcm[i] = static_cast<std::byte>(finalSample & kByteMask);
-        pcm[i + 1] = static_cast<std::byte>((finalSample >> kShift8) & kByteMask);
-        pcm[i + 2] = static_cast<std::byte>((finalSample >> kShift16) & kByteMask);
+        pcm[i + 1] = static_cast<std::byte>((finalSample >> 8) & kByteMask);
+        pcm[i + 2] = static_cast<std::byte>((finalSample >> 16) & kByteMask);
       }
     }
   } // namespace

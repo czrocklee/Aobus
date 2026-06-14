@@ -18,9 +18,12 @@ namespace ao::library
 {
   // Extra capacity for dictionary entries
   constexpr std::uint32_t kExtraCapacity = 4096;
+  // Initial bucket count for the string-to-id lookup map.
+  constexpr std::uint32_t kInitialBucketCount = 1024;
 
   DictionaryStore::DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& txn)
-    : _database{std::move(db)}, _stringToId{1024, DictHash{&_idToStringStorage}, DictEqual{&_idToStringStorage}}
+    : _database{std::move(db)}
+    , _stringToId{kInitialBucketCount, DictHash{&_idToStringStorage}, DictEqual{&_idToStringStorage}}
   {
     auto const reader = _database.reader(txn);
 

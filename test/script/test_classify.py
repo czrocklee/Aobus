@@ -32,6 +32,30 @@ class TidyClassifyTest(unittest.TestCase):
         self.assertEqual(tidy.classify(helper, explicit=True), "IGNORE")
 
 
+class TidyChecksForTest(unittest.TestCase):
+    def test_no_selection_uses_full_mode_checks(self):
+        self.assertEqual(tidy.checks_for("STRICT", None), tidy.STRICT_CHECKS)
+        self.assertEqual(tidy.checks_for("RELAXED", None), tidy.RELAXED_CHECKS)
+
+    def test_selected_check_keeps_mode_disables(self):
+        # A check disabled only for tests must stay off in RELAXED even when selected.
+        relaxed = tidy.checks_for("RELAXED", "readability-magic-numbers")
+        self.assertEqual(relaxed.split(",")[:2], ["-*", "readability-magic-numbers"])
+        self.assertEqual(relaxed.split(",").count("-readability-magic-numbers"), 1)
+        self.assertTrue(relaxed.endswith("-readability-magic-numbers") or ",-readability-magic-numbers," in relaxed)
+
+    def test_selected_check_active_in_strict(self):
+        # STRICT does not disable magic-numbers, so it stays enabled.
+        strict = tidy.checks_for("STRICT", "readability-magic-numbers")
+        self.assertIn("readability-magic-numbers", strict)
+        self.assertNotIn("-readability-magic-numbers", strict)
+
+    def test_mode_disabled_checks_excludes_star(self):
+        disables = tidy.mode_disabled_checks("STRICT")
+        self.assertNotIn("-*", disables)
+        self.assertTrue(all(token.startswith("-") for token in disables))
+
+
 class TidySplitExistingTest(unittest.TestCase):
     def test_files_outside_the_repository_keep_their_absolute_path(self):
         with tempfile.NamedTemporaryFile(suffix=".py", dir="/tmp") as outside:

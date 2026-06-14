@@ -24,8 +24,6 @@ namespace ao::audio
 {
   namespace
   {
-    constexpr std::uint8_t kBytesPer24BitSample = 3;
-
     std::size_t frameBytes(Format const& format) noexcept
     {
       if (format.channels == 0 || format.bitDepth == 0)
@@ -37,7 +35,7 @@ namespace ao::audio
 
       if (format.bitDepth == 24U)
       {
-        bytesPerSample = kBytesPer24BitSample;
+        bytesPerSample = 3U;
       }
       else if (format.bitDepth > 16U)
       {

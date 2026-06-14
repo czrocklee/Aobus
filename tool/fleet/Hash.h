@@ -31,8 +31,10 @@ namespace ao::fleet
     // Streams a regular file through the hash in fixed-size chunks.
     void mixFile(std::filesystem::path const& path)
     {
+      constexpr std::size_t kChunkSize = 8192;
+
       auto input = std::ifstream{path, std::ios::binary};
-      auto buffer = std::array<char, 8192>{};
+      auto buffer = std::array<char, kChunkSize>{};
 
       while (input)
       {

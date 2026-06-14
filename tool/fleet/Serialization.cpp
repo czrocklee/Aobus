@@ -408,7 +408,9 @@ namespace ao::fleet
 
     void requireSafeIdentifier(std::string_view value, std::string_view context)
     {
-      if (value.empty() || value.size() > 128 || value == "." || value == "..")
+      constexpr std::size_t kMaxIdentifierLength = 128;
+
+      if (value.empty() || value.size() > kMaxIdentifierLength || value == "." || value == "..")
       {
         throwException<ParseFailure>("{} must be a non-empty safe identifier", context);
       }
@@ -1613,8 +1615,8 @@ namespace ao::fleet
   std::string utcTimestamp()
   {
     auto const now = std::chrono::system_clock::now();
-    auto const seconds = std::chrono::floor<std::chrono::seconds>(now);
-    return std::format("{:%FT%TZ}", seconds);
+    auto const secondsInstant = std::chrono::floor<std::chrono::seconds>(now);
+    return std::format("{:%FT%TZ}", secondsInstant);
   }
 
   std::optional<ReviewVerdict> parseReviewVerdict(std::string_view value)

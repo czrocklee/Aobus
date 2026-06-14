@@ -32,6 +32,9 @@ namespace ao::media::mp4
     constexpr std::byte kDecoderSpecificInfoTag{0x05};
     constexpr std::uint8_t kDescriptorLengthBitsPerByte = 7;
     constexpr std::uint8_t kDescriptorLengthByteMask = 0x7F;
+    constexpr std::uint8_t kDescriptorLengthContinuationBit = 0x80;
+    constexpr std::uint8_t kEsStreamDependenceFlag = 0x80;
+    constexpr std::uint8_t kEsUrlFlag = 0x40;
 
     struct MdhdVersion1PrefixLayout final
     {
@@ -92,7 +95,7 @@ namespace ao::media::mp4
         auto const value = byteValue(bytes[offset++]);
         length = (length << kDescriptorLengthBitsPerByte) | (value & kDescriptorLengthByteMask);
 
-        if ((value & 0x80U) == 0)
+        if ((value & kDescriptorLengthContinuationBit) == 0)
         {
           return length;
         }
@@ -113,12 +116,12 @@ namespace ao::media::mp4
       auto offset = kBaseHeaderSize;
       auto const flags = byteValue(payload[2]);
 
-      if ((flags & 0x80U) != 0)
+      if ((flags & kEsStreamDependenceFlag) != 0)
       {
         offset += 2;
       }
 
-      if ((flags & 0x40U) != 0)
+      if ((flags & kEsUrlFlag) != 0)
       {
         if (offset >= payload.size())
         {

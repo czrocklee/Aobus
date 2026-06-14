@@ -20,9 +20,6 @@ namespace ao::uimodel::track
 {
   namespace
   {
-    constexpr std::uint32_t kKilo = 1000;
-    constexpr double kKiloD = 1000.0;
-
     std::string_view trimAsciiWhitespace(std::string_view value)
     {
       auto const first = value.find_first_not_of(" \t\n\r\f\v");
@@ -115,12 +112,12 @@ namespace ao::uimodel::track
       return {};
     }
 
-    if (sampleRate % kKilo == 0)
+    if (sampleRate % 1000 == 0)
     {
-      return std::format("{} kHz", sampleRate / kKilo);
+      return std::format("{} kHz", sampleRate / 1000);
     }
 
-    return std::format("{:.4g} kHz", static_cast<double>(sampleRate) / kKiloD);
+    return std::format("{:.4g} kHz", static_cast<double>(sampleRate) / 1000);
   }
 
   std::string formatBitrate(std::uint32_t bitrate)
@@ -130,7 +127,7 @@ namespace ao::uimodel::track
       return {};
     }
 
-    return std::format("{} kbps", bitrate / kKilo);
+    return std::format("{} kbps", bitrate / 1000);
   }
 
   std::string formatChannels(std::uint8_t channels)

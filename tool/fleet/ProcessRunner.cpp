@@ -109,9 +109,11 @@ namespace ao::fleet
 
     asio::awaitable<void> drain(std::shared_ptr<RunState> statePtr, bool isError)
     {
+      constexpr std::size_t kReadBufferSize = 8192;
+
       auto& pipe = isError ? statePtr->errorPipe : statePtr->outputPipe;
       auto& sink = isError ? statePtr->standardError : statePtr->standardOutput;
-      auto buffer = std::array<char, 8192>{};
+      auto buffer = std::array<char, kReadBufferSize>{};
 
       while (true)
       {

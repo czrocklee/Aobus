@@ -26,7 +26,6 @@ namespace ao::audio
   namespace
   {
     constexpr auto kDecodeBackoffInterval = std::chrono::milliseconds{5};
-    constexpr std::uint8_t kBytesPer24BitSample = 3;
 
     std::uint64_t bytesPerSecond(Format const& format) noexcept
     {
@@ -39,7 +38,7 @@ namespace ao::audio
 
       if (format.bitDepth == 24U)
       {
-        bytesPerSample = kBytesPer24BitSample;
+        bytesPerSample = 3U;
       }
       else if (format.bitDepth > 16U)
       {

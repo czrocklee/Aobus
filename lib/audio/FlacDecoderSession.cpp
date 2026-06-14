@@ -36,7 +36,6 @@ namespace ao::audio
   namespace
   {
     constexpr std::uint8_t kLowByteMask = 0xFF;
-    constexpr std::uint8_t kBytesPer24BitSample = 3;
 
     ::FLAC__StreamMetadata_StreamInfo const& getStreamInfo(::FLAC__StreamMetadata const* metadata)
     {
@@ -452,7 +451,7 @@ namespace ao::audio
     }
     else if (outBps == 24)
     {
-      impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * kBytesPer24BitSample);
+      impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 3);
       auto* out = utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)

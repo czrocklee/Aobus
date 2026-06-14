@@ -74,6 +74,9 @@ namespace clang::tidy::readability
       return;
     }
 
+    // Inline buffer for the angle-bracket-wrapped filename in the fix-it replacement.
+    constexpr unsigned kFilenameBufferSize = 128;
+
     if (isAngled)
     {
       return;
@@ -81,7 +84,7 @@ namespace clang::tidy::readability
 
     if (fileType == SrcMgr::C_System || fileType == SrcMgr::C_ExternCSystem)
     {
-      auto buf = SmallString<128>{};
+      auto buf = SmallString<kFilenameBufferSize>{};
       buf.push_back('<');
       buf.append(fileName);
       buf.push_back('>');
@@ -91,7 +94,7 @@ namespace clang::tidy::readability
     }
     else if (fileName.starts_with("ao/"))
     {
-      auto buf = SmallString<128>{};
+      auto buf = SmallString<kFilenameBufferSize>{};
       buf.push_back('<');
       buf.append(fileName);
       buf.push_back('>');

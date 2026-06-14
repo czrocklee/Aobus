@@ -88,6 +88,24 @@ RELAXED_CHECKS = ",".join(
 STRICT_HEADER_FILTER = f"{PROJECT_ROOT}/(lib|app|include|tool)/.*"
 RELAXED_HEADER_FILTER = f"{PROJECT_ROOT}/(test|include)/.*"
 
+
+def mode_disabled_checks(mode: str) -> list[str]:
+    """The explicit disable directives a mode applies, e.g. ['-bugprone-...', ...]."""
+    source = RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS
+    return [token for token in source.split(",") if token.startswith("-") and token != "-*"]
+
+
+def checks_for(mode: str, selected: str | None) -> str:
+    """Resolve the clang-tidy check list for a mode.
+
+    With --check, run only the selected check(s) but still honour the mode's disable
+    list, so a check disabled for tests (e.g. readability-magic-numbers) stays off there.
+    """
+    if selected:
+        return ",".join(["-*", selected, *mode_disabled_checks(mode)])
+    return RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS
+
+
 FIX_REPLACEMENT_RE = re.compile(r"^\s+- FilePath:")
 
 
@@ -289,7 +307,7 @@ def run_command(args: argparse.Namespace) -> int:
             return 1 if overall_failed else 0
 
         def run_one(mode: str, file: str, log: Path) -> int:
-            checks = f"-*,{args.check}" if args.check else (RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS)
+            checks = checks_for(mode, args.check)
             header_filter = args.header_filter or (RELAXED_HEADER_FILTER if mode == "RELAXED" else STRICT_HEADER_FILTER)
             extra: list[str] = list(isystem)
             if "linux-gtk/" in file:

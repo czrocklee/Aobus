@@ -41,19 +41,15 @@ namespace ao::audio::detail
         return 0;
       }
 
-      constexpr std::uint32_t kBytesPerSample16 = 2;
-      constexpr std::uint32_t kBytesPerSample24 = 3;
-      constexpr std::uint32_t kBytesPerSample32 = 4;
-
-      std::uint32_t bytesPerSample = kBytesPerSample32;
+      std::uint32_t bytesPerSample = 4;
 
       if (format.bitDepth <= 16)
       {
-        bytesPerSample = kBytesPerSample16;
+        bytesPerSample = 2;
       }
       else if (format.bitDepth == 24)
       {
-        bytesPerSample = kBytesPerSample24;
+        bytesPerSample = 3;
       }
 
       return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;

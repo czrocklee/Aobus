@@ -292,12 +292,14 @@ namespace ao::cli
 
         os << "Total: " << count << " resources, " << totalBytes << " bytes\n";
 
+        constexpr std::size_t kPreviewByteLimit = 64;
+
         for (auto const& [key, val] : reader)
         {
           auto const resId = *utility::layout::view<std::uint32_t>(key);
           os << "  Resource ID: " << resId << " (Size: " << val.size() << ")\n";
           os << "  Preview:\n";
-          hexDump(val.subspan(0, std::min<std::size_t>(64, val.size())), os);
+          hexDump(val.subspan(0, std::min<std::size_t>(kPreviewByteLimit, val.size())), os);
         }
       }
     }
