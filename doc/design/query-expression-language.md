@@ -22,7 +22,7 @@ relational-expression
                         add-expression)? ;
 add-expression      ::= unary-expression (("+" | adjacency) unary-expression)* ;
 unary-expression    ::= ("not" | "!") unary-expression | atom ;
-atom                ::= "(" expression ")" | variable | list | constant ;
+atom                ::= "(" expression ")" | variable | list | range | constant ;
 
 variable            ::= system-variable | user-variable ;
 system-variable     ::= ("$" | "@") system-identifier ;
@@ -43,9 +43,10 @@ quoted-user-char    ::= any non-control Unicode character except '"' and "\"
 
 constant            ::= boolean | unit-number | integer | string ;
 list                ::= "[" constant ("," constant)* "]" ;
+range               ::= constant ".." constant ;
 boolean             ::= "true" | "false" ;
 integer             ::= "-"? ASCII digit+ ;
-unit-number         ::= "-"? ASCII digit+ ("." ASCII digit+)? ASCII letter+ ;
+unit-number         ::= "-"? ASCII digit+ ("." ASCII digit+)? ASCII letter+ (ASCII digit+ ASCII letter+)* ;
 string              ::= bare-string | single-quoted-string | double-quoted-string ;
 bare-string         ::= (ASCII letter | ASCII digit | "_")+ except "and", "or", "not", "in" ;
 single-quoted-string
@@ -63,8 +64,8 @@ Important implementation notes:
   explicit bracketed forms, useful when visual separation from the surrounding expression matters.
 - Quoted user names support `\"` and `\\`. String constants currently do not support escape
   sequences; use the other quote character when possible.
-- Lists are non-empty, comma-separated constant lists. They are executable only as the right operand
-  of `in`.
+- Lists are non-empty, comma-separated constant lists. Ranges are inclusive `lower..upper` pairs.
+  Lists and ranges are executable only as the right operand of `in`.
 - The parser accepts `+` and adjacent atoms as concatenation syntax, but query execution currently
   rejects `+` with `operator '+' is not yet supported in query execution`. Do not use it in smart
   lists or CLI filters yet.
@@ -77,7 +78,7 @@ Operator precedence from tightest to loosest:
 | --- | --- | --- |
 | 1 | `not`, `!` | Boolean negation |
 | 2 | `+`, adjacency | Parser-level concatenation, not executable yet |
-| 3 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison; `~` is substring match, `in` tests equality against a list |
+| 3 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison; `~` is substring match, `in` tests equality against a list or inclusion in a range |
 | 4 | `and`, `&&` | Boolean conjunction |
 | 5 | `or`, `||` | Boolean disjunction |
 
@@ -165,7 +166,8 @@ on the left-hand field:
 | `@sampleRate` | `k`, `m` | thousand, million |
 
 Unit suffixes are case-insensitive. Fractional units are accepted only when they scale to an integer
-value, so `@sampleRate = 44.1k` is valid but `@duration = 1.5ms` is rejected.
+value, so `@sampleRate = 44.1k` is valid but `@duration = 1.5ms` is rejected. Duration constants may
+combine multiple unit segments, such as `2m30s`.
 
 Lists contain constants and are used with `in`:
 
@@ -180,6 +182,24 @@ $year in [1990, 1991, 1992]
 `$year in [1990, 1991]` means `($year = 1990) or ($year = 1991)`.
 Lists may mix constant kinds; each element is compiled as its own equality comparison against the
 left-hand field, matching ordinary `=` semantics.
+
+Ranges are inclusive and are also used with `in`:
+
+```text
+$year in 1990..1999
+@duration in 2m30s..5m
+```
+
+`in` with a range is equivalent to closed bounds over the same left-hand side. For example,
+`$year in 1990..1999` means `($year >= 1990) and ($year <= 1999)`.
+
+Ordered comparisons — `<`, `<=`, `>`, `>=`, and ranges — compare the left-hand field's value.
+Dictionary-backed metadata fields (`$artist`, `$album`, `$genre`, `$albumArtist`, `$composer`,
+`$work`) store interned IDs whose order reflects insertion rather than text, so an ordered comparison
+resolves the ID back to its string and compares lexicographically (the same resolution `~` uses).
+The operand must therefore be a string: `$artist in Bach..Mozart` is valid, but `$artist in 1..5`
+is rejected. Equality and `in` lists over these fields still match by ID, which is both correct and
+cheaper. Plain string fields such as `$title` already compare lexicographically.
 
 ## Quick Filter Expansion
 
@@ -217,6 +237,8 @@ Multiple plain terms are combined with `and`.
 | `$genre in [Classical, Jazz]` | Genre is Classical or Jazz using list membership. |
 | `$artist in ["Bach", "Mozart", "Debussy"]` | Artist equals one of the listed names. |
 | `$year in [1989, 1990, 1991]` | Year equals one of the listed years. |
+| `$year in 1990..1999` | Year is between 1990 and 1999, inclusive. |
+| `$artist in Bach..Mozart` | Artist name falls between Bach and Mozart, inclusive (lexicographic). |
 | `($genre = Classical or $genre = Jazz) and @duration > 3m` | Parenthesized genre choice plus duration. |
 | `not $composer` | Composer field is logically false/empty. |
 | `!#skip` | Track does not have the `skip` tag. |
@@ -231,6 +253,7 @@ Multiple plain terms are combined with `and`.
 | `%mood in ["focus", "night"]` | Custom mood equals one of the listed values. |
 | `@duration >= 3m and @duration < 10m` | Duration is at least 3 minutes and under 10 minutes. |
 | `@duration in [3m, 4m, 5m]` | Duration equals one of the listed unit values. |
+| `@duration in 2m30s..5m` | Duration is between 2 minutes 30 seconds and 5 minutes, inclusive. |
 | `@bitrate >= 256k` | Bitrate is at least 256000. |
 | `@sampleRate = 44.1k` | Sample rate equals 44100. |
 | `@channels = 2 and @bitDepth >= 16` | Stereo, 16-bit or better. |
@@ -252,9 +275,13 @@ Multiple plain terms are combined with `and`.
 | `$title = "a \"quote\""` | String constants do not currently support escape sequences. |
 | `$artist in []` | `in` lists must be non-empty. |
 | `$artist in [Bach,]` | Trailing list separators are rejected. |
-| `$artist in Bach` | `in` requires a list right operand. |
+| `$artist in Bach` | `in` requires a list or range right operand. |
 | `[1990, 1991]` | Lists are only executable as the right operand of `in`. |
+| `1990..1999` | Ranges are only executable as the right operand of `in`. |
+| `$year in 1990..` | Range bounds are both required. |
+| `$artist in 1..5` | Ordered comparisons over dictionary fields require string operands. |
 | `$title + $artist = "x"` | Parses, but execution rejects `+` today. |
 | `@duration >= 10k` | `k` is not a duration unit. |
+| `@bitrate >= 2k3m` | Compound unit literals are only supported for duration. |
 | `@bitrate >= 3h` | `h` is not a bitrate unit. |
 | `@codec = OPUS` | `OPUS` is not a supported codec name yet. |

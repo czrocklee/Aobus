@@ -145,6 +145,13 @@ namespace ao::query
         oss << "]";
       }
 
+      void operator()(RangeExpression const& range)
+      {
+        serializeConstant(range.lower);
+        oss << "..";
+        serializeConstant(range.upper);
+      }
+
       void serializeBinary(Operator op, Expression const& rhs)
       {
         switch (op)

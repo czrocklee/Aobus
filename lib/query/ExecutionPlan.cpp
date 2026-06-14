@@ -93,6 +93,11 @@ namespace ao::query
       }
     }
 
+    bool isOrderedComparison(OpCode op)
+    {
+      return op == OpCode::Lt || op == OpCode::Le || op == OpCode::Gt || op == OpCode::Ge;
+    }
+
     bool isDictionaryField(Field field)
     {
       switch (field)
@@ -197,6 +202,7 @@ namespace ao::query
                           },
                           [](ConstantExpression const&) { return std::uint32_t{0}; },
                           [](ListExpression const&) { return std::uint32_t{0}; },
+                          [](RangeExpression const&) { return std::uint32_t{0}; },
                           [dict](std::unique_ptr<BinaryExpression> const& binary)
                           {
                             if (!binary)
@@ -238,8 +244,25 @@ namespace ao::query
         case Field::TrackTotal: return "trackTotal";
         case Field::DiscNumber: return "discNumber";
         case Field::DiscTotal: return "discTotal";
+        case Field::ArtistId: return "artist";
+        case Field::AlbumId: return "album";
+        case Field::GenreId: return "genre";
+        case Field::AlbumArtistId: return "albumArtist";
+        case Field::ComposerId: return "composer";
+        case Field::WorkId: return "work";
         default: return "field";
       }
+    }
+
+    bool isStringConstant(ConstantExpression const& constant)
+    {
+      return std::holds_alternative<std::string>(constant);
+    }
+
+    bool isStringConstantOperand(Expression const& expr)
+    {
+      auto const* constant = std::get_if<ConstantExpression>(&expr);
+      return constant != nullptr && isStringConstant(*constant);
     }
 
     std::optional<std::uint64_t> parseUnsigned(std::string_view value)
@@ -334,34 +357,11 @@ namespace ao::query
       throwException<Exception>("unit '{}' is not supported for {} constants", normalized, fieldName(field));
     }
 
-    std::int64_t scaleUnitConstant(UnitConstantExpression const& constant, Field field)
+    std::uint64_t scaleUnitSegment(std::string_view numberPart,
+                                   std::string_view suffixPart,
+                                   Field field,
+                                   UnitConstantExpression const& constant)
     {
-      if (field == Field::TagBloom)
-      {
-        throwException<Exception>("unit literal '{}' requires a numeric field context", constant.lexeme);
-      }
-
-      auto lexeme = std::string_view{constant.lexeme};
-
-      auto const negative = !lexeme.empty() && lexeme.front() == '-';
-
-      if (negative)
-      {
-        lexeme.remove_prefix(1);
-      }
-
-      auto const* const suffixStart =
-        std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
-
-      if (suffixStart == lexeme.end())
-      {
-        throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
-      }
-
-      auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
-      auto const numberPart = lexeme.substr(0, suffixOffset);
-      auto const suffixPart = lexeme.substr(suffixOffset);
-
       if (numberPart.empty() || suffixPart.empty())
       {
         throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
@@ -409,30 +409,87 @@ namespace ao::query
       }
 
       auto const magnitude = *optScaledNumerator / *optDenominator;
+      return magnitude;
+    }
 
-      if (!negative)
+    std::int64_t scaleUnitConstant(UnitConstantExpression const& constant, Field field)
+    {
+      if (field == Field::TagBloom)
       {
-        if (magnitude > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        throwException<Exception>("unit literal '{}' requires a numeric field context", constant.lexeme);
+      }
+
+      auto lexeme = std::string_view{constant.lexeme};
+
+      auto const negative = !lexeme.empty() && lexeme.front() == '-';
+
+      if (negative)
+      {
+        lexeme.remove_prefix(1);
+      }
+
+      auto total = std::uint64_t{0};
+      auto segmentCount = std::uint32_t{0};
+
+      while (!lexeme.empty())
+      {
+        auto const* const suffixStart =
+          std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
+
+        if (suffixStart == lexeme.end())
+        {
+          throwException<Exception>("invalid unit literal '{}'", constant.lexeme);
+        }
+
+        auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
+        auto const numberPart = lexeme.substr(0, suffixOffset);
+        auto const suffixAndRest = lexeme.substr(suffixOffset);
+        auto const* const nextNumber =
+          std::ranges::find_if(suffixAndRest, [](unsigned char ch) { return std::isdigit(ch) != 0; });
+        auto const suffixSize = static_cast<std::size_t>(std::distance(suffixAndRest.begin(), nextNumber));
+        auto const suffixPart = suffixAndRest.substr(0, suffixSize);
+        auto const magnitude = scaleUnitSegment(numberPart, suffixPart, field, constant);
+        auto const optTotal = checkedAdd(total, magnitude);
+
+        if (!optTotal)
         {
           throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
         }
 
-        return static_cast<std::int64_t>(magnitude);
+        total = *optTotal;
+        segmentCount++;
+        lexeme = suffixAndRest.substr(suffixSize);
+      }
+
+      if (segmentCount > 1 && field != Field::Duration)
+      {
+        throwException<Exception>(
+          "compound unit literal '{}' is only supported for duration constants", constant.lexeme);
+      }
+
+      if (!negative)
+      {
+        if (total > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        {
+          throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
+        }
+
+        return static_cast<std::int64_t>(total);
       }
 
       auto const negativeLimit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) + 1;
 
-      if (magnitude > negativeLimit)
+      if (total > negativeLimit)
       {
         throwException<Exception>("unit literal '{}' is out of range", constant.lexeme);
       }
 
-      if (magnitude == negativeLimit)
+      if (total == negativeLimit)
       {
         return std::numeric_limits<std::int64_t>::min();
       }
 
-      return -static_cast<std::int64_t>(magnitude);
+      return -static_cast<std::int64_t>(total);
     }
   }
 
@@ -460,7 +517,8 @@ namespace ao::query
                                     [this](std::unique_ptr<UnaryExpression> const& unary) { compileUnary(*unary); },
                                     [this](VariableExpression const& var) { compileVariable(var); },
                                     [this](ConstantExpression const& constant) { compileConstant(constant); },
-                                    [this](ListExpression const& list) { compileList(list); }),
+                                    [this](ListExpression const& list) { compileList(list); },
+                                    [this](RangeExpression const& range) { compileRange(range); }),
                expr);
   }
 
@@ -485,9 +543,20 @@ namespace ao::query
         ao::throwException<Exception>("LIKE operator not supported for coverArt or tags");
       }
 
+      // Dictionary fields store interned IDs, so an ordered comparison (<, <=, >, >=)
+      // must compare the resolved text rather than the ID. Require a string operand
+      // and keep it as a string constant (like LIKE) so the evaluator resolves the
+      // field's ID back to text at compare time.
+      if (isOrderedComparison(opcode) && isDictionaryField(leftField) &&
+          !isStringConstantOperand(binary.optOperation->operand))
+      {
+        throwException<Exception>(
+          "ordered comparison on the '{}' field requires a string operand", fieldName(leftField));
+      }
+
       auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
 
-      if (opcode == OpCode::Like && isDictionaryField(leftField))
+      if (isDictionaryField(leftField) && (opcode == OpCode::Like || isOrderedComparison(opcode)))
       {
         _resolveStringConstantsToIds = false;
       }
@@ -717,47 +786,116 @@ namespace ao::query
     throwException<Exception>("list expressions are only supported as the right operand of 'in'");
   }
 
+  void QueryCompiler::compileRange(RangeExpression const& /*range*/)
+  {
+    throwException<Exception>("range expressions are only supported as the right operand of 'in'");
+  }
+
   void QueryCompiler::compileIn(Expression const& lhs, Expression const& rhs)
   {
-    auto const* list = std::get_if<ListExpression>(&rhs);
-
-    if (list == nullptr)
+    if (auto const* list = std::get_if<ListExpression>(&rhs); list != nullptr)
     {
-      throwException<Exception>("operator 'in' expects a list right operand");
+      if (list->values.empty())
+      {
+        throwException<Exception>("operator 'in' expects a non-empty list");
+      }
+
+      auto first = true;
+
+      for (auto const& value : list->values)
+      {
+        compileExpression(lhs);
+        compileConstant(value);
+
+        auto const rightReg = _nextReg - 1;
+        _plan.instructions.push_back(Instruction{
+          .op = OpCode::Eq,
+          .field = 0,
+          .operand = static_cast<std::int32_t>(rightReg),
+          .constValue = 0,
+          .size = 0,
+          .data = nullptr,
+        });
+        _nextReg--;
+
+        if (first)
+        {
+          first = false;
+          continue;
+        }
+
+        auto const rhsReg = _nextReg - 1;
+        _plan.instructions.push_back(Instruction{
+          .op = OpCode::Or,
+          .field = 0,
+          .operand = static_cast<std::int32_t>(rhsReg),
+          .constValue = 0,
+          .size = 0,
+          .data = nullptr,
+        });
+        _nextReg--;
+      }
+
+      return;
     }
 
-    if (list->values.empty())
+    if (auto const* range = std::get_if<RangeExpression>(&rhs); range == nullptr)
     {
-      throwException<Exception>("operator 'in' expects a non-empty list");
+      throwException<Exception>("operator 'in' expects a list or range right operand");
     }
-
-    auto first = true;
-
-    for (auto const& value : list->values)
+    else
     {
       compileExpression(lhs);
-      compileConstant(value);
 
-      auto const rightReg = _nextReg - 1;
+      // A range compiles to Ge/Le bounds, i.e. ordered comparisons. For dictionary
+      // fields those must compare resolved text, so require string bounds and keep
+      // them as string constants (see compileBinary / executeComparison).
+      auto const dictionaryBounds = isDictionaryField(_lastField);
+
+      if (dictionaryBounds && (!isStringConstant(range->lower) || !isStringConstant(range->upper)))
+      {
+        throwException<Exception>("range over the '{}' field requires string bounds", fieldName(_lastField));
+      }
+
+      auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
+
+      if (dictionaryBounds)
+      {
+        _resolveStringConstantsToIds = false;
+      }
+
+      compileConstant(range->lower);
+
+      auto const lowerReg = _nextReg - 1;
       _plan.instructions.push_back(Instruction{
-        .op = OpCode::Eq,
+        .op = OpCode::Ge,
         .field = 0,
-        .operand = static_cast<std::int32_t>(rightReg),
+        .operand = static_cast<std::int32_t>(lowerReg),
         .constValue = 0,
         .size = 0,
         .data = nullptr,
       });
       _nextReg--;
 
-      if (first)
-      {
-        first = false;
-        continue;
-      }
+      compileExpression(lhs);
+      compileConstant(range->upper);
+
+      auto const upperReg = _nextReg - 1;
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::Le,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(upperReg),
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
+      _nextReg--;
+
+      _resolveStringConstantsToIds = previousResolveStringConstantsToIds;
 
       auto const rhsReg = _nextReg - 1;
       _plan.instructions.push_back(Instruction{
-        .op = OpCode::Or,
+        .op = OpCode::And,
         .field = 0,
         .operand = static_cast<std::int32_t>(rhsReg),
         .constValue = 0,

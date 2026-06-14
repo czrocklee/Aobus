@@ -176,7 +176,7 @@ namespace
   {
     static constexpr auto kUnitToken =
       dsl::token(dsl::minus_sign + dsl::digits<> + dsl::opt(dsl::lit_c<'.'> >> dsl::digits<>) +
-                 decltype(dsl::identifier(dsl::ascii::alpha))::pattern());
+                 decltype(dsl::identifier(dsl::ascii::alpha, dsl::ascii::alpha_digit))::pattern());
     static constexpr auto rule = dsl::peek(kUnitToken) >> dsl::capture(kUnitToken);
     static constexpr auto value = lexy::callback<UnitConstantExpression>(
       [](auto lexeme) { return UnitConstantExpression{lexeme | std::ranges::to<std::string>()}; });
@@ -198,6 +198,15 @@ namespace
                                     { return ListExpression{.values = std::move(values)}; });
   };
 
+  struct ConstantRange final
+  {
+    static constexpr auto rule =
+      dsl::peek(dsl::p<Constant> + LEXY_LIT("..")) >> (dsl::p<Constant> + LEXY_LIT("..") + dsl::p<Constant>);
+    static constexpr auto value = lexy::callback<RangeExpression>(
+      [](ConstantExpression lower, ConstantExpression upper)
+      { return RangeExpression{.lower = std::move(lower), .upper = std::move(upper)}; });
+  };
+
   struct Expr : lexy::expression_production
   {
     struct ExpectedOperand
@@ -207,8 +216,8 @@ namespace
 
     struct ExprAtom
     {
-      static constexpr auto rule =
-        dsl::list(dsl::parenthesized(dsl::p<Expr>) | dsl::p<Variable> | dsl::p<ConstantList> | dsl::p<Constant>);
+      static constexpr auto rule = dsl::list(dsl::parenthesized(dsl::p<Expr>) | dsl::p<Variable> |
+                                             dsl::p<ConstantList> | dsl::p<ConstantRange> | dsl::p<Constant>);
       static constexpr auto value = lexy::as_list<std::vector<Expression>> >>
                                     lexy::callback<Expression>(
                                       [](std::vector<Expression> list)

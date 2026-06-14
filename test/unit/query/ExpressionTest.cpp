@@ -99,6 +99,13 @@ namespace ao::query::test
         oss << "]";
       }
 
+      void operator()(RangeExpression const& range)
+      {
+        std::visit(*this, Expression{range.lower});
+        oss << "..";
+        std::visit(*this, Expression{range.upper});
+      }
+
       std::ostringstream oss;
     };
 

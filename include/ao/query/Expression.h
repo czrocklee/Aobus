@@ -41,9 +41,16 @@ namespace ao::query
     std::vector<ConstantExpression> values;
   };
 
+  struct RangeExpression
+  {
+    ConstantExpression lower;
+    ConstantExpression upper;
+  };
+
   using Expression = std::variant<VariableExpression,
                                   ConstantExpression,
                                   ListExpression,
+                                  RangeExpression,
                                   std::unique_ptr<BinaryExpression>,
                                   std::unique_ptr<UnaryExpression>>;
 

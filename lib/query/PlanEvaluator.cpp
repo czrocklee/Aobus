@@ -97,6 +97,11 @@ namespace ao::query
       }
     }
 
+    bool isOrderedComparison(OpCode op)
+    {
+      return op == OpCode::Lt || op == OpCode::Le || op == OpCode::Gt || op == OpCode::Ge;
+    }
+
     // Get string constant from plan's string constants table
     std::string_view getStringConstant(ExecutionPlan const* plan, std::int64_t stringIdx)
     {
@@ -231,10 +236,20 @@ namespace ao::query
         auto const constantStr = getStringConstant(plan, stringIdx);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
+      else if (prevLoadField != nullptr && isDictionaryField(static_cast<Field>(prevLoadField->field)) &&
+               isOrderedComparison(instr.op))
+      {
+        // Dictionary fields hold interned IDs whose order is arbitrary, so an
+        // ordered comparison resolves the ID back to text and compares that.
+        auto field = static_cast<Field>(prevLoadField->field);
+        auto const fieldStr = loadDictionaryFieldValue(track, field, plan);
+        auto const constantStr = getStringConstant(plan, stringIdx);
+        reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
+      }
       else
       {
         // Numeric comparison
-        auto rhs = reg(registers, instr.operand);
+        auto rhs = stringIdx;
         auto lhs = reg(registers, instr.operand - 1);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), lhs, rhs) ? 1 : 0;
       }

@@ -146,6 +146,17 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(binPtr)}) == R"($artist in ["Bach", "Mozart"])");
   }
 
+  TEST_CASE("Serializer - Serializes In Ranges", "[query][unit][serializer]")
+  {
+    auto binPtr = std::make_unique<BinaryExpression>();
+    binPtr->operand = VariableExpression{.type = VariableType::Property, .name = "duration"};
+    binPtr->optOperation = BinaryExpression::Operation{
+      .op = Operator::In,
+      .operand = RangeExpression{.lower = UnitConstantExpression{"2m30s"}, .upper = UnitConstantExpression{"5m"}}};
+
+    CHECK(serialize(Expression{std::move(binPtr)}) == "@duration in 2m30s..5m");
+  }
+
   TEST_CASE("Serializer - RoundTrip ParseSerializeParse Preserves Canonical Shape", "[query][unit][serializer]")
   {
     auto queries = {R"($artist = "Bach" and $year >= 2020)",
@@ -153,6 +164,7 @@ namespace ao::query::test
                     R"($title ~ "Bach" or $composer ~ "Mozart")",
                     R"(%isrc = "X" and @duration >= 3m)",
                     R"($artist in ["Bach", "Mozart"])",
+                    "@duration in 2m30s..5m",
                     R"(#"90s Rock" and %"Replay Gain" = "high")"};
 
     for (auto const& q : queries)

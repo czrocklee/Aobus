@@ -244,6 +244,96 @@ namespace ao::query::test
     }
   }
 
+  TEST_CASE("ExecutionPlan - Compile In Range", "[query][unit][execution_plan]")
+  {
+    auto compiler = QueryCompiler{};
+
+    SECTION("CompilesRangeAsClosedBounds")
+    {
+      auto const plan = compiler.compile(parse("$year in 1990..1999"));
+
+      CHECK(std::ranges::count(plan.instructions, OpCode::Ge, &Instruction::op) == 1);
+      CHECK(std::ranges::count(plan.instructions, OpCode::Le, &Instruction::op) == 1);
+      CHECK(std::ranges::count(plan.instructions, OpCode::And, &Instruction::op) == 1);
+    }
+
+    SECTION("ScalesDurationRangeBounds")
+    {
+      auto const plan = compiler.compile(parse("@duration in 2m30s..5m"));
+
+      REQUIRE(plan.instructions.size() >= 5);
+      CHECK(plan.instructions[1].op == OpCode::LoadConstant);
+      CHECK(plan.instructions[1].constValue == 150000);
+      CHECK(plan.instructions[4].op == OpCode::LoadConstant);
+      CHECK(plan.instructions[4].constValue == 300000);
+    }
+
+    SECTION("RejectsStandaloneRange")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("1990..1999")));
+    }
+
+    SECTION("CompilesDictionaryRangeAsStringBounds")
+    {
+      // Dictionary fields hold interned IDs, so range bounds are kept as string
+      // constants (not resolved to IDs) for lexicographic comparison at eval time.
+      auto const plan = compiler.compile(parse("$artist in Bach..Mozart"));
+
+      REQUIRE(plan.stringConstants.size() == 2);
+      CHECK(plan.stringConstants[0] == "Bach");
+      CHECK(plan.stringConstants[1] == "Mozart");
+      CHECK(std::ranges::count(plan.instructions, OpCode::Ge, &Instruction::op) == 1);
+      CHECK(std::ranges::count(plan.instructions, OpCode::Le, &Instruction::op) == 1);
+    }
+
+    SECTION("RejectsNonStringDictionaryRangeBounds")
+    {
+      // An ordered comparison over a dictionary field only makes sense against text.
+      REQUIRE_THROWS(compiler.compile(parse("$artist in 1..5")));
+    }
+
+    SECTION("AllowsRangeOnStringField")
+    {
+      // Plain string fields compare lexicographically, so a range is meaningful.
+      CHECK_NOTHROW(compiler.compile(parse("$title in apple..zoo")));
+    }
+  }
+
+  TEST_CASE("ExecutionPlan - Ordered Comparison Field Restrictions", "[query][unit][execution_plan]")
+  {
+    auto compiler = QueryCompiler{};
+
+    SECTION("AllowsStringRelationalOnDictionaryField")
+    {
+      // Ordered comparisons over dictionary fields compare resolved text; the
+      // operand is kept as a string constant rather than resolved to an ID.
+      auto const plan = compiler.compile(parse("$artist > Bach"));
+
+      REQUIRE(plan.stringConstants.size() == 1);
+      CHECK(plan.stringConstants[0] == "Bach");
+      CHECK(std::ranges::count(plan.instructions, OpCode::Gt, &Instruction::op) == 1);
+    }
+
+    SECTION("RejectsNonStringRelationalOnDictionaryField")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("$artist > 5")));
+      REQUIRE_THROWS(compiler.compile(parse("$genre <= 3m")));
+    }
+
+    SECTION("AllowsEqualityOnDictionaryField")
+    {
+      CHECK_NOTHROW(compiler.compile(parse("$artist = Bach")));
+      CHECK_NOTHROW(compiler.compile(parse("$genre in [Classical, Jazz]")));
+    }
+
+    SECTION("AllowsRelationalOnNumericAndStringFields")
+    {
+      CHECK_NOTHROW(compiler.compile(parse("$year < 1990")));
+      CHECK_NOTHROW(compiler.compile(parse("$title < zoo")));
+      CHECK_NOTHROW(compiler.compile(parse("$coverArt > 0")));
+    }
+  }
+
   TEST_CASE("ExecutionPlan - Compile Logical Not", "[query][unit][execution_plan]")
   {
     auto expr = parse("not $artist");
@@ -812,7 +902,6 @@ namespace ao::query::test
                      "$discNumber",
                      "$discTotal",
                      "$coverArt",
-                     "$work",
                      "%isrc",
                      "@duration",
                      "@bitrate",
@@ -824,6 +913,11 @@ namespace ao::query::test
         auto plan = compiler.compile(expr);
         CHECK(plan.accessProfile == AccessProfile::ColdOnly);
       }
+
+      // $work is a dictionary field (cold), so reference it with equality rather
+      // than an ordered comparison, which is rejected for dictionary fields.
+      auto workPlan = compiler.compile(parse("$work = w"));
+      CHECK(workPlan.accessProfile == AccessProfile::ColdOnly);
     }
 
     SECTION("HotAndCold")
@@ -927,6 +1021,12 @@ namespace ao::query::test
       }
     }
 
+    SECTION("DurationSupportsCompoundUnits")
+    {
+      auto expr = parse("@duration >= 2m30s");
+      CHECK(compiler.compile(expr).instructions[1].constValue == 150000);
+    }
+
     SECTION("Bitrate and SampleRate Support KAndMUnits")
     {
       auto expr1 = parse("@bitrate >= 256k");
@@ -982,6 +1082,11 @@ namespace ao::query::test
     SECTION("Rejects NonIntegerResolution")
     {
       REQUIRE_THROWS(compiler.compile(parse("@duration >= 1.5ms")));
+    }
+
+    SECTION("RejectsCompoundUnitsOutsideDuration")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("@bitrate >= 2k3m")));
     }
 
     SECTION("Accepts Zero")

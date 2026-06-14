@@ -46,6 +46,7 @@ namespace ao::query
       void operator()(VariableExpression& /*variable*/) {}
       void operator()(ConstantExpression& /*constant*/) {}
       void operator()(ListExpression& /*list*/) {}
+      void operator()(RangeExpression& /*range*/) {}
 
       void shiftAdd(BinaryExpression& binary)
       {

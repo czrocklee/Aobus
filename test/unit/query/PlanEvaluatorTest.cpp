@@ -993,6 +993,128 @@ namespace ao::query::test
     }
   }
 
+  TEST_CASE("PlanEvaluator - In Range", "[query][unit][plan_evaluator]")
+  {
+    auto spec = TrackSpec{};
+    spec.year = 1994;
+    spec.duration = std::chrono::minutes{3};
+    auto track = TrackFixture{spec};
+
+    auto evaluator = PlanEvaluator{};
+    auto compiler = QueryCompiler{&track.dictionary()};
+
+    SECTION("NumericRangeMatch")
+    {
+      auto plan = compiler.compile(parse("$year in 1990..1999"));
+      CHECK(evaluator.evaluateFull(plan, track.view()));
+    }
+
+    SECTION("UnitRangeMatch")
+    {
+      auto plan = compiler.compile(parse("@duration in 2m30s..5m"));
+      CHECK(evaluator.evaluateFull(plan, track.view()));
+    }
+
+    SECTION("OutOfRangeDoesNotMatch")
+    {
+      auto plan = compiler.compile(parse("$year in 1980..1989"));
+      CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
+    }
+  }
+
+  TEST_CASE("PlanEvaluator - Dictionary Field Lexicographic Comparison", "[query][unit][plan_evaluator]")
+  {
+    auto temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = WriteTransaction{env};
+    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+
+    // Intern in non-alphabetical order so dictionary-ID order differs from text
+    // order; a correct comparison must use the resolved text, not the interned ID.
+    auto zappaId = dict.put(wtxn, "Zappa");
+    auto adeleId = dict.put(wtxn, "Adele");
+    auto mozartId = dict.put(wtxn, "Mozart");
+    auto kinksId = dict.put(wtxn, "Kinks"); // sorts strictly between Adele and Mozart
+
+    auto compiler = QueryCompiler{&dict};
+    auto evaluator = PlanEvaluator{};
+
+    auto adeleData = makeHotOnlyTrack(adeleId);
+    auto adele = library::TrackView{adeleData, std::span<std::byte const>{}};
+    auto mozartData = makeHotOnlyTrack(mozartId);
+    auto mozart = library::TrackView{mozartData, std::span<std::byte const>{}};
+    auto zappaData = makeHotOnlyTrack(zappaId);
+    auto zappa = library::TrackView{zappaData, std::span<std::byte const>{}};
+    auto kinksData = makeHotOnlyTrack(kinksId);
+    auto kinks = library::TrackView{kinksData, std::span<std::byte const>{}};
+
+    SECTION("RangeMatchesByText")
+    {
+      auto plan = compiler.compile(parse("$artist in Adele..Mozart"));
+      CHECK(evaluator.evaluateFull(plan, adele));       // lower bound, inclusive
+      CHECK(evaluator.evaluateFull(plan, kinks));       // strictly inside the range
+      CHECK(evaluator.evaluateFull(plan, mozart));      // upper bound, inclusive
+      CHECK_FALSE(evaluator.evaluateFull(plan, zappa)); // "Zappa" > "Mozart"
+    }
+
+    SECTION("GreaterThanComparesByText")
+    {
+      auto plan = compiler.compile(parse("$artist > Mozart"));
+      CHECK(evaluator.evaluateFull(plan, zappa));
+      CHECK_FALSE(evaluator.evaluateFull(plan, adele));
+      CHECK_FALSE(evaluator.evaluateFull(plan, mozart)); // strictly greater
+    }
+
+    SECTION("LessThanComparesByText")
+    {
+      auto plan = compiler.compile(parse("$artist < Mozart"));
+      CHECK(evaluator.evaluateFull(plan, adele));
+      CHECK(evaluator.evaluateFull(plan, kinks));
+      CHECK_FALSE(evaluator.evaluateFull(plan, mozart)); // strictly less
+      CHECK_FALSE(evaluator.evaluateFull(plan, zappa));
+    }
+
+    SECTION("LessOrEqualComparesByText")
+    {
+      auto plan = compiler.compile(parse("$artist <= Mozart"));
+      CHECK(evaluator.evaluateFull(plan, adele));
+      CHECK(evaluator.evaluateFull(plan, mozart)); // inclusive
+      CHECK_FALSE(evaluator.evaluateFull(plan, zappa));
+    }
+
+    SECTION("GreaterOrEqualComparesByText")
+    {
+      auto plan = compiler.compile(parse("$artist >= Mozart"));
+      CHECK(evaluator.evaluateFull(plan, mozart)); // inclusive
+      CHECK(evaluator.evaluateFull(plan, zappa));
+      CHECK_FALSE(evaluator.evaluateFull(plan, adele));
+    }
+
+    SECTION("NotEqualStillComparesById")
+    {
+      // '!=' is not an ordered comparison, so it keeps the cheap interned-ID
+      // path; this guards the branch executeComparison routes around.
+      auto plan = compiler.compile(parse("$artist != Mozart"));
+      CHECK(evaluator.evaluateFull(plan, adele));
+      CHECK(evaluator.evaluateFull(plan, zappa));
+      CHECK_FALSE(evaluator.evaluateFull(plan, mozart));
+    }
+
+    SECTION("ResolvesPerFieldNotJustArtist")
+    {
+      // Prove the field dispatch in loadDictionaryFieldValue works for a
+      // dictionary field other than artist.
+      auto rockData = makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, zappaId);
+      auto rock = library::TrackView{rockData, std::span<std::byte const>{}};
+      auto jazzData = makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, adeleId);
+      auto jazz = library::TrackView{jazzData, std::span<std::byte const>{}};
+
+      auto plan = compiler.compile(parse("$genre > Mozart"));
+      CHECK(evaluator.evaluateFull(plan, rock));       // "Zappa" > "Mozart"
+      CHECK_FALSE(evaluator.evaluateFull(plan, jazz)); // "Adele" < "Mozart"
+    }
+  }
+
   TEST_CASE("PlanEvaluator - Tag Query - With Non-Matching Tag", "[query][unit][plan_evaluator]")
   {
     // Dictionary: "rock" -> ID 10, but track has tag ID 20

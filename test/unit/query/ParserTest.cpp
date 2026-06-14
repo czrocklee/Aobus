@@ -105,6 +105,15 @@ namespace ao::query::test
         oss << "]";
       }
 
+      void operator()(RangeExpression const& range)
+      {
+        oss << "[r";
+        std::visit(*this, Expression{range.lower});
+        oss << ",";
+        std::visit(*this, Expression{range.upper});
+        oss << "]";
+      }
+
       std::ostringstream oss;
     };
 
@@ -225,6 +234,13 @@ namespace ao::query::test
     CHECK("[b{in}[v{p}duration],[l[c{u}3m][c{u}4m]]]" == canonicalize(parse("@duration in [3m, 4m]")));
   }
 
+  TEST_CASE("Parser - In Range", "[query][unit][parser]")
+  {
+    CHECK("[b{in}[v{m}year],[r[c{i}1990],[c{i}1999]]]" == canonicalize(parse("$year in 1990..1999")));
+    CHECK("[b{in}[v{p}duration],[r[c{u}2m30s],[c{u}5m]]]" == canonicalize(parse("@duration in 2m30s..5m")));
+    CHECK("[b{in}[v{p}sampleRate],[r[c{u}44.1k],[c{u}48k]]]" == canonicalize(parse("@sampleRate in 44.1k..48k")));
+  }
+
   TEST_CASE("Parser - Logical Operators", "[query][unit][parser]")
   {
     CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach && true")));
@@ -300,6 +316,7 @@ namespace ao::query::test
   TEST_CASE("Parser - Unit Constants", "[query][unit][parser]")
   {
     CHECK("[c{u}3m]" == canonicalize(parse("3m")));
+    CHECK("[c{u}2m30s]" == canonicalize(parse("2m30s")));
     CHECK("[b{ge}[v{p}duration],[c{u}120s]]" == canonicalize(parse("@duration>=120s")));
     CHECK("[b{ge}[v{p}bitrate],[c{u}100k]]" == canonicalize(parse("@bitrate>=100k")));
     CHECK("[b{eq}[v{p}sampleRate],[c{u}44.1k]]" == canonicalize(parse("@sampleRate=44.1k")));
@@ -345,6 +362,13 @@ namespace ao::query::test
       REQUIRE_THROWS(parse("$artist in []"));
       REQUIRE_THROWS(parse("$artist in [Bach,]"));
       REQUIRE_THROWS(parse("$artist in [Bach Mozart]"));
+    }
+
+    SECTION("Malformed Ranges")
+    {
+      REQUIRE_THROWS(parse("$year in 1990.."));
+      REQUIRE_THROWS(parse("$year in ..1999"));
+      REQUIRE_THROWS(parse("$year in 1990...1999"));
     }
   }
 } // namespace ao::query::test

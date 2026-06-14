@@ -161,6 +161,7 @@ namespace ao::query
     void compileVariable(VariableExpression const& var);
     void compileConstant(ConstantExpression const& constant);
     void compileList(ListExpression const& list);
+    void compileRange(RangeExpression const& range);
     void compileIn(Expression const& lhs, Expression const& rhs);
 
     // Resolve string to ID using dictionary (if available)
