@@ -113,10 +113,10 @@ namespace ao::tag::mpeg
       auto bitrate = optFrameView->bitrate();
 
       builder.property()
-        .sampleRate(optFrameView->sampleRate())
-        .bitrate(bitrate)
-        .channels(optFrameView->channels())
-        .bitDepth(16)
+        .sampleRate(SampleRate{optFrameView->sampleRate()})
+        .bitrate(Bitrate{bitrate})
+        .channels(Channels{optFrameView->channels()})
+        .bitDepth(BitDepth{16})
         .codec(library::AudioCodec::Mp3);
 
       auto const duration = calculateDuration(*optFrameView, hasId3v1);
@@ -130,7 +130,7 @@ namespace ao::tag::mpeg
         constexpr std::uint32_t kBitsPerByte = 8;
         bitrate = static_cast<std::uint32_t>(
           (static_cast<std::uint64_t>(optXing->bytes) * kMsPerSecond * kBitsPerByte) / duration.count());
-        builder.property().bitrate(bitrate);
+        builder.property().bitrate(Bitrate{bitrate});
       }
     }
 

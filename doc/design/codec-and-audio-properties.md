@@ -12,12 +12,11 @@ codecs. It does not describe the file extension or container.
 
 - `sampleRate` as `uint32_t`
 - `codec` as `AudioCodec`
-- `bitDepth` as `uint16_t`
-- `rating` as `uint8_t`
+- `bitDepth` as `uint8_t`
 
 `sampleRate` is hot because built-in smart lists and common technical filters can use it without loading
-cold data. `TrackHotHeader` is 40 bytes and `TrackColdHeader` is 32 bytes, keeping the fixed per-track
-header total at 72 bytes.
+cold data. `TrackHotHeader` is 36 bytes and `TrackColdHeader` is 32 bytes, keeping the fixed per-track
+header total at 68 bytes.
 
 ## Codec Mapping
 

@@ -223,11 +223,11 @@ namespace ao::rt
     constexpr auto kPropertyDispatch = std::to_array<PropertyDispatch>({
       {.field = TrackField::Duration,
        .u32Get = [](auto const& prop) { return static_cast<std::uint32_t>(prop.duration().count()); }},
-      {.field = TrackField::Bitrate, .u32Get = [](auto const& prop) { return prop.bitrate(); }},
-      {.field = TrackField::SampleRate, .u32Get = [](auto const& prop) { return prop.sampleRate(); }},
+      {.field = TrackField::Bitrate, .u32Get = [](auto const& prop) { return prop.bitrate().raw(); }},
+      {.field = TrackField::SampleRate, .u32Get = [](auto const& prop) { return prop.sampleRate().raw(); }},
       {.field = TrackField::Codec, .stringGet = [](auto const& prop) { return library::audioCodecName(prop.codec()); }},
-      {.field = TrackField::Channels, .u8Get = [](auto const& prop) { return prop.channels(); }},
-      {.field = TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth(); }},
+      {.field = TrackField::Channels, .u8Get = [](auto const& prop) { return prop.channels().raw(); }},
+      {.field = TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth().raw(); }},
     });
 
     void emitTrackProperties(ryml::NodeRef& node,
@@ -325,16 +325,8 @@ namespace ao::rt
       }
     }
 
-    void emitTrackCommon(ryml::NodeRef& node,
-                         library::TrackView::MetadataProxy const& metadata,
-                         library::TrackView::TagProxy const& tags,
-                         library::DictionaryStore& dict)
+    void emitTrackCommon(ryml::NodeRef& node, library::TrackView::TagProxy const& tags, library::DictionaryStore& dict)
     {
-      if (metadata.rating() != 0)
-      {
-        node.append_child() << ryml::key("rating") << metadata.rating();
-      }
-
       if (tags.count() != 0)
       {
         auto tagsNode = node.append_child();
@@ -490,7 +482,7 @@ namespace ao::rt
     }
 
     emitTrackCover(trackNode, txn, metadata, optBaseline, mode, exportedCovers, resources);
-    emitTrackCommon(trackNode, metadata, view.tags(), dict);
+    emitTrackCommon(trackNode, view.tags(), dict);
   }
 
   void LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,

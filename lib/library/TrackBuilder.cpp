@@ -45,7 +45,6 @@ namespace ao::library
     {
       auto meta = view.metadata();
       builder.metadata().title(meta.title()).year(meta.year());
-      builder.metadata().rating(meta.rating());
 
       auto prop = view.property();
       builder.property().sampleRate(prop.sampleRate()).codec(prop.codec()).bitDepth(prop.bitDepth());
@@ -237,12 +236,6 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::rating(std::uint8_t rating)
-  {
-    _rating = rating;
-    return *this;
-  }
-
   //=============================================================================
   // PropertyBuilder
   //=============================================================================
@@ -253,13 +246,13 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitrate(std::uint32_t bitrate)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitrate(Bitrate bitrate)
   {
     _bitrate = bitrate;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::sampleRate(std::uint32_t sampleRate)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::sampleRate(SampleRate sampleRate)
   {
     _sampleRate = sampleRate;
     return *this;
@@ -271,13 +264,13 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::channels(std::uint8_t channels)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::channels(Channels channels)
   {
     _channels = channels;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitDepth(std::uint8_t bitDepth)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitDepth(BitDepth bitDepth)
   {
     _bitDepth = bitDepth;
     return *this;
@@ -443,12 +436,10 @@ namespace ao::library
       .composerId = _composerId,
       .sampleRate = builder._propertyBuilder._sampleRate,
       .year = builder._metadataBuilder._year,
-      .bitDepth = builder._propertyBuilder._bitDepth,
       .titleLen = static_cast<std::uint16_t>(builder._metadataBuilder._title.size()),
       .tagLen = static_cast<std::uint16_t>(_tagIds.size() * sizeof(DictionaryId)),
+      .bitDepth = builder._propertyBuilder._bitDepth,
       .codec = builder._propertyBuilder._codec,
-      .rating = builder._metadataBuilder._rating,
-      .padding = {},
     };
 
     auto pos = sizeof(TrackHotHeader);

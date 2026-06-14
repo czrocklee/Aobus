@@ -24,7 +24,6 @@ sr, Field::SampleRate
 channels, Field::Channels
 bitDepth, Field::BitDepth
 bd, Field::BitDepth
-rating, Field::Rating
 codec, Field::Codec
 %%
 } // namespace property_dispatch

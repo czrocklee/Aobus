@@ -617,8 +617,7 @@ namespace ao::rt
               .trackNumber(0)
               .totalTracks(0)
               .discNumber(0)
-              .totalDiscs(0)
-              .rating(0);
+              .totalDiscs(0);
             optBuilder->tags().clear();
             optBuilder->custom().clear();
           }
@@ -692,11 +691,6 @@ namespace ao::rt
         }
       }
     }
-
-    if (auto ratingNode = yaml::findChild(trackNode, "rating"); ratingNode.readable())
-    {
-      builder.metadata().rating(yaml::asInt<uint8_t>(ratingNode));
-    }
   }
 
   void LibraryYamlImporter::Impl::overlayCustomData(library::TrackBuilder& builder,
@@ -741,10 +735,11 @@ namespace ao::rt
     constexpr auto kPropertyDispatch = std::to_array<Dispatch>({
       {.field = rt::TrackField::Duration,
        .u32Setter = [](auto& prop, auto value) { prop.duration(std::chrono::milliseconds{value}); }},
-      {.field = rt::TrackField::Bitrate, .u32Setter = [](auto& prop, auto value) { prop.bitrate(value); }},
-      {.field = rt::TrackField::SampleRate, .u32Setter = [](auto& prop, auto value) { prop.sampleRate(value); }},
-      {.field = rt::TrackField::Channels, .u8Setter = [](auto& prop, auto value) { prop.channels(value); }},
-      {.field = rt::TrackField::BitDepth, .u8Setter = [](auto& prop, auto value) { prop.bitDepth(value); }},
+      {.field = rt::TrackField::Bitrate, .u32Setter = [](auto& prop, auto value) { prop.bitrate(Bitrate{value}); }},
+      {.field = rt::TrackField::SampleRate,
+       .u32Setter = [](auto& prop, auto value) { prop.sampleRate(SampleRate{value}); }},
+      {.field = rt::TrackField::Channels, .u8Setter = [](auto& prop, auto value) { prop.channels(Channels{value}); }},
+      {.field = rt::TrackField::BitDepth, .u8Setter = [](auto& prop, auto value) { prop.bitDepth(BitDepth{value}); }},
     });
 
     if (auto codecNode = yaml::findChild(trackNode, rt::trackFieldId(rt::TrackField::Codec)); codecNode.readable())

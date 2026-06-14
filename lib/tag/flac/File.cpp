@@ -85,9 +85,9 @@ namespace ao::tag::flac
         {
           auto view = StreamInfoBlockView{iter->data()};
           builder.property()
-            .sampleRate(view.sampleRate())
-            .channels(view.channels())
-            .bitDepth(view.bitDepth())
+            .sampleRate(SampleRate{view.sampleRate()})
+            .channels(Channels{view.channels()})
+            .bitDepth(BitDepth{view.bitDepth()})
             .codec(library::AudioCodec::Flac);
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
@@ -97,8 +97,8 @@ namespace ao::tag::flac
                                             view.sampleRate()};
                 duration > std::chrono::milliseconds{0})
             {
-              builder.property().duration(duration).bitrate(static_cast<std::uint32_t>(
-                (size() * kBitsPerByte * std::chrono::milliseconds::period::den) / duration.count()));
+              builder.property().duration(duration).bitrate(Bitrate{static_cast<std::uint32_t>(
+                (size() * kBitsPerByte * std::chrono::milliseconds::period::den) / duration.count())});
             }
           }
 

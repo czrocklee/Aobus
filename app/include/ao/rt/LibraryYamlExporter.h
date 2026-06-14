@@ -20,7 +20,7 @@ namespace ao::rt
    */
   enum class ExportMode : std::uint8_t
   {
-    Delta,    // User edits + Tags + Ratings + Lists
+    Delta,    // User edits + Tags + Lists
     Metadata, // Curated text + cover art
     Full,     // Everything
     ListOnly  // Playlists only

@@ -763,7 +763,6 @@ namespace ao::query::test
                      "false",
                      "@sampleRate",
                      "@bitDepth",
-                     "@rating",
                      "@codec"};
 
       for (auto const* f : fields)

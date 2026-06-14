@@ -171,7 +171,7 @@ namespace ao::gtk::portal
     box->append(*label);
 
     auto* modeCombo = Gtk::make_managed<Gtk::DropDown>();
-    auto modeStringsPtr = Gtk::StringList::create({"Delta (Sync user edits, Tags, Ratings, Lists)",
+    auto modeStringsPtr = Gtk::StringList::create({"Delta (Sync user edits, Tags, Lists)",
                                                    "Metadata (Curated text + Cover Art, no technical stats)",
                                                    "Full (Disaster Recovery: Everything)",
                                                    "List Only (Sync playlists without touching tracks)"});

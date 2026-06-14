@@ -79,8 +79,8 @@ namespace ao::rt::test
       trackBuilder.property()
         .uri("song.flac")
         .duration(std::chrono::minutes{3})
-        .sampleRate(96000)
-        .bitDepth(24)
+        .sampleRate(SampleRate{96000})
+        .bitDepth(BitDepth{24})
         .codec(AudioCodec::Flac);
       trackBuilder.metadata().title("Test Title").artist("Test Artist").coverArtId(resId.raw());
       trackBuilder.tags().add("rock").add("favorite");
@@ -508,7 +508,7 @@ namespace ao::rt::test
       auto& dict = ml.dictionary();
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property().uri(uri1);
-      trackBuilder.metadata().title("Original Title").rating(1);
+      trackBuilder.metadata().title("Original Title");
       auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml.resources());
       auto [tid, view] = ml.tracks().writer(txn).createHotCold(preparedHot.size(),
                                                                preparedCold.size(),
@@ -533,7 +533,6 @@ library:
   tracks:
     - uri: track1.flac
       title: "Updated Title"
-      rating: 5
     - uri: track2.flac
       title: "New Track"
   lists: []
@@ -561,7 +560,6 @@ library:
       // Track 1 should be updated
       auto const& v1 = tracks.at(uri1);
       CHECK(v1.metadata().title() == "Updated Title");
-      CHECK(v1.metadata().rating() == 5);
 
       // Track 2 should be added
       auto const& v2 = tracks.at(uri2);
@@ -870,7 +868,6 @@ library:
       auto trackBuilder3 = TrackBuilder::createNew();
       trackBuilder3.property().uri("cover.flac");
       trackBuilder3.metadata().title("Different Title");
-      trackBuilder3.metadata().rating(5);
       auto coverData = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
       trackBuilder3.metadata().coverArtData(coverData);
       auto const [p3h, p3c] = trackBuilder3.prepare(txn, dict, ml.resources());
@@ -903,7 +900,6 @@ library:
       CHECK(yaml::scalarView(tracks[0]["title"]) == "Should Export Fully");
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
       CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
-      CHECK(yaml::scalarView(tracks[2]["rating"]) == "5");
       CHECK(tracks[2].has_child("coverArtBase64"));
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
     }

@@ -52,8 +52,7 @@ namespace ao::library::test
       h.composerId = kInvalidDictionaryId;
       h.year = 2020;
       h.codec = AudioCodec::Unknown;
-      h.bitDepth = 16;
-      h.rating = 3;
+      h.bitDepth = BitDepth{16};
       h.tagLen = 0;
       h.titleLen = 0;
 
@@ -71,8 +70,7 @@ namespace ao::library::test
       h.composerId = kInvalidDictionaryId;
       h.year = 2020;
       h.codec = AudioCodec::Unknown;
-      h.bitDepth = 16;
-      h.rating = 3;
+      h.bitDepth = BitDepth{16};
       h.tagLen = 0; // no tags
 
       // In new layout: tags first (at sizeof(TrackHotHeader)), title after (at sizeof(TrackHotHeader) + tagLen)
@@ -204,35 +202,14 @@ namespace ao::library::test
   {
     auto h = TrackHotHeader{};
     h.codec = AudioCodec::Flac;
-    h.bitDepth = 24;
-    h.sampleRate = 96000;
-    h.rating = 0;
+    h.bitDepth = BitDepth{24};
+    h.sampleRate = SampleRate{96000};
     auto const data = serializeHeader(h);
     auto const view = TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.property().codec() == AudioCodec::Flac);
     CHECK(view.property().bitDepth() == 24);
     CHECK(view.property().sampleRate() == 96000);
-  }
-
-  TEST_CASE("TrackView - Hot Rating", "[library][unit][track]")
-  {
-    auto const data = createMinimalHotData();
-    auto const view = TrackView{data, std::span<std::byte const>{}};
-
-    CHECK(view.metadata().rating() == 3);
-  }
-
-  TEST_CASE("TrackView - Hot Rating Boundary", "[library][unit][track]")
-  {
-    auto h = TrackHotHeader{};
-    h.rating = 0;
-    auto data = serializeHeader(h);
-    CHECK(TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 0);
-
-    h.rating = 255;
-    data = serializeHeader(h);
-    CHECK(TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 255);
   }
 
   TEST_CASE("TrackView - Cold File Size and Mtime", "[library][unit][track]")
@@ -246,8 +223,8 @@ namespace ao::library::test
   {
     auto header = TrackColdHeader{};
     header.duration = std::chrono::minutes{3};
-    header.bitrate = 320000;
-    header.channels = 2;
+    header.bitrate = Bitrate{320000};
+    header.channels = Channels{2};
 
     auto const data = createColdData(header, {}, "");
     auto const view = makeColdView(data);
@@ -295,8 +272,7 @@ namespace ao::library::test
     h.composerId = kInvalidDictionaryId;
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
-    h.bitDepth = 16;
-    h.rating = 3;
+    h.bitDepth = BitDepth{16};
     h.tagLen = 8; // 2 tags * 4 bytes
 
     auto const title = std::string{"Test Title"};
@@ -326,8 +302,7 @@ namespace ao::library::test
     h.composerId = kInvalidDictionaryId;
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
-    h.bitDepth = 16;
-    h.rating = 3;
+    h.bitDepth = BitDepth{16};
     h.tagLen = 8; // 2 tags * 4 bytes
 
     auto const title = std::string{"Test Title"};
@@ -361,8 +336,7 @@ namespace ao::library::test
     h.composerId = kInvalidDictionaryId;
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
-    h.bitDepth = 16;
-    h.rating = 3;
+    h.bitDepth = BitDepth{16};
     h.tagLen = 8;
 
     auto data = serializeHeader(h);
@@ -389,8 +363,7 @@ namespace ao::library::test
     h.composerId = kInvalidDictionaryId;
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
-    h.bitDepth = 16;
-    h.rating = 3;
+    h.bitDepth = BitDepth{16};
     h.tagLen = 8;
 
     auto data = serializeHeader(h);

@@ -12,7 +12,7 @@
 namespace ao::library
 {
   constexpr std::uint32_t kLibraryMetaMagic = 0x42534C52U;
-  constexpr std::uint32_t kLibraryVersion = 2;
+  constexpr std::uint32_t kLibraryVersion = 4;
   constexpr std::size_t kMetaHeaderByteCount = 40;
 
   enum class MetaRecordId : std::uint8_t

@@ -30,7 +30,7 @@ namespace ao::query
     Channels = 5,
     BitDepth = 6,
     Codec = 7,
-    Rating = 8,
+    // 8 retired (formerly Rating; field IDs are a stable contract, slot left as a gap)
 
     // Metadata ID fields (Dictionary IDs)
     ArtistId = 9,

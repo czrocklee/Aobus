@@ -70,8 +70,7 @@ namespace ao::library::test
       .totalTracks(10)
       .discNumber(2)
       .totalDiscs(3)
-      .coverArtId(42)
-      .rating(4);
+      .coverArtId(42);
 
     CHECK(builder.metadata().title() == "Test Title");
     CHECK(builder.metadata().artist() == "Test Artist");
@@ -85,7 +84,6 @@ namespace ao::library::test
     CHECK(builder.metadata().discNumber() == 2);
     CHECK(builder.metadata().totalDiscs() == 3);
     CHECK(builder.metadata().coverArtId() == 42);
-    CHECK(builder.metadata().rating() == 4);
   }
 
   TEST_CASE("TrackBuilder - PropertyBuilder fluent setters", "[library][unit][track]")
@@ -94,11 +92,11 @@ namespace ao::library::test
     builder.property()
       .uri("file:///home/user/music/test.flac")
       .duration(std::chrono::minutes{3} + std::chrono::milliseconds{500})
-      .bitrate(320000)
-      .sampleRate(44100)
+      .bitrate(Bitrate{320000})
+      .sampleRate(SampleRate{44100})
       .codec(AudioCodec::Alac)
-      .channels(2)
-      .bitDepth(16);
+      .channels(Channels{2})
+      .bitDepth(BitDepth{16});
 
     CHECK(builder.property().uri() == "file:///home/user/music/test.flac");
     CHECK(builder.property().duration() == std::chrono::minutes{3} + std::chrono::milliseconds{500});
@@ -159,7 +157,7 @@ namespace ao::library::test
     auto builder = TrackBuilder::createNew();
 
     builder.metadata().title("Song").artist("Artist").album("Album");
-    builder.property().bitDepth(16);
+    builder.property().bitDepth(BitDepth{16});
     builder.tags().add("rock").add("jazz");
     builder.custom().add("key", "value");
 
@@ -205,8 +203,8 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - buildHotHeader Method", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
-    builder.metadata().year(1999).rating(5);
-    builder.property().bitDepth(24);
+    builder.metadata().year(1999);
+    builder.property().bitDepth(BitDepth{24});
 
     auto const temp = TempDir{};
     auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -219,7 +217,6 @@ namespace ao::library::test
 
     CHECK(header->year == 1999);
     CHECK(header->bitDepth == 24);
-    CHECK(header->rating == 5);
   }
 
   TEST_CASE("TrackBuilder - Serialize With Special Characters", "[library][unit][track]")
@@ -420,7 +417,6 @@ namespace ao::library::test
       .totalTracks(10)
       .discNumber(2)
       .totalDiscs(3)
-      .rating(4)
       .coverArtId(42)
       .album("Album")
       .genre("Genre")
@@ -434,7 +430,6 @@ namespace ao::library::test
     CHECK(view.metadata().totalTracks() == 10);
     CHECK(view.metadata().discNumber() == 2);
     CHECK(view.metadata().totalDiscs() == 3);
-    CHECK(view.metadata().rating() == 4);
     CHECK(view.metadata().coverArtId() == 42);
     CHECK(view.metadata().albumId() == dict.getId("Album"));
     CHECK(view.metadata().genreId() == dict.getId("Genre"));

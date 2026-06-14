@@ -70,14 +70,15 @@ namespace ao::rt
           std::in_place_type<std::string>, std::string{library::audioCodecName(view.property().codec())}};
       }
       case TrackField::SampleRate:
-        return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().sampleRate()};
+        return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().sampleRate().raw()};
       case TrackField::Channels:
         return TrackFieldRawValue{
-          std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().channels())};
+          std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().channels().raw())};
       case TrackField::BitDepth:
         return TrackFieldRawValue{
-          std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().bitDepth())};
-      case TrackField::Bitrate: return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().bitrate()};
+          std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().bitDepth().raw())};
+      case TrackField::Bitrate:
+        return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().bitrate().raw()};
 
       case TrackField::FileSize:
       {

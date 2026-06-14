@@ -11,7 +11,7 @@ namespace ao::library::test
 {
   TEST_CASE("TrackHotHeader - Size and Alignment", "[library][unit][track]")
   {
-    CHECK(sizeof(TrackHotHeader) == 40);
+    CHECK(sizeof(TrackHotHeader) == 36);
     CHECK(alignof(TrackHotHeader) == 4);
   }
 
@@ -28,13 +28,12 @@ namespace ao::library::test
 
     // Check 2-byte section starts at offset 28
     CHECK(offsetof(TrackHotHeader, year) == 28);
-    CHECK(offsetof(TrackHotHeader, bitDepth) == 30);
-    CHECK(offsetof(TrackHotHeader, titleLen) == 32);
-    CHECK(offsetof(TrackHotHeader, tagLen) == 34);
+    CHECK(offsetof(TrackHotHeader, titleLen) == 30);
+    CHECK(offsetof(TrackHotHeader, tagLen) == 32);
 
     // Check 1-byte section
-    CHECK(offsetof(TrackHotHeader, codec) == 36);
-    CHECK(offsetof(TrackHotHeader, rating) == 37);
+    CHECK(offsetof(TrackHotHeader, bitDepth) == 34);
+    CHECK(offsetof(TrackHotHeader, codec) == 35);
   }
 
   TEST_CASE("TrackColdHeader - Size and Alignment", "[library][unit][track]")

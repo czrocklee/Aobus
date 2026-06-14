@@ -173,12 +173,11 @@ namespace ao::query
       {
         // Property fields (@ prefix)
         case Field::Duration: return static_cast<std::int64_t>(track.property().duration().count());
-        case Field::Bitrate: return static_cast<std::int64_t>(track.property().bitrate());
-        case Field::SampleRate: return static_cast<std::int64_t>(track.property().sampleRate());
-        case Field::Channels: return static_cast<std::int64_t>(track.property().channels());
-        case Field::BitDepth: return static_cast<std::int64_t>(track.property().bitDepth());
+        case Field::Bitrate: return static_cast<std::int64_t>(track.property().bitrate().raw());
+        case Field::SampleRate: return static_cast<std::int64_t>(track.property().sampleRate().raw());
+        case Field::Channels: return static_cast<std::int64_t>(track.property().channels().raw());
+        case Field::BitDepth: return static_cast<std::int64_t>(track.property().bitDepth().raw());
         case Field::Codec: return static_cast<std::int64_t>(library::audioCodecStorageValue(track.property().codec()));
-        case Field::Rating: return static_cast<std::int64_t>(track.metadata().rating());
 
         // Metadata ID fields
         case Field::ArtistId: return static_cast<std::int64_t>(track.metadata().artistId().raw());

@@ -62,7 +62,6 @@ namespace ao::query::test
       std::uint8_t channels = 2;
       std::uint8_t bitDepth = 16;
       std::uint32_t coverArtId = 0;
-      std::uint8_t rating = 0;
       library::AudioCodec codec = library::AudioCodec::Unknown;
       std::uint32_t artistId = 0;
       std::uint32_t albumId = 0;
@@ -163,11 +162,10 @@ namespace ao::query::test
 
         builder.property().uri(spec.uri);
         builder.property().duration(spec.duration);
-        builder.property().bitrate(spec.bitrate);
-        builder.property().sampleRate(spec.sampleRate);
-        builder.property().channels(spec.channels);
-        builder.property().bitDepth(spec.bitDepth);
-        builder.metadata().rating(spec.rating);
+        builder.property().bitrate(Bitrate{spec.bitrate});
+        builder.property().sampleRate(SampleRate{spec.sampleRate});
+        builder.property().channels(Channels{spec.channels});
+        builder.property().bitDepth(BitDepth{spec.bitDepth});
         builder.property().codec(spec.codec);
         builder.metadata().coverArtId(spec.coverArtId);
 
@@ -663,7 +661,6 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Other Dictionary Fields", "[query][unit][plan_evaluator]")
   {
     auto spec = TrackSpec{};
-    spec.rating = 5;
     spec.codec = library::AudioCodec::Flac;
     spec.trackNumber = 3;
     spec.totalTracks = 12;
@@ -732,12 +729,6 @@ namespace ao::query::test
     SECTION("Codec")
     {
       auto plan = compiler.compile(parse("@codec = FLAC"));
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
-    }
-
-    SECTION("Rating")
-    {
-      auto plan = compiler.compile(parse("@rating = 5"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 

@@ -36,7 +36,7 @@ namespace ao::library
    *   // Pattern B: create new track
    *   auto builder = TrackBuilder::createNew();
    *   builder.metadata().title("Song").artist("Artist").album("Album");
-   *   builder.property().fileSize(fs).bitDepth(16);
+   *   builder.property().fileSize(fs).bitDepth(BitDepth{16});
    *   builder.tags().add("rock");
    *   builder.custom().add("key", "value");
    *   auto [hot, cold] = builder.serialize(txn, dict, resources);
@@ -72,7 +72,6 @@ namespace ao::library
       MetadataBuilder& totalDiscs(std::uint16_t count);
       MetadataBuilder& coverArtId(std::uint32_t id);
       MetadataBuilder& coverArtData(std::span<std::byte const> data);
-      MetadataBuilder& rating(std::uint8_t rating);
 
       // Accessors
       std::string_view title() const { return _title; }
@@ -89,7 +88,6 @@ namespace ao::library
       std::uint16_t totalDiscs() const { return _totalDiscs; }
       std::uint32_t coverArtId() const { return _coverArtId; }
       std::span<std::byte const> coverArtData() const { return _embeddedCoverArt; }
-      std::uint8_t rating() const { return _rating; }
 
     private:
       friend class TrackBuilder;
@@ -110,7 +108,6 @@ namespace ao::library
       std::uint16_t _discNumber = 0;
       std::uint16_t _totalDiscs = 0;
       std::uint32_t _coverArtId = 0;
-      std::uint8_t _rating = 0;
       mutable std::span<std::byte const> _embeddedCoverArt;
     };
 
@@ -118,32 +115,32 @@ namespace ao::library
     {
     public:
       PropertyBuilder& duration(std::chrono::milliseconds duration);
-      PropertyBuilder& bitrate(std::uint32_t bitrate);
-      PropertyBuilder& sampleRate(std::uint32_t sampleRate);
+      PropertyBuilder& bitrate(Bitrate bitrate);
+      PropertyBuilder& sampleRate(SampleRate sampleRate);
       PropertyBuilder& codec(AudioCodec codec);
-      PropertyBuilder& channels(std::uint8_t channels);
-      PropertyBuilder& bitDepth(std::uint8_t bitDepth);
+      PropertyBuilder& channels(Channels channels);
+      PropertyBuilder& bitDepth(BitDepth bitDepth);
       PropertyBuilder& uri(std::string_view uri);
 
       // Accessors
       std::string_view uri() const { return _uri; }
       std::chrono::milliseconds duration() const { return _duration; }
-      std::uint32_t bitrate() const { return _bitrate; }
-      std::uint32_t sampleRate() const { return _sampleRate; }
+      Bitrate bitrate() const { return _bitrate; }
+      SampleRate sampleRate() const { return _sampleRate; }
       AudioCodec codec() const { return _codec; }
-      std::uint8_t channels() const { return _channels; }
-      std::uint8_t bitDepth() const { return _bitDepth; }
+      Channels channels() const { return _channels; }
+      BitDepth bitDepth() const { return _bitDepth; }
 
     private:
       friend class TrackBuilder;
 
       // Property numerics
       std::chrono::milliseconds _duration{0};
-      std::uint32_t _bitrate = 0;
-      std::uint32_t _sampleRate = 0;
+      Bitrate _bitrate{};
+      SampleRate _sampleRate{};
       AudioCodec _codec = AudioCodec::Unknown;
-      std::uint8_t _channels = 0;
-      std::uint8_t _bitDepth = 0;
+      Channels _channels{};
+      BitDepth _bitDepth{};
 
       // Property strings
       std::string_view _uri;

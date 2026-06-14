@@ -202,7 +202,7 @@ namespace ao::tag::mp4
 
         if (auto const timescale = layout.timescale.value(); timescale > 0)
         {
-          builder.property().sampleRate(timescale);
+          builder.property().sampleRate(SampleRate{timescale});
 
           if (auto const duration = layout.duration.value(); duration > 0)
           {
@@ -214,8 +214,8 @@ namespace ao::tag::mp4
             {
               builder.property()
                 .duration(trackDuration)
-                .bitrate(static_cast<std::uint32_t>((fileSize * std::chrono::milliseconds::period::den * kBitsPerByte) /
-                                                    trackDuration.count()));
+                .bitrate(Bitrate{static_cast<std::uint32_t>(
+                  (fileSize * std::chrono::milliseconds::period::den * kBitsPerByte) / trackDuration.count())});
             }
           }
         }
@@ -241,8 +241,8 @@ namespace ao::tag::mp4
       }
 
       builder.property()
-        .channels(static_cast<std::uint8_t>(audioLayout->channelCount.value()))
-        .bitDepth(static_cast<std::uint8_t>(audioLayout->sampleSize.value()))
+        .channels(Channels{static_cast<std::uint8_t>(audioLayout->channelCount.value())})
+        .bitDepth(BitDepth{static_cast<std::uint8_t>(audioLayout->sampleSize.value())})
         .codec(codec);
 
       // Sample rate is a 16.16 fixed point, extract integer part
@@ -251,7 +251,7 @@ namespace ao::tag::mp4
 
       if (auto const sampleRateFixed = audioLayout->sampleRate.value(); sampleRateFixed >> kFixedPointShift > 0)
       {
-        builder.property().sampleRate(sampleRateFixed >> kFixedPointShift);
+        builder.property().sampleRate(SampleRate{sampleRateFixed >> kFixedPointShift});
       }
     }
   } // namespace

@@ -47,8 +47,6 @@ The Track Details panel uses an invisible interaction model. Editable controls a
 
 Custom metadata represents properties created by the user inside Aobus, or explicitly provided through Aobus library import data. File tag readers do not promote unknown or vendor-specific MP4, ID3, or Vorbis fields into custom metadata; they only map fields that Aobus explicitly understands.
 
-User rating is also Aobus-owned state. File tag readers do not import ambiguous external rating fields such as ID3 user text ratings, MP4 rating atoms, or Vorbis `RATING` comments; users assign ratings inside Aobus, and Aobus library import data may restore them.
-
 ## Layout Configuration
 
 The component is registered as `track.fieldGrid`. It supports a `categories` property to filter which field types to display.

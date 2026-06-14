@@ -50,10 +50,10 @@ namespace ao::gtk::test
       builder1.property()
         .uri("/music/track1.flac")
         .duration(std::chrono::seconds{1})
-        .sampleRate(44100)
-        .bitrate(320)
-        .channels(2)
-        .bitDepth(16)
+        .sampleRate(SampleRate{44100})
+        .bitrate(Bitrate{320})
+        .channels(Channels{2})
+        .bitDepth(BitDepth{16})
         .codec(library::AudioCodec::Flac);
       auto const [hot1, cold1] = builder1.serialize(txn, library.dictionary(), library.resources());
       trackId1 = writer.createHotCold(hot1, cold1).first;
@@ -71,10 +71,10 @@ namespace ao::gtk::test
       builder2.property()
         .uri("/music/track2.flac")
         .duration(std::chrono::seconds{2})
-        .sampleRate(48000)
-        .bitrate(320)
-        .channels(2)
-        .bitDepth(24)
+        .sampleRate(SampleRate{48000})
+        .bitrate(Bitrate{320})
+        .channels(Channels{2})
+        .bitDepth(BitDepth{24})
         .codec(library::AudioCodec::Flac);
       auto const [hot2, cold2] = builder2.serialize(txn, library.dictionary(), library.resources());
       trackId2 = writer.createHotCold(hot2, cold2).first;

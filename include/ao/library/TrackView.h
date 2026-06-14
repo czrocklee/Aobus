@@ -34,7 +34,7 @@ namespace ao::library
   public:
     /**
      * MetadataProxy - Accessors for track metadata ($ prefix).
-     * Includes: title, artist, album, genre, year, rating, track info, disc info, uri, cover art.
+     * Includes: title, artist, album, genre, year, track info, disc info, uri, cover art.
      */
     class MetadataProxy final
     {
@@ -52,7 +52,6 @@ namespace ao::library
       DictionaryId albumArtistId() const noexcept { return _track.hotHeader().albumArtistId; }
       DictionaryId composerId() const noexcept { return _track.hotHeader().composerId; }
       std::uint16_t year() const noexcept { return _track.hotHeader().year; }
-      std::uint8_t rating() const noexcept { return _track.hotHeader().rating; }
 
       // From cold
       std::uint16_t trackNumber() const noexcept { return _track.coldHeader().trackNumber; }
@@ -81,13 +80,13 @@ namespace ao::library
 
       // Hot properties
       AudioCodec codec() const noexcept { return _track.hotHeader().codec; }
-      std::uint8_t bitDepth() const noexcept { return static_cast<std::uint8_t>(_track.hotHeader().bitDepth); }
-      std::uint32_t sampleRate() const noexcept { return _track.hotHeader().sampleRate; }
+      BitDepth bitDepth() const noexcept { return _track.hotHeader().bitDepth; }
+      SampleRate sampleRate() const noexcept { return _track.hotHeader().sampleRate; }
 
       // Technical properties (from cold)
       std::chrono::milliseconds duration() const noexcept { return _track.coldHeader().duration; }
-      std::uint32_t bitrate() const noexcept { return _track.coldHeader().bitrate; }
-      std::uint8_t channels() const noexcept { return _track.coldHeader().channels; }
+      Bitrate bitrate() const noexcept { return _track.coldHeader().bitrate; }
+      Channels channels() const noexcept { return _track.coldHeader().channels; }
       std::string_view uri() const { return _track.coldUri(); }
 
     private:

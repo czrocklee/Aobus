@@ -526,7 +526,7 @@ namespace ao::gtk
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           {
             return TrackFieldRawValue{
-              std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().channels())};
+              std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().channels().raw())};
           },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
@@ -547,7 +547,7 @@ namespace ao::gtk
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
           {
             return TrackFieldRawValue{
-              std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().bitDepth())};
+              std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().bitDepth().raw())};
           },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {

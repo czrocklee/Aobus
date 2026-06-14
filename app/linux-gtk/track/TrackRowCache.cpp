@@ -122,11 +122,11 @@ namespace ao::gtk
                      metadata.trackNumber(),
                      metadata.totalTracks(),
                      metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt,
-                     view.property().sampleRate(),
-                     view.property().channels(),
-                     view.property().bitDepth(),
+                     view.property().sampleRate().raw(),
+                     view.property().channels().raw(),
+                     view.property().bitDepth().raw(),
                      view.property().codec(),
-                     view.property().bitrate(),
+                     view.property().bitrate().raw(),
                      fileSize,
                      mtime,
                      status);
@@ -232,9 +232,9 @@ namespace ao::gtk
 
     auto desc = audio::TrackPlaybackDescriptor{.trackId = id,
                                                .duration = property.duration(),
-                                               .sampleRateHint = property.sampleRate(),
-                                               .channelsHint = property.channels(),
-                                               .bitDepthHint = property.bitDepth()};
+                                               .sampleRateHint = property.sampleRate().raw(),
+                                               .channelsHint = property.channels().raw(),
+                                               .bitDepthHint = property.bitDepth().raw()};
 
     // File path
     if (auto const optFilePath = resolveLibraryPath(_ml.rootPath(), property.uri()); optFilePath)

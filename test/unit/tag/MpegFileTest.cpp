@@ -57,7 +57,6 @@ namespace ao::tag::mpeg::test
       addTextFrame(body, "TRCK", "1/10");
       addTextFrame(body, "TCON", "Genre");
 
-      addTxxxFrame(body, "rating", "4");
       addTxxxFrame(body, "work", "WorkName");
       addTxxxFrame(body, "CustomKey", "CustomValue");
 
@@ -147,7 +146,6 @@ namespace ao::tag::mpeg::test
     CHECK(meta.trackNumber() == 1);
     CHECK(meta.totalTracks() == 10);
     CHECK(meta.genre() == "Genre");
-    CHECK(meta.rating() == 0);
     CHECK(meta.work() == "WorkName");
 
     CHECK(builder.custom().pairs().empty());

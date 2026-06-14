@@ -92,10 +92,10 @@ namespace ao::gtk::test
         builder.property()
           .uri("/tmp/test.flac")
           .duration(spec.duration)
-          .bitrate(320000)
-          .sampleRate(44100)
-          .channels(2)
-          .bitDepth(16);
+          .bitrate(Bitrate{320000})
+          .sampleRate(SampleRate{44100})
+          .channels(Channels{2})
+          .bitDepth(BitDepth{16});
 
         auto const hotData = builder.serializeHot(txn, _library.dictionary());
         auto const coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
