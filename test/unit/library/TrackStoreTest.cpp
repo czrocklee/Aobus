@@ -195,7 +195,7 @@ namespace ao::library::test
     auto coldHeader = TrackColdHeader{};
     coldHeader.duration = std::chrono::minutes{3};
     coldHeader.trackNumber = 1;
-    coldHeader.totalTracks = 10;
+    coldHeader.trackTotal = 10;
 
     auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
@@ -212,7 +212,7 @@ namespace ao::library::test
     REQUIRE(optView.has_value());
     REQUIRE(optView->property().duration() == std::chrono::minutes{3});
     REQUIRE(optView->metadata().trackNumber() == 1);
-    REQUIRE(optView->metadata().totalTracks() == 10);
+    REQUIRE(optView->metadata().trackTotal() == 10);
   }
 
   TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[library][unit][track]")

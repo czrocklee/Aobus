@@ -109,26 +109,27 @@ namespace ao::rt::test
 
     REQUIRE(spec.groupBy == TrackGroupKey::Composer);
 
-    REQUIRE(spec.sortBy.size() == 7);
+    REQUIRE(spec.sortBy.size() == 8);
     CHECK(spec.sortBy[0].field == TrackSortField::Composer);
     CHECK(spec.sortBy[1].field == TrackSortField::Work);
     CHECK(spec.sortBy[2].field == TrackSortField::Year);
     CHECK(spec.sortBy[3].field == TrackSortField::Album);
-    CHECK(spec.sortBy[4].field == TrackSortField::DiscNumber);
-    CHECK(spec.sortBy[5].field == TrackSortField::TrackNumber);
-    CHECK(spec.sortBy[6].field == TrackSortField::Title);
+    CHECK(spec.sortBy[4].field == TrackSortField::Movement);
+    CHECK(spec.sortBy[5].field == TrackSortField::DiscNumber);
+    CHECK(spec.sortBy[6].field == TrackSortField::TrackNumber);
+    CHECK(spec.sortBy[7].field == TrackSortField::Title);
 
-    REQUIRE(spec.visibleFields.size() == 6);
+    REQUIRE(spec.visibleFields.size() == 7);
     CHECK(spec.visibleFields[0] == TrackField::DisplayTrackNumber);
-    CHECK(spec.visibleFields[1] == TrackField::Title);
-    CHECK(spec.visibleFields[2] == TrackField::Artist);
-    CHECK(spec.visibleFields[3] == TrackField::Album);
-    CHECK(spec.visibleFields[4] == TrackField::Year);
-    CHECK(spec.visibleFields[5] == TrackField::Duration);
+    CHECK(spec.visibleFields[1] == TrackField::Work);
+    CHECK(spec.visibleFields[2] == TrackField::Movement);
+    CHECK(spec.visibleFields[3] == TrackField::Artist);
+    CHECK(spec.visibleFields[4] == TrackField::Album);
+    CHECK(spec.visibleFields[5] == TrackField::Year);
+    CHECK(spec.visibleFields[6] == TrackField::Duration);
 
-    REQUIRE(spec.redundantFields.size() == 2);
+    REQUIRE(spec.redundantFields.size() == 1);
     CHECK(spec.redundantFields[0] == TrackField::Composer);
-    CHECK(spec.redundantFields[1] == TrackField::Work);
   }
 
   TEST_CASE("classical-works preset has correct group, sort, and redundant fields", "[runtime][unit][presentation]")
@@ -140,18 +141,19 @@ namespace ao::rt::test
 
     REQUIRE(spec.groupBy == TrackGroupKey::Work);
 
-    REQUIRE(spec.sortBy.size() == 7);
+    REQUIRE(spec.sortBy.size() == 8);
     CHECK(spec.sortBy[0].field == TrackSortField::Composer);
     CHECK(spec.sortBy[1].field == TrackSortField::Work);
     CHECK(spec.sortBy[2].field == TrackSortField::Year);
     CHECK(spec.sortBy[3].field == TrackSortField::Album);
-    CHECK(spec.sortBy[4].field == TrackSortField::DiscNumber);
-    CHECK(spec.sortBy[5].field == TrackSortField::TrackNumber);
-    CHECK(spec.sortBy[6].field == TrackSortField::Title);
+    CHECK(spec.sortBy[4].field == TrackSortField::Movement);
+    CHECK(spec.sortBy[5].field == TrackSortField::DiscNumber);
+    CHECK(spec.sortBy[6].field == TrackSortField::TrackNumber);
+    CHECK(spec.sortBy[7].field == TrackSortField::Title);
 
     REQUIRE(spec.visibleFields.size() == 6);
     CHECK(spec.visibleFields[0] == TrackField::DisplayTrackNumber);
-    CHECK(spec.visibleFields[1] == TrackField::Title);
+    CHECK(spec.visibleFields[1] == TrackField::Movement);
     CHECK(spec.visibleFields[2] == TrackField::Artist);
     CHECK(spec.visibleFields[3] == TrackField::Album);
     CHECK(spec.visibleFields[4] == TrackField::Year);

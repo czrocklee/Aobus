@@ -415,6 +415,85 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("TrackListProjection - movement sort keeps performances contiguous", "[app][unit][runtime][projection]")
+  {
+    // One work recorded twice (two albums/performances). Grouping by Work merges both
+    // performances into a single section. The classical sort order places Album before
+    // Movement, so each performance's movements must stay contiguous and movement-ordered
+    // rather than interleaving (Karajan-I, Kleiber-I, Karajan-II, ...).
+    auto env = TestEnv{};
+
+    struct Row final
+    {
+      std::string album;
+      std::uint16_t movementNumber;
+      std::uint16_t trackNumber;
+    };
+
+    // Deliberately shuffled input order.
+    auto const rows = std::vector<Row>{
+      {"Kleiber 1974", 2, 2},
+      {"Karajan 1963", 3, 3},
+      {"Kleiber 1974", 1, 1},
+      {"Karajan 1963", 1, 1},
+      {"Kleiber 1974", 3, 3},
+      {"Karajan 1963", 2, 2},
+    };
+
+    auto ids = std::vector<TrackId>{};
+    ids.reserve(rows.size());
+
+    for (auto const& r : rows)
+    {
+      auto spec = TrackSpec{};
+      spec.composer = "Beethoven";
+      spec.work = "Symphony No. 5";
+      spec.album = r.album;
+      spec.movement = std::format("Movement {}", r.movementNumber);
+      spec.movementNumber = r.movementNumber;
+      spec.movementTotal = 3;
+      spec.trackNumber = r.trackNumber;
+      ids.push_back(env.lib.addTrack(spec));
+    }
+
+    env.setupFiltered(ids);
+
+    auto proj = env.createProjection(ViewId{1});
+    auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Work,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Composer, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Work, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Movement, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 6);
+
+    auto const& dict = env.lib.library().dictionary();
+    auto txn = env.lib.library().readTransaction();
+    auto reader = env.lib.library().tracks().reader(txn);
+
+    auto orderedAlbums = std::vector<std::string>{};
+    auto orderedMovements = std::vector<std::uint16_t>{};
+
+    for (std::size_t i = 0; i < proj.size(); ++i)
+    {
+      auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView.has_value());
+      orderedAlbums.emplace_back(dict.get(optView->metadata().albumId()));
+      orderedMovements.push_back(optView->metadata().movementNumber());
+    }
+
+    // Karajan (alphabetically first) movements 1,2,3, then Kleiber movements 1,2,3.
+    CHECK(orderedAlbums ==
+          std::vector<std::string>{
+            "Karajan 1963", "Karajan 1963", "Karajan 1963", "Kleiber 1974", "Kleiber 1974", "Kleiber 1974"});
+    CHECK(orderedMovements == std::vector<std::uint16_t>{1, 2, 3, 1, 2, 3});
+  }
+
   TEST_CASE("TrackListProjection - sort 10 identical tracks preserves stability", "[app][unit][runtime][projection]")
   {
     auto env = TestEnv{};

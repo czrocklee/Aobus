@@ -40,7 +40,7 @@ namespace ao::tag::mpeg::test
     }
   }
 
-  TEST_CASE("MPEG Frame - Validation", "[tag][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - validates headers", "[tag][unit][mpeg][frame]")
   {
     SECTION("Valid V1 Layer III header")
     {
@@ -90,7 +90,7 @@ namespace ao::tag::mpeg::test
     }
   }
 
-  TEST_CASE("MPEG Frame - Properties", "[tag][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - derives frame properties", "[tag][unit][mpeg][frame]")
   {
     SECTION("Layer I")
     {
@@ -131,7 +131,7 @@ namespace ao::tag::mpeg::test
     }
   }
 
-  TEST_CASE("MPEG Frame - Xing Info", "[tag][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - parses Xing information", "[tag][unit][mpeg][frame]")
   {
     // Construct a buffer with a frame header followed by Xing header
     auto buffer = std::vector<std::uint8_t>(200, 0);
@@ -158,7 +158,7 @@ namespace ao::tag::mpeg::test
     CHECK(optXing->bytes == 56789);
   }
 
-  TEST_CASE("MPEG Frame - Locate", "[tag][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - locates frame sync", "[tag][unit][mpeg][frame]")
   {
     auto buffer =
       std::vector<std::uint8_t>{0x00, 0x11, 0x22, 0xFF, 0xFB, 0x90, 0x44}; // Some garbage, then a frame sync

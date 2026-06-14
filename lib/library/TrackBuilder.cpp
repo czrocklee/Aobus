@@ -90,9 +90,11 @@ namespace ao::library
       auto meta = view.metadata();
       builder.metadata()
         .trackNumber(meta.trackNumber())
-        .totalTracks(meta.totalTracks())
+        .trackTotal(meta.trackTotal())
         .discNumber(meta.discNumber())
-        .totalDiscs(meta.totalDiscs());
+        .discTotal(meta.discTotal())
+        .movementNumber(meta.movementNumber())
+        .movementTotal(meta.movementTotal());
 
       for (auto const cover : view.coverArt())
       {
@@ -102,6 +104,11 @@ namespace ao::library
       if (auto workId = meta.workId(); workId.raw() > 0)
       {
         builder.metadata().work(dict.get(workId));
+      }
+
+      if (auto movementId = meta.movementId(); movementId.raw() > 0)
+      {
+        builder.metadata().movement(dict.get(movementId));
       }
 
       for (auto const& [dictId, value] : view.customMetadata())
@@ -209,6 +216,12 @@ namespace ao::library
     return *this;
   }
 
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::movement(std::string_view text)
+  {
+    _movement = text;
+    return *this;
+  }
+
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::year(std::uint16_t year)
   {
     _year = year;
@@ -221,9 +234,9 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalTracks(std::uint16_t count)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::trackTotal(std::uint16_t count)
   {
-    _totalTracks = count;
+    _trackTotal = count;
     return *this;
   }
 
@@ -233,9 +246,21 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalDiscs(std::uint16_t count)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::discTotal(std::uint16_t count)
   {
-    _totalDiscs = count;
+    _discTotal = count;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::movementNumber(std::uint16_t number)
+  {
+    _movementNumber = number;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::movementTotal(std::uint16_t count)
+  {
+    _movementTotal = count;
     return *this;
   }
 
@@ -517,6 +542,11 @@ namespace ao::library
       _workId = dict.put(txn, _builder->_metadataBuilder._work);
     }
 
+    if (!_builder->_metadataBuilder._movement.empty())
+    {
+      _movementId = dict.put(txn, _builder->_metadataBuilder._movement);
+    }
+
     // Resolve custom keys to DictionaryIds
     _resolvedPairs.reserve(_builder->_customMetadataBuilder._customPairs.size());
 
@@ -585,10 +615,13 @@ namespace ao::library
         .duration = std::chrono::duration_cast<TrackDuration>(prop._duration),
         .bitrate = prop._bitrate,
         .workId = _workId,
+        .movementId = _movementId,
         .trackNumber = meta._trackNumber,
-        .totalTracks = meta._totalTracks,
+        .trackTotal = meta._trackTotal,
         .discNumber = meta._discNumber,
-        .totalDiscs = meta._totalDiscs,
+        .discTotal = meta._discTotal,
+        .movementNumber = meta._movementNumber,
+        .movementTotal = meta._movementTotal,
         .customCount = static_cast<std::uint16_t>(_resolvedPairs.size()),
         .uriOffset = _uriOffset,
         .uriLength = _uriLength,

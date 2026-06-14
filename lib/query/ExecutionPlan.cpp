@@ -125,9 +125,9 @@ namespace ao::query
         case Field::CoverArtId:  // cold: TrackColdHeader
         case Field::WorkId:      // cold: TrackColdHeader
         case Field::TrackNumber: // cold: TrackColdHeader
-        case Field::TotalTracks: // cold: TrackColdHeader
+        case Field::TrackTotal:  // cold: TrackColdHeader
         case Field::DiscNumber:  // cold: TrackColdHeader
-        case Field::TotalDiscs:  // cold: TrackColdHeader
+        case Field::DiscTotal:   // cold: TrackColdHeader
         case Field::Custom:      // cold: custom KV storage
         case Field::Duration:    // cold: TrackColdHeader
         case Field::Bitrate:     // cold: TrackColdHeader
@@ -233,9 +233,9 @@ namespace ao::query
         case Field::BitDepth: return "bitDepth";
         case Field::Year: return "year";
         case Field::TrackNumber: return "trackNumber";
-        case Field::TotalTracks: return "totalTracks";
+        case Field::TrackTotal: return "trackTotal";
         case Field::DiscNumber: return "discNumber";
-        case Field::TotalDiscs: return "totalDiscs";
+        case Field::DiscTotal: return "discTotal";
         default: return "field";
       }
     }

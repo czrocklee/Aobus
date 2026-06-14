@@ -676,12 +676,12 @@ namespace ao::query::test
                   Case{.name = "y", .expected = Field::Year},
                   Case{.name = "trackNumber", .expected = Field::TrackNumber},
                   Case{.name = "tn", .expected = Field::TrackNumber},
-                  Case{.name = "totalTracks", .expected = Field::TotalTracks},
-                  Case{.name = "tt", .expected = Field::TotalTracks},
+                  Case{.name = "trackTotal", .expected = Field::TrackTotal},
+                  Case{.name = "tt", .expected = Field::TrackTotal},
                   Case{.name = "discNumber", .expected = Field::DiscNumber},
                   Case{.name = "dn", .expected = Field::DiscNumber},
-                  Case{.name = "totalDiscs", .expected = Field::TotalDiscs},
-                  Case{.name = "td", .expected = Field::TotalDiscs},
+                  Case{.name = "discTotal", .expected = Field::DiscTotal},
+                  Case{.name = "td", .expected = Field::DiscTotal},
                   Case{.name = "artist", .expected = Field::ArtistId},
                   Case{.name = "a", .expected = Field::ArtistId},
                   Case{.name = "album", .expected = Field::AlbumId},
@@ -782,9 +782,9 @@ namespace ao::query::test
     SECTION("ColdOnly")
     {
       auto fields = {"$trackNumber",
-                     "$totalTracks",
+                     "$trackTotal",
                      "$discNumber",
-                     "$totalDiscs",
+                     "$discTotal",
                      "$coverArt",
                      "$work",
                      "%isrc",
@@ -936,9 +936,9 @@ namespace ao::query::test
       REQUIRE_THROWS(compiler.compile(parse("@bitDepth = 16h")));
       REQUIRE_THROWS(compiler.compile(parse("$year = 2020h")));
       REQUIRE_THROWS(compiler.compile(parse("$trackNumber = 1h")));
-      REQUIRE_THROWS(compiler.compile(parse("$totalTracks = 10h")));
+      REQUIRE_THROWS(compiler.compile(parse("$trackTotal = 10h")));
       REQUIRE_THROWS(compiler.compile(parse("$discNumber = 1h")));
-      REQUIRE_THROWS(compiler.compile(parse("$totalDiscs = 2h")));
+      REQUIRE_THROWS(compiler.compile(parse("$discTotal = 2h")));
       REQUIRE_THROWS(compiler.compile(parse("%custom = 1h")));
     }
 

@@ -17,13 +17,16 @@ ARTIST, &handleText<&library::TrackBuilder::MetadataBuilder::artist>
 ALBUM, &handleText<&library::TrackBuilder::MetadataBuilder::album>
 ALBUMARTIST, &handleText<&library::TrackBuilder::MetadataBuilder::albumArtist>
 COMPOSER, &handleText<&library::TrackBuilder::MetadataBuilder::composer>
-TRACKNUMBER, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::trackNumber, &library::TrackBuilder::MetadataBuilder::totalTracks>
-TRACKTOTAL, &handleNumber<&library::TrackBuilder::MetadataBuilder::totalTracks>
-TOTALTRACKS, &handleNumber<&library::TrackBuilder::MetadataBuilder::totalTracks>
-DISCNUMBER, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::discNumber, &library::TrackBuilder::MetadataBuilder::totalDiscs>
-DISCTOTAL, &handleNumber<&library::TrackBuilder::MetadataBuilder::totalDiscs>
-TOTALDISCS, &handleNumber<&library::TrackBuilder::MetadataBuilder::totalDiscs>
+TRACKNUMBER, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::trackNumber, &library::TrackBuilder::MetadataBuilder::trackTotal>
+TRACKTOTAL, &handleNumber<&library::TrackBuilder::MetadataBuilder::trackTotal>
+TOTALTRACKS, &handleNumber<&library::TrackBuilder::MetadataBuilder::trackTotal>
+DISCNUMBER, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::discNumber, &library::TrackBuilder::MetadataBuilder::discTotal>
+DISCTOTAL, &handleNumber<&library::TrackBuilder::MetadataBuilder::discTotal>
+TOTALDISCS, &handleNumber<&library::TrackBuilder::MetadataBuilder::discTotal>
 GENRE, &handleText<&library::TrackBuilder::MetadataBuilder::genre>
 WORK, &handleText<&library::TrackBuilder::MetadataBuilder::work>
 GROUPING, &handleText<&library::TrackBuilder::MetadataBuilder::work>
+MOVEMENTNAME, &handleText<&library::TrackBuilder::MetadataBuilder::movement>
+MOVEMENT, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::movementNumber, &library::TrackBuilder::MetadataBuilder::movementTotal>
+MOVEMENTTOTAL, &handleNumber<&library::TrackBuilder::MetadataBuilder::movementTotal>
 DATE, &handleNumber<&library::TrackBuilder::MetadataBuilder::year>

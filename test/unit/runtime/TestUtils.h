@@ -35,9 +35,12 @@ namespace ao::rt::test
     std::string genre{};
     std::string composer{};
     std::string work{};
+    std::string movement{};
     std::uint16_t year = 2020;
     std::uint16_t discNumber = 1;
     std::uint16_t trackNumber = 1;
+    std::uint16_t movementNumber = 0;
+    std::uint16_t movementTotal = 0;
     std::chrono::milliseconds duration = std::chrono::seconds{200};
   };
 
@@ -70,9 +73,12 @@ namespace ao::rt::test
         .genre(spec.genre)
         .composer(spec.composer)
         .work(spec.work)
+        .movement(spec.movement)
         .year(spec.year)
         .discNumber(spec.discNumber)
-        .trackNumber(spec.trackNumber);
+        .trackNumber(spec.trackNumber)
+        .movementNumber(spec.movementNumber)
+        .movementTotal(spec.movementTotal);
       builder.property()
         .uri("/tmp/test.flac")
         .duration(spec.duration)

@@ -14,7 +14,7 @@ using namespace std::string_literals;
 
 namespace ao::tag::mpeg::id3v2::test
 {
-  TEST_CASE("ID3v2 - UTF-8 Conversion", "[tag][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - converts text encodings to UTF-8", "[tag][unit][mpeg][id3v2]")
   {
     SECTION("Latin1 to UTF-8")
     {

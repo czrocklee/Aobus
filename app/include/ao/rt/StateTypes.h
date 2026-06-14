@@ -228,11 +228,14 @@ namespace ao::rt
     std::optional<std::string> optGenre{};
     std::optional<std::string> optComposer{};
     std::optional<std::string> optWork{};
+    std::optional<std::string> optMovement{};
     std::optional<std::uint16_t> optYear{};
     std::optional<std::uint16_t> optTrackNumber{};
-    std::optional<std::uint16_t> optTotalTracks{};
+    std::optional<std::uint16_t> optTrackTotal{};
     std::optional<std::uint16_t> optDiscNumber{};
-    std::optional<std::uint16_t> optTotalDiscs{};
+    std::optional<std::uint16_t> optDiscTotal{};
+    std::optional<std::uint16_t> optMovementNumber{};
+    std::optional<std::uint16_t> optMovementTotal{};
 
     std::map<std::string, std::optional<std::string>> customUpdates{};
   };

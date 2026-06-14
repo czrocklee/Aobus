@@ -662,11 +662,14 @@ namespace ao::rt
               .composer("")
               .genre("")
               .work("")
+              .movement("")
               .year(0)
               .trackNumber(0)
-              .totalTracks(0)
+              .trackTotal(0)
               .discNumber(0)
-              .totalDiscs(0);
+              .discTotal(0)
+              .movementNumber(0)
+              .movementTotal(0);
             optBuilder->tags().clear();
             optBuilder->customMetadata().clear();
           }
@@ -720,11 +723,16 @@ namespace ao::rt
       {.field = rt::TrackField::Composer, .stringSetter = [](auto& meta, auto value) { meta.composer(value); }},
       {.field = rt::TrackField::Genre, .stringSetter = [](auto& meta, auto value) { meta.genre(value); }},
       {.field = rt::TrackField::Work, .stringSetter = [](auto& meta, auto value) { meta.work(value); }},
+      {.field = rt::TrackField::Movement, .stringSetter = [](auto& meta, auto value) { meta.movement(value); }},
       {.field = rt::TrackField::Year, .numberSetter = [](auto& meta, auto value) { meta.year(value); }},
       {.field = rt::TrackField::TrackNumber, .numberSetter = [](auto& meta, auto value) { meta.trackNumber(value); }},
-      {.field = rt::TrackField::TotalTracks, .numberSetter = [](auto& meta, auto value) { meta.totalTracks(value); }},
+      {.field = rt::TrackField::TrackTotal, .numberSetter = [](auto& meta, auto value) { meta.trackTotal(value); }},
       {.field = rt::TrackField::DiscNumber, .numberSetter = [](auto& meta, auto value) { meta.discNumber(value); }},
-      {.field = rt::TrackField::TotalDiscs, .numberSetter = [](auto& meta, auto value) { meta.totalDiscs(value); }},
+      {.field = rt::TrackField::DiscTotal, .numberSetter = [](auto& meta, auto value) { meta.discTotal(value); }},
+      {.field = rt::TrackField::MovementNumber,
+       .numberSetter = [](auto& meta, auto value) { meta.movementNumber(value); }},
+      {.field = rt::TrackField::MovementTotal,
+       .numberSetter = [](auto& meta, auto value) { meta.movementTotal(value); }},
     });
 
     for (auto const& map : kMetadataDispatch)

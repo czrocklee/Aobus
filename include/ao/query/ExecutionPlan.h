@@ -44,9 +44,9 @@ namespace ao::query
     // Metadata numeric fields
     Year = 16,
     TrackNumber = 17,
-    TotalTracks = 18,
+    TrackTotal = 18,
     DiscNumber = 19,
-    TotalDiscs = 20,
+    DiscTotal = 20,
 
     // Tag fields
     TagBloom = 21,

@@ -58,7 +58,7 @@ namespace ao::media::mp4
     DataAtomLayout common;
     boost::endian::big_uint16_buf_t pad1;
     boost::endian::big_uint16_buf_t trackNumber;
-    boost::endian::big_uint16_buf_t totalTracks;
+    boost::endian::big_uint16_buf_t trackTotal;
     boost::endian::big_uint16_buf_t pad2;
 
     static constexpr char const* kType = "trkn";
@@ -76,7 +76,7 @@ namespace ao::media::mp4
     DataAtomLayout common;
     boost::endian::big_uint16_buf_t pad1;
     boost::endian::big_uint16_buf_t discNumber;
-    boost::endian::big_uint16_buf_t totalDiscs;
+    boost::endian::big_uint16_buf_t discTotal;
 
     static constexpr char const* kType = "disk";
   };

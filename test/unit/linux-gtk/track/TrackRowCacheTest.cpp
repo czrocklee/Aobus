@@ -141,14 +141,14 @@ namespace ao::gtk::test
       // Verify other metadata and resource/playback properties
       row1Ptr->setYear(2025);
       row1Ptr->setDiscNumber(2);
-      row1Ptr->setTotalDiscs(3);
+      row1Ptr->setDiscTotal(3);
       row1Ptr->setTrackNumber(4);
-      row1Ptr->setTotalTracks(10);
+      row1Ptr->setTrackTotal(10);
       CHECK(row1Ptr->year() == 2025);
       CHECK(row1Ptr->discNumber() == 2);
-      CHECK(row1Ptr->totalDiscs() == 3);
+      CHECK(row1Ptr->discTotal() == 3);
       CHECK(row1Ptr->trackNumber() == 4);
-      CHECK(row1Ptr->totalTracks() == 10);
+      CHECK(row1Ptr->trackTotal() == 10);
       CHECK(row1Ptr->sampleRate() == 44100);
       CHECK(row1Ptr->channels() == 2);
       CHECK(row1Ptr->bitDepth() == 16);

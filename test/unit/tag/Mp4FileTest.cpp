@@ -11,9 +11,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -25,6 +27,24 @@ namespace ao::tag::mp4::test
 
   namespace
   {
+    std::vector<std::uint8_t> makeIntegerMetadataAtom(char const* atomType,
+                                                      std::span<std::uint8_t const> payload,
+                                                      std::uint32_t dataType = 21,
+                                                      std::uint8_t version = 0)
+    {
+      auto layout = DataAtomLayout{};
+      layout.common.length = static_cast<std::uint32_t>(sizeof(DataAtomLayout) + payload.size());
+      std::memcpy(layout.common.type.data(), atomType, 4);
+      layout.dataLength = static_cast<std::uint32_t>(16 + payload.size());
+      std::memcpy(layout.magic.data(), "data", 4);
+      layout.type = (static_cast<std::uint32_t>(version) << 24U) | dataType;
+
+      auto const* ptr = reinterpret_cast<std::uint8_t const*>(&layout);
+      auto atom = std::vector(ptr, ptr + sizeof(layout));
+      atom.insert(atom.end(), payload.begin(), payload.end());
+      return atom;
+    }
+
     std::vector<std::uint8_t> createMinimalM4a(char const* sampleEntryType = "mp4a",
                                                std::vector<std::uint8_t> const& sampleEntryExtensions = {})
     {
@@ -72,6 +92,18 @@ namespace ao::tag::mp4::test
       addTextAtom("\xA9"
                   "grp",
                   "Grouping");
+      addTextAtom("\xA9"
+                  "mvn",
+                  "MovementName");
+
+      auto const movementNumberAtom = makeIntegerMetadataAtom("\xA9"
+                                                              "mvi",
+                                                              std::array<std::uint8_t, 2>{0, 2});
+      ilstBody.insert(ilstBody.end(), movementNumberAtom.begin(), movementNumberAtom.end());
+      auto const movementTotalAtom = makeIntegerMetadataAtom("\xA9"
+                                                             "mvc",
+                                                             std::array<std::uint8_t, 2>{0, 4});
+      ilstBody.insert(ilstBody.end(), movementTotalAtom.begin(), movementTotalAtom.end());
       addTextAtom("aART", "AlbumArtist");
 
       auto addCoverAtom = [&](std::uint8_t firstByte)
@@ -100,7 +132,7 @@ namespace ao::tag::mp4::test
         trkn.common.dataLength = 16 + 8; // data header (8) + fields (8)
         std::memcpy(trkn.common.magic.data(), "data", 4);
         trkn.trackNumber = 7;
-        trkn.totalTracks = 10;
+        trkn.trackTotal = 10;
 
         auto const* ptr = reinterpret_cast<std::uint8_t const*>(&trkn);
         auto atom = std::vector(ptr, ptr + sizeof(trkn));
@@ -115,7 +147,7 @@ namespace ao::tag::mp4::test
         disk.common.dataLength = 16 + 6;
         std::memcpy(disk.common.magic.data(), "data", 4);
         disk.discNumber = 2;
-        disk.totalDiscs = 5;
+        disk.discTotal = 5;
 
         auto const* ptr = reinterpret_cast<std::uint8_t const*>(&disk);
         auto atom = std::vector(ptr, ptr + sizeof(disk));
@@ -199,6 +231,39 @@ namespace ao::tag::mp4::test
       return createMinimalM4aWithRawIlstAtom(trackAtom);
     }
 
+    enum class MovementField : std::uint8_t
+    {
+      Number,
+      Total,
+    };
+
+    std::uint16_t loadMovementValue(MovementField field,
+                                    std::span<std::uint8_t const> payload,
+                                    std::uint32_t dataType = 21,
+                                    std::uint8_t version = 0,
+                                    std::optional<std::uint8_t> optBaseline = std::nullopt)
+    {
+      auto const* atomType = field == MovementField::Number ? "\xA9"
+                                                              "mvi"
+                                                            : "\xA9"
+                                                              "mvc";
+      auto ilstChildren = std::vector<std::uint8_t>{};
+
+      if (optBaseline)
+      {
+        ilstChildren = makeIntegerMetadataAtom(atomType, std::array{*optBaseline});
+      }
+
+      auto const candidate = makeIntegerMetadataAtom(atomType, payload, dataType, version);
+      ilstChildren.insert(ilstChildren.end(), candidate.begin(), candidate.end());
+
+      auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const metadata = file.loadTrack().metadata();
+      return field == MovementField::Number ? metadata.movementNumber() : metadata.movementTotal();
+    }
+
     std::vector<std::uint8_t> createMinimalM4aWithLeadingVideoTrack()
     {
       auto data = std::vector<std::uint8_t>{};
@@ -214,7 +279,7 @@ namespace ao::tag::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - loadTrack", "[tag][unit][mp4][file]")
+  TEST_CASE("MP4 File - parses a complete tagged file", "[tag][unit][mp4][file]")
   {
     auto const data = createMinimalM4a();
     auto const temp = TempFile{data};
@@ -231,9 +296,12 @@ namespace ao::tag::mp4::test
     CHECK(meta.genre() == "Genre");
     CHECK(meta.composer() == "Composer");
     CHECK(meta.work() == "Grouping"); // grp overwrites wrk
+    CHECK(meta.movement() == "MovementName");
+    CHECK(meta.movementNumber() == 2);
+    CHECK(meta.movementTotal() == 4);
     CHECK(meta.trackNumber() == 7);
     CHECK(meta.discNumber() == 2);
-    CHECK(meta.totalDiscs() == 5);
+    CHECK(meta.discTotal() == 5);
 
     auto const& covers = builder.coverArt().entries();
     REQUIRE(covers.size() == 2);
@@ -246,7 +314,7 @@ namespace ao::tag::mp4::test
     auto const secondData = std::get<std::span<std::byte const>>(covers[1].source);
     CHECK(static_cast<std::uint8_t>(secondData[0]) == 0xEE);
 
-    CHECK(meta.totalDiscs() == 5);
+    CHECK(meta.discTotal() == 5);
 
     CHECK(builder.customMetadata().pairs().empty());
 
@@ -257,72 +325,154 @@ namespace ao::tag::mp4::test
     CHECK(builder.property().codec() == library::AudioCodec::Aac);
   }
 
-  TEST_CASE("MP4 File - ALAC sample entry sets codec", "[tag][unit][mp4][file]")
+  TEST_CASE("MP4 File - parses movement integer metadata", "[tag][unit][mp4][file]")
   {
-    auto const data = createMinimalM4a("alac");
-    auto const temp = TempFile{data};
+    SECTION("Accepts every supported payload width")
+    {
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 1>{0x7F}) == 127);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 2>{0x01, 0x02}) == 258);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 3>{0x00, 0xFF, 0xFF}) == 65535);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 4>{0x00, 0x00, 0x12, 0x34}) == 0x1234);
+      CHECK(loadMovementValue(MovementField::Number,
+                              std::array<std::uint8_t, 8>{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x23, 0x45}) == 0x2345);
+    }
 
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
+    SECTION("Accepts the implicit integer data type")
+    {
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 2>{0x01, 0x23}, 0) == 0x0123);
+    }
 
-    CHECK(builder.property().codec() == library::AudioCodec::Alac);
+    SECTION("Rejects unsupported payload widths")
+    {
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 0>{}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 5>{0, 0, 0, 0, 1}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 6>{0, 0, 0, 0, 0, 1}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 7>{0, 0, 0, 0, 0, 0, 1}, 21, 0, 37) ==
+            37);
+      CHECK(loadMovementValue(
+              MovementField::Number, std::array<std::uint8_t, 9>{0, 0, 0, 0, 0, 0, 0, 0, 1}, 21, 0, 37) == 37);
+    }
+
+    SECTION("Rejects negative values")
+    {
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 1>{0xFF}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 2>{0x80, 0x00}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 3>{0xFF, 0xFF, 0xFF}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 4>{0x80, 0x00, 0x00, 0x00}, 21, 0, 37) ==
+            37);
+      CHECK(loadMovementValue(MovementField::Number,
+                              std::array<std::uint8_t, 8>{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+                              21,
+                              0,
+                              37) == 37);
+    }
+
+    SECTION("Rejects values outside uint16 range")
+    {
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 3>{0x01, 0x00, 0x00}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 4>{0x7F, 0xFF, 0xFF, 0xFF}, 21, 0, 37) ==
+            37);
+      CHECK(loadMovementValue(MovementField::Number,
+                              std::array<std::uint8_t, 8>{0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00},
+                              21,
+                              0,
+                              37) == 37);
+    }
+
+    SECTION("Rejects incompatible data type and version")
+    {
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 1>{42}, 1, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 1>{42}, 13, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Number, std::array<std::uint8_t, 1>{42}, 21, 1, 37) == 37);
+    }
+
+    SECTION("Applies the same validation to movement total")
+    {
+      CHECK(loadMovementValue(MovementField::Total,
+                              std::array<std::uint8_t, 8>{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x23, 0x45},
+                              21,
+                              0,
+                              37) == 0x2345);
+      CHECK(loadMovementValue(MovementField::Total, std::array<std::uint8_t, 5>{0, 0, 0, 0, 1}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Total, std::array<std::uint8_t, 1>{0xFF}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Total, std::array<std::uint8_t, 3>{0x01, 0x00, 0x00}, 21, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Total, std::array<std::uint8_t, 1>{42}, 13, 0, 37) == 37);
+      CHECK(loadMovementValue(MovementField::Total, std::array<std::uint8_t, 1>{42}, 21, 1, 37) == 37);
+    }
   }
 
-  TEST_CASE("MP4 File - 32-byte disk atom parses disc numbers", "[tag][unit][mp4][file]")
+  TEST_CASE("MP4 File - parses track and disc number pairs", "[tag][unit][mp4][file]")
   {
-    auto const data = createMinimalM4aWithRawDiskAtom();
-    auto const temp = TempFile{data};
+    SECTION("Accepts a 32-byte disk atom")
+    {
+      auto const data = createMinimalM4aWithRawDiskAtom();
+      auto const temp = TempFile{data};
 
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto builder = file.loadTrack();
 
-    CHECK(builder.metadata().discNumber() == 2);
-    CHECK(builder.metadata().totalDiscs() == 5);
+      CHECK(builder.metadata().discNumber() == 2);
+      CHECK(builder.metadata().discTotal() == 5);
+    }
+
+    SECTION("Accepts a 30-byte trkn atom")
+    {
+      auto const data = createMinimalM4aWithRawTrackAtom();
+      auto const temp = TempFile{data};
+
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto builder = file.loadTrack();
+
+      CHECK(builder.metadata().trackNumber() == 2);
+      CHECK(builder.metadata().trackTotal() == 4);
+    }
   }
 
-  TEST_CASE("MP4 File - 30-byte trkn atom parses track numbers", "[tag][unit][mp4][file]")
+  TEST_CASE("MP4 File - derives audio properties", "[tag][unit][mp4][file]")
   {
-    auto const data = createMinimalM4aWithRawTrackAtom();
-    auto const temp = TempFile{data};
+    SECTION("Recognizes ALAC sample entries")
+    {
+      auto const data = createMinimalM4a("alac");
+      auto const temp = TempFile{data};
 
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto builder = file.loadTrack();
 
-    CHECK(builder.metadata().trackNumber() == 2);
-    CHECK(builder.metadata().totalTracks() == 4);
+      CHECK(builder.property().codec() == library::AudioCodec::Alac);
+    }
+
+    SECTION("Reads AAC entries that contain child atoms")
+    {
+      auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0});
+      auto const data = createMinimalM4a("mp4a", esdsAtom);
+      auto const temp = TempFile{data};
+
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto builder = file.loadTrack();
+
+      CHECK(builder.property().codec() == library::AudioCodec::Aac);
+      CHECK(builder.property().sampleRate() == 44100);
+      CHECK(builder.property().channels() == 2);
+      CHECK(builder.property().bitDepth() == 16);
+    }
+
+    SECTION("Skips a leading video track")
+    {
+      auto const data = createMinimalM4aWithLeadingVideoTrack();
+      auto const temp = TempFile{data};
+
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto builder = file.loadTrack();
+
+      CHECK(builder.property().codec() == library::AudioCodec::Aac);
+      CHECK(builder.property().sampleRate() == 48000);
+      CHECK(builder.property().duration().count() == 2000);
+      CHECK(builder.property().channels() == 2);
+      CHECK(builder.property().bitDepth() == 16);
+    }
   }
 
-  TEST_CASE("MP4 File - AAC sample entry with child atoms does not crash", "[tag][unit][mp4][file]")
-  {
-    auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0});
-    auto const data = createMinimalM4a("mp4a", esdsAtom);
-    auto const temp = TempFile{data};
-
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
-
-    CHECK(builder.property().codec() == library::AudioCodec::Aac);
-    CHECK(builder.property().sampleRate() == 44100);
-    CHECK(builder.property().channels() == 2);
-    CHECK(builder.property().bitDepth() == 16);
-  }
-
-  TEST_CASE("MP4 File - audio properties skip leading video track", "[tag][unit][mp4][file]")
-  {
-    auto const data = createMinimalM4aWithLeadingVideoTrack();
-    auto const temp = TempFile{data};
-
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
-
-    CHECK(builder.property().codec() == library::AudioCodec::Aac);
-    CHECK(builder.property().sampleRate() == 48000);
-    CHECK(builder.property().duration().count() == 2000);
-    CHECK(builder.property().channels() == 2);
-    CHECK(builder.property().bitDepth() == 16);
-  }
-
-  TEST_CASE("MP4 File - Malformed Data", "[tag][unit][mp4][file]")
+  TEST_CASE("MP4 File - handles malformed input", "[tag][unit][mp4][file]")
   {
     SECTION("Truncated Atom")
     {

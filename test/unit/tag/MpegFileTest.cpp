@@ -79,6 +79,8 @@ namespace ao::tag::mpeg::test
       addTextFrame(body, "TYER", "2024");
       addTextFrame(body, "TRCK", "1/10");
       addTextFrame(body, "TCON", "Genre");
+      addTextFrame(body, "MVNM", "MovementName");
+      addTextFrame(body, "MVIN", "2/4");
 
       addTxxxFrame(body, "work", "WorkName");
       addTxxxFrame(body, "CustomKey", "CustomValue");
@@ -131,7 +133,7 @@ namespace ao::tag::mpeg::test
     }
   }
 
-  TEST_CASE("MPEG File - loadTrack with tags", "[tag][unit][mpeg][file]")
+  TEST_CASE("MPEG File - parses metadata and cover art", "[tag][unit][mpeg][file]")
   {
     auto const data = createMp3WithTags();
     auto const temp = TempFile{data};
@@ -145,9 +147,12 @@ namespace ao::tag::mpeg::test
     CHECK(meta.album() == "Album");
     CHECK(meta.year() == 2024);
     CHECK(meta.trackNumber() == 1);
-    CHECK(meta.totalTracks() == 10);
+    CHECK(meta.trackTotal() == 10);
     CHECK(meta.genre() == "Genre");
     CHECK(meta.work() == "WorkName");
+    CHECK(meta.movement() == "MovementName");
+    CHECK(meta.movementNumber() == 2);
+    CHECK(meta.movementTotal() == 4);
 
     CHECK(builder.customMetadata().pairs().empty());
 
@@ -167,7 +172,7 @@ namespace ao::tag::mpeg::test
     CHECK(prop.bitDepth() == 16);
   }
 
-  TEST_CASE("MPEG File - CBR Duration", "[tag][unit][mpeg][file]")
+  TEST_CASE("MPEG File - derives CBR audio properties", "[tag][unit][mpeg][file]")
   {
     auto data = std::vector<std::uint8_t>{};
     auto const mpegHdr = std::array<std::uint8_t, 4>{0xFF, 0xFB, 0x90, 0x44};
@@ -184,25 +189,25 @@ namespace ao::tag::mpeg::test
     CHECK(builder.property().bitDepth() == 16);
   }
 
-  TEST_CASE("MPEG File - ID3v2.2 (Unsupported)", "[tag][unit][mpeg][file]")
+  TEST_CASE("MPEG File - handles unsupported or malformed input", "[tag][unit][mpeg][file]")
   {
-    auto data = std::vector<std::uint8_t>{};
-    auto header = id3v2::HeaderLayout{};
-    std::memcpy(header.id.data(), "ID3", 3);
-    header.majorVersion = 2;
-    auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
-    data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
-    data.resize(data.size() + 100, 0);
+    SECTION("Unsupported ID3v2.2 tag")
+    {
+      auto data = std::vector<std::uint8_t>{};
+      auto header = id3v2::HeaderLayout{};
+      std::memcpy(header.id.data(), "ID3", 3);
+      header.majorVersion = 2;
+      auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
+      data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
+      data.resize(data.size() + 100, 0);
 
-    auto const temp = TempFile{data};
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
-    CHECK(builder.metadata().title().empty());
-  }
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto builder = file.loadTrack();
+      CHECK(builder.metadata().title().empty());
+    }
 
-  TEST_CASE("MPEG File - Malformed Data", "[tag][unit][mpeg][file]")
-  {
-    SECTION("Truncated ID3v2 Header")
+    SECTION("Truncated ID3v2 header")
     {
       auto data = std::vector<std::uint8_t>{};
       auto header = id3v2::HeaderLayout{};
@@ -220,7 +225,7 @@ namespace ao::tag::mpeg::test
       CHECK(builder.metadata().title().empty());
     }
 
-    SECTION("Corrupt Frame Size Exceeds Body")
+    SECTION("Frame size exceeds tag body")
     {
       auto data = std::vector<std::uint8_t>{};
       auto header = id3v2::HeaderLayout{};
@@ -243,7 +248,7 @@ namespace ao::tag::mpeg::test
       REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
     }
 
-    SECTION("Invalid Sync")
+    SECTION("Missing MPEG frame sync")
     {
       auto data = std::vector<std::uint8_t>(1000, 0x42); // Just 1000 bytes of garbage, no 0xFF 0xFB sync
       auto const temp = TempFile{data};

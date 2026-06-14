@@ -94,9 +94,9 @@ namespace ao::library::test
       builder.property().uri(uri);
       // Cover entries are serialized separately from the fixed header.
       builder.metadata().trackNumber(header.trackNumber);
-      builder.metadata().totalTracks(header.totalTracks);
+      builder.metadata().trackTotal(header.trackTotal);
       builder.metadata().discNumber(header.discNumber);
-      builder.metadata().totalDiscs(header.totalDiscs);
+      builder.metadata().discTotal(header.discTotal);
       builder.property().duration(header.duration);
       builder.property().bitrate(header.bitrate);
       builder.property().channels(header.channels);
@@ -158,17 +158,42 @@ namespace ao::library::test
   {
     auto header = TrackColdHeader{};
     header.trackNumber = 5;
-    header.totalTracks = 10;
+    header.trackTotal = 10;
     header.discNumber = 1;
-    header.totalDiscs = 2;
+    header.discTotal = 2;
 
     auto const data = createColdData(header, {}, "/path/to/file.flac");
     auto const view = makeColdView(data);
 
     CHECK(view.metadata().trackNumber() == 5);
-    CHECK(view.metadata().totalTracks() == 10);
+    CHECK(view.metadata().trackTotal() == 10);
     CHECK(view.metadata().discNumber() == 1);
-    CHECK(view.metadata().totalDiscs() == 2);
+    CHECK(view.metadata().discTotal() == 2);
+  }
+
+  TEST_CASE("TrackView - Cold Work and Movement", "[library][unit][track]")
+  {
+    auto builder = TrackBuilder::createNew();
+    builder.metadata()
+      .work("Symphony No. 9 in D minor, Op. 125")
+      .movement("II. Molto vivace")
+      .movementNumber(2)
+      .movementTotal(4);
+
+    auto temp = TempDir{};
+    auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = lmdb::WriteTransaction{env};
+    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
+    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
+    auto const coldData = builder.serializeCold(wtxn, dict, resources);
+    auto const view = makeColdView(coldData);
+
+    CHECK(view.metadata().workId().raw() > 0);
+    CHECK(view.metadata().movementId().raw() > 0);
+    CHECK(dict.get(view.metadata().workId()) == "Symphony No. 9 in D minor, Op. 125");
+    CHECK(dict.get(view.metadata().movementId()) == "II. Molto vivace");
+    CHECK(view.metadata().movementNumber() == 2);
+    CHECK(view.metadata().movementTotal() == 4);
   }
 
   TEST_CASE("TrackView - Cold Cover Art", "[library][unit][track]")

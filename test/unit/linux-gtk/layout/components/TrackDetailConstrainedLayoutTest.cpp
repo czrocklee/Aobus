@@ -129,7 +129,7 @@ namespace ao::gtk::layout::test
       auto builder = library::TrackBuilder::createNew();
       builder.metadata().title(title);
       builder.metadata().trackNumber(trackNumber);
-      builder.metadata().totalTracks(12);
+      builder.metadata().trackTotal(12);
       auto const [hot, cold] =
         builder.serialize(txn, runtime.musicLibrary().dictionary(), runtime.musicLibrary().resources());
       auto const trackId = writer.createHotCold(hot, cold).first;
@@ -980,7 +980,7 @@ namespace ao::gtk::layout::test
       snap.selectionKind = rt::SelectionKind::Multiple;
       snap.trackIds = {trackId1, trackId2};
       rt::trackFieldArrayAt(snap.fields, rt::TrackField::TrackNumber).mixed = true;
-      rt::trackFieldArrayAt(snap.fields, rt::TrackField::TotalTracks).optValue =
+      rt::trackFieldArrayAt(snap.fields, rt::TrackField::TrackTotal).optValue =
         rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, 12};
 
       auto scope = FakeTrackDetailScope{std::move(snap)};

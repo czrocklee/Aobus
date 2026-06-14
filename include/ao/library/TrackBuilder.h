@@ -65,13 +65,16 @@ namespace ao::library
       MetadataBuilder& composer(std::string_view text);
       MetadataBuilder& genre(std::string_view text);
       MetadataBuilder& work(std::string_view text);
+      MetadataBuilder& movement(std::string_view text);
 
       // Numeric setters
       MetadataBuilder& year(std::uint16_t year);
       MetadataBuilder& trackNumber(std::uint16_t number);
-      MetadataBuilder& totalTracks(std::uint16_t count);
+      MetadataBuilder& trackTotal(std::uint16_t count);
       MetadataBuilder& discNumber(std::uint16_t number);
-      MetadataBuilder& totalDiscs(std::uint16_t count);
+      MetadataBuilder& discTotal(std::uint16_t count);
+      MetadataBuilder& movementNumber(std::uint16_t number);
+      MetadataBuilder& movementTotal(std::uint16_t count);
 
       // Accessors
       std::string_view title() const { return _title; }
@@ -81,11 +84,14 @@ namespace ao::library
       std::string_view composer() const { return _composer; }
       std::string_view genre() const { return _genre; }
       std::string_view work() const { return _work; }
+      std::string_view movement() const { return _movement; }
       std::uint16_t year() const { return _year; }
       std::uint16_t trackNumber() const { return _trackNumber; }
-      std::uint16_t totalTracks() const { return _totalTracks; }
+      std::uint16_t trackTotal() const { return _trackTotal; }
       std::uint16_t discNumber() const { return _discNumber; }
-      std::uint16_t totalDiscs() const { return _totalDiscs; }
+      std::uint16_t discTotal() const { return _discTotal; }
+      std::uint16_t movementNumber() const { return _movementNumber; }
+      std::uint16_t movementTotal() const { return _movementTotal; }
 
     private:
       friend class TrackBuilder;
@@ -98,13 +104,16 @@ namespace ao::library
       std::string_view _composer;
       std::string_view _genre;
       std::string_view _work;
+      std::string_view _movement;
 
       // Metadata numerics
       std::uint16_t _year = 0;
       std::uint16_t _trackNumber = 0;
-      std::uint16_t _totalTracks = 0;
+      std::uint16_t _trackTotal = 0;
       std::uint16_t _discNumber = 0;
-      std::uint16_t _totalDiscs = 0;
+      std::uint16_t _discTotal = 0;
+      std::uint16_t _movementNumber = 0;
+      std::uint16_t _movementTotal = 0;
     };
 
     class PropertyBuilder
@@ -274,6 +283,7 @@ namespace ao::library
       std::uint16_t _uriLength = 0;
       std::uint16_t _customOffset = 0;
       DictionaryId _workId = kInvalidDictionaryId;
+      DictionaryId _movementId = kInvalidDictionaryId;
       std::size_t _size = 0;
 
       friend class TrackBuilder;

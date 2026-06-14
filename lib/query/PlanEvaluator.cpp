@@ -192,9 +192,9 @@ namespace ao::query
         // Metadata numeric fields
         case Field::Year: return static_cast<std::int64_t>(track.metadata().year());
         case Field::TrackNumber: return static_cast<std::int64_t>(track.metadata().trackNumber());
-        case Field::TotalTracks: return static_cast<std::int64_t>(track.metadata().totalTracks());
+        case Field::TrackTotal: return static_cast<std::int64_t>(track.metadata().trackTotal());
         case Field::DiscNumber: return static_cast<std::int64_t>(track.metadata().discNumber());
-        case Field::TotalDiscs: return static_cast<std::int64_t>(track.metadata().totalDiscs());
+        case Field::DiscTotal: return static_cast<std::int64_t>(track.metadata().discTotal());
 
         // Tag fields
         case Field::TagBloom: return static_cast<std::int64_t>(track.tags().bloom());

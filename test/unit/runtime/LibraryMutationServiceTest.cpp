@@ -60,9 +60,9 @@ namespace ao::rt::test
                                      .optWork = "Work",
                                      .optYear = 2024,
                                      .optTrackNumber = 1,
-                                     .optTotalTracks = 10,
+                                     .optTrackTotal = 10,
                                      .optDiscNumber = 1,
-                                     .optTotalDiscs = 2};
+                                     .optDiscTotal = 2};
 
     auto const result = service.updateMetadata(targetIds, patch);
     REQUIRE(result.has_value());

@@ -15,7 +15,7 @@ namespace ao::tag::test
 {
   using namespace ao::test;
 
-  TEST_CASE("TagFile - Factory", "[tag][unit][factory]")
+  TEST_CASE("TagFile - opens parser by file extension", "[tag][unit][factory]")
   {
     SECTION("MP3 extension")
     {

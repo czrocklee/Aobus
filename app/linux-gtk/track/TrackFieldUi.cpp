@@ -100,7 +100,7 @@ namespace ao::gtk
     std::string readDisplayTrackNumber(TrackRowObject const& row, TrackRowCache const& /*cache*/)
     {
       auto const disc = row.discNumber();
-      auto const totalDiscs = row.totalDiscs();
+      auto const discTotal = row.discTotal();
       auto const track = row.trackNumber();
 
       if (track == 0)
@@ -108,7 +108,7 @@ namespace ao::gtk
         return {};
       }
 
-      if (totalDiscs > 1 && disc != 0)
+      if (discTotal > 1 && disc != 0)
       {
         return std::format("{}-{}", disc, track);
       }
@@ -223,6 +223,11 @@ namespace ao::gtk
       writeStrPatch(ctx, ctx.patch.optWork);
     }
 
+    void writeMovementPatch(TrackFieldEditContext const& ctx)
+    {
+      writeStrPatch(ctx, ctx.patch.optMovement);
+    }
+
     void writeYearPatch(TrackFieldEditContext const& ctx)
     {
       writeUint16Patch(ctx, ctx.patch.optYear);
@@ -233,9 +238,9 @@ namespace ao::gtk
       writeUint16Patch(ctx, ctx.patch.optDiscNumber);
     }
 
-    void writeTotalDiscsPatch(TrackFieldEditContext const& ctx)
+    void writeDiscTotalPatch(TrackFieldEditContext const& ctx)
     {
-      writeUint16Patch(ctx, ctx.patch.optTotalDiscs);
+      writeUint16Patch(ctx, ctx.patch.optDiscTotal);
     }
 
     void writeTrackNumberPatch(TrackFieldEditContext const& ctx)
@@ -243,9 +248,19 @@ namespace ao::gtk
       writeUint16Patch(ctx, ctx.patch.optTrackNumber);
     }
 
-    void writeTotalTracksPatch(TrackFieldEditContext const& ctx)
+    void writeTrackTotalPatch(TrackFieldEditContext const& ctx)
     {
-      writeUint16Patch(ctx, ctx.patch.optTotalTracks);
+      writeUint16Patch(ctx, ctx.patch.optTrackTotal);
+    }
+
+    void writeMovementNumberPatch(TrackFieldEditContext const& ctx)
+    {
+      writeUint16Patch(ctx, ctx.patch.optMovementNumber);
+    }
+
+    void writeMovementTotalPatch(TrackFieldEditContext const& ctx)
+    {
+      writeUint16Patch(ctx, ctx.patch.optMovementTotal);
     }
   } // namespace
 
@@ -386,6 +401,20 @@ namespace ao::gtk
           .applyRowEditValue = applyStringEditValue,
           .writePatch = writeWorkPatch,
         },
+        {
+          .field = F::Movement,
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return std::string{row.stringField(rt::TrackField::Movement)->raw()}; },
+          .readViewRawValue = +[](library::TrackView const& view,
+                                  library::DictionaryStore const& dict,
+                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
+          { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().movementId())}; },
+          .formatValue = readStr,
+          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
+          .writePatch = writeMovementPatch,
+        },
         // ---- Metadata: number ----
         {
           .field = F::Year,
@@ -416,18 +445,18 @@ namespace ao::gtk
           .writePatch = writeDiscNumberPatch,
         },
         {
-          .field = F::TotalDiscs,
+          .field = F::DiscTotal,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.totalDiscs()); },
+          { return uimodel::track::formatUint16(row.discTotal()); },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const&,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().totalDiscs()}; },
+          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().discTotal()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::totalDiscs>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setTotalDiscs>,
-          .writePatch = writeTotalDiscsPatch,
+          .readRowEditValue = readUint16Field<&TrackRowObject::discTotal>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setDiscTotal>,
+          .writePatch = writeDiscTotalPatch,
         },
         {
           .field = F::TrackNumber,
@@ -444,18 +473,46 @@ namespace ao::gtk
           .writePatch = writeTrackNumberPatch,
         },
         {
-          .field = F::TotalTracks,
+          .field = F::TrackTotal,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.totalTracks()); },
+          { return uimodel::track::formatUint16(row.trackTotal()); },
           .readViewRawValue = +[](library::TrackView const& view,
                                   library::DictionaryStore const&,
                                   library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().totalTracks()}; },
+          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().trackTotal()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::totalTracks>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setTotalTracks>,
-          .writePatch = writeTotalTracksPatch,
+          .readRowEditValue = readUint16Field<&TrackRowObject::trackTotal>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setTrackTotal>,
+          .writePatch = writeTrackTotalPatch,
+        },
+        {
+          .field = F::MovementNumber,
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return uimodel::track::formatUint16(row.movementNumber()); },
+          .readViewRawValue = +[](library::TrackView const& view,
+                                  library::DictionaryStore const&,
+                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
+          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().movementNumber()}; },
+          .formatValue = readUint16,
+          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          .readRowEditValue = readUint16Field<&TrackRowObject::movementNumber>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setMovementNumber>,
+          .writePatch = writeMovementNumberPatch,
+        },
+        {
+          .field = F::MovementTotal,
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return uimodel::track::formatUint16(row.movementTotal()); },
+          .readViewRawValue = +[](library::TrackView const& view,
+                                  library::DictionaryStore const&,
+                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
+          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().movementTotal()}; },
+          .formatValue = readUint16,
+          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          .readRowEditValue = readUint16Field<&TrackRowObject::movementTotal>,
+          .applyRowEditValue = applyUint16Field<&TrackRowObject::setMovementTotal>,
+          .writePatch = writeMovementTotalPatch,
         },
         // ---- Duration ----
         {
@@ -695,10 +752,13 @@ namespace ao::gtk
       case rt::TrackField::AlbumArtist: return kWidthAlbumArtist;
       case rt::TrackField::Genre:
       case rt::TrackField::Composer:
-      case rt::TrackField::Work: return kWidthGenre;
+      case rt::TrackField::Work:
+      case rt::TrackField::Movement: return kWidthGenre;
       case rt::TrackField::Year: return kWidthYear;
       case rt::TrackField::DiscNumber: return kWidthDisc;
-      case rt::TrackField::TrackNumber: return kWidthTrack;
+      case rt::TrackField::TrackNumber:
+      case rt::TrackField::MovementNumber:
+      case rt::TrackField::MovementTotal: return kWidthTrack;
       case rt::TrackField::Duration: return kWidthDuration;
       case rt::TrackField::Tags: return kWidthTags;
       case rt::TrackField::FilePath: return kWidthPath;

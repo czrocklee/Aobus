@@ -33,7 +33,8 @@ namespace ao::gtk
         case rt::TrackField::AlbumArtist:
         case rt::TrackField::Genre:
         case rt::TrackField::Composer:
-        case rt::TrackField::Work: return true;
+        case rt::TrackField::Work:
+        case rt::TrackField::Movement: return true;
 
         default: return false;
       }
@@ -100,13 +101,16 @@ namespace ao::gtk
                                 DictionaryId genre,
                                 DictionaryId composer,
                                 DictionaryId work,
+                                DictionaryId movement,
                                 Glib::ustring const& tags,
                                 std::chrono::milliseconds duration,
                                 std::uint16_t year,
                                 std::uint16_t discNumber,
-                                std::uint16_t totalDiscs,
+                                std::uint16_t discTotal,
                                 std::uint16_t trackNumber,
-                                std::uint16_t totalTracks,
+                                std::uint16_t trackTotal,
+                                std::uint16_t movementNumber,
+                                std::uint16_t movementTotal,
                                 ResourceId resourceId,
                                 std::uint32_t sampleRate,
                                 std::uint8_t channels,
@@ -124,14 +128,17 @@ namespace ao::gtk
     _text[static_cast<std::size_t>(rt::TrackField::Genre)] = _provider->resolveDictionaryString(genre);
     _text[static_cast<std::size_t>(rt::TrackField::Composer)] = _provider->resolveDictionaryString(composer);
     _text[static_cast<std::size_t>(rt::TrackField::Work)] = _provider->resolveDictionaryString(work);
+    _text[static_cast<std::size_t>(rt::TrackField::Movement)] = _provider->resolveDictionaryString(movement);
 
     _tags = tags;
     _duration = duration;
     _year = year;
     _discNumber = discNumber;
-    _totalDiscs = totalDiscs;
+    _discTotal = discTotal;
     _trackNumber = trackNumber;
-    _totalTracks = totalTracks;
+    _trackTotal = trackTotal;
+    _movementNumber = movementNumber;
+    _movementTotal = movementTotal;
     _resourceId = resourceId;
 
     _sampleRate = sampleRate;
@@ -172,9 +179,9 @@ namespace ao::gtk
     _discNumber = discNumber;
   }
 
-  void TrackRowObject::setTotalDiscs(std::uint16_t totalDiscs)
+  void TrackRowObject::setDiscTotal(std::uint16_t discTotal)
   {
-    _totalDiscs = totalDiscs;
+    _discTotal = discTotal;
   }
 
   void TrackRowObject::setTrackNumber(std::uint16_t trackNumber)
@@ -182,8 +189,18 @@ namespace ao::gtk
     _trackNumber = trackNumber;
   }
 
-  void TrackRowObject::setTotalTracks(std::uint16_t totalTracks)
+  void TrackRowObject::setTrackTotal(std::uint16_t trackTotal)
   {
-    _totalTracks = totalTracks;
+    _trackTotal = trackTotal;
+  }
+
+  void TrackRowObject::setMovementNumber(std::uint16_t movementNumber)
+  {
+    _movementNumber = movementNumber;
+  }
+
+  void TrackRowObject::setMovementTotal(std::uint16_t movementTotal)
+  {
+    _movementTotal = movementTotal;
   }
 } // namespace ao::gtk

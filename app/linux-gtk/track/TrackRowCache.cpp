@@ -115,13 +115,16 @@ namespace ao::gtk
                      metadata.genreId(),
                      metadata.composerId(),
                      metadata.workId(),
+                     metadata.movementId(),
                      joinResolvedTags(view.tags(), _dict),
                      view.property().duration(),
                      metadata.year(),
                      metadata.discNumber(),
-                     metadata.totalDiscs(),
+                     metadata.discTotal(),
                      metadata.trackNumber(),
-                     metadata.totalTracks(),
+                     metadata.trackTotal(),
+                     metadata.movementNumber(),
+                     metadata.movementTotal(),
                      view.coverArt()
                        .primary()
                        .transform([](library::CoverArt cover) { return cover.resourceId; })

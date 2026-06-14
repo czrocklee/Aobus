@@ -88,6 +88,24 @@ namespace ao::rt
         result.changedCold = true;
       }
 
+      if (patch.optMovement)
+      {
+        meta.movement(*patch.optMovement);
+        result.changedCold = true;
+      }
+
+      if (patch.optMovementNumber)
+      {
+        meta.movementNumber(*patch.optMovementNumber);
+        result.changedCold = true;
+      }
+
+      if (patch.optMovementTotal)
+      {
+        meta.movementTotal(*patch.optMovementTotal);
+        result.changedCold = true;
+      }
+
       if (patch.optYear)
       {
         meta.year(*patch.optYear);
@@ -100,9 +118,9 @@ namespace ao::rt
         result.changedCold = true;
       }
 
-      if (patch.optTotalTracks)
+      if (patch.optTrackTotal)
       {
-        meta.totalTracks(*patch.optTotalTracks);
+        meta.trackTotal(*patch.optTrackTotal);
         result.changedCold = true;
       }
 
@@ -112,9 +130,9 @@ namespace ao::rt
         result.changedCold = true;
       }
 
-      if (patch.optTotalDiscs)
+      if (patch.optDiscTotal)
       {
-        meta.totalDiscs(*patch.optTotalDiscs);
+        meta.discTotal(*patch.optDiscTotal);
         result.changedCold = true;
       }
 

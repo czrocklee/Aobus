@@ -409,9 +409,9 @@ namespace ao::gtk::test
     auto const numericMetadataFields = {
       TrackField::Year,
       TrackField::DiscNumber,
-      TrackField::TotalDiscs,
+      TrackField::DiscTotal,
       TrackField::TrackNumber,
-      TrackField::TotalTracks,
+      TrackField::TrackTotal,
     };
 
     for (auto const field : numericMetadataFields)
@@ -436,9 +436,9 @@ namespace ao::gtk::test
     CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Work)));
     CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::Year)));
     CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::DiscNumber)));
-    CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::TotalDiscs)));
+    CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::DiscTotal)));
     CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::TrackNumber)));
-    CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::TotalTracks)));
+    CHECK(canInlineEdit(*trackFieldUiDefinition(TrackField::TrackTotal)));
 
     CHECK_FALSE(canInlineEdit(*trackFieldUiDefinition(TrackField::Duration)));
   }
@@ -464,9 +464,9 @@ namespace ao::gtk::test
   {
     auto const fields = std::to_array({TrackField::Year,
                                        TrackField::DiscNumber,
-                                       TrackField::TotalDiscs,
+                                       TrackField::DiscTotal,
                                        TrackField::TrackNumber,
-                                       TrackField::TotalTracks});
+                                       TrackField::TrackTotal});
 
     for (auto const field : fields)
     {

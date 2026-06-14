@@ -56,10 +56,13 @@ namespace ao::library
 
       // From cold
       std::uint16_t trackNumber() const noexcept { return _track.coldHeader().trackNumber; }
-      std::uint16_t totalTracks() const noexcept { return _track.coldHeader().totalTracks; }
+      std::uint16_t trackTotal() const noexcept { return _track.coldHeader().trackTotal; }
       std::uint16_t discNumber() const noexcept { return _track.coldHeader().discNumber; }
-      std::uint16_t totalDiscs() const noexcept { return _track.coldHeader().totalDiscs; }
+      std::uint16_t discTotal() const noexcept { return _track.coldHeader().discTotal; }
       DictionaryId workId() const noexcept { return _track.coldHeader().workId; }
+      DictionaryId movementId() const noexcept { return _track.coldHeader().movementId; }
+      std::uint16_t movementNumber() const noexcept { return _track.coldHeader().movementNumber; }
+      std::uint16_t movementTotal() const noexcept { return _track.coldHeader().movementTotal; }
 
     private:
       TrackView const& _track;

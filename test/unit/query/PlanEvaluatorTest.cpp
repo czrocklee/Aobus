@@ -54,9 +54,9 @@ namespace ao::query::test
       std::string uri = "/path/to/track.flac";
       std::uint16_t year = 2020;
       std::uint16_t trackNumber = 1;
-      std::uint16_t totalTracks = 0;
+      std::uint16_t trackTotal = 0;
       std::uint16_t discNumber = 0;
-      std::uint16_t totalDiscs = 0;
+      std::uint16_t discTotal = 0;
       std::chrono::milliseconds duration = std::chrono::seconds{180};
       std::uint32_t bitrate = 320000;
       std::uint32_t sampleRate = 44100;
@@ -157,9 +157,9 @@ namespace ao::query::test
         builder.metadata().genre(spec.genre);
         builder.metadata().year(spec.year);
         builder.metadata().trackNumber(spec.trackNumber);
-        builder.metadata().totalTracks(spec.totalTracks);
+        builder.metadata().trackTotal(spec.trackTotal);
         builder.metadata().discNumber(spec.discNumber);
-        builder.metadata().totalDiscs(spec.totalDiscs);
+        builder.metadata().discTotal(spec.discTotal);
 
         builder.property().uri(spec.uri);
         builder.property().duration(spec.duration);
@@ -668,9 +668,9 @@ namespace ao::query::test
     auto spec = TrackSpec{};
     spec.codec = library::AudioCodec::Flac;
     spec.trackNumber = 3;
-    spec.totalTracks = 12;
+    spec.trackTotal = 12;
     spec.discNumber = 1;
-    spec.totalDiscs = 2;
+    spec.discTotal = 2;
     spec.coverArtId = ResourceId{99};
     spec.album = "Test Album";
     spec.genre = "Test Genre";
@@ -740,9 +740,9 @@ namespace ao::query::test
     SECTION("Numeric Metadata Fields")
     {
       CHECK(evaluator.evaluateFull(compiler.compile(parse("$trackNumber = 3")), track.view()) == true);
-      CHECK(evaluator.evaluateFull(compiler.compile(parse("$totalTracks = 12")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compiler.compile(parse("$trackTotal = 12")), track.view()) == true);
       CHECK(evaluator.evaluateFull(compiler.compile(parse("$discNumber = 1")), track.view()) == true);
-      CHECK(evaluator.evaluateFull(compiler.compile(parse("$totalDiscs = 2")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compiler.compile(parse("$discTotal = 2")), track.view()) == true);
     }
 
     SECTION("CoverArtId")

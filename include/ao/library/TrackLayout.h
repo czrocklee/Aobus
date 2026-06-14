@@ -107,22 +107,24 @@ namespace ao::library
    *
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
    *   - duration, bitrate, channels: audio properties
-   *   - trackNumber, totalTracks, discNumber, totalDiscs: display only
-   *   - workId: classical metadata
+   *   - trackNumber, trackTotal, discNumber, discTotal: display only
+   *   - workId, movementId, movementNumber, movementTotal: classical metadata
    *   - uri: playback path, not filtered
    *   - covers: ordered list of typed cover art ResourceStore references
    *
-   * Total size: 32 bytes with 4-byte alignment.
+   * Total size: 40 bytes with 4-byte alignment.
    *
    * Cover entries are 8 bytes each: [resourceId(4), type(1), reserved(3)].
    * The primary cover is the first front cover, or entry 0 when no front cover exists.
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← cold data begin
-   *   │        TrackColdHeader (32B)        │
-   *   │  duration, bitrate, workId          │
-   *   │  trackNumber, totalTracks,          │
-   *   │  discNumber, totalDiscs             │
+   *   │        TrackColdHeader (40B)        │
+   *   │  duration, bitrate,                 │
+   *   │  workId, movementId                 │
+   *   │  trackNumber, trackTotal,           │
+   *   │  discNumber, discTotal              │
+   *   │  movementNumber, movementTotal      │
    *   │  customCount, uriOffset, uriLength  │
    *   │  coverCount, customOffset           │
    *   │  channels, padding                  │
@@ -141,32 +143,35 @@ namespace ao::library
   struct TrackColdHeader final
   {
     // 4-byte section
-    TrackDuration duration{}; // Track duration (millisecond span)
-    Bitrate bitrate{};        // Bitrate in bps
-    DictionaryId workId{};    // Dictionary ID for work
+    TrackDuration duration{};  // Track duration (millisecond span)
+    Bitrate bitrate{};         // Bitrate in bps
+    DictionaryId workId{};     // Dictionary ID for work
+    DictionaryId movementId{}; // Dictionary ID for movement name
 
     // 2-byte section
-    std::uint16_t trackNumber{};  // Track number
-    std::uint16_t totalTracks{};  // Total tracks in album
-    std::uint16_t discNumber{};   // Disc number
-    std::uint16_t totalDiscs{};   // Total discs in album
-    std::uint16_t customCount{};  // Number of custom key-value entries
-    std::uint16_t uriOffset{};    // Byte offset from header start to uri string
-    std::uint16_t uriLength{};    // Length of URI string
-    std::uint16_t coverCount{};   // Number of cover art entries
-    std::uint16_t customOffset{}; // Byte offset from header start to custom table
+    std::uint16_t trackNumber{};    // Track number
+    std::uint16_t trackTotal{};     // Total tracks in album
+    std::uint16_t discNumber{};     // Disc number
+    std::uint16_t discTotal{};      // Total discs in album
+    std::uint16_t movementNumber{}; // Movement ordinal within the work
+    std::uint16_t movementTotal{};  // Total movements in the work
+    std::uint16_t customCount{};    // Number of custom key-value entries
+    std::uint16_t uriOffset{};      // Byte offset from header start to uri string
+    std::uint16_t uriLength{};      // Length of URI string
+    std::uint16_t coverCount{};     // Number of cover art entries
+    std::uint16_t customOffset{};   // Byte offset from header start to custom table
 
     // 1-byte section
     Channels channels{}; // Number of audio channels
 
-    // 1 byte padding to reach 32 bytes total
+    // 1 byte padding to reach 40 bytes total
     std::array<std::byte, 1> padding{};
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackColdHeaderSize = 32;
+  constexpr std::size_t kTrackColdHeaderSize = 40;
   constexpr std::size_t kTrackColdHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 32 bytes");
+  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 40 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 4-byte alignment");
 } // namespace ao::library

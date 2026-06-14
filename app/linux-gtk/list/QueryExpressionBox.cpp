@@ -65,9 +65,9 @@ namespace ao::gtk
       "genre",
       "year",
       "trackNumber",
-      "totalTracks",
+      "trackTotal",
       "discNumber",
-      "totalDiscs",
+      "discTotal",
       "coverArt",
     });
 

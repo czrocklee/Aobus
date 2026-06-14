@@ -236,7 +236,14 @@ namespace ao::rt::test
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property().uri("full-fields.flac").duration(std::chrono::minutes{4});
 
-      trackBuilder.metadata().title("Test Title").artist("Test Artist").composer("Test Composer").work("Test Work");
+      trackBuilder.metadata()
+        .title("Test Title")
+        .artist("Test Artist")
+        .composer("Test Composer")
+        .work("Test Work")
+        .movement("Test Movement")
+        .movementNumber(2)
+        .movementTotal(4);
 
       auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
       auto const [trackId, view] =
@@ -294,6 +301,9 @@ namespace ao::rt::test
       REQUIRE(std::string{dict.get(view.metadata().artistId())} == "Test Artist");
       REQUIRE(std::string{dict.get(view.metadata().composerId())} == "Test Composer");
       REQUIRE(std::string{dict.get(view.metadata().workId())} == "Test Work");
+      REQUIRE(std::string{dict.get(view.metadata().movementId())} == "Test Movement");
+      REQUIRE(view.metadata().movementNumber() == 2);
+      REQUIRE(view.metadata().movementTotal() == 4);
     }
   }
 

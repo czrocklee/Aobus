@@ -95,11 +95,15 @@ namespace ao::library::test
       .albumArtist("Test Album Artist")
       .composer("Test Composer")
       .genre("Rock")
+      .work("Symphony No. 9")
+      .movement("I. Allegro ma non troppo")
       .year(2024)
       .trackNumber(5)
-      .totalTracks(10)
+      .trackTotal(10)
       .discNumber(2)
-      .totalDiscs(3);
+      .discTotal(3)
+      .movementNumber(1)
+      .movementTotal(4);
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
 
     CHECK(builder.metadata().title() == "Test Title");
@@ -108,11 +112,15 @@ namespace ao::library::test
     CHECK(builder.metadata().albumArtist() == "Test Album Artist");
     CHECK(builder.metadata().composer() == "Test Composer");
     CHECK(builder.metadata().genre() == "Rock");
+    CHECK(builder.metadata().work() == "Symphony No. 9");
+    CHECK(builder.metadata().movement() == "I. Allegro ma non troppo");
     CHECK(builder.metadata().year() == 2024);
     CHECK(builder.metadata().trackNumber() == 5);
-    CHECK(builder.metadata().totalTracks() == 10);
+    CHECK(builder.metadata().trackTotal() == 10);
     CHECK(builder.metadata().discNumber() == 2);
-    CHECK(builder.metadata().totalDiscs() == 3);
+    CHECK(builder.metadata().discTotal() == 3);
+    CHECK(builder.metadata().movementNumber() == 1);
+    CHECK(builder.metadata().movementTotal() == 4);
     REQUIRE(builder.coverArt().entries().size() == 1);
     CHECK(std::get<ResourceId>(builder.coverArt().entries()[0].source) == ResourceId{42});
     CHECK(builder.coverArt().entries()[0].type == PictureType::FrontCover);
@@ -352,7 +360,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - buildColdHeader", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
-    builder.metadata().trackNumber(5).totalTracks(10).discNumber(1).totalDiscs(2);
+    builder.metadata().trackNumber(5).trackTotal(10).discNumber(1).discTotal(2);
     builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{3});
 
     auto const temp = TempDir{};
@@ -365,9 +373,9 @@ namespace ao::library::test
     auto const* header = reinterpret_cast<TrackColdHeader const*>(coldData.data());
     CHECK(header->duration == std::chrono::minutes{3});
     CHECK(header->trackNumber == 5);
-    CHECK(header->totalTracks == 10);
+    CHECK(header->trackTotal == 10);
     CHECK(header->discNumber == 1);
-    CHECK(header->totalDiscs == 2);
+    CHECK(header->discTotal == 2);
   }
 
   TEST_CASE("TrackBuilder - serializeHot", "[library][unit][track]")
@@ -483,9 +491,9 @@ namespace ao::library::test
     auto builder = TrackBuilder::createNew();
     builder.metadata()
       .trackNumber(1)
-      .totalTracks(10)
+      .trackTotal(10)
       .discNumber(2)
-      .totalDiscs(3)
+      .discTotal(3)
       .album("Album")
       .genre("Genre")
       .albumArtist("Album Artist");
@@ -496,9 +504,9 @@ namespace ao::library::test
     auto view = TrackView{hotData, coldData};
 
     CHECK(view.metadata().trackNumber() == 1);
-    CHECK(view.metadata().totalTracks() == 10);
+    CHECK(view.metadata().trackTotal() == 10);
     CHECK(view.metadata().discNumber() == 2);
-    CHECK(view.metadata().totalDiscs() == 3);
+    CHECK(view.metadata().discTotal() == 3);
     REQUIRE(view.coverArt().primary());
     CHECK(view.coverArt().primary()->resourceId == ResourceId{42});
     CHECK(view.metadata().albumId() == dict.getId("Album"));

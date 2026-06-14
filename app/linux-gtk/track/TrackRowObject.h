@@ -52,14 +52,20 @@ namespace ao::gtk
     std::uint16_t discNumber() const { return _discNumber; }
     void setDiscNumber(std::uint16_t discNumber);
 
-    std::uint16_t totalDiscs() const { return _totalDiscs; }
-    void setTotalDiscs(std::uint16_t totalDiscs);
+    std::uint16_t discTotal() const { return _discTotal; }
+    void setDiscTotal(std::uint16_t discTotal);
 
     std::uint16_t trackNumber() const { return _trackNumber; }
     void setTrackNumber(std::uint16_t trackNumber);
 
-    std::uint16_t totalTracks() const { return _totalTracks; }
-    void setTotalTracks(std::uint16_t totalTracks);
+    std::uint16_t trackTotal() const { return _trackTotal; }
+    void setTrackTotal(std::uint16_t trackTotal);
+
+    std::uint16_t movementNumber() const { return _movementNumber; }
+    void setMovementNumber(std::uint16_t movementNumber);
+
+    std::uint16_t movementTotal() const { return _movementTotal; }
+    void setMovementTotal(std::uint16_t movementTotal);
 
     std::uint32_t bitrate() const { return _bitrate; }
     std::uint64_t fileSize() const { return _fileSize; }
@@ -78,13 +84,16 @@ namespace ao::gtk
                   DictionaryId genre,
                   DictionaryId composer,
                   DictionaryId work,
+                  DictionaryId movement,
                   Glib::ustring const& tags,
                   std::chrono::milliseconds duration,
                   std::uint16_t year,
                   std::uint16_t discNumber,
-                  std::uint16_t totalDiscs,
+                  std::uint16_t discTotal,
                   std::uint16_t trackNumber,
-                  std::uint16_t totalTracks,
+                  std::uint16_t trackTotal,
+                  std::uint16_t movementNumber,
+                  std::uint16_t movementTotal,
                   ResourceId resourceId,
                   std::uint32_t sampleRate,
                   std::uint8_t channels,
@@ -109,9 +118,11 @@ namespace ao::gtk
     std::chrono::milliseconds _duration{0};
     std::uint16_t _year = 0;
     std::uint16_t _discNumber = 0;
-    std::uint16_t _totalDiscs = 0;
+    std::uint16_t _discTotal = 0;
     std::uint16_t _trackNumber = 0;
-    std::uint16_t _totalTracks = 0;
+    std::uint16_t _trackTotal = 0;
+    std::uint16_t _movementNumber = 0;
+    std::uint16_t _movementTotal = 0;
     ResourceId _resourceId{kInvalidResourceId};
 
     std::uint32_t _sampleRate = 0;

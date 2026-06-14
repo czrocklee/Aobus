@@ -19,12 +19,12 @@ year, Field::Year
 y, Field::Year
 trackNumber, Field::TrackNumber
 tn, Field::TrackNumber
-totalTracks, Field::TotalTracks
-tt, Field::TotalTracks
+trackTotal, Field::TrackTotal
+tt, Field::TrackTotal
 discNumber, Field::DiscNumber
 dn, Field::DiscNumber
-totalDiscs, Field::TotalDiscs
-td, Field::TotalDiscs
+discTotal, Field::DiscTotal
+td, Field::DiscTotal
 artist, Field::ArtistId
 a, Field::ArtistId
 album, Field::AlbumId

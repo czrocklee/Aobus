@@ -49,16 +49,22 @@ namespace ao::rt
         return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().composerId())};
       case TrackField::Work:
         return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().workId())};
+      case TrackField::Movement:
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().movementId())};
 
       case TrackField::Year: return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().year()};
       case TrackField::DiscNumber:
         return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().discNumber()};
-      case TrackField::TotalDiscs:
-        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().totalDiscs()};
+      case TrackField::DiscTotal:
+        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().discTotal()};
       case TrackField::TrackNumber:
         return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().trackNumber()};
-      case TrackField::TotalTracks:
-        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().totalTracks()};
+      case TrackField::TrackTotal:
+        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().trackTotal()};
+      case TrackField::MovementNumber:
+        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().movementNumber()};
+      case TrackField::MovementTotal:
+        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().movementTotal()};
 
       case TrackField::Duration:
         return TrackFieldRawValue{std::in_place_type<TrackFieldDuration>, view.property().duration()};

@@ -118,7 +118,7 @@ namespace ao::rt::test
     auto const syntheticCount =
       countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Synthetic; });
 
-    CHECK(metadataCount == 12);
+    CHECK(metadataCount == 15);
     CHECK(tagCount == 1);
     CHECK(technicalCount == 9);
     CHECK(syntheticCount == 3);
@@ -165,7 +165,7 @@ namespace ao::rt::test
       if (def.sortable)
       {
         REQUIRE(static_cast<bool>(def.optSortField));
-        CHECK(static_cast<std::size_t>(*def.optSortField) < 11);
+        CHECK(static_cast<std::size_t>(*def.optSortField) < kTrackSortFieldCount);
       }
       else
       {
@@ -224,6 +224,8 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Genre)->optSortField == TrackSortField::Genre);
     CHECK(trackFieldDefinition(TrackField::Composer)->optSortField == TrackSortField::Composer);
     CHECK(trackFieldDefinition(TrackField::Work)->optSortField == TrackSortField::Work);
+    CHECK(trackFieldDefinition(TrackField::Movement)->optSortField == TrackSortField::Movement);
+    CHECK(trackFieldDefinition(TrackField::MovementNumber)->optSortField == TrackSortField::Movement);
     CHECK(trackFieldDefinition(TrackField::Year)->optSortField == TrackSortField::Year);
     CHECK(trackFieldDefinition(TrackField::DiscNumber)->optSortField == TrackSortField::DiscNumber);
     CHECK(trackFieldDefinition(TrackField::TrackNumber)->optSortField == TrackSortField::TrackNumber);
@@ -250,11 +252,14 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Genre)->label == "Genre");
     CHECK(trackFieldDefinition(TrackField::Composer)->label == "Composer");
     CHECK(trackFieldDefinition(TrackField::Work)->label == "Work");
+    CHECK(trackFieldDefinition(TrackField::Movement)->label == "Movement");
+    CHECK(trackFieldDefinition(TrackField::MovementNumber)->label == "Movement No.");
+    CHECK(trackFieldDefinition(TrackField::MovementTotal)->label == "Total Movements");
     CHECK(trackFieldDefinition(TrackField::Year)->label == "Year");
     CHECK(trackFieldDefinition(TrackField::DiscNumber)->label == "Disc");
-    CHECK(trackFieldDefinition(TrackField::TotalDiscs)->label == "Total Discs");
+    CHECK(trackFieldDefinition(TrackField::DiscTotal)->label == "Total Discs");
     CHECK(trackFieldDefinition(TrackField::TrackNumber)->label == "Track");
-    CHECK(trackFieldDefinition(TrackField::TotalTracks)->label == "Total Tracks");
+    CHECK(trackFieldDefinition(TrackField::TrackTotal)->label == "Total Tracks");
     CHECK(trackFieldDefinition(TrackField::Duration)->label == "Duration");
     CHECK(trackFieldDefinition(TrackField::Tags)->label == "Tags");
     CHECK(trackFieldDefinition(TrackField::FilePath)->label == "File Path");
@@ -281,9 +286,9 @@ namespace ao::rt::test
     CHECK(trackFieldFilterExpressionVariable(TrackField::Work) == "$work");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Year) == "$year");
     CHECK(trackFieldFilterExpressionVariable(TrackField::DiscNumber) == "$discNumber");
-    CHECK(trackFieldFilterExpressionVariable(TrackField::TotalDiscs) == "$totalDiscs");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::DiscTotal) == "$discTotal");
     CHECK(trackFieldFilterExpressionVariable(TrackField::TrackNumber) == "$trackNumber");
-    CHECK(trackFieldFilterExpressionVariable(TrackField::TotalTracks) == "$totalTracks");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::TrackTotal) == "$trackTotal");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Duration) == "@duration");
     CHECK(trackFieldFilterExpressionVariable(TrackField::SampleRate) == "@sampleRate");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Channels) == "@channels");

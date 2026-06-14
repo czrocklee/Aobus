@@ -59,7 +59,7 @@ namespace ao::tag::flac::test
         vc.insert(vc.end(), s.begin(), s.end());
       };
       addString("Vendor");
-      std::uint32_t const count = 15;
+      std::uint32_t const count = 16;
       vc.push_back(count & 0xFF);
       vc.push_back((count >> 8) & 0xFF);
       vc.push_back((count >> 16) & 0xFF);
@@ -77,7 +77,8 @@ namespace ao::tag::flac::test
       addString("TOTALDISCS=5");
       addString("DATE=2024");
       addString("WORK=WorkName");
-      addString("GROUPING=GroupingName");
+      addString("MOVEMENTNAME=MovementName");
+      addString("MOVEMENT=2/4");
       addString("UNKNOWN=IgnoredValue");
 
       addBlockHeader(data, MetadataBlockType::VorbisComment, true, static_cast<std::uint32_t>(vc.size()));
@@ -87,7 +88,7 @@ namespace ao::tag::flac::test
     }
   }
 
-  TEST_CASE("FLAC File - loadTrack", "[tag][unit][flac][file]")
+  TEST_CASE("FLAC File - parses metadata and audio properties", "[tag][unit][flac][file]")
   {
     auto const data = createMinimalFlac();
     auto const temp = TempFile{data};
@@ -102,10 +103,14 @@ namespace ao::tag::flac::test
     CHECK(meta.composer() == "Composer");
     CHECK(meta.genre() == "Genre");
     CHECK(meta.trackNumber() == 1);
-    CHECK(meta.totalTracks() == 10);
+    CHECK(meta.trackTotal() == 10);
     CHECK(meta.discNumber() == 2);
-    CHECK(meta.totalDiscs() == 5);
+    CHECK(meta.discTotal() == 5);
     CHECK(meta.year() == 2024);
+    CHECK(meta.work() == "WorkName");
+    CHECK(meta.movement() == "MovementName");
+    CHECK(meta.movementNumber() == 2);
+    CHECK(meta.movementTotal() == 4);
     CHECK(builder.customMetadata().pairs().empty());
 
     auto const prop = builder.property();
@@ -116,9 +121,9 @@ namespace ao::tag::flac::test
     CHECK(prop.duration() == std::chrono::seconds{1});
   }
 
-  TEST_CASE("FLAC File - Malformed Data", "[tag][unit][flac][file]")
+  TEST_CASE("FLAC File - rejects malformed input", "[tag][unit][flac][file]")
   {
-    SECTION("Missing StreamInfo Block")
+    SECTION("Missing StreamInfo block")
     {
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
       addBlockHeader(data, MetadataBlockType::VorbisComment, true, 10);
@@ -165,7 +170,7 @@ namespace ao::tag::flac::test
       REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
     }
 
-    SECTION("Invalid FLAC Magic Signature")
+    SECTION("Invalid FLAC magic signature")
     {
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'K'};
       auto const temp = TempFile{data};

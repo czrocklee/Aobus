@@ -38,7 +38,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackColdHeader - Size and Alignment", "[library][unit][track]")
   {
-    CHECK(sizeof(TrackColdHeader) == 32);
+    CHECK(sizeof(TrackColdHeader) == 40);
     CHECK(alignof(TrackColdHeader) == 4);
   }
 
@@ -48,19 +48,22 @@ namespace ao::library::test
     CHECK(offsetof(TrackColdHeader, duration) == 0);
     CHECK(offsetof(TrackColdHeader, bitrate) == 4);
     CHECK(offsetof(TrackColdHeader, workId) == 8);
+    CHECK(offsetof(TrackColdHeader, movementId) == 12);
 
     // 2-byte section
-    CHECK(offsetof(TrackColdHeader, trackNumber) == 12);
-    CHECK(offsetof(TrackColdHeader, totalTracks) == 14);
-    CHECK(offsetof(TrackColdHeader, discNumber) == 16);
-    CHECK(offsetof(TrackColdHeader, totalDiscs) == 18);
-    CHECK(offsetof(TrackColdHeader, customCount) == 20);
-    CHECK(offsetof(TrackColdHeader, uriOffset) == 22);
-    CHECK(offsetof(TrackColdHeader, uriLength) == 24);
-    CHECK(offsetof(TrackColdHeader, coverCount) == 26);
-    CHECK(offsetof(TrackColdHeader, customOffset) == 28);
+    CHECK(offsetof(TrackColdHeader, trackNumber) == 16);
+    CHECK(offsetof(TrackColdHeader, trackTotal) == 18);
+    CHECK(offsetof(TrackColdHeader, discNumber) == 20);
+    CHECK(offsetof(TrackColdHeader, discTotal) == 22);
+    CHECK(offsetof(TrackColdHeader, movementNumber) == 24);
+    CHECK(offsetof(TrackColdHeader, movementTotal) == 26);
+    CHECK(offsetof(TrackColdHeader, customCount) == 28);
+    CHECK(offsetof(TrackColdHeader, uriOffset) == 30);
+    CHECK(offsetof(TrackColdHeader, uriLength) == 32);
+    CHECK(offsetof(TrackColdHeader, coverCount) == 34);
+    CHECK(offsetof(TrackColdHeader, customOffset) == 36);
 
     // 1-byte section
-    CHECK(offsetof(TrackColdHeader, channels) == 30);
+    CHECK(offsetof(TrackColdHeader, channels) == 38);
   }
 } // namespace ao::library::test

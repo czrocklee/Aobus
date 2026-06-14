@@ -22,6 +22,9 @@ disk, &handleDiscNumbers
 "\251wrt", &handleText<&library::TrackBuilder::MetadataBuilder::composer>
 "\251wrk", &handleText<&library::TrackBuilder::MetadataBuilder::work>
 "\251grp", &handleText<&library::TrackBuilder::MetadataBuilder::work>
+"\251mvn", &handleText<&library::TrackBuilder::MetadataBuilder::movement>
+"\251mvi", &handleIntegerNumber<&library::TrackBuilder::MetadataBuilder::movementNumber>
+"\251mvc", &handleIntegerNumber<&library::TrackBuilder::MetadataBuilder::movementTotal>
 aART, &handleText<&library::TrackBuilder::MetadataBuilder::albumArtist>
 "\251gen", &handleText<&library::TrackBuilder::MetadataBuilder::genre>
 "\251day", &handleNumber<&library::TrackBuilder::MetadataBuilder::year>

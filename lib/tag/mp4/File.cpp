@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -96,7 +97,7 @@ namespace ao::tag::mp4
     {
       if (auto optPair = atomNumberPair(view); optPair)
       {
-        builder.metadata().trackNumber(optPair->number).totalTracks(optPair->total);
+        builder.metadata().trackNumber(optPair->number).trackTotal(optPair->total);
       }
     }
 
@@ -104,7 +105,7 @@ namespace ao::tag::mp4
     {
       if (auto optPair = atomNumberPair(view); optPair)
       {
-        builder.metadata().discNumber(optPair->number).totalDiscs(optPair->total);
+        builder.metadata().discNumber(optPair->number).discTotal(optPair->total);
       }
     }
 
@@ -121,6 +122,51 @@ namespace ao::tag::mp4
       {
         (builder.metadata().*Setter)(*optYear);
       }
+    }
+
+    // Movement number/count atoms (©mvi/©mvc) store a binary big-endian integer payload,
+    // unlike the text-encoded numeric atoms handled above.
+    template<NumberSetter Setter>
+    void handleIntegerNumber(library::TrackBuilder& builder, AtomView const& view)
+    {
+      constexpr std::uint32_t kVersionShift = 24;
+      constexpr std::uint32_t kDataTypeMask = 0x00FFFFFFU;
+      constexpr std::uint32_t kImplicitDataType = 0;
+      constexpr std::uint32_t kIntegerDataType = 21;
+      constexpr std::uint8_t kSignBitMask = 0x80U;
+
+      auto const& layout = view.layout<DataAtomLayout>();
+      auto const type = layout.type.value();
+      auto const version = type >> kVersionShift;
+      auto const dataType = type & kDataTypeMask;
+      auto const data = atomData(view);
+
+      if (version != 0 || (dataType != kImplicitDataType && dataType != kIntegerDataType) ||
+          (data.size() != 1 && data.size() != 2 && data.size() != 3 && data.size() != 4 && data.size() != 8))
+      {
+        return;
+      }
+
+      // MP4 INTEGER is signed. Movement fields are uint16_t, so reject negative
+      // and out-of-range values instead of narrowing them modulo 2^16.
+      if ((byteValue(data.front()) & kSignBitMask) != 0)
+      {
+        return;
+      }
+
+      std::uint64_t value = 0;
+
+      for (auto const byte : data)
+      {
+        value = (value << 8U) | byteValue(byte);
+      }
+
+      if (value > std::numeric_limits<std::uint16_t>::max())
+      {
+        return;
+      }
+
+      (builder.metadata().*Setter)(static_cast<std::uint16_t>(value));
     }
 
     void handleCoverArt(library::TrackBuilder& builder, AtomView const& view)

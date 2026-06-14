@@ -249,7 +249,8 @@ namespace ao::gtk::layout
             continue;
           }
 
-          if (def.field == rt::TrackField::TotalDiscs || def.field == rt::TrackField::TotalTracks)
+          if (def.field == rt::TrackField::DiscTotal || def.field == rt::TrackField::TrackTotal ||
+              def.field == rt::TrackField::MovementTotal)
           {
             continue; // Handled by composite rows
           }
@@ -258,12 +259,17 @@ namespace ao::gtk::layout
           {
             if (def.field == rt::TrackField::DiscNumber)
             {
-              _compositeRows.emplace_back(rt::TrackField::DiscNumber, rt::TrackField::TotalDiscs);
+              _compositeRows.emplace_back(rt::TrackField::DiscNumber, rt::TrackField::DiscTotal);
               setupCompositeRow(_compositeRows.back());
             }
             else if (def.field == rt::TrackField::TrackNumber)
             {
-              _compositeRows.emplace_back(rt::TrackField::TrackNumber, rt::TrackField::TotalTracks);
+              _compositeRows.emplace_back(rt::TrackField::TrackNumber, rt::TrackField::TrackTotal);
+              setupCompositeRow(_compositeRows.back());
+            }
+            else if (def.field == rt::TrackField::MovementNumber)
+            {
+              _compositeRows.emplace_back(rt::TrackField::MovementNumber, rt::TrackField::MovementTotal);
               setupCompositeRow(_compositeRows.back());
             }
             else

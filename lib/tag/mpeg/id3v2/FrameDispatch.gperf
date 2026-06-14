@@ -24,8 +24,10 @@ TALB, &handleText<&library::TrackBuilder::MetadataBuilder::album>
 TCOM, &handleText<&library::TrackBuilder::MetadataBuilder::composer>
 TYER, &handleNumber<&library::TrackBuilder::MetadataBuilder::year>
 TDRC, &handleNumber<&library::TrackBuilder::MetadataBuilder::year>
-TRCK, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::trackNumber, &library::TrackBuilder::MetadataBuilder::totalTracks>
-TPOS, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::discNumber, &library::TrackBuilder::MetadataBuilder::totalDiscs>
+TRCK, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::trackNumber, &library::TrackBuilder::MetadataBuilder::trackTotal>
+TPOS, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::discNumber, &library::TrackBuilder::MetadataBuilder::discTotal>
 TCON, &handleText<&library::TrackBuilder::MetadataBuilder::genre>
+MVNM, &handleText<&library::TrackBuilder::MetadataBuilder::movement>
+MVIN, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::movementNumber, &library::TrackBuilder::MetadataBuilder::movementTotal>
 APIC, &handlePicture
 TXXX, &handleTxxx
