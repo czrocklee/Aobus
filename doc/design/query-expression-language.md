@@ -18,10 +18,11 @@ expression          ::= or-expression ;
 or-expression       ::= and-expression (("or" | "||") and-expression)* ;
 and-expression      ::= relational-expression (("and" | "&&") relational-expression)* ;
 relational-expression
-                    ::= add-expression (("=" | "!=" | "<=" | ">=" | "~" | "<" | ">") add-expression)? ;
+                    ::= add-expression (("=" | "!=" | "<=" | ">=" | "~" | "<" | ">" | "in")
+                        add-expression)? ;
 add-expression      ::= unary-expression (("+" | adjacency) unary-expression)* ;
 unary-expression    ::= ("not" | "!") unary-expression | atom ;
-atom                ::= "(" expression ")" | variable | constant ;
+atom                ::= "(" expression ")" | variable | list | constant ;
 
 variable            ::= system-variable | user-variable ;
 system-variable     ::= ("$" | "@") system-identifier ;
@@ -41,11 +42,12 @@ quoted-user-char    ::= any non-control Unicode character except '"' and "\"
                       | '\\' ;
 
 constant            ::= boolean | unit-number | integer | string ;
+list                ::= "[" constant ("," constant)* "]" ;
 boolean             ::= "true" | "false" ;
 integer             ::= "-"? ASCII digit+ ;
 unit-number         ::= "-"? ASCII digit+ ("." ASCII digit+)? ASCII letter+ ;
 string              ::= bare-string | single-quoted-string | double-quoted-string ;
-bare-string         ::= (ASCII letter | ASCII digit | "_")+ except "and", "or", "not" ;
+bare-string         ::= (ASCII letter | ASCII digit | "_")+ except "and", "or", "not", "in" ;
 single-quoted-string
                     ::= "'" any characters up to the next "'" "'" ;
 double-quoted-string
@@ -55,12 +57,14 @@ double-quoted-string
 Important implementation notes:
 
 - Whitespace is ASCII whitespace and may appear between tokens.
-- `and`, `or`, and `not` are keyword operators only when followed by an identifier boundary.
+- `and`, `or`, `not`, and `in` are keyword operators only when followed by an identifier boundary.
 - User names after `#` and `%` may start with a digit. System variables after `$` and `@` may not.
 - `#"..."` and `%"..."` are the compact quoted user-name forms. `#["..."]` and `%["..."]` are the
   explicit bracketed forms, useful when visual separation from the surrounding expression matters.
 - Quoted user names support `\"` and `\\`. String constants currently do not support escape
   sequences; use the other quote character when possible.
+- Lists are non-empty, comma-separated constant lists. They are executable only as the right operand
+  of `in`.
 - The parser accepts `+` and adjacent atoms as concatenation syntax, but query execution currently
   rejects `+` with `operator '+' is not yet supported in query execution`. Do not use it in smart
   lists or CLI filters yet.
@@ -73,7 +77,7 @@ Operator precedence from tightest to loosest:
 | --- | --- | --- |
 | 1 | `not`, `!` | Boolean negation |
 | 2 | `+`, adjacency | Parser-level concatenation, not executable yet |
-| 3 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~` | Comparison; `~` is substring match |
+| 3 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison; `~` is substring match, `in` tests equality against a list |
 | 4 | `and`, `&&` | Boolean conjunction |
 | 5 | `or`, `||` | Boolean disjunction |
 
@@ -163,6 +167,20 @@ on the left-hand field:
 Unit suffixes are case-insensitive. Fractional units are accepted only when they scale to an integer
 value, so `@sampleRate = 44.1k` is valid but `@duration = 1.5ms` is rejected.
 
+Lists contain constants and are used with `in`:
+
+```text
+$artist in ["Bach", "Mozart"]
+$year in [1990, 1991, 1992]
+@duration in [3m, 4m, 5m]
+%mood in ["focus", "night"]
+```
+
+`in` is equivalent to an `or` of equality tests over the same left-hand side. For example,
+`$year in [1990, 1991]` means `($year = 1990) or ($year = 1991)`.
+Lists may mix constant kinds; each element is compiled as its own equality comparison against the
+left-hand field, matching ordinary `=` semantics.
+
 ## Quick Filter Expansion
 
 The track quick filter accepts either a full expression or plain search terms. Plain terms are
@@ -196,6 +214,9 @@ Multiple plain terms are combined with `and`.
 | `$year >= 2020` | Year is 2020 or later. |
 | `$trackNumber = 1 and $discNumber = 2` | First track on disc 2. |
 | `$genre = Classical or $genre = Jazz` | Genre is Classical or Jazz. |
+| `$genre in [Classical, Jazz]` | Genre is Classical or Jazz using list membership. |
+| `$artist in ["Bach", "Mozart", "Debussy"]` | Artist equals one of the listed names. |
+| `$year in [1989, 1990, 1991]` | Year equals one of the listed years. |
 | `($genre = Classical or $genre = Jazz) and @duration > 3m` | Parenthesized genre choice plus duration. |
 | `not $composer` | Composer field is logically false/empty. |
 | `!#skip` | Track does not have the `skip` tag. |
@@ -207,7 +228,9 @@ Multiple plain terms are combined with `and`.
 | `%isrc = "US-RC1-12-00001"` | Custom key `isrc` has the given value. |
 | `%"Replay Gain" = "-7.4 dB"` | Custom key with a space in its name. |
 | `%123 = "catalogue"` | Numeric custom key. |
+| `%mood in ["focus", "night"]` | Custom mood equals one of the listed values. |
 | `@duration >= 3m and @duration < 10m` | Duration is at least 3 minutes and under 10 minutes. |
+| `@duration in [3m, 4m, 5m]` | Duration equals one of the listed unit values. |
 | `@bitrate >= 256k` | Bitrate is at least 256000. |
 | `@sampleRate = 44.1k` | Sample rate equals 44100. |
 | `@channels = 2 and @bitDepth >= 16` | Stereo, 16-bit or better. |
@@ -227,6 +250,10 @@ Multiple plain terms are combined with `and`.
 | `#""` | Quoted user names must be non-empty. |
 | `%"" = x` | Quoted custom keys must be non-empty. |
 | `$title = "a \"quote\""` | String constants do not currently support escape sequences. |
+| `$artist in []` | `in` lists must be non-empty. |
+| `$artist in [Bach,]` | Trailing list separators are rejected. |
+| `$artist in Bach` | `in` requires a list right operand. |
+| `[1990, 1991]` | Lists are only executable as the right operand of `in`. |
 | `$title + $artist = "x"` | Parses, but execution rejects `+` today. |
 | `@duration >= 10k` | `k` is not a duration unit. |
 | `@bitrate >= 3h` | `h` is not a bitrate unit. |

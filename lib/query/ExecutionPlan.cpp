@@ -87,6 +87,7 @@ namespace ao::query
         case Operator::LessEqual: return OpCode::Le;
         case Operator::Greater: return OpCode::Gt;
         case Operator::GreaterEqual: return OpCode::Ge;
+        case Operator::In: throwException<Exception>("operator 'in' requires list compilation");
         case Operator::Add: throwException<Exception>("operator '+' is not yet supported in query execution");
         default: throwException<Exception>("unsupported operator");
       }
@@ -195,6 +196,7 @@ namespace ao::query
                             return tagBloomBit(dict, variable.name);
                           },
                           [](ConstantExpression const&) { return std::uint32_t{0}; },
+                          [](ListExpression const&) { return std::uint32_t{0}; },
                           [dict](std::unique_ptr<BinaryExpression> const& binary)
                           {
                             if (!binary)
@@ -242,8 +244,8 @@ namespace ao::query
 
     std::optional<std::uint64_t> parseUnsigned(std::string_view value)
     {
-      std::uint64_t parsedValue =
-        0; // NOLINT(misc-const-correctness): std::from_chars writes through this out parameter.
+      // NOLINTNEXTLINE(misc-const-correctness): std::from_chars writes through this out parameter.
+      std::uint64_t parsedValue = 0;
       auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsedValue);
 
       if (ec != std::errc{} || ptr != value.data() + value.size())
@@ -457,12 +459,19 @@ namespace ao::query
     std::visit(utility::makeVisitor([this](std::unique_ptr<BinaryExpression> const& binary) { compileBinary(*binary); },
                                     [this](std::unique_ptr<UnaryExpression> const& unary) { compileUnary(*unary); },
                                     [this](VariableExpression const& var) { compileVariable(var); },
-                                    [this](ConstantExpression const& constant) { compileConstant(constant); }),
+                                    [this](ConstantExpression const& constant) { compileConstant(constant); },
+                                    [this](ListExpression const& list) { compileList(list); }),
                expr);
   }
 
   void QueryCompiler::compileBinary(BinaryExpression const& binary)
   {
+    if (binary.optOperation && binary.optOperation->op == Operator::In)
+    {
+      compileIn(binary.operand, binary.optOperation->operand);
+      return;
+    }
+
     // Compile left operand
     compileExpression(binary.operand);
 
@@ -701,6 +710,62 @@ namespace ao::query
                    }
                  }),
                constant);
+  }
+
+  void QueryCompiler::compileList(ListExpression const& /*list*/)
+  {
+    throwException<Exception>("list expressions are only supported as the right operand of 'in'");
+  }
+
+  void QueryCompiler::compileIn(Expression const& lhs, Expression const& rhs)
+  {
+    auto const* list = std::get_if<ListExpression>(&rhs);
+
+    if (list == nullptr)
+    {
+      throwException<Exception>("operator 'in' expects a list right operand");
+    }
+
+    if (list->values.empty())
+    {
+      throwException<Exception>("operator 'in' expects a non-empty list");
+    }
+
+    auto first = true;
+
+    for (auto const& value : list->values)
+    {
+      compileExpression(lhs);
+      compileConstant(value);
+
+      auto const rightReg = _nextReg - 1;
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::Eq,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(rightReg),
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
+      _nextReg--;
+
+      if (first)
+      {
+        first = false;
+        continue;
+      }
+
+      auto const rhsReg = _nextReg - 1;
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::Or,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(rhsReg),
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
+      _nextReg--;
+    }
   }
 
   std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)

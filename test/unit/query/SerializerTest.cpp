@@ -95,6 +95,7 @@ namespace ao::query::test
                         Case{.op = Operator::Equal, .expected = " = "},
                         Case{.op = Operator::NotEqual, .expected = " != "},
                         Case{.op = Operator::Like, .expected = " ~ "},
+                        Case{.op = Operator::In, .expected = " in "},
                         Case{.op = Operator::Add, .expected = " + "}};
 
     for (auto const& c : cases)
@@ -135,12 +136,23 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(binPtr)}) == "$a = 1");
   }
 
+  TEST_CASE("Serializer - Serializes In Lists", "[query][unit][serializer]")
+  {
+    auto binPtr = std::make_unique<BinaryExpression>();
+    binPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
+    binPtr->optOperation = BinaryExpression::Operation{
+      .op = Operator::In, .operand = ListExpression{.values = {std::string{"Bach"}, std::string{"Mozart"}}}};
+
+    CHECK(serialize(Expression{std::move(binPtr)}) == R"($artist in ["Bach", "Mozart"])");
+  }
+
   TEST_CASE("Serializer - RoundTrip ParseSerializeParse Preserves Canonical Shape", "[query][unit][serializer]")
   {
     auto queries = {R"($artist = "Bach" and $year >= 2020)",
                     "not ($year = 2020)",
                     R"($title ~ "Bach" or $composer ~ "Mozart")",
                     R"(%isrc = "X" and @duration >= 3m)",
+                    R"($artist in ["Bach", "Mozart"])",
                     R"(#"90s Rock" and %"Replay Gain" = "high")"};
 
     for (auto const& q : queries)

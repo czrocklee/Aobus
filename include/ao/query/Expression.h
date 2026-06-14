@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace ao::query
 {
@@ -35,8 +36,14 @@ namespace ao::query
 
   using ConstantExpression = std::variant<bool, std::int64_t, UnitConstantExpression, std::string>;
 
+  struct ListExpression
+  {
+    std::vector<ConstantExpression> values;
+  };
+
   using Expression = std::variant<VariableExpression,
                                   ConstantExpression,
+                                  ListExpression,
                                   std::unique_ptr<BinaryExpression>,
                                   std::unique_ptr<UnaryExpression>>;
 
@@ -52,6 +59,7 @@ namespace ao::query
     LessEqual,
     Greater,
     GreaterEqual,
+    In,
     Add
   };
 

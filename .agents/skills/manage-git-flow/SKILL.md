@@ -21,14 +21,17 @@ Before committing, run the check-only gate:
 ./ao hygiene
 ```
 
-`./ao hygiene` never modifies files. A failing gate blocks the commit; resolve it as follows:
+`./ao hygiene` never modifies files. A failing gate blocks the commit; resolve it in this order:
 
-- **Formatting findings:** run `./ao format` on the same scope (this is the one sanctioned
-  formatting pass), report exactly which files were reformatted, and re-stage them.
-- **Lint findings (clang-tidy / Ruff / mypy):** fix them manually — most C++ findings have no safe
-  auto-fix — then re-run scoped validation.
+1. **Formatting first.** Run `./ao format` on the same scope (the one sanctioned formatting pass —
+   cheap, no compile), report exactly which files were reformatted, and re-stage them. Do this
+   before touching lint: formatting shifts line numbers, so fixing lint first strands the tidy
+   findings on stale lines and forces an extra, expensive clang-tidy pass.
+2. **Lint findings (clang-tidy / Ruff / mypy).** Fix them manually against the post-format lines —
+   most C++ findings have no safe auto-fix — then re-run scoped validation.
 
-Re-run `./ao hygiene` until it is clean before staging.
+Re-run `./ao hygiene` to verify before staging. Done in this order, clang-tidy runs only twice
+(discover + verify).
 
 ## Validation
 
@@ -50,8 +53,8 @@ Route statistics affect selection and breaker state only; an oracle pass is not 
 
 1. Inspect `git status`, `git diff HEAD`, and `git log -n 3`.
 2. Confirm implementation and debugging are complete.
-3. Run `./ao hygiene`; resolve any findings as described in Hygiene Tools and re-run until clean,
-   then run scoped validation if code changed.
+3. Run `./ao hygiene`; resolve any findings in the order given in Hygiene Tools (format first, then
+   lint) and re-run until clean, then run scoped validation if code changed.
 4. Stage only intended changes.
 5. Commit with an imperative message describing the primary technical contribution. Do not mention AI,
    internal plans, or append co-author signatures.

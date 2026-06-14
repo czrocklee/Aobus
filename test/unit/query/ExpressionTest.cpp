@@ -46,6 +46,7 @@ namespace ao::query::test
             case Operator::LessEqual: oss << " <= "; break;
             case Operator::Greater: oss << " > "; break;
             case Operator::GreaterEqual: oss << " >= "; break;
+            case Operator::In: oss << " in "; break;
             default: oss << " op "; break;
           }
 
@@ -76,6 +77,26 @@ namespace ao::query::test
                                         [this](UnitConstantExpression const& val) { oss << val.lexeme; },
                                         [this](std::string const& val) { oss << "\"" << val << "\""; }),
                    constant);
+      }
+
+      void operator()(ListExpression const& list)
+      {
+        oss << "[";
+
+        auto first = true;
+
+        for (auto const& value : list.values)
+        {
+          if (!first)
+          {
+            oss << ", ";
+          }
+
+          std::visit(*this, Expression{value});
+          first = false;
+        }
+
+        oss << "]";
       }
 
       std::ostringstream oss;

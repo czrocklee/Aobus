@@ -14,7 +14,7 @@ Aobus is a C++26 music application: GTK4 (gtkmm) desktop frontend and a CLI tool
 5. **Design docs:** Sync `doc/design/` when user-facing behavior changes.
 6. **Tests:** All changes include appropriate test coverage.
 7. **Scratch files:** Throwaway artifacts go to `/tmp`, never into the repo.
-8. **Hygiene:** Never run format/lint tools (`./ao format`/`tidy`, clang-format/-tidy, Ruff, mypy) mid-session — file rewrites disturb in-flight work; validate with builds and targeted tests instead. Commit gate: `./ao hygiene` (check-only, never edits files) right before staging; on failure run one `./ao format` pass, fix lint findings manually, re-run until clean. Explicit lint requests go through `./ao tidy`, never the raw tools.
+8. **Hygiene:** Never run format/lint tools (`./ao format`/`tidy`, clang-format/-tidy, Ruff, mypy) mid-session — file rewrites disturb in-flight work; validate with builds and targeted tests instead. Commit gate, right before staging: run `./ao format` first (cheap, no compile), then `./ao hygiene` (check-only, never edits files). Order matters — formatting shifts line numbers, so collecting tidy findings before formatting strands them on stale lines and forces an extra, expensive clang-tidy pass. Fix lint findings manually against the post-format lines, then re-run `./ao hygiene` to verify; done in this order clang-tidy runs only twice (discover + verify). Explicit lint requests go through `./ao tidy`, never the raw tools.
 
 > [!TIP]
 > Heavy development, no compatibility/migration constraints — propose the best approach without historical baggage.

@@ -123,14 +123,26 @@ namespace ao::query
         serializeUserVariableName(oss, variable.name);
       }
 
-      void operator()(ConstantExpression const& constant)
+      void operator()(ConstantExpression const& constant) { serializeConstant(constant); }
+
+      void operator()(ListExpression const& list)
       {
-        std::visit(utility::makeVisitor([](std::monostate) {},
-                                        [this](bool val) { oss << (val ? "true" : "false"); },
-                                        [this](std::int64_t val) { oss << val; },
-                                        [this](UnitConstantExpression const& val) { oss << val.lexeme; },
-                                        [this](std::string_view val) { oss << "\"" << val << "\""; }),
-                   constant);
+        oss << "[";
+
+        auto first = true;
+
+        for (auto const& value : list.values)
+        {
+          if (!first)
+          {
+            oss << ", ";
+          }
+
+          serializeConstant(value);
+          first = false;
+        }
+
+        oss << "]";
       }
 
       void serializeBinary(Operator op, Expression const& rhs)
@@ -146,11 +158,22 @@ namespace ao::query
           case Operator::Equal: oss << " = "; break;
           case Operator::NotEqual: oss << " != "; break;
           case Operator::Like: oss << " ~ "; break;
+          case Operator::In: oss << " in "; break;
           case Operator::Add: oss << " + "; break;
           default: break;
         }
 
         std::visit(*this, rhs);
+      }
+
+      void serializeConstant(ConstantExpression const& constant)
+      {
+        std::visit(utility::makeVisitor([](std::monostate) {},
+                                        [this](bool val) { oss << (val ? "true" : "false"); },
+                                        [this](std::int64_t val) { oss << val; },
+                                        [this](UnitConstantExpression const& val) { oss << val.lexeme; },
+                                        [this](std::string_view val) { oss << "\"" << val << "\""; }),
+                   constant);
       }
 
       std::ostringstream oss;

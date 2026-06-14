@@ -38,6 +38,8 @@
 #include <lexy/dsl/option.hpp>
 #include <lexy/dsl/peek.hpp>
 #include <lexy/dsl/production.hpp>
+#include <lexy/dsl/punctuator.hpp>
+#include <lexy/dsl/separator.hpp>
 #include <lexy/dsl/sequence.hpp>
 #include <lexy/dsl/sign.hpp>
 #include <lexy/dsl/symbol.hpp>
@@ -75,7 +77,7 @@ namespace
   {
     auto const id = dsl::identifier(dsl::ascii::alpha_digit_underscore);
 
-    return id.reserve(LEXY_KEYWORD("and", id), LEXY_KEYWORD("or", id), LEXY_KEYWORD("not", id));
+    return id.reserve(LEXY_KEYWORD("and", id), LEXY_KEYWORD("or", id), LEXY_KEYWORD("not", id), LEXY_KEYWORD("in", id));
   }();
 
   struct SystemVariable : lexy::token_production
@@ -187,6 +189,15 @@ namespace
     static constexpr auto value = lexy::construct<ConstantExpression>;
   };
 
+  struct ConstantList final
+  {
+    static constexpr auto rule = dsl::square_bracketed.list(dsl::p<Constant>, dsl::sep(dsl::comma));
+    static constexpr auto value = lexy::as_list<std::vector<ConstantExpression>> >>
+                                  lexy::callback<ListExpression>(
+                                    [](std::vector<ConstantExpression> values)
+                                    { return ListExpression{.values = std::move(values)}; });
+  };
+
   struct Expr : lexy::expression_production
   {
     struct ExpectedOperand
@@ -196,7 +207,8 @@ namespace
 
     struct ExprAtom
     {
-      static constexpr auto rule = dsl::list(dsl::parenthesized(dsl::p<Expr>) | dsl::p<Variable> | dsl::p<Constant>);
+      static constexpr auto rule =
+        dsl::list(dsl::parenthesized(dsl::p<Expr>) | dsl::p<Variable> | dsl::p<ConstantList> | dsl::p<Constant>);
       static constexpr auto value = lexy::as_list<std::vector<Expression>> >>
                                     lexy::callback<Expression>(
                                       [](std::vector<Expression> list)
@@ -241,8 +253,8 @@ namespace
       static constexpr auto op =
         dsl::op<Operator::Equal>(dsl::lit_c<'='>) / dsl::op<Operator::NotEqual>(LEXY_LIT("!=")) /
         dsl::op<Operator::LessEqual>(LEXY_LIT("<=")) / dsl::op<Operator::GreaterEqual>(LEXY_LIT(">=")) /
-        dsl::op<Operator::Like>(dsl::lit_c<'~'>) / dsl::op<Operator::Less>(dsl::lit_c<'<'>) /
-        dsl::op<Operator::Greater>(dsl::lit_c<'>'>);
+        dsl::op<Operator::Like>(dsl::lit_c<'~'>) / dsl::op<Operator::In>(LEXY_KEYWORD("in", kBarewordIdentifier)) /
+        dsl::op<Operator::Less>(dsl::lit_c<'<'>) / dsl::op<Operator::Greater>(dsl::lit_c<'>'>);
       using operand = MathAdd;
     };
 

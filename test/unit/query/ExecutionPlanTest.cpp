@@ -218,6 +218,32 @@ namespace ao::query::test
     CHECK(hasOr == true);
   }
 
+  TEST_CASE("ExecutionPlan - Compile In List", "[query][unit][execution_plan]")
+  {
+    auto compiler = QueryCompiler{};
+
+    SECTION("CompilesEachListItemAsEquality")
+    {
+      auto const plan = compiler.compile(parse("$year in [1990, 1991, 1992]"));
+
+      auto const eqCount = std::ranges::count(plan.instructions, OpCode::Eq, &Instruction::op);
+      auto const orCount = std::ranges::count(plan.instructions, OpCode::Or, &Instruction::op);
+
+      CHECK(eqCount == 3);
+      CHECK(orCount == 2);
+    }
+
+    SECTION("RejectsStandaloneList")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("[1990, 1991]")));
+    }
+
+    SECTION("RejectsNonListRightOperand")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("$artist in Bach")));
+    }
+  }
+
   TEST_CASE("ExecutionPlan - Compile Logical Not", "[query][unit][execution_plan]")
   {
     auto expr = parse("not $artist");

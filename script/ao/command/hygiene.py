@@ -3,6 +3,11 @@
 Deliberately never modifies files: rewriting sources mid-session disturbs in-flight work,
 and most clang-tidy findings have no safe auto-fix. The gate reports; fixes are applied
 explicitly (./ao format for formatting, manual edits for lint findings).
+
+Resolution order matters: format before acting on tidy findings. clang-format shifts line
+numbers, so lint findings collected against unformatted code go stale once you format, which
+forces another expensive clang-tidy pass. Formatting first holds clang-tidy to two runs
+(discover + verify); the failure message below spells this out.
 """
 
 import argparse
@@ -90,9 +95,17 @@ def run_command(args: argparse.Namespace) -> int:
     if not (format_failed or tidy_failed):
         return 0
 
-    print("Hygiene issues found. This gate is check-only; fix and re-run:", file=sys.stderr)
-    if format_failed:
+    print("Hygiene issues found. This gate is check-only; fix and re-run.", file=sys.stderr)
+    if format_failed and tidy_failed:
+        print("  Order matters - format FIRST, then lint:", file=sys.stderr)
+        print("    1. Run ./ao format on the same scope, then review and re-stage the diff.", file=sys.stderr)
+        print("       Formatting shifts line numbers; fixing lint first strands the tidy", file=sys.stderr)
+        print("       findings on stale lines and forces an extra clang-tidy pass.", file=sys.stderr)
+        print("    2. Fix the lint findings manually against the now-current lines.", file=sys.stderr)
+        print("  Then re-run ./ao hygiene to verify.", file=sys.stderr)
+    elif format_failed:
         print("  - Formatting: run ./ao format on the same scope, then review and re-stage the diff.", file=sys.stderr)
-    if tidy_failed:
-        print("  - Lint findings: fix them manually, re-run scoped validation, then ./ao hygiene.", file=sys.stderr)
+    else:  # tidy_failed only
+        print("  - Lint findings: formatting is already clean, so line numbers are stable -", file=sys.stderr)
+        print("    fix the findings manually, re-run scoped validation, then ./ao hygiene.", file=sys.stderr)
     return 1

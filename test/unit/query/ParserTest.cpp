@@ -32,6 +32,7 @@ namespace ao::query::test
         case Operator::LessEqual: return "le";
         case Operator::Greater: return "gt";
         case Operator::GreaterEqual: return "ge";
+        case Operator::In: return "in";
         case Operator::Add: return "add";
         default: return "unknown";
       }
@@ -89,6 +90,18 @@ namespace ao::query::test
                                         [this](UnitConstantExpression const& val) { oss << "u}" << val.lexeme; },
                                         [this](std::string_view val) { oss << "s}" << val; }),
                    constant);
+        oss << "]";
+      }
+
+      void operator()(ListExpression const& list)
+      {
+        oss << "[l";
+
+        for (auto const& value : list.values)
+        {
+          std::visit(*this, Expression{value});
+        }
+
         oss << "]";
       }
 
@@ -205,6 +218,13 @@ namespace ao::query::test
     CHECK("[b{like}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist~Bach")));
   }
 
+  TEST_CASE("Parser - In List", "[query][unit][parser]")
+  {
+    CHECK("[b{in}[v{m}artist],[l[c{s}Bach][c{s}Mozart]]]" == canonicalize(parse(R"($artist in ["Bach", "Mozart"])")));
+    CHECK("[b{in}[v{m}year],[l[c{i}1990][c{i}1991]]]" == canonicalize(parse("$year in [1990, 1991]")));
+    CHECK("[b{in}[v{p}duration],[l[c{u}3m][c{u}4m]]]" == canonicalize(parse("@duration in [3m, 4m]")));
+  }
+
   TEST_CASE("Parser - Logical Operators", "[query][unit][parser]")
   {
     CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach && true")));
@@ -247,6 +267,8 @@ namespace ao::query::test
       CHECK("[c{s}Bandroid]" == canonicalize(parse("Bandroid")));
       CHECK("[c{s}oratorio]" == canonicalize(parse("oratorio")));
       CHECK("[c{s}notation]" == canonicalize(parse("notation")));
+      CHECK("[c{s}in9]" == canonicalize(parse("in9")));
+      CHECK("[c{s}in_value]" == canonicalize(parse("in_value")));
     }
 
     SECTION("Custom Identifier Allows Underscore And Digits")
@@ -316,6 +338,13 @@ namespace ao::query::test
     {
       REQUIRE_THROWS(parse("()"));
       REQUIRE_THROWS(parse("($artist = Bach"));
+    }
+
+    SECTION("Malformed Lists")
+    {
+      REQUIRE_THROWS(parse("$artist in []"));
+      REQUIRE_THROWS(parse("$artist in [Bach,]"));
+      REQUIRE_THROWS(parse("$artist in [Bach Mozart]"));
     }
   }
 } // namespace ao::query::test

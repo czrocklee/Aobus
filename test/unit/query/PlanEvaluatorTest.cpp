@@ -956,6 +956,43 @@ namespace ao::query::test
     CHECK(PlanEvaluator{}.evaluateFull(plan, track.view()));
   }
 
+  TEST_CASE("PlanEvaluator - In List", "[query][unit][plan_evaluator]")
+  {
+    auto spec = TrackSpec{};
+    spec.artist = "Bach";
+    spec.year = 1990;
+    spec.duration = std::chrono::minutes{3};
+    spec.customPairs.emplace_back("mood", "focus");
+    auto track = TrackFixture{spec};
+
+    auto evaluator = PlanEvaluator{};
+    auto compiler = QueryCompiler{&track.dictionary()};
+
+    SECTION("DictionaryBackedStringMatch")
+    {
+      auto plan = compiler.compile(parse(R"($artist in ["Bach", "Mozart"])"));
+      CHECK(evaluator.evaluateFull(plan, track.view()));
+    }
+
+    SECTION("NumericNonMatch")
+    {
+      auto plan = compiler.compile(parse("$year in [1988, 1989]"));
+      CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
+    }
+
+    SECTION("UnitConstantMatch")
+    {
+      auto plan = compiler.compile(parse("@duration in [2m, 3m]"));
+      CHECK(evaluator.evaluateFull(plan, track.view()));
+    }
+
+    SECTION("CustomStringMatch")
+    {
+      auto plan = compiler.compile(parse(R"(%mood in ["study", "focus"])"));
+      CHECK(evaluator.evaluateFull(plan, track.view()));
+    }
+  }
+
   TEST_CASE("PlanEvaluator - Tag Query - With Non-Matching Tag", "[query][unit][plan_evaluator]")
   {
     // Dictionary: "rock" -> ID 10, but track has tag ID 20

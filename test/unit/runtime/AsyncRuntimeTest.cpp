@@ -2,14 +2,18 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtils.h"
+#include <ao/Exception.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/CorePrimitives.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <fcntl.h>
+#include <unistd.h>
 
-#include <stdexcept>
+#include <cstdint>
+#include <cstdio>
 #include <thread>
 #include <vector>
 
@@ -35,8 +39,39 @@ namespace ao::rt::test
     Task<void> failingTask(Runtime* runtime)
     {
       co_await runtime->resumeOnWorker();
-      throw std::runtime_error{"Test failure"};
+      throwException<Exception>("Test failure");
     }
+
+    /// RAII guard that redirects stderr to /dev/null for its lifetime.
+    /// Used to silence the intentional "unhandled exception" diagnostic that
+    /// spawnLogged emits when exercising the exception-logging path.
+    class StderrSilencer final
+    {
+    public:
+      StderrSilencer()
+        : _savedFd{::dup(STDERR_FILENO)}
+      {
+        std::fflush(stderr);
+        int const devNull = ::open("/dev/null", O_WRONLY);
+        ::dup2(devNull, STDERR_FILENO);
+        ::close(devNull);
+      }
+
+      ~StderrSilencer()
+      {
+        std::fflush(stderr);
+        ::dup2(_savedFd, STDERR_FILENO);
+        ::close(_savedFd);
+      }
+
+      StderrSilencer(StderrSilencer const&) = delete;
+      StderrSilencer(StderrSilencer&&) = delete;
+      StderrSilencer& operator=(StderrSilencer const&) = delete;
+      StderrSilencer& operator=(StderrSilencer&&) = delete;
+
+    private:
+      int _savedFd{-1};
+    };
   }
 
   TEST_CASE("Async runtime - Basic spawn and wait", "[async][unit][runtime]")
@@ -60,15 +95,21 @@ namespace ao::rt::test
     auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
 
-    // Logging version - should not crash
-    REQUIRE_NOTHROW(runtime.spawnLogged(failingTask(&runtime)));
+    {
+      // The logging path intentionally writes a diagnostic to stderr from a
+      // worker thread; silence it until join() guarantees the handler has run.
+      auto const silencer = StderrSilencer{};
 
-    // Future version - should throw when getting result
-    auto future = runtime.spawn(failingTask(&runtime));
-    REQUIRE_THROWS_AS(future.get(), std::runtime_error);
+      // Logging version - should not crash
+      REQUIRE_NOTHROW(runtime.spawnLogged(failingTask(&runtime)));
 
-    runtime.requestStop();
-    runtime.join();
+      // Future version - should throw when getting result
+      auto future = runtime.spawn(failingTask(&runtime));
+      REQUIRE_THROWS_AS(future.get(), Exception);
+
+      runtime.requestStop();
+      runtime.join();
+    }
   }
 
   TEST_CASE("Immediate executor - defer is FIFO and never reenters the current task", "[async][unit][runtime]")
@@ -105,9 +146,9 @@ namespace ao::rt::test
                         [&]
                         {
                           executor.defer([&] { order.push_back(1); });
-                          throw std::runtime_error{"boom"};
+                          throwException<Exception>("boom");
                         }),
-                      std::runtime_error);
+                      Exception);
 
     // The task deferred before the throw stayed queued and runs in the next turn.
     REQUIRE(order.empty());
@@ -118,11 +159,11 @@ namespace ao::rt::test
   TEST_CASE("Signal - re-posting during a posted emission runs after the current emission", "[async][unit][runtime]")
   {
     auto executor = ImmediateExecutor{};
-    auto signal = Signal<int>{};
-    auto order = std::vector<int>{};
+    auto signal = Signal<std::int32_t>{};
+    auto order = std::vector<std::int32_t>{};
 
     auto subscription = signal.connect(
-      [&](int value)
+      [&](std::int32_t value)
       {
         order.push_back(value);
 
@@ -136,17 +177,17 @@ namespace ao::rt::test
 
     signal.post(executor, 1);
 
-    REQUIRE(order == std::vector<int>{1, -1, 2});
+    REQUIRE(order == std::vector<std::int32_t>{1, -1, 2});
   }
 
   TEST_CASE("Signal - handlers connected during emission join the next emission", "[async][unit][runtime]")
   {
-    auto signal = Signal<int>{};
-    auto order = std::vector<int>{};
+    auto signal = Signal<std::int32_t>{};
+    auto order = std::vector<std::int32_t>{};
     auto subscriptions = std::vector<Subscription>{};
 
     subscriptions.push_back(signal.connect(
-      [&](int value)
+      [&](std::int32_t value)
       {
         order.push_back(value);
 
@@ -155,13 +196,13 @@ namespace ao::rt::test
           // Enough connects to force handler-vector reallocation while the emit loop is live.
           for (auto added = 0; added < 16; ++added)
           {
-            subscriptions.push_back(signal.connect([&](int inner) { order.push_back(100 + inner); }));
+            subscriptions.push_back(signal.connect([&](std::int32_t inner) { order.push_back(100 + inner); }));
           }
         }
       }));
 
     signal.emit(1);
-    REQUIRE(order == std::vector<int>{1});
+    REQUIRE(order == std::vector<std::int32_t>{1});
 
     signal.emit(2);
     REQUIRE(order.size() == 1 + 1 + 16);

@@ -160,6 +160,8 @@ namespace ao::query
     void compileUnary(UnaryExpression const& unary);
     void compileVariable(VariableExpression const& var);
     void compileConstant(ConstantExpression const& constant);
+    void compileList(ListExpression const& list);
+    void compileIn(Expression const& lhs, Expression const& rhs);
 
     // Resolve string to ID using dictionary (if available)
     std::int64_t resolveStringConstant(std::string const& str, Field field);
