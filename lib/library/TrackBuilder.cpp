@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
 #include <ao/library/CoverArt.h>
@@ -19,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <span>
 #include <utility>
 #include <variant>
@@ -578,25 +580,68 @@ namespace ao::library
       }
     }
 
-    // Compute sizes
+    // Compute sizes with overflow validation.
+    // All offset/count/length fields in TrackColdHeader are uint16_t, so every
+    // intermediate value must be checked before narrowing.
+    constexpr auto kU16Max = std::size_t{std::numeric_limits<std::uint16_t>::max()};
+
+    std::size_t const coverCount = _coverArt.size();
     std::size_t const entryCount = _resolvedPairs.size();
     std::size_t totalValueSize = 0;
 
     for (auto const& resolvedPair : _resolvedPairs)
     {
-      totalValueSize += resolvedPair.second.size();
+      auto const len = resolvedPair.second.size();
+
+      if (len > kU16Max)
+      {
+        ao::throwException<Exception>("Custom metadata value length {} exceeds uint16_t", len);
+      }
+
+      totalValueSize += len;
     }
 
-    _uriLength = static_cast<std::uint16_t>(_builder->_propertyBuilder._uri.size());
+    auto const uriSize = _builder->_propertyBuilder._uri.size();
+
+    if (uriSize > kU16Max)
+    {
+      ao::throwException<Exception>("URI length {} exceeds uint16_t", uriSize);
+    }
+
+    if (coverCount > kU16Max)
+    {
+      ao::throwException<Exception>("Cover art count {} exceeds uint16_t", coverCount);
+    }
+
+    if (entryCount > kU16Max)
+    {
+      ao::throwException<Exception>("Custom metadata count {} exceeds uint16_t", entryCount);
+    }
+
+    _uriLength = static_cast<std::uint16_t>(uriSize);
 
     constexpr std::size_t kEntrySize = 8;
-    std::size_t const coverArea = (_coverArt.size() * kEntrySize);
-    _customOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + coverArea);
+    std::size_t const coverArea = (coverCount * kEntrySize);
+    std::size_t const customOffsetValue = sizeof(TrackColdHeader) + coverArea;
+
+    if (customOffsetValue > kU16Max)
+    {
+      ao::throwException<Exception>("Cold record custom offset {} exceeds uint16_t", customOffsetValue);
+    }
+
+    _customOffset = static_cast<std::uint16_t>(customOffsetValue);
 
     std::size_t const customArea = (entryCount * kEntrySize) + totalValueSize;
-    _uriOffset = static_cast<std::uint16_t>(_customOffset + customArea);
+    std::size_t const uriOffsetValue = customOffsetValue + customArea;
 
-    std::size_t size = _uriOffset + _uriLength;
+    if (uriOffsetValue > kU16Max)
+    {
+      ao::throwException<Exception>("Cold record URI offset {} exceeds uint16_t", uriOffsetValue);
+    }
+
+    _uriOffset = static_cast<std::uint16_t>(uriOffsetValue);
+
+    std::size_t size = uriOffsetValue + uriSize;
     size = (size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
     _size = size;
   }
@@ -622,10 +667,10 @@ namespace ao::library
         .discTotal = meta._discTotal,
         .movementNumber = meta._movementNumber,
         .movementTotal = meta._movementTotal,
-        .customCount = static_cast<std::uint16_t>(_resolvedPairs.size()),
+        .customCount = static_cast<std::uint16_t>(_resolvedPairs.size()), // validated in prepare
         .uriOffset = _uriOffset,
         .uriLength = _uriLength,
-        .coverCount = static_cast<std::uint16_t>(_coverArt.size()),
+        .coverCount = static_cast<std::uint16_t>(_coverArt.size()), // validated in prepare
         .customOffset = _customOffset,
         .channels = prop._channels,
         .padding = {},

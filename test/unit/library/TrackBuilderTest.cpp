@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
 #include <ao/library/CoverArt.h>
@@ -18,8 +19,11 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -30,14 +34,39 @@ namespace ao::library::test
 
   namespace
   {
+    class TrackSerializationContext final
+    {
+    public:
+      TrackSerializationContext()
+        : _env{_temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}}
+        , _txn{_env}
+        , _dict{lmdb::Database{_txn, "dict"}, _txn}
+        , _resources{lmdb::Database{_txn, "resources"}}
+      {
+      }
+
+      std::pair<std::vector<std::byte>, std::vector<std::byte>> serialize(TrackBuilder& builder)
+      {
+        return builder.serialize(_txn, _dict, _resources);
+      }
+
+      std::vector<std::byte> serializeCold(TrackBuilder& builder)
+      {
+        return builder.serializeCold(_txn, _dict, _resources);
+      }
+
+    private:
+      TempDir _temp;
+      Environment _env;
+      WriteTransaction _txn;
+      DictionaryStore _dict;
+      ResourceStore _resources;
+    };
+
     std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(TrackBuilder& builder)
     {
-      auto temp = TempDir{};
-      auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-      auto wtxn = WriteTransaction{env};
-      auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-      auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-      return builder.serialize(wtxn, dict, resources);
+      auto context = TrackSerializationContext{};
+      return context.serialize(builder);
     }
   } // namespace
 
@@ -512,5 +541,83 @@ namespace ao::library::test
     CHECK(view.metadata().albumId() == dict.getId("Album"));
     CHECK(view.metadata().genreId() == dict.getId("Genre"));
     CHECK(view.metadata().albumArtistId() == dict.getId("Album Artist"));
+  }
+
+  TEST_CASE("TrackBuilder - cold serialization rejects values that exceed header fields", "[library][unit][track]")
+  {
+    constexpr auto kUint16Max = std::size_t{std::numeric_limits<std::uint16_t>::max()};
+    constexpr auto kUint16Overflow = kUint16Max + 1;
+
+    auto context = TrackSerializationContext{};
+
+    SECTION("URI length")
+    {
+      auto builder = TrackBuilder::createNew();
+      auto const uri = std::string(kUint16Overflow, 'u');
+      builder.property().uri(uri);
+
+      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+    }
+
+    SECTION("Custom metadata value length")
+    {
+      auto builder = TrackBuilder::createNew();
+      auto const value = std::string(kUint16Overflow, 'v');
+      builder.customMetadata().add("key", value);
+
+      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+    }
+
+    SECTION("Cover art count")
+    {
+      auto builder = TrackBuilder::createNew();
+
+      for (std::size_t i = 0; i < kUint16Overflow; ++i)
+      {
+        builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
+      }
+
+      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+    }
+
+    SECTION("Custom metadata count")
+    {
+      auto builder = TrackBuilder::createNew();
+
+      for (std::size_t i = 0; i < kUint16Overflow; ++i)
+      {
+        builder.customMetadata().add("key", {});
+      }
+
+      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+    }
+
+    SECTION("Custom metadata table offset")
+    {
+      constexpr std::size_t kOverflowCount = (kUint16Overflow / sizeof(CoverArtEntry));
+
+      auto builder = TrackBuilder::createNew();
+
+      for (std::size_t i = 0; i < kOverflowCount; ++i)
+      {
+        builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
+      }
+
+      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+    }
+
+    SECTION("URI offset after accumulated custom metadata values")
+    {
+      constexpr std::size_t kValueCount = 2;
+      constexpr std::size_t kValueSize =
+        (kUint16Overflow - sizeof(TrackColdHeader) - (kValueCount * sizeof(CustomMetadataEntry))) / kValueCount;
+
+      auto builder = TrackBuilder::createNew();
+      auto const value = std::string(kValueSize, 'v');
+
+      builder.customMetadata().add("first", value).add("second", value);
+
+      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+    }
   }
 } // namespace ao::library::test

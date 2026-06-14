@@ -108,17 +108,23 @@ namespace ao::tag::mp4::test
 
       auto addCoverAtom = [&](std::uint8_t firstByte)
       {
-        auto covrData = std::vector<std::uint8_t>{};
-        auto dataLayout = DataAtomLayout{};
-        dataLayout.common.length = 16 + 2;
-        std::memcpy(dataLayout.common.type.data(), "data", 4);
-        dataLayout.type = 13; // JPEG
-        auto const* dlAddr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
-        covrData.insert(covrData.end(), dlAddr + 8, dlAddr + 24);
-        covrData.push_back(firstByte);
-        covrData.push_back(static_cast<std::uint8_t>(firstByte + 1));
+        // Build a covr atom containing a single child data atom.
+        // Child data atom layout: [length(4)]["data"(4)][type_indicator(4)][locale(4)][payload]
+        auto childData = std::vector<std::uint8_t>{};
+        auto childPayload = std::vector<std::uint8_t>{firstByte, static_cast<std::uint8_t>(firstByte + 1)};
+        constexpr std::uint32_t kDataChildHeaderSize = 16; // length + "data" + type + locale
+        auto childLength = static_cast<std::uint32_t>(kDataChildHeaderSize + childPayload.size());
+        ao::test::mp4::appendBe32(childData, childLength);
+        childData.push_back('d');
+        childData.push_back('a');
+        childData.push_back('t');
+        childData.push_back('a');
+        ao::test::mp4::appendBe32(childData, 13); // type indicator: JPEG
+        ao::test::mp4::appendBe32(childData, 0);  // locale
+        childData.insert(childData.end(), childPayload.begin(), childPayload.end());
+
         auto atom = std::vector<std::uint8_t>{};
-        ao::test::mp4::addAtom(atom, "covr", covrData);
+        ao::test::mp4::addAtom(atom, "covr", childData);
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       };
       addCoverAtom(0xCC);
@@ -323,6 +329,72 @@ namespace ao::tag::mp4::test
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
     CHECK(builder.property().codec() == library::AudioCodec::Aac);
+  }
+
+  TEST_CASE("MP4 File - single covr with two data boxes", "[tag][unit][mp4][file][cover]")
+  {
+    // Standard iTunes encoding: one covr atom containing two data children.
+    // Each data child has: [length(4)]["data"(4)][type_indicator(4)][locale(4)][payload]
+    auto makeDataChild = [](std::vector<std::uint8_t> const& payload)
+    {
+      auto child = std::vector<std::uint8_t>{};
+      constexpr std::uint32_t kDataChildHeaderSize = 16;
+      ao::test::mp4::appendBe32(child, kDataChildHeaderSize + static_cast<std::uint32_t>(payload.size()));
+      child.push_back('d');
+      child.push_back('a');
+      child.push_back('t');
+      child.push_back('a');
+      ao::test::mp4::appendBe32(child, 13); // JPEG
+      ao::test::mp4::appendBe32(child, 0);  // locale
+      child.insert(child.end(), payload.begin(), payload.end());
+      return child;
+    };
+
+    auto const child1 = makeDataChild({0xAA, 0xBB});
+    auto const child2 = makeDataChild({0xDD, 0xEE, 0xFF});
+
+    // Combine into a single covr atom body
+    auto covrBody = std::vector<std::uint8_t>{};
+    covrBody.insert(covrBody.end(), child1.begin(), child1.end());
+    covrBody.insert(covrBody.end(), child2.begin(), child2.end());
+
+    auto ilstBody = std::vector<std::uint8_t>{};
+    ao::test::mp4::addAtom(ilstBody, "covr", covrBody);
+
+    auto const ilstAtom = ao::test::mp4::makeAtom("ilst", ilstBody);
+    auto metaBody = std::vector<std::uint8_t>{0, 0, 0, 0};
+    metaBody.insert(metaBody.end(), ilstAtom.begin(), ilstAtom.end());
+    auto const metaAtom = ao::test::mp4::makeAtom("meta", metaBody);
+    auto udtaBody = std::vector<std::uint8_t>{};
+    udtaBody.insert(udtaBody.end(), metaAtom.begin(), metaAtom.end());
+    auto const udtaAtom = ao::test::mp4::makeAtom("udta", udtaBody);
+    auto const trakAtom = ao::test::mp4::makeAudioTrackAtom("mp4a");
+
+    auto data = std::vector<std::uint8_t>{};
+    auto moovBody = std::vector<std::uint8_t>{};
+    moovBody.insert(moovBody.end(), udtaAtom.begin(), udtaAtom.end());
+    moovBody.insert(moovBody.end(), trakAtom.begin(), trakAtom.end());
+    ao::test::mp4::addAtom(data, "moov", moovBody);
+
+    auto const temp = TempFile{data};
+    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto builder = file.loadTrack();
+
+    auto const& covers = builder.coverArt().entries();
+    REQUIRE(covers.size() == 2);
+
+    CHECK(covers[0].type == library::PictureType::FrontCover);
+    auto const firstData = std::get<std::span<std::byte const>>(covers[0].source);
+    REQUIRE(firstData.size() == 2);
+    CHECK(static_cast<std::uint8_t>(firstData[0]) == 0xAA);
+    CHECK(static_cast<std::uint8_t>(firstData[1]) == 0xBB);
+
+    CHECK(covers[1].type == library::PictureType::FrontCover);
+    auto const secondData = std::get<std::span<std::byte const>>(covers[1].source);
+    REQUIRE(secondData.size() == 3);
+    CHECK(static_cast<std::uint8_t>(secondData[0]) == 0xDD);
+    CHECK(static_cast<std::uint8_t>(secondData[1]) == 0xEE);
+    CHECK(static_cast<std::uint8_t>(secondData[2]) == 0xFF);
   }
 
   TEST_CASE("MP4 File - parses movement integer metadata", "[tag][unit][mp4][file]")

@@ -171,7 +171,43 @@ namespace ao::tag::mp4
 
     void handleCoverArt(library::TrackBuilder& builder, AtomView const& view)
     {
-      builder.coverArt().add(library::PictureType::FrontCover, atomData(view));
+      // A covr atom may contain multiple child data boxes (the standard iTunes
+      // encoding for multiple artwork). Iterate each data box and add a separate
+      // cover entry. MP4 covr does not carry a picture-type role, so all entries
+      // are treated as FrontCover.
+      auto const bytes = view.bytes();
+      constexpr std::size_t kOuterHeader = 8;       // outer covr: length(4) + type(4)
+      constexpr std::size_t kDataChildMinSize = 16; // child data: length(4) + "data"(4) + type(4) + reserved(4)
+
+      if (bytes.size() <= kOuterHeader)
+      {
+        return;
+      }
+
+      auto remaining = bytes.subspan(kOuterHeader);
+
+      while (remaining.size() >= kDataChildMinSize)
+      {
+        // Read the child atom header: [length(4)][type(4)]
+        auto const* const childLayout = utility::layout::view<AtomLayout>(remaining);
+        auto const childLength = std::size_t{childLayout->length.value()};
+
+        if (childLength < kDataChildMinSize || childLength > remaining.size())
+        {
+          break;
+        }
+
+        // Only process "data" children; skip unknown siblings
+        if (std::string_view{childLayout->type.data(), childLayout->type.size()} == "data" &&
+            childLength > kDataChildMinSize)
+        {
+          auto const payloadSize = childLength - kDataChildMinSize;
+          auto const payload = remaining.subspan(kDataChildMinSize, payloadSize);
+          builder.coverArt().add(library::PictureType::FrontCover, payload);
+        }
+
+        remaining = remaining.subspan(childLength);
+      }
     }
 
     using AtomHandler = void (*)(library::TrackBuilder&, AtomView const&);

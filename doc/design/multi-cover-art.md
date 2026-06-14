@@ -24,7 +24,8 @@ clearing the complete set. Cover art is not part of `MetadataBuilder`.
 
 ## Storage
 
-The cold track record stores an ordered table of eight-byte cover entries after custom metadata.
+The cold track record stores an ordered table of eight-byte cover entries immediately after
+`TrackColdHeader`, before the custom metadata table.
 The table is four-byte aligned and contains the resource ID, picture type, and reserved bytes.
 Image data remains deduplicated in `ResourceStore`.
 
