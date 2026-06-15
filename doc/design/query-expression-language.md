@@ -204,6 +204,22 @@ Existence semantics:
 | Tag (`#favorite`) | track has the tag |
 | Custom metadata (`%rating`) | key is present, even when its value is an empty string |
 
+## Missing Values
+
+Negate an existence test to test for a missing value. `!field?` is the canonical missing-field test;
+`not field?` is equivalent.
+
+```text
+!$year?
+not $composer?
+!@duration?
+!%rating?
+```
+
+The bare form `!$year` is rejected because its operand `$year` is a bare non-tag field; non-tag
+variables are not predicates on their own. Aobus reports a hint pointing to `!$year?` so the
+intended missing-value test is clear.
+
 ## Constants And Units
 
 String constants may be bare words or quoted with single or double quotes:
@@ -344,6 +360,7 @@ Multiple plain terms are combined with `and`.
 | `$year` | Non-tag fields must use `?`, `in`, or an explicit comparison. |
 | `@duration` | Non-tag fields are not bare predicates. |
 | `%rating` | Custom metadata existence must be written as `%rating?`. |
+| `!$year` | Missing-field test must include `?`; use `!$year?`. |
 | `not $year` | Negated field existence must be written as `!$year?` or `not $year?`. |
 | `1990?` | Postfix `?` only applies to variables. |
 | `($year = 1990)?` | Postfix `?` cannot apply to grouped expressions. |

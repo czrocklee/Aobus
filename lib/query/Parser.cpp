@@ -332,7 +332,7 @@ namespace ao::query
       return root;
     }
 
-    throwException<Exception>("parsing {} error", expr);
+    throwException<Exception>("failed to parse query expression '{}'", expr);
   }
 }
 

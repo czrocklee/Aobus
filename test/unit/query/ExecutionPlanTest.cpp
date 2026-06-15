@@ -13,6 +13,8 @@
 #include <ao/query/Parser.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <lmdb.h>
 
 #include <algorithm>
@@ -402,6 +404,7 @@ namespace ao::query::test
       REQUIRE_THROWS(compiler.compile(parse("@duration")));
       REQUIRE_THROWS(compiler.compile(parse("%rating")));
       REQUIRE_THROWS(compiler.compile(parse("not $year")));
+      REQUIRE_THROWS_WITH(compiler.compile(parse("!$year")), Catch::Matchers::ContainsSubstring("!$year?"));
       REQUIRE_THROWS(compiler.compile(parse("$artist and $year = 1990")));
       REQUIRE_THROWS(compiler.compile(parse("$artist or $year = 1990")));
       REQUIRE_THROWS(compiler.compile(parse("$year = 1990 or $artist")));

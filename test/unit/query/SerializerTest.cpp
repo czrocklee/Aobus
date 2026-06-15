@@ -106,6 +106,9 @@ namespace ao::query::test
   {
     CHECK(serialize(parse("$year?")) == "$year?");
     CHECK(serialize(parse("!$year?")) == "not $year?");
+    CHECK(serialize(parse("not $composer?")) == "not $composer?");
+    CHECK(serialize(parse("!@duration?")) == "not @duration?");
+    CHECK(serialize(parse("!%rating?")) == "not %rating?");
     CHECK(serialize(parse("#favorite?")) == "#favorite?");
     CHECK(serialize(parse(R"(%"Replay Gain"?)")) == R"(%"Replay Gain"?)");
 

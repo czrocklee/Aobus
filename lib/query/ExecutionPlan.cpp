@@ -433,7 +433,10 @@ namespace ao::query
     {
       auto const name = variableDisplayName(*var);
       throwException<Exception>(
-        "bare field '{}' is not a predicate; use '{}?' for existence or compare it explicitly", name, name);
+        "bare field '{}' is not a predicate; use '{}?' for existence, '!{}?' for missing, or compare it explicitly",
+        name,
+        name,
+        name);
     }
 
     compileExpression(expr);
