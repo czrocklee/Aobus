@@ -23,6 +23,7 @@ add_library(aobus-gtk-lib STATIC
     app/GtkMainContextExecutor.cpp
     app/MainWindow.cpp
     app/MenuController.cpp
+    app/PlaybackShortcutPolicy.cpp
     app/ShellLayoutController.cpp
     app/GtkStyleRuntime.cpp
     app/ThemeCoordinator.cpp
@@ -32,6 +33,10 @@ add_library(aobus-gtk-lib STATIC
     app/ShellLayoutStore.cpp
     app/GtkLayoutConfig.cpp
     platform/AudioBackendBootstrap.cpp
+
+    common/DismissController.cpp
+
+    completion/EntryCompletionController.cpp
 
     track/LibraryTrackCountLabel.cpp
     track/SelectionInfoLabel.cpp

@@ -851,7 +851,7 @@ namespace ao::query::test
     CHECK(foundLoadField);
   }
 
-  TEST_CASE("ExecutionPlan - Metadata Dispatch Maps Every Supported Name", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - Metadata Catalog Maps Every Supported Name", "[query][unit][execution_plan]")
   {
     struct Case final
     {
@@ -899,7 +899,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - Property Dispatch Maps Every Supported Name", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - Property Catalog Maps Every Supported Name", "[query][unit][execution_plan]")
   {
     struct Case final
     {

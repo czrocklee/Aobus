@@ -3,11 +3,13 @@
 
 #include "tag/TagEditor.h"
 
+#include "common/DismissController.h"
 #include "layout/LayoutConstants.h"
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/CompletionService.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -15,20 +17,16 @@
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerfocus.h>
 #include <gtkmm/eventcontrollerkey.h>
-#include <gtkmm/gestureclick.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
-#include <gtkmm/window.h>
 #include <pangomm/layout.h>
 #include <sigc++/functors/mem_fun.h>
 #include <sigc++/signal.h>
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -310,7 +308,7 @@ namespace ao::gtk
       append(_entry);
     }
 
-    ~AddTagTrigger() override { removeOutsideWatch(); }
+    ~AddTagTrigger() override = default;
 
     AddTagTrigger(AddTagTrigger const&) = delete;
     AddTagTrigger& operator=(AddTagTrigger const&) = delete;
@@ -328,72 +326,26 @@ namespace ao::gtk
       _button.set_visible(false);
       _entry.set_visible(true);
       _entry.grab_focus();
-      installOutsideWatch();
+      _dismissController.install(*this,
+                                 {this},
+                                 [this]
+                                 {
+                                   if (_entry.get_visible())
+                                   {
+                                     collapse();
+                                   }
+                                 });
       _filterChanged.emit(); // re-run the flow filter so current chips drop out of add/search mode
     }
 
   private:
     void collapse()
     {
-      removeOutsideWatch();
+      _dismissController.remove();
       _entry.set_text("");
       _entry.set_visible(false);
       _button.set_visible(true);
       _filterChanged.emit();
-    }
-
-    // Clicking blank, non-focusable areas never moves keyboard focus, so a focus-leave watch alone
-    // can leave the entry stuck open. While open, watch the toplevel for any press landing outside
-    // this trigger and dismiss on it — mirroring the detail-field editors' outside-click handling.
-    void installOutsideWatch()
-    {
-      if (_outsideClickPtr)
-      {
-        return;
-      }
-
-      auto* const window = dynamic_cast<Gtk::Window*>(get_root());
-
-      if (window == nullptr)
-      {
-        return;
-      }
-
-      _watchedWindow = window;
-      _outsideClickPtr = Gtk::GestureClick::create();
-      _outsideClickPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
-      _outsideClickPtr->signal_pressed().connect(
-        [this](std::int32_t, double const xPos, double const yPos)
-        {
-          if (!_entry.get_visible())
-          {
-            return;
-          }
-
-          auto const* target = _watchedWindow->pick(xPos, yPos);
-
-          for (; target != nullptr; target = target->get_parent())
-          {
-            if (target == static_cast<Gtk::Widget const*>(this))
-            {
-              return; // press landed inside the trigger — keep editing
-            }
-          }
-
-          collapse();
-        });
-      _watchedWindow->add_controller(_outsideClickPtr);
-    }
-
-    void removeOutsideWatch()
-    {
-      if (_outsideClickPtr && _watchedWindow != nullptr)
-      {
-        _watchedWindow->remove_controller(_outsideClickPtr);
-      }
-
-      _outsideClickPtr = nullptr;
-      _watchedWindow = nullptr;
     }
 
     void onActivate()
@@ -427,8 +379,7 @@ namespace ao::gtk
     Gtk::Entry _entry;
     SubmitSignal _submit;
     FilterSignal _filterChanged;
-    Glib::RefPtr<Gtk::GestureClick> _outsideClickPtr;
-    Gtk::Window* _watchedWindow = nullptr;
+    DismissController _dismissController;
   };
 
   TagEditor::TagEditor()
@@ -488,9 +439,12 @@ namespace ao::gtk
       { child->size_allocate(Gtk::Allocation{xPos, yPos, childWidth, childHeight}, -1); });
   }
 
-  void TagEditor::setup(library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds)
+  void TagEditor::setup(library::MusicLibrary& library,
+                        rt::CompletionService& completion,
+                        std::vector<TrackId> selectedTrackIds)
   {
     _musicLibrary = &library;
+    _completion = &completion;
     _selectedTrackIds = std::move(selectedTrackIds);
 
     collectTagData();
@@ -522,13 +476,12 @@ namespace ao::gtk
     _pendingAdds.clear();
     _pendingRemoves.clear();
 
-    if (_musicLibrary == nullptr || _selectedTrackIds.empty())
+    if (_musicLibrary == nullptr || _completion == nullptr || _selectedTrackIds.empty())
     {
       return;
     }
 
     auto const selectionCount = _selectedTrackIds.size();
-    auto tagFrequency = std::map<std::string, std::size_t>{};
 
     auto const txn = _musicLibrary->readTransaction();
     auto const reader = _musicLibrary->tracks().reader(txn);
@@ -568,27 +521,14 @@ namespace ao::gtk
       }
     }
 
-    // Full scan for available tags
-    for (auto const& [_, view] : reader.hot())
+    for (auto const& tag : _completion->tags())
     {
-      for (auto const tagId : view.tags())
+      if (_availableTagsByFrequency.size() >= kMaxAvailableTags)
       {
-        if (auto const tag = std::string{dictionary.get(tagId)}; !tag.empty())
-        {
-          ++tagFrequency[tag];
-        }
+        break;
       }
-    }
 
-    _availableTagsByFrequency.assign(tagFrequency.begin(), tagFrequency.end());
-
-    std::ranges::sort(_availableTagsByFrequency,
-                      [](auto const& lhs, auto const& rhs)
-                      { return lhs.second > rhs.second || (lhs.second == rhs.second && lhs.first < rhs.first); });
-
-    if (_availableTagsByFrequency.size() > kMaxAvailableTags)
-    {
-      _availableTagsByFrequency.resize(kMaxAvailableTags);
+      _availableTagsByFrequency.emplace_back(tag.value, static_cast<std::size_t>(tag.frequency));
     }
   }
 

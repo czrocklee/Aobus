@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "../../GtkTestSupport.h"
+#include "app/ThemeCoordinator.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
@@ -10,13 +11,24 @@
 #include "app/linux-gtk/track/TrackRowCache.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/document/LayoutDocument.h"
+#include "list/ListNavigationController.h"
+#include "tag/TagEditController.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include "track/TrackPageHost.h"
+#include "track/TrackQuickFilter.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
+#include <ao/uimodel/playback/PlaybackQueueModel.h>
+#include <ao/uimodel/track/TrackPresentationViewModel.h>
 #include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <glibmm/main.h>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -27,6 +39,7 @@
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 #include <sigc++/signal.h>
@@ -107,6 +120,23 @@ namespace ao::gtk::layout::test
                   [&](Gtk::Widget& widget)
                   {
                     if (result == nullptr)
+                    {
+                      result = dynamic_cast<WidgetT*>(&widget);
+                    }
+                  });
+
+      return result;
+    }
+
+    template<typename WidgetT>
+    WidgetT* findWidgetByClass(Gtk::Widget& root, std::string_view className)
+    {
+      WidgetT* result = nullptr;
+
+      walkWidgets(root,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (result == nullptr && widget.has_css_class(std::string{className}))
                     {
                       result = dynamic_cast<WidgetT*>(&widget);
                     }
@@ -606,6 +636,69 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
       CHECK(compPtr->widget().get_visible());
     }
+  }
+
+  TEST_CASE("track.quickFilter component wires create smart list action", "[layout][unit][components]")
+  {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
+    auto fixture = ao::gtk::test::GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& library = runtime.musicLibrary();
+    auto cache = TrackRowCache{library};
+    auto imageCache = ImageCache{200};
+    auto window = Gtk::Window{};
+    auto stack = Gtk::Stack{};
+    auto themeController = ThemeCoordinator{};
+    auto tagEditCallbacks = TagEditController::Callbacks{};
+    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeController};
+    auto navCallbacks = ListNavigationController::Callbacks{};
+    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
+    auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
+    auto queueModel = uimodel::playback::PlaybackQueueModel{
+      runtime.playback(), [&cache](TrackId id) { return cache.playbackDescriptor(id); }};
+    auto pageHost =
+      TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, presentationStore, &imageCache};
+
+    runtime.workspace().navigateTo(rt::kAllTracksListId);
+    ao::gtk::test::drainGtkEvents();
+
+    auto txn = library.readTransaction();
+    pageHost.rebuild(cache, txn);
+    ao::gtk::test::drainGtkEvents();
+
+    auto registry = ComponentRegistry{};
+    LayoutRuntime::registerStandardComponents(registry);
+
+    auto actionRegistry = ActionRegistry{};
+    auto ctx = makeContext(registry, actionRegistry, runtime, window);
+    ctx.track.pageHost = &pageHost;
+    auto capturedParentId = kInvalidListId;
+    auto capturedExpression = std::string{};
+    ctx.list.createSmartListFromExpression = [&](ListId parentListId, std::string expression)
+    {
+      capturedParentId = parentListId;
+      capturedExpression = std::move(expression);
+    };
+
+    auto const node = LayoutNode{.type = "track.quickFilter"};
+    auto const compPtr = registry.create(ctx, node);
+    REQUIRE(compPtr != nullptr);
+
+    auto* const filter = dynamic_cast<TrackQuickFilter*>(&compPtr->widget());
+    REQUIRE(filter != nullptr);
+
+    filter->setText(R"($artist = "Muse")");
+    ::g_usleep(static_cast<gulong>(250) * 1000);
+    ao::gtk::test::drainGtkEvents();
+
+    auto* const createButton = findWidgetByClass<Gtk::Button>(*filter, "ao-quick-filter-create");
+    REQUIRE(createButton != nullptr);
+
+    ::g_signal_emit_by_name(createButton->gobj(), "clicked");
+    ao::gtk::test::drainGtkEvents();
+
+    CHECK(capturedParentId == kInvalidListId);
+    CHECK(capturedExpression == R"($artist = "Muse")");
   }
 
   // ---------------------------------------------------------------------------

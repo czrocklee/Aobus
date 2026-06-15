@@ -12,7 +12,9 @@
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackFieldUi.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/CompletionService.h>
 #include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/MetadataValueCompleter.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
@@ -196,6 +198,7 @@ namespace ao::gtk::layout
       TrackFieldGridComponent(LayoutContext& ctx, LayoutNode const& node)
         : _editCoordinator{ctx.parentWindow}
         , _mutation{ctx.runtime.mutation()}
+        , _completion{ctx.runtime.completion()}
         , _scope{ctx.track.detailScope}
         , _mainBox{Gtk::Orientation::VERTICAL, 0}
         , _compositePrimarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
@@ -442,6 +445,11 @@ namespace ao::gtk::layout
 
         if (row.editable)
         {
+          if (rt::trackFieldSupportsValueCompletion(row.field))
+          {
+            row.valueEditor.setCompletionProvider(rt::MetadataValueCompleter{_completion, row.field}.asProvider());
+          }
+
           row.valueEditor.add_css_class("ao-property-editable");
           row.valueEditor.signalCommitted().connect([this, field = row.field] { onBuiltInEdited(field); });
           row.valueEditor.signalCanceled().connect(
@@ -490,6 +498,11 @@ namespace ao::gtk::layout
 
           if (isEditable)
           {
+            if (rt::trackFieldSupportsValueCompletion(field))
+            {
+              editor.setCompletionProvider(rt::MetadataValueCompleter{_completion, field}.asProvider());
+            }
+
             editor.add_css_class("ao-property-editable");
             editor.signalCommitted().connect([this, field] { onCompositeEdited(field); });
             editor.signalCanceled().connect(
@@ -1052,6 +1065,7 @@ namespace ao::gtk::layout
       Gtk::Grid _grid;
       DetailEditCoordinator _editCoordinator;
       rt::LibraryMutationService& _mutation;
+      rt::CompletionService& _completion;
       ITrackDetailScope* _scope;
       std::deque<BuiltInRow> _metadataRows;
       std::deque<CompositeBuiltInRow> _compositeRows;

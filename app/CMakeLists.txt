@@ -4,6 +4,9 @@ add_library(ao_app_runtime STATIC
     runtime/CoreRuntime.cpp
     runtime/LibraryYamlImporter.cpp
     runtime/LibraryYamlExporter.cpp
+    runtime/CompletionService.cpp
+    runtime/QueryExpressionCompleter.cpp
+    runtime/MetadataValueCompleter.cpp
     runtime/AllTracksSource.cpp
     runtime/ConfigStore.cpp
     runtime/PlaybackService.cpp

@@ -10,11 +10,13 @@
 #include <ao/rt/TrackField.h>
 
 #include <gtkmm/box.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/notebook.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -27,12 +29,14 @@ namespace ao::library
 
 namespace ao::rt
 {
+  class CompletionService;
   class LibraryMutationService;
 }
 
 namespace ao::gtk
 {
   class TrackRowCache;
+  class EntryCompletionController;
 
   class TrackPropertiesDialog final : public AppDialog
   {
@@ -40,6 +44,7 @@ namespace ao::gtk
     TrackPropertiesDialog(Gtk::Window& parent,
                           library::MusicLibrary& library,
                           rt::LibraryMutationService& mutation,
+                          rt::CompletionService& completion,
                           TrackRowCache& rowCache,
                           std::vector<TrackId> trackIds);
     ~TrackPropertiesDialog() override;
@@ -56,6 +61,12 @@ namespace ao::gtk
       Gtk::Widget* widget = nullptr;
       bool mixed = false;
       TrackFieldRawValue originalRawValue{};
+    };
+
+    struct CompletionControllerBinding final
+    {
+      Gtk::Entry* entry = nullptr;
+      std::unique_ptr<EntryCompletionController> controllerPtr;
     };
 
     void setupUi();
@@ -77,6 +88,7 @@ namespace ao::gtk
 
     library::MusicLibrary& _library;
     rt::LibraryMutationService& _mutation;
+    rt::CompletionService& _completion;
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;
     bool _multipleTracks = false;
@@ -91,5 +103,6 @@ namespace ao::gtk
 
     std::vector<FieldEditor> _editors;
     std::vector<FieldEditor> _readonlyRows;
+    std::vector<CompletionControllerBinding> _completionControllers;
   };
 } // namespace ao::gtk

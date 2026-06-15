@@ -410,4 +410,23 @@ namespace ao::query::test
       REQUIRE_THROWS(parse(R"xy(%"trailing\)xy"));
     }
   }
+
+  TEST_CASE("Parser - Matches Expression Syntax Without Building AST", "[query][unit][parser]")
+  {
+    SECTION("Accepts complete expressions")
+    {
+      CHECK(matchesExpressionSyntax("#rock"));
+      CHECK(matchesExpressionSyntax(R"($artist = "Miles")"));
+      CHECK(matchesExpressionSyntax("$title"));
+      CHECK(matchesExpressionSyntax("3m"));
+    }
+
+    SECTION("Rejects incomplete or invalid expressions")
+    {
+      CHECK_FALSE(matchesExpressionSyntax(""));
+      CHECK_FALSE(matchesExpressionSyntax("$artist ="));
+      CHECK_FALSE(matchesExpressionSyntax(R"($artist in ["Miles",)"));
+      CHECK_FALSE(matchesExpressionSyntax(R"(#"unterminated)"));
+    }
+  }
 } // namespace ao::query::test

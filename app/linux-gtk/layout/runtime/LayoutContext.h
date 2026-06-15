@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
+#include <ao/Type.h>
 
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
@@ -65,6 +66,7 @@ namespace ao::gtk::layout
   struct ListUiContext final
   {
     ListNavigationController* navigationController = nullptr;
+    std::function<void(ListId, std::string)> createSmartListFromExpression;
   };
 
   struct PlaybackUiContext final

@@ -15,12 +15,19 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::rt
+{
+  class CompletionService;
+}
+
 namespace ao::gtk
 {
   class TagPopover final : public Gtk::Popover
   {
   public:
-    TagPopover(library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds);
+    TagPopover(library::MusicLibrary& musicLibrary,
+               rt::CompletionService& completion,
+               std::vector<TrackId> selectedTrackIds);
     ~TagPopover() override;
 
     // Not copyable or movable

@@ -11,6 +11,7 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 
+#include <lexy/action/match.hpp>
 #include <lexy/action/parse.hpp>
 #include <lexy/callback/adapter.hpp>
 #include <lexy/callback/composition.hpp>
@@ -319,6 +320,12 @@ namespace
 
 namespace ao::query
 {
+  bool matchesExpressionSyntax(std::string_view expr)
+  {
+    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr}; // NOLINT(aobus-modernize-use-ctad)
+    return lexy::match<Stmt>(input);
+  }
+
   Expression parse(std::string_view expr)
   {
     auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr}; // NOLINT(aobus-modernize-use-ctad)

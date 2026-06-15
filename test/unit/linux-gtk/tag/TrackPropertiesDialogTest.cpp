@@ -87,7 +87,7 @@ namespace ao::gtk::test
 
     SECTION("dialog creation and data loading")
     {
-      auto dialog = TrackPropertiesDialog{window, library, runtime.mutation(), cache, {trackId1}};
+      auto dialog = TrackPropertiesDialog{window, library, runtime.mutation(), runtime.completion(), cache, {trackId1}};
       drainGtkEvents();
 
       auto width = 0;
@@ -121,7 +121,8 @@ namespace ao::gtk::test
 
     SECTION("multi-track selection")
     {
-      auto const dialog = TrackPropertiesDialog{window, library, runtime.mutation(), cache, {trackId1, trackId2}};
+      auto const dialog =
+        TrackPropertiesDialog{window, library, runtime.mutation(), runtime.completion(), cache, {trackId1, trackId2}};
       drainGtkEvents();
     }
   }

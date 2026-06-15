@@ -550,6 +550,12 @@ namespace ao::gtk
     dialogRaw->present();
   }
 
+  layout::ActionActivationOutcome ShellLayoutController::activateAction(std::string_view id)
+  {
+    auto ctx = getActionContext(id);
+    return _actionRegistry.tryActivate(id, ctx);
+  }
+
   layout::ActionActivationContext ShellLayoutController::getActionContext(std::string_view componentId)
   {
     return layout::ActionActivationContext{.runtime = _context.runtime,

@@ -21,6 +21,11 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::rt
+{
+  class CompletionService;
+}
+
 namespace ao::gtk
 {
   class AddTagTrigger;
@@ -48,7 +53,9 @@ namespace ao::gtk
     TagEditor(TagEditor&&) = delete;
     TagEditor& operator=(TagEditor&&) = delete;
 
-    void setup(library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds);
+    void setup(library::MusicLibrary& library,
+               rt::CompletionService& completion,
+               std::vector<TrackId> selectedTrackIds);
 
     // Signals
     TagsChangedSignal& signalTagsChanged() { return _tagsChanged; }
@@ -78,6 +85,7 @@ namespace ao::gtk
     void applyFilter();
 
     library::MusicLibrary* _musicLibrary = nullptr;
+    rt::CompletionService* _completion = nullptr;
     std::vector<TrackId> _selectedTrackIds;
 
     // Chips are direct children inserted before _addTrigger, which is the persistent trailing child.

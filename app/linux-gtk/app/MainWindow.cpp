@@ -6,13 +6,16 @@
 #include "app/AppConfig.h"
 #include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
+#include "app/PlaybackShortcutPolicy.h"
 #include "app/UIState.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/utility/Log.h>
 
+#include <gdkmm/enums.h>
 #include <gtkmm/applicationwindow.h>
+#include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gestureclick.h>
 
 #include <cstdint>
@@ -45,6 +48,7 @@ namespace ao::gtk
     _shellLayout.context().shell.menuModelPtr = _menuControllerPtr->menuModel();
 
     _shellLayout.attachToWindow();
+    setupPlaybackSpaceShortcut();
 
     // Mouse back/forward navigation (buttons 8/9).
     auto mouseNavGesturePtr = Gtk::GestureClick::create();
@@ -107,5 +111,23 @@ namespace ao::gtk
   void MainWindow::rebuildLayout()
   {
     _shellLayout.loadLayout(*_configPtr);
+  }
+
+  void MainWindow::setupPlaybackSpaceShortcut()
+  {
+    auto keyControllerPtr = Gtk::EventControllerKey::create();
+    keyControllerPtr->signal_key_pressed().connect(
+      [this](guint keyval, guint, Gdk::ModifierType modifiers)
+      {
+        if (!shouldActivatePlaybackSpaceShortcut(keyval, modifiers, get_focus()))
+        {
+          return false;
+        }
+
+        _shellLayout.activateAction("playback.playPause");
+        return true;
+      },
+      false);
+    add_controller(keyControllerPtr);
   }
 } // namespace ao::gtk

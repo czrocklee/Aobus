@@ -9,7 +9,9 @@ add_executable(ao_core_test
     unit/core/ErrorTest.cpp
 
     # query tests
+    unit/query/CompletionTest.cpp
     unit/query/ParserTest.cpp
+    unit/query/PredicateTest.cpp
     unit/query/ExecutionPlanTest.cpp
     unit/query/FormatExpressionTest.cpp
     unit/query/PlanEvaluatorTest.cpp
@@ -111,6 +113,7 @@ add_executable(ao_core_test
 
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp
+    unit/runtime/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/SmartListEvaluatorTest.cpp
     unit/runtime/TrackPresentationTest.cpp
@@ -123,7 +126,9 @@ add_executable(ao_core_test
   unit/runtime/ListSourceStoreTest.cpp
     unit/runtime/TrackDetailProjectionTest.cpp
     unit/runtime/LibraryMutationServiceTest.cpp
+    unit/runtime/MetadataValueCompleterTest.cpp
     unit/runtime/NotificationServiceTest.cpp
+    unit/runtime/QueryExpressionCompleterTest.cpp
     unit/runtime/ViewServiceTest.cpp
     unit/runtime/ConfigStoreTest.cpp
     unit/runtime/ManualListSourceTest.cpp
@@ -201,6 +206,7 @@ target_compile_options(ao_integration_test PRIVATE -Wno-array-bounds)
 
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_gtk_test
+    unit/linux-gtk/completion/EntryCompletionControllerTest.cpp
     unit/linux-gtk/list/ListModelTest.cpp
     unit/linux-gtk/list/ListTreeModelBuilderTest.cpp
     unit/linux-gtk/list/QueryExpressionBoxTest.cpp
@@ -216,6 +222,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/ThemeCoordinatorTest.cpp
     unit/linux-gtk/app/ThemePresetTest.cpp
     unit/linux-gtk/app/MainWindowCoordinatorTest.cpp
+    unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/AppConfigTest.cpp

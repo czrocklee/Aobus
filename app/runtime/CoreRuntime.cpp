@@ -3,6 +3,7 @@
 
 #include <ao/async/Runtime.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/CompletionService.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
@@ -23,6 +24,7 @@ namespace ao::rt
     std::filesystem::path databasePath;
     library::MusicLibrary musicLibrary;
     LibraryMutationService mutationService;
+    CompletionService completionService;
     TrackCommandService trackCommandService;
     ListSourceStore listSourceStore;
     NotificationService notificationService;
@@ -34,6 +36,7 @@ namespace ao::rt
       , databasePath{std::move(databasePath)}
       , musicLibrary{this->musicRoot, this->databasePath}
       , mutationService{asyncRuntime, musicLibrary}
+      , completionService{musicLibrary, mutationService}
       , trackCommandService{musicLibrary, mutationService}
       , listSourceStore{musicLibrary, mutationService}
       , notificationService{}
@@ -68,6 +71,11 @@ namespace ao::rt
   LibraryMutationService& CoreRuntime::mutation() noexcept
   {
     return _implPtr->mutationService;
+  }
+
+  CompletionService& CoreRuntime::completion() noexcept
+  {
+    return _implPtr->completionService;
   }
 
   TrackCommandService& CoreRuntime::trackCommands() noexcept

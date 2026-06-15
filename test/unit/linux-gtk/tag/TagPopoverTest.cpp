@@ -21,7 +21,7 @@ namespace ao::gtk::test
 
     SECTION("initialization")
     {
-      auto popover = TagPopover{library, {}};
+      auto popover = TagPopover{library, fixture.runtime().completion(), {}};
       popover.set_parent(window);
 
       // Test signal accessor

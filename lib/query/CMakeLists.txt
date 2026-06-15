@@ -1,30 +1,21 @@
 # ao_query
 add_gperf_header(
-  QUERY_PROPERTY_DISPATCH_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/PropertyDispatch.gperf"
-  "query/PropertyDispatch.h"
-)
-add_gperf_header(
-  QUERY_METADATA_DISPATCH_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/MetadataDispatch.gperf"
-  "query/MetadataDispatch.h"
-)
-add_gperf_header(
   QUERY_UNIT_DISPATCH_HEADER
   "${CMAKE_CURRENT_SOURCE_DIR}/UnitDispatch.gperf"
   "query/UnitDispatch.h"
 )
 
 add_library(ao_query STATIC
+    Completion.cpp
     ExecutionPlan.cpp
+    FieldCatalog.cpp
     Field.cpp
     FormatExpression.cpp
     PlanEvaluator.cpp
     Expression.cpp
     Parser.cpp
+    Predicate.cpp
     Serializer.cpp
-    "${QUERY_PROPERTY_DISPATCH_HEADER}"
-    "${QUERY_METADATA_DISPATCH_HEADER}"
     "${QUERY_UNIT_DISPATCH_HEADER}"
 )
 target_include_directories(ao_query PUBLIC ${AO_PUBLIC_INCLUDE_DIR} ${AO_GENERATED_INCLUDE_DIR})

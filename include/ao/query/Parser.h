@@ -10,4 +10,5 @@
 namespace ao::query
 {
   Expression parse(std::string_view expr);
+  bool matchesExpressionSyntax(std::string_view expr);
 }

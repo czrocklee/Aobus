@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TrackFieldGridWidgets.h"
+#include "layout/component/track/TrackFieldGridWidgets.h"
 
+#include "completion/EntryCompletionController.h"
 #include "sigc++/signal.h"
+#include <ao/rt/CompletionResult.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -19,6 +21,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
+#include <utility>
 
 namespace ao::gtk::layout::track_field_grid
 {
@@ -193,6 +197,8 @@ namespace ao::gtk::layout::track_field_grid
     _entry.add_controller(focusPtr);
   }
 
+  DetailFieldEditor::~DetailFieldEditor() = default;
+
   void DetailFieldEditor::setText(Glib::ustring const& text)
   {
     _text = text;
@@ -200,7 +206,7 @@ namespace ao::gtk::layout::track_field_grid
 
     if (!_editing)
     {
-      _entry.set_text(_text);
+      setEntryTextSilently(_text);
     }
   }
 
@@ -243,7 +249,7 @@ namespace ao::gtk::layout::track_field_grid
 
     _editStarted.emit();
     _editing = true;
-    _entry.set_text(_text);
+    setEntryTextSilently(_text);
     _stack.set_visible_child("edit");
     _editButton.set_visible(false);
     _entry.grab_focus();
@@ -266,7 +272,7 @@ namespace ao::gtk::layout::track_field_grid
     }
     else
     {
-      _entry.set_text(_text);
+      setEntryTextSilently(_text);
     }
 
     _stack.set_visible_child("display");
@@ -280,6 +286,11 @@ namespace ao::gtk::layout::track_field_grid
     {
       _canceled.emit();
     }
+  }
+
+  void DetailFieldEditor::setCompletionProvider(rt::CompletionProvider provider)
+  {
+    _completionControllerPtr = std::make_unique<EntryCompletionController>(_entry, std::move(provider));
   }
 
   sigc::signal<void()>& DetailFieldEditor::signalEditStarted()
@@ -300,6 +311,17 @@ namespace ao::gtk::layout::track_field_grid
   void DetailFieldEditor::removeMaxWidthConstraint()
   {
     _displayLabel.set_max_width_chars(-1);
+  }
+
+  void DetailFieldEditor::setEntryTextSilently(Glib::ustring const& text)
+  {
+    if (_completionControllerPtr != nullptr)
+    {
+      _completionControllerPtr->setTextProgrammatically(text);
+      return;
+    }
+
+    _entry.set_text(text);
   }
 
   DetailEditCoordinator::DetailEditCoordinator(Gtk::Window& parentWindow)

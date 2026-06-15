@@ -307,6 +307,21 @@ namespace ao::rt::test
     CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::Quality));
   }
 
+  TEST_CASE("TrackField supports value completion helper works", "[runtime][unit][trackfield]")
+  {
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Artist));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Album));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::AlbumArtist));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Genre));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Composer));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Work));
+
+    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Title));
+    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Movement));
+    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Year));
+    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Tags));
+  }
+
   TEST_CASE("TrackField properties - Invalid Field", "[field][unit]")
   {
     auto const invalidField = static_cast<TrackField>(255);

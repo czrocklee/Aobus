@@ -164,7 +164,8 @@ namespace ao::gtk
       return;
     }
 
-    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.musicLibrary(), _optActiveSelection->selectedIds);
+    _tagPopoverPtr =
+      std::make_unique<TagPopover>(_runtime.musicLibrary(), _runtime.completion(), _optActiveSelection->selectedIds);
 
     _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -180,8 +181,12 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, _optActiveSelection->selectedIds);
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
+                                                                  _runtime.musicLibrary(),
+                                                                  _runtime.mutation(),
+                                                                  _runtime.completion(),
+                                                                  *_dataProvider,
+                                                                  _optActiveSelection->selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] {});
     dialog->present();
@@ -194,8 +199,12 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      _parent, _runtime.musicLibrary(), _runtime.mutation(), *_dataProvider, selection.selectedIds);
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
+                                                                  _runtime.musicLibrary(),
+                                                                  _runtime.mutation(),
+                                                                  _runtime.completion(),
+                                                                  *_dataProvider,
+                                                                  selection.selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] {});
     dialog->present();
@@ -210,7 +219,8 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
 
-    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.musicLibrary(), selection.selectedIds);
+    _tagPopoverPtr =
+      std::make_unique<TagPopover>(_runtime.musicLibrary(), _runtime.completion(), selection.selectedIds);
 
     _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)

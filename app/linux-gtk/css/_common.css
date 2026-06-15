@@ -220,8 +220,62 @@ listbox.ao-boxed-list>row entry.flat-entry:focus {
 }
 
 /* Query Box */
-.ao-query-completion-row {
-  padding: var(--ao-spacing-sm) var(--ao-spacing-lg);
+.ao-quick-filter {
+  border: var(--ao-surface-border-width) solid var(--ao-surface-border-color);
+  border-radius: var(--ao-control-radius);
+  background-color: var(--ao-surface-bg);
+  min-height: 36px;
+  transition: all var(--ao-transition-fast) ease;
+}
+
+.ao-quick-filter entry.ao-quick-filter-entry {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  background-color: transparent;
+  background-image: none;
+  min-height: 34px;
+}
+
+.ao-quick-filter entry.ao-quick-filter-entry image.left {
+  opacity: 0.5;
+  margin-left: 4px;
+}
+
+.ao-quick-filter entry.ao-quick-filter-entry:focus {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  background-color: transparent;
+  background-image: none;
+}
+
+button.ao-quick-filter-action {
+  padding: 0;
+  margin: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  background-color: transparent;
+  background-image: none;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--ao-control-radius);
+  color: alpha(currentColor, 0.6);
+  transition: all var(--ao-transition-fast) ease;
+}
+
+button.ao-quick-filter-action:hover {
+  background-color: alpha(currentColor, 0.08);
+  color: currentColor;
+}
+
+button.ao-quick-filter-action:active {
+  background-color: alpha(currentColor, 0.15);
+}
+
+button.ao-quick-filter-action:disabled {
+  opacity: 0.3;
 }
 
 /* Playback Details */

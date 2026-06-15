@@ -15,10 +15,9 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto& library = fixture.runtime().musicLibrary();
 
     auto window = Gtk::Window{};
-    auto box = QueryExpressionBox{library};
+    auto box = QueryExpressionBox{fixture.runtime().completion()};
     window.set_child(box);
 
     drainGtkEvents();

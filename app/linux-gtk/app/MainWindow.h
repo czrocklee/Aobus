@@ -46,6 +46,8 @@ namespace ao::gtk
     void rebuildLayout();
 
   private:
+    void setupPlaybackSpaceShortcut();
+
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfig> _configPtr;
 

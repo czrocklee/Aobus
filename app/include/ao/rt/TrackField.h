@@ -131,6 +131,7 @@ namespace ao::rt
     bool sortable = false;
     bool groupable = false;
     bool synthetic = false;
+    bool valueCompletion = false;
 
     std::optional<TrackSortField> optSortField{};
     std::optional<TrackGroupKey> optGroupKey{};
@@ -145,4 +146,5 @@ namespace ao::rt
 
   std::string_view trackFieldFilterExpressionVariable(TrackField field);
   bool trackFieldSupportsFilterExpression(TrackField field);
+  bool trackFieldSupportsValueCompletion(TrackField field);
 } // namespace ao::rt

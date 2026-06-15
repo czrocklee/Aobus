@@ -113,7 +113,7 @@ namespace ao::gtk
                                    rt::AppRuntime& runtime,
                                    ListId parentListId,
                                    TrackRowCache const& provider)
-    : _exprBox{runtime.musicLibrary()}, _runtime{runtime}, _parentListId{parentListId}, _trackRowCache{provider}
+    : _exprBox{runtime.completion()}, _runtime{runtime}, _parentListId{parentListId}, _trackRowCache{provider}
   {
     set_title("New List");
     set_transient_for(parent);
@@ -503,7 +503,7 @@ namespace ao::gtk
 
     if (hasError && !expr.empty())
     {
-      _exprBox.entry().add_css_class("error");
+      _exprBox.entry().add_css_class("ao-query-invalid");
       _errorLabel.set_visible(true);
       _errorLabel.set_text("Filter error: " + errorMessage);
       _previewScrolledWindow.set_visible(false);
@@ -511,7 +511,7 @@ namespace ao::gtk
     }
     else
     {
-      _exprBox.entry().remove_css_class("error");
+      _exprBox.entry().remove_css_class("ao-query-invalid");
       _errorLabel.set_visible(false);
       _previewScrolledWindow.set_visible(true);
       _expressionValid = true;

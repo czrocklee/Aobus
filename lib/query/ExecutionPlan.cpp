@@ -7,6 +7,7 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
+#include <ao/query/Predicate.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -151,6 +152,67 @@ namespace ao::query
                             return computeRequiredTagBloomMask(*unary, dict);
                           }),
                         expr);
+    }
+
+    VariableExpression const* bareNonTagVariableInPredicatePosition(Expression const& expr);
+
+    VariableExpression const* bareNonTagVariableInPredicatePosition(BinaryExpression const& binary)
+    {
+      if (!binary.optOperation)
+      {
+        return bareNonTagVariableInPredicatePosition(binary.operand);
+      }
+
+      if (binary.optOperation->op == Operator::And || binary.optOperation->op == Operator::Or)
+      {
+        if (auto const* variable = bareNonTagVariableInPredicatePosition(binary.operand); variable != nullptr)
+        {
+          return variable;
+        }
+
+        return bareNonTagVariableInPredicatePosition(binary.optOperation->operand);
+      }
+
+      return nullptr;
+    }
+
+    VariableExpression const* bareNonTagVariableInPredicatePosition(UnaryExpression const& unary)
+    {
+      if (unary.op != Operator::Not)
+      {
+        return nullptr;
+      }
+
+      return bareNonTagVariableInPredicatePosition(unary.operand);
+    }
+
+    VariableExpression const* bareNonTagVariableInPredicatePosition(Expression const& expr)
+    {
+      return std::visit(
+        utility::makeVisitor([](VariableExpression const& variable) -> VariableExpression const*
+                             { return variable.type == VariableType::Tag ? nullptr : &variable; },
+                             [](ConstantExpression const&) -> VariableExpression const* { return nullptr; },
+                             [](ListExpression const&) -> VariableExpression const* { return nullptr; },
+                             [](RangeExpression const&) -> VariableExpression const* { return nullptr; },
+                             [](std::unique_ptr<BinaryExpression> const& binary) -> VariableExpression const*
+                             {
+                               if (!binary)
+                               {
+                                 return nullptr;
+                               }
+
+                               return bareNonTagVariableInPredicatePosition(*binary);
+                             },
+                             [](std::unique_ptr<UnaryExpression> const& unary) -> VariableExpression const*
+                             {
+                               if (!unary)
+                               {
+                                 return nullptr;
+                               }
+
+                               return bareNonTagVariableInPredicatePosition(*unary);
+                             }),
+        expr);
     }
 
     std::string toLower(std::string_view value)
@@ -429,7 +491,7 @@ namespace ao::query
 
   void QueryCompiler::compilePredicate(Expression const& expr)
   {
-    if (auto const* var = std::get_if<VariableExpression>(&expr); var != nullptr && var->type != VariableType::Tag)
+    if (auto const* var = bareNonTagVariableInPredicatePosition(expr); var != nullptr)
     {
       auto const name = variableDisplayName(*var);
       throwException<Exception>(
@@ -437,6 +499,11 @@ namespace ao::query
         name,
         name,
         name);
+    }
+
+    if (!isPredicateExpression(expr))
+    {
+      throwException<Exception>("query expression is not a predicate");
     }
 
     compileExpression(expr);

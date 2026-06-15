@@ -19,4 +19,6 @@ namespace ao::gtk::layout
   // UI Element sizing
   constexpr int kDefaultListPaneWidth = 330;
   constexpr int kMinCoverArtHeight = 50;
+  constexpr int kCompletionPopoverWidth = 260;
+  constexpr int kCompletionPopoverMaxHeight = 180;
 } // namespace ao::gtk::layout

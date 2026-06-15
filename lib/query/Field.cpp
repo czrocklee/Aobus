@@ -5,17 +5,10 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
+#include <ao/query/FieldCatalog.h>
 
 #include <string>
 #include <string_view>
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wold-style-cast"
-#pragma GCC diagnostic ignored "-Wconversion"
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#include "query/MetadataDispatch.h"
-#include "query/PropertyDispatch.h"
-#pragma GCC diagnostic pop
 
 namespace ao::query
 {
@@ -25,20 +18,18 @@ namespace ao::query
     {
       case VariableType::Property:
       {
-        if (auto const* entry = property_dispatch::Table::lookupPropertyField(name.data(), name.size());
-            entry != nullptr)
+        if (auto const* spec = findQueryVariableCompletionSpec(type, name); spec != nullptr)
         {
-          return entry->field;
+          return spec->field;
         }
 
         throwException<Exception>("unknown property field '@{}'", name);
       }
       case VariableType::Metadata:
       {
-        if (auto const* entry = metadata_dispatch::Table::lookupMetadataField(name.data(), name.size());
-            entry != nullptr)
+        if (auto const* spec = findQueryVariableCompletionSpec(type, name); spec != nullptr)
         {
-          return entry->field;
+          return spec->field;
         }
 
         throwException<Exception>("unknown metadata field '${}'", name);

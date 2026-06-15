@@ -62,6 +62,7 @@ namespace ao::gtk
     void refreshExportedActions();
     void loadLayout(AppConfig& config);
     void openEditor(AppConfig& config);
+    layout::ActionActivationOutcome activateAction(std::string_view id);
 
     layout::ActionActivationContext getActionContext(std::string_view componentId) override;
     bool canProvideSafeAnchor(layout::ActionDescriptor const& desc) const override;

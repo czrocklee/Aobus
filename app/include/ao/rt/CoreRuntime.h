@@ -19,6 +19,7 @@ namespace ao::async
 
 namespace ao::rt
 {
+  class CompletionService;
   class LibraryMutationService;
   class TrackCommandService;
   class ListSourceStore;
@@ -47,6 +48,7 @@ namespace ao::rt
     std::filesystem::path const& databasePath() const noexcept;
 
     LibraryMutationService& mutation() noexcept;
+    CompletionService& completion() noexcept;
     TrackCommandService& trackCommands() noexcept;
     ListSourceStore& sources() noexcept;
     NotificationService& notifications() noexcept;

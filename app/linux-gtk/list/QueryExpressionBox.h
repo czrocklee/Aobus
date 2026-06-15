@@ -3,22 +3,20 @@
 
 #pragma once
 
-#include <glibmm/refptr.h>
+#include "completion/EntryCompletionController.h"
+#include <ao/rt/CompletionResult.h>
+#include <ao/rt/QueryExpressionCompleter.h>
+
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
-#include <gtkmm/listview.h>
-#include <gtkmm/popover.h>
-#include <gtkmm/scrolledwindow.h>
-#include <gtkmm/singleselection.h>
-#include <gtkmm/stringlist.h>
 
-#include <cstdint>
-#include <string>
-#include <vector>
+#include <cstddef>
+#include <optional>
+#include <string_view>
 
-namespace ao::library
+namespace ao::rt
 {
-  class MusicLibrary;
+  class CompletionService;
 }
 
 namespace ao::gtk
@@ -26,7 +24,7 @@ namespace ao::gtk
   class QueryExpressionBox final : public Gtk::Box
   {
   public:
-    explicit QueryExpressionBox(library::MusicLibrary& musicLibrary);
+    explicit QueryExpressionBox(rt::CompletionService& completion);
     ~QueryExpressionBox() override;
 
     QueryExpressionBox(QueryExpressionBox const&) = delete;
@@ -34,35 +32,14 @@ namespace ao::gtk
     QueryExpressionBox(QueryExpressionBox&&) = delete;
     QueryExpressionBox& operator=(QueryExpressionBox&&) = delete;
 
-    void refreshCompletionData();
-
     Gtk::Entry& entry() { return _entry; }
     Gtk::Entry const& entry() const { return _entry; }
 
   private:
-    friend class QueryExpressionBoxTestPeer;
-
-    void setupCompletion();
-    void updateCompletion();
-    void hideCompletion();
-    void applySelectedCompletion();
-    bool moveCompletionSelection(std::int32_t delta);
+    std::optional<rt::CompletionResult> complete(std::string_view text, std::size_t cursor);
 
     Gtk::Entry _entry;
-    Gtk::Popover _completionPopover;
-    Gtk::ScrolledWindow _completionScrolledWindow;
-    Gtk::ListView _completionListView;
-    Glib::RefPtr<Gtk::StringList> _completionItemsPtr;
-    Glib::RefPtr<Gtk::SingleSelection> _completionSelectionPtr;
-    library::MusicLibrary& _musicLibrary;
-    std::vector<std::string> _availableTags;
-    std::vector<std::string> _availableCustomKeys;
-    std::int32_t _completionTokenStart = -1;
-    bool _suppressNextCompletionUpdate = false;
-    bool _suppressPopup = false;
-
-    // Layout constants
-    static constexpr int kCompletionWidth = 260;
-    static constexpr int kCompletionHeight = 180;
+    rt::QueryExpressionCompleter _completer;
+    EntryCompletionController _completionController;
   };
 } // namespace ao::gtk

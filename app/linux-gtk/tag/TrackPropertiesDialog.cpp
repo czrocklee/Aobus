@@ -5,13 +5,16 @@
 
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
+#include "completion/EntryCompletionController.h"
 #include "layout/LayoutConstants.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/CompletionService.h>
 #include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/MetadataValueCompleter.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 
@@ -28,9 +31,11 @@
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
 #include <format>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -67,11 +72,13 @@ namespace ao::gtk
   TrackPropertiesDialog::TrackPropertiesDialog(Gtk::Window& parent,
                                                library::MusicLibrary& library,
                                                rt::LibraryMutationService& mutation,
+                                               rt::CompletionService& completion,
                                                TrackRowCache& rowCache,
                                                std::vector<TrackId> trackIds)
     : AppDialog{}
     , _library{library}
     , _mutation{mutation}
+    , _completion{completion}
     , _rowCache{rowCache}
     , _trackIds{std::move(trackIds)}
     , _multipleTracks{_trackIds.size() > 1}
@@ -193,6 +200,16 @@ namespace ao::gtk
 
     auto* const entry = Gtk::make_managed<Gtk::Entry>();
     entry->set_hexpand(true);
+
+    if (rt::trackFieldSupportsValueCompletion(field))
+    {
+      _completionControllers.push_back(CompletionControllerBinding{
+        .entry = entry,
+        .controllerPtr = std::make_unique<EntryCompletionController>(
+          *entry, rt::MetadataValueCompleter{_completion, field}.asProvider()),
+      });
+    }
+
     return entry;
   }
 
@@ -389,6 +406,15 @@ namespace ao::gtk
   {
     if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
+      auto const iter = std::ranges::find_if(
+        _completionControllers, [entry](CompletionControllerBinding const& binding) { return binding.entry == entry; });
+
+      if (iter != _completionControllers.end())
+      {
+        iter->controllerPtr->setTextProgrammatically(std::string{value});
+        return;
+      }
+
       entry->set_text(std::string{value});
       return;
     }

@@ -40,6 +40,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
+        .valueCompletion = true,
         .optSortField = TrackSortField::Artist,
         .optGroupKey = TrackGroupKey::Artist,
         .filterExpressionVariable = "$artist",
@@ -54,6 +55,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
+        .valueCompletion = true,
         .optSortField = TrackSortField::Album,
         .optGroupKey = TrackGroupKey::Album,
         .filterExpressionVariable = "$album",
@@ -68,6 +70,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
+        .valueCompletion = true,
         .optSortField = TrackSortField::AlbumArtist,
         .optGroupKey = TrackGroupKey::AlbumArtist,
         .filterExpressionVariable = "$albumArtist",
@@ -82,6 +85,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
+        .valueCompletion = true,
         .optSortField = TrackSortField::Genre,
         .optGroupKey = TrackGroupKey::Genre,
         .filterExpressionVariable = "$genre",
@@ -96,6 +100,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
+        .valueCompletion = true,
         .optSortField = TrackSortField::Composer,
         .optGroupKey = TrackGroupKey::Composer,
         .filterExpressionVariable = "$composer",
@@ -110,6 +115,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = true,
+        .valueCompletion = true,
         .optSortField = TrackSortField::Work,
         .optGroupKey = TrackGroupKey::Work,
         .filterExpressionVariable = "$work",
@@ -382,5 +388,15 @@ namespace ao::rt
   bool trackFieldSupportsFilterExpression(TrackField const field)
   {
     return !trackFieldFilterExpressionVariable(field).empty();
+  }
+
+  bool trackFieldSupportsValueCompletion(TrackField const field)
+  {
+    if (auto const* const def = trackFieldDefinition(field); def != nullptr)
+    {
+      return def->valueCompletion;
+    }
+
+    return false;
   }
 } // namespace ao::rt

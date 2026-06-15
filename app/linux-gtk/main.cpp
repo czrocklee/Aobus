@@ -229,7 +229,7 @@ namespace
     app->add_action(quitActionPtr);
 
     // Global layout action shortcuts (exported to the window ActionMap, so they use the 'win.' prefix)
-    app->set_accels_for_action("win.playback.playPause", {"<Primary>p", "space", "AudioPlay", "AudioPause"});
+    app->set_accels_for_action("win.playback.playPause", {"<Primary>p", "AudioPlay", "AudioPause"});
     app->set_accels_for_action("win.playback.stop", {"AudioStop"});
     app->set_accels_for_action("win.playback.next", {"<Primary>Right", "AudioNext"});
     app->set_accels_for_action("win.playback.previous", {"<Primary>Left", "AudioPrev"});

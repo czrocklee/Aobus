@@ -297,7 +297,8 @@
 }
 
 /* Elastic Search Pill (The precision tool) */
-.ao-theme-modern .ao-track-controls-bar-modern entry {
+.ao-theme-modern .ao-track-controls-bar-modern entry,
+.ao-theme-modern entry.ao-query-expression-entry {
   border-radius: var(--ao-radius-full);
   background-color: alpha(@theme_fg_color, 0.08);
   border: 1px solid alpha(@theme_fg_color, 0.1);
@@ -308,10 +309,69 @@
   transition: all 200ms ease;
 }
 
-.ao-theme-modern .ao-track-controls-bar-modern entry:focus {
+.ao-theme-modern .ao-quick-filter {
+  border-radius: var(--ao-radius-full);
+  background-color: alpha(@theme_fg_color, 0.05);
+  border: 1px solid alpha(@theme_fg_color, 0.08);
+  box-shadow: none;
+  padding: 0 4px 0 0;
+  min-height: 36px;
+  transition: all var(--ao-transition-fast) ease-out;
+}
+
+.ao-theme-modern .ao-quick-filter button.ao-quick-filter-action {
+  border-radius: var(--ao-radius-full);
+}
+
+.ao-theme-modern .ao-track-controls-bar-modern entry:focus,
+.ao-theme-modern entry.ao-query-expression-entry:focus {
   background-color: @theme_base_color;
-  border-color: alpha(@accent_color, 0.5);
-  box-shadow: 0 8px 20px -6px alpha(black, 0.15);
+  border-color: alpha(@accent_color, 0.4);
+  box-shadow: 0 4px 12px -2px alpha(black, 0.12);
+}
+
+.ao-theme-modern .ao-quick-filter:focus-within,
+.ao-theme-modern .ao-quick-filter.ao-quick-filter-active {
+  background-color: @theme_base_color;
+  border-color: alpha(@accent_color, 0.4);
+  box-shadow: 0 4px 12px -2px alpha(black, 0.12);
+}
+
+.ao-theme-modern .ao-track-controls-bar-modern .ao-quick-filter entry.ao-quick-filter-entry,
+.ao-theme-modern .ao-track-controls-bar-modern .ao-quick-filter entry.ao-quick-filter-entry:focus,
+.ao-theme-modern .ao-quick-filter entry.ao-quick-filter-entry,
+.ao-theme-modern .ao-quick-filter entry.ao-quick-filter-entry:focus {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0 8px 0 14px;
+}
+
+.ao-theme-modern .ao-quick-filter button.ao-quick-filter-action {
+  margin-left: 0;
+}
+
+/* Soft Query Validation (Amber instead of aggressive red "error" class) */
+.ao-theme-modern entry.ao-query-invalid {
+  border-color: alpha(@warning_color, 0.4);
+  background-color: alpha(@warning_color, 0.05);
+}
+
+.ao-theme-modern .ao-quick-filter.ao-query-invalid {
+  border-color: alpha(@warning_color, 0.4);
+  background-color: alpha(@warning_color, 0.05);
+}
+
+.ao-theme-modern entry.ao-query-invalid:focus,
+.ao-theme-modern .ao-quick-filter.ao-query-invalid.ao-quick-filter-active {
+  border-color: @warning_color;
+  box-shadow: 0 4px 12px -2px alpha(@warning_color, 0.2);
+  background-color: @theme_base_color;
+}
+
+.ao-theme-modern entry.ao-query-invalid image {
+  color: @warning_color;
 }
 
 /* Header Metadata/Stats on the right */
@@ -690,4 +750,47 @@ listview>row:first-child .ao-track-section-box {
 
 .ao-theme-modern .ao-track-detail-section-line {
   background-color: alpha(currentColor, 0.15);
+}
+
+/* ===== Query Completion (Modern) ===== */
+/* Inherits base glassmorphism from global popover>contents, but shrinks the 
+   geometry and shadow slightly to match the tooltip scale for quick input context. */
+.ao-theme-modern .ao-query-completion-popover > contents {
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px alpha(black, 0.15);
+  min-height: 0;
+}
+
+.ao-theme-modern .ao-query-completion-popover listview > row {
+  border-radius: var(--ao-row-radius);
+  margin: 2px 4px;
+  min-height: 32px;
+  border: 1px solid transparent;
+  transition: all 200ms ease;
+}
+
+.ao-theme-modern .ao-query-completion-row {
+  padding: 4px 12px;
+}
+
+.ao-theme-modern .ao-query-completion-row-detail {
+  opacity: 0.65;
+  font-size: 0.85em;
+}
+
+.ao-theme-modern .ao-query-completion-popover listview > row:selected {
+  background-image: none;
+  background-color: alpha(@theme_selected_bg_color, 0.15);
+  border-color: transparent;
+  color: inherit;
+}
+
+.ao-theme-modern .ao-query-completion-popover listview > row:selected:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.22);
+}
+
+.ao-theme-modern .ao-query-completion-popover listview > row:selected .ao-query-completion-row-title {
+  color: @theme_selected_bg_color;
+  font-weight: 600;
 }

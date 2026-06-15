@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/rt/CompletionResult.h>
+
 #include <glibmm/ustring.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -16,10 +18,16 @@
 #include <sigc++/signal.h>
 
 #include <cstdint>
+#include <memory>
 
 namespace Gtk
 {
   class Grid;
+}
+
+namespace ao::gtk
+{
+  class EntryCompletionController;
 }
 
 namespace ao::gtk::layout::track_field_grid
@@ -66,7 +74,7 @@ namespace ao::gtk::layout::track_field_grid
   {
   public:
     DetailFieldEditor();
-    ~DetailFieldEditor() override = default;
+    ~DetailFieldEditor() override;
 
     DetailFieldEditor(DetailFieldEditor const&) = delete;
     DetailFieldEditor& operator=(DetailFieldEditor const&) = delete;
@@ -82,6 +90,7 @@ namespace ao::gtk::layout::track_field_grid
 
     void startEditing();
     void stopEditing(bool commit);
+    void setCompletionProvider(rt::CompletionProvider provider);
 
     sigc::signal<void()>& signalEditStarted();
     sigc::signal<void()>& signalCommitted();
@@ -90,10 +99,13 @@ namespace ao::gtk::layout::track_field_grid
     void removeMaxWidthConstraint();
 
   private:
+    void setEntryTextSilently(Glib::ustring const& text);
+
     Gtk::Stack _stack;
     Gtk::Label _displayLabel;
     Gtk::Entry _entry;
     Gtk::Button _editButton;
+    std::unique_ptr<EntryCompletionController> _completionControllerPtr;
     Glib::ustring _text;
     sigc::signal<void()> _editStarted;
     sigc::signal<void()> _committed;

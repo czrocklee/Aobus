@@ -70,7 +70,7 @@ namespace ao::gtk::layout
       void onSnapshot(LayoutContext& ctx, rt::TrackDetailSnapshot const& snap)
       {
         _currentTrackIds = snap.trackIds;
-        _tagEditor.setup(ctx.runtime.musicLibrary(), _currentTrackIds);
+        _tagEditor.setup(ctx.runtime.musicLibrary(), ctx.runtime.completion(), _currentTrackIds);
         _tagEditor.set_visible(true);
       }
 
