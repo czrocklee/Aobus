@@ -5,6 +5,7 @@
 #include <ao/library/AudioCodec.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
+#include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -25,31 +26,6 @@ namespace ao::query
 
   namespace
   {
-    bool requiresHotData(ExecutionPlan const& plan)
-    {
-      return plan.accessProfile != AccessProfile::ColdOnly;
-    }
-
-    bool requiresColdData(ExecutionPlan const& plan)
-    {
-      return plan.accessProfile != AccessProfile::HotOnly;
-    }
-
-    bool hasRequiredTrackData(ExecutionPlan const& plan, library::TrackView const& track)
-    {
-      if (requiresHotData(plan) && !track.isHotValid())
-      {
-        return false;
-      }
-
-      if (requiresColdData(plan) && !track.isColdValid())
-      {
-        return false;
-      }
-
-      return true;
-    }
-
     // Helper to find the previous LoadField instruction
     Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
     {
@@ -69,32 +45,6 @@ namespace ao::query
       }
 
       return &found.front();
-    }
-
-    // Check if a field requires string comparison (not numeric)
-    bool isStringField(Field field)
-    {
-      switch (field)
-      {
-        case Field::Title:
-        case Field::Uri:
-        case Field::Custom: return true;
-        default: return false;
-      }
-    }
-
-    bool isDictionaryField(Field field)
-    {
-      switch (field)
-      {
-        case Field::ArtistId:
-        case Field::AlbumId:
-        case Field::GenreId:
-        case Field::AlbumArtistId:
-        case Field::ComposerId:
-        case Field::WorkId: return true;
-        default: return false;
-      }
     }
 
     bool isOrderedComparison(OpCode op)
@@ -371,7 +321,7 @@ namespace ao::query
       return true;
     }
 
-    if (!hasRequiredTrackData(plan, track))
+    if (!hasRequiredTrackData(plan.accessProfile, track))
     {
       return false;
     }
@@ -396,7 +346,7 @@ namespace ao::query
       return true;
     }
 
-    if (!hasRequiredTrackData(plan, track))
+    if (!hasRequiredTrackData(plan.accessProfile, track))
     {
       return false;
     }

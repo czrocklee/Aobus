@@ -45,7 +45,6 @@
 #include <lexy/dsl/symbol.hpp>
 #include <lexy/dsl/token.hpp>
 #include <lexy/dsl/unicode.hpp>
-#include <lexy/dsl/until.hpp>
 #include <lexy/encoding.hpp>
 #include <lexy/grammar.hpp>
 #include <lexy/input/string_input.hpp>
@@ -73,6 +72,14 @@ namespace
 
   constexpr auto kBoolTable = lexy::symbol_table<bool>.map<LEXY_SYMBOL("true")>(true).map<LEXY_SYMBOL("false")>(false);
 
+  // Shared escape sequences for quoted strings and user-variable names:
+  // \", \\, \', \n, \t and \r are recognized in both single- and double-quoted literals.
+  constexpr auto kStringEscapeSymbols =
+    lexy::symbol_table<char>.map<'"'>('"').map<'\\'>('\\').map<'\''>('\'').map<'n'>('\n').map<'t'>('\t').map<'r'>('\r');
+
+  constexpr auto kStringEscape = dsl::backslash_escape.symbol<kStringEscapeSymbols>(
+    dsl::lit_c<'"'> / dsl::lit_c<'\\'> / dsl::lit_c<'\''> / dsl::lit_c<'n'> / dsl::lit_c<'t'> / dsl::lit_c<'r'>);
+
   constexpr auto kBarewordIdentifier = []
   {
     auto const id = dsl::identifier(dsl::ascii::alpha_digit_underscore);
@@ -97,9 +104,8 @@ namespace
 
   struct QuotedUserVariableName : lexy::token_production
   {
-    static constexpr auto kEscape = dsl::backslash_escape.capture(dsl::lit_c<'"'> / dsl::lit_c<'\\'>);
-    static constexpr auto rule =
-      dsl::peek(dsl::lit_c<'"'>) >> (dsl::peek_not(LEXY_LIT("\"\"")) + dsl::quoted(-dsl::unicode::control, kEscape));
+    static constexpr auto rule = dsl::peek(dsl::lit_c<'"'>) >>
+                                 (dsl::peek_not(LEXY_LIT("\"\"")) + dsl::quoted(-dsl::unicode::control, kStringEscape));
     static constexpr auto value = lexy::as_string<std::string>;
   };
 
@@ -137,21 +143,10 @@ namespace
 
   struct StringConstant : lexy::token_production
   {
-    static constexpr auto rule = (dsl::lit_c<'\''> >> dsl::capture(dsl::until(dsl::lit_c<'\''>))) |
-                                 (dsl::lit_c<'"'> >> dsl::capture(dsl::until(dsl::lit_c<'"'>))) | kBarewordIdentifier;
+    static constexpr auto rule = dsl::single_quoted(-dsl::unicode::control, kStringEscape) |
+                                 dsl::quoted(-dsl::unicode::control, kStringEscape) | kBarewordIdentifier;
 
-    static constexpr auto value = lexy::callback<std::string>(
-      [](auto lexeme)
-      {
-        auto str = lexeme | std::ranges::to<std::string>();
-
-        if (!str.empty() && (str.back() == '\'' || str.back() == '"'))
-        {
-          str.pop_back();
-        }
-
-        return str;
-      });
+    static constexpr auto value = lexy::as_string<std::string>;
   };
 
   struct NegativeInteger : lexy::token_production

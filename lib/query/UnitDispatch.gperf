@@ -6,7 +6,8 @@
 %{
 #include <cstdint>
 #include <cstring>
-namespace unit_dispatch {
+
+namespace ao::query::unit_dispatch {
 %}
 %define class-name Table
 %define lookup-function-name lookupUnit
@@ -23,4 +24,4 @@ m, 60000, 1000000
 h, 3600000, 0
 k, 0, 1000
 %%
-} // namespace unit_dispatch
+} // namespace ao::query::unit_dispatch

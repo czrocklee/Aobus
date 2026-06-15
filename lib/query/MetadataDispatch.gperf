@@ -5,7 +5,10 @@
 %struct-type
 %{
 #include <cstring>
-namespace metadata_dispatch {
+
+#include <ao/query/Field.h>
+
+namespace ao::query::metadata_dispatch {
 %}
 %define class-name Table
 %define lookup-function-name lookupMetadataField
@@ -42,4 +45,4 @@ t, Field::Title
 work, Field::WorkId
 w, Field::WorkId
 %%
-} // namespace metadata_dispatch
+} // namespace ao::query::metadata_dispatch

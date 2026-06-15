@@ -131,6 +131,18 @@ namespace ao::query::test
     CHECK("[c{s}Artist]" == canonicalize(parse("Artist")));
     CHECK("[c{s}Artist]" == canonicalize(parse("\"Artist\"")));
     CHECK("[c{s}Artist]" == canonicalize(parse("'Artist'")));
+    CHECK("[c{s}A \"quote\"]" == canonicalize(parse(R"("A \"quote\"")")));
+    CHECK("[c{s}A 'quote']" == canonicalize(parse(R"('A \'quote\'')")));
+  }
+
+  TEST_CASE("Parser - String Escape Sequences", "[query][unit][parser]")
+  {
+    CHECK("[c{s}quote\"and\\slash]" == canonicalize(parse(R"("quote\"and\\slash")")));
+    CHECK("[c{s}quote\"and\\slash]" == canonicalize(parse(R"('quote\"and\\slash')")));
+    CHECK("[c{s}line1\nline2]" == canonicalize(parse(R"("line1\nline2")")));
+    CHECK("[c{s}line1\nline2]" == canonicalize(parse(R"('line1\nline2')")));
+    CHECK("[c{s}col1\tcol2]" == canonicalize(parse(R"("col1\tcol2")")));
+    CHECK("[c{s}cr\rlf]" == canonicalize(parse(R"("cr\rlf")")));
   }
 
   TEST_CASE("Parser - System Variable", "[query][unit][parser]")
@@ -160,6 +172,7 @@ namespace ao::query::test
       CHECK("[v{t}你说得对]" == canonicalize(parse(R"(#"你说得对")")));
       CHECK("[v{c}Replay Gain]" == canonicalize(parse(R"(%"Replay Gain")")));
       CHECK("[v{c}quote\"and\\slash]" == canonicalize(parse(R"(%"quote\"and\\slash")")));
+      CHECK("[v{c}quote'and\nnewline]" == canonicalize(parse(R"(%"quote\'and\nnewline")")));
     }
 
     SECTION("Bracketed quoted accepted as well")
@@ -386,6 +399,15 @@ namespace ao::query::test
       REQUIRE_THROWS(parse("$year in 1990.."));
       REQUIRE_THROWS(parse("$year in ..1999"));
       REQUIRE_THROWS(parse("$year in 1990...1999"));
+    }
+
+    SECTION("Invalid Escape Sequences")
+    {
+      REQUIRE_THROWS(parse(R"($title = "a \x")"));
+      REQUIRE_THROWS(parse(R"($title = 'a \x')"));
+      REQUIRE_THROWS(parse(R"($title = "a \u")"));
+      REQUIRE_THROWS(parse(R"(%"bad\")"));
+      REQUIRE_THROWS(parse(R"xy(%"trailing\)xy"));
     }
   }
 } // namespace ao::query::test

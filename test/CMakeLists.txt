@@ -11,6 +11,7 @@ add_executable(ao_core_test
     # query tests
     unit/query/ParserTest.cpp
     unit/query/ExecutionPlanTest.cpp
+    unit/query/FormatExpressionTest.cpp
     unit/query/PlanEvaluatorTest.cpp
     unit/query/ExpressionTest.cpp
     unit/query/SerializerTest.cpp

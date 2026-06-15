@@ -100,7 +100,7 @@ class HygieneCommandTest(unittest.TestCase):
 
         self.assertIn("check-only", stderr.getvalue())
         self.assertIn("./ao format", stderr.getvalue())
-        self.assertIn("fix them manually", stderr.getvalue())
+        self.assertIn("Fix the lint findings manually", stderr.getvalue())
 
 
 if __name__ == "__main__":

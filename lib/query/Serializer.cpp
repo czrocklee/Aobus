@@ -28,6 +28,22 @@ namespace ao::query
                                                   });
     }
 
+    void appendEscapedString(std::ostringstream& oss, std::string_view str)
+    {
+      for (auto const ch : str)
+      {
+        switch (ch)
+        {
+          case '\\': oss << "\\\\"; break;
+          case '"': oss << "\\\""; break;
+          case '\n': oss << "\\n"; break;
+          case '\t': oss << "\\t"; break;
+          case '\r': oss << "\\r"; break;
+          default: oss << ch; break;
+        }
+      }
+    }
+
     void serializeUserVariableName(std::ostringstream& oss, std::string_view name)
     {
       if (isSimpleUserVariableName(name))
@@ -37,17 +53,7 @@ namespace ao::query
       }
 
       oss << '"';
-
-      for (auto const ch : name)
-      {
-        if (ch == '"' || ch == '\\')
-        {
-          oss << '\\';
-        }
-
-        oss << ch;
-      }
-
+      appendEscapedString(oss, name);
       oss << '"';
     }
 
@@ -190,7 +196,12 @@ namespace ao::query
                                         [this](bool val) { oss << (val ? "true" : "false"); },
                                         [this](std::int64_t val) { oss << val; },
                                         [this](UnitConstantExpression const& val) { oss << val.lexeme; },
-                                        [this](std::string_view val) { oss << "\"" << val << "\""; }),
+                                        [this](std::string_view val)
+                                        {
+                                          oss << '"';
+                                          appendEscapedString(oss, val);
+                                          oss << '"';
+                                        }),
                    constant);
       }
 

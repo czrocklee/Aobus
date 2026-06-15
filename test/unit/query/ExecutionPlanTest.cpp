@@ -9,6 +9,7 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
+#include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -403,6 +404,7 @@ namespace ao::query::test
       REQUIRE_THROWS(compiler.compile(parse("not $year")));
       REQUIRE_THROWS(compiler.compile(parse("$artist and $year = 1990")));
       REQUIRE_THROWS(compiler.compile(parse("$artist or $year = 1990")));
+      REQUIRE_THROWS(compiler.compile(parse("$year = 1990 or $artist")));
     }
 
     SECTION("ExistenceRequiresVariableOperand")

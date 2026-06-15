@@ -5,6 +5,7 @@
 
 #include <ao/library/DictionaryStore.h>
 #include <ao/query/Expression.h>
+#include <ao/query/Field.h>
 
 #include <cstdint>
 #include <string>
@@ -13,50 +14,6 @@
 
 namespace ao::query
 {
-  /**
-   * Field - Identifies which field to read from a track.
-   * Ordered by category: string -> property -> metadata -> tags
-   */
-  enum class Field : std::uint8_t
-  {
-    // String fields
-    Title = 0,
-    Uri = 1,
-
-    // Property fields (@ prefix) - audio technical properties
-    Duration = 2,
-    Bitrate = 3,
-    SampleRate = 4,
-    Channels = 5,
-    BitDepth = 6,
-    Codec = 7,
-    // 8 retired (formerly Rating; field IDs are a stable contract, slot left as a gap)
-
-    // Metadata ID fields (Dictionary IDs)
-    ArtistId = 9,
-    AlbumId = 10,
-    GenreId = 11,
-    AlbumArtistId = 12,
-    ComposerId = 13,
-    CoverArtId = 14,
-    WorkId = 15,
-
-    // Metadata numeric fields
-    Year = 16,
-    TrackNumber = 17,
-    TrackTotal = 18,
-    DiscNumber = 19,
-    DiscTotal = 20,
-
-    // Tag fields
-    TagBloom = 21,
-    TagCount = 22,
-    Tag = 23,
-
-    // Custom field (for %custom_key lookups from cold storage)
-    Custom = 24,
-  };
-
   /**
    * OpCode - Operations in the execution plan.
    */
@@ -94,16 +51,6 @@ namespace ao::query
     // The actual string data will be stored separately in the plan
     std::uint32_t size = 0;
     char const* data = nullptr;
-  };
-
-  /**
-   * AccessProfile - Indicates which storage tier(s) the query accesses.
-   */
-  enum class AccessProfile : std::uint8_t
-  {
-    HotOnly,   // Only accesses hot data (metadata, property, tags)
-    ColdOnly,  // Only accesses cold data (custom KV)
-    HotAndCold // Mixed access
   };
 
   /**

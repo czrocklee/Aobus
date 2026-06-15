@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <variant>
 
 namespace ao::query::test
 {
@@ -40,6 +41,8 @@ namespace ao::query::test
 
       CHECK(serialize(VariableExpression{.type = VariableType::Tag, .name = "90s Rock"}) == R"(#"90s Rock")");
       CHECK(serialize(escaped) == R"(%"quote\"and\\slash")");
+      CHECK(serialize(VariableExpression{.type = VariableType::Custom, .name = "with\nnewline"}) ==
+            R"(%"with\nnewline")");
     }
 
     SECTION("Quoted names round-trip")
@@ -69,6 +72,26 @@ namespace ao::query::test
   TEST_CASE("Serializer - Serializes String Constant With Quotes", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{std::string{"Bach"}}) == "\"Bach\"");
+    CHECK(serialize(ConstantExpression{std::string{"quote\"and\\slash"}}) == R"("quote\"and\\slash")");
+    CHECK(serialize(ConstantExpression{std::string{"line1\nline2"}}) == R"("line1\nline2")");
+    CHECK(serialize(ConstantExpression{std::string{"col1\tcol2"}}) == R"("col1\tcol2")");
+    CHECK(serialize(ConstantExpression{std::string{"cr\rlf"}}) == R"("cr\rlf")");
+    CHECK(serialize(ConstantExpression{std::string{"has'apostrophe"}}) == R"("has'apostrophe")");
+  }
+
+  TEST_CASE("Serializer - String Constants With Control Characters Round-Trip", "[query][unit][serializer]")
+  {
+    auto const original = std::string{"quote\"\n\t\r\\slash"};
+    auto const expr = ConstantExpression{original};
+    auto const serialized = serialize(expr);
+    auto const reparsed = parse(serialized);
+    CHECK(serialize(reparsed) == serialized);
+
+    auto const* constant = std::get_if<ConstantExpression>(&reparsed);
+    REQUIRE(constant != nullptr);
+    auto const* value = std::get_if<std::string>(constant);
+    REQUIRE(value != nullptr);
+    CHECK(*value == original);
   }
 
   TEST_CASE("Serializer - Serializes Unary Not", "[query][unit][serializer]")
@@ -183,7 +206,8 @@ namespace ao::query::test
                     R"($artist in ["Bach", "Mozart"])",
                     "@duration in 2m30s..5m",
                     R"(#"90s Rock" and %"Replay Gain" = "high")",
-                    R"($year? and %"Replay Gain"?)"};
+                    R"($year? and %"Replay Gain"?)",
+                    R"($title = "A \"quote\"")"};
 
     for (auto const& q : queries)
     {

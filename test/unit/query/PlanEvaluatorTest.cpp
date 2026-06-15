@@ -15,6 +15,7 @@
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/query/ExecutionPlan.h>
+#include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/utility/ByteView.h>

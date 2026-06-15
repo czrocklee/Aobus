@@ -5,6 +5,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/query/ExecutionPlan.h>
+#include <ao/query/Field.h>
 #include <ao/rt/SmartListEvaluator.h>
 #include <ao/rt/SmartListSource.h>
 #include <ao/rt/TrackSource.h>
@@ -673,6 +674,7 @@ namespace ao::rt
 
       switch (list->_current.planPtr->accessProfile)
       {
+        case query::AccessProfile::NoTrackData: break;
         case query::AccessProfile::HotOnly: needsHot = true; break;
         case query::AccessProfile::ColdOnly: needsCold = true; break;
         case query::AccessProfile::HotAndCold:

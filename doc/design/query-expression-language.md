@@ -27,20 +27,29 @@ existence-atom      ::= variable "?" ;
 
 variable            ::= system-variable | user-variable ;
 system-variable     ::= ("$" | "@") system-identifier ;
-user-variable       ::= ("#" | "%") user-name ;
+user-variable       ::= ("#" | "%") user-variable-name ;
 
 system-identifier   ::= system-start system-char* ;
 system-start        ::= ASCII letter | "_" ;
 system-char         ::= ASCII letter | ASCII digit | "_" ;
 
-user-name           ::= bare-user-name | quoted-user-name | bracketed-quoted-user-name ;
-bare-user-name      ::= (ASCII letter | ASCII digit | "_")+ ;
-quoted-user-name    ::= '"' quoted-user-char+ '"' ;
-bracketed-quoted-user-name
-                    ::= "[" quoted-user-name "]" ;
-quoted-user-char    ::= any non-control Unicode character except '"' and "\"
-                      | '\"'
-                      | '\\' ;
+user-variable-name  ::= bare-user-variable-name
+                      | quoted-user-variable-name
+                      | bracketed-quoted-user-variable-name ;
+bare-user-variable-name
+                    ::= (ASCII letter | ASCII digit | "_")+ ;
+quoted-user-variable-name
+                    ::= '"' quoted-user-variable-char+ '"' ;
+bracketed-quoted-user-variable-name
+                    ::= "[" quoted-user-variable-name "]" ;
+quoted-user-variable-char
+                    ::= any non-control Unicode character except '"' and "\\"
+                      | '\\"'
+                      | '\\\\'
+                      | '\\''
+                      | '\\n'
+                      | '\\t'
+                      | '\\r' ;
 
 constant            ::= boolean | unit-number | integer | string ;
 list                ::= "[" constant ("," constant)* "]" ;
@@ -50,27 +59,41 @@ integer             ::= "-"? ASCII digit+ ;
 unit-number         ::= "-"? ASCII digit+ ("." ASCII digit+)? ASCII letter+ (ASCII digit+ ASCII letter+)* ;
 string              ::= bare-string | single-quoted-string | double-quoted-string ;
 bare-string         ::= (ASCII letter | ASCII digit | "_")+ except "and", "or", "not", "in" ;
+single-quoted-char  ::= any non-control Unicode character except "'" and "\\"
+                      | '\\"'
+                      | '\\\\'
+                      | '\\''
+                      | '\\n'
+                      | '\\t'
+                      | '\\r' ;
+double-quoted-char  ::= any non-control Unicode character except '"' and "\\"
+                      | '\\"'
+                      | '\\\\'
+                      | '\\''
+                      | '\\n'
+                      | '\\t'
+                      | '\\r' ;
 single-quoted-string
-                    ::= "'" any characters up to the next "'" "'" ;
+                    ::= "'" single-quoted-char* "'" ;
 double-quoted-string
-                    ::= '"' any characters up to the next '"' '"' ;
+                    ::= '"' double-quoted-char* '"' ;
 ```
 
 Important implementation notes:
 
 - Whitespace is ASCII whitespace and may appear between tokens.
 - `and`, `or`, `not`, and `in` are keyword operators only when followed by an identifier boundary.
-- User names after `#` and `%` may start with a digit. System variables after `$` and `@` may not.
-- `#"..."` and `%"..."` are the compact quoted user-name forms. `#["..."]` and `%["..."]` are the
+- User variable names after `#` and `%` may start with a digit. System variables after `$` and `@` may not.
+- `#"..."` and `%"..."` are the compact quoted user-variable-name forms. `#["..."]` and `%["..."]` are the
   explicit bracketed forms, useful when visual separation from the surrounding expression matters.
 - Postfix `?` applies only to variables. `!$year?` means `!($year?)`.
-- Quoted user names support `\"` and `\\`. String constants currently do not support escape
-  sequences; use the other quote character when possible.
+- Quoted user variable names and both single- and double-quoted string constants share the same
+  escape sequences: `\"`, `\\`, `\'`, `\n`, `\t` and `\r`. Invalid escapes are rejected.
 - Lists are non-empty, comma-separated constant lists. Ranges are inclusive `lower..upper` pairs.
   Lists and ranges are executable only as the right operand of `in`.
-- The parser accepts `+` and adjacent atoms as concatenation syntax, but query execution currently
-  rejects `+` with `operator '+' is not yet supported in query execution`. Do not use it in smart
-  lists or CLI filters yet.
+- The shared expression parser accepts `+` and adjacent atoms for format expressions, so those forms
+  have a defined precedence here. Query execution rejects concatenation because a string-producing
+  expression is not a predicate. Use concatenation through the format expression contract instead.
 
 ## Operators
 
@@ -80,7 +103,7 @@ Operator precedence from tightest to loosest:
 | --- | --- | --- |
 | 1 | `?` | Field existence test |
 | 2 | `not`, `!` | Boolean negation |
-| 3 | `+`, adjacency | Parser-level concatenation, not executable yet |
+| 3 | `+`, adjacency | String concatenation for format expressions; parsed by the shared parser but rejected by query execution |
 | 4 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison; `~` is substring match, `in` tests equality against a list or inclusion in a range |
 | 5 | `and`, `&&` | Boolean conjunction |
 | 6 | `or`, `||` | Boolean disjunction |
@@ -93,8 +116,8 @@ Use parentheses to make grouping explicit when mixing `and` and `or`.
 | --- | --- | --- | --- |
 | `$` | Metadata fields | System identifier | `$title`, `$artist`, `$year` |
 | `@` | Technical properties | System identifier | `@duration`, `@bitrate`, `@codec` |
-| `#` | Tags | Bare or quoted user name | `#rock`, `#123`, `#"90s Rock"` |
-| `%` | Custom metadata | Bare or quoted user name | `%isrc`, `%123`, `%"Replay Gain"` |
+| `#` | Tags | Bare or quoted user variable name | `#rock`, `#123`, `#"90s Rock"` |
+| `%` | Custom metadata | Bare or quoted user variable name | `%isrc`, `%123`, `%"Replay Gain"` |
 
 ### Metadata Fields
 
@@ -308,9 +331,9 @@ Multiple plain terms are combined with `and`.
 | --- | --- |
 | `$123 = x` | System variable names must start with an ASCII letter or `_`. |
 | `@123 = 1` | Technical property names are system identifiers. |
-| `#""` | Quoted user names must be non-empty. |
-| `%"" = x` | Quoted custom keys must be non-empty. |
-| `$title = "a \"quote\""` | String constants do not currently support escape sequences. |
+| `#""` | Quoted tag names must be non-empty. |
+| `%"" = x` | Quoted custom-metadata keys must be non-empty. |
+| `$title = "a \\x"` | Invalid escape sequences in string constants are rejected. |
 | `$artist in []` | `in` lists must be non-empty. |
 | `$artist in [Bach,]` | Trailing list separators are rejected. |
 | `$artist in Bach` | `in` requires a list or range right operand. |

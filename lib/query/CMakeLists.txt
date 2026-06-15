@@ -17,6 +17,8 @@ add_gperf_header(
 
 add_library(ao_query STATIC
     ExecutionPlan.cpp
+    Field.cpp
+    FormatExpression.cpp
     PlanEvaluator.cpp
     Expression.cpp
     Parser.cpp

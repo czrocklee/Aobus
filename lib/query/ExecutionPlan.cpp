@@ -6,6 +6,7 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
+#include <ao/query/Field.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -13,8 +14,8 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -25,53 +26,19 @@
 #include <system_error>
 #include <variant>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#include "query/UnitDispatch.h"
+#pragma GCC diagnostic pop
+
 namespace ao::query
 {
   namespace
   {
     // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
     constexpr std::uint32_t kBloomBitMask = 31;
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wold-style-cast"
-#pragma GCC diagnostic ignored "-Wconversion"
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#include "query/MetadataDispatch.h"
-#include "query/PropertyDispatch.h"
-#include "query/UnitDispatch.h"
-#pragma GCC diagnostic pop
-
-    Field variableTypeToField(VariableType type, std::string_view name)
-    {
-      switch (type)
-      {
-        case VariableType::Property:
-        {
-          if (auto const* entry = property_dispatch::Table::lookupPropertyField(name.data(), name.size());
-              entry != nullptr)
-          {
-            return entry->field;
-          }
-
-          throwException<Exception>("unknown property field '@{}'", name);
-        }
-        case VariableType::Metadata:
-        {
-          if (auto const* entry = metadata_dispatch::Table::lookupMetadataField(name.data(), name.size());
-              entry != nullptr)
-          {
-            return entry->field;
-          }
-
-          throwException<Exception>("unknown metadata field '${}'", name);
-        }
-        case VariableType::Tag: return Field::Tag;
-        case VariableType::Custom: return Field::Custom;
-        default: break;
-      }
-
-      throwException<Exception>("unsupported variable type for '{}'", name);
-    }
 
     OpCode toOpCode(Operator op)
     {
@@ -88,7 +55,8 @@ namespace ao::query
         case Operator::Greater: return OpCode::Gt;
         case Operator::GreaterEqual: return OpCode::Ge;
         case Operator::In: throwException<Exception>("operator 'in' requires list compilation");
-        case Operator::Add: throwException<Exception>("operator '+' is not yet supported in query execution");
+        case Operator::Add:
+          throwException<Exception>("string concatenation is not a query predicate; use it in a format expression");
         case Operator::Exists: return OpCode::Exists;
         default: throwException<Exception>("unsupported operator");
       }
@@ -99,69 +67,9 @@ namespace ao::query
       return op == OpCode::Lt || op == OpCode::Le || op == OpCode::Gt || op == OpCode::Ge;
     }
 
-    bool isDictionaryField(Field field)
-    {
-      switch (field)
-      {
-        case Field::ArtistId:
-        case Field::AlbumId:
-        case Field::GenreId:
-        case Field::AlbumArtistId:
-        case Field::ComposerId:
-        case Field::WorkId: return true;
-        default: return false;
-      }
-    }
-
-    bool isTagField(Field field)
-    {
-      return field == Field::Tag;
-    }
-
-    char variablePrefix(VariableType type)
-    {
-      switch (type)
-      {
-        case VariableType::Metadata: return '$';
-        case VariableType::Property: return '@';
-        case VariableType::Tag: return '#';
-        case VariableType::Custom: return '%';
-        default: return '?';
-      }
-    }
-
-    std::string variableDisplayName(VariableExpression const& var)
-    {
-      auto name = std::string{};
-      name.push_back(variablePrefix(var.type));
-      name += var.name;
-      return name;
-    }
-
     bool isUnsupportedLikeField(Field field)
     {
       return field == Field::CoverArtId || field == Field::Tag;
-    }
-
-    bool isColdField(Field field)
-    {
-      // Cold fields are stored in TrackColdHeader or custom KV storage
-      switch (field)
-      {
-        case Field::Uri:         // cold: TrackColdHeader
-        case Field::CoverArtId:  // cold: TrackColdHeader
-        case Field::WorkId:      // cold: TrackColdHeader
-        case Field::TrackNumber: // cold: TrackColdHeader
-        case Field::TrackTotal:  // cold: TrackColdHeader
-        case Field::DiscNumber:  // cold: TrackColdHeader
-        case Field::DiscTotal:   // cold: TrackColdHeader
-        case Field::Custom:      // cold: custom KV storage
-        case Field::Duration:    // cold: TrackColdHeader
-        case Field::Bitrate:     // cold: TrackColdHeader
-        case Field::Channels:    // cold: TrackColdHeader
-          return true;
-        default: return false;
-      }
     }
 
     std::uint32_t tagBloomBit(library::DictionaryStore* dict, std::string_view tagName)
@@ -249,30 +157,6 @@ namespace ao::query
     {
       return value | std::views::transform([](unsigned char ch) { return static_cast<char>(std::tolower(ch)); }) |
              std::ranges::to<std::string>();
-    }
-
-    char const* fieldName(Field field)
-    {
-      switch (field)
-      {
-        case Field::Duration: return "duration";
-        case Field::Bitrate: return "bitrate";
-        case Field::SampleRate: return "sampleRate";
-        case Field::Channels: return "channels";
-        case Field::BitDepth: return "bitDepth";
-        case Field::Year: return "year";
-        case Field::TrackNumber: return "trackNumber";
-        case Field::TrackTotal: return "trackTotal";
-        case Field::DiscNumber: return "discNumber";
-        case Field::DiscTotal: return "discTotal";
-        case Field::ArtistId: return "artist";
-        case Field::AlbumId: return "album";
-        case Field::GenreId: return "genre";
-        case Field::AlbumArtistId: return "albumArtist";
-        case Field::ComposerId: return "composer";
-        case Field::WorkId: return "work";
-        default: return "field";
-      }
     }
 
     bool isStringConstant(ConstantExpression const& constant)
@@ -375,7 +259,7 @@ namespace ao::query
         default: break;
       }
 
-      throwException<Exception>("unit '{}' is not supported for {} constants", normalized, fieldName(field));
+      throwException<Exception>("unit '{}' is not supported for {} constants", normalized, fieldDisplayName(field));
     }
 
     std::uint64_t scaleUnitSegment(std::string_view numberPart,
@@ -426,7 +310,7 @@ namespace ao::query
       if (*optScaledNumerator % *optDenominator != 0)
       {
         throwException<Exception>(
-          "unit literal '{}' does not resolve to an integer {} value", constant.lexeme, fieldName(field));
+          "unit literal '{}' does not resolve to an integer {} value", constant.lexeme, fieldDisplayName(field));
       }
 
       auto const magnitude = *optScaledNumerator / *optDenominator;
@@ -608,7 +492,7 @@ namespace ao::query
           !isStringConstantOperand(binary.optOperation->operand))
       {
         throwException<Exception>(
-          "ordered comparison on the '{}' field requires a string operand", fieldName(leftField));
+          "ordered comparison on the '{}' field requires a string operand", fieldDisplayName(leftField));
       }
 
       auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
@@ -679,7 +563,7 @@ namespace ao::query
       throwException<Exception>("operator '?' requires a field operand");
     }
 
-    auto const field = variableTypeToField(var->type, var->name);
+    auto const field = resolveVariableField(*var);
     _lastField = field;
 
     if (isColdField(field))
@@ -758,7 +642,7 @@ namespace ao::query
       }
     }
 
-    auto const field = variableTypeToField(var.type, var.name);
+    auto const field = resolveVariableField(var);
     _lastField = field; // Track for string resolution context
 
     // Track access profile for hot/cold determination based on field storage location
@@ -961,7 +845,7 @@ namespace ao::query
 
       if (dictionaryBounds && (!isStringConstant(range->lower) || !isStringConstant(range->upper)))
       {
-        throwException<Exception>("range over the '{}' field requires string bounds", fieldName(_lastField));
+        throwException<Exception>("range over the '{}' field requires string bounds", fieldDisplayName(_lastField));
       }
 
       auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
