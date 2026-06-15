@@ -22,7 +22,8 @@ relational-expression
                         add-expression)? ;
 add-expression      ::= unary-expression (("+" | adjacency) unary-expression)* ;
 unary-expression    ::= ("not" | "!") unary-expression | atom ;
-atom                ::= "(" expression ")" | variable | list | range | constant ;
+atom                ::= "(" expression ")" | existence-atom | variable | list | range | constant ;
+existence-atom      ::= variable "?" ;
 
 variable            ::= system-variable | user-variable ;
 system-variable     ::= ("$" | "@") system-identifier ;
@@ -62,6 +63,7 @@ Important implementation notes:
 - User names after `#` and `%` may start with a digit. System variables after `$` and `@` may not.
 - `#"..."` and `%"..."` are the compact quoted user-name forms. `#["..."]` and `%["..."]` are the
   explicit bracketed forms, useful when visual separation from the surrounding expression matters.
+- Postfix `?` applies only to variables. `!$year?` means `!($year?)`.
 - Quoted user names support `\"` and `\\`. String constants currently do not support escape
   sequences; use the other quote character when possible.
 - Lists are non-empty, comma-separated constant lists. Ranges are inclusive `lower..upper` pairs.
@@ -76,11 +78,12 @@ Operator precedence from tightest to loosest:
 
 | Precedence | Operators | Meaning |
 | --- | --- | --- |
-| 1 | `not`, `!` | Boolean negation |
-| 2 | `+`, adjacency | Parser-level concatenation, not executable yet |
-| 3 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison; `~` is substring match, `in` tests equality against a list or inclusion in a range |
-| 4 | `and`, `&&` | Boolean conjunction |
-| 5 | `or`, `||` | Boolean disjunction |
+| 1 | `?` | Field existence test |
+| 2 | `not`, `!` | Boolean negation |
+| 3 | `+`, adjacency | Parser-level concatenation, not executable yet |
+| 4 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison; `~` is substring match, `in` tests equality against a list or inclusion in a range |
+| 5 | `and`, `&&` | Boolean conjunction |
+| 6 | `or`, `||` | Boolean disjunction |
 
 Use parentheses to make grouping explicit when mixing `and` and `or`.
 
@@ -135,6 +138,8 @@ A standalone tag variable is a membership test. For example, `#rock` means "the 
 #"你说得对"
 ```
 
+`#rock?` is accepted as an explicit spelling of the same membership test.
+
 ### Custom Metadata
 
 Custom metadata variables load the value for a user-defined key and are normally used with a
@@ -145,6 +150,36 @@ comparison:
 %"Replay Gain" = "-7.4 dB"
 %123 = "user value"
 ```
+
+## Existence Tests
+
+Use postfix `?` to test whether a field exists:
+
+```text
+$albumArtist?
+!$trackNumber?
+@duration?
+%rating?
+#favorite?
+```
+
+Non-tag variables are not predicates by themselves. They must be compared, used as the left operand
+of `in`, or tested explicitly with `?`. For example, `$year = 1990`, `$year in 1990..1999`, and
+`$year?` are valid; `$year`, `@duration`, `%rating`, and `not $year` are rejected. Bare tags remain
+valid membership predicates, so `#favorite` and `!#favorite` continue to work.
+
+Existence semantics:
+
+| Field kind | Exists when |
+| --- | --- |
+| String metadata (`$title`) | string is non-empty |
+| Dictionary metadata (`$artist`, `$album`, `$albumArtist`, `$genre`, `$composer`, `$work`) | id is not invalid |
+| Numeric metadata (`$year`, `$trackNumber`, `$trackTotal`, `$discNumber`, `$discTotal`) | value is greater than zero |
+| Cover art (`$coverArt`) | primary resource id is valid |
+| Numeric properties (`@duration`, `@bitrate`, `@sampleRate`, `@channels`, `@bitDepth`) | value is greater than zero |
+| Codec (`@codec`) | codec is not `UNKNOWN` |
+| Tag (`#favorite`) | track has the tag |
+| Custom metadata (`%rating`) | key is present, even when its value is an empty string |
 
 ## Constants And Units
 
@@ -240,15 +275,18 @@ Multiple plain terms are combined with `and`.
 | `$year in 1990..1999` | Year is between 1990 and 1999, inclusive. |
 | `$artist in Bach..Mozart` | Artist name falls between Bach and Mozart, inclusive (lexicographic). |
 | `($genre = Classical or $genre = Jazz) and @duration > 3m` | Parenthesized genre choice plus duration. |
-| `not $composer` | Composer field is logically false/empty. |
+| `$albumArtist?` | Album artist field is present. |
+| `!$composer?` | Composer field is missing. |
 | `!#skip` | Track does not have the `skip` tag. |
 | `#favorite` | Track has the `favorite` tag. |
+| `#favorite?` | Explicit existence spelling for the same tag membership test. |
 | `#123` | Track has the numeric tag `123`. |
 | `#"90s Rock"` | Track has the tag `90s Rock`. |
 | `#["90s Rock"]` | Explicit bracketed spelling for the same tag. |
 | `#"你说得对"` | Track has a Unicode tag. |
 | `%isrc = "US-RC1-12-00001"` | Custom key `isrc` has the given value. |
 | `%"Replay Gain" = "-7.4 dB"` | Custom key with a space in its name. |
+| `%rating?` | Custom key `rating` is present, even if its value is empty. |
 | `%123 = "catalogue"` | Numeric custom key. |
 | `%mood in ["focus", "night"]` | Custom mood equals one of the listed values. |
 | `@duration >= 3m and @duration < 10m` | Duration is at least 3 minutes and under 10 minutes. |
@@ -280,6 +318,12 @@ Multiple plain terms are combined with `and`.
 | `1990..1999` | Ranges are only executable as the right operand of `in`. |
 | `$year in 1990..` | Range bounds are both required. |
 | `$artist in 1..5` | Ordered comparisons over dictionary fields require string operands. |
+| `$year` | Non-tag fields must use `?`, `in`, or an explicit comparison. |
+| `@duration` | Non-tag fields are not bare predicates. |
+| `%rating` | Custom metadata existence must be written as `%rating?`. |
+| `not $year` | Negated field existence must be written as `!$year?` or `not $year?`. |
+| `1990?` | Postfix `?` only applies to variables. |
+| `($year = 1990)?` | Postfix `?` cannot apply to grouped expressions. |
 | `$title + $artist = "x"` | Parses, but execution rejects `+` today. |
 | `@duration >= 10k` | `k` is not a duration unit. |
 | `@bitrate >= 2k3m` | Compound unit literals are only supported for duration. |

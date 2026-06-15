@@ -75,6 +75,7 @@ namespace ao::query
     Or,
     Not,
     Like,
+    Exists,
   };
 
   /**
@@ -156,8 +157,10 @@ namespace ao::query
     // Compile helper functions
     std::uint32_t addStringConstant(std::string_view str);
     void compileExpression(Expression const& expr);
+    void compilePredicate(Expression const& expr);
     void compileBinary(BinaryExpression const& binary);
     void compileUnary(UnaryExpression const& unary);
+    void compileExists(Expression const& operand);
     void compileVariable(VariableExpression const& var);
     void compileConstant(ConstantExpression const& constant);
     void compileList(ListExpression const& list);

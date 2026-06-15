@@ -956,6 +956,128 @@ namespace ao::query::test
     CHECK(PlanEvaluator{}.evaluateFull(plan, track.view()));
   }
 
+  TEST_CASE("PlanEvaluator - Existence Tests", "[query][unit][plan_evaluator]")
+  {
+    auto evaluator = PlanEvaluator{};
+
+    SECTION("StringMetadataExistsWhenNonEmpty")
+    {
+      auto missingSpec = TrackSpec{};
+      missingSpec.title.clear();
+      auto missing = TrackFixture{missingSpec};
+      auto present = TrackFixture{TrackSpec{}};
+      auto plan = QueryCompiler{}.compile(parse("$title?"));
+
+      CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
+      CHECK(evaluator.evaluateFull(plan, present.view()));
+    }
+
+    SECTION("DictionaryMetadataExistsWhenIdIsValid")
+    {
+      auto missingSpec = TrackSpec{};
+      missingSpec.artist.clear();
+      auto missing = TrackFixture{missingSpec};
+      auto present = TrackFixture{TrackSpec{}};
+      auto plan = QueryCompiler{}.compile(parse("$artist?"));
+
+      CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
+      CHECK(evaluator.evaluateFull(plan, present.view()));
+    }
+
+    SECTION("NumericMetadataExistsWhenPositive")
+    {
+      auto missingSpec = TrackSpec{};
+      missingSpec.year = 0;
+      missingSpec.trackNumber = 0;
+      missingSpec.trackTotal = 0;
+      auto missing = TrackFixture{missingSpec};
+
+      auto presentSpec = TrackSpec{};
+      presentSpec.year = 2024;
+      presentSpec.trackNumber = 3;
+      presentSpec.trackTotal = 12;
+      auto present = TrackFixture{presentSpec};
+
+      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$year?")), missing.view()));
+      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$year?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$trackNumber?")), missing.view()));
+      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$trackNumber?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$trackTotal?")), missing.view()));
+      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$trackTotal?")), present.view()));
+    }
+
+    SECTION("PropertiesExistWhenPositiveOrKnown")
+    {
+      auto missingSpec = TrackSpec{};
+      missingSpec.duration = std::chrono::milliseconds{0};
+      missingSpec.codec = library::AudioCodec::Unknown;
+      auto missing = TrackFixture{missingSpec};
+
+      auto presentSpec = TrackSpec{};
+      presentSpec.duration = std::chrono::milliseconds{1};
+      presentSpec.codec = library::AudioCodec::Flac;
+      auto present = TrackFixture{presentSpec};
+
+      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@duration?")), missing.view()));
+      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@duration?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@codec?")), missing.view()));
+      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@codec?")), present.view()));
+    }
+
+    SECTION("CoverArtExistsWhenPrimaryResourceIsValid")
+    {
+      auto missing = TrackFixture{TrackSpec{}};
+      auto presentSpec = TrackSpec{};
+      presentSpec.coverArtId = ResourceId{42};
+      auto present = TrackFixture{presentSpec};
+      auto plan = QueryCompiler{}.compile(parse("$coverArt?"));
+
+      CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
+      CHECK(evaluator.evaluateFull(plan, present.view()));
+    }
+
+    SECTION("CustomMetadataExistsEvenWhenValueIsEmpty")
+    {
+      auto absent = TrackFixture{TrackSpec{}};
+      auto emptyValueSpec = TrackSpec{};
+      emptyValueSpec.customPairs.emplace_back("rating", "");
+      auto emptyValue = TrackFixture{emptyValueSpec};
+      auto nonEmptyValueSpec = TrackSpec{};
+      nonEmptyValueSpec.customPairs.emplace_back("rating", "5");
+      auto nonEmptyValue = TrackFixture{nonEmptyValueSpec};
+
+      auto plan = QueryCompiler{&emptyValue.dictionary()}.compile(parse("%rating?"));
+
+      CHECK_FALSE(evaluator.evaluateFull(plan, absent.view()));
+      CHECK(evaluator.evaluateFull(plan, emptyValue.view()));
+      CHECK(evaluator.evaluateFull(plan, nonEmptyValue.view()));
+    }
+
+    SECTION("TagExistenceMatchesMembership")
+    {
+      auto absent = TrackFixture{TrackSpec{}};
+      auto presentSpec = TrackSpec{};
+      presentSpec.tags.emplace_back("favorite");
+      auto present = TrackFixture{presentSpec};
+      auto plan = QueryCompiler{&present.dictionary()}.compile(parse("#favorite?"));
+
+      CHECK_FALSE(evaluator.evaluateFull(plan, absent.view()));
+      CHECK(evaluator.evaluateFull(plan, present.view()));
+    }
+
+    SECTION("NegatedExistenceMatchesMissingFields")
+    {
+      auto missingSpec = TrackSpec{};
+      missingSpec.year = 0;
+      auto missing = TrackFixture{missingSpec};
+      auto present = TrackFixture{TrackSpec{}};
+      auto plan = QueryCompiler{}.compile(parse("!$year?"));
+
+      CHECK(evaluator.evaluateFull(plan, missing.view()));
+      CHECK_FALSE(evaluator.evaluateFull(plan, present.view()));
+    }
+  }
+
   TEST_CASE("PlanEvaluator - In List", "[query][unit][plan_evaluator]")
   {
     auto spec = TrackSpec{};

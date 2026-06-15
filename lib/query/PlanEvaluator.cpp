@@ -316,6 +316,51 @@ namespace ao::query
       auto found = fieldStr.contains(constantStr);
       reg(registers, instr.operand - 1) = found ? 1 : 0;
     }
+
+    bool executeExists(library::TrackView const& track, Instruction const& instr)
+    {
+      switch (auto const field = static_cast<Field>(instr.field); field)
+      {
+        case Field::Title: return !track.metadata().title().empty();
+        case Field::Uri: return !track.property().uri().empty();
+
+        case Field::ArtistId:
+        case Field::AlbumId:
+        case Field::GenreId:
+        case Field::AlbumArtistId:
+        case Field::ComposerId:
+        case Field::WorkId:
+          return loadFieldValue(track, field) != static_cast<std::int64_t>(kInvalidDictionaryId.raw());
+
+        case Field::CoverArtId:
+          return track.coverArt().primary().value_or(library::CoverArt{}).resourceId != kInvalidResourceId;
+
+        case Field::Year:
+        case Field::TrackNumber:
+        case Field::TrackTotal:
+        case Field::DiscNumber:
+        case Field::DiscTotal:
+        case Field::Duration:
+        case Field::Bitrate:
+        case Field::SampleRate:
+        case Field::Channels:
+        case Field::BitDepth: return loadFieldValue(track, field) > 0;
+
+        case Field::Codec: return track.property().codec() != library::AudioCodec::Unknown;
+
+        case Field::Tag:
+          return instr.constValue > 0 && track.tags().has(DictionaryId{static_cast<std::uint32_t>(instr.constValue)});
+
+        case Field::Custom:
+          return instr.constValue > 0 &&
+                 track.customMetadata().contains(DictionaryId{static_cast<std::uint32_t>(instr.constValue)});
+
+        case Field::TagBloom:
+        case Field::TagCount: return loadFieldValue(track, field) > 0;
+
+        default: return false;
+      }
+    }
   }
 
   bool PlanEvaluator::matches(ExecutionPlan const& plan, library::TrackView const& track) const
@@ -415,6 +460,8 @@ namespace ao::query
         }
 
         case OpCode::Like: executeLike(_registers, track, &plan, instr, plan.instructions); break;
+
+        case OpCode::Exists: reg(_registers, instr.operand) = executeExists(track, instr) ? 1 : 0; break;
 
         case OpCode::Nop:
         default: break;

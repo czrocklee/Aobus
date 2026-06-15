@@ -244,11 +244,17 @@ namespace
 
     static constexpr auto atom = dsl::p<ExprAtom> | dsl::error<ExpectedOperand>;
 
+    struct MathExists : dsl::postfix_op
+    {
+      static constexpr auto op = dsl::op<Operator::Exists>(dsl::lit_c<'?'>);
+      using operand = dsl::atom;
+    };
+
     struct MathNot : dsl::prefix_op
     {
       static constexpr auto op = dsl::op<Operator::Not>(LEXY_KEYWORD("not", dsl::identifier(dsl::ascii::alpha))) /
                                  dsl::op<Operator::Not>(dsl::lit_c<'!'>);
-      using operand = dsl::atom;
+      using operand = MathExists;
     };
 
     struct MathAdd : dsl::infix_op_right
@@ -285,6 +291,13 @@ namespace
 
     static constexpr auto value = lexy::callback<Expression>([](Expression lhs) { return lhs; },
                                                              [](Operator op, Expression expr)
+                                                             {
+                                                               auto unPtr = std::make_unique<UnaryExpression>();
+                                                               unPtr->op = op;
+                                                               unPtr->operand = std::move(expr);
+                                                               return Expression{std::move(unPtr)};
+                                                             },
+                                                             [](Expression expr, Operator op)
                                                              {
                                                                auto unPtr = std::make_unique<UnaryExpression>();
                                                                unPtr->op = op;

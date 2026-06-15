@@ -89,6 +89,7 @@ namespace ao::query
         case Operator::GreaterEqual: return OpCode::Ge;
         case Operator::In: throwException<Exception>("operator 'in' requires list compilation");
         case Operator::Add: throwException<Exception>("operator '+' is not yet supported in query execution");
+        case Operator::Exists: return OpCode::Exists;
         default: throwException<Exception>("unsupported operator");
       }
     }
@@ -115,6 +116,26 @@ namespace ao::query
     bool isTagField(Field field)
     {
       return field == Field::Tag;
+    }
+
+    char variablePrefix(VariableType type)
+    {
+      switch (type)
+      {
+        case VariableType::Metadata: return '$';
+        case VariableType::Property: return '@';
+        case VariableType::Tag: return '#';
+        case VariableType::Custom: return '%';
+        default: return '?';
+      }
+    }
+
+    std::string variableDisplayName(VariableExpression const& var)
+    {
+      auto name = std::string{};
+      name.push_back(variablePrefix(var.type));
+      name += var.name;
+      return name;
     }
 
     bool isUnsupportedLikeField(Field field)
@@ -522,11 +543,47 @@ namespace ao::query
                expr);
   }
 
+  void QueryCompiler::compilePredicate(Expression const& expr)
+  {
+    if (auto const* var = std::get_if<VariableExpression>(&expr); var != nullptr && var->type != VariableType::Tag)
+    {
+      auto const name = variableDisplayName(*var);
+      throwException<Exception>(
+        "bare field '{}' is not a predicate; use '{}?' for existence or compare it explicitly", name, name);
+    }
+
+    compileExpression(expr);
+  }
+
   void QueryCompiler::compileBinary(BinaryExpression const& binary)
   {
-    if (binary.optOperation && binary.optOperation->op == Operator::In)
+    if (!binary.optOperation)
+    {
+      compilePredicate(binary.operand);
+      return;
+    }
+
+    if (binary.optOperation->op == Operator::In)
     {
       compileIn(binary.operand, binary.optOperation->operand);
+      return;
+    }
+
+    if (binary.optOperation->op == Operator::And || binary.optOperation->op == Operator::Or)
+    {
+      compilePredicate(binary.operand);
+      compilePredicate(binary.optOperation->operand);
+
+      auto const rightReg = _nextReg - 1;
+      _plan.instructions.push_back(Instruction{
+        .op = toOpCode(binary.optOperation->op),
+        .field = 0,
+        .operand = static_cast<std::int32_t>(rightReg),
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
+      _nextReg--;
       return;
     }
 
@@ -589,14 +646,64 @@ namespace ao::query
 
   void QueryCompiler::compileUnary(UnaryExpression const& unary)
   {
-    compileExpression(unary.operand);
+    if (unary.op == Operator::Exists)
+    {
+      compileExists(unary.operand);
+      return;
+    }
 
-    auto const opcode = toOpCode(unary.op);
+    if (unary.op == Operator::Not)
+    {
+      compilePredicate(unary.operand);
+
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::Not,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(_nextReg - 1),
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
+      return;
+    }
+
+    throwException<Exception>("unsupported unary operator");
+  }
+
+  void QueryCompiler::compileExists(Expression const& operand)
+  {
+    auto const* var = std::get_if<VariableExpression>(&operand);
+
+    if (var == nullptr)
+    {
+      throwException<Exception>("operator '?' requires a field operand");
+    }
+
+    auto const field = variableTypeToField(var->type, var->name);
+    _lastField = field;
+
+    if (isColdField(field))
+    {
+      _hasColdAccess = true;
+    }
+    else
+    {
+      _hasHotAccess = true;
+    }
+
+    auto constValue = std::int64_t{0};
+
+    if ((var->type == VariableType::Custom || var->type == VariableType::Tag) && _dict != nullptr)
+    {
+      auto const dictId = _dict->getOrIntern(var->name);
+      constValue = static_cast<std::int64_t>(dictId.raw());
+    }
+
     _plan.instructions.push_back(Instruction{
-      .op = opcode,
-      .field = 0,
-      .operand = static_cast<std::int32_t>(_nextReg - 1),
-      .constValue = 0,
+      .op = OpCode::Exists,
+      .field = static_cast<std::uint8_t>(field),
+      .operand = static_cast<std::int32_t>(_nextReg++),
+      .constValue = constValue,
       .size = 0,
       .data = nullptr,
     });
@@ -946,7 +1053,7 @@ namespace ao::query
       }
     }
 
-    compileExpression(expr);
+    compilePredicate(expr);
 
     // Set access profile based on what data was accessed
     if (_hasHotAccess && _hasColdAccess)

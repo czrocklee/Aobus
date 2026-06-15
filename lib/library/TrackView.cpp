@@ -168,6 +168,20 @@ namespace ao::library
     return std::nullopt;
   }
 
+  bool TrackView::CustomMetadataProxy::contains(DictionaryId dictId) const
+  {
+    constexpr std::size_t kSearchThreshold = 64;
+    auto customEntries = entries();
+
+    if (customEntries.size() < kSearchThreshold)
+    {
+      return std::ranges::find(customEntries, dictId, &Entry::keyId) != customEntries.end();
+    }
+
+    auto it = std::ranges::lower_bound(customEntries, dictId, {}, &Entry::keyId);
+    return it != customEntries.end() && it->keyId == dictId;
+  }
+
   TrackView::CustomMetadataProxy::Iterator TrackView::CustomMetadataProxy::begin() const
   {
     auto customEntries = entries();

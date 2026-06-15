@@ -67,7 +67,8 @@ namespace ao::query
     Greater,
     GreaterEqual,
     In,
-    Add
+    Add,
+    Exists
   };
 
   struct BinaryExpression

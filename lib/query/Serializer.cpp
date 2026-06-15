@@ -106,6 +106,17 @@ namespace ao::query
           return;
         }
 
+        if (unary->op == Operator::Exists)
+        {
+          auto const needsParens = std::get_if<VariableExpression>(&unary->operand) == nullptr;
+          {
+            auto guard = ParenthesisGuard{oss, needsParens};
+            std::visit(*this, unary->operand);
+          }
+          oss << "?";
+          return;
+        }
+
         oss << "not ";
         std::visit(*this, unary->operand);
       }

@@ -79,6 +79,23 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(unaryPtr)}) == "not $artist");
   }
 
+  TEST_CASE("Serializer - Serializes Existence Tests", "[query][unit][serializer]")
+  {
+    CHECK(serialize(parse("$year?")) == "$year?");
+    CHECK(serialize(parse("!$year?")) == "not $year?");
+    CHECK(serialize(parse("#favorite?")) == "#favorite?");
+    CHECK(serialize(parse(R"(%"Replay Gain"?)")) == R"(%"Replay Gain"?)");
+
+    auto binaryPtr = std::make_unique<BinaryExpression>();
+    binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "year"};
+    binaryPtr->optOperation = BinaryExpression::Operation{.op = Operator::Equal, .operand = std::int64_t{1990}};
+
+    auto unaryPtr = std::make_unique<UnaryExpression>();
+    unaryPtr->op = Operator::Exists;
+    unaryPtr->operand = std::move(binaryPtr);
+    CHECK(serialize(Expression{std::move(unaryPtr)}) == "($year = 1990)?");
+  }
+
   TEST_CASE("Serializer - Serializes Each Binary Operator Token", "[query][unit][serializer]")
   {
     struct Case final
@@ -165,7 +182,8 @@ namespace ao::query::test
                     R"(%isrc = "X" and @duration >= 3m)",
                     R"($artist in ["Bach", "Mozart"])",
                     "@duration in 2m30s..5m",
-                    R"(#"90s Rock" and %"Replay Gain" = "high")"};
+                    R"(#"90s Rock" and %"Replay Gain" = "high")",
+                    R"($year? and %"Replay Gain"?)"};
 
     for (auto const& q : queries)
     {

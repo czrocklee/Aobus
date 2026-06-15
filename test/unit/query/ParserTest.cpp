@@ -34,6 +34,7 @@ namespace ao::query::test
         case Operator::GreaterEqual: return "ge";
         case Operator::In: return "in";
         case Operator::Add: return "add";
+        case Operator::Exists: return "exists";
         default: return "unknown";
       }
     }
@@ -61,7 +62,7 @@ namespace ao::query::test
           return;
         }
 
-        oss << "[u{!}";
+        oss << "[u{" << toString(unary->op) << "}";
         std::visit(*this, unary->operand);
         oss << "]";
       }
@@ -247,8 +248,24 @@ namespace ao::query::test
     CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach and true")));
     CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach || true")));
     CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach or true")));
-    CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("not $artist")));
-    CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("!$artist")));
+    CHECK("[u{not}[v{m}artist]]" == canonicalize(parse("not $artist")));
+    CHECK("[u{not}[v{m}artist]]" == canonicalize(parse("!$artist")));
+  }
+
+  TEST_CASE("Parser - Existence Tests", "[query][unit][parser]")
+  {
+    CHECK("[u{exists}[v{m}year]]" == canonicalize(parse("$year?")));
+    CHECK("[u{exists}[v{p}duration]]" == canonicalize(parse("@duration?")));
+    CHECK("[u{exists}[v{c}rating]]" == canonicalize(parse("%rating?")));
+    CHECK("[u{exists}[v{c}Replay Gain]]" == canonicalize(parse(R"(%"Replay Gain"?)")));
+    CHECK("[u{exists}[v{c}Replay Gain]]" == canonicalize(parse(R"(%["Replay Gain"]?)")));
+    CHECK("[u{exists}[v{t}favorite]]" == canonicalize(parse("#favorite?")));
+    CHECK("[u{not}[u{exists}[v{m}year]]]" == canonicalize(parse("!$year?")));
+    CHECK("[u{not}[u{exists}[v{m}year]]]" == canonicalize(parse("not $year?")));
+
+    CHECK("[u{exists}[b{eq}[v{m}year],[c{i}1990]]]" == canonicalize(parse("($year = 1990)?")));
+    CHECK("[u{exists}[c{i}1990]]" == canonicalize(parse("1990?")));
+    CHECK("[u{exists}[c{s}Bach]]" == canonicalize(parse(R"("Bach"?)")));
   }
 
   TEST_CASE("Parser - Precedence And Grouping", "[query][unit][parser]")

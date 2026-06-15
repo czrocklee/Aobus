@@ -64,6 +64,13 @@ namespace ao::query::test
           return;
         }
 
+        if (unary->op == Operator::Exists)
+        {
+          std::visit(*this, unary->operand);
+          oss << "?";
+          return;
+        }
+
         oss << "not ";
         std::visit(*this, unary->operand);
       }

@@ -202,6 +202,7 @@ namespace ao::library
       Iterator begin() const;
       Iterator end() const;
       std::optional<std::string_view> get(DictionaryId dictId) const;
+      bool contains(DictionaryId dictId) const;
 
     private:
       TrackColdHeader const& coldHeader() const

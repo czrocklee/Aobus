@@ -336,7 +336,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - Compile Logical Not", "[query][unit][execution_plan]")
   {
-    auto expr = parse("not $artist");
+    auto expr = parse("not #favorite");
     auto compiler = QueryCompiler{};
     auto plan = compiler.compile(expr);
 
@@ -352,6 +352,71 @@ namespace ao::query::test
     }
 
     CHECK(hasNot == true);
+  }
+
+  TEST_CASE("ExecutionPlan - Compile Existence Tests", "[query][unit][execution_plan]")
+  {
+    auto compiler = QueryCompiler{};
+
+    SECTION("FieldExistenceEmitsExistsOpcode")
+    {
+      auto const plan = compiler.compile(parse("$year?"));
+
+      REQUIRE(plan.instructions.size() == 1);
+      CHECK(plan.instructions[0].op == OpCode::Exists);
+      CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Year));
+      CHECK(plan.accessProfile == AccessProfile::HotOnly);
+    }
+
+    SECTION("ColdFieldExistenceUpdatesAccessProfile")
+    {
+      auto const plan = compiler.compile(parse("@duration?"));
+
+      REQUIRE(plan.instructions.size() == 1);
+      CHECK(plan.instructions[0].op == OpCode::Exists);
+      CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Duration));
+      CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+    }
+
+    SECTION("CustomExistenceCarriesDictionaryId")
+    {
+      auto temp = TempDir{};
+      auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+      auto wtxn = lmdb::WriteTransaction{env};
+      auto dict = library::DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
+      auto dictCompiler = QueryCompiler{&dict};
+
+      auto const plan = dictCompiler.compile(parse("%rating?"));
+
+      REQUIRE(plan.instructions.size() == 1);
+      CHECK(plan.instructions[0].op == OpCode::Exists);
+      CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Custom));
+      CHECK(std::cmp_equal(plan.instructions[0].constValue, dict.getId("rating").raw()));
+      CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+    }
+
+    SECTION("BareNonTagVariablesAreRejectedAsPredicates")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("$year")));
+      REQUIRE_THROWS(compiler.compile(parse("@duration")));
+      REQUIRE_THROWS(compiler.compile(parse("%rating")));
+      REQUIRE_THROWS(compiler.compile(parse("not $year")));
+      REQUIRE_THROWS(compiler.compile(parse("$artist and $year = 1990")));
+      REQUIRE_THROWS(compiler.compile(parse("$artist or $year = 1990")));
+    }
+
+    SECTION("ExistenceRequiresVariableOperand")
+    {
+      REQUIRE_THROWS(compiler.compile(parse("($year = 1990)?")));
+      REQUIRE_THROWS(compiler.compile(parse("1990?")));
+      REQUIRE_THROWS(compiler.compile(parse(R"("Bach"?)")));
+    }
+
+    SECTION("BareTagsRemainPredicates")
+    {
+      CHECK_NOTHROW(compiler.compile(parse("#favorite")));
+      CHECK_NOTHROW(compiler.compile(parse("!#favorite")));
+    }
   }
 
   TEST_CASE("ExecutionPlan - Compile Relational Operators", "[query][unit][execution_plan]")
