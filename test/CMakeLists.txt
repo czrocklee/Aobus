@@ -10,6 +10,7 @@ add_executable(ao_core_test
 
     # query tests
     unit/query/CompletionTest.cpp
+    unit/query/CompletionTokenizerTest.cpp
     unit/query/ParserTest.cpp
     unit/query/PredicateTest.cpp
     unit/query/ExecutionPlanTest.cpp

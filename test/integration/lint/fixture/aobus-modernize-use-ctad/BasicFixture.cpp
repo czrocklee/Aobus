@@ -16,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -70,6 +71,71 @@ namespace llvm
   };
 } // namespace llvm
 
+// A class template where the first template parameter (Encoding) is NOT
+// deducible from the constructor arguments: the constructor takes a
+// generic View, not something parameterised on Encoding.  A deduction
+// guide maps View to a *different* default encoding. Suggesting CTAD
+// would silently switch the encoding, so the checker must stay quiet.
+struct DefaultEncoding
+{};
+struct Utf8Encoding
+{};
+
+template<typename Encoding = DefaultEncoding>
+class StringInput
+{
+public:
+  using char_type = char;
+
+  explicit StringInput(char const* /*data*/, std::size_t /*size*/) {}
+
+  template<typename View>
+  explicit StringInput(View const& /*view*/)
+  {
+  }
+};
+
+template<typename View>
+StringInput(View const&) -> StringInput<DefaultEncoding>;
+
+template<typename T = int>
+struct SameDefault
+{
+  SameDefault(int /*val*/) {}
+};
+
+template<typename T, int N = 10>
+struct NonTypeDefault
+{
+  NonTypeDefault(T /*val*/) {}
+};
+
+template<typename... Ts>
+struct Packed
+{
+  Packed(int /*val*/) {}
+};
+
+template<typename T>
+struct IdentityInput
+{
+  IdentityInput(std::type_identity_t<T> /*val*/) {}
+};
+
+template<typename T = int const>
+struct CvDefault
+{
+  CvDefault(int /*val*/) {}
+};
+
+int g_global = 0;
+
+template<int* P>
+struct RefKey
+{
+  RefKey(int /*val*/) {}
+};
+
 void noopDelete(char* /*ptr*/)
 {
 }
@@ -102,6 +168,14 @@ void ctadPositiveCases()
 
   // POSITIVE: FIX-TO: [[maybe_unused]] auto const rows = std::vector{Row{"Gamma", 1, 2}, Row{"Alpha", 1, 3}};
   [[maybe_unused]] auto const rows = std::vector<Row>{Row{"Gamma", 1, 2}, Row{"Alpha", 1, 3}};
+
+  std::string_view sv = "hello";
+
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const defaultInput = StringInput{sv};
+  [[maybe_unused]] auto const defaultInput = StringInput<DefaultEncoding>{sv};
+
+  // POSITIVE: FIX-TO: [[maybe_unused]] auto const sameDefault = SameDefault{42};
+  [[maybe_unused]] auto const sameDefault = SameDefault<int>{42};
 }
 
 void ctadNegativeCases()
@@ -141,4 +215,25 @@ void ctadNegativeCases()
   [[maybe_unused]] auto dist = std::uniform_int_distribution<std::size_t>{0, arr.size()};
   [[maybe_unused]] auto ptr = std::unique_ptr<char, void (*)(char*)>{nullptr, noopDelete};
   [[maybe_unused]] auto switcher = llvm::StringSwitch<bool>{"name"};
+
+  // NEGATIVE - non-deducible template parameter: CTAD would deduce DefaultEncoding
+  // but we explicitly want Utf8Encoding, which is not reachable from the constructor's
+  // parameter list.  The checker must not fire here.
+  std::string_view sv = "hello";
+  [[maybe_unused]] auto const input = StringInput<Utf8Encoding>{sv};
+
+  // NEGATIVE - explicit non-type argument not reachable from constructor parameters.
+  [[maybe_unused]] auto const nonType = NonTypeDefault<int, 5>{42};
+
+  // NEGATIVE - explicit parameter pack not reachable from constructor parameters.
+  [[maybe_unused]] auto const packed = Packed<int, double>{42};
+
+  // NEGATIVE - type parameter only appears inside a non-deduced alias.
+  [[maybe_unused]] auto const identity = IdentityInput<int>{42};
+
+  // NEGATIVE - explicit argument differs from the default by cv-qualifier only.
+  [[maybe_unused]] auto const cv = CvDefault<int>{42};
+
+  // NEGATIVE - explicit non-type argument of Declaration kind is not deducible.
+  [[maybe_unused]] auto const refKey = RefKey<&g_global>{42};
 }

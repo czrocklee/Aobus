@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
@@ -7,6 +7,7 @@
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 
+#include "detail/Lexical.h"
 #include <ao/Exception.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
@@ -18,43 +19,27 @@
 #include <lexy/callback/container.hpp>
 #include <lexy/callback/forward.hpp>
 #include <lexy/callback/noop.hpp>
-#include <lexy/callback/object.hpp>
-#include <lexy/callback/string.hpp>
 #include <lexy/dsl/ascii.hpp>
 #include <lexy/dsl/brackets.hpp>
 #include <lexy/dsl/branch.hpp>
-#include <lexy/dsl/capture.hpp>
 #include <lexy/dsl/choice.hpp>
-#include <lexy/dsl/delimited.hpp>
-#include <lexy/dsl/digit.hpp>
 #include <lexy/dsl/eof.hpp>
 #include <lexy/dsl/error.hpp>
 #include <lexy/dsl/expression.hpp>
 #include <lexy/dsl/identifier.hpp>
-#include <lexy/dsl/if.hpp>
-#include <lexy/dsl/integer.hpp>
 #include <lexy/dsl/list.hpp>
 #include <lexy/dsl/literal.hpp>
 #include <lexy/dsl/operator.hpp>
-#include <lexy/dsl/option.hpp>
 #include <lexy/dsl/peek.hpp>
 #include <lexy/dsl/production.hpp>
 #include <lexy/dsl/punctuator.hpp>
 #include <lexy/dsl/separator.hpp>
 #include <lexy/dsl/sequence.hpp>
-#include <lexy/dsl/sign.hpp>
-#include <lexy/dsl/symbol.hpp>
-#include <lexy/dsl/token.hpp>
-#include <lexy/dsl/unicode.hpp>
 #include <lexy/encoding.hpp>
-#include <lexy/grammar.hpp>
 #include <lexy/input/string_input.hpp>
 
-#include <cstdint>
 #include <memory>
-#include <optional>
 #include <ranges>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -64,126 +49,8 @@ namespace
   // LEXY grammar: rule/value/op/operand/operation names follow framework conventions.
   namespace dsl = lexy::dsl;
   using namespace ao::query;
-
-  constexpr auto kSystemVarTypes =
-    lexy::symbol_table<VariableType>.map<LEXY_SYMBOL("$")>(VariableType::Metadata).map<LEXY_SYMBOL("@")>(VariableType::Property);
-
-  constexpr auto kUserVarTypes =
-    lexy::symbol_table<VariableType>.map<LEXY_SYMBOL("#")>(VariableType::Tag).map<LEXY_SYMBOL("%")>(VariableType::Custom);
-
-  constexpr auto kBoolTable = lexy::symbol_table<bool>.map<LEXY_SYMBOL("true")>(true).map<LEXY_SYMBOL("false")>(false);
-
-  // Shared escape sequences for quoted strings and user-variable names:
-  // \", \\, \', \n, \t and \r are recognized in both single- and double-quoted literals.
-  constexpr auto kStringEscapeSymbols =
-    lexy::symbol_table<char>.map<'"'>('"').map<'\\'>('\\').map<'\''>('\'').map<'n'>('\n').map<'t'>('\t').map<'r'>('\r');
-
-  constexpr auto kStringEscape = dsl::backslash_escape.symbol<kStringEscapeSymbols>(
-    dsl::lit_c<'"'> / dsl::lit_c<'\\'> / dsl::lit_c<'\''> / dsl::lit_c<'n'> / dsl::lit_c<'t'> / dsl::lit_c<'r'>);
-
-  constexpr auto kBarewordIdentifier = []
-  {
-    auto const id = dsl::identifier(dsl::ascii::alpha_digit_underscore);
-
-    return id.reserve(LEXY_KEYWORD("and", id), LEXY_KEYWORD("or", id), LEXY_KEYWORD("not", id), LEXY_KEYWORD("in", id));
-  }();
-
-  struct SystemVariable : lexy::token_production
-  {
-    static constexpr auto rule = dsl::symbol<kSystemVarTypes> >>
-                                 dsl::identifier(dsl::ascii::alpha_underscore, dsl::ascii::alpha_digit_underscore);
-    static constexpr auto value = lexy::callback<VariableExpression>(
-      [](VariableType type, auto lexeme) { return VariableExpression{type, lexeme | std::ranges::to<std::string>()}; });
-  };
-
-  struct SimpleUserVariableName : lexy::token_production
-  {
-    static constexpr auto rule = dsl::identifier(dsl::ascii::alpha_digit_underscore);
-    static constexpr auto value =
-      lexy::callback<std::string>([](auto lexeme) { return lexeme | std::ranges::to<std::string>(); });
-  };
-
-  struct QuotedUserVariableName : lexy::token_production
-  {
-    static constexpr auto rule = dsl::peek(dsl::lit_c<'"'>) >>
-                                 (dsl::peek_not(LEXY_LIT("\"\"")) + dsl::quoted(-dsl::unicode::control, kStringEscape));
-    static constexpr auto value = lexy::as_string<std::string>;
-  };
-
-  struct BracketedQuotedUserVariableName final
-  {
-    static constexpr auto rule = dsl::square_bracketed(dsl::p<QuotedUserVariableName>);
-    static constexpr auto value = lexy::forward<std::string>;
-  };
-
-  struct UserVariableName final
-  {
-    static constexpr auto rule =
-      dsl::p<QuotedUserVariableName> | dsl::p<BracketedQuotedUserVariableName> | dsl::p<SimpleUserVariableName>;
-    static constexpr auto value = lexy::forward<std::string>;
-  };
-
-  struct UserVariable : lexy::token_production
-  {
-    static constexpr auto rule = dsl::symbol<kUserVarTypes> >> dsl::p<UserVariableName>;
-    static constexpr auto value = lexy::callback<VariableExpression>(
-      [](VariableType type, std::string name) { return VariableExpression{.type = type, .name = std::move(name)}; });
-  };
-
-  struct Variable final
-  {
-    static constexpr auto rule = dsl::p<SystemVariable> | dsl::p<UserVariable>;
-    static constexpr auto value = lexy::forward<VariableExpression>;
-  };
-
-  struct BooleanConstant : lexy::token_production
-  {
-    static constexpr auto rule = dsl::symbol<kBoolTable>(dsl::identifier(dsl::ascii::alpha));
-    static constexpr auto value = lexy::forward<bool>;
-  };
-
-  struct StringConstant : lexy::token_production
-  {
-    static constexpr auto rule = dsl::single_quoted(-dsl::unicode::control, kStringEscape) |
-                                 dsl::quoted(-dsl::unicode::control, kStringEscape) | kBarewordIdentifier;
-
-    static constexpr auto value = lexy::as_string<std::string>;
-  };
-
-  struct NegativeInteger : lexy::token_production
-  {
-    static constexpr auto rule = dsl::lit_c<'-'> >> dsl::integer<std::int64_t>;
-    static constexpr auto value = lexy::callback<std::int64_t>([](std::int64_t val) { return -val; });
-  };
-
-  struct PositiveInteger : lexy::token_production
-  {
-    static constexpr auto rule = dsl::integer<std::int64_t>;
-    static constexpr auto value = lexy::forward<std::int64_t>;
-  };
-
-  struct IntegerConstant final
-  {
-    static constexpr auto rule = dsl::p<NegativeInteger> | dsl::p<PositiveInteger>;
-    static constexpr auto value = lexy::forward<std::int64_t>;
-  };
-
-  struct UnitConstant : lexy::token_production
-  {
-    static constexpr auto kUnitToken =
-      dsl::token(dsl::minus_sign + dsl::digits<> + dsl::opt(dsl::lit_c<'.'> >> dsl::digits<>) +
-                 decltype(dsl::identifier(dsl::ascii::alpha, dsl::ascii::alpha_digit))::pattern());
-    static constexpr auto rule = dsl::peek(kUnitToken) >> dsl::capture(kUnitToken);
-    static constexpr auto value = lexy::callback<UnitConstantExpression>(
-      [](auto lexeme) { return UnitConstantExpression{lexeme | std::ranges::to<std::string>()}; });
-  };
-
-  struct Constant final
-  {
-    static constexpr auto rule =
-      dsl::p<BooleanConstant> | dsl::p<UnitConstant> | dsl::p<IntegerConstant> | dsl::p<StringConstant>;
-    static constexpr auto value = lexy::construct<ConstantExpression>;
-  };
+  using detail::Constant;
+  using detail::Variable;
 
   struct ConstantList final
   {
@@ -242,44 +109,45 @@ namespace
 
     struct MathExists : dsl::postfix_op
     {
-      static constexpr auto op = dsl::op<Operator::Exists>(dsl::lit_c<'?'>);
+      static constexpr auto op = dsl::op<Operator::Exists>(detail::oplit::kExists);
       using operand = dsl::atom;
     };
 
     struct MathNot : dsl::prefix_op
     {
-      static constexpr auto op = dsl::op<Operator::Not>(LEXY_KEYWORD("not", dsl::identifier(dsl::ascii::alpha))) /
-                                 dsl::op<Operator::Not>(dsl::lit_c<'!'>);
+      static constexpr auto op =
+        dsl::op<Operator::Not>(detail::oplit::kNotWord) / dsl::op<Operator::Not>(detail::oplit::kNotSymbol);
       using operand = MathExists;
     };
 
     struct MathAdd : dsl::infix_op_right
     {
-      static constexpr auto op = dsl::op<Operator::Add>(dsl::lit_c<'+'>);
+      static constexpr auto op = dsl::op<Operator::Add>(detail::oplit::kAdd);
       using operand = MathNot;
     };
 
     struct MathRelational : dsl::infix_op_right
     {
       static constexpr auto op =
-        dsl::op<Operator::Equal>(dsl::lit_c<'='>) / dsl::op<Operator::NotEqual>(LEXY_LIT("!=")) /
-        dsl::op<Operator::LessEqual>(LEXY_LIT("<=")) / dsl::op<Operator::GreaterEqual>(LEXY_LIT(">=")) /
-        dsl::op<Operator::Like>(dsl::lit_c<'~'>) / dsl::op<Operator::In>(LEXY_KEYWORD("in", kBarewordIdentifier)) /
-        dsl::op<Operator::Less>(dsl::lit_c<'<'>) / dsl::op<Operator::Greater>(dsl::lit_c<'>'>);
+        dsl::op<Operator::Equal>(detail::oplit::kEqual) / dsl::op<Operator::NotEqual>(detail::oplit::kNotEqual) /
+        dsl::op<Operator::LessEqual>(detail::oplit::kLessEqual) /
+        dsl::op<Operator::GreaterEqual>(detail::oplit::kGreaterEqual) / dsl::op<Operator::Like>(detail::oplit::kLike) /
+        dsl::op<Operator::In>(detail::oplit::kIn) / dsl::op<Operator::Less>(detail::oplit::kLess) /
+        dsl::op<Operator::Greater>(detail::oplit::kGreater);
       using operand = MathAdd;
     };
 
     struct MathAnd : dsl::infix_op_right
     {
-      static constexpr auto op = dsl::op<Operator::And>(LEXY_KEYWORD("and", dsl::identifier(dsl::ascii::alpha))) /
-                                 dsl::op<Operator::And>(LEXY_LIT("&&"));
+      static constexpr auto op =
+        dsl::op<Operator::And>(detail::oplit::kAndWord) / dsl::op<Operator::And>(detail::oplit::kAndSymbol);
       using operand = MathRelational;
     };
 
     struct MathOr : dsl::infix_op_right
     {
-      static constexpr auto op = dsl::op<Operator::Or>(LEXY_KEYWORD("or", dsl::identifier(dsl::ascii::alpha))) /
-                                 dsl::op<Operator::Or>(LEXY_LIT("||"));
+      static constexpr auto op =
+        dsl::op<Operator::Or>(detail::oplit::kOrWord) / dsl::op<Operator::Or>(detail::oplit::kOrSymbol);
       using operand = MathAnd;
     };
 
@@ -322,13 +190,13 @@ namespace ao::query
 {
   bool matchesExpressionSyntax(std::string_view expr)
   {
-    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr}; // NOLINT(aobus-modernize-use-ctad)
+    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
     return lexy::match<Stmt>(input);
   }
 
   Expression parse(std::string_view expr)
   {
-    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr}; // NOLINT(aobus-modernize-use-ctad)
+    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
 
     if (auto optResult = lexy::parse<Stmt>(input, lexy::noop); optResult)
     {

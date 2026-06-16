@@ -14,13 +14,30 @@ shared UI adapter:
 
 The engine is split across three layers so the grammar stays free of UI and library concerns:
 
-- **`lib/query` (`ao/query/Completion.h`)** — pure grammar. `analyzeCompletionContext()` is a
-  partial-input scanner that classifies the cursor as `Variable`, field `Operator`, `LogicalOperator`,
-  or `Value` without requiring the expression to parse as a complete AST. `queryCompletionTokenAtCursor()`
-  remains a variable-only compatibility wrapper. `queryVariableCompletionSpecs()` /
-  `completeQueryVariable()` resolve the *authoritative* catalog of `$`/`@` variables, including aliases
-  and `$coverArt` that exist only on the query side. `resolveVariableField()` uses the same catalog,
-  so parser/compiler field resolution and completion names have one shared source.
+- **`lib/query` (`ao/query/Completion.h`)** — pure grammar. `analyzeCompletionContext()` classifies the
+  cursor as `Variable`, field `Operator`, `LogicalOperator`, or `Value` without requiring the expression
+  to parse as a complete AST. It works over a token view produced by `detail::tokenizeCompletionQuery()`
+  rather than re-deriving lexing by hand. `queryCompletionTokenAtCursor()` remains a variable-only
+  compatibility wrapper. `queryVariableCompletionSpecs()` / `completeQueryVariable()` resolve the
+  *authoritative* catalog of `$`/`@` variables, including aliases and `$coverArt` that exist only on the
+  query side. `resolveVariableField()` uses the same catalog, so parser/compiler field resolution and
+  completion names have one shared source.
+
+### Lexical source of truth
+
+The completion tokenizer (`detail/CompletionTokenizer.cpp`) reuses the parser's own lexical rules from
+`detail/Lexical.h`: variable sigils, quoted/bracketed names, literals, and operator spellings are each
+defined once and consumed by both the parser grammar (`dsl::p<…>`, `dsl::op<…>`) and the tokenizer (via
+the `AsToken<…>` capturing wrapper). A new sigil or operator spelling therefore cannot drift between the
+parser and completion.
+
+The one exception is the **partial-tail** boundary — the incomplete token under the cursor (an open
+quote, a lone sigil, an unterminated `["…"]`). The parser cannot lex incomplete input, so this has no
+shared rule and is detected by a small hand-written tolerant scanner. Its agreement with the lexical
+rules has no parser oracle and is instead pinned by a differential test
+(`CompletionTokenizer - Prefixes Of Valid Expressions Lex Without Interior Errors`): every prefix of a
+parser-accepted expression must tile contiguously with no interior error tokens, leaving only the final
+in-progress tail unrecognized.
 - **`app/runtime` (`CompletionService`, `QueryExpressionCompleter`, `MetadataValueCompleter`)** —
   composes the grammar catalog with the live library vocabulary (tags, custom keys, metadata
   values) and formats ranked `CompletionItem`s.

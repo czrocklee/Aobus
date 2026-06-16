@@ -7,6 +7,7 @@ add_gperf_header(
 
 add_library(ao_query STATIC
     Completion.cpp
+    detail/CompletionTokenizer.cpp
     ExecutionPlan.cpp
     FieldCatalog.cpp
     Field.cpp

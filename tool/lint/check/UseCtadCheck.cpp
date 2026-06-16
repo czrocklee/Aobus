@@ -486,7 +486,321 @@ namespace clang::tidy::readability
         record->ctors(), [](CXXConstructorDecl const* ctor) { return isInitializerListConstructor(ctor); });
     }
 
-    bool isUnsafeForCtad(CXXConstructExpr const* construct)
+    constexpr std::int32_t kMaxTypeReferencesDepth = 64;
+
+    bool typeReferencesTemplateParam(QualType type, TemplateTypeParmDecl const* param, std::int32_t depth = 0);
+
+    bool templateSpecializationArgsReferenceTemplateParam(TemplateSpecializationType const* tst,
+                                                          TemplateTypeParmDecl const* param,
+                                                          std::int32_t depth)
+    {
+      if (tst == nullptr)
+      {
+        return false;
+      }
+
+      return std::ranges::any_of(tst->template_arguments(),
+                                 [param, depth](TemplateArgument const& arg)
+                                 {
+                                   return arg.getKind() == TemplateArgument::Type &&
+                                          typeReferencesTemplateParam(arg.getAsType(), param, depth + 1);
+                                 });
+    }
+
+    bool classTemplateArgsReferenceTemplateParam(ClassTemplateSpecializationDecl const* spec,
+                                                 TemplateTypeParmDecl const* param,
+                                                 std::int32_t depth)
+    {
+      if (spec == nullptr)
+      {
+        return false;
+      }
+
+      auto const& args = spec->getTemplateArgs();
+
+      for (std::uint32_t i = 0; i < args.size(); ++i)
+      {
+        if (args[i].getKind() == TemplateArgument::Type &&
+            typeReferencesTemplateParam(args[i].getAsType(), param, depth + 1))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    bool isNonAliasTemplateSpecialization(TemplateSpecializationType const* tst)
+    {
+      if (tst == nullptr)
+      {
+        return false;
+      }
+
+      auto const* tmpl = tst->getTemplateName().getAsTemplateDecl();
+      return tmpl != nullptr && !isa<TypeAliasTemplateDecl>(tmpl);
+    }
+
+    // Recursively check whether a QualType references a given TemplateTypeParmDecl.
+    bool typeReferencesTemplateParam(QualType type, TemplateTypeParmDecl const* param, std::int32_t depth)
+    {
+      if (type.isNull() || param == nullptr || depth > kMaxTypeReferencesDepth)
+      {
+        return false;
+      }
+
+      type = type.getNonReferenceType().getUnqualifiedType();
+
+      // Direct match: the type *is* the template parameter.
+      if (auto const* parmType = type->getAs<TemplateTypeParmType>(); parmType != nullptr)
+      {
+        return parmType->getDepth() == param->getDepth() && parmType->getIndex() == param->getIndex();
+      }
+
+      if (auto const* substParmType = type->getAs<SubstTemplateTypeParmType>(); substParmType != nullptr)
+      {
+        auto const* replaced = substParmType->getReplacedParameter();
+
+        if (replaced == nullptr)
+        {
+          return false;
+        }
+
+        return (replaced->getDepth() == param->getDepth() && replaced->getIndex() == param->getIndex()) ||
+               typeReferencesTemplateParam(substParmType->getReplacementType(), param, depth + 1);
+      }
+
+      // Pointer / array element type.
+      if (type->isPointerType() || type->isArrayType())
+      {
+        return typeReferencesTemplateParam(
+          type->getPointeeOrArrayElementType()->getCanonicalTypeInternal(), param, depth + 1);
+      }
+
+      // Template specialization: check each template argument recursively.
+      // Alias templates are not generally deducible in CTAD, so be conservative and do not
+      // consider a parameter deducible merely because it appears in an alias template argument list.
+      if (auto const* tst = type->getAs<TemplateSpecializationType>();
+          isNonAliasTemplateSpecialization(tst) && templateSpecializationArgsReferenceTemplateParam(tst, param, depth))
+      {
+        return true;
+      }
+
+      // Also try the desugared RecordType path (for type aliases / elaborated types).
+      if (auto const* spec = getTemplateSpecialization(type);
+          classTemplateArgsReferenceTemplateParam(spec, param, depth))
+      {
+        return true;
+      }
+
+      auto const desugared = type->getLocallyUnqualifiedSingleStepDesugaredType();
+
+      return desugared != type && typeReferencesTemplateParam(desugared, param, depth + 1);
+    }
+
+    bool isSameTemplateArgument(TemplateArgument const& lhs, TemplateArgument const& rhs)
+    {
+      if (lhs.getKind() != rhs.getKind())
+      {
+        return false;
+      }
+
+      if (lhs.getKind() == TemplateArgument::Type)
+      {
+        // Compare canonical types exactly (preserving cv-qualifiers). Using the unqualified
+        // comparison would treat e.g. int and int const as the same default argument, which
+        // could lead to an unsafe CTAD suggestion.
+        return lhs.getAsType().getCanonicalType() == rhs.getAsType().getCanonicalType();
+      }
+
+      // Conservative for non-type/template-template arguments: treat them as different from
+      // the default so that explicit non-type/template-template arguments suppress the check.
+      return false;
+    }
+
+    // Conservative check: if any explicitly-written template argument is a non-type argument,
+    // suppress the CTAD suggestion. Determining whether non-type arguments are deducible from
+    // constructor parameters is complex and error-prone, so we err on the side of avoiding
+    // unsafe suggestions.
+    bool hasExplicitNonTypeArgument(ClassTemplateSpecializationDecl const* spec, std::uint32_t explicitTemplateArgCount)
+    {
+      if (spec == nullptr || explicitTemplateArgCount == 0)
+      {
+        return false;
+      }
+
+      auto const& args = spec->getTemplateArgs();
+
+      for (std::uint32_t i = 0; i < explicitTemplateArgCount && i < args.size(); ++i)
+      {
+        // Any argument that is not a type argument (and not a pack, which is handled separately)
+        // is considered non-deducible: non-type and template-template arguments cannot reliably
+        // be checked for deducibility from constructor parameters.
+        if (auto const kind = args[i].getKind(); kind != TemplateArgument::Type && kind != TemplateArgument::Pack)
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    bool isExplicitNonDefaultTemplateArgument(ClassTemplateSpecializationDecl const* spec,
+                                              TemplateTypeParmDecl const* typeParm,
+                                              std::uint32_t explicitTemplateArgCount)
+    {
+      auto const paramIndex = typeParm->getIndex();
+
+      if (paramIndex >= explicitTemplateArgCount)
+      {
+        return false;
+      }
+
+      if (!typeParm->hasDefaultArgument())
+      {
+        return true;
+      }
+
+      auto const& args = spec->getTemplateArgs();
+
+      if (args.size() <= paramIndex)
+      {
+        return true;
+      }
+
+      return !isSameTemplateArgument(args[paramIndex], typeParm->getDefaultArgument().getArgument());
+    }
+
+    CXXConstructorDecl const* getPrimaryConstructorPattern(CXXConstructorDecl const* ctor)
+    {
+      if (auto const* memberPattern = ctor->getInstantiatedFromMemberFunction(); memberPattern != nullptr)
+      {
+        if (auto const* tmplCtor = dyn_cast<CXXConstructorDecl>(memberPattern); tmplCtor != nullptr)
+        {
+          return tmplCtor;
+        }
+      }
+      else if (auto const* pattern = ctor->getTemplateInstantiationPattern(); pattern != nullptr)
+      {
+        if (auto const* tmplCtor = dyn_cast<CXXConstructorDecl>(pattern); tmplCtor != nullptr)
+        {
+          return tmplCtor;
+        }
+      }
+
+      return ctor;
+    }
+
+    bool isPackDeducibleViaConstructor(CXXConstructorDecl const* primaryCtor)
+    {
+      if (auto const* ctorTemplate = primaryCtor->getDescribedTemplate(); ctorTemplate != nullptr)
+      {
+        auto const* ctorParams = ctorTemplate->getTemplateParameters();
+
+        if (ctorParams != nullptr)
+        {
+          return std::ranges::any_of(*ctorParams,
+                                     [](NamedDecl const* ctorParam)
+                                     {
+                                       auto const* ctorTypeParm = dyn_cast<TemplateTypeParmDecl>(ctorParam);
+                                       return ctorTypeParm != nullptr && ctorTypeParm->isParameterPack();
+                                     });
+        }
+      }
+
+      return false;
+    }
+
+    bool isTypeParameterDeducibleFromConstructor(CXXConstructorDecl const* primaryCtor,
+                                                 TemplateTypeParmDecl const* typeParm)
+    {
+      for (std::uint32_t i = 0; i < primaryCtor->getNumParams(); ++i)
+      {
+        if (typeReferencesTemplateParam(primaryCtor->getParamDecl(i)->getType(), typeParm))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    // Check whether an explicitly-written class template argument is not deducible from the
+    // constructor's parameter types. When such an argument is unreachable, CTAD may select a
+    // default or a deduction guide that differs from the explicit specialization.
+    bool hasExplicitNonDeducibleTemplateParameter(CXXConstructExpr const* construct,
+                                                  std::uint32_t explicitTemplateArgCount)
+    {
+      if (construct == nullptr)
+      {
+        return false;
+      }
+
+      auto const* ctor = construct->getConstructor();
+
+      if (ctor == nullptr)
+      {
+        return false;
+      }
+
+      auto const* spec = getTemplateSpecialization(construct->getType());
+
+      if (spec == nullptr)
+      {
+        return false;
+      }
+
+      auto const* tmpl = spec->getSpecializedTemplate();
+
+      if (tmpl == nullptr)
+      {
+        return false;
+      }
+
+      auto const* paramList = tmpl->getTemplateParameters();
+
+      if (paramList == nullptr)
+      {
+        return false;
+      }
+
+      // Conservative: non-type arguments are difficult to verify for deducibility, so
+      // suppress the warning whenever they are explicitly provided.
+      if (hasExplicitNonTypeArgument(spec, explicitTemplateArgCount))
+      {
+        return true;
+      }
+
+      // Walk up to the primary (un-instantiated) constructor declaration.
+      // The instantiated constructor's parameter types are already substituted
+      // (e.g. `int` instead of `T`), so we need the templated pattern.
+      auto const* primaryCtor = getPrimaryConstructorPattern(ctor);
+
+      return std::ranges::any_of(
+        *paramList,
+        [&](NamedDecl const* namedDecl)
+        {
+          auto const* typeParm = dyn_cast<TemplateTypeParmDecl>(namedDecl);
+
+          if (typeParm == nullptr || !isExplicitNonDefaultTemplateArgument(spec, typeParm, explicitTemplateArgCount))
+          {
+            return false;
+          }
+
+          // For parameter packs, assume they are deducible when the constructor is itself a
+          // member template with a parameter pack (e.g. std::tuple's converting constructor).
+          // Otherwise, check whether the class template pack is referenced in the constructor
+          // parameter types.
+          if (typeParm->isParameterPack() && isPackDeducibleViaConstructor(primaryCtor))
+          {
+            return false;
+          }
+
+          return !isTypeParameterDeducibleFromConstructor(primaryCtor, typeParm);
+        });
+    }
+
+    bool isUnsafeForCtad(CXXConstructExpr const* construct, std::uint32_t explicitTemplateArgCount)
     {
       if (construct == nullptr)
       {
@@ -499,17 +813,21 @@ namespace clang::tidy::readability
       // on a type that also has an initializer_list constructor: after removing
       // the template arguments, CTAD would re-resolve the braced list to the
       // initializer_list constructor and silently change the meaning
-      // (e.g. std::vector<int>{it1, it2} → std::vector{it1, it2}).
+      // (e.g. std::vector<int>{it1, it2} to std::vector{it1, it2}).
       if (construct->isListInitialization() && !construct->isStdInitListInitialization() &&
           hasInitializerListConstructor(construct))
       {
         return true;
       }
 
-      return isAlwaysUnsafeTemplateName(templateName) || isPointerSizeConstructor(construct) ||
-             isParenSizeConstructor(construct) || isSingleSizeConstructor(construct) ||
-             isSingleSameTypeConstructor(construct) || isPairWithTypeChangingArgs(construct) ||
-             isInitializerListWithTypeChangingElements(construct);
+      // std::pair is excluded from the generic non-deducible-parameter check because it is
+      // already covered by isPairWithTypeChangingArgs, which understands pair-specific CTAD.
+      return isAlwaysUnsafeTemplateName(templateName) ||
+             (templateName != "std::pair" &&
+              hasExplicitNonDeducibleTemplateParameter(construct, explicitTemplateArgCount)) ||
+             isPointerSizeConstructor(construct) || isParenSizeConstructor(construct) ||
+             isSingleSizeConstructor(construct) || isSingleSameTypeConstructor(construct) ||
+             isPairWithTypeChangingArgs(construct) || isInitializerListWithTypeChangingElements(construct);
     }
 
     void reportCtadWarning(ClangTidyCheck& check, SourceLocation loc, TemplateSpecializationTypeLoc tsLoc)
@@ -554,11 +872,6 @@ namespace clang::tidy::readability
 
     if (auto const* tempObj = result.Nodes.getNodeAs<CXXTemporaryObjectExpr>("temp_obj"); tempObj != nullptr)
     {
-      if (isUnsafeForCtad(tempObj))
-      {
-        return;
-      }
-
       auto const loc = tempObj->getBeginLoc();
 
       if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
@@ -581,6 +894,11 @@ namespace clang::tidy::readability
         return;
       }
 
+      if (isUnsafeForCtad(tempObj, tsLoc.getNumArgs()))
+      {
+        return;
+      }
+
       if (hasFixedWidthIntegerTemplateArgument(tsLoc, sm, result.Context->getLangOpts()))
       {
         return;
@@ -592,7 +910,7 @@ namespace clang::tidy::readability
     {
       auto const* init = result.Nodes.getNodeAs<CXXConstructExpr>("var_init");
 
-      if (init == nullptr || isUnsafeForCtad(init))
+      if (init == nullptr)
       {
         return;
       }
@@ -615,6 +933,11 @@ namespace clang::tidy::readability
       auto const tsLoc = elabLoc.getNamedTypeLoc().getAs<TemplateSpecializationTypeLoc>();
 
       if (tsLoc.isNull())
+      {
+        return;
+      }
+
+      if (isUnsafeForCtad(init, tsLoc.getNumArgs()))
       {
         return;
       }

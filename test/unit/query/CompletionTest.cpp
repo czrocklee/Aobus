@@ -136,6 +136,7 @@ namespace ao::query::test
     CHECK_FALSE(queryCompletionTokenAtCursor(R"("$artist")", 5));
     CHECK_FALSE(queryCompletionTokenAtCursor(R"(#"Rock")", 6));
     CHECK_FALSE(queryCompletionTokenAtCursor(R"(#["Rock"])", 7));
+    CHECK_FALSE(analyzeCompletionContext(R"($artist = "Mil)", 14));
   }
 
   TEST_CASE("Completion - Keeps Cursor Inside Tag Token As Variable Completion", "[query][unit][completion]")
@@ -418,6 +419,36 @@ namespace ao::query::test
       CHECK(completeQueryOperator(context.field, context.replacement.prefix) ==
             std::vector<std::string_view>{"=", "!=", "~", "in", "?"});
     }
+
+    SECTION("Resolves bracketed quoted user variables as lvalues")
+    {
+      auto const text = std::string{R"(%["Replay Gain"] )"};
+      auto const context = operatorContext(analyzeCompletionContext(text, text.size()));
+
+      CHECK(context.field == Field::Custom);
+      CHECK(context.replacement.replaceBegin == text.size() - 1);
+      CHECK(context.replacement.replaceEnd == text.size());
+      CHECK(completeQueryOperator(context.field, context.replacement.prefix) ==
+            std::vector<std::string_view>{"=", "!=", "~", "in", "?"});
+    }
+
+    SECTION("Resolves bracketed quoted user variables as lvalues without trailing space")
+    {
+      auto const text = std::string{R"(%["Replay Gain"])"};
+      auto const context = operatorContext(analyzeCompletionContext(text, text.size()));
+
+      CHECK(context.field == Field::Custom);
+      CHECK(context.replacement.replaceBegin == text.size());
+      CHECK(context.replacement.replaceEnd == text.size());
+      CHECK(completeQueryOperator(context.field, context.replacement.prefix) ==
+            std::vector<std::string_view>{"=", "!=", "~", "in", "?"});
+    }
+
+    SECTION("Rejects invalid escape in quoted variable as operator lvalue")
+    {
+      auto const text = std::string{R"(%"a\x"=)"};
+      CHECK_FALSE(analyzeCompletionContext(text, text.size()));
+    }
   }
 
   TEST_CASE("Completion - Filters Operator Catalog By Field Kind", "[query][unit][completion]")
@@ -509,6 +540,17 @@ namespace ao::query::test
     SECTION("Does not offer logical operators after an incomplete comparison")
     {
       CHECK_FALSE(analyzeCompletionContext("$artist = a", 10));
+    }
+
+    SECTION("Completes symbolic logical operator from an Unknown ampersand tail")
+    {
+      auto const text = std::string{"$year >= 1999 &"};
+      auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+
+      CHECK(context.replacement.replaceBegin == text.find_last_of(' '));
+      CHECK(context.replacement.replaceEnd == text.size());
+      CHECK(context.replacement.prefix == "&");
+      CHECK(completeQueryLogicalOperator(context.replacement.prefix) == std::vector<std::string_view>{"&&"});
     }
   }
 
