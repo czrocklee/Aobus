@@ -45,7 +45,7 @@ namespace ao::utility::test
       auto const str = std::string{"Hello"};
       auto const sView = std::string_view{str};
       auto const dummy = Dummy{.a = 1, .b = 2};
-      auto arr = std::array<Dummy, 2>{{{.a = 1, .b = 2}, {.a = 3, .b = 4}}};
+      auto arr = std::to_array<Dummy>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});
       auto vec = std::vector{std::byte{1}, std::byte{2}};
       auto const vecConst = std::vector{std::byte{1}, std::byte{2}};
 
@@ -106,7 +106,7 @@ namespace ao::utility::test
       mut->b = 20;
       CHECK(dummy.b == 20);
 
-      auto arr = std::array<Dummy, 2>{{{.a = 1, .b = 2}, {.a = 3, .b = 4}}};
+      auto arr = std::to_array<Dummy>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});
       auto arrSpan = bytes::view(std::span<Dummy>{arr});
       auto arrSpanMut = std::span<std::byte>{reinterpret_cast<std::byte*>(arr.data()), 2 * sizeof(Dummy)};
 

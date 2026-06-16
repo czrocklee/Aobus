@@ -27,11 +27,11 @@ namespace ao::query
 {
   namespace
   {
-    constexpr auto kStringOperators = std::array<std::string_view, 5>{"=", "!=", "~", "in", "?"};
-    constexpr auto kNumericOperators = std::array<std::string_view, 8>{"=", "!=", "<", "<=", ">", ">=", "in", "?"};
-    constexpr auto kTagOperators = std::array<std::string_view, 1>{"?"};
-    constexpr auto kFallbackOperators = std::array<std::string_view, 4>{"=", "!=", "in", "?"};
-    constexpr auto kLogicalOperators = std::array<std::string_view, 4>{"and", "or", "&&", "||"};
+    constexpr auto kStringOperators = std::to_array<std::string_view>({"=", "!=", "~", "in", "?"});
+    constexpr auto kNumericOperators = std::to_array<std::string_view>({"=", "!=", "<", "<=", ">", ">=", "in", "?"});
+    constexpr auto kTagOperators = std::to_array<std::string_view>({"?"});
+    constexpr auto kFallbackOperators = std::to_array<std::string_view>({"=", "!=", "in", "?"});
+    constexpr auto kLogicalOperators = std::to_array<std::string_view>({"and", "or", "&&", "||"});
 
     char lowerAscii(char ch)
     {

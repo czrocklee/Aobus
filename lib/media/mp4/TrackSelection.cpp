@@ -22,19 +22,19 @@ namespace ao::media::mp4
     constexpr std::size_t kHandlerTypeOffset = sizeof(AtomLayout) + 8;
     constexpr std::size_t kHandlerTypeSize = 4;
 
-    constexpr std::array kTrackHdlrPath = {
-      std::string_view{"trak"},
-      std::string_view{"mdia"},
-      std::string_view{"hdlr"},
-    };
+    constexpr auto kTrackHdlrPath = std::to_array<std::string_view>({
+      "trak",
+      "mdia",
+      "hdlr",
+    });
 
-    constexpr std::array kTrackStsdPath = {
-      std::string_view{"trak"},
-      std::string_view{"mdia"},
-      std::string_view{"minf"},
-      std::string_view{"stbl"},
-      std::string_view{"stsd"},
-    };
+    constexpr auto kTrackStsdPath = std::to_array<std::string_view>({
+      "trak",
+      "mdia",
+      "minf",
+      "stbl",
+      "stsd",
+    });
 
     std::optional<std::string_view> trackHandlerType(Atom const& track)
     {

@@ -37,9 +37,7 @@ class BuildDirTest(unittest.TestCase):
             self.assertEqual(builddir.build_dir("debug", clang=True), Path("/tmp/build/debug-clang"))
             self.assertEqual(builddir.build_dir("debug", asan=True), Path("/tmp/build/debug-asan"))
             self.assertEqual(builddir.build_dir("debug", tsan=True), Path("/tmp/build/debug-tsan"))
-            self.assertEqual(
-                builddir.build_dir("debug", clang=True, asan=True), Path("/tmp/build/debug-clang-asan")
-            )
+            self.assertEqual(builddir.build_dir("debug", clang=True, asan=True), Path("/tmp/build/debug-clang-asan"))
 
     def test_pgo_steps_share_one_tree(self):
         with mock.patch.dict("os.environ", {}, clear=False):

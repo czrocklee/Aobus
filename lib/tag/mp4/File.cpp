@@ -219,19 +219,19 @@ namespace ao::tag::mp4
 #include "tag/mp4/AtomDispatch.h"
 #pragma GCC diagnostic pop
 
-    constexpr std::array kIlstPath = {
-      std::string_view{"root"},
-      std::string_view{"moov"},
-      std::string_view{"udta"},
-      std::string_view{"meta"},
-      std::string_view{"ilst"},
-    };
+    constexpr auto kIlstPath = std::to_array<std::string_view>({
+      "root",
+      "moov",
+      "udta",
+      "meta",
+      "ilst",
+    });
 
-    constexpr std::array kTrackMdhdPath = {
-      std::string_view{"trak"},
-      std::string_view{"mdia"},
-      std::string_view{"mdhd"},
-    };
+    constexpr auto kTrackMdhdPath = std::to_array<std::string_view>({
+      "trak",
+      "mdia",
+      "mdhd",
+    });
 
     AudioSampleEntryLayout const* firstAudioSampleEntry(AtomView const& stsdView)
     {

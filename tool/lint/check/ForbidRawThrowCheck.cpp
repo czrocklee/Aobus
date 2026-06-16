@@ -16,8 +16,13 @@ namespace clang::tidy::readability
 {
   void ForbidRawThrowCheck::registerMatchers(MatchFinder* finder)
   {
+    auto isAllowedException = hasType(hasUnqualifiedDesugaredType(
+      recordType(hasDeclaration(cxxRecordDecl(hasAnyName("::boost::system::system_error", "::std::system_error"))))));
+
     finder->addMatcher(
-      cxxThrowExpr(unless(hasAncestor(functionDecl(hasAnyName("throwException", "ao::throwException"))))).bind("throw"),
+      cxxThrowExpr(unless(hasAncestor(functionDecl(hasAnyName("throwException", "ao::throwException")))),
+                   unless(has(expr(isAllowedException))))
+        .bind("throw"),
       this);
   }
 

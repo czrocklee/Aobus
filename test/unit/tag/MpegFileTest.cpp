@@ -175,7 +175,7 @@ namespace ao::tag::mpeg::test
   TEST_CASE("MPEG File - derives CBR audio properties", "[tag][unit][mpeg][file]")
   {
     auto data = std::vector<std::uint8_t>{};
-    auto const mpegHdr = std::array<std::uint8_t, 4>{0xFF, 0xFB, 0x90, 0x44};
+    auto const mpegHdr = std::to_array<std::uint8_t>({0xFF, 0xFB, 0x90, 0x44});
     data.insert(data.end(), mpegHdr.begin(), mpegHdr.end());
     data.resize(data.size() + 16000, 0);
 

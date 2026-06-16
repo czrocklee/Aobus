@@ -21,17 +21,17 @@ namespace ao::tag
   {
     using Creator = std::unique_ptr<TagFile> (*)(std::filesystem::path const&, TagFile::Mode);
 
-    static constexpr auto kCreatorMap = std::array{
-      std::pair{std::string_view{".mp3"},
-                +[](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
-                { return std::make_unique<mpeg::File>(filePath, fileMode); }},
-      std::pair{std::string_view{".m4a"},
-                +[](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
-                { return std::make_unique<mp4::File>(filePath, fileMode); }},
-      std::pair{std::string_view{".flac"},
-                +[](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
-                { return std::make_unique<flac::File>(filePath, fileMode); }},
-    };
+    static constexpr auto kCreatorMap = std::to_array<std::pair<std::string_view, Creator>>({
+      {".mp3",
+       [](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
+       { return std::make_unique<mpeg::File>(filePath, fileMode); }},
+      {".m4a",
+       [](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
+       { return std::make_unique<mp4::File>(filePath, fileMode); }},
+      {".flac",
+       [](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
+       { return std::make_unique<flac::File>(filePath, fileMode); }},
+    });
 
     auto ext = path.extension().string();
     std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });

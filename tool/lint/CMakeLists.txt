@@ -43,6 +43,7 @@ add_library(AobusLintPlugin MODULE
   check/UseRangesMinMaxCheck.cpp
   check/UseStartsWithCheck.cpp
   check/UseCtadCheck.cpp
+  check/UseStdToArrayCheck.cpp
   AobusLintModule.cpp
 )
 

@@ -30,7 +30,7 @@ namespace ao::library::test
   TEST_CASE("LibraryScanner Classification", "[library][unit][scan]")
   {
     auto const temp = TempDir{};
-    auto const root = temp.path();
+    auto const& root = temp.path();
     auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot);
 
@@ -100,7 +100,7 @@ namespace ao::library::test
   TEST_CASE("LibraryScanner IO Error Handling", "[library][unit][scan][error]")
   {
     auto const temp = TempDir{};
-    auto const root = temp.path();
+    auto const& root = temp.path();
     auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot / "ok_dir");
     std::filesystem::create_directories(musicRoot / "restricted_dir");
@@ -173,7 +173,7 @@ namespace ao::library::test
   TEST_CASE("LibraryScanner URI Canonization Edge Cases", "[library][unit][scan][uri]")
   {
     auto const temp = TempDir{};
-    auto const root = temp.path();
+    auto const& root = temp.path();
     auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot / "nested" / "dir");
 

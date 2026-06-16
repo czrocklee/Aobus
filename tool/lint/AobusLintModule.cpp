@@ -33,6 +33,7 @@
 #include "check/UseRangesProjectionCheck.h"
 #include "check/UseStartsWithCheck.h"
 #include "check/UseStdNumbersCheck.h"
+#include "check/UseStdToArrayCheck.h"
 
 #include <clang-tidy/ClangTidyModule.h>
 #include <clang-tidy/ClangTidyModuleRegistry.h>
@@ -74,6 +75,7 @@ namespace clang::tidy::readability
       checkFactories.registerCheck<UseStartsWithCheck>("aobus-modernize-use-starts-with");
       checkFactories.registerCheck<UseStdNumbersCheck>("aobus-modernize-use-std-numbers");
       checkFactories.registerCheck<UseCtadCheck>("aobus-modernize-use-ctad");
+      checkFactories.registerCheck<modernize::UseStdToArrayCheck>("aobus-modernize-use-std-to-array");
       checkFactories.registerCheck<IncludeConventionCheck>("aobus-include-convention");
       checkFactories.registerCheck<SpdxLicenseHeaderCheck>("aobus-license-header");
       checkFactories.registerCheck<aobus::StrictForwardDeclarationCheck>("aobus-strict-forward-declaration");

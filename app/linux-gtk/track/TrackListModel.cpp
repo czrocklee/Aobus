@@ -153,7 +153,7 @@ namespace ao::gtk
     rowPtr->setPlaying(trackId == _playingTrackId);
 
     auto* const gobj = rowPtr->gobj();
-    (g_object_ref)(gobj);
+    (::g_object_ref)(gobj);
     return gobj;
   }
 

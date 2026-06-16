@@ -56,7 +56,7 @@ namespace ao::tag::mpeg::test
 
     SECTION("Invalid sync")
     {
-      auto data = std::array<std::uint8_t, 4>{0xFE, 0xE0, 0x00, 0x00};
+      auto data = std::to_array<std::uint8_t>({0xFE, 0xE0, 0x00, 0x00});
       auto const view = FrameView{data.data(), data.size()};
       CHECK_FALSE(view.isValid());
     }

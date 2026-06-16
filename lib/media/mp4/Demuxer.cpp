@@ -220,11 +220,11 @@ namespace ao::media::mp4
 
     Result<TrackTiming> parseTrackTiming(Atom const& track)
     {
-      static constexpr std::array kMdhdPath = {
-        std::string_view{"trak"},
-        std::string_view{"mdia"},
-        std::string_view{"mdhd"},
-      };
+      static constexpr auto kMdhdPath = std::to_array<std::string_view>({
+        "trak",
+        "mdia",
+        "mdhd",
+      });
 
       auto timing = TrackTiming{};
       auto const* node = track.find(kMdhdPath);
@@ -605,15 +605,15 @@ namespace ao::media::mp4
       return std::unexpected{timing.error()};
     }
 
-    auto const kCookiePath = std::array{
-      std::string_view{"trak"},
-      std::string_view{"mdia"},
-      std::string_view{"minf"},
-      std::string_view{"stbl"},
-      std::string_view{"stsd"},
+    auto const kCookiePath = std::to_array<std::string_view>({
+      "trak",
+      "mdia",
+      "minf",
+      "stbl",
+      "stsd",
       targetFormat,
       targetFormat,
-    };
+    });
 
     if (auto const* node = track.find(kCookiePath); node != nullptr)
     {
@@ -624,15 +624,15 @@ namespace ao::media::mp4
 
     if (targetFormat == "mp4a")
     {
-      static constexpr std::array kEsdsPath = {
-        std::string_view{"trak"},
-        std::string_view{"mdia"},
-        std::string_view{"minf"},
-        std::string_view{"stbl"},
-        std::string_view{"stsd"},
-        std::string_view{"mp4a"},
-        std::string_view{"esds"},
-      };
+      static constexpr auto kEsdsPath = std::to_array<std::string_view>({
+        "trak",
+        "mdia",
+        "minf",
+        "stbl",
+        "stsd",
+        "mp4a",
+        "esds",
+      });
 
       if (auto const* node = track.find(kEsdsPath); node != nullptr)
       {
@@ -641,12 +641,12 @@ namespace ao::media::mp4
       }
     }
 
-    static constexpr std::array kStblPath = {
-      std::string_view{"trak"},
-      std::string_view{"mdia"},
-      std::string_view{"minf"},
-      std::string_view{"stbl"},
-    };
+    static constexpr auto kStblPath = std::to_array<std::string_view>({
+      "trak",
+      "mdia",
+      "minf",
+      "stbl",
+    });
 
     auto const* stblNode = track.find(kStblPath);
 

@@ -98,11 +98,11 @@ namespace ao::tag::mp4::test
 
       auto const movementNumberAtom = makeIntegerMetadataAtom("\xA9"
                                                               "mvi",
-                                                              std::array<std::uint8_t, 2>{0, 2});
+                                                              std::to_array<std::uint8_t>({0, 2}));
       ilstBody.insert(ilstBody.end(), movementNumberAtom.begin(), movementNumberAtom.end());
       auto const movementTotalAtom = makeIntegerMetadataAtom("\xA9"
                                                              "mvc",
-                                                             std::array<std::uint8_t, 2>{0, 4});
+                                                             std::to_array<std::uint8_t>({0, 4}));
       ilstBody.insert(ilstBody.end(), movementTotalAtom.begin(), movementTotalAtom.end());
       addTextAtom("aART", "AlbumArtist");
 

@@ -38,7 +38,7 @@ namespace ao::fleet
 
     // Single source of truth for transient top-level repository entries: the canary ignores
     // them and snapshot copies exclude them, so the two views can never drift apart.
-    constexpr auto kTransientPaths = std::array<std::string_view, 3>{".cache", "build", "logs"};
+    constexpr auto kTransientPaths = std::to_array<std::string_view>({".cache", "build", "logs"});
 
     bool ignoredCanaryPath(std::filesystem::path const& relative)
     {
@@ -537,14 +537,14 @@ namespace ao::fleet
     // Unified diff content lines always carry a +/-/space prefix, so a bare marker at the
     // start of a line can only be a diff header; patch text merely containing these words
     // (for example in added source lines) must not trip the guard.
-    constexpr auto kForbiddenHeaderPrefixes = std::array<std::string_view, 6>{
+    constexpr auto kForbiddenHeaderPrefixes = std::to_array<std::string_view>({
       "old mode ",
       "new mode ",
       "new file mode 120000",
       "deleted file mode 120000",
       "rename from ",
       "copy from ",
-    };
+    });
     auto const hasForbiddenHeader = [&]
     {
       auto const text = std::string_view{patch.patch};

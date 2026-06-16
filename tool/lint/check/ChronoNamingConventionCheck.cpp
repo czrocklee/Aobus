@@ -55,12 +55,8 @@ namespace clang::tidy::readability
     // they are exempt from the return-type noun convention.
     bool isConversionFunctionName(StringRef name)
     {
-      static constexpr std::array kConversionPrefixes{StringRef{"from"},
-                                                      StringRef{"to"},
-                                                      StringRef{"as"},
-                                                      StringRef{"make"},
-                                                      StringRef{"parse"},
-                                                      StringRef{"convert"}};
+      static constexpr auto kConversionPrefixes =
+        std::to_array<StringRef>({"from", "to", "as", "make", "parse", "convert"});
 
       return std::ranges::any_of(kConversionPrefixes,
                                  [&name](StringRef prefix)
@@ -85,26 +81,25 @@ namespace clang::tidy::readability
     // stems", so idiomatic names like startTime or bufferedDuration are left alone.
     StringRef redundantStem(StringRef name)
     {
-      static constexpr std::array kGenericSuffixes{
-        StringRef{"time"}, StringRef{"duration"}, StringRef{"timestamp"}, StringRef{"instant"}};
-      static constexpr std::array kStrongStems{StringRef{"elapsed"},
-                                               StringRef{"now"},
-                                               StringRef{"deadline"},
-                                               StringRef{"timeout"},
-                                               StringRef{"interval"},
-                                               StringRef{"delay"},
-                                               StringRef{"period"},
-                                               StringRef{"remaining"},
-                                               StringRef{"latency"},
-                                               StringRef{"epoch"},
-                                               StringRef{"expiry"},
-                                               StringRef{"age"},
-                                               StringRef{"span"},
-                                               StringRef{"budget"},
-                                               StringRef{"delta"},
-                                               StringRef{"threshold"},
-                                               StringRef{"offset"},
-                                               StringRef{"length"}};
+      static constexpr auto kGenericSuffixes = std::to_array<StringRef>({"time", "duration", "timestamp", "instant"});
+      static constexpr auto kStrongStems = std::to_array<StringRef>({"elapsed",
+                                                                     "now",
+                                                                     "deadline",
+                                                                     "timeout",
+                                                                     "interval",
+                                                                     "delay",
+                                                                     "period",
+                                                                     "remaining",
+                                                                     "latency",
+                                                                     "epoch",
+                                                                     "expiry",
+                                                                     "age",
+                                                                     "span",
+                                                                     "budget",
+                                                                     "delta",
+                                                                     "threshold",
+                                                                     "offset",
+                                                                     "length"});
 
       for (StringRef const suffix : kGenericSuffixes)
       {
@@ -140,22 +135,22 @@ namespace clang::tidy::readability
 
     bool isApprovedDurationName(StringRef name)
     {
-      static constexpr std::array kApprovedNouns{StringRef{"duration"},
-                                                 StringRef{"interval"},
-                                                 StringRef{"timeout"},
-                                                 StringRef{"delay"},
-                                                 StringRef{"period"},
-                                                 StringRef{"time"},
-                                                 StringRef{"offset"},
-                                                 StringRef{"threshold"},
-                                                 StringRef{"elapsed"},
-                                                 StringRef{"length"},
-                                                 StringRef{"latency"},
-                                                 StringRef{"remaining"},
-                                                 StringRef{"budget"},
-                                                 StringRef{"span"},
-                                                 StringRef{"age"},
-                                                 StringRef{"delta"}};
+      static constexpr auto kApprovedNouns = std::to_array<StringRef>({"duration",
+                                                                       "interval",
+                                                                       "timeout",
+                                                                       "delay",
+                                                                       "period",
+                                                                       "time",
+                                                                       "offset",
+                                                                       "threshold",
+                                                                       "elapsed",
+                                                                       "length",
+                                                                       "latency",
+                                                                       "remaining",
+                                                                       "budget",
+                                                                       "span",
+                                                                       "age",
+                                                                       "delta"});
 
       return endsWithApprovedNoun(name, kApprovedNouns);
     }
@@ -182,18 +177,18 @@ namespace clang::tidy::readability
         return true;
       }
 
-      static constexpr std::array kApprovedNouns{StringRef{"time"},
-                                                 StringRef{"timestamp"},
-                                                 StringRef{"instant"},
-                                                 StringRef{"deadline"},
-                                                 StringRef{"point"},
-                                                 StringRef{"epoch"},
-                                                 StringRef{"mark"},
-                                                 StringRef{"start"},
-                                                 StringRef{"end"},
-                                                 StringRef{"expiry"},
-                                                 StringRef{"origin"},
-                                                 StringRef{"now"}};
+      static constexpr auto kApprovedNouns = std::to_array<StringRef>({"time",
+                                                                       "timestamp",
+                                                                       "instant",
+                                                                       "deadline",
+                                                                       "point",
+                                                                       "epoch",
+                                                                       "mark",
+                                                                       "start",
+                                                                       "end",
+                                                                       "expiry",
+                                                                       "origin",
+                                                                       "now"});
 
       return endsWithApprovedNoun(name, kApprovedNouns);
     }

@@ -110,12 +110,12 @@ namespace ao::library::test
     }
 
     // Modify targetFile and advance mtime
-    auto const oldMtime = std::filesystem::last_write_time(targetFile);
+    auto const oldMTime = std::filesystem::last_write_time(targetFile);
     {
       auto out = std::ofstream{targetFile, std::ios::binary | std::ios::app};
       out << "some extra garbage";
     }
-    std::filesystem::last_write_time(targetFile, oldMtime + std::chrono::seconds{10});
+    std::filesystem::last_write_time(targetFile, oldMTime + std::chrono::seconds{10});
 
     auto scanner = LibraryScanner{ml};
     auto plan = scanner.buildPlan();

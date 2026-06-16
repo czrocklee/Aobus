@@ -1453,15 +1453,15 @@ namespace ao::fleet
       return std::unexpected{stream.error()};
     }
 
-    auto const allowed =
-      std::array<std::string_view, 7>{"schema", "event", "phase-id", "route-key", "verdict", "reason", "timestamp"};
+    static constexpr auto kAllowed =
+      std::to_array<std::string_view>({"schema", "event", "phase-id", "route-key", "verdict", "reason", "timestamp"});
     auto result = StreamReadResult{.outcomes = {}, .trailingCorruption = stream->trailingCorruption};
 
     for (auto const& document : stream->documents)
     {
       for (auto const& name : std::views::keys(document))
       {
-        if (!std::ranges::contains(allowed, name))
+        if (!std::ranges::contains(kAllowed, name))
         {
           return validationError(path.string(), std::format("unknown field '{}' in review outcome", name));
         }
