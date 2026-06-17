@@ -86,7 +86,6 @@ namespace ao::gtk::layout::editor
     void testWrapNode(std::string containerType) { wrapNode(std::move(containerType)); }
     void testOnResetDefault() { onResetDefault(); }
     void testMarkEdited() { markEdited(); }
-    void testSuppressErrorDialogs() { _suppressErrorDialogsForTests = true; }
 
   private:
     // Tree Model columns
@@ -202,7 +201,6 @@ namespace ao::gtk::layout::editor
     std::map<std::string, SessionEntry, std::less<>> _session;
     std::string _currentPresetId;
     sigc::connection _previewDebounceConn;
-    bool _suppressErrorDialogsForTests = false;
 
     sigc::signal<void(uimodel::layout::LayoutDocument const&)> _signalApplyPreview;
     sigc::signal<void(std::string_view)> _signalThemePreview;

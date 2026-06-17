@@ -33,7 +33,6 @@ namespace ao::gtk
 {
   struct EntryCompletionControllerOptions final
   {
-    bool suppressPopup = false;
     std::int32_t popoverWidth = layout::kCompletionPopoverWidth;
     std::int32_t popoverMaxHeight = layout::kCompletionPopoverMaxHeight;
   };

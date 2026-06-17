@@ -1,6 +1,9 @@
 """ao test — incrementally build and run registered development test suites."""
 
 import argparse
+import subprocess
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -50,6 +53,39 @@ SUITE_GROUPS = {
     "default": ("core", "gtk"),
     "all": ("core", "gtk", "integration", "fleet", "tooling", "lint"),
 }
+
+
+@contextmanager
+def virtual_gtk_display() -> Generator[dict[str, str], None, None]:
+    try:
+        server = subprocess.Popen(
+            ["Xvfb", "-displayfd", "1", "-screen", "0", "1280x1024x24", "-nolisten", "tcp"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise die(
+            "GTK tests require Xvfb. Enter the project nix-shell, or run through ./ao after shell.nix is updated."
+        ) from exc
+
+    try:
+        assert server.stdout is not None
+        display_number = server.stdout.readline().strip()
+        if not display_number:
+            output = server.stdout.read()
+            raise die(f"Xvfb failed to start.{(' Output: ' + output.strip()) if output.strip() else ''}")
+
+        display = f":{display_number}"
+        print(f"GTK display: Xvfb {display}")
+        yield {"DISPLAY": display, "GDK_BACKEND": "x11", "GDK_DISABLE": "gl,vulkan", "GSK_RENDERER": "cairo"}
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait()
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -106,7 +142,6 @@ def run_suite(
     if not binary.is_file():
         raise die(f"{name} test binary not found at {binary}. Build first, e.g. with ./ao build.")
 
-    # GTK tests are headless by design: nothing is ever presented, so no display is needed.
     command = [str(binary)]
     if list_only:
         command += ["--list-tests", "--verbosity", "high"]
@@ -117,6 +152,11 @@ def run_suite(
     print(f"Running {spec.label} Tests")
     print(f"CMD: {' '.join(command)}")
     print("=====================================")
+
+    if name == "gtk" and not list_only:
+        with virtual_gtk_display() as env:
+            return run(command, env=env, log=log, append=log is not None)
+
     return run(command, log=log, append=log is not None)
 
 

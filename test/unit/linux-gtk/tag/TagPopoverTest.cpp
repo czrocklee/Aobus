@@ -27,9 +27,6 @@ namespace ao::gtk::test
       // Test signal accessor
       auto connected = false;
       popover.signalTagsChanged().connect([&](auto, auto) { connected = true; });
-
-      // Try popup but we don't really want it to block or anything, just ensure it doesn't crash.
-      // However, it's safer not to actually popup during test to avoid Wayland issues unless suppressed.
     }
   }
 } // namespace ao::gtk::test

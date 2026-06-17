@@ -304,15 +304,12 @@ namespace ao::gtk
     _selectionPtr->set_selected(0);
     _listView.scroll_to(0);
 
-    if (!_options.suppressPopup && !_popover.get_visible())
+    if (!_popover.get_visible())
     {
       _popover.popup();
     }
 
-    if (!_options.suppressPopup)
-    {
-      _dismissController.install(_entry, {&_entry, &_popover}, [this] { hide(); });
-    }
+    _dismissController.install(_entry, {&_entry, &_popover}, [this] { hide(); });
   }
 
   void EntryCompletionController::hide()

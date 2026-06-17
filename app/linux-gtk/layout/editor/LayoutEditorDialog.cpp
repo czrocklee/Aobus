@@ -688,11 +688,6 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::presentErrorDialog(std::string const& title, std::string const& message)
   {
-    if (_suppressErrorDialogsForTests)
-    {
-      return;
-    }
-
     auto msgPtr =
       std::make_shared<Gtk::MessageDialog>(*this, title, false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
     msgPtr->set_secondary_text(message);

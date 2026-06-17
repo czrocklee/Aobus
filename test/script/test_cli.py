@@ -93,6 +93,36 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual([call.args[0] for call in run_suite.call_args_list], ["core", "gtk", "integration", "fleet"])
         self.assertEqual([call.args[0] for call in run_non_catch2.call_args_list], ["tooling", "lint"])
 
+    def test_gtk_suite_runs_inside_virtual_x11_display(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = build_dir / "test" / "ao_gtk_test"
+            binary.parent.mkdir()
+            binary.touch()
+
+            server = mock.Mock()
+            server.stdout = io.StringIO("42\n")
+            server.wait.return_value = 0
+
+            with mock.patch.object(test_command.subprocess, "Popen", return_value=server) as popen:
+                with mock.patch.object(test_command, "run", return_value=0) as run:
+                    self.assertEqual(test_command.run_suite("gtk", build_dir, test_filter="[layout]"), 0)
+
+        popen.assert_called_once_with(
+            ["Xvfb", "-displayfd", "1", "-screen", "0", "1280x1024x24", "-nolisten", "tcp"],
+            stdout=test_command.subprocess.PIPE,
+            stderr=test_command.subprocess.DEVNULL,
+            text=True,
+        )
+        run.assert_called_once_with(
+            [str(binary), "[layout]"],
+            env={"DISPLAY": ":42", "GDK_BACKEND": "x11", "GDK_DISABLE": "gl,vulkan", "GSK_RENDERER": "cairo"},
+            log=None,
+            append=False,
+        )
+        server.terminate.assert_called_once()
+        server.wait.assert_called_once_with(timeout=5)
+
     def test_test_no_build_lint_uses_selected_tree_without_building(self):
         build_dir = Path("/tmp/aobus-test-build")
 

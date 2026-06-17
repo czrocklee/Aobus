@@ -168,8 +168,7 @@ namespace ao::gtk::test
           .replaceEnd = std::string{"你 $al"}.size(),
           .items = std::move(items),
         };
-      },
-      EntryCompletionControllerOptions{.suppressPopup = true}};
+      }};
 
     controller.update();
     controller.applySelected();
@@ -230,8 +229,7 @@ namespace ao::gtk::test
         });
         return rt::CompletionResult{
           .replaceBegin = 0, .replaceEnd = std::string{"$al"}.size(), .items = std::move(items)};
-      },
-      EntryCompletionControllerOptions{.suppressPopup = true}};
+      }};
 
     controller.update();
     REQUIRE(providerCalls == 1);
@@ -377,8 +375,7 @@ namespace ao::gtk::test
 
         return rt::CompletionResult{
           .replaceBegin = 0, .replaceEnd = std::string{"$"}.size(), .items = std::move(items)};
-      },
-      EntryCompletionControllerOptions{.suppressPopup = true}};
+      }};
 
     controller.update();
     REQUIRE(controller.moveSelection(1));
@@ -416,8 +413,7 @@ namespace ao::gtk::test
                                                     .replaceEnd = 1,
                                                     .items = std::move(items),
                                                   };
-                                                },
-                                                EntryCompletionControllerOptions{.suppressPopup = true}};
+                                                }};
 
     auto* const popover = findCompletionPopover(entry);
     REQUIRE(popover != nullptr);
@@ -452,8 +448,7 @@ namespace ao::gtk::test
                                                   return rt::CompletionResult{.replaceBegin = 0,
                                                                               .replaceEnd = std::string{"$al"}.size(),
                                                                               .items = std::move(items)};
-                                                },
-                                                EntryCompletionControllerOptions{.suppressPopup = true}};
+                                                }};
 
     controller.update();
     emitFocusLeave(entry);
@@ -524,8 +519,7 @@ namespace ao::gtk::test
                                                   return rt::CompletionResult{.replaceBegin = 0,
                                                                               .replaceEnd = std::string{"$al"}.size(),
                                                                               .items = std::move(items)};
-                                                },
-                                                EntryCompletionControllerOptions{.suppressPopup = true}};
+                                                }};
 
     auto* const popover = findCompletionPopover(entry);
     REQUIRE(popover != nullptr);

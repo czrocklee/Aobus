@@ -52,6 +52,7 @@ pkgs.mkShell {
       pkg-config
       ninja
       mold
+      xvfb
       clang
       gcc
       gdb

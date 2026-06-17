@@ -345,7 +345,6 @@ namespace ao::gtk::layout::editor::test
 
       auto dialogPtr = std::make_unique<LayoutEditorDialog>(
         window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader);
-      dialogPtr->testSuppressErrorDialogs();
 
       // Attempting to save an invalid document should fail validation and keep dialog open
       dialogPtr->response(Gtk::ResponseType::OK);
@@ -371,7 +370,6 @@ namespace ao::gtk::layout::editor::test
       invalidDoc.root.props["primaryAction"] = LayoutValue{std::string{"this.does.not.exist"}};
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader};
-      dialog.testSuppressErrorDialogs();
 
       auto saveCount = 0;
       dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
@@ -446,7 +444,6 @@ namespace ao::gtk::layout::editor::test
       };
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, duplicateDoc, "classic", "modern", stubLoader};
-      dialog.testSuppressErrorDialogs();
 
       auto saveCount = 0;
       dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
@@ -487,9 +484,6 @@ namespace ao::gtk::layout::editor::test
       {
         auto dialogPtr =
           std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
-        // Keep the dialog unmapped so the test does not grab focus, while still
-        // exercising construction, header preset widget setup, and destruction.
-        dialogPtr->close();
         dialogPtr.reset();
       }
       SUCCEED(); // Reaching here without crash or GTK warnings is the goal
@@ -682,7 +676,6 @@ namespace ao::gtk::layout::editor::test
       };
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", customLoader};
-      dialog.testSuppressErrorDialogs();
 
       auto const collectCombos = [](auto& self, Gtk::Widget& widget, std::vector<Gtk::ComboBoxText*>& combos) -> void
       {
