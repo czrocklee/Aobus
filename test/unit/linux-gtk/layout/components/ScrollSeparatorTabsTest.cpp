@@ -28,7 +28,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::makeRuntime;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("Scroll, separator, and tabs components", "[layout][unit][containers]")
+  TEST_CASE("Scroll, separator, and tabs components", "[layout][unit][containers][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 

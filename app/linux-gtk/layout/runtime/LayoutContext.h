@@ -105,6 +105,32 @@ namespace ao::gtk::layout
     ThemeCoordinator* themeController = nullptr;
   };
 
+  /**
+   * @brief Copies UI service pointers into their per-subsystem contexts.
+   *
+   * Kept free of GTK types so the mapping can be unit-tested without constructing
+   * a window or runtime. LayoutContext::bind forwards to this.
+   */
+  inline void bindServices(TrackUiContext& track,
+                           ListUiContext& list,
+                           PlaybackUiContext& playback,
+                           DetailUiContext& detail,
+                           TagUiContext& tag,
+                           PortalContext& portal,
+                           ThemeUiContext& theme,
+                           GtkUiServices const& services)
+  {
+    track.pageHost = services.trackPageHost;
+    track.presentationStore = services.trackPresentationStore;
+    track.trackRowCache = services.trackRowCache;
+    list.navigationController = services.listNavigationController;
+    playback.queueModel = services.playbackQueueModel;
+    detail.imageCache = services.imageCache;
+    tag.editController = services.tagEditController;
+    portal.coordinator = services.importExportCoordinator;
+    theme.themeController = services.themeController;
+  }
+
   enum class LayoutSurface : std::uint8_t
   {
     Main,
@@ -146,15 +172,7 @@ namespace ao::gtk::layout
 
     void bind(GtkUiServices const& services)
     {
-      track.pageHost = services.trackPageHost;
-      track.presentationStore = services.trackPresentationStore;
-      track.trackRowCache = services.trackRowCache;
-      list.navigationController = services.listNavigationController;
-      playback.queueModel = services.playbackQueueModel;
-      detail.imageCache = services.imageCache;
-      tag.editController = services.tagEditController;
-      portal.coordinator = services.importExportCoordinator;
-      theme.themeController = services.themeController;
+      bindServices(track, list, playback, detail, tag, portal, theme, services);
     }
   };
 } // namespace ao::gtk::layout

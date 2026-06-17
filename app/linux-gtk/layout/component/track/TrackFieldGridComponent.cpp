@@ -5,6 +5,7 @@
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
 #include "layout/component/track/TrackFieldGridRows.h"
+#include "layout/component/track/TrackFieldGridTextUtils.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
@@ -21,7 +22,6 @@
 #include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/utility/Log.h>
 
-#include <glib.h>
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/grid.h>
@@ -47,76 +47,6 @@ namespace ao::gtk::layout
   namespace
   {
     constexpr float kLabelOpacity = 0.6F;
-    constexpr std::string_view kMultipleValuesText = "<Multiple Values>";
-    constexpr std::string_view kCompositeMixedText = "-";
-
-    std::string validUtf8Text(std::string_view text)
-    {
-      if (text.empty())
-      {
-        return {};
-      }
-
-      if (::g_utf8_validate(text.data(), static_cast<gssize>(text.size()), nullptr) != 0)
-      {
-        return std::string{text};
-      }
-
-      auto validPtr = Glib::make_unique_ptr_gfree(::g_utf8_make_valid(text.data(), static_cast<gssize>(text.size())));
-
-      if (!validPtr)
-      {
-        return {};
-      }
-
-      return std::string{validPtr.get()};
-    }
-
-    std::string displayTextForField(rt::TrackField field,
-                                    rt::TrackDetailSnapshot const& snap,
-                                    std::string_view mixedText,
-                                    bool showTechnicalUnknown)
-    {
-      auto const& agg = rt::trackFieldArrayAt(snap.fields, field);
-      auto const* uiDef = trackFieldUiDefinition(field);
-      auto const* def = rt::trackFieldDefinition(field);
-
-      if (agg.mixed)
-      {
-        return std::string{mixedText};
-      }
-
-      if (!agg.optValue)
-      {
-        if (showTechnicalUnknown && def != nullptr && def->category == rt::TrackFieldCategory::Technical)
-        {
-          return "Unknown";
-        }
-
-        return {};
-      }
-
-      if (uiDef != nullptr && uiDef->formatValue != nullptr)
-      {
-        return uiDef->formatValue(*agg.optValue);
-      }
-
-      return {};
-    }
-
-    bool isProtectedFieldEditValue(rt::TrackField field,
-                                   rt::TrackDetailSnapshot const& snap,
-                                   std::string_view newValue,
-                                   bool protectCompositeMixedText)
-    {
-      if (newValue == kMultipleValuesText)
-      {
-        return true;
-      }
-
-      auto const& agg = rt::trackFieldArrayAt(snap.fields, field);
-      return protectCompositeMixedText && agg.mixed && newValue == kCompositeMixedText;
-    }
 
     class ColumnWidthAnchor final : public Gtk::Widget
     {
@@ -182,17 +112,7 @@ namespace ao::gtk::layout
       std::vector<Gtk::Widget*> _widgets;
     };
 
-    using track_field_grid::AddCustomPropertyRow;
-    using track_field_grid::BuiltInRow;
-    using track_field_grid::CompositeBuiltInRow;
-    using track_field_grid::ConstrainedGridBox;
-    using track_field_grid::CustomPropertyUndoBar;
-    using track_field_grid::CustomRow;
-    using track_field_grid::DetailEditCoordinator;
-    using track_field_grid::DetailFieldEditor;
-    using track_field_grid::FixedHeightMinimum;
-    using track_field_grid::FixedHeightWidgetSlot;
-    using track_field_grid::SectionHeaderRow;
+    using namespace track_field_grid;
 
     class TrackFieldGridComponent final : public ILayoutComponent
     {

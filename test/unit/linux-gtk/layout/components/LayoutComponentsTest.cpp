@@ -59,6 +59,9 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
   using namespace ao::lmdb::test;
+  using ao::gtk::test::emitClicked;
+  using ao::gtk::test::findWidget;
+  using ao::gtk::test::findWidgetByClass;
   using ao::gtk::test::makeRuntime;
 
   namespace
@@ -104,50 +107,6 @@ namespace ao::gtk::layout::test
       rt::TrackDetailSnapshot _snapshot;
       sigc::signal<void(rt::TrackDetailSnapshot const&)> _signal;
     };
-
-    void walkWidgets(Gtk::Widget& root, auto const& visit)
-    {
-      visit(root);
-
-      for (auto* child = root.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        walkWidgets(*child, visit);
-      }
-    }
-
-    template<typename WidgetT>
-    WidgetT* findWidget(Gtk::Widget& root)
-    {
-      WidgetT* result = nullptr;
-
-      walkWidgets(root,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (result == nullptr)
-                    {
-                      result = dynamic_cast<WidgetT*>(&widget);
-                    }
-                  });
-
-      return result;
-    }
-
-    template<typename WidgetT>
-    WidgetT* findWidgetByClass(Gtk::Widget& root, std::string_view className)
-    {
-      WidgetT* result = nullptr;
-
-      walkWidgets(root,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (result == nullptr && widget.has_css_class(std::string{className}))
-                    {
-                      result = dynamic_cast<WidgetT*>(&widget);
-                    }
-                  });
-
-      return result;
-    }
   } // namespace
 
   TEST_CASE("Playback component instantiation", "[layout][unit][components]")
@@ -696,7 +655,7 @@ namespace ao::gtk::layout::test
     auto* const createButton = findWidgetByClass<Gtk::Button>(*filter, "ao-quick-filter-create");
     REQUIRE(createButton != nullptr);
 
-    ::g_signal_emit_by_name(createButton->gobj(), "clicked");
+    emitClicked(*createButton);
     ao::gtk::test::drainGtkEvents();
 
     CHECK(capturedParentId == kInvalidListId);
@@ -804,7 +763,7 @@ namespace ao::gtk::layout::test
       CHECK(button->has_css_class("circular"));
 
       // Verify that clicking the button routes primary action through the registry
-      ::g_signal_emit_by_name(button->gobj(), "clicked");
+      emitClicked(*button);
       CHECK(primaryFired == 1);
       CHECK(longPressFired == 0);
     }

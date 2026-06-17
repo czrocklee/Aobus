@@ -33,7 +33,6 @@
 #include <map>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::gtk::layout
@@ -80,12 +79,6 @@ namespace ao::gtk::layout::editor
     sigc::signal<void(LayoutSaveResult const&)>& signalSaveRequest() { return _signalSaveRequest; }
 
     void updateNodePosition(std::string_view nodeId, std::int32_t posX, std::int32_t posY);
-
-    // Test helper methods
-    void testAddComponent(std::string type) { addComponent(std::move(type)); }
-    void testWrapNode(std::string containerType) { wrapNode(std::move(containerType)); }
-    void testOnResetDefault() { onResetDefault(); }
-    void testMarkEdited() { markEdited(); }
 
   private:
     // Tree Model columns

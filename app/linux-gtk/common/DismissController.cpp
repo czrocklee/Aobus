@@ -11,10 +11,27 @@
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
+#include <span>
 #include <utility>
 
 namespace ao::gtk
 {
+  bool isWidgetWithinAny(Gtk::Widget const* target, std::span<Gtk::Widget* const> insideWidgets)
+  {
+    for (; target != nullptr; target = target->get_parent())
+    {
+      for (auto const* const insideWidget : insideWidgets)
+      {
+        if (target == insideWidget)
+        {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   DismissController::~DismissController()
   {
     remove();
@@ -83,17 +100,6 @@ namespace ao::gtk
 
   bool DismissController::pressIsInside(Gtk::Widget const* target) const
   {
-    for (; target != nullptr; target = target->get_parent())
-    {
-      for (auto const* const insideWidget : _insideWidgets)
-      {
-        if (target == insideWidget)
-        {
-          return true;
-        }
-      }
-    }
-
-    return false;
+    return isWidgetWithinAny(target, _insideWidgets);
   }
 } // namespace ao::gtk

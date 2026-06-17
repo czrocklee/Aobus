@@ -9,6 +9,7 @@
 #include "TrackPresentation.h"
 #include <ao/Type.h>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
@@ -86,6 +87,11 @@ namespace ao::rt
     std::vector<ViewRecord> listViews() const;
 
     TrackListViewState trackListState(ViewId viewId) const;
+
+    // Total playback duration of the view's current selection. Returns 0 for an unknown view,
+    // an empty selection, or selected ids missing from the library.
+    std::chrono::milliseconds selectionDuration(ViewId viewId) const;
+
     std::shared_ptr<ITrackListProjection> trackListProjection(ViewId viewId);
     std::unique_ptr<ITrackDetailProjection> detailProjection(DetailTarget const& target,
                                                              WorkspaceService& workspace,

@@ -5,6 +5,7 @@
 
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/PlaybackPositionInterpolator.h>
+#include <ao/uimodel/playback/SeekSliderInteractionModel.h>
 #include <ao/uimodel/playback/SeekViewModel.h>
 
 #include <gtkmm/scale.h>
@@ -12,7 +13,6 @@
 #include <sigc++/connection.h>
 
 #include <chrono>
-#include <cstdint>
 
 namespace ao::gtk::test
 {
@@ -38,18 +38,12 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _scale; }
 
   private:
-    enum class InteractionState : std::uint8_t
-    {
-      Idle,
-      Pointer,
-    };
-
     void applyState(uimodel::playback::SeekViewState const& view);
 
     void handleScaleValueChanged();
     void beginUserInteraction();
     void endUserInteraction();
-    void previewSeekFromScale();
+    void applySeekDecision(uimodel::playback::SeekSliderDecision const& decision);
     void commitSeekFromScale();
     void executeDebouncedFinalSeek();
     void setScaleRange(std::chrono::milliseconds duration);
@@ -59,10 +53,8 @@ namespace ao::gtk
 
     Gtk::Scale _scale;
     uimodel::playback::PlaybackPositionInterpolator _interpolator;
+    uimodel::playback::SeekSliderInteractionModel _interaction;
 
-    std::chrono::milliseconds _duration{0};
-    InteractionState _interactionState = InteractionState::Idle;
-    bool _pendingFinalSeek = false;
     bool _updatingScale = false;
     sigc::connection _debounceConnection;
     uimodel::playback::SeekViewModel _controller;

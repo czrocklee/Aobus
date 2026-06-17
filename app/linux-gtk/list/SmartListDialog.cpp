@@ -22,7 +22,6 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackSource.h>
 #include <ao/uimodel/list/SmartListEditorModel.h>
-#include <ao/uimodel/track/TrackPresentationRecommender.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -44,68 +43,21 @@
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <format>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
-using namespace std::string_literals;
-
 namespace ao::gtk
 {
   namespace
   {
-    std::string displayExpression(std::string_view expression)
+    std::string italicMarkup(std::string_view text)
     {
-      return expression.empty() ? "(none)" : std::string{expression};
-    }
-
-    std::string formatPreviewStatus(uimodel::list::SmartListStatus status,
-                                    std::size_t count,
-                                    bool isAllTracks,
-                                    bool localEmpty)
-    {
-      using Status = uimodel::list::SmartListStatus;
-
-      if (localEmpty)
-      {
-        if (count == 0)
-        {
-          return isAllTracks ? "<i>No tracks in library</i>" : "<i>No tracks in source</i>";
-        }
-
-        return std::format("<i>Showing all {} {}</i>", count, isAllTracks ? "tracks" : "source tracks");
-      }
-
-      switch (status)
-      {
-        case Status::InvalidExpression: return "<i>Invalid filter</i>";
-        case Status::EmptySource: return "<i>No tracks in source</i>";
-        case Status::Valid:
-        {
-          if (count == 0)
-          {
-            return "<i>No matches</i>";
-          }
-
-          constexpr std::size_t kMaxPreview = 10;
-
-          if (count <= kMaxPreview)
-          {
-            return std::format("<i>Showing all {} matches</i>", count);
-          }
-
-          return std::format("<i>Showing {} of {} matches</i>", kMaxPreview, count);
-        }
-      }
-
-      return "";
+      return std::format("<i>{}</i>", text);
     }
   }
 
@@ -139,25 +91,9 @@ namespace ao::gtk
     set_title("Edit List");
     _okButton->set_label("Save");
 
-    if (optPresentationId)
-    {
-      auto const& presets = rt::builtinTrackPresentationPresets();
-      auto const it = std::ranges::find(presets, *optPresentationId, [](auto const& preset) { return preset.spec.id; });
-
-      if (it != presets.end())
-      {
-        auto const index = std::distance(presets.begin(), it);
-        _presentationDropDown.set_selected(static_cast<std::uint32_t>(index + 1));
-      }
-      else
-      {
-        _presentationDropDown.set_selected(0);
-      }
-    }
-    else
-    {
-      _presentationDropDown.set_selected(0);
-    }
+    auto const presentationIndex = uimodel::list::SmartListEditorModel::presentationIndexForId(
+      optPresentationId, rt::builtinTrackPresentationPresets());
+    _presentationDropDown.set_selected(static_cast<std::uint32_t>(presentationIndex));
 
     updateDialogState();
   }
@@ -170,23 +106,10 @@ namespace ao::gtk
   std::string SmartListDialog::presentationId() const
   {
     auto const selected = _presentationDropDown.get_selected();
+    auto const localExpr = std::string{_exprBox.entry().get_text()};
 
-    if (selected == 0 || selected == GTK_INVALID_LIST_POSITION)
-    {
-      auto const localExpr = std::string{_exprBox.entry().get_text()};
-      auto const recommended =
-        uimodel::track::recommendPresentation(localExpr, rt::builtinTrackPresentationPresets(), {});
-      return recommended.id;
-    }
-
-    auto const& presets = rt::builtinTrackPresentationPresets();
-
-    if (auto const index = selected - 1; index < presets.size())
-    {
-      return std::string{presets[index].spec.id};
-    }
-
-    return std::string{rt::kDefaultTrackPresentationId};
+    return uimodel::list::SmartListEditorModel::resolvePresentationId(
+      selected, selected != GTK_INVALID_LIST_POSITION, localExpr, rt::builtinTrackPresentationPresets(), {});
   }
 
   void SmartListDialog::setLocalExpression(std::string_view expression)
@@ -443,32 +366,18 @@ namespace ao::gtk
       }
     }
 
-    _inheritedExprLabel.set_text(displayExpression(inheritedExpr));
+    _inheritedExprLabel.set_text(uimodel::list::SmartListEditorModel::displayExpression(inheritedExpr));
 
     auto const localExpr = std::string{_exprBox.entry().get_text()};
     auto const effectiveExpression =
       ao::uimodel::list::SmartListEditorModel::composeEffectiveExpression(inheritedExpr, localExpr);
-    _effectiveExprLabel.set_text(displayExpression(effectiveExpression));
+    _effectiveExprLabel.set_text(uimodel::list::SmartListEditorModel::displayExpression(effectiveExpression));
   }
 
   void SmartListDialog::updateDialogState()
   {
-    using ao::uimodel::list::SmartListStatus;
-
-    auto const status = [this]
-    {
-      if (!_expressionValid)
-      {
-        return SmartListStatus::InvalidExpression;
-      }
-
-      if (!_previewFilteredListPtr)
-      {
-        return SmartListStatus::EmptySource;
-      }
-
-      return SmartListStatus::Valid;
-    }();
+    auto const status =
+      ao::uimodel::list::SmartListEditorModel::dialogStatus(_expressionValid, _previewFilteredListPtr != nullptr);
 
     _okButton->set_sensitive(ao::uimodel::list::SmartListEditorModel::canSubmit(_nameEntry.get_text().raw(), status));
   }
@@ -479,7 +388,16 @@ namespace ao::gtk
 
     if (!_previewFilteredListPtr)
     {
-      _expressionValid = false;
+      auto const state = ao::uimodel::list::SmartListEditorModel::previewState(ao::uimodel::list::SmartListPreviewInput{
+        .name = _nameEntry.get_text().raw(),
+        .localExpression = _exprBox.entry().get_text().raw(),
+        .hasPreviewSource = false,
+        .hasError = false,
+        .errorMessage = "",
+        .matchCount = 0,
+        .isAllTracks = false,
+      });
+      _expressionValid = state.expressionValid;
       _previewScrolledWindow.set_visible(false);
       updateDialogState();
       return;
@@ -496,26 +414,31 @@ namespace ao::gtk
     auto const errorMessage = optError ? optError->message : std::string{};
     auto const matchCount = _previewFilteredListPtr->size();
 
-    auto const status =
-      hasError ? ao::uimodel::list::SmartListStatus::InvalidExpression : ao::uimodel::list::SmartListStatus::Valid;
+    auto const state = ao::uimodel::list::SmartListEditorModel::previewState(ao::uimodel::list::SmartListPreviewInput{
+      .name = _nameEntry.get_text().raw(),
+      .localExpression = expr,
+      .hasPreviewSource = true,
+      .hasError = hasError,
+      .errorMessage = errorMessage,
+      .matchCount = matchCount,
+      .isAllTracks = isAllTracks,
+    });
 
-    _matchCountLabel.set_markup(formatPreviewStatus(status, matchCount, isAllTracks, expr.empty()));
+    _matchCountLabel.set_markup(italicMarkup(state.previewStatusText));
 
-    if (hasError && !expr.empty())
+    if (state.queryInvalid)
     {
       _exprBox.entry().add_css_class("ao-query-invalid");
-      _errorLabel.set_visible(true);
-      _errorLabel.set_text("Filter error: " + errorMessage);
-      _previewScrolledWindow.set_visible(false);
-      _expressionValid = false;
     }
     else
     {
       _exprBox.entry().remove_css_class("ao-query-invalid");
-      _errorLabel.set_visible(false);
-      _previewScrolledWindow.set_visible(true);
-      _expressionValid = true;
     }
+
+    _errorLabel.set_visible(state.errorVisible);
+    _errorLabel.set_text(state.errorText);
+    _previewScrolledWindow.set_visible(state.previewVisible);
+    _expressionValid = state.expressionValid;
 
     updateDialogState();
   }

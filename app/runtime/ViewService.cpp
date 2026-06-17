@@ -3,6 +3,8 @@
 
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/ListSourceStore.h>
@@ -17,6 +19,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/utility/ScopedTimer.h>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -389,6 +392,31 @@ namespace ao::rt
   TrackListViewState ViewService::trackListState(ViewId viewId) const
   {
     return _implPtr->views.at(viewId).state;
+  }
+
+  std::chrono::milliseconds ViewService::selectionDuration(ViewId viewId) const
+  {
+    auto const it = _implPtr->views.find(viewId);
+
+    if (it == _implPtr->views.end() || it->second.state.selection.empty())
+    {
+      return std::chrono::milliseconds{0};
+    }
+
+    auto const txn = _implPtr->library.readTransaction();
+    auto const reader = _implPtr->library.tracks().reader(txn);
+
+    auto totalDuration = std::chrono::milliseconds{0};
+
+    for (auto const trackId : it->second.state.selection)
+    {
+      if (auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Cold); optView)
+      {
+        totalDuration += optView->property().duration();
+      }
+    }
+
+    return totalDuration;
   }
 
   std::shared_ptr<ITrackListProjection> ViewService::trackListProjection(ViewId viewId)

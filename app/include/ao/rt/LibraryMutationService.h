@@ -92,6 +92,8 @@ namespace ao::rt
       std::string message{};
     };
 
+    void notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress);
+
     Subscription onTracksMutated(std::move_only_function<void(std::vector<TrackId> const&)> handler);
     Subscription onListsMutated(std::move_only_function<void(ListsMutated const&)> handler);
     Subscription onLibraryTaskCompleted(std::move_only_function<void(std::size_t)> handler);

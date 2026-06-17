@@ -44,7 +44,12 @@ namespace ao::gtk
                   [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.set_ellipsize(Pango::EllipsizeMode::END);
-    _label.add_css_class(cssClassForField(field));
+
+    if (auto const* cssClass = cssClassForField(field); cssClass[0] != '\0')
+    {
+      _label.add_css_class(cssClass);
+    }
+
     _label.set_selectable(false);
 
     if (_action != Action::None)

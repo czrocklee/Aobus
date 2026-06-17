@@ -81,6 +81,8 @@ namespace ao::gtk::portal
     void exportLibrary(); // YAML export
 
     void openMusicLibrary(std::filesystem::path const& path) const;
+    void importLibraryFrom(std::filesystem::path path);
+    void exportLibraryTo(std::filesystem::path path, rt::ExportMode mode);
 
   private:
     void onImportFinished() const;
@@ -92,7 +94,6 @@ namespace ao::gtk::portal
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
                               rt::ExportMode mode,
                               Glib::RefPtr<Gtk::FileDialog> const& fileDialog);
-    void executeExportTask(std::filesystem::path const& path, rt::ExportMode mode);
 
     Gtk::Window& _parent;
     rt::AppRuntime& _runtime;

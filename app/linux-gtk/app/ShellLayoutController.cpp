@@ -33,6 +33,7 @@
 #include <ao/uimodel/layout/LayoutComponentState.h>
 #include <ao/uimodel/layout/LayoutNodeId.h>
 #include <ao/uimodel/layout/LayoutStatePromoter.h>
+#include <ao/uimodel/layout/ShellLayoutSessionModel.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/utility/Log.h>
 
@@ -41,6 +42,7 @@
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/window.h>
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -58,11 +60,6 @@ namespace ao::gtk
       uimodel::layout::LayoutComponentStateDocument componentState;
     };
 
-    uimodel::layout::LayoutComponentStateDocument emptyComponentState(std::string_view presetId)
-    {
-      return uimodel::layout::LayoutComponentStateDocument{.preset = std::string{presetId}};
-    }
-
     LayoutLoadResult loadLayoutOnWorker(ShellLayoutStore& store,
                                         ShellLayoutComponentStateStore* componentStateStore,
                                         AppConfig& config)
@@ -70,27 +67,27 @@ namespace ao::gtk
       auto prefs = rt::AppPrefsState{};
       config.loadAppPrefs(prefs);
 
-      auto presetId = layout::LayoutPresetId::Classic;
-      auto presetIdStr = std::string{"classic"};
+      static constexpr auto kSupportedPresets = std::array<std::string_view, 2>{"classic", "modern"};
 
-      if (prefs.lastLayoutPreset == "modern")
-      {
-        presetId = layout::LayoutPresetId::Modern;
-        presetIdStr = "modern";
-      }
-      else if (!prefs.lastLayoutPreset.empty() && prefs.lastLayoutPreset != "classic")
+      auto const selection =
+        uimodel::layout::ShellLayoutSessionModel::selectPreset(prefs.lastLayoutPreset, kSupportedPresets);
+
+      if (selection.usedFallback)
       {
         APP_LOG_DEBUG(
           "ShellLayoutController: Unknown layout preset '{}', falling back to classic", prefs.lastLayoutPreset);
       }
 
-      auto optDoc = store.load(presetIdStr);
+      auto const presetId = layout::presetIdFromString(selection.presetId);
+      auto optDoc = store.load(selection.presetId);
       auto doc = optDoc ? std::move(*optDoc) : layout::createBuiltInLayout(presetId);
-      auto stateDoc = componentStateStore == nullptr
-                        ? emptyComponentState(presetIdStr)
-                        : componentStateStore->load(presetIdStr).value_or(emptyComponentState(presetIdStr));
+      auto stateDoc =
+        componentStateStore == nullptr
+          ? uimodel::layout::ShellLayoutSessionModel::emptyComponentState(selection.presetId)
+          : componentStateStore->load(selection.presetId)
+              .value_or(uimodel::layout::ShellLayoutSessionModel::emptyComponentState(selection.presetId));
 
-      return {.presetId = presetIdStr, .document = std::move(doc), .componentState = std::move(stateDoc)};
+      return {.presetId = selection.presetId, .document = std::move(doc), .componentState = std::move(stateDoc)};
     }
   } // namespace
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
@@ -468,17 +465,17 @@ namespace ao::gtk
                                                 uimodel::layout::LayoutDocument document,
                                                 uimodel::layout::LayoutComponentStateDocument componentState)
   {
-    _activePresetId = std::move(presetId);
-    _activeLayout = std::move(document);
-    _context.activePresetId = _activePresetId;
+    _session.applyLoadedLayout(std::move(presetId), std::move(document));
+    auto const snapshot = _session.snapshot();
+    _context.activePresetId = snapshot.presetId;
     _context.componentState = std::move(componentState);
 
-    for (auto const& diagnostic : uimodel::layout::validateStatefulLayoutNodeIds(_activeLayout))
+    for (auto const& diagnostic : uimodel::layout::validateStatefulLayoutNodeIds(snapshot.layout))
     {
       if (diagnostic.severity == uimodel::layout::LayoutNodeIdDiagnosticSeverity::Error)
       {
         APP_LOG_ERROR("ShellLayoutController: Layout id error in preset '{}' component '{}' ({}): {}",
-                      _activePresetId,
+                      snapshot.presetId,
                       diagnostic.componentId,
                       diagnostic.componentType,
                       diagnostic.message);
@@ -486,14 +483,14 @@ namespace ao::gtk
       else
       {
         APP_LOG_WARN("ShellLayoutController: Layout id warning in preset '{}' component '{}' ({}): {}",
-                     _activePresetId,
+                     snapshot.presetId,
                      diagnostic.componentId,
                      diagnostic.componentType,
                      diagnostic.message);
       }
     }
 
-    _host.setLayout(_context, _activeLayout);
+    _host.setLayout(_context, snapshot.layout);
   }
 
   void ShellLayoutController::openEditor(AppConfig& config)
@@ -501,7 +498,8 @@ namespace ao::gtk
     auto prefs = rt::AppPrefsState{};
     config.loadAppPrefs(prefs);
 
-    auto const initialPresetId = _activePresetId.empty() ? "classic" : _activePresetId;
+    auto const initialPresetId =
+      uimodel::layout::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
     auto const initialThemeId = std::string{themePresetToString(_themeCoordinator.activeTheme())};
 
     auto loader = [storePtr = _layoutStorePtr](std::string_view id) -> uimodel::layout::LayoutDocument
@@ -518,7 +516,7 @@ namespace ao::gtk
       std::make_shared<layout::editor::LayoutEditorDialog>(dynamic_cast<Gtk::Window&>(_context.parentWindow),
                                                            _registry,
                                                            _actionRegistry,
-                                                           _activeLayout,
+                                                           _session.snapshot().layout,
                                                            initialPresetId,
                                                            initialThemeId,
                                                            std::move(loader));
@@ -536,7 +534,7 @@ namespace ao::gtk
       }
     };
 
-    _host.setLayout(_context, _activeLayout);
+    _host.setLayout(_context, _session.snapshot().layout);
 
     dialogRaw->signalApplyPreview().connect([this](uimodel::layout::LayoutDocument const& doc)
                                             { _host.setLayout(_context, doc); });
@@ -561,7 +559,7 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::CANCEL)
         {
-          _host.setLayout(_context, _activeLayout);
+          _host.setLayout(_context, _session.snapshot().layout);
           _themeCoordinator.setTheme(oldTheme);
         }
       });
@@ -604,19 +602,20 @@ namespace ao::gtk
       }
     }
 
-    _activeLayout = result.activeDocument;
-    _activePresetId = result.activePresetId;
-    _context.activePresetId = _activePresetId;
+    _session.applyEditorSave(result.activePresetId, result.activeDocument);
+    auto const snapshot = _session.snapshot();
+    _context.activePresetId = snapshot.presetId;
     _context.componentState =
       _componentStateStorePtr == nullptr
-        ? emptyComponentState(_activePresetId)
-        : _componentStateStorePtr->load(_activePresetId).value_or(emptyComponentState(_activePresetId));
+        ? uimodel::layout::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId)
+        : _componentStateStorePtr->load(snapshot.presetId)
+            .value_or(uimodel::layout::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId));
 
     if (_configPtr)
     {
       auto prefsUpdate = rt::AppPrefsState{};
       _configPtr->loadAppPrefs(prefsUpdate);
-      prefsUpdate.lastLayoutPreset = _activePresetId;
+      prefsUpdate.lastLayoutPreset = snapshot.presetId;
 
       if (_editorDialogPtr)
       {
@@ -630,44 +629,41 @@ namespace ao::gtk
       _configPtr->saveAppPrefs(prefsUpdate);
     }
 
-    _host.setLayout(_context, _activeLayout);
+    _host.setLayout(_context, snapshot.layout);
   }
 
   void ShellLayoutController::resetRuntimeLayoutState()
   {
-    auto const presetId = _activePresetId.empty() ? std::string{"classic"} : _activePresetId;
+    auto reset = _session.resetRuntimeLayoutState();
 
     if (_componentStateStorePtr)
     {
-      if (!_componentStateStorePtr->removePreset(presetId))
+      if (!_componentStateStorePtr->removePreset(reset.presetId))
       {
-        APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", presetId);
+        APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", reset.presetId);
       }
     }
 
-    _context.activePresetId = presetId;
-    _context.componentState = emptyComponentState(presetId);
-    _host.setLayout(_context, _activeLayout);
+    _context.activePresetId = reset.presetId;
+    _context.componentState = std::move(reset.componentState);
+    _host.setLayout(_context, _session.snapshot().layout);
     refreshExportedActions();
   }
 
   void ShellLayoutController::saveCurrentPanelSizesAsLayoutDefaults()
   {
-    auto const presetId = _activePresetId.empty() ? std::string{"classic"} : _activePresetId;
-    auto promotedLayout = _activeLayout;
-    auto promotedState = _context.componentState;
-    promotedState.preset = presetId;
+    auto optPromotion = _session.preparePanelSizePromotion(_context.componentState);
 
-    auto const promotion = uimodel::layout::promotePanelSizeDefaults(promotedLayout, promotedState);
-
-    if (!promotion.changed)
+    if (!optPromotion)
     {
+      auto const presetId =
+        uimodel::layout::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
       APP_LOG_INFO("ShellLayoutController: No panel sizes to promote for preset '{}'", presetId);
       return;
     }
 
-    auto apply = [this, presetId, promotedLayout = std::move(promotedLayout), promotedState = std::move(promotedState)](
-                   bool confirmed) mutable
+    auto presetId = optPromotion->presetId;
+    auto apply = [this, presetId, promotion = std::move(*optPromotion)](bool confirmed) mutable
     {
       if (!confirmed)
       {
@@ -675,7 +671,7 @@ namespace ao::gtk
         return;
       }
 
-      applyPromotedPanelSizes(presetId, std::move(promotedLayout), std::move(promotedState));
+      applyPromotedPanelSizes(presetId, std::move(promotion.layout), std::move(promotion.componentState));
     };
 
     if (_confirmPromotionFn)
@@ -713,11 +709,12 @@ namespace ao::gtk
       }
     }
 
-    _activePresetId = presetId;
-    _activeLayout = std::move(promotedLayout);
-    _context.activePresetId = _activePresetId;
+    _session.applyPanelSizePromotion(uimodel::layout::ShellLayoutPanelSizePromotion{
+      .presetId = presetId, .layout = std::move(promotedLayout), .componentState = promotedState, .result = {}});
+    auto const snapshot = _session.snapshot();
+    _context.activePresetId = snapshot.presetId;
     _context.componentState = std::move(promotedState);
-    _host.setLayout(_context, _activeLayout);
+    _host.setLayout(_context, snapshot.layout);
     refreshExportedActions();
   }
 

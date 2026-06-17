@@ -12,16 +12,27 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 
+#include <glib-object.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
+#include <gtkmm/button.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/eventcontroller.h>
+#include <gtkmm/eventcontrollerfocus.h>
+#include <gtkmm/gestureclick.h>
+#include <gtkmm/label.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -29,19 +40,301 @@
 namespace ao::gtk::test
 {
   /**
+   * collectAll - Recursively collects all descendant widgets (including root) of type T.
+   */
+  template<typename T>
+  std::vector<T*> collectAll(Gtk::Widget& root)
+  {
+    auto result = std::vector<T*>{};
+
+    if (auto* const match = dynamic_cast<T*>(&root); match != nullptr)
+    {
+      result.push_back(match);
+    }
+
+    for (auto* child = root.get_first_child(); child != nullptr; child = child->get_next_sibling())
+    {
+      auto nested = collectAll<T>(*child);
+      result.insert(result.end(), nested.begin(), nested.end());
+    }
+
+    return result;
+  }
+
+  /**
    * collectScrolledWindows - Recursively collects all Gtk::ScrolledWindow widgets.
    */
   inline void collectScrolledWindows(Gtk::Widget& widget, std::vector<Gtk::ScrolledWindow*>& result)
   {
-    if (auto* const scrolledWindow = dynamic_cast<Gtk::ScrolledWindow*>(&widget); scrolledWindow != nullptr)
+    auto found = collectAll<Gtk::ScrolledWindow>(widget);
+    result.insert(result.end(), found.begin(), found.end());
+  }
+
+  /**
+   * findLabelByText - Returns the first descendant Gtk::Label whose text matches, or nullptr.
+   */
+  inline Gtk::Label* findLabelByText(Gtk::Widget& root, std::string const& text)
+  {
+    for (auto* const label : collectAll<Gtk::Label>(root))
     {
-      result.push_back(scrolledWindow);
+      if (label->get_text() == text)
+      {
+        return label;
+      }
     }
 
-    for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+    return nullptr;
+  }
+
+  /**
+   * findButtonByLabel - Returns the first descendant Gtk::Button with the given label, or nullptr.
+   */
+  inline Gtk::Button* findButtonByLabel(Gtk::Widget& root, std::string const& labelText)
+  {
+    for (auto* const button : collectAll<Gtk::Button>(root))
     {
-      collectScrolledWindows(*child, result);
+      if (button->get_label() == labelText)
+      {
+        return button;
+      }
     }
+
+    return nullptr;
+  }
+
+  /**
+   * hasCssClass - True if the widget carries the given CSS class.
+   */
+  inline bool hasCssClass(Gtk::Widget const& widget, std::string_view cssClass)
+  {
+    auto const classes = widget.get_css_classes();
+    return std::ranges::any_of(classes, [&](auto const& name) { return std::string_view{name.raw()} == cssClass; });
+  }
+
+  /**
+   * emitClicked - Emits the GTK "clicked" signal on a button.
+   */
+  inline void emitClicked(Gtk::Button& button)
+  {
+    ::g_signal_emit_by_name(button.gobj(), "clicked");
+  }
+
+  /**
+   * emitActivate - Emits the GTK "activate" signal on an entry.
+   */
+  inline void emitActivate(Gtk::Entry& entry)
+  {
+    ::g_signal_emit_by_name(entry.gobj(), "activate");
+  }
+
+  /**
+   * emitClosed - Emits the GTK "closed" signal on a popover.
+   */
+  inline void emitClosed(Gtk::Popover& popover)
+  {
+    ::g_signal_emit_by_name(popover.gobj(), "closed");
+  }
+
+  /**
+   * emitShow - Emits the GTK "show" signal on a widget.
+   */
+  inline void emitShow(Gtk::Widget& widget)
+  {
+    ::g_signal_emit_by_name(widget.gobj(), "show");
+  }
+
+  /**
+   * findController - Returns the first controller of type T installed on a widget.
+   */
+  template<typename T>
+  Glib::RefPtr<T> findController(Gtk::Widget& widget)
+  {
+    auto const controllersPtr = widget.observe_controllers();
+
+    if (!controllersPtr)
+    {
+      return {};
+    }
+
+    auto const count = controllersPtr->get_n_items();
+
+    for (auto i = 0U; i < count; ++i)
+    {
+      if (auto const controllerPtr = std::dynamic_pointer_cast<T>(controllersPtr->get_object(i)); controllerPtr)
+      {
+        return controllerPtr;
+      }
+    }
+
+    return {};
+  }
+
+  /**
+   * findControllerIf - Returns the first controller of type T matching a predicate.
+   */
+  template<typename T, typename Predicate>
+  Glib::RefPtr<T> findControllerIf(Gtk::Widget& widget, Predicate const& predicate)
+  {
+    auto const controllersPtr = widget.observe_controllers();
+
+    if (!controllersPtr)
+    {
+      return {};
+    }
+
+    auto const count = controllersPtr->get_n_items();
+
+    for (auto i = 0U; i < count; ++i)
+    {
+      auto const controllerPtr = std::dynamic_pointer_cast<T>(controllersPtr->get_object(i));
+
+      if (controllerPtr && predicate(*controllerPtr))
+      {
+        return controllerPtr;
+      }
+    }
+
+    return {};
+  }
+
+  /**
+   * hasController - True if the widget has a controller of type T.
+   */
+  template<typename T>
+  bool hasController(Gtk::Widget& widget)
+  {
+    return findController<T>(widget) != nullptr;
+  }
+
+  /**
+   * emitFocusEnter - Emits the focus controller "enter" signal when present.
+   */
+  inline bool emitFocusEnter(Gtk::Widget& widget)
+  {
+    auto const focusControllerPtr = findController<Gtk::EventControllerFocus>(widget);
+
+    if (!focusControllerPtr)
+    {
+      return false;
+    }
+
+    ::g_signal_emit_by_name(focusControllerPtr->gobj(), "enter");
+    return true;
+  }
+
+  /**
+   * emitFocusLeave - Emits the focus controller "leave" signal when present.
+   */
+  inline bool emitFocusLeave(Gtk::Widget& widget)
+  {
+    auto const focusControllerPtr = findController<Gtk::EventControllerFocus>(widget);
+
+    if (!focusControllerPtr)
+    {
+      return false;
+    }
+
+    ::g_signal_emit_by_name(focusControllerPtr->gobj(), "leave");
+    return true;
+  }
+
+  /**
+   * emitGesturePressed - Emits "pressed" on the first matching GestureClick controller.
+   */
+  inline bool emitGesturePressed(Gtk::Widget& widget,
+                                 int const nPress = 1,
+                                 double const x = 1.0,
+                                 double const y = 1.0,
+                                 std::optional<Gtk::PropagationPhase> const optPhase = std::nullopt)
+  {
+    auto const gesturePtr =
+      findControllerIf<Gtk::GestureClick>(widget,
+                                          [optPhase](Gtk::GestureClick const& gesture)
+                                          { return !optPhase || gesture.get_propagation_phase() == *optPhase; });
+
+    if (!gesturePtr)
+    {
+      return false;
+    }
+
+    ::g_signal_emit_by_name(gesturePtr->gobj(), "pressed", nPress, x, y);
+    return true;
+  }
+
+  /**
+   * emitGestureReleased - Emits "released" on the first matching GestureClick controller.
+   */
+  inline bool emitGestureReleased(Gtk::Widget& widget,
+                                  int const nPress = 1,
+                                  double const x = 1.0,
+                                  double const y = 1.0,
+                                  std::optional<Gtk::PropagationPhase> const optPhase = std::nullopt)
+  {
+    auto const gesturePtr =
+      findControllerIf<Gtk::GestureClick>(widget,
+                                          [optPhase](Gtk::GestureClick const& gesture)
+                                          { return !optPhase || gesture.get_propagation_phase() == *optPhase; });
+
+    if (!gesturePtr)
+    {
+      return false;
+    }
+
+    ::g_signal_emit_by_name(gesturePtr->gobj(), "released", nPress, x, y);
+    return true;
+  }
+
+  /**
+   * walkWidgets - Visits root and every descendant in pre-order.
+   */
+  void walkWidgets(Gtk::Widget& root, auto const& visit)
+  {
+    visit(root);
+
+    for (auto* child = root.get_first_child(); child != nullptr; child = child->get_next_sibling())
+    {
+      walkWidgets(*child, visit);
+    }
+  }
+
+  /**
+   * findWidget - Returns the first descendant (including root) of type T in pre-order, or nullptr.
+   */
+  template<typename T>
+  T* findWidget(Gtk::Widget& root)
+  {
+    T* result = nullptr;
+
+    walkWidgets(root,
+                [&result](Gtk::Widget& widget)
+                {
+                  if (result == nullptr)
+                  {
+                    result = dynamic_cast<T*>(&widget);
+                  }
+                });
+
+    return result;
+  }
+
+  /**
+   * findWidgetByClass - Returns the first descendant of type T carrying the CSS class, or nullptr.
+   */
+  template<typename T>
+  T* findWidgetByClass(Gtk::Widget& root, std::string_view cssClass)
+  {
+    T* result = nullptr;
+
+    walkWidgets(root,
+                [&result, cssClass](Gtk::Widget& widget)
+                {
+                  if (result == nullptr && hasCssClass(widget, cssClass))
+                  {
+                    result = dynamic_cast<T*>(&widget);
+                  }
+                });
+
+    return result;
   }
 
   /**

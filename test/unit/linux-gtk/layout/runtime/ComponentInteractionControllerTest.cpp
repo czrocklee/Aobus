@@ -57,7 +57,7 @@ namespace ao::gtk::layout::test
       auto controller = ComponentInteractionController{};
       controller.attach(ctx, node, button, uimodel::layout::kAllExternalActions);
 
-      ::g_signal_emit_by_name(button.gobj(), "clicked");
+      emitClicked(button);
       CHECK(primaryClicked);
     }
 
@@ -72,7 +72,7 @@ namespace ao::gtk::layout::test
       auto controller = ComponentInteractionController{};
       controller.attach(ctx, node, button, policy);
 
-      ::g_signal_emit_by_name(button.gobj(), "clicked");
+      emitClicked(button);
       CHECK(primaryClicked);
     }
 
@@ -107,7 +107,7 @@ namespace ao::gtk::layout::test
       // Only allow secondary
       controller.attach(ctx, node, button, uimodel::layout::kExternalSecondaryActions);
 
-      ::g_signal_emit_by_name(button.gobj(), "clicked");
+      emitClicked(button);
       CHECK_FALSE(primaryClicked);
     }
   }

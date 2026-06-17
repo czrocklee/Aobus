@@ -20,6 +20,7 @@
 #include <gtkmm/selectionmodel.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <iterator>
 #include <memory>
@@ -73,11 +74,13 @@ namespace ao::gtk::test
 
       auto builder1 = library::TrackBuilder::createNew();
       builder1.metadata().title("Track 1");
+      builder1.property().duration(std::chrono::minutes{2});
       auto const [hot1, cold1] = builder1.serialize(txn, library.dictionary(), library.resources());
       trackId1 = writer.createHotCold(hot1, cold1).first;
 
       auto builder2 = library::TrackBuilder::createNew();
       builder2.metadata().title("Track 2");
+      builder2.property().duration(std::chrono::minutes{3});
       auto const [hot2, cold2] = builder2.serialize(txn, library.dictionary(), library.resources());
       trackId2 = writer.createHotCold(hot2, cold2).first;
 
@@ -111,6 +114,22 @@ namespace ao::gtk::test
         auto const ids = controller.selectedTrackIds();
         REQUIRE(ids.size() == 1);
         CHECK(ids[0] == trackId1);
+      }
+
+      SECTION("selected row helpers return rows and aggregate duration")
+      {
+        selectionModelPtr->select_item(0, false);
+        selectionModelPtr->select_item(1, false);
+        drainGtkEvents();
+
+        auto const rows = controller.selectedRows();
+        REQUIRE(rows.size() == 2);
+        CHECK(rows[0]->trackId() == trackId1);
+        CHECK(rows[1]->trackId() == trackId2);
+        CHECK(controller.selectedTracksDuration() == std::chrono::minutes{5});
+
+        auto const visibleIds = controller.visibleTrackIds();
+        CHECK(visibleIds == std::vector<TrackId>{trackId1, trackId2});
       }
 
       SECTION("selectTrack helper")

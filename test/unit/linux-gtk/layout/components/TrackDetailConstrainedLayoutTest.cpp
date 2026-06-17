@@ -19,11 +19,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <glibmm/ustring.h>
-#include <gtk/gtk.h>
 #include <gtkmm/application.h>
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/gestureclick.h>
 #include <gtkmm/grid.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
@@ -44,7 +44,13 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
   using namespace ao::lmdb::test;
+  using ao::gtk::test::emitActivate;
+  using ao::gtk::test::emitClicked;
+  using ao::gtk::test::emitGesturePressed;
+  using ao::gtk::test::findWidget;
+  using ao::gtk::test::hasController;
   using ao::gtk::test::makeRuntime;
+  using ao::gtk::test::walkWidgets;
 
   namespace
   {
@@ -67,33 +73,6 @@ namespace ao::gtk::layout::test
       rt::TrackDetailSnapshot _snap;
       sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;
     };
-
-    void walkWidgets(Gtk::Widget& root, auto const& visit)
-    {
-      visit(root);
-
-      for (auto* child = root.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        walkWidgets(*child, visit);
-      }
-    }
-
-    template<typename WidgetT>
-    WidgetT* findWidget(Gtk::Widget& root)
-    {
-      WidgetT* result = nullptr;
-
-      walkWidgets(root,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (result == nullptr)
-                    {
-                      result = dynamic_cast<WidgetT*>(&widget);
-                    }
-                  });
-
-      return result;
-    }
 
     Gtk::Widget* findAncestorWithClass(Gtk::Widget* widget, std::string_view const className)
     {
@@ -194,66 +173,12 @@ namespace ao::gtk::layout::test
 
     bool hasClickGesture(Gtk::Widget& widget)
     {
-      auto const controllersPtr = widget.observe_controllers();
-      REQUIRE(controllersPtr);
-
-      auto const count = controllersPtr->get_n_items();
-
-      for (auto i = 0U; i < count; ++i)
-      {
-        auto* const object = ::g_list_model_get_object(controllersPtr->gobj(), i);
-
-        if (object == nullptr)
-        {
-          continue;
-        }
-
-        if (::g_type_check_instance_is_a(reinterpret_cast<GTypeInstance*>(object), ::gtk_gesture_click_get_type()) !=
-            FALSE)
-        {
-          ::g_object_unref(object);
-          return true;
-        }
-
-        ::g_object_unref(object);
-      }
-
-      return false;
+      return hasController<Gtk::GestureClick>(widget);
     }
 
     bool emitClickGesture(Gtk::Widget& widget, double const x = 1.0, double const y = 1.0)
     {
-      auto const controllersPtr = widget.observe_controllers();
-      REQUIRE(controllersPtr);
-
-      auto const count = controllersPtr->get_n_items();
-
-      for (auto i = 0U; i < count; ++i)
-      {
-        auto* const object = ::g_list_model_get_object(controllersPtr->gobj(), i);
-
-        if (object == nullptr)
-        {
-          continue;
-        }
-
-        auto const isClick = ::g_type_check_instance_is_a(
-                               reinterpret_cast<GTypeInstance*>(object), ::gtk_gesture_click_get_type()) != FALSE;
-
-        if (isClick)
-        {
-          ::g_signal_emit_by_name(object, "pressed", 1, x, y);
-        }
-
-        ::g_object_unref(object);
-
-        if (isClick)
-        {
-          return true;
-        }
-      }
-
-      return false;
+      return emitGesturePressed(widget, 1, x, y);
     }
 
     Gtk::Button* findEditButton(Gtk::Widget& editor)
@@ -294,7 +219,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetail cover art sizing", "[layout][components]")
+  TEST_CASE("TrackDetail cover art sizing", "[layout][components][geometry]")
   {
     int const targetSize = 250;
 
@@ -332,11 +257,11 @@ namespace ao::gtk::layout::test
     CHECK(first.has_css_class("ao-detail-field-editable"));
     CHECK(firstButton->has_css_class("ao-detail-field-edit-hint"));
 
-    ::g_signal_emit_by_name(firstButton->gobj(), "clicked");
+    emitClicked(*firstButton);
     REQUIRE(first.getEditing());
     firstEntry->set_text("committed first");
 
-    ::g_signal_emit_by_name(secondButton->gobj(), "clicked");
+    emitClicked(*secondButton);
     CHECK_FALSE(first.getEditing());
     CHECK(first.getText() == "committed first");
     CHECK(second.getEditing());
@@ -348,7 +273,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(secondEntry->get_child_visible());
   }
 
-  TEST_CASE("TrackFieldGrid constrained layout behavior", "[layout][components][constrained]")
+  TEST_CASE("TrackFieldGrid constrained layout behavior", "[layout][components][constrained][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
     auto const tempDir = TempDir{};
@@ -819,7 +744,7 @@ namespace ao::gtk::layout::test
       REQUIRE(editButton != nullptr);
       auto* const entry = findWidget<Gtk::Entry>(*builtInValueEditor);
       REQUIRE(entry != nullptr);
-      ::g_signal_emit_by_name(editButton->gobj(), "clicked");
+      emitClicked(*editButton);
       scopedRoot.measure(Gtk::Orientation::VERTICAL, narrowPanelWidth, minHeight, natHeight, minWidth, natWidth);
       scopedRoot.size_allocate(Gtk::Allocation{0, 0, narrowPanelWidth, 2000}, -1);
 
@@ -905,7 +830,7 @@ namespace ao::gtk::layout::test
       REQUIRE(undoBar != nullptr);
       REQUIRE(trackHasCustomKey(runtime, trackId1, "partial"));
 
-      ::g_signal_emit_by_name(deleteButton->gobj(), "clicked");
+      emitClicked(*deleteButton);
       ao::gtk::test::drainGtkEvents();
 
       CHECK_FALSE(trackHasCustomKey(runtime, trackId1, "partial"));
@@ -1002,9 +927,9 @@ namespace ao::gtk::layout::test
 
       auto* const editButton = findEditButton(*mixedEditor);
       REQUIRE(editButton != nullptr);
-      ::g_signal_emit_by_name(editButton->gobj(), "clicked");
+      emitClicked(*editButton);
       CHECK(entry->get_child_visible());
-      ::g_signal_emit_by_name(entry->gobj(), "activate");
+      emitActivate(*entry);
       ao::gtk::test::drainGtkEvents();
 
       CHECK(trackNumberFor(runtime, trackId1) == std::optional<std::uint16_t>{1});

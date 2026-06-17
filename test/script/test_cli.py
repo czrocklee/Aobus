@@ -187,6 +187,25 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.suite, "core")
         self.assertEqual(args.filter, "rt::SmartListEvaluator")
 
+    def test_coverage_accepts_scopes_and_summary_limit(self):
+        args = self.parse(
+            [
+                "coverage",
+                "--gtk",
+                "--scope",
+                "app/linux-gtk",
+                "--scope",
+                "include/aobus",
+                "--summary-limit",
+                "7",
+                "[layout]",
+            ]
+        )
+        self.assertEqual(args.suite, "gtk")
+        self.assertEqual(args.scope, ["app/linux-gtk", "include/aobus"])
+        self.assertEqual(args.summary_limit, 7)
+        self.assertEqual(args.filter, "[layout]")
+
     def test_tidy_scope_and_passthrough_arguments(self):
         args = self.parse(
             [

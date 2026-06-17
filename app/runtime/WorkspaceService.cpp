@@ -489,7 +489,7 @@ namespace ao::rt
   void WorkspaceService::removeCustomPreset(std::string_view presetId)
   {
     std::erase_if(
-      _implPtr->customPresets, [presetId](auto const& existingPreset) { return existingPreset.label == presetId; });
+      _implPtr->customPresets, [presetId](auto const& existingPreset) { return existingPreset.spec.id == presetId; });
     _implPtr->customPresetsChangedSignal.emit();
   }
 

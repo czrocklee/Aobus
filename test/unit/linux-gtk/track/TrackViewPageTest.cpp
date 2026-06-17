@@ -37,15 +37,15 @@ namespace ao::gtk::test
       CHECK(page.projection() == nullptr);
     }
 
-    SECTION("set playing track doesn't crash")
-    {
-      page.setPlayingTrackId(TrackId{1});
-    }
-
-    SECTION("status message management")
+    SECTION("status message shows then hides the status label")
     {
       page.setStatusMessage("Loading...");
+      auto* const label = findLabelByText(page, "Loading...");
+      REQUIRE(label != nullptr);
+      CHECK(label->get_visible());
+
       page.clearStatusMessage();
+      CHECK_FALSE(label->get_visible());
     }
   }
 } // namespace ao::gtk::test

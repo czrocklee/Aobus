@@ -27,10 +27,11 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
+  using ao::gtk::test::emitClicked;
   using ao::gtk::test::makeRuntime;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("CollapsibleSplitComponent success states", "[layout][unit][containers]")
+  TEST_CASE("CollapsibleSplitComponent success states", "[layout][unit][containers][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -84,7 +85,7 @@ namespace ao::gtk::layout::test
       CHECK(revealer->get_reveal_child() == false);
       CHECK(revealer->get_transition_type() == Gtk::RevealerTransitionType::SLIDE_LEFT);
 
-      ::g_signal_emit_by_name(handleButton->gobj(), "clicked");
+      emitClicked(*handleButton);
       CHECK(revealer->get_reveal_child() == true);
 
       auto* const paneSizer = revealer->get_child();
@@ -165,7 +166,7 @@ namespace ao::gtk::layout::test
       auto* const handleButton = dynamic_cast<Gtk::Button*>(handleWidget);
       REQUIRE(handleButton != nullptr);
 
-      ::g_signal_emit_by_name(handleButton->gobj(), "clicked");
+      emitClicked(*handleButton);
       CHECK(revealer->get_reveal_child() == false);
 
       auto* const paneSizer = revealer->get_child();
@@ -355,7 +356,7 @@ namespace ao::gtk::layout::test
       auto* const handleButton = endSideCollapsibleToggle(*box);
       REQUIRE(handleButton != nullptr);
 
-      ::g_signal_emit_by_name(handleButton->gobj(), "clicked");
+      emitClicked(*handleButton);
 
       REQUIRE(stateStore.saveCount() == 1);
       REQUIRE(stateStore.document().components.contains("detail-split"));
@@ -391,7 +392,7 @@ namespace ao::gtk::layout::test
       auto* const handleButton = endSideCollapsibleToggle(*box);
       REQUIRE(handleButton != nullptr);
 
-      ::g_signal_emit_by_name(handleButton->gobj(), "clicked");
+      emitClicked(*handleButton);
 
       CHECK(stateStore.saveCount() == 0);
       CHECK(stateStore.document().components.empty());
@@ -423,7 +424,7 @@ namespace ao::gtk::layout::test
         REQUIRE(handleButton != nullptr);
 
         ++ctx.componentStateGeneration;
-        ::g_signal_emit_by_name(handleButton->gobj(), "clicked");
+        emitClicked(*handleButton);
       }
 
       CHECK(stateStore.saveCount() == 0);

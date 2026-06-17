@@ -61,7 +61,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("playback.image declarative properties", "[layout][unit][components]")
+  TEST_CASE("playback.image declarative properties", "[layout][unit][components][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.playback_image_test");
 

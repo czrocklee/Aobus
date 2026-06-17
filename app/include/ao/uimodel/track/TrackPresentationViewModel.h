@@ -29,6 +29,22 @@ namespace ao::uimodel::track
     LayoutOnly,
   };
 
+  enum class TrackPresentationMenuItemType : std::uint8_t
+  {
+    Preset,
+    Separator,
+    CreateCustomView,
+  };
+
+  struct TrackPresentationMenuItem final
+  {
+    TrackPresentationMenuItemType type = TrackPresentationMenuItemType::Preset;
+    std::string id;
+    std::string label;
+
+    bool operator==(TrackPresentationMenuItem const&) const = default;
+  };
+
   struct ColumnState final
   {
     rt::TrackField field = rt::TrackField::Title;
@@ -56,6 +72,8 @@ namespace ao::uimodel::track
     std::span<rt::CustomTrackPresentationPreset const> customPresentations() const noexcept;
 
     std::optional<rt::TrackPresentationSpec> specForId(std::string_view id) const;
+    std::string labelForId(std::string_view id) const;
+    std::vector<TrackPresentationMenuItem> menuItems() const;
 
     void addCustomPresentation(rt::CustomTrackPresentationPreset const& state);
     void removeCustomPresentation(std::string_view id);

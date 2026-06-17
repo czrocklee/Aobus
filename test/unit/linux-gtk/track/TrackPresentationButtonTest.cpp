@@ -7,15 +7,20 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/menubutton.h>
 #include <gtkmm/window.h>
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackPresentationButton - menu population", "[gtk][track][presentation]")
+  // Menu population semantics (which presets appear, ordering, active marker) are covered by
+  // TrackPresentationViewModel's tests. The widget keeps a single smoke: it binds its store and
+  // rebuilds its menu on a focus change.
+  TEST_CASE("TrackPresentationButton - constructs and rebuilds on focus change", "[gtk][track][presentation]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -28,15 +33,27 @@ namespace ao::gtk::test
     button.setPresentationStore(&presentationStore, &themeController);
     window.set_child(button);
 
-    SECTION("initial state")
-    {
-      // Verify it doesn't crash
-    }
+    runtime.workspace().navigateTo(rt::kAllTracksListId);
+    drainGtkEvents();
 
-    SECTION("populates on focus change")
-    {
-      runtime.workspace().navigateTo(rt::kAllTracksListId);
-      drainGtkEvents();
-    }
+    auto* const menuButton = findWidget<Gtk::MenuButton>(button);
+    REQUIRE(menuButton != nullptr);
+    CHECK(menuButton->get_sensitive());
+
+    auto* const popover = menuButton->get_popover();
+    REQUIRE(popover != nullptr);
+
+    auto* const albumsButton = findButtonByLabel(*popover, "Albums");
+    REQUIRE(albumsButton != nullptr);
+
+    emitClicked(*albumsButton);
+    drainGtkEvents();
+
+    auto const optPresentationId = presentationStore.presentationIdForList(rt::kAllTracksListId);
+    REQUIRE(optPresentationId.has_value());
+    CHECK(*optPresentationId == "albums");
+    auto const activeViewId = runtime.workspace().layoutState().activeViewId;
+    REQUIRE(activeViewId != rt::kInvalidViewId);
+    CHECK(runtime.views().trackListState(activeViewId).presentation.id == "albums");
   }
 } // namespace ao::gtk::test

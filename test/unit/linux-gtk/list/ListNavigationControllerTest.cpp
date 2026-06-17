@@ -6,19 +6,54 @@
 #include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <giomm/simpleaction.h>
+#include <giomm/simpleactiongroup.h>
 #include <gtkmm/window.h>
 
+#include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    ListId createList(library::MusicLibrary& library, std::string const& name, ListId parentId = kInvalidListId)
+    {
+      auto txn = library.writeTransaction();
+      auto writer = library.lists().writer(txn);
+      auto builder = library::ListBuilder::createNew();
+      builder.name(name).parentId(parentId);
+      auto const listId = writer.create(builder.serialize()).first;
+      txn.commit();
+      return listId;
+    }
+
+    Glib::RefPtr<Gio::SimpleAction> simpleAction(Gio::ActionMap& actionMap, std::string const& name)
+    {
+      return std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap.lookup_action(name));
+    }
+
+    std::optional<library::ListView> findList(library::MusicLibrary& library, ListId listId)
+    {
+      auto txn = library.readTransaction();
+      auto reader = library.lists().reader(txn);
+      return reader.get(listId);
+    }
+  } // namespace
+
   TEST_CASE("ListNavigationController - basic interactions", "[gtk][list][controller]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -27,10 +62,17 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{fixture.runtime().musicLibrary()};
 
     auto selectedId = ListId{999};
+    auto savedPresentationListId = kInvalidListId;
+    auto savedPresentationId = std::string{};
     auto callbacks =
       ListNavigationController::Callbacks{.onListSelected = [&](ListId id) { selectedId = id; },
                                           .getListMembership = [&](ListId) -> rt::TrackSource* { return nullptr; },
-                                          .onListPresentationSaved = {},
+                                          .onListPresentationSaved =
+                                            [&](ListId id, std::string presentationId)
+                                          {
+                                            savedPresentationListId = id;
+                                            savedPresentationId = std::move(presentationId);
+                                          },
                                           .getListPresentation = {}};
 
     auto themeController = ThemeCoordinator{};
@@ -39,14 +81,7 @@ namespace ao::gtk::test
 
     SECTION("rebuildTree populates the navigation panel")
     {
-      {
-        auto txn = fixture.runtime().musicLibrary().writeTransaction();
-        auto writer = fixture.runtime().musicLibrary().lists().writer(txn);
-        auto builder = library::ListBuilder::createNew();
-        builder.name("Test List");
-        writer.create(builder.serialize());
-        txn.commit();
-      }
+      createList(fixture.runtime().musicLibrary(), "Test List");
 
       auto txn = fixture.runtime().musicLibrary().readTransaction();
       controller.rebuildTree(cache, txn);
@@ -57,16 +92,7 @@ namespace ao::gtk::test
 
     SECTION("select triggers callback")
     {
-      auto testListId = ListId{0};
-      {
-        auto txn = fixture.runtime().musicLibrary().writeTransaction();
-        auto writer = fixture.runtime().musicLibrary().lists().writer(txn);
-        auto builder = library::ListBuilder::createNew();
-        builder.name("Select Target");
-        auto [id, _] = writer.create(builder.serialize());
-        testListId = id;
-        txn.commit();
-      }
+      auto const testListId = createList(fixture.runtime().musicLibrary(), "Select Target");
 
       auto txn = fixture.runtime().musicLibrary().readTransaction();
       controller.rebuildTree(cache, txn);
@@ -76,6 +102,130 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(selectedId == testListId);
+    }
+
+    SECTION("registered actions follow the selected list policy")
+    {
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*groupPtr);
+
+      auto const newActionPtr = simpleAction(*groupPtr, "new");
+      auto const editActionPtr = simpleAction(*groupPtr, "edit");
+      auto const deleteActionPtr = simpleAction(*groupPtr, "delete");
+      REQUIRE(newActionPtr);
+      REQUIRE(editActionPtr);
+      REQUIRE(deleteActionPtr);
+
+      CHECK_FALSE(newActionPtr->get_enabled());
+      CHECK_FALSE(editActionPtr->get_enabled());
+      CHECK_FALSE(deleteActionPtr->get_enabled());
+
+      auto& library = fixture.runtime().musicLibrary();
+      auto const leafListId = createList(library, "Leaf List");
+      auto const parentListId = createList(library, "Parent List");
+      createList(library, "Child List", parentListId);
+
+      auto txn = library.readTransaction();
+      controller.rebuildTree(cache, txn);
+      drainGtkEvents();
+
+      controller.select(leafListId);
+      drainGtkEvents();
+      CHECK(newActionPtr->get_enabled());
+      CHECK(editActionPtr->get_enabled());
+      CHECK(deleteActionPtr->get_enabled());
+
+      controller.select(parentListId);
+      drainGtkEvents();
+      CHECK(newActionPtr->get_enabled());
+      CHECK(editActionPtr->get_enabled());
+      CHECK_FALSE(deleteActionPtr->get_enabled());
+
+      controller.select(rt::kAllTracksListId);
+      drainGtkEvents();
+      CHECK(newActionPtr->get_enabled());
+      CHECK_FALSE(editActionPtr->get_enabled());
+      CHECK_FALSE(deleteActionPtr->get_enabled());
+    }
+
+    SECTION("submitListDraft creates a list and selects it on rebuild")
+    {
+      auto draft = rt::LibraryMutationService::ListDraft{};
+      draft.name = "Recently Played";
+      draft.description = "Tracks touched this week";
+      draft.expression = "$lastPlayed >= 7d";
+
+      auto const listId = controller.submitListDraft(draft, "compact");
+
+      auto const optList = findList(fixture.runtime().musicLibrary(), listId);
+      REQUIRE(optList);
+      CHECK(optList->name() == "Recently Played");
+      CHECK(optList->filter() == "$lastPlayed >= 7d");
+      CHECK(savedPresentationListId == listId);
+      CHECK(savedPresentationId == "compact");
+
+      auto txn = fixture.runtime().musicLibrary().readTransaction();
+      controller.rebuildTree(cache, txn);
+      drainGtkEvents();
+
+      CHECK(selectedId == listId);
+    }
+
+    SECTION("submitListDraft updates an existing list and preserves the presentation callback")
+    {
+      auto const listId = createList(fixture.runtime().musicLibrary(), "Old Name");
+
+      auto draft = rt::LibraryMutationService::ListDraft{};
+      draft.listId = listId;
+      draft.name = "High Energy";
+      draft.description = "Updated description";
+      draft.expression = "$bpm >= 130";
+
+      auto const savedId = controller.submitListDraft(draft, "wide");
+
+      auto const optList = findList(fixture.runtime().musicLibrary(), listId);
+      REQUIRE(optList);
+      CHECK(savedId == listId);
+      CHECK(optList->name() == "High Energy");
+      CHECK(optList->filter() == "$bpm >= 130");
+      CHECK(savedPresentationListId == listId);
+      CHECK(savedPresentationId == "wide");
+
+      auto txn = fixture.runtime().musicLibrary().readTransaction();
+      controller.rebuildTree(cache, txn);
+      drainGtkEvents();
+
+      CHECK(selectedId == listId);
+    }
+
+    SECTION("delete action removes the selected leaf list")
+    {
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*groupPtr);
+
+      auto const deleteActionPtr = simpleAction(*groupPtr, "delete");
+      REQUIRE(deleteActionPtr);
+
+      auto& library = fixture.runtime().musicLibrary();
+      auto const listId = createList(library, "Delete Target");
+
+      auto txn = library.readTransaction();
+      controller.rebuildTree(cache, txn);
+      drainGtkEvents();
+
+      controller.select(listId);
+      drainGtkEvents();
+      REQUIRE(deleteActionPtr->get_enabled());
+
+      deleteActionPtr->activate();
+
+      CHECK_FALSE(findList(library, listId).has_value());
+
+      auto rebuildTxn = library.readTransaction();
+      controller.rebuildTree(cache, rebuildTxn);
+      drainGtkEvents();
+
+      CHECK(selectedId == rt::kAllTracksListId);
     }
   }
 } // namespace ao::gtk::test

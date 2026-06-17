@@ -182,23 +182,7 @@ namespace ao::gtk
         {
           auto const presId = dialog->presentationId();
 
-          if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
-          {
-            updateList(draft);
-
-            if (_callbacks.onListPresentationSaved)
-            {
-              _callbacks.onListPresentationSaved(draft.listId, presId);
-            }
-          }
-          else
-          {
-            if (auto const newListId = createList(draft);
-                _callbacks.onListPresentationSaved && newListId != kInvalidListId)
-            {
-              _callbacks.onListPresentationSaved(newListId, presId);
-            }
-          }
+          submitListDraft(dialog->draft(), presId);
         }
 
         dialog->close();
@@ -229,18 +213,13 @@ namespace ao::gtk
       auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
       dialog->populate(listId, *optView, optPres);
       dialog->signal_response().connect(
-        [this, dialog, listId, tokenPtr](std::int32_t responseId)
+        [this, dialog, tokenPtr](std::int32_t responseId)
         {
           if (responseId == Gtk::ResponseType::OK)
           {
             if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
             {
-              updateList(draft);
-
-              if (_callbacks.onListPresentationSaved)
-              {
-                _callbacks.onListPresentationSaved(listId, dialog->presentationId());
-              }
+              submitListDraft(draft, dialog->presentationId());
             }
           }
 
@@ -249,6 +228,31 @@ namespace ao::gtk
 
       dialog->present();
     }
+  }
+
+  ListId ListNavigationController::submitListDraft(rt::LibraryMutationService::ListDraft const& draft,
+                                                   std::string presentationId)
+  {
+    if (draft.listId != kInvalidListId)
+    {
+      updateList(draft);
+
+      if (_callbacks.onListPresentationSaved)
+      {
+        _callbacks.onListPresentationSaved(draft.listId, std::move(presentationId));
+      }
+
+      return draft.listId;
+    }
+
+    auto const newListId = createList(draft);
+
+    if (_callbacks.onListPresentationSaved && newListId != kInvalidListId)
+    {
+      _callbacks.onListPresentationSaved(newListId, std::move(presentationId));
+    }
+
+    return newListId;
   }
 
   ListId ListNavigationController::createList(rt::LibraryMutationService::ListDraft const& draft)

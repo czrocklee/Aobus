@@ -88,10 +88,12 @@ add_executable(ao_core_test
     unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
 
     # ui model tests (no platform deps)
+    unit/uimodel/layout/AbsoluteCanvasModelTest.cpp
     unit/uimodel/layout/ActionCatalogTest.cpp
     unit/uimodel/layout/ActionValidatorTest.cpp
     unit/uimodel/layout/ComponentCatalogTest.cpp
     unit/uimodel/layout/LayoutModelTest.cpp
+    unit/uimodel/layout/ShellLayoutSessionModelTest.cpp
     unit/uimodel/layout/LayoutTemplateExpanderTest.cpp
     unit/uimodel/list/ListActionPolicyTest.cpp
     unit/uimodel/list/SmartListEditorModelTest.cpp
@@ -102,14 +104,19 @@ add_executable(ao_core_test
     unit/uimodel/playback/PlaybackQueueModelTest.cpp
     unit/uimodel/playback/PlaybackPositionInterpolatorTest.cpp
     unit/uimodel/playback/PlaybackTimeViewModelTest.cpp
+    unit/uimodel/playback/SeekSliderInteractionModelTest.cpp
     unit/uimodel/playback/SeekViewModelTest.cpp
     unit/uimodel/playback/TransportViewModelTest.cpp
     unit/uimodel/playback/VolumeViewModelTest.cpp
+    unit/uimodel/status/StatusSlotModelTest.cpp
     unit/uimodel/tag/TagEditWorkflowTest.cpp
     unit/uimodel/track/TrackFilterViewModelTest.cpp
     unit/uimodel/track/TrackFilterResolverTest.cpp
     unit/uimodel/track/TrackPageRouteTest.cpp
+    unit/uimodel/track/TrackCustomViewEditorModelTest.cpp
     unit/uimodel/track/TrackFieldFormatterTest.cpp
+    unit/uimodel/track/TrackInlineEditWorkflowTest.cpp
+    unit/uimodel/track/SelectionSummaryTest.cpp
     unit/uimodel/track/TrackPresentationViewModelTest.cpp
     unit/uimodel/track/TrackPresentationRecommenderTest.cpp
 
@@ -208,6 +215,7 @@ target_compile_options(ao_integration_test PRIVATE -Wno-array-bounds)
 
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_gtk_test
+    unit/linux-gtk/common/DismissControllerTest.cpp
     unit/linux-gtk/completion/EntryCompletionControllerTest.cpp
     unit/linux-gtk/list/ListModelTest.cpp
     unit/linux-gtk/list/ListTreeModelBuilderTest.cpp
@@ -216,7 +224,6 @@ add_executable(ao_gtk_test
     unit/linux-gtk/list/ListNavigationControllerTest.cpp
     unit/linux-gtk/tag/TagEditorTest.cpp
     unit/linux-gtk/tag/TagEditControllerTest.cpp
-    unit/linux-gtk/tag/TagPopoverTest.cpp
     unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp
     unit/linux-gtk/image/ImageWidgetTest.cpp
     unit/linux-gtk/image/ImageCacheTest.cpp
@@ -224,10 +231,13 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/ThemeCoordinatorTest.cpp
     unit/linux-gtk/app/ThemePresetTest.cpp
     unit/linux-gtk/app/MainWindowCoordinatorTest.cpp
+    unit/linux-gtk/app/MenuControllerTest.cpp
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
+    unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/AppConfigTest.cpp
+    unit/linux-gtk/app/MainWindowTest.cpp
     unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutControllerTest.cpp
@@ -244,8 +254,14 @@ add_executable(ao_gtk_test
     unit/linux-gtk/track/TrackPresentationTest.cpp
     unit/linux-gtk/track/TrackFieldUiTest.cpp
     unit/linux-gtk/track/TrackRowCacheTest.cpp
+    unit/linux-gtk/track/SelectionInfoLabelTest.cpp
+    unit/linux-gtk/track/StatusSlotTest.cpp
+    unit/linux-gtk/portal/LibraryTaskProgressDialogTest.cpp
+    unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
+    unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
+      unit/linux-gtk/layout/runtime/LayoutContextTest.cpp
       unit/linux-gtk/layout/runtime/ActionBinderTest.cpp
       unit/linux-gtk/layout/runtime/ActionValidatorTest.cpp
       unit/linux-gtk/layout/runtime/ComponentInteractionControllerTest.cpp
@@ -265,11 +281,14 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp
       unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp
+      unit/linux-gtk/layout/components/TrackFieldGridTextUtilsTest.cpp
       unit/linux-gtk/layout/components/PlaybackImageTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp
       unit/linux-gtk/app/AppConfigTest.cpp
     unit/linux-gtk/playback/AudioPipelinePanelTest.cpp
+    unit/linux-gtk/playback/AobusSoulWindowTest.cpp
+    unit/linux-gtk/playback/AudioDeviceSelectorTest.cpp
     unit/linux-gtk/playback/PlaybackUiComponentsTest.cpp
     unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
     unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp

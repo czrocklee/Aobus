@@ -6,7 +6,7 @@
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/uimodel/status/StatusSlotModel.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/box.h>
@@ -17,8 +17,6 @@
 
 #include <chrono>
 #include <cstddef>
-#include <optional>
-#include <string>
 
 namespace ao::rt
 {
@@ -57,9 +55,7 @@ namespace ao::gtk
     void onLibraryTaskCompleted(std::size_t count);
     void onNotificationPosted(rt::NotificationId id);
 
-    void showProgress(std::string const& message, double fraction);
-    void showNotification(rt::NotificationEntry const& entry);
-    void showSelectionInfo();
+    void renderState(uimodel::status::StatusSlotViewState const& state);
 
     void clearSeverityClasses();
     void startAutoDismissTimer(std::chrono::milliseconds timeout);
@@ -72,8 +68,7 @@ namespace ao::gtk
     Gtk::ProgressBar _progressBar;
     SelectionInfoLabel _selectionInfo;
 
-    bool _taskActive = false;
-    std::optional<rt::NotificationEntry> _optDeferredNotification;
+    uimodel::status::StatusSlotModel _model;
     sigc::connection _autoDismissTimer;
 
     rt::Subscription _progressSub;
@@ -82,6 +77,5 @@ namespace ao::gtk
 
     static constexpr int kMaxMessageChars = 30;
     static constexpr int kProgressBarWidth = 150;
-    static constexpr std::chrono::seconds kDefaultAutoDismissDuration{5};
   };
 } // namespace ao::gtk

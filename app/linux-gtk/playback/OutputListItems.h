@@ -10,7 +10,6 @@
 #include <glibmm/refptr.h>
 
 #include <string>
-#include <utility>
 
 namespace ao::gtk
 {
@@ -20,19 +19,13 @@ namespace ao::gtk
   class BackendItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<BackendItem> create(audio::BackendId id, std::string name)
-    {
-      return Glib::make_refptr_for_instance<BackendItem>(new BackendItem{std::move(id), std::move(name)});
-    }
+    static Glib::RefPtr<BackendItem> create(audio::BackendId id, std::string name);
 
-    audio::BackendId const& id() const { return _id; }
-    std::string const& name() const { return _name; }
+    audio::BackendId const& id() const;
+    std::string const& name() const;
 
   protected:
-    BackendItem(audio::BackendId id, std::string name)
-      : Glib::ObjectBase{typeid(BackendItem)}, _id{std::move(id)}, _name{std::move(name)}
-    {
-    }
+    BackendItem();
 
   private:
     audio::BackendId _id;
@@ -48,36 +41,21 @@ namespace ao::gtk
     static Glib::RefPtr<DeviceItem> create(audio::BackendId backend,
                                            audio::Device const& device,
                                            audio::ProfileId profile,
-                                           std::string customName = "")
-    {
-      return Glib::make_refptr_for_instance<DeviceItem>(
-        new DeviceItem{std::move(backend), device, std::move(profile), std::move(customName)});
-    }
+                                           std::string customName = "");
 
-    audio::BackendId const& backendId() const { return _backendId; }
-    audio::ProfileId const& profileId() const { return _profileId; }
-    audio::DeviceId const& id() const { return _id; }
-    std::string const& name() const { return _name; }
-    std::string const& description() const { return _description; }
-    bool active() const { return _active; }
-    void setActive(bool active) { _active = active; }
+    audio::BackendId const& backendId() const;
+    audio::ProfileId const& profileId() const;
+    audio::DeviceId const& id() const;
+    std::string const& name() const;
+    std::string const& description() const;
+    bool active() const;
+    void setActive(bool active);
 
     // Helper for diffing
-    bool matches(audio::BackendId const& backend, audio::DeviceId const& devId, audio::ProfileId const& profile) const
-    {
-      return _backendId == backend && _id == devId && _profileId == profile;
-    }
+    bool matches(audio::BackendId const& backend, audio::DeviceId const& devId, audio::ProfileId const& profile) const;
 
   protected:
-    DeviceItem(audio::BackendId backend, audio::Device const& device, audio::ProfileId profile, std::string customName)
-      : Glib::ObjectBase{typeid(DeviceItem)}
-      , _backendId{std::move(backend)}
-      , _profileId{std::move(profile)}
-      , _id{device.id}
-      , _name{customName.empty() ? device.displayName : customName}
-      , _description{device.description}
-    {
-    }
+    DeviceItem();
 
   private:
     audio::BackendId _backendId;

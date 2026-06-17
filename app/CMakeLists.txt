@@ -34,6 +34,7 @@ target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
 
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
 add_library(ao_app_uimodel STATIC
+    uimodel/layout/AbsoluteCanvasModel.cpp
     uimodel/layout/ActionCatalog.cpp
     uimodel/layout/ActionValidator.cpp
     uimodel/layout/ComponentCatalog.cpp
@@ -43,6 +44,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/LayoutStatePromoter.cpp
     uimodel/layout/LayoutTemplateExpander.cpp
     uimodel/layout/LayoutValue.cpp
+    uimodel/layout/ShellLayoutSessionModel.cpp
     uimodel/list/ListActionPolicy.cpp
     uimodel/list/SmartListEditorModel.cpp
     uimodel/playback/AobusSoulViewModel.cpp
@@ -52,15 +54,20 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/PlaybackPositionInterpolator.cpp
     uimodel/playback/PlaybackQueueModel.cpp
     uimodel/playback/PlaybackTimeViewModel.cpp
+    uimodel/playback/SeekSliderInteractionModel.cpp
     uimodel/playback/SeekViewModel.cpp
     uimodel/playback/TransportViewModel.cpp
     uimodel/playback/VolumeViewModel.cpp
+    uimodel/status/StatusSlotModel.cpp
+    uimodel/track/TrackCustomViewEditorModel.cpp
     uimodel/track/TrackPageRoute.cpp
     uimodel/track/TrackFilterViewModel.cpp
     uimodel/track/TrackFilterResolver.cpp
+    uimodel/track/TrackInlineEditWorkflow.cpp
     uimodel/track/TrackPresentationViewModel.cpp
     uimodel/track/TrackPresentationRecommender.cpp
     uimodel/track/TrackFieldFormatter.cpp
+    uimodel/track/SelectionSummary.cpp
     uimodel/tag/TagEditWorkflow.cpp
 )
 target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")

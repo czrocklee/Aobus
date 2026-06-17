@@ -13,10 +13,10 @@
 #include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/scrolledwindow.h>
-#include <gtkmm/widget.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
 #include <chrono>
 #include <vector>
 
@@ -90,40 +90,29 @@ namespace ao::gtk::test
       auto dialog = TrackPropertiesDialog{window, library, runtime.mutation(), runtime.completion(), cache, {trackId1}};
       drainGtkEvents();
 
-      auto width = 0;
-      auto height = 0;
-      dialog.get_default_size(width, height);
-
-      CHECK(width == -1);
-      CHECK(height == -1);
-
-      auto scrolledWindows = std::vector<Gtk::ScrolledWindow*>{};
-      auto* const child = dialog.get_child();
-      REQUIRE(child != nullptr);
-      collectScrolledWindows(*child, scrolledWindows);
-
-      auto configuredScrollCount = 0;
-
-      for (auto* const scrolledWindow : scrolledWindows)
-      {
-        if (scrolledWindow->get_min_content_width() == 480)
-        {
-          ++configuredScrollCount;
-          CHECK(scrolledWindow->get_propagate_natural_width());
-          CHECK(scrolledWindow->get_propagate_natural_height());
-          CHECK(scrolledWindow->get_max_content_width() == 640);
-          CHECK(scrolledWindow->get_max_content_height() == 520);
-        }
-      }
-
-      CHECK(configuredScrollCount == 2);
+      auto const entries = collectAll<Gtk::Entry>(dialog);
+      auto const hasTrackTitle =
+        std::ranges::any_of(entries, [](Gtk::Entry const* entry) { return entry->get_text() == "Track 1"; });
+      auto const hasTrackArtist =
+        std::ranges::any_of(entries, [](Gtk::Entry const* entry) { return entry->get_text() == "Artist 1"; });
+      CHECK(hasTrackTitle);
+      CHECK(hasTrackArtist);
     }
 
-    SECTION("multi-track selection")
+    SECTION("multi-track selection marks differing fields as mixed")
     {
-      auto const dialog =
+      auto dialog =
         TrackPropertiesDialog{window, library, runtime.mutation(), runtime.completion(), cache, {trackId1, trackId2}};
       drainGtkEvents();
+
+      // Title and artist differ across the two tracks, so their editors surface the mixed-value
+      // placeholder, while album/albumArtist/genre/year are shared and stay plain. The field-merge
+      // logic itself belongs to the dialog's data path; here we assert the mixed marker reaches a
+      // widget so the multi-track branch is observably exercised, not just constructed.
+      auto const entries = collectAll<Gtk::Entry>(dialog);
+      auto const mixedCount = std::ranges::count_if(
+        entries, [](Gtk::Entry const* entry) { return entry->get_placeholder_text() == "<Multiple Values>"; });
+      CHECK(mixedCount >= 1);
     }
   }
 } // namespace ao::gtk::test

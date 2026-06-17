@@ -8,6 +8,7 @@
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/uimodel/status/StatusSlotModel.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/enums.h>
@@ -17,7 +18,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <string>
 
 namespace ao::gtk
@@ -33,7 +33,7 @@ namespace ao::gtk
     _completedSub = _mutation.onLibraryTaskCompleted([this](auto count) { onLibraryTaskCompleted(count); });
     _notificationSub = _notifications.onPosted([this](auto id) { onNotificationPosted(id); });
 
-    showSelectionInfo();
+    renderState(_model.initialState());
   }
 
   StatusSlot::~StatusSlot()
@@ -65,40 +65,12 @@ namespace ao::gtk
 
   void StatusSlot::onLibraryTaskProgress(rt::LibraryMutationService::LibraryTaskProgressUpdated const& ev)
   {
-    _taskActive = true;
-
-    if (_autoDismissTimer)
-    {
-      _autoDismissTimer.disconnect();
-    }
-
-    showProgress(ev.message, ev.fraction);
+    renderState(_model.onLibraryTaskProgress(ev.message, ev.fraction));
   }
 
   void StatusSlot::onLibraryTaskCompleted(std::size_t count)
   {
-    _taskActive = false;
-    _progressBar.set_visible(false);
-
-    if (_optDeferredNotification)
-    {
-      auto const entry = *_optDeferredNotification;
-      _optDeferredNotification.reset();
-      showNotification(entry);
-    }
-    else
-    {
-      if (auto const message =
-            count == 0 ? "Library is up to date" : std::format("Scan complete: {} tracks added", count);
-          !message.empty())
-      {
-        _messageLabel.set_text(message);
-        clearSeverityClasses();
-        _messageLabel.add_css_class("ao-status-info");
-
-        startAutoDismissTimer(std::chrono::duration_cast<std::chrono::milliseconds>(kDefaultAutoDismissDuration));
-      }
-    }
+    renderState(_model.onLibraryTaskCompleted(count));
   }
 
   void StatusSlot::onNotificationPosted(rt::NotificationId id)
@@ -111,77 +83,55 @@ namespace ao::gtk
       return;
     }
 
-    if (_taskActive)
+    if (auto const optState = _model.onNotificationPosted(*iter); optState)
     {
-      _optDeferredNotification = *iter;
-    }
-    else
-    {
-      showNotification(*iter);
+      renderState(*optState);
     }
   }
 
-  void StatusSlot::showProgress(std::string const& message, double fraction)
-  {
-    _selectionInfo.widget().set_visible(false);
-    _messageLabel.set_visible(true);
-    _progressBar.set_visible(true);
-
-    _messageLabel.set_text(message);
-    _progressBar.set_fraction(fraction);
-
-    clearSeverityClasses();
-  }
-
-  void StatusSlot::showNotification(rt::NotificationEntry const& entry)
+  void StatusSlot::renderState(uimodel::status::StatusSlotViewState const& state)
   {
     if (_autoDismissTimer)
     {
       _autoDismissTimer.disconnect();
     }
 
-    _selectionInfo.widget().set_visible(false);
-    _messageLabel.set_visible(true);
-    _progressBar.set_visible(false);
-
-    _messageLabel.set_text(entry.message);
-
     clearSeverityClasses();
 
-    switch (entry.severity)
+    switch (state.mode)
     {
-      case rt::NotificationSeverity::Info: _messageLabel.add_css_class("ao-status-info"); break;
-      case rt::NotificationSeverity::Warning: _messageLabel.add_css_class("ao-status-warning"); break;
-      case rt::NotificationSeverity::Error: _messageLabel.add_css_class("ao-status-error"); break;
+      case uimodel::status::StatusSlotDisplayMode::SelectionInfo:
+        _messageLabel.set_visible(false);
+        _progressBar.set_visible(false);
+        _selectionInfo.widget().set_visible(true);
+        return;
+
+      case uimodel::status::StatusSlotDisplayMode::Progress:
+        _selectionInfo.widget().set_visible(false);
+        _messageLabel.set_visible(true);
+        _progressBar.set_visible(true);
+        _messageLabel.set_text(state.message);
+        _progressBar.set_fraction(state.progressFraction);
+        return;
+
+      case uimodel::status::StatusSlotDisplayMode::Message:
+        _selectionInfo.widget().set_visible(false);
+        _messageLabel.set_visible(true);
+        _progressBar.set_visible(false);
+        _messageLabel.set_text(state.message);
+
+        if (state.optSeverity)
+        {
+          _messageLabel.add_css_class(std::string{uimodel::status::statusSlotSeverityCssClass(*state.optSeverity)});
+        }
+
+        if (state.optAutoDismissTimeout)
+        {
+          startAutoDismissTimer(*state.optAutoDismissTimeout);
+        }
+
+        return;
     }
-
-    if (!entry.sticky)
-    {
-      auto const timeout =
-        entry.optTimeout.value_or(std::chrono::duration_cast<std::chrono::milliseconds>(kDefaultAutoDismissDuration));
-      startAutoDismissTimer(std::chrono::duration_cast<std::chrono::milliseconds>(timeout));
-    }
-  }
-
-  void StatusSlot::showSelectionInfo()
-  {
-    if (_autoDismissTimer)
-    {
-      _autoDismissTimer.disconnect();
-    }
-
-    _messageLabel.set_visible(false);
-    _progressBar.set_visible(false);
-    _selectionInfo.widget().set_visible(true);
-
-    clearSeverityClasses();
-  }
-
-  void StatusSlot::clearSeverityClasses()
-  {
-    _messageLabel.remove_css_class("ao-status-info");
-    _messageLabel.remove_css_class("ao-status-warning");
-    _messageLabel.remove_css_class("ao-status-error");
   }
 
   void StatusSlot::startAutoDismissTimer(std::chrono::milliseconds timeout)
@@ -194,9 +144,16 @@ namespace ao::gtk
     _autoDismissTimer = Glib::signal_timeout().connect(
       [this]
       {
-        showSelectionInfo();
+        renderState(_model.onAutoDismiss());
         return false;
       },
       static_cast<std::uint32_t>(timeout.count()));
+  }
+
+  void StatusSlot::clearSeverityClasses()
+  {
+    _messageLabel.remove_css_class("ao-status-info");
+    _messageLabel.remove_css_class("ao-status-warning");
+    _messageLabel.remove_css_class("ao-status-error");
   }
 } // namespace ao::gtk

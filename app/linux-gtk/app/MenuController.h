@@ -21,6 +21,10 @@ namespace ao::gtk
     class ImportExportCoordinator;
   }
 
+  // Owns the main menu model and binds its window actions to the injected callbacks. The menu
+  // structure and the action binding are deliberately kept together: the model is static data with
+  // no behavior of its own, so splitting it out would only enable a low-value shape assertion.
+  // Dispatch behavior is covered by MenuControllerTest.
   class MenuController final
   {
   public:

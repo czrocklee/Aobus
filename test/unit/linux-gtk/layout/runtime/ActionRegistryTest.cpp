@@ -157,7 +157,7 @@ namespace ao::gtk::layout::test
           .slot = ActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
     }
 
-    SECTION("Activating an unknown action id returns UnknownAction and does not crash")
+    SECTION("Activating an unknown action id returns UnknownAction")
     {
       auto const outcome = registry.activate("unknown", ctx);
       CHECK(outcome.result == ActionActivationResult::UnknownAction);

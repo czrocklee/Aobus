@@ -6,6 +6,7 @@
 #include "app/AppConfig.h"
 #include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
+#include "app/MouseNavigationPolicy.h"
 #include "app/PlaybackShortcutPolicy.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/UIState.h"
@@ -87,20 +88,21 @@ namespace ao::gtk
 
     setupPlaybackSpaceShortcut();
 
-    // Mouse back/forward navigation (buttons 8/9).
+    // Mouse back/forward navigation (thumb buttons 8/9).
     auto mouseNavGesturePtr = Gtk::GestureClick::create();
     mouseNavGesturePtr->set_button(0); // listen to all buttons
-    constexpr int kMouseBackButton = 8;
-    constexpr int kMouseForwardButton = 9;
 
     mouseNavGesturePtr->signal_pressed().connect(
       [this, mouseNavGesturePtr](std::int32_t /*nPress*/, double /*x*/, double /*y*/)
       {
-        if (auto const button = mouseNavGesturePtr->get_current_button(); button == kMouseBackButton)
+        auto const optNavigation =
+          mouseButtonNavigation(static_cast<std::int32_t>(mouseNavGesturePtr->get_current_button()));
+
+        if (optNavigation == WorkspaceNavigation::Back)
         {
           _runtime.workspace().goBack();
         }
-        else if (button == kMouseForwardButton)
+        else if (optNavigation == WorkspaceNavigation::Forward)
         {
           _runtime.workspace().goForward();
         }

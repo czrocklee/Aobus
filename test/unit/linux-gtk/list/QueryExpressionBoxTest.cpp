@@ -6,12 +6,14 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
-#include <giomm/listmodel.h>
 #include <gtkmm/window.h>
 
 namespace ao::gtk::test
 {
-  TEST_CASE("QueryExpressionBox - smoke test", "[gtk][list][query]")
+  // Wiring smoke only. Completion routing (text change -> provider -> popup) is
+  // covered by EntryCompletionControllerTest; the completer logic by
+  // CompletionServiceTest.
+  TEST_CASE("QueryExpressionBox - wires the entry into the box", "[gtk][list][query]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -19,7 +21,11 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto box = QueryExpressionBox{fixture.runtime().completion()};
     window.set_child(box);
-
     drainGtkEvents();
+
+    auto& entry = box.entry();
+    CHECK(entry.get_parent() == &box);
+    CHECK(entry.get_hexpand());
+    CHECK(hasCssClass(entry, "ao-query-expression-entry"));
   }
 } // namespace ao::gtk::test

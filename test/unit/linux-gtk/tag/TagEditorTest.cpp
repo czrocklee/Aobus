@@ -17,7 +17,6 @@
 #include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtk/gtk.h>
 
 #include <cstdint>
 #include <string>
@@ -27,28 +26,6 @@ namespace ao::gtk::test
 {
   namespace
   {
-    template<typename T>
-    T* findWidgetByClass(Gtk::Widget& root, std::string_view const className)
-    {
-      if (root.has_css_class(Glib::ustring{std::string{className}}))
-      {
-        if (auto* const target = dynamic_cast<T*>(&root); target != nullptr)
-        {
-          return target;
-        }
-      }
-
-      for (auto* child = root.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        if (auto* const result = findWidgetByClass<T>(*child, className); result != nullptr)
-        {
-          return result;
-        }
-      }
-
-      return nullptr;
-    }
-
     // Counts the editor's direct chip children carrying the given CSS class. Chips are direct
     // children of the editor (the flow is hand-rolled, not a GtkFlowBox), so no cell wrapper.
     std::int32_t countChipsByClass(Gtk::Widget& container, std::string_view const className)
@@ -66,41 +43,9 @@ namespace ao::gtk::test
       return count;
     }
 
-    // Emits a "pressed" on the first GestureClick controller installed on the window. The add
-    // trigger attaches such a controller while its inline entry is open to catch outside clicks.
     bool emitWindowOutsideClick(Gtk::Window& window, double const x = 1.0, double const y = 1.0)
     {
-      auto const controllersPtr = window.observe_controllers();
-      REQUIRE(controllersPtr);
-
-      auto const count = controllersPtr->get_n_items();
-
-      for (auto i = 0U; i < count; ++i)
-      {
-        auto* const object = ::g_list_model_get_object(controllersPtr->gobj(), i);
-
-        if (object == nullptr)
-        {
-          continue;
-        }
-
-        auto const isClick = ::g_type_check_instance_is_a(
-                               reinterpret_cast<GTypeInstance*>(object), ::gtk_gesture_click_get_type()) != FALSE;
-
-        if (isClick)
-        {
-          ::g_signal_emit_by_name(object, "pressed", 1, x, y);
-        }
-
-        ::g_object_unref(object);
-
-        if (isClick)
-        {
-          return true;
-        }
-      }
-
-      return false;
+      return emitGesturePressed(window, 1, x, y);
     }
 
     // Returns the first suggested chip among the editor's direct children, if present.
@@ -139,7 +84,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TagEditor - chip interaction", "[gtk][tag]")
+  TEST_CASE("TagEditor - chip interaction", "[gtk][tag][geometry]")
   {
     constexpr auto kLongTag = "AnExtremelyLongTagNameForNarrowLayouts";
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -238,7 +183,7 @@ namespace ao::gtk::test
       auto* suggested = findWidgetByClass<Gtk::Button>(editor, "ao-tag-chip-suggested");
       REQUIRE(suggested != nullptr);
 
-      ::g_signal_emit_by_name(suggested->gobj(), "clicked");
+      emitClicked(*suggested);
       drainGtkEvents();
 
       CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 4);
@@ -253,12 +198,12 @@ namespace ao::gtk::test
       REQUIRE(entry != nullptr);
       CHECK_FALSE(entry->get_visible());
 
-      ::g_signal_emit_by_name(addButton->gobj(), "clicked");
+      emitClicked(*addButton);
       drainGtkEvents();
       CHECK(entry->get_visible());
 
       entry->set_text("Funk");
-      ::g_signal_emit_by_name(entry->gobj(), "activate");
+      emitActivate(*entry);
       drainGtkEvents();
 
       CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 4);
@@ -269,7 +214,7 @@ namespace ao::gtk::test
       entry->insert_text("123 Mix", -1, position);
       CHECK(entry->get_text() == "123 Mix");
 
-      ::g_signal_emit_by_name(entry->gobj(), "activate");
+      emitActivate(*entry);
       drainGtkEvents();
 
       CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 5);
@@ -285,7 +230,7 @@ namespace ao::gtk::test
       REQUIRE(addButton != nullptr);
       REQUIRE(entry != nullptr);
 
-      ::g_signal_emit_by_name(addButton->gobj(), "clicked");
+      emitClicked(*addButton);
       drainGtkEvents();
       REQUIRE(entry->get_visible());
 
@@ -310,7 +255,7 @@ namespace ao::gtk::test
       REQUIRE(rockChip != nullptr);
       CHECK(rockChip->get_visible()); // shown in the default browse view
 
-      ::g_signal_emit_by_name(addButton->gobj(), "clicked");
+      emitClicked(*addButton);
       drainGtkEvents();
       CHECK_FALSE(rockChip->get_visible()); // hidden while adding/searching
 
@@ -327,7 +272,7 @@ namespace ao::gtk::test
       // natural width.
       auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
       REQUIRE(addButton != nullptr);
-      ::g_signal_emit_by_name(addButton->gobj(), "clicked");
+      emitClicked(*addButton);
       drainGtkEvents();
 
       auto* const chip = firstSuggestedChip(editor); // only Jazz remains visible
@@ -442,7 +387,7 @@ namespace ao::gtk::test
       REQUIRE(addButton != nullptr);
       REQUIRE(entry != nullptr);
 
-      ::g_signal_emit_by_name(addButton->gobj(), "clicked");
+      emitClicked(*addButton);
       drainGtkEvents();
 
       auto* const jazz = firstSuggestedChip(editor); // only Jazz is suggested
@@ -479,7 +424,7 @@ namespace ao::gtk::test
       CHECK(natWidth > minWidth);
       CHECK(removeButton->get_width() >= 20);
 
-      ::g_signal_emit_by_name(removeButton->gobj(), "clicked");
+      emitClicked(*removeButton);
       drainGtkEvents();
 
       CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 2);

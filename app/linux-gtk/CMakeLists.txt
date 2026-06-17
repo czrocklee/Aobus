@@ -23,6 +23,7 @@ add_library(aobus-gtk-lib STATIC
     app/GtkMainContextExecutor.cpp
     app/MainWindow.cpp
     app/MenuController.cpp
+    app/MouseNavigationPolicy.cpp
     app/PlaybackShortcutPolicy.cpp
     app/ShellLayoutController.cpp
     app/ShellLayoutComponentStateStore.cpp
@@ -69,6 +70,7 @@ add_library(aobus-gtk-lib STATIC
     playback/AudioPipelinePanel.cpp
     playback/NowPlayingFieldLabel.cpp
     playback/NowPlayingStatusLabel.cpp
+    playback/OutputListItems.cpp
     playback/PlaybackDetailsWidget.cpp
     playback/TransportButton.cpp
     playback/TimeLabel.cpp
@@ -110,6 +112,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/track/TrackFieldGridCustomControls.cpp
     layout/component/track/TrackFieldGridComponent.cpp
     layout/component/track/TrackFieldGridRows.cpp
+    layout/component/track/TrackFieldGridTextUtils.cpp
     layout/component/track/TrackFieldGridWidgets.cpp
     layout/component/track/TrackTagEditorComponent.cpp
     layout/component/playback/AudioPipelinePanelComponent.cpp

@@ -13,6 +13,7 @@
 #include <map>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -52,6 +53,69 @@ namespace ao::uimodel::track
     }
 
     return std::nullopt;
+  }
+
+  std::string TrackPresentationViewModel::labelForId(std::string_view id) const
+  {
+    if (auto const* builtin = rt::builtinTrackPresentationPreset(id); builtin != nullptr)
+    {
+      return std::string{builtin->label};
+    }
+
+    auto const presets = _workspace.customPresets();
+    auto const it = std::ranges::find(presets, id, [](auto const& preset) { return preset.spec.id; });
+
+    if (it != presets.end())
+    {
+      return it->label;
+    }
+
+    return std::string{id};
+  }
+
+  std::vector<TrackPresentationMenuItem> TrackPresentationViewModel::menuItems() const
+  {
+    auto items = std::vector<TrackPresentationMenuItem>{};
+
+    for (auto const& preset : builtinPresets())
+    {
+      items.push_back(TrackPresentationMenuItem{
+        .type = TrackPresentationMenuItemType::Preset,
+        .id = std::string{preset.spec.id},
+        .label = std::string{preset.label},
+      });
+    }
+
+    if (auto const customs = customPresentations(); !customs.empty())
+    {
+      items.push_back(TrackPresentationMenuItem{
+        .type = TrackPresentationMenuItemType::Separator,
+        .id = {},
+        .label = {},
+      });
+
+      for (auto const& preset : customs)
+      {
+        items.push_back(TrackPresentationMenuItem{
+          .type = TrackPresentationMenuItemType::Preset,
+          .id = preset.spec.id,
+          .label = preset.label,
+        });
+      }
+    }
+
+    items.push_back(TrackPresentationMenuItem{
+      .type = TrackPresentationMenuItemType::Separator,
+      .id = {},
+      .label = {},
+    });
+    items.push_back(TrackPresentationMenuItem{
+      .type = TrackPresentationMenuItemType::CreateCustomView,
+      .id = {},
+      .label = "Create Custom View...",
+    });
+
+    return items;
   }
 
   void TrackPresentationViewModel::setActivePresentationId(std::string_view id)

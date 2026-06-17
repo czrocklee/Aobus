@@ -60,6 +60,7 @@ namespace ao::gtk
     void rebuildTree(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
     void select(ListId listId);
     void createSmartListFromExpression(ListId parentListId, std::string expression);
+    ListId submitListDraft(rt::LibraryMutationService::ListDraft const& draft, std::string presentationId);
 
     void addActionsTo(Gio::ActionMap& actionMap);
 

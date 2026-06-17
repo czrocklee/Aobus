@@ -246,7 +246,7 @@ namespace ao::gtk::portal
     {
       if (auto const filePtr = fileDialog->save_finish(result); filePtr)
       {
-        executeExportTask(filePtr->get_path(), mode);
+        exportLibraryTo(filePtr->get_path(), mode);
       }
     }
     catch (Glib::Error const& e)
@@ -255,7 +255,7 @@ namespace ao::gtk::portal
     }
   }
 
-  void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, rt::ExportMode mode)
+  void ImportExportCoordinator::exportLibraryTo(std::filesystem::path path, rt::ExportMode mode)
   {
     _runtime.async().spawnWithLifetime(
       &_tasks,
@@ -278,7 +278,7 @@ namespace ao::gtk::portal
           self->_runtime.notifications().post(
             rt::NotificationSeverity::Error, std::format("Export failed: {}", e.what()));
         }
-      }(this, path, mode));
+      }(this, std::move(path), mode));
   }
 
   void ImportExportCoordinator::importLibrary()
@@ -324,6 +324,14 @@ namespace ao::gtk::portal
     }
   }
 
+  void ImportExportCoordinator::importLibraryFrom(std::filesystem::path path)
+  {
+    _runtime.async().spawnWithLifetime(
+      &_tasks,
+      [](ImportExportCoordinator* self, std::filesystem::path importPath) -> async::Task<void>
+      { co_await self->importLibraryTask(std::move(importPath)); }(this, std::move(path)));
+  }
+
   void ImportExportCoordinator::onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result,
                                                         Glib::RefPtr<Gtk::FileDialog> const& dialog)
   {
@@ -331,11 +339,7 @@ namespace ao::gtk::portal
     {
       if (auto const filePtr = dialog->open_finish(result); filePtr)
       {
-        auto const path = std::filesystem::path{filePtr->get_path()};
-        _runtime.async().spawnWithLifetime(
-          &_tasks,
-          [](ImportExportCoordinator* self, std::filesystem::path importPath) -> async::Task<void>
-          { co_await self->importLibraryTask(std::move(importPath)); }(this, path));
+        importLibraryFrom(filePtr->get_path());
       }
     }
     catch (Glib::Error const& e)

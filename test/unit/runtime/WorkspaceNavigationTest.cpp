@@ -534,7 +534,7 @@ namespace ao::rt::test
     CHECK(spec.groupBy == TrackGroupKey::Work);
 
     // Remove preset
-    runtime.workspace().removeCustomPreset("custom1");
+    runtime.workspace().removeCustomPreset("custom1_id");
     CHECK(emitCount == 3);
     CHECK(runtime.workspace().customPresets().empty());
   }

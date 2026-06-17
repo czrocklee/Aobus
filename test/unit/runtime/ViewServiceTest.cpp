@@ -15,6 +15,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -377,6 +378,38 @@ namespace ao::rt::test
 
     // Invalid viewId does not crash
     REQUIRE_NOTHROW(service.openListInView(ViewId{999}, listId));
+  }
+
+  TEST_CASE("ViewService - selectionDuration sums selected track durations", "[app][unit][runtime][view][selection]")
+  {
+    auto env = TestEnv{};
+    auto const trackA = env.library.addTrack(TrackSpec{.title = "A", .duration = std::chrono::seconds{200}});
+    auto const trackB = env.library.addTrack(TrackSpec{.title = "B", .duration = std::chrono::seconds{100}});
+
+    auto service = env.makeService();
+    auto const result = service.createView({}, true);
+
+    SECTION("an empty selection has zero duration")
+    {
+      CHECK(service.selectionDuration(result.viewId) == std::chrono::milliseconds{0});
+    }
+
+    SECTION("the selection's durations are summed")
+    {
+      service.setSelection(result.viewId, {trackA, trackB});
+      CHECK(service.selectionDuration(result.viewId) == std::chrono::seconds{300});
+    }
+
+    SECTION("ids missing from the library are skipped")
+    {
+      service.setSelection(result.viewId, {trackA, TrackId{9999}});
+      CHECK(service.selectionDuration(result.viewId) == std::chrono::seconds{200});
+    }
+
+    SECTION("an unknown view has zero duration")
+    {
+      CHECK(service.selectionDuration(ViewId{999}) == std::chrono::milliseconds{0});
+    }
   }
 
   TEST_CASE("ViewService - setFilter", "[app][unit][runtime][view]")

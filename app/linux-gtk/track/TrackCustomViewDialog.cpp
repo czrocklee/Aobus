@@ -7,6 +7,7 @@
 #include "app/FormBuilder.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/uimodel/track/TrackCustomViewEditorModel.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -22,17 +23,14 @@
 #include <gtkmm/togglebutton.h>
 #include <gtkmm/window.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <iterator>
 #include <optional>
 #include <random>
+#include <span>
 #include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 namespace ao::gtk
 {
@@ -51,59 +49,38 @@ namespace ao::gtk
       return std::format("{:016x}", dis(gen));
     }
 
-    std::string_view groupKeyName(rt::TrackGroupKey key)
-    {
-      switch (key)
-      {
-        case rt::TrackGroupKey::None: return "None";
-        case rt::TrackGroupKey::Artist: return "Artist";
-        case rt::TrackGroupKey::Album: return "Album";
-        case rt::TrackGroupKey::AlbumArtist: return "Album Artist";
-        case rt::TrackGroupKey::Genre: return "Genre";
-        case rt::TrackGroupKey::Composer: return "Composer";
-        case rt::TrackGroupKey::Work: return "Work";
-        case rt::TrackGroupKey::Year: return "Year";
-      }
-
-      return "None";
-    }
-
-    Glib::RefPtr<Gtk::StringList> createSortFieldsModel(std::vector<rt::TrackSortField>& mapping)
+    Glib::RefPtr<Gtk::StringList> createGroupKeysModel(std::span<uimodel::track::TrackGroupKeyOption const> options)
     {
       auto modelPtr = Gtk::StringList::create({});
-      auto const defs = rt::trackFieldDefinitions();
-      mapping.clear();
 
-      for (std::size_t idx = 0; idx < rt::kTrackSortFieldCount; ++idx)
+      for (auto const& option : options)
       {
-        auto const sortField = static_cast<rt::TrackSortField>(idx);
-
-        for (auto const& def : defs)
-        {
-          if (def.optSortField == sortField)
-          {
-            modelPtr->append(std::string{def.label});
-            mapping.push_back(sortField);
-            break;
-          }
-        }
+        modelPtr->append(option.label);
       }
 
       return modelPtr;
     }
 
-    Glib::RefPtr<Gtk::StringList> createVisibleFieldsModel(std::vector<rt::TrackField>& mapping)
+    Glib::RefPtr<Gtk::StringList> createSortFieldsModel(std::span<uimodel::track::TrackSortFieldOption const> options)
     {
       auto modelPtr = Gtk::StringList::create({});
-      mapping.clear();
 
-      for (auto const& def : rt::trackFieldDefinitions())
+      for (auto const& option : options)
       {
-        if (def.presentable)
-        {
-          modelPtr->append(std::string{def.label});
-          mapping.push_back(def.field);
-        }
+        modelPtr->append(option.label);
+      }
+
+      return modelPtr;
+    }
+
+    Glib::RefPtr<Gtk::StringList> createVisibleFieldsModel(
+      std::span<uimodel::track::TrackVisibleFieldOption const> options)
+    {
+      auto modelPtr = Gtk::StringList::create({});
+
+      for (auto const& option : options)
+      {
+        modelPtr->append(option.label);
       }
 
       return modelPtr;
@@ -136,24 +113,15 @@ namespace ao::gtk
     _nameEntry.set_placeholder_text("View label");
     metaList->addEntryRow("Name", _nameEntry);
 
-    auto groupModelPtr = Gtk::StringList::create({});
-    _availableGroupKeys = {
-      rt::TrackGroupKey::None,
-      rt::TrackGroupKey::Artist,
-      rt::TrackGroupKey::Album,
-      rt::TrackGroupKey::AlbumArtist,
-      rt::TrackGroupKey::Genre,
-      rt::TrackGroupKey::Composer,
-      rt::TrackGroupKey::Work,
-      rt::TrackGroupKey::Year,
-    };
-
-    for (auto const key : _availableGroupKeys)
-    {
-      groupModelPtr->append(std::string{groupKeyName(key)});
-    }
-
-    _groupDropdown.set_model(groupModelPtr);
+    _groupDropdown.set_model(createGroupKeysModel(_model.groupOptions()));
+    _groupDropdown.property_selected().signal_changed().connect(
+      [this]
+      {
+        if (auto const selected = _groupDropdown.get_selected(); selected < _model.groupOptions().size())
+        {
+          _model.setGroupKeyByOptionIndex(selected);
+        }
+      });
     metaList->addRow("Group By", _groupDropdown);
     mainBox->append(*metaList);
 
@@ -172,7 +140,7 @@ namespace ao::gtk
     addSortBtn->signal_clicked().connect(
       [this]
       {
-        _sortState.push_back({rt::TrackSortField::Title, true});
+        _model.addSortTerm();
         rebuildSortList();
       });
     mainBox->append(*addSortBtn);
@@ -192,7 +160,7 @@ namespace ao::gtk
     addVisibleBtn->signal_clicked().connect(
       [this]
       {
-        _visibleFieldsState.push_back(rt::TrackField::Title);
+        _model.addVisibleField();
         rebuildVisibleFieldsList();
       });
     mainBox->append(*addVisibleBtn);
@@ -217,27 +185,24 @@ namespace ao::gtk
       _sortTermsList.remove(*child);
     }
 
-    for (std::size_t i = 0; i < _sortState.size(); ++i)
+    auto const sortTerms = _model.sortTerms();
+
+    for (std::size_t i = 0; i < sortTerms.size(); ++i)
     {
-      auto const& term = _sortState[i];
+      auto const& term = sortTerms[i];
       auto* const row = Gtk::make_managed<Gtk::ListBoxRow>();
       auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
-      auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createSortFieldsModel(_availableSortFields));
+      auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createSortFieldsModel(_model.sortFieldOptions()));
+      auto const index = _model.optionIndexForSortField(term.field).value_or(0);
 
-      // Find the index in our mapping
-      auto const it = std::ranges::find(_availableSortFields, term.field);
-      auto const index = (it != _availableSortFields.end())
-                           ? static_cast<::guint>(std::ranges::distance(_availableSortFields.begin(), it))
-                           : 0;
-
-      dropdown->set_selected(index);
+      dropdown->set_selected(static_cast<::guint>(index));
       dropdown->property_selected().signal_changed().connect(
         [this, i, dropdown]
         {
-          if (auto const selected = dropdown->get_selected(); selected < _availableSortFields.size())
+          if (auto const selected = dropdown->get_selected(); selected < _model.sortFieldOptions().size())
           {
-            _sortState[i].field = _availableSortFields[selected];
+            _model.setSortFieldByOptionIndex(i, selected);
           }
         });
       box->append(*dropdown);
@@ -245,7 +210,7 @@ namespace ao::gtk
       auto* ascBtn = Gtk::make_managed<Gtk::ToggleButton>("Ascending");
       ascBtn->set_active(term.ascending);
 
-      ascBtn->signal_toggled().connect([this, i, ascBtn] { _sortState[i].ascending = ascBtn->get_active(); });
+      ascBtn->signal_toggled().connect([this, i, ascBtn] { _model.setSortAscending(i, ascBtn->get_active()); });
       box->append(*ascBtn);
 
       auto* spacer = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
@@ -258,18 +223,18 @@ namespace ao::gtk
       upBtn->signal_clicked().connect(
         [this, i]
         {
-          std::swap(_sortState[i], _sortState[i - 1]);
+          _model.moveSortTermUp(i);
           rebuildSortList();
         });
       box->append(*upBtn);
 
       auto* downBtn = Gtk::make_managed<Gtk::Button>("Down");
-      downBtn->set_sensitive(i < _sortState.size() - 1);
+      downBtn->set_sensitive(i + 1 < sortTerms.size());
 
       downBtn->signal_clicked().connect(
         [this, i]
         {
-          std::swap(_sortState[i], _sortState[i + 1]);
+          _model.moveSortTermDown(i);
           rebuildSortList();
         });
       box->append(*downBtn);
@@ -278,7 +243,7 @@ namespace ao::gtk
       removeBtn->signal_clicked().connect(
         [this, i]
         {
-          _sortState.erase(_sortState.begin() + static_cast<std::ptrdiff_t>(i));
+          _model.removeSortTerm(i);
           rebuildSortList();
         });
       box->append(*removeBtn);
@@ -295,26 +260,24 @@ namespace ao::gtk
       _visibleFieldsList.remove(*child);
     }
 
-    for (std::size_t i = 0; i < _visibleFieldsState.size(); ++i)
+    auto const visibleFields = _model.visibleFields();
+
+    for (std::size_t i = 0; i < visibleFields.size(); ++i)
     {
-      auto const field = _visibleFieldsState[i];
+      auto const field = visibleFields[i];
       auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
       auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
-      auto* dropdown = Gtk::make_managed<Gtk::DropDown>(createVisibleFieldsModel(_availableVisibleFields));
+      auto* dropdown = Gtk::make_managed<Gtk::DropDown>(createVisibleFieldsModel(_model.visibleFieldOptions()));
+      auto const index = _model.optionIndexForVisibleField(field).value_or(0);
 
-      auto const it = std::ranges::find(_availableVisibleFields, field);
-      auto const index = (it != _availableVisibleFields.end())
-                           ? static_cast<::guint>(std::ranges::distance(_availableVisibleFields.begin(), it))
-                           : 0;
-
-      dropdown->set_selected(index);
+      dropdown->set_selected(static_cast<::guint>(index));
       dropdown->property_selected().signal_changed().connect(
         [this, i, dropdown]
         {
-          if (auto const selected = dropdown->get_selected(); selected < _availableVisibleFields.size())
+          if (auto const selected = dropdown->get_selected(); selected < _model.visibleFieldOptions().size())
           {
-            _visibleFieldsState[i] = _availableVisibleFields[selected];
+            _model.setVisibleFieldByOptionIndex(i, selected);
           }
         });
       box->append(*dropdown);
@@ -329,18 +292,18 @@ namespace ao::gtk
       upBtn->signal_clicked().connect(
         [this, i]
         {
-          std::swap(_visibleFieldsState[i], _visibleFieldsState[i - 1]);
+          _model.moveVisibleFieldUp(i);
           rebuildVisibleFieldsList();
         });
       box->append(*upBtn);
 
       auto* downBtn = Gtk::make_managed<Gtk::Button>("Down");
-      downBtn->set_sensitive(i < _visibleFieldsState.size() - 1);
+      downBtn->set_sensitive(i + 1 < visibleFields.size());
 
       downBtn->signal_clicked().connect(
         [this, i]
         {
-          std::swap(_visibleFieldsState[i], _visibleFieldsState[i + 1]);
+          _model.moveVisibleFieldDown(i);
           rebuildVisibleFieldsList();
         });
       box->append(*downBtn);
@@ -349,7 +312,7 @@ namespace ao::gtk
       removeBtn->signal_clicked().connect(
         [this, i]
         {
-          _visibleFieldsState.erase(_visibleFieldsState.begin() + static_cast<std::ptrdiff_t>(i));
+          _model.removeVisibleField(i);
           rebuildVisibleFieldsList();
         });
       box->append(*removeBtn);
@@ -361,51 +324,22 @@ namespace ao::gtk
 
   void TrackCustomViewDialog::populateFromSpec(rt::TrackPresentationSpec const& spec, std::string_view label)
   {
-    _nameEntry.set_text(std::string{label});
+    _model.populate(spec, label);
+    _nameEntry.set_text(std::string{_model.label()});
 
-    if (auto const it = std::ranges::find(_availableGroupKeys, spec.groupBy); it != _availableGroupKeys.end())
+    if (auto const optIndex = _model.groupKeyOptionIndex(); optIndex)
     {
-      _groupDropdown.set_selected(static_cast<::guint>(std::ranges::distance(_availableGroupKeys.begin(), it)));
-    }
-
-    _sortState.clear();
-
-    for (auto const& term : spec.sortBy)
-    {
-      _sortState.push_back(term);
+      _groupDropdown.set_selected(static_cast<::guint>(*optIndex));
     }
 
     rebuildSortList();
-
-    _visibleFieldsState.clear();
-
-    for (auto const field : spec.visibleFields)
-    {
-      _visibleFieldsState.push_back(field);
-    }
-
     rebuildVisibleFieldsList();
   }
 
-  rt::CustomTrackPresentationPreset TrackCustomViewDialog::collectState() const
+  rt::CustomTrackPresentationPreset TrackCustomViewDialog::collectState()
   {
-    auto state = rt::CustomTrackPresentationPreset{};
-    state.spec.id = generateId();
-    state.label = _nameEntry.get_text();
-
-    if (auto const groupIndex = _groupDropdown.get_selected(); groupIndex < _availableGroupKeys.size())
-    {
-      state.spec.groupBy = _availableGroupKeys[groupIndex];
-    }
-    else
-    {
-      state.spec.groupBy = rt::TrackGroupKey::None;
-    }
-
-    state.spec.sortBy = _sortState;
-    state.spec.visibleFields = _visibleFieldsState;
-
-    return state;
+    _model.setLabel(_nameEntry.get_text().raw());
+    return _model.collectState(generateId());
   }
 
   std::optional<TrackCustomViewDialog::Result> TrackCustomViewDialog::runDialog()

@@ -23,6 +23,7 @@ examples:
   ./ao coverage                          # core suite, full report
   ./ao coverage "rt::SmartListEvaluator" # coverage for a test subset
   ./ao coverage --gtk "[layout]"         # GTK suite with a Catch2 filter
+  ./ao coverage --gtk --scope app/linux-gtk
 """
 
 REPORTED_TOP_DIRS = ("app", "lib", "include")
@@ -41,6 +42,18 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     suite.add_argument("--all", dest="suite", action="store_const", const="all", help="shortcut for --suite all")
     parser.add_argument("-p", "--path", metavar="<dir>", help="build directory (default: /tmp/build/coverage)")
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count(), help="parallel jobs (default: nproc)")
+    parser.add_argument(
+        "--scope",
+        action="append",
+        metavar="<prefix>",
+        help="only report source files under this repository-relative prefix; may be repeated",
+    )
+    parser.add_argument(
+        "--summary-limit",
+        type=int,
+        default=20,
+        help="number of lowest-coverage files to include in scoped summaries (default: 20)",
+    )
     parser.set_defaults(func=run_command)
 
 
@@ -55,10 +68,22 @@ def coverage_cxx_flags() -> str:
     return flags
 
 
+def _combine_hits(old_hits: int | None, new_hits: int | None) -> int | None:
+    """Sum hit counts, preserving None for non-executable lines."""
+    if old_hits is None:
+        return new_hits
+    if new_hits is None:
+        return old_hits
+    return old_hits + new_hits
+
+
 def parse_gcov_text(text: str) -> tuple[str | None, dict[int, tuple[int | None, str]]]:
     """Parse one .gcov file into (source path, {line: (hits or None, source text)}).
 
     hits is None for non-executable lines, 0 for never-executed ('#####'/'=====').
+    The same source line may appear multiple times when gcov splits constructors
+    into C1/C2 thunks (and the primary pass); accumulate hits across entries and
+    keep the first non-empty content.
     """
     source: str | None = None
     lines: dict[int, tuple[int | None, str]] = {}
@@ -81,7 +106,11 @@ def parse_gcov_text(text: str) -> tuple[str | None, dict[int, tuple[int | None, 
         else:
             digits = count_field.rstrip("*")
             hits = int(digits) if digits.isdigit() else None
-        lines[lineno] = (hits, content)
+        if lineno in lines:
+            old_hits, old_content = lines[lineno]
+            lines[lineno] = (_combine_hits(old_hits, hits), old_content or content)
+        else:
+            lines[lineno] = (hits, content)
     return source, lines
 
 
@@ -89,13 +118,7 @@ def merge_report(target: dict[int, tuple[int | None, str]], update: dict[int, tu
     """Union-merge executed counts: a line is covered if any translation unit ran it."""
     for lineno, (hits, content) in update.items():
         old_hits, old_content = target.get(lineno, (None, content))
-        if old_hits is None:
-            merged = hits
-        elif hits is None:
-            merged = old_hits
-        else:
-            merged = old_hits + hits
-        target[lineno] = (merged, old_content or content)
+        target[lineno] = (_combine_hits(old_hits, hits), old_content or content)
 
 
 def context_blocks(
@@ -117,6 +140,39 @@ def context_blocks(
         output.append(f"{marker:>9}:{lineno:>5}:{content}")
         previous = lineno
     return output
+
+
+def _normalized_scope(scope: str) -> str:
+    return scope.strip().strip("/")
+
+
+def _matches_scope(rel: str, scopes: list[str] | None) -> bool:
+    if not scopes:
+        return True
+    normalized = [_normalized_scope(scope) for scope in scopes]
+    return any(rel == scope or rel.startswith(f"{scope}/") for scope in normalized if scope)
+
+
+def file_stats(lines: dict[int, tuple[int | None, str]]) -> tuple[int, int, int, float]:
+    executable = {lineno: hits for lineno, (hits, _) in lines.items() if hits is not None}
+    total = len(executable)
+    missing = sum(1 for hits in executable.values() if hits == 0)
+    covered = total - missing
+    percent = covered / total * 100 if total else 100.0
+    return covered, total, missing, percent
+
+
+def scoped_stats(
+    merged: dict[str, dict[int, tuple[int | None, str]]], scopes: list[str] | None
+) -> list[tuple[str, int, int, int, float]]:
+    rows: list[tuple[str, int, int, int, float]] = []
+    for rel, lines in sorted(merged.items()):
+        if not _matches_scope(rel, scopes):
+            continue
+        covered, total, missing, percent = file_stats(lines)
+        if total:
+            rows.append((rel, covered, total, missing, percent))
+    return rows
 
 
 def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, str]]]:
@@ -146,22 +202,51 @@ def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, s
     return merged
 
 
-def report(merged: dict[str, dict[int, tuple[int | None, str]]], context_limit: int) -> None:
+def print_scoped_summary(
+    merged: dict[str, dict[int, tuple[int | None, str]]], scopes: list[str] | None, summary_limit: int
+) -> None:
+    if not scopes:
+        return
+    rows = scoped_stats(merged, scopes)
+    covered = sum(row[1] for row in rows)
+    total = sum(row[2] for row in rows)
+    missing = sum(row[3] for row in rows)
+    percent = covered / total * 100 if total else 100.0
+    scope_text = ", ".join(_normalized_scope(scope) for scope in scopes)
+    print(f"Scoped coverage ({scope_text}): {percent:.2f}% ({covered}/{total} lines), {missing} missing")
+    if not rows:
+        return
+    print("Lowest coverage files:")
+    for rel, file_covered, file_total, file_missing, file_percent in sorted(
+        rows, key=lambda row: (row[4], -row[3], row[0])
+    )[:summary_limit]:
+        print(f"  {file_percent:6.2f}% {file_covered:5}/{file_total:<5} {file_missing:5} missing  {rel}")
+    print()
+
+
+def report(
+    merged: dict[str, dict[int, tuple[int | None, str]]],
+    context_limit: int,
+    scopes: list[str] | None = None,
+    summary_limit: int = 20,
+) -> None:
+    print_scoped_summary(merged, scopes, summary_limit)
     for rel in sorted(merged):
-        lines = merged[rel]
-        executable = {lineno: hits for lineno, (hits, _) in lines.items() if hits is not None}
-        if not executable:
+        if not _matches_scope(rel, scopes):
             continue
-        missing = sorted(lineno for lineno, hits in executable.items() if hits == 0)
-        percent = (len(executable) - len(missing)) / len(executable) * 100
+        lines = merged[rel]
+        _, total, missing_count, percent = file_stats(lines)
+        if not total:
+            continue
+        missing = sorted(lineno for lineno, (hits, _) in lines.items() if hits == 0)
         if missing:
-            print(f"{YELLOW}{rel}: {percent:.2f}% ({len(executable)} lines) -> {len(missing)} missing lines{RESET}")
+            print(f"{YELLOW}{rel}: {percent:.2f}% ({total} lines) -> {missing_count} missing lines{RESET}")
             for row in context_blocks(lines, missing)[:context_limit]:
                 print(f"    {row}")
             if len(missing) > 5:
                 print("    ...")
         else:
-            print(f"{GREEN}{rel}: {percent:.2f}% ({len(executable)} lines) -> OK{RESET}")
+            print(f"{GREEN}{rel}: {percent:.2f}% ({total} lines) -> OK{RESET}")
 
 
 def run_command(args: argparse.Namespace) -> int:
@@ -203,7 +288,12 @@ def run_command(args: argparse.Namespace) -> int:
     print("=== Coverage Summary ===")
     print()
     merged = collect_coverage(build_dir)
-    report(merged, int(os.environ.get("COVERAGE_CONTEXT_LIMIT", "40")))
+    report(
+        merged,
+        int(os.environ.get("COVERAGE_CONTEXT_LIMIT", "40")),
+        scopes=args.scope,
+        summary_limit=args.summary_limit,
+    )
     print()
     print("Coverage check completed.")
     return 0

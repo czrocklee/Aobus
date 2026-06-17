@@ -9,6 +9,8 @@
 
 namespace ao::gtk::test
 {
+  // Smoke only. The soul view state (breathe/aura) is covered by
+  // AobusSoulViewModelTest; the click/Escape -> hide wiring is trivial GTK glue.
   TEST_CASE("AobusSoulWindow - basic lifecycle", "[gtk][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -17,18 +19,14 @@ namespace ao::gtk::test
 
     auto window = AobusSoulWindow{};
 
-    SECTION("initial state")
-    {
-      CHECK(window.get_title() == "Aobus Soul");
-    }
+    CHECK(window.get_title() == "Aobus Soul");
+    CHECK(window.get_name() == "AobusSoul");
+    CHECK(hasCssClass(window, "ao-soul-window"));
 
-    SECTION("bind and show")
-    {
-      window.bind(playback);
-
-      drainGtkEvents();
-      window.hide();
-      drainGtkEvents();
-    }
+    window.bind(playback);
+    window.show();
+    drainGtkEvents();
+    window.hide();
+    drainGtkEvents();
   }
 } // namespace ao::gtk::test

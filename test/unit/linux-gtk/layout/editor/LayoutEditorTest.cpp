@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "../../GtkTestSupport.h"
+#include "../components/ContainerTestHelpers.h"
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -18,7 +19,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/comboboxtext.h>
 #include <gtkmm/dialog.h>
-#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/treeview.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
@@ -37,7 +38,8 @@
 namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel::layout;
-  using ao::gtk::test::collectScrolledWindows;
+  using ao::gtk::test::emitClicked;
+  using ao::gtk::test::findButtonByLabel;
   using ao::gtk::test::makeRuntime;
 
   using namespace ao::lmdb::test;
@@ -266,46 +268,19 @@ namespace ao::gtk::layout::editor::test
       return nullptr;
     };
 
-    SECTION("Dialog constructs without crash")
+    SECTION("Dialog initializes selectors and tree")
     {
       auto dialogPtr =
         std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
-      REQUIRE(dialogPtr != nullptr);
 
-      auto width = 0;
-      auto height = 0;
-      dialogPtr->get_default_size(width, height);
+      CHECK(dialogPtr->selectedPresetId() == "classic");
+      CHECK(dialogPtr->selectedThemeId() == "modern");
 
-      CHECK(width == -1);
-      CHECK(height == -1);
-
-      auto scrolledWindows = std::vector<Gtk::ScrolledWindow*>{};
-      collectScrolledWindows(*dialogPtr, scrolledWindows);
-
-      auto foundTreeScroll = false;
-      auto foundPropertiesScroll = false;
-
-      for (auto* const scrolledWindow : scrolledWindows)
-      {
-        CHECK(scrolledWindow->get_propagate_natural_width());
-        CHECK(scrolledWindow->get_propagate_natural_height());
-
-        if (scrolledWindow->get_min_content_width() == 220)
-        {
-          foundTreeScroll = true;
-          CHECK(scrolledWindow->get_min_content_height() == 460);
-        }
-
-        if (scrolledWindow->get_min_content_width() == 420)
-        {
-          foundPropertiesScroll = true;
-          CHECK(scrolledWindow->get_max_content_width() == 560);
-          CHECK(scrolledWindow->get_max_content_height() == 560);
-        }
-      }
-
-      CHECK(foundTreeScroll);
-      CHECK(foundPropertiesScroll);
+      auto* const treeView = findTreeView(findTreeView, *dialogPtr);
+      REQUIRE(treeView != nullptr);
+      auto const modelPtr = treeView->get_model();
+      REQUIRE(modelPtr);
+      REQUIRE(!modelPtr->children().empty());
       dialogPtr->close();
     }
 
@@ -319,48 +294,6 @@ namespace ao::gtk::layout::editor::test
       CHECK(returned.root.id == doc.root.id);
 
       dialogPtr->close();
-    }
-
-    SECTION("reset default restores to createDefaultLayout shape")
-    {
-      // Create a modified document
-      auto modified = LayoutDocument{};
-      modified.root.type = "spacer";
-
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(
-        window, registry, actionRegistry, modified, "classic", "modern", stubLoader);
-
-      // The dialog copies the document, so modifications to the dialog's copy
-      // are reflected. Just verify the initial copy is correct.
-      CHECK(dialogPtr->document().root.type == "spacer");
-
-      dialogPtr->close();
-    }
-
-    SECTION("Validation prevents saving unknown actions")
-    {
-      auto invalidDoc = LayoutDocument{};
-      invalidDoc.root.type = "app.actionButton";
-      invalidDoc.root.props["primaryAction"] = LayoutValue{"this.does.not.exist"};
-
-      auto dialogPtr = std::make_unique<LayoutEditorDialog>(
-        window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader);
-
-      // Attempting to save an invalid document should fail validation and keep dialog open
-      dialogPtr->response(Gtk::ResponseType::OK);
-      // We verify the dialog object remains alive after validation rejects the response.
-      CHECK(dialogPtr != nullptr);
-      dialogPtr->close();
-
-      auto validDoc = LayoutDocument{};
-      validDoc.root.type = "app.actionButton";
-      validDoc.root.props["primaryAction"] = LayoutValue{"none"};
-
-      auto dialogValidPtr = std::make_unique<LayoutEditorDialog>(
-        window, registry, actionRegistry, validDoc, "classic", "modern", stubLoader);
-
-      // Attempting to save a valid document should succeed and close the dialog
-      dialogValidPtr->response(Gtk::ResponseType::OK);
     }
 
     SECTION("invalid save does not emit save request")
@@ -396,7 +329,7 @@ namespace ao::gtk::layout::editor::test
         treeView->get_selection()->select(modelPtr->children().begin());
       }
 
-      dialogPtr->testAddComponent("spacer");
+      CHECK(dialogPtr->activate_action("editor.add_spacer"));
 
       CHECK(count > 0);
 
@@ -421,9 +354,9 @@ namespace ao::gtk::layout::editor::test
       auto const initialCount = dialog.document().root.children.size();
 
       selectRoot();
-      dialog.testAddComponent("spacer");
+      CHECK(dialog.activate_action("editor.add_spacer"));
       selectRoot();
-      dialog.testAddComponent("spacer");
+      CHECK(dialog.activate_action("editor.add_spacer"));
 
       REQUIRE(dialog.document().root.children.size() == initialCount + 2);
       auto const& firstAdded = dialog.document().root.children[initialCount];
@@ -469,7 +402,7 @@ namespace ao::gtk::layout::editor::test
       treeView->get_selection()->select(rootRow.children().begin());
 
       auto const originalFirstChildId = dialog.document().root.children.front().id;
-      dialog.testWrapNode("box");
+      CHECK(dialog.activate_action("editor.wrap_box"));
 
       auto const& wrapper = dialog.document().root.children.front();
       CHECK(wrapper.id == "box-wrap");
@@ -477,16 +410,6 @@ namespace ao::gtk::layout::editor::test
       CHECK(wrapper.children.front().id == originalFirstChildId);
 
       dialog.close();
-    }
-
-    SECTION("destroys cleanly with header preset widgets")
-    {
-      {
-        auto dialogPtr =
-          std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
-        dialogPtr.reset();
-      }
-      SUCCEED(); // Reaching here without crash or GTK warnings is the goal
     }
 
     SECTION("Session caching and dirty tracking")
@@ -542,7 +465,7 @@ namespace ao::gtk::layout::editor::test
       auto const initialCount = dialog.document().root.children.size();
 
       // Edit active layout (classic) - this marks classic as dirty
-      dialog.testAddComponent("spacer");
+      CHECK(dialog.activate_action("editor.add_spacer"));
       CHECK(dialog.document().root.children.size() == initialCount + 1);
 
       // Switch to modern (not cached, invokes loader)
@@ -613,8 +536,9 @@ namespace ao::gtk::layout::editor::test
       auto* const combo = combos[0]->get_active_id() == "classic" ? combos[0] : combos[1];
       REQUIRE(combo != nullptr);
 
-      // Trigger reset default on classic
-      dialog.testOnResetDefault();
+      auto* const resetButton = findButtonByLabel(dialog.headerBar(), "Reset Default");
+      REQUIRE(resetButton != nullptr);
+      emitClicked(*resetButton);
 
       // Switch to modern, edit it
       combo->set_active_id("modern");
@@ -627,7 +551,7 @@ namespace ao::gtk::layout::editor::test
         treeView->get_selection()->select(modelPtr->children().begin());
       }
 
-      dialog.testAddComponent("spacer");
+      CHECK(dialog.activate_action("editor.add_spacer"));
 
       // Save and verify result
       auto saveResult = LayoutSaveResult{};
@@ -706,7 +630,7 @@ namespace ao::gtk::layout::editor::test
       CHECK(loadCount == 1);
 
       // Edit modern (currently active) to be dirty
-      dialog.testMarkEdited();
+      dialog.updateNodePosition("", 1, 2);
 
       // Switch back to classic (which is valid)
       combo->set_active_id("classic");
@@ -731,7 +655,9 @@ namespace ao::gtk::layout::editor::test
     {
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
 
-      dialog.testOnResetDefault();
+      auto* const resetButton = findButtonByLabel(dialog.headerBar(), "Reset Default");
+      REQUIRE(resetButton != nullptr);
+      emitClicked(*resetButton);
 
       auto saveResult = LayoutSaveResult{};
       auto saveCount = 0;
@@ -953,7 +879,7 @@ namespace ao::gtk::layout::editor::test
       CHECK(!optDesc->optMaxChildren.has_value());
     }
 
-    SECTION("absoluteCanvas with no children builds without crash")
+    SECTION("absoluteCanvas with no children builds a component")
     {
       auto doc = LayoutDocument{};
       doc.root.type = "absoluteCanvas";
@@ -984,5 +910,59 @@ namespace ao::gtk::layout::editor::test
 
       REQUIRE(compPtr != nullptr);
     }
+  }
+
+  TEST_CASE("absoluteCanvas geometry", "[layout][unit][editor][geometry]")
+  {
+    auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
+
+    auto const tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+
+    auto registry = ComponentRegistry{};
+    LayoutRuntime::registerStandardComponents(registry);
+
+    auto window = Gtk::Window{};
+    auto const actionRegistry = ActionRegistry{};
+    auto ctx =
+      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+
+    auto doc = LayoutDocument{};
+    doc.root.type = "absoluteCanvas";
+
+    auto child = LayoutNode{};
+    child.type = "spacer";
+    child.id = "pos-spacer";
+    child.layout["x"] = LayoutValue{static_cast<std::int64_t>(50)};
+    child.layout["y"] = LayoutValue{static_cast<std::int64_t>(100)};
+    child.layout["width"] = LayoutValue{static_cast<std::int64_t>(200)};
+    child.layout["height"] = LayoutValue{static_cast<std::int64_t>(50)};
+    doc.root.children.push_back(std::move(child));
+
+    auto layoutRuntime = LayoutRuntime{registry};
+    auto const compPtr = layoutRuntime.build(ctx, doc);
+
+    REQUIRE(compPtr != nullptr);
+
+    auto& canvas = compPtr->widget();
+    auto const horizontal = ao::gtk::layout::test::measureWidget(canvas, Gtk::Orientation::HORIZONTAL);
+    auto const vertical = ao::gtk::layout::test::measureWidget(canvas, Gtk::Orientation::VERTICAL);
+
+    CHECK(horizontal.minimum == 250);
+    CHECK(horizontal.natural == 250);
+    CHECK(vertical.minimum == 150);
+    CHECK(vertical.natural == 150);
+
+    auto allocationHost = ao::gtk::layout::test::AllocationHost{canvas};
+    allocationHost.allocateChild(400, 300);
+
+    auto* const allocatedChild = canvas.get_first_child();
+    REQUIRE(allocatedChild != nullptr);
+
+    auto const allocation = allocatedChild->get_allocation();
+    CHECK(allocation.get_x() == 50);
+    CHECK(allocation.get_y() == 100);
+    CHECK(allocation.get_width() == 200);
+    CHECK(allocation.get_height() == 50);
   }
 } // namespace ao::gtk::layout::editor::test

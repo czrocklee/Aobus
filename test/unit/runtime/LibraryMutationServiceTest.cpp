@@ -237,12 +237,19 @@ namespace ao::rt::test
     auto taskCount = std::size_t{0};
     auto sub3 = service.onLibraryTaskCompleted([&](auto count) { taskCount = count; });
 
+    auto taskProgress = LibraryMutationService::LibraryTaskProgressUpdated{};
+    auto sub4 = service.onLibraryTaskProgress([&](auto const& ev) { taskProgress = ev; });
+
     service.notifyTracksMutated({TrackId{1}, TrackId{2}});
     REQUIRE(mutatedTracks.size() == 2);
 
     service.notifyListsMutated({ListId{1}}, {ListId{2}});
     REQUIRE(upsertedLists.size() == 1);
     REQUIRE(deletedLists.size() == 1);
+
+    service.notifyLibraryTaskProgress({.fraction = 0.75, .message = "Scanning Fixture"});
+    CHECK(taskProgress.fraction == 0.75);
+    CHECK(taskProgress.message == "Scanning Fixture");
 
     service.notifyLibraryTaskCompleted(42);
     REQUIRE(taskCount == 42);

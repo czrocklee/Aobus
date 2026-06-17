@@ -5,6 +5,7 @@
 
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/playback/SeekSliderInteractionModel.h>
 #include <ao/uimodel/playback/SeekViewModel.h>
 
 #include <gdkmm/frameclock.h>
@@ -18,6 +19,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <tuple>
 
 namespace ao::gtk
 {
@@ -50,7 +52,7 @@ namespace ao::gtk
     _scale.add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
-        if (_interpolator.isPlaying() && _interactionState == InteractionState::Idle)
+        if (_interpolator.isPlaying() && !_interaction.isPointerActive())
         {
           auto const displayElapsed =
             _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clock->get_frame_time()));
@@ -72,8 +74,7 @@ namespace ao::gtk
   {
     if (view.duration == std::chrono::milliseconds{0})
     {
-      _interactionState = InteractionState::Idle;
-      _pendingFinalSeek = false;
+      _interaction.applyViewState(view.duration, view.enabled);
       setScaleRange(std::chrono::milliseconds{0});
       setScaleValue(std::chrono::milliseconds{0});
       _scale.set_sensitive(false);
@@ -81,10 +82,11 @@ namespace ao::gtk
     }
 
     setScaleRange(view.duration);
+    _interaction.applyViewState(view.duration, view.enabled);
     _scale.set_sensitive(view.enabled);
     _interpolator.updateState(view.elapsed, view.duration, view.isPlaying);
 
-    if (view.immediateUpdate && _interactionState == InteractionState::Idle)
+    if (view.immediateUpdate && !_interaction.isPointerActive())
     {
       setScaleValue(view.elapsed);
     }
@@ -92,63 +94,42 @@ namespace ao::gtk
 
   void SeekControl::handleScaleValueChanged()
   {
-    if (_updatingScale || _duration == std::chrono::milliseconds{0})
+    if (_updatingScale)
     {
       return;
     }
 
-    if (_interactionState == InteractionState::Pointer)
-    {
-      previewSeekFromScale();
-      return;
-    }
-
-    commitSeekFromScale();
+    applySeekDecision(_interaction.valueChanged(scaleElapsed()));
   }
 
   void SeekControl::beginUserInteraction()
   {
-    if (!_scale.get_sensitive() || _duration == std::chrono::milliseconds{0})
-    {
-      return;
-    }
-
-    if (_interactionState != InteractionState::Pointer)
-    {
-      _pendingFinalSeek = false;
-    }
-
-    _interactionState = InteractionState::Pointer;
+    std::ignore = _interaction.beginPointerInteraction();
   }
 
   void SeekControl::endUserInteraction()
   {
-    if (_interactionState != InteractionState::Pointer)
-    {
-      return;
-    }
-
-    _interactionState = InteractionState::Idle;
-
-    if (_pendingFinalSeek)
-    {
-      commitSeekFromScale();
-    }
+    applySeekDecision(_interaction.endPointerInteraction(scaleElapsed()));
   }
 
-  void SeekControl::previewSeekFromScale()
+  void SeekControl::applySeekDecision(uimodel::playback::SeekSliderDecision const& decision)
   {
-    auto const elapsed = scaleElapsed();
-    _pendingFinalSeek = true;
-    _interpolator.updateState(elapsed, _duration, false);
-    _controller.seekPreview(elapsed);
+    switch (decision.action)
+    {
+      case uimodel::playback::SeekSliderAction::Preview:
+        _interpolator.updateState(decision.elapsed, _interaction.duration(), false);
+        _controller.seekPreview(decision.elapsed);
+        break;
+      case uimodel::playback::SeekSliderAction::Commit: commitSeekFromScale(); break;
+      case uimodel::playback::SeekSliderAction::None: break;
+    }
   }
 
   void SeekControl::executeDebouncedFinalSeek()
   {
     _debounceConnection.disconnect();
 
-    if (_duration > std::chrono::milliseconds{0})
+    if (_interaction.duration() > std::chrono::milliseconds{0})
     {
       _controller.seekFinal(scaleElapsed());
     }
@@ -156,12 +137,11 @@ namespace ao::gtk
 
   void SeekControl::commitSeekFromScale()
   {
-    if (_duration == std::chrono::milliseconds{0})
+    if (_interaction.duration() == std::chrono::milliseconds{0})
     {
       return;
     }
 
-    _pendingFinalSeek = false;
     _debounceConnection.disconnect();
 
     _debounceConnection = Glib::signal_timeout().connect(
@@ -175,8 +155,6 @@ namespace ao::gtk
 
   void SeekControl::setScaleRange(std::chrono::milliseconds duration)
   {
-    _duration = duration;
-
     _updatingScale = true;
     _scale.set_range(
       0.0, duration > std::chrono::milliseconds{0} ? static_cast<double>(duration.count()) : kDefaultMaxRange);
@@ -186,7 +164,7 @@ namespace ao::gtk
   void SeekControl::setScaleValue(std::chrono::milliseconds elapsed)
   {
     std::chrono::milliseconds const maxDuration =
-      _duration > std::chrono::milliseconds{0} ? _duration : std::chrono::milliseconds{0};
+      _interaction.duration() > std::chrono::milliseconds{0} ? _interaction.duration() : std::chrono::milliseconds{0};
     auto const clampedElapsed = std::clamp(elapsed, std::chrono::milliseconds{0}, maxDuration);
 
     _updatingScale = true;
@@ -196,8 +174,9 @@ namespace ao::gtk
 
   std::chrono::milliseconds SeekControl::scaleElapsed() const noexcept
   {
-    auto const upper =
-      _duration > std::chrono::milliseconds{0} ? static_cast<double>(_duration.count()) : kDefaultMaxRange;
+    auto const upper = _interaction.duration() > std::chrono::milliseconds{0}
+                         ? static_cast<double>(_interaction.duration().count())
+                         : kDefaultMaxRange;
     auto const value = std::clamp(_scale.get_value(), 0.0, upper);
 
     return std::chrono::milliseconds{static_cast<std::int64_t>(std::round(value))};
@@ -205,8 +184,7 @@ namespace ao::gtk
 
   void SeekControl::reset()
   {
-    _interactionState = InteractionState::Idle;
-    _pendingFinalSeek = false;
+    _interaction.reset();
 
     setScaleRange(std::chrono::milliseconds{0});
     setScaleValue(std::chrono::milliseconds{0});

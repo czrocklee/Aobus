@@ -21,7 +21,6 @@
 #include <gtkmm/separator.h>
 #include <gtkmm/window.h>
 
-#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -71,22 +70,7 @@ namespace ao::gtk
     auto const state = _runtime.views().trackListState(_activeViewId);
     auto const& pres = state.presentation;
 
-    auto label = pres.id;
-
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(pres.id); builtin != nullptr)
-    {
-      label = std::string{builtin->label};
-    }
-    else if (_presentationStore != nullptr)
-    {
-      auto const& customs = _presentationStore->customPresentations();
-      auto const it = std::ranges::find(customs, pres.id, [](auto const& preset) { return preset.spec.id; });
-
-      if (it != customs.end())
-      {
-        label = it->label;
-      }
-    }
+    auto label = _presentationStore != nullptr ? _presentationStore->labelForId(pres.id) : std::string{pres.id};
 
     _button.set_label(label);
     populatePresentationOptions();
@@ -108,53 +92,33 @@ namespace ao::gtk
       return;
     }
 
-    auto const builtins = _presentationStore->builtinPresets();
-
-    for (auto const& preset : builtins)
+    for (auto const& item : _presentationStore->menuItems())
     {
-      auto* const btn = Gtk::make_managed<Gtk::Button>(std::string{preset.label});
+      if (item.type == uimodel::track::TrackPresentationMenuItemType::Separator)
+      {
+        auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
+        sep->add_css_class("ao-presentation-menu-separator");
+        _menuBox.append(*sep);
+        continue;
+      }
+
+      auto* const btn = Gtk::make_managed<Gtk::Button>(item.label);
       btn->set_halign(Gtk::Align::FILL);
       btn->set_has_frame(false);
       btn->add_css_class("ao-presentation-menu-item");
 
-      auto const id = std::string{preset.spec.id};
-      btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
+      if (item.type == uimodel::track::TrackPresentationMenuItemType::CreateCustomView)
+      {
+        btn->signal_clicked().connect([this] { onCreateCustomViewClicked(); });
+      }
+      else
+      {
+        auto const id = item.id;
+        btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
+      }
 
       _menuBox.append(*btn);
     }
-
-    auto const& customs = _presentationStore->customPresentations();
-
-    if (!customs.empty())
-    {
-      auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
-      sep->add_css_class("ao-presentation-menu-separator");
-      _menuBox.append(*sep);
-
-      for (auto const& custom : customs)
-      {
-        auto* const btn = Gtk::make_managed<Gtk::Button>(custom.label);
-        btn->set_halign(Gtk::Align::FILL);
-        btn->set_has_frame(false);
-        btn->add_css_class("ao-presentation-menu-item");
-
-        auto const id = custom.spec.id;
-        btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
-
-        _menuBox.append(*btn);
-      }
-    }
-
-    auto* const finalSep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
-    finalSep->add_css_class("ao-presentation-menu-separator");
-    _menuBox.append(*finalSep);
-
-    auto* const createBtn = Gtk::make_managed<Gtk::Button>("Create Custom View...");
-    createBtn->set_halign(Gtk::Align::FILL);
-    createBtn->set_has_frame(false);
-    createBtn->add_css_class("ao-presentation-menu-item");
-    createBtn->signal_clicked().connect([this] { onCreateCustomViewClicked(); });
-    _menuBox.append(*createBtn);
   }
 
   void TrackPresentationButton::onPresentationSelected(std::string_view presentationId)
@@ -173,24 +137,7 @@ namespace ao::gtk
       return;
     }
 
-    auto label = std::string{presentationId};
-
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(presentationId); builtin != nullptr)
-    {
-      label = std::string{builtin->label};
-    }
-    else
-    {
-      auto const& customs = _presentationStore->customPresentations();
-      auto const it = std::ranges::find(customs, presentationId, [](auto const& preset) { return preset.spec.id; });
-
-      if (it != customs.end())
-      {
-        label = it->label;
-      }
-    }
-
-    _button.set_label(label);
+    _button.set_label(_presentationStore->labelForId(presentationId));
 
     auto spec = rt::TrackPresentationSpec{*optSpec};
 

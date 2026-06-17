@@ -10,10 +10,15 @@
 
 #include <functional>
 #include <initializer_list>
+#include <span>
 #include <vector>
 
 namespace ao::gtk
 {
+  // True when `target`, or any of its ancestors, is one of `insideWidgets`. Pure widget-tree walk
+  // (no geometry/allocation) — the geometric hit-test (`Gtk::Window::pick`) stays at the call site.
+  bool isWidgetWithinAny(Gtk::Widget const* target, std::span<Gtk::Widget* const> insideWidgets);
+
   class DismissController final
   {
   public:

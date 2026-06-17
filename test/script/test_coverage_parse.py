@@ -40,6 +40,28 @@ class ParseGcovTest(unittest.TestCase):
         self.assertEqual(lines[9][0], 4)
 
 
+GCOV_DUP = """\
+        -:    0:Source:lib/audio/Ctor.cpp
+        2:    5:  Thing::Thing() {
+        3:    5:
+        -:    7:  member_init;
+        4:    7:  member_init;
+"""
+
+
+class ParseGcovDuplicateLineTest(unittest.TestCase):
+    """gcov emits the same line twice for C1/C2 constructor thunks."""
+
+    def test_duplicate_line_hits_accumulate_and_first_content_kept(self):
+        _, lines = coverage.parse_gcov_text(GCOV_DUP)
+        self.assertEqual(lines[5][0], 5)  # 2 + 3
+        self.assertEqual(lines[5][1], "  Thing::Thing() {")  # first non-empty content kept
+
+    def test_non_executable_then_executable_keeps_count(self):
+        _, lines = coverage.parse_gcov_text(GCOV_DUP)
+        self.assertEqual(lines[7][0], 4)  # None combined with 4
+
+
 class MergeReportTest(unittest.TestCase):
     def test_union_merge_covers_lines_hit_in_any_translation_unit(self):
         _, first = coverage.parse_gcov_text(GCOV_A)
@@ -64,6 +86,43 @@ class ContextBlocksTest(unittest.TestCase):
         lines = {n: (1 if n != 1 and n != 50 else 0, f"line {n}") for n in [1, 2, 49, 50]}
         rows = coverage.context_blocks(lines, [1, 50], before=1, after=1)
         self.assertIn("--", rows)
+
+
+class ScopedStatsTest(unittest.TestCase):
+    def test_scoped_stats_filters_and_aggregates_file_rows(self):
+        merged = {
+            "app/linux-gtk/Foo.cpp": {
+                1: (1, "hit"),
+                2: (0, "miss"),
+                3: (None, "comment"),
+            },
+            "app/linux-gtk/sub/Bar.cpp": {
+                1: (2, "hit"),
+                2: (3, "hit"),
+            },
+            "lib/core/Baz.cpp": {
+                1: (0, "miss"),
+            },
+        }
+
+        rows = coverage.scoped_stats(merged, ["app/linux-gtk"])
+
+        self.assertEqual(
+            rows,
+            [
+                ("app/linux-gtk/Foo.cpp", 1, 2, 1, 50.0),
+                ("app/linux-gtk/sub/Bar.cpp", 2, 2, 0, 100.0),
+            ],
+        )
+
+    def test_scope_accepts_trailing_slash(self):
+        merged = {
+            "app/linux-gtk/Foo.cpp": {
+                1: (1, "hit"),
+            },
+        }
+
+        self.assertEqual(len(coverage.scoped_stats(merged, ["app/linux-gtk/"])), 1)
 
 
 if __name__ == "__main__":

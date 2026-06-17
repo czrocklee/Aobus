@@ -461,6 +461,11 @@ namespace ao::rt
     _implPtr->listsMutatedSignal.emit({.upserted = std::move(upserted), .deleted = std::move(deleted)});
   }
 
+  void LibraryMutationService::notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress)
+  {
+    _implPtr->libraryTaskProgressSignal.emit(progress);
+  }
+
   void LibraryMutationService::notifyLibraryTaskCompleted(std::size_t count)
   {
     _implPtr->libraryTaskCompletedSignal.emit(count);

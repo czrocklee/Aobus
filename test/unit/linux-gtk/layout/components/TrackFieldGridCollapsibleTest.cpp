@@ -28,41 +28,12 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
+  using ao::gtk::test::emitClicked;
+  using ao::gtk::test::findWidget;
+  using ao::gtk::test::walkWidgets;
 
   namespace
   {
-    void walkWidgets(Gtk::Widget& root, auto const& visit)
-    {
-      visit(root);
-
-      for (auto* child = root.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        walkWidgets(*child, visit);
-      }
-    }
-
-    template<typename WidgetT>
-    WidgetT* findWidget(Gtk::Widget& root)
-    {
-      WidgetT* found = nullptr;
-
-      walkWidgets(root,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (found != nullptr)
-                    {
-                      return;
-                    }
-
-                    if (auto* const typed = dynamic_cast<WidgetT*>(&widget); typed != nullptr)
-                    {
-                      found = typed;
-                    }
-                  });
-
-      return found;
-    }
-
     class MockDetailScope final : public ITrackDetailScope
     {
     public:
@@ -81,7 +52,7 @@ namespace ao::gtk::layout::test
     };
   }
 
-  TEST_CASE("TrackFieldGrid collapsible sections", "[layout][unit][components][track]")
+  TEST_CASE("TrackFieldGrid collapsible sections", "[layout][unit][components][track][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.collapsible_test");
     auto const tempDir = ao::test::TempDir{};
@@ -178,7 +149,7 @@ namespace ao::gtk::layout::test
       REQUIRE(techHeader != nullptr);
 
       // Expand technical
-      ::g_signal_emit_by_name(techHeader->gobj(), "clicked");
+      emitClicked(*techHeader);
 
       bool foundVisibleTech = false;
       walkWidgets(*grid,
@@ -198,7 +169,7 @@ namespace ao::gtk::layout::test
       // Collapse metadata
       auto* metaHeader = findHeaderByClass("ao-track-detail-section-meta");
       REQUIRE(metaHeader != nullptr);
-      ::g_signal_emit_by_name(metaHeader->gobj(), "clicked");
+      emitClicked(*metaHeader);
 
       bool foundHiddenMeta = false;
       walkWidgets(*grid,
@@ -277,7 +248,7 @@ namespace ao::gtk::layout::test
 
       auto* const techHeader = findHeaderByClass("ao-track-detail-section-tech");
       REQUIRE(techHeader != nullptr);
-      ::g_signal_emit_by_name(techHeader->gobj(), "clicked");
+      emitClicked(*techHeader);
       ao::gtk::test::drainGtkEvents();
 
       allocate(320, 1000);
@@ -301,8 +272,8 @@ namespace ao::gtk::layout::test
       REQUIRE(expandedCustomWidth > 0);
       REQUIRE(expandedTechWidth > 0);
 
-      ::g_signal_emit_by_name(metaHeader->gobj(), "clicked");
-      ::g_signal_emit_by_name(customHeader->gobj(), "clicked");
+      emitClicked(*metaHeader);
+      emitClicked(*customHeader);
       ao::gtk::test::drainGtkEvents();
       allocate(320, 1000);
 
@@ -439,7 +410,7 @@ namespace ao::gtk::layout::test
       CHECK(foundCustom);
 
       // Collapse custom
-      ::g_signal_emit_by_name(customHeader->gobj(), "clicked");
+      emitClicked(*customHeader);
       ao::gtk::test::drainGtkEvents();
       allocate(316, 320);
       CHECK(measureMinimumHeight(*wrapper, -1) == 0);

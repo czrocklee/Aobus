@@ -14,6 +14,7 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/LayoutStatePromoter.h>
+#include <ao/uimodel/layout/ShellLayoutSessionModel.h>
 
 #include <gtkmm/window.h>
 
@@ -60,7 +61,7 @@ namespace ao::gtk
     layout::ComponentRegistry& registry() { return _registry; }
     layout::LayoutContext& context() { return _context; }
     layout::LayoutHost& host() { return _host; }
-    uimodel::layout::LayoutDocument const& activeLayout() const { return _activeLayout; }
+    uimodel::layout::LayoutDocument const& activeLayout() const { return _session.snapshot().layout; }
 
     void attachToWindow();
     void refreshExportedActions();
@@ -104,8 +105,7 @@ namespace ao::gtk
     layout::LayoutHost _host;
     std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
     std::vector<rt::Subscription> _playbackSubs;
-    uimodel::layout::LayoutDocument _activeLayout;
-    std::string _activePresetId;
+    uimodel::layout::ShellLayoutSessionModel _session;
     std::shared_ptr<AppConfig> _configPtr;
     std::shared_ptr<ShellLayoutStore> _layoutStorePtr;
     std::shared_ptr<ShellLayoutComponentStateStore> _componentStateStorePtr;
