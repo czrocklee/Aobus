@@ -270,8 +270,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.image",
                                 .displayName = "Playback Cover Art",
-                                .category = "Playback",
-                                .container = false,
+                                .category = ComponentCategory::Playback,
                                 .props = {{.name = "targetSize",
                                            .kind = PropertyKind::Int,
                                            .label = "Target Size",

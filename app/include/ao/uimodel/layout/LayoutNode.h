@@ -146,6 +146,8 @@ namespace ao::uimodel::layout
         data);
     }
 
+    bool isNumber() const { return std::holds_alternative<std::int64_t>(data) || std::holds_alternative<double>(data); }
+
     double asDouble(double defaultValue = 0.0) const;
 
     std::vector<std::string> asStringList() const;

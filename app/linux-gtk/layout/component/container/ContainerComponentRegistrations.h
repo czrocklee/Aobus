@@ -12,6 +12,7 @@ namespace ao::gtk::layout
   void registerCenterBoxComponent(ComponentRegistry& registry);
   void registerSplitComponent(ComponentRegistry& registry);
   void registerCollapsibleSplitComponent(ComponentRegistry& registry);
+  void registerResponsiveClassComponent(ComponentRegistry& registry);
   void registerScrollComponent(ComponentRegistry& registry);
   void registerSpacerComponent(ComponentRegistry& registry);
   void registerSeparatorComponent(ComponentRegistry& registry);

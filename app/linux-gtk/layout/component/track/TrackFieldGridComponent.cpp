@@ -1109,8 +1109,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "track.fieldGrid",
        .displayName = "Field Grid",
-       .category = "Tracks",
-       .container = false,
+       .category = ComponentCategory::Track,
        .props = {{.name = "categories", .kind = PropertyKind::StringList, .label = "Categories"}},
        .layoutProps = {},
        .minChildren = 0,

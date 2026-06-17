@@ -46,7 +46,6 @@ namespace ao::gtk
   {
     _listScrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _listScrolledWindow.set_child(_listView);
-    _listScrolledWindow.set_size_request(kDefaultWidth, -1);
 
     auto factoryPtr = Gtk::SignalListItemFactory::create();
     factoryPtr->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)

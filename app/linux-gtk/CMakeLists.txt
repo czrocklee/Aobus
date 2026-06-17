@@ -25,6 +25,7 @@ add_library(aobus-gtk-lib STATIC
     app/MenuController.cpp
     app/PlaybackShortcutPolicy.cpp
     app/ShellLayoutController.cpp
+    app/ShellLayoutComponentStateStore.cpp
     app/GtkStyleRuntime.cpp
     app/ThemeCoordinator.cpp
     app/ThemePreset.cpp
@@ -98,6 +99,9 @@ add_library(aobus-gtk-lib STATIC
     layout/runtime/ActionValidator.cpp
     layout/runtime/ActionBinder.cpp
     layout/runtime/LayoutHost.cpp
+    layout/state/LayoutComponentState.cpp
+    layout/state/LayoutNodeId.cpp
+    layout/state/LayoutStatePromoter.cpp
     layout/component/common/CommonLayoutProps.cpp
     layout/component/track/TrackDetailSizing.cpp
     layout/component/track/TrackRegistry.cpp
@@ -137,6 +141,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/container/CenterBoxComponent.cpp
     layout/component/container/CollapsibleSplitComponent.cpp
     layout/component/container/ContainerRegistry.cpp
+    layout/component/container/ResponsiveClassComponent.cpp
     layout/component/container/ScrollComponent.cpp
     layout/component/container/SeparatorComponent.cpp
     layout/component/container/SpacerComponent.cpp

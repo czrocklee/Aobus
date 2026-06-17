@@ -59,8 +59,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "app.menuButton",
                                 .displayName = "Menu Button",
-                                .category = "Application",
-                                .container = false,
+                                .category = ComponentCategory::Application,
                                 .props = {{.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
                                           {.name = "style",
                                            .kind = PropertyKind::Enum,

@@ -71,8 +71,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.audioPipelinePanel",
        .displayName = "Audio Pipeline Panel",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props = {{.name = "variant",
                   .kind = PropertyKind::Enum,
                   .label = "Variant",

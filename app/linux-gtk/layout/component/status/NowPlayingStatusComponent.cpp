@@ -40,6 +40,7 @@ namespace ao::gtk::layout
   void registerNowPlayingStatusComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.nowPlaying", .displayName = "Now Playing Status", .category = "Status"}, createNowPlayingStatus);
+      {.type = "status.nowPlaying", .displayName = "Now Playing Status", .category = ComponentCategory::Status},
+      createNowPlayingStatus);
   }
 } // namespace ao::gtk::layout

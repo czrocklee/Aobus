@@ -4,13 +4,13 @@
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/utility/AtomicFile.h>
 #include <ao/utility/Log.h>
 #include <ao/yaml/Utils.h>
 
 #include <exception>
 #include <filesystem>
 #include <format>
-#include <fstream>
 #include <string>
 #include <utility>
 
@@ -29,19 +29,9 @@ namespace ao::rt
     }
 
     APP_LOG_INFO("Saving config to: {}", _filePath.string());
-    std::filesystem::create_directories(_filePath.parent_path());
 
-    auto yaml = ryml::emitrs_yaml<std::string>(_root);
-
-    auto file = std::ofstream{_filePath};
-    file << yaml;
-
-    if (!file.good())
-    {
-      return makeError(Error::Code::IoError, std::format("Failed to write config file: {}", _filePath.string()));
-    }
-
-    return {};
+    auto const yaml = ryml::emitrs_yaml<std::string>(_root);
+    return utility::writeAtomically(_filePath, yaml, utility::AtomicFilePermissions::OwnerReadWrite);
   }
 
   Result<> ConfigStore::ensureLoaded()

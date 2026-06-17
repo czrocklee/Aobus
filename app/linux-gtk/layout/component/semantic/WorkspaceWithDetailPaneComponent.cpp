@@ -99,8 +99,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "workspace.withDetailPane",
                                 .displayName = "Workspace with Detail",
-                                .category = "Layout",
-                                .container = true,
+                                .category = ComponentCategory::Layout,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

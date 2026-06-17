@@ -25,6 +25,6 @@ namespace ao::uimodel::layout
     bool tryBind(std::string_view id, ActionBindingContext const& ctx) const;
 
   private:
-    std::vector<ActionDescriptor> _descriptors;
+    std::vector<ActionDescriptor> _descriptors = {};
   };
 }

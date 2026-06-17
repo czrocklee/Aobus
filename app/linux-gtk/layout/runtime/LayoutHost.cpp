@@ -19,6 +19,10 @@ namespace ao::gtk::layout
 
   void LayoutHost::setLayout(LayoutContext& ctx, LayoutDocument const& doc)
   {
+    // Invalidate any pending runtime-state writes from components that are about to be
+    // destroyed. New components built below will capture the updated generation.
+    ++ctx.componentStateGeneration;
+
     if (_activeComponentPtr)
     {
       remove(_activeComponentPtr->widget());

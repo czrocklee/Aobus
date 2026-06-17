@@ -72,8 +72,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.outputSelector",
                                 .displayName = "Output Selector",
-                                .category = "Playback",
-                                .container = false,
+                                .category = ComponentCategory::Playback,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

@@ -86,8 +86,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.playPauseButton",
        .displayName = "Play/Pause Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props =
          {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
           {.name = "size",
@@ -103,8 +102,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.stopButton",
        .displayName = "Stop Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props =
          {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
           {.name = "size",
@@ -120,8 +118,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.nextButton",
        .displayName = "Next Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props =
          {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
           {.name = "size",
@@ -137,8 +134,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.previousButton",
        .displayName = "Previous Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props =
          {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
           {.name = "size",
@@ -154,8 +150,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.shuffleButton",
        .displayName = "Shuffle Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props =
          {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
           {.name = "size",
@@ -171,8 +166,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.repeatButton",
        .displayName = "Repeat Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props =
          {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
           {.name = "size",
@@ -188,8 +182,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.playButton",
        .displayName = "Play Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props =
          {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
           {.name = "size",
@@ -205,8 +198,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.pauseButton",
        .displayName = "Pause Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props =
          {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label", .defaultValue = LayoutValue{false}},
           {.name = "size",

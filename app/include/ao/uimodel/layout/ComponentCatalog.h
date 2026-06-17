@@ -47,6 +47,37 @@ namespace ao::uimodel::layout
     std::optional<std::string> optDefaultActionId = {};
   };
 
+  enum class ComponentCategory : std::uint8_t
+  {
+    Container,
+    Decorator,
+    Track,
+    Playback,
+    Status,
+    Generic,
+    Application,
+    Library,
+    Layout,
+  };
+
+  constexpr std::string_view toString(ComponentCategory category) noexcept
+  {
+    switch (category)
+    {
+      case ComponentCategory::Container: return "Containers";
+      case ComponentCategory::Decorator: return "Decorators";
+      case ComponentCategory::Track: return "Tracks";
+      case ComponentCategory::Playback: return "Playback";
+      case ComponentCategory::Status: return "Status";
+      case ComponentCategory::Generic: return "Generic";
+      case ComponentCategory::Application: return "Application";
+      case ComponentCategory::Library: return "Library";
+      case ComponentCategory::Layout: return "Layout";
+    }
+
+    return "Unknown";
+  }
+
   enum class SurfaceCapability : std::uint8_t
   {
     Main = 1,
@@ -59,8 +90,7 @@ namespace ao::uimodel::layout
   {
     std::string type;
     std::string displayName;
-    std::string category;
-    bool container = false;
+    ComponentCategory category = ComponentCategory::Generic;
     std::vector<PropertyDescriptor> props = {};
     std::vector<PropertyDescriptor> layoutProps = {};
     std::size_t minChildren = 0;
@@ -68,6 +98,12 @@ namespace ao::uimodel::layout
     SurfaceCapabilityMask surfaces = static_cast<SurfaceCapabilityMask>(SurfaceCapability::Main);
     ComponentActionPolicy actionPolicy = kNoExternalActions;
   };
+
+  constexpr bool isContainer(ComponentDescriptor const& descriptor) noexcept
+  {
+    // A component is a container if it can have at least one child.
+    return descriptor.minChildren > 0 || !descriptor.optMaxChildren || *descriptor.optMaxChildren > 0;
+  }
 
   class ComponentCatalog final
   {
@@ -79,7 +115,7 @@ namespace ao::uimodel::layout
     std::optional<ComponentDescriptor> descriptor(std::string_view type) const;
 
   private:
-    std::vector<ComponentDescriptor> _descriptors;
-    std::map<std::string, std::size_t, std::less<>> _descriptorIndexMap;
+    std::vector<ComponentDescriptor> _descriptors = {};
+    std::map<std::string, std::size_t, std::less<>> _descriptorIndexMap = {};
   };
 }

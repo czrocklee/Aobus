@@ -59,8 +59,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.timeLabel",
                                 .displayName = "Time Label",
-                                .category = "Playback",
-                                .container = false,
+                                .category = ComponentCategory::Playback,
                                 .props = {{.name = "mode",
                                            .kind = PropertyKind::Enum,
                                            .label = "Mode",

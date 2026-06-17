@@ -67,8 +67,6 @@ namespace ao::gtk
     void showContextMenu(Gdk::Rectangle const& rect);
 
   private:
-    static constexpr int kDefaultWidth = 200;
-
     void setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void bindNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems) const;

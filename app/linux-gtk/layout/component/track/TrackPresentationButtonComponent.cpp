@@ -55,8 +55,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "track.presentationButton",
                                 .displayName = "Presentation",
-                                .category = "Tracks",
-                                .container = false,
+                                .category = ComponentCategory::Track,
                                 .props = {{.name = "variant",
                                            .kind = PropertyKind::String,
                                            .label = "Variant",

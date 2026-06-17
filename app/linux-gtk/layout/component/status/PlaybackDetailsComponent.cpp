@@ -40,7 +40,7 @@ namespace ao::gtk::layout
   void registerPlaybackDetailsComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.playbackDetails", .displayName = "Playback Details", .category = "Status"},
+      {.type = "status.playbackDetails", .displayName = "Playback Details", .category = ComponentCategory::Status},
       createPlaybackDetails);
   }
 } // namespace ao::gtk::layout

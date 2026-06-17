@@ -121,8 +121,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.soulPlayPauseButton",
        .displayName = "Soul Play/Pause Button",
-       .category = "Playback",
-       .container = false,
+       .category = ComponentCategory::Playback,
        .props = {{.name = "strokeWidth",
                   .kind = PropertyKind::Double,
                   .label = "Stroke Width",

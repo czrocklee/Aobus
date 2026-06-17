@@ -15,8 +15,14 @@
 
 namespace ao::gtk
 {
-  MenuController::MenuController(portal::ImportExportCoordinator& importExport, std::function<void()> onEditLayout)
-    : _importExport{importExport}, _onEditLayout{std::move(onEditLayout)}
+  MenuController::MenuController(portal::ImportExportCoordinator& importExport,
+                                 std::function<void()> onEditLayout,
+                                 std::function<void()> onResetRuntimeLayoutState,
+                                 std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults)
+    : _importExport{importExport}
+    , _onEditLayout{std::move(onEditLayout)}
+    , _onResetRuntimeLayoutState{std::move(onResetRuntimeLayoutState)}
+    , _onSaveCurrentPanelSizesAsLayoutDefaults{std::move(onSaveCurrentPanelSizesAsLayoutDefaults)}
   {
   }
 
@@ -38,6 +44,8 @@ namespace ao::gtk
 
     auto viewMenuPtr = Gio::Menu::create();
     viewMenuPtr->append("Edit Layout...", "win.edit-layout");
+    viewMenuPtr->append("Save Current Panel Sizes as Layout Defaults", "win.save-panel-sizes-as-layout-defaults");
+    viewMenuPtr->append("Reset Runtime Layout State", "win.reset-runtime-layout-state");
     _menuModelPtr->append_submenu("View", viewMenuPtr);
 
     auto helpMenuPtr = Gio::Menu::create();
@@ -63,5 +71,15 @@ namespace ao::gtk
     auto editLayoutActionPtr = Gio::SimpleAction::create("edit-layout");
     editLayoutActionPtr->signal_activate().connect([this](Glib::VariantBase const&) { _onEditLayout(); });
     window.add_action(editLayoutActionPtr);
+
+    auto savePanelSizesActionPtr = Gio::SimpleAction::create("save-panel-sizes-as-layout-defaults");
+    savePanelSizesActionPtr->signal_activate().connect([this](Glib::VariantBase const&)
+                                                       { _onSaveCurrentPanelSizesAsLayoutDefaults(); });
+    window.add_action(savePanelSizesActionPtr);
+
+    auto resetRuntimeLayoutStateActionPtr = Gio::SimpleAction::create("reset-runtime-layout-state");
+    resetRuntimeLayoutStateActionPtr->signal_activate().connect([this](Glib::VariantBase const&)
+                                                                { _onResetRuntimeLayoutState(); });
+    window.add_action(resetRuntimeLayoutStateActionPtr);
   }
 } // namespace ao::gtk

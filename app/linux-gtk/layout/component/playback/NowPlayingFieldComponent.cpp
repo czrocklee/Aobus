@@ -70,8 +70,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.currentTitleLabel",
                                 .displayName = "Current Title Label",
-                                .category = "Playback",
-                                .container = false,
+                                .category = ComponentCategory::Playback,
                                 .props = {{.name = "action",
                                            .kind = PropertyKind::Enum,
                                            .label = "Action",
@@ -84,8 +83,7 @@ namespace ao::gtk::layout
 
     registry.registerComponent({.type = "playback.currentArtistLabel",
                                 .displayName = "Current Artist Label",
-                                .category = "Playback",
-                                .container = false,
+                                .category = ComponentCategory::Playback,
                                 .props = {{.name = "action",
                                            .kind = PropertyKind::Enum,
                                            .label = "Action",

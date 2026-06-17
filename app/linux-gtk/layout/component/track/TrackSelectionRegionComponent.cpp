@@ -92,8 +92,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "track.selectionRegion",
        .displayName = "Selection Region",
-       .category = "Tracks",
-       .container = true,
+       .category = ComponentCategory::Track,
        .props =
          {{.name = "showWhen", .kind = PropertyKind::String, .label = "Show When", .defaultValue = LayoutValue{"any"}},
           {.name = "showPlaceholder",

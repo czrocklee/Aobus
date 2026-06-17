@@ -1,6 +1,7 @@
 # ao_core_test: portable unit + integration tests
 add_executable(ao_core_test
     # utility tests
+    unit/utility/AtomicFileTest.cpp
     unit/utility/Base64Test.cpp
     unit/utility/MappedFileTest.cpp
     unit/utility/LogTest.cpp
@@ -227,6 +228,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/AppConfigTest.cpp
+    unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutControllerTest.cpp
     unit/linux-gtk/app/GtkLayoutConfigTest.cpp
@@ -249,7 +251,17 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/runtime/ComponentInteractionControllerTest.cpp
       unit/linux-gtk/layout/runtime/ComponentRegistryInjectionTest.cpp
       unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp
-      unit/linux-gtk/layout/components/ContainersTest.cpp
+      unit/linux-gtk/layout/state/LayoutComponentStateTest.cpp
+      unit/linux-gtk/layout/state/LayoutStatePromoterTest.cpp
+      unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp
+      unit/linux-gtk/layout/components/ContainerErrorStatesTest.cpp
+      unit/linux-gtk/layout/components/SplitComponentTest.cpp
+      unit/linux-gtk/layout/components/CollapsibleSplitComponentTest.cpp
+      unit/linux-gtk/layout/components/CenterBoxTest.cpp
+      unit/linux-gtk/layout/components/ResponsiveClassTest.cpp
+      unit/linux-gtk/layout/components/ScrollSeparatorTabsTest.cpp
+      unit/linux-gtk/layout/components/ApplyCommonPropsTest.cpp
+      unit/linux-gtk/layout/components/LayoutHostTest.cpp
       unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp
       unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp

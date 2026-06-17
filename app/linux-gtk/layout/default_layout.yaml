@@ -201,10 +201,11 @@ templates:
           hexpand: true
       - type: track.presentationButton
   app.defaultLayout:
+    id: main-workspace-split
     type: collapsibleSplit
     props:
       orientation: horizontal
-      position: 300
+      initialPositionPercent: 0.2
       revealed: false
     layout:
       vexpand: true
@@ -233,10 +234,11 @@ templates:
         layout:
           vexpand: true
   app.defaultMainPaned:
+    id: main-paned
     type: split
     props:
       orientation: horizontal
-      position: 250
+      initialPositionPercent: 0.2
     layout:
       vexpand: true
     children:

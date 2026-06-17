@@ -52,8 +52,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "separator",
                                 .displayName = "Separator",
-                                .category = "Containers",
-                                .container = false,
+                                .category = ComponentCategory::Container,
                                 .props = {{.name = "orientation",
                                            .kind = PropertyKind::Enum,
                                            .label = "Orientation",

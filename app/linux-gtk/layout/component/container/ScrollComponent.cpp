@@ -93,8 +93,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "scroll",
                                 .displayName = "Scroll Window",
-                                .category = "Containers",
-                                .container = true,
+                                .category = ComponentCategory::Container,
                                 .props = {{.name = "hscrollPolicy",
                                            .kind = PropertyKind::Enum,
                                            .label = "H. Scroll Policy",

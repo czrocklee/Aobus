@@ -66,8 +66,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "box",
                                 .displayName = "Box",
-                                .category = "Containers",
-                                .container = true,
+                                .category = ComponentCategory::Container,
                                 .props = {{.name = "orientation",
                                            .kind = PropertyKind::Enum,
                                            .label = "Orientation",

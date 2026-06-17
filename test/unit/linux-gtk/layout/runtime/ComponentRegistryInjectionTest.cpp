@@ -19,7 +19,7 @@ namespace ao::gtk::layout::test
     {
       registry.registerComponent({.type = "test.all",
                                   .displayName = "All",
-                                  .category = "Test",
+                                  .category = ComponentCategory::Generic,
                                   .actionPolicy = uimodel::layout::kAllExternalActions},
                                  nullptr);
 
@@ -42,7 +42,7 @@ namespace ao::gtk::layout::test
     {
       registry.registerComponent({.type = "test.secondary",
                                   .displayName = "Secondary",
-                                  .category = "Test",
+                                  .category = ComponentCategory::Generic,
                                   .actionPolicy = uimodel::layout::kExternalSecondaryActions},
                                  nullptr);
 
@@ -63,7 +63,8 @@ namespace ao::gtk::layout::test
 
     SECTION("injects nothing when policy is kNoExternalActions (default)")
     {
-      registry.registerComponent({.type = "test.none", .displayName = "None", .category = "Test"}, nullptr);
+      registry.registerComponent(
+        {.type = "test.none", .displayName = "None", .category = ComponentCategory::Generic}, nullptr);
 
       auto const optDesc = registry.descriptor("test.none");
       REQUIRE(optDesc.has_value());
@@ -75,7 +76,7 @@ namespace ao::gtk::layout::test
       registry.registerComponent(
         {.type = "test.overwrite",
          .displayName = "Overwrite",
-         .category = "Test",
+         .category = ComponentCategory::Generic,
          .props = {{.name = "primaryAction", .kind = uimodel::layout::PropertyKind::String, .label = "Custom Label"}},
          .actionPolicy = uimodel::layout::kAllExternalActions},
         nullptr);

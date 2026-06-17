@@ -10,6 +10,8 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ActionValidator.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/state/LayoutNodeId.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
 
 #include <giomm/menu.h>
 #include <giomm/simpleactiongroup.h>
@@ -47,6 +49,7 @@
 #include <cstdint>
 #include <format>
 #include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -203,20 +206,22 @@ namespace ao::gtk::layout::editor
 
     for (auto const& descriptor : _registry.descriptors())
     {
-      if (!categoryMenus.contains(descriptor.category))
+      auto const categoryLabel = std::string{uimodel::layout::toString(descriptor.category)};
+
+      if (!categoryMenus.contains(categoryLabel))
       {
-        categoryMenus[descriptor.category] = Gio::Menu::create();
-        addMenuPtr->append_submenu(descriptor.category, categoryMenus[descriptor.category]);
+        categoryMenus[categoryLabel] = Gio::Menu::create();
+        addMenuPtr->append_submenu(categoryLabel, categoryMenus[categoryLabel]);
       }
 
       auto actionName = "add_" + descriptor.type;
       std::ranges::replace(actionName, '.', '_');
 
-      categoryMenus[descriptor.category]->append(descriptor.displayName, "editor." + actionName);
+      categoryMenus[categoryLabel]->append(descriptor.displayName, "editor." + actionName);
 
       _actionGroupPtr->add_action(actionName, [this, type = descriptor.type] { addComponent(type); });
 
-      if (descriptor.container)
+      if (uimodel::layout::isContainer(descriptor))
       {
         auto wrapActionName = "wrap_" + descriptor.type;
         std::ranges::replace(wrapActionName, '.', '_');
@@ -420,9 +425,8 @@ namespace ao::gtk::layout::editor
     }
 
     auto newNode = LayoutNode{};
-    newNode.id = type + "_new";
-    std::ranges::replace(newNode.id, '.', '_');
     newNode.type = std::move(type);
+    newNode.id = layout::makeUniqueLayoutNodeId(_document, newNode.type, "new");
 
     markEdited();
     parentNode->children.push_back(std::move(newNode));
@@ -457,8 +461,8 @@ namespace ao::gtk::layout::editor
       if (it != parentNode->children.end())
       {
         auto containerNode = LayoutNode{};
-        containerNode.id = containerType + "_wrap";
         containerNode.type = std::move(containerType);
+        containerNode.id = layout::makeUniqueLayoutNodeId(_document, containerNode.type, "wrap");
 
         markEdited();
         // Move the target node into the new container
@@ -641,32 +645,51 @@ namespace ao::gtk::layout::editor
     {
       if (entry.dirty || presetId == _currentPresetId)
       {
+        auto const idDiagnostics = layout::validateStatefulLayoutNodeIds(entry.doc);
+
+        if (layout::hasLayoutNodeIdErrors(idDiagnostics))
+        {
+          auto const firstErrorIt =
+            std::ranges::find_if(idDiagnostics,
+                                 [](layout::LayoutNodeIdDiagnostic const& diagnostic)
+                                 { return diagnostic.severity == layout::LayoutNodeIdDiagnosticSeverity::Error; });
+          auto const& firstError = *firstErrorIt;
+          presentErrorDialog("Invalid Layout Component IDs",
+                             std::format("Validation failed on preset '{}' component '{}' type '{}':\n\n{}",
+                                         presetId,
+                                         firstError.componentId,
+                                         firstError.componentType,
+                                         firstError.message));
+          return false;
+        }
+
         auto const diagnostics = validateActions(
           entry.doc, _registry.catalog(), _actionRegistry.catalog(), resolveGtkLayoutActionBindingContext);
 
         if (!diagnostics.empty())
         {
           auto const& firstError = diagnostics.front();
-          auto* const msg = Gtk::make_managed<Gtk::MessageDialog>(
-            *this, "Invalid Layout Actions", false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
-          msg->set_secondary_text(std::format("Validation failed on preset '{}' component '{}' property '{}':\n\n{}",
-                                              presetId,
-                                              firstError.componentId,
-                                              firstError.propertyName,
-                                              firstError.message));
-          msg->signal_response().connect([msg](std::int32_t) { msg->close(); });
-
-          if (get_visible())
-          {
-            msg->show();
-          }
-
+          presentErrorDialog("Invalid Layout Actions",
+                             std::format("Validation failed on preset '{}' component '{}' property '{}':\n\n{}",
+                                         presetId,
+                                         firstError.componentId,
+                                         firstError.propertyName,
+                                         firstError.message));
           return false;
         }
       }
     }
 
     return true;
+  }
+
+  void LayoutEditorDialog::presentErrorDialog(std::string const& title, std::string const& message)
+  {
+    auto msgPtr =
+      std::make_shared<Gtk::MessageDialog>(*this, title, false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
+    msgPtr->set_secondary_text(message);
+    msgPtr->signal_response().connect([msgPtr](std::int32_t) { msgPtr->close(); });
+    msgPtr->present();
   }
 
   void LayoutEditorDialog::onSelectionChanged()

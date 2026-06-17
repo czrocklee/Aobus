@@ -89,8 +89,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.soulButton",
                                 .displayName = "Soul Button",
-                                .category = "Playback",
-                                .container = false,
+                                .category = ComponentCategory::Playback,
                                 .props = {{.name = "strokeWidth",
                                            .kind = PropertyKind::Double,
                                            .label = "Stroke Width",

@@ -9,7 +9,7 @@ root:
       type: split
       props:
         orientation: horizontal
-        position: 250
+        initialPositionPercent: 0.20
       layout:
         vexpand: true
       children:
@@ -29,34 +29,41 @@ root:
           layout:
             cssClasses: ao-content-shell-modern
           children:
-            - type: centerBox
+            - type: responsiveClass
+              props:
+                compactMax: 900
+                regularMax: 1280
               layout:
-                cssClasses: ao-track-controls-bar-modern
                 hexpand: true
               children:
-                - type: track.presentationButton
-                  props:
-                    variant: title
+                - type: centerBox
                   layout:
-                    slot: start
-                    halign: start
-                    cssClasses: ao-section-title-modern-button
-                - type: track.quickFilter
-                  layout:
-                    widthRequest: 320
-                    slot: center
-                    halign: center
-                    cssClasses: ao-search-pill-modern
-                - type: status.trackCount
-                  layout:
-                    slot: end
-                    halign: end
-                    cssClasses: ao-header-stats-modern
+                    cssClasses: ao-track-controls-bar-modern
+                    hexpand: true
+                  children:
+                    - type: track.presentationButton
+                      props:
+                        variant: title
+                      layout:
+                        slot: start
+                        halign: start
+                        cssClasses: ao-section-title-modern-button
+                    - type: track.quickFilter
+                      layout:
+                        slot: center
+                        halign: center
+                        hexpand: true
+                        cssClasses: ao-search-pill-modern
+                    - type: status.trackCount
+                      layout:
+                        slot: end
+                        halign: end
+                        cssClasses: ao-header-stats-modern
             - id: main-workspace-split
               type: collapsibleSplit
               props:
                 orientation: horizontal
-                position: 300
+                initialPositionPercent: 0.2
                 revealed: true
               layout:
                 vexpand: true

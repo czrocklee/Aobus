@@ -1,0 +1,181 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "app/ShellLayoutComponentStateStore.h"
+
+#include "layout/state/LayoutComponentState.h"
+#include "test/unit/lmdb/TestUtils.h"
+#include <ao/Exception.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <utility>
+
+namespace ao::gtk::test
+{
+  using namespace ao::lmdb::test;
+
+  namespace
+  {
+    uimodel::layout::LayoutNode splitNode(std::string id = "main-paned")
+    {
+      auto node = uimodel::layout::LayoutNode{};
+      node.id = std::move(id);
+      node.type = "split";
+      node.props["orientation"] = uimodel::layout::LayoutValue{std::string{"horizontal"}};
+      node.props["initialPositionPercent"] = uimodel::layout::LayoutValue{0.2};
+      node.children = {uimodel::layout::LayoutNode{.type = "spacer"}, uimodel::layout::LayoutNode{.type = "spacer"}};
+      return node;
+    }
+
+    layout::LayoutComponentStateDocument stateDocFor(uimodel::layout::LayoutNode const& node)
+    {
+      auto doc = layout::LayoutComponentStateDocument{};
+      doc.preset = "classic";
+      doc.components[node.id] = layout::LayoutComponentStateEntry{
+        .type = node.type,
+        .stateVersion = layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = layout::layoutComponentBaselineHash(node),
+        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.35}}},
+      };
+      return doc;
+    }
+  } // namespace
+
+  TEST_CASE("ShellLayoutComponentStateStore persistence and operations", "[gtk][app][layout-state]")
+  {
+    auto const tempDir = TempDir{};
+    auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
+
+    SECTION("load on a missing file returns nullopt")
+    {
+      auto const store = ShellLayoutComponentStateStore{stateDir};
+      CHECK_FALSE(store.load("classic").has_value());
+    }
+
+    SECTION("save creates a state file and load retrieves it")
+    {
+      auto store = ShellLayoutComponentStateStore{stateDir};
+      auto const node = splitNode();
+      auto doc = stateDocFor(node);
+
+      store.save(doc, "classic");
+
+      auto const optLoaded = store.load("classic");
+      REQUIRE(optLoaded.has_value());
+      CHECK(optLoaded->preset == "classic");
+      REQUIRE(optLoaded->components.contains("main-paned"));
+      CHECK(optLoaded->components.at("main-paned").state.at("positionPercent").asDouble() == 0.35);
+    }
+
+    SECTION("load rejects corrupted and mismatched files without throwing")
+    {
+      std::filesystem::create_directories(stateDir);
+      {
+        auto out = std::ofstream{stateDir / "corrupted.yaml"};
+        out << "not-a-state-file\n";
+      }
+      {
+        auto out = std::ofstream{stateDir / "modern.yaml"};
+        out << "version: 1\npreset: classic\ncomponents: {}\n";
+      }
+
+      auto const store = ShellLayoutComponentStateStore{stateDir};
+      CHECK_FALSE(store.load("corrupted").has_value());
+      CHECK_FALSE(store.load("modern").has_value());
+    }
+
+    SECTION("prune removes orphan, type-mismatched, and stale-baseline entries")
+    {
+      auto store = ShellLayoutComponentStateStore{stateDir};
+      auto liveNode = splitNode("live-split");
+      auto staleNode = splitNode("stale-split");
+      auto doc = stateDocFor(liveNode);
+      doc.components["orphan-split"] = layout::LayoutComponentStateEntry{
+        .type = "split",
+        .stateVersion = layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = "orphan",
+        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.10}}},
+      };
+      doc.components["wrong-type"] = layout::LayoutComponentStateEntry{
+        .type = "collapsibleSplit",
+        .stateVersion = layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = layout::layoutComponentBaselineHash(liveNode),
+        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.20}}},
+      };
+      doc.components["stale-split"] = layout::LayoutComponentStateEntry{
+        .type = "split",
+        .stateVersion = layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = "stale",
+        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.30}}},
+      };
+      store.save(doc, "classic");
+
+      auto layoutDoc = uimodel::layout::LayoutDocument{};
+      layoutDoc.root.type = "box";
+      layoutDoc.root.children = {liveNode, uimodel::layout::LayoutNode{.id = "wrong-type", .type = "split"}, staleNode};
+
+      store.prune("classic", layoutDoc);
+
+      auto const optLoaded = store.load("classic");
+      REQUIRE(optLoaded.has_value());
+      REQUIRE(optLoaded->components.size() == 1);
+      CHECK(optLoaded->components.contains("live-split"));
+    }
+
+    SECTION("removePreset deletes the file and reports success")
+    {
+      auto store = ShellLayoutComponentStateStore{stateDir};
+      store.save(stateDocFor(splitNode()), "classic");
+
+      CHECK(std::filesystem::exists(stateDir / "classic.yaml"));
+
+      CHECK(store.removePreset("classic"));
+      CHECK_FALSE(std::filesystem::exists(stateDir / "classic.yaml"));
+      CHECK(store.removePreset("classic"));
+    }
+
+    SECTION("prune returns whether anything changed")
+    {
+      auto store = ShellLayoutComponentStateStore{stateDir};
+      auto const node = splitNode("live-split");
+      auto doc = stateDocFor(node);
+      store.save(doc, "classic");
+
+      auto layoutDoc = uimodel::layout::LayoutDocument{};
+      layoutDoc.root.type = "box";
+      layoutDoc.root.children = {node};
+
+      CHECK_FALSE(store.prune("classic", layoutDoc));
+
+      layoutDoc.root.children.clear();
+      CHECK(store.prune("classic", layoutDoc));
+    }
+
+    SECTION("preset validation rejects path traversal, empty ids, and null bytes")
+    {
+      auto const store = ShellLayoutComponentStateStore{stateDir};
+
+      CHECK_THROWS_AS(store.load("../traversal"), Exception);
+      CHECK_THROWS_AS(store.load(""), Exception);
+      CHECK_THROWS_AS(store.load(std::string{"class\0ic", 9}), Exception);
+    }
+
+    SECTION("saved state file is readable only by owner")
+    {
+      auto store = ShellLayoutComponentStateStore{stateDir};
+      store.save(stateDocFor(splitNode()), "classic");
+
+      auto const perms = std::filesystem::status(stateDir / "classic.yaml").permissions();
+      CHECK((perms & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
+      CHECK((perms & std::filesystem::perms::owner_write) != std::filesystem::perms::none);
+      CHECK((perms & std::filesystem::perms::group_read) == std::filesystem::perms::none);
+      CHECK((perms & std::filesystem::perms::others_read) == std::filesystem::perms::none);
+    }
+  }
+} // namespace ao::gtk::test

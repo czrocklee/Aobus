@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
+#include "layout/state/LayoutComponentState.h"
 #include <ao/Type.h>
 
 #include <giomm/menumodel.h>
@@ -54,6 +55,7 @@ namespace ao::gtk::layout
   class ITrackDetailScope;
   class ComponentRegistry;
   class ActionRegistry;
+  class ILayoutComponentStateStore;
 
   struct TrackUiContext final
   {
@@ -86,7 +88,7 @@ namespace ao::gtk::layout
 
   struct ShellUiContext final
   {
-    Glib::RefPtr<Gio::MenuModel> menuModelPtr;
+    Glib::RefPtr<Gio::MenuModel> menuModelPtr = {};
   };
 
   struct PortalContext final
@@ -112,6 +114,19 @@ namespace ao::gtk::layout
     ActionRegistry const& actionRegistry;
     rt::AppRuntime& runtime;
     Gtk::Window& parentWindow;
+    std::string activePresetId{};
+    LayoutComponentStateDocument componentState{};
+    ILayoutComponentStateStore* componentStateStore = nullptr;
+
+    /**
+     * @brief Monotonically incremented when the active component state document is replaced.
+     *
+     * Components capture the generation at construction time and refuse to write runtime
+     * state if the context's current generation has moved on. This prevents stale
+     * components (e.g. destructing during reset/load/save-defaults) from polluting a
+     * freshly assigned state document.
+     */
+    std::uint64_t componentStateGeneration = 1;
 
     TrackUiContext track{};
     ListUiContext list{};

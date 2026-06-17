@@ -115,12 +115,13 @@ namespace ao::gtk::layout::track_field_grid
       return;
     }
 
-    _grid->measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
+    _grid->measure(
+      orientation, widthAtLeastMinimum(*_grid, forSize), minimum, natural, minimumBaseline, naturalBaseline);
   }
 
   void ConstrainedGridBox::size_allocate_vfunc(int width, int height, int baseline)
   {
-    _lastAllocatedWidth = std::max(0, width);
+    _lastAllocatedWidth = (_grid != nullptr) ? widthAtLeastMinimum(*_grid, width) : std::max(0, width);
 
     if (_grid != nullptr)
     {

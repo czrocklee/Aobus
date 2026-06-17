@@ -83,8 +83,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "app.actionButton",
                                 .displayName = "Action Button",
-                                .category = "Generic",
-                                .container = false,
+                                .category = ComponentCategory::Generic,
                                 .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"},
                                           {.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
                                           {.name = "size",

@@ -89,8 +89,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "tabs",
        .displayName = "Tabs",
-       .category = "Containers",
-       .container = true,
+       .category = ComponentCategory::Container,
        .props = {},
        .layoutProps =
          {{.name = "title", .kind = PropertyKind::String, .label = "Tab Title", .defaultValue = LayoutValue{""}},

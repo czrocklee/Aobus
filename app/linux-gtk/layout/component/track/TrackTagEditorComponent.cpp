@@ -91,8 +91,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "track.tagEditor",
                                 .displayName = "Tag Editor",
-                                .category = "Tracks",
-                                .container = false,
+                                .category = ComponentCategory::Track,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

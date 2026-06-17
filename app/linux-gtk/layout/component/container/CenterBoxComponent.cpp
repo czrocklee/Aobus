@@ -87,8 +87,7 @@ namespace ao::gtk::layout
     constexpr std::size_t kCenterBoxMaxChildren = 3;
     registry.registerComponent({.type = "centerBox",
                                 .displayName = "Center Box",
-                                .category = "Containers",
-                                .container = true,
+                                .category = ComponentCategory::Container,
                                 .props = {{.name = "orientation",
                                            .kind = PropertyKind::Enum,
                                            .label = "Orientation",

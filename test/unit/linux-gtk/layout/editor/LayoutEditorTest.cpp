@@ -9,6 +9,7 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -71,28 +72,21 @@ namespace ao::gtk::layout::editor::test
     {
       for (auto const& desc : descriptors)
       {
-        CHECK(!desc.category.empty());
+        CHECK(!uimodel::layout::toString(desc.category).empty());
       }
     }
 
-    SECTION("container types have container=true")
+    SECTION("container types are derived from child limits")
     {
       auto const expectedContainers = std::set<std::string>{"box", "split", "scroll", "tabs"};
 
       for (auto const& desc : descriptors)
       {
-        if (expectedContainers.contains(desc.type))
+        if (auto const isContainer = uimodel::layout::isContainer(desc); expectedContainers.contains(desc.type))
         {
-          CHECK(desc.container == true);
+          CHECK(isContainer);
         }
-      }
-    }
-
-    SECTION("leaf types have container=false and optMaxChildren=0")
-    {
-      for (auto const& desc : descriptors)
-      {
-        if (!desc.container)
+        else if (!isContainer)
         {
           CHECK(desc.optMaxChildren.value_or(0) == 0);
         }
@@ -133,7 +127,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("box");
 
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->container == true);
+      CHECK(uimodel::layout::isContainer(*optDesc));
 
       auto const hasProp = [&](std::string const& name)
       { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
@@ -148,7 +142,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("playback.playPauseButton");
 
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->category == "Playback");
+      CHECK(optDesc->category == uimodel::layout::ComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
       { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
@@ -162,7 +156,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("playback.qualityIndicator");
 
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->category == "Playback");
+      CHECK(optDesc->category == uimodel::layout::ComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
       {
@@ -187,10 +181,11 @@ namespace ao::gtk::layout::editor::test
 
       for (auto const& desc : descriptors)
       {
-        categories.insert(desc.category);
+        categories.insert(std::string{uimodel::layout::toString(desc.category)});
       }
 
       CHECK(categories.contains("Containers"));
+      CHECK(categories.contains("Decorators"));
       CHECK(categories.contains("Playback"));
       CHECK(categories.contains("Application"));
       CHECK(categories.contains("Status"));
@@ -406,16 +401,93 @@ namespace ao::gtk::layout::editor::test
       dialogPtr->close();
     }
 
+    SECTION("added components receive unique ids")
+    {
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
+
+      auto* const treeView = findTreeView(findTreeView, dialog);
+      REQUIRE(treeView != nullptr);
+
+      auto const selectRoot = [treeView]
+      {
+        if (auto const modelPtr = treeView->get_model(); modelPtr && !modelPtr->children().empty())
+        {
+          treeView->get_selection()->select(modelPtr->children().begin());
+        }
+      };
+
+      auto const initialCount = dialog.document().root.children.size();
+
+      selectRoot();
+      dialog.testAddComponent("spacer");
+      selectRoot();
+      dialog.testAddComponent("spacer");
+
+      REQUIRE(dialog.document().root.children.size() == initialCount + 2);
+      auto const& firstAdded = dialog.document().root.children[initialCount];
+      auto const& secondAdded = dialog.document().root.children[initialCount + 1];
+      CHECK(firstAdded.id == "spacer-new");
+      CHECK(secondAdded.id == "spacer-new-2");
+
+      dialog.close();
+    }
+
+    SECTION("duplicate stateful ids prevent save")
+    {
+      auto duplicateDoc = LayoutDocument{};
+      duplicateDoc.root.type = "box";
+      duplicateDoc.root.children = {
+        LayoutNode{.id = "shared-split", .type = "split"},
+        LayoutNode{.id = "shared-split", .type = "collapsibleSplit"},
+      };
+
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, duplicateDoc, "classic", "modern", stubLoader};
+
+      auto saveCount = 0;
+      dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
+
+      dialog.response(Gtk::ResponseType::OK);
+
+      CHECK(saveCount == 0);
+      dialog.close();
+    }
+
+    SECTION("wrapped nodes receive a unique container id")
+    {
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
+
+      auto* const treeView = findTreeView(findTreeView, dialog);
+      REQUIRE(treeView != nullptr);
+      auto const modelPtr = treeView->get_model();
+      REQUIRE(modelPtr);
+      REQUIRE(!modelPtr->children().empty());
+
+      auto const rootRow = *modelPtr->children().begin();
+      REQUIRE(!rootRow.children().empty());
+      treeView->get_selection()->select(rootRow.children().begin());
+
+      auto const originalFirstChildId = dialog.document().root.children.front().id;
+      dialog.testWrapNode("box");
+
+      auto const& wrapper = dialog.document().root.children.front();
+      CHECK(wrapper.id == "box-wrap");
+      REQUIRE(wrapper.children.size() == 1);
+      CHECK(wrapper.children.front().id == originalFirstChildId);
+
+      dialog.close();
+    }
+
     SECTION("destroys cleanly with header preset widgets")
     {
       {
         auto dialogPtr =
           std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
-        dialogPtr->present();
+        // Keep the dialog unmapped so the test does not grab focus, while still
+        // exercising construction, header preset widget setup, and destruction.
         dialogPtr->close();
         dialogPtr.reset();
       }
-      SUCCEED(); // Reaching here without crash or GTK warnings (in a real display session) is the goal
+      SUCCEED(); // Reaching here without crash or GTK warnings is the goal
     }
 
     SECTION("Session caching and dirty tracking")
@@ -877,7 +949,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("absoluteCanvas");
 
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->container == true);
+      CHECK(uimodel::layout::isContainer(*optDesc));
       CHECK(optDesc->minChildren == 0);
       CHECK(!optDesc->optMaxChildren.has_value());
     }

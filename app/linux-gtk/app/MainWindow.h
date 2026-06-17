@@ -17,6 +17,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class AppConfig;
+  class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
   class MenuController;
   class MainWindowCoordinator;
@@ -30,7 +31,8 @@ namespace ao::gtk
   public:
     explicit MainWindow(rt::AppRuntime& runtime,
                         std::shared_ptr<AppConfig> configPtr,
-                        std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr);
+                        std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+                        std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr = nullptr);
     ~MainWindow() override;
 
     MainWindow(MainWindow const&) = delete;

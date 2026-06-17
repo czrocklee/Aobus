@@ -40,6 +40,7 @@ namespace ao::gtk::layout
   void registerStatusSlotComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.statusSlot", .displayName = "Status Slot", .category = "Status"}, createStatusSlot);
+      {.type = "status.statusSlot", .displayName = "Status Slot", .category = ComponentCategory::Status},
+      createStatusSlot);
   }
 } // namespace ao::gtk::layout

@@ -46,7 +46,7 @@ namespace ao::gtk::layout
   void registerStatusMessageLabelComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.messageLabel", .displayName = "Status Message (Basic)", .category = "Status"},
+      {.type = "status.messageLabel", .displayName = "Status Message (Basic)", .category = ComponentCategory::Status},
       createStatusMessageLabel);
   }
 } // namespace ao::gtk::layout

@@ -593,8 +593,6 @@ namespace ao::gtk::layout::test
       auto* const imageWidget = widget.get_first_child();
       REQUIRE(imageWidget != nullptr);
       window.set_child(widget);
-      widget.set_visible(true);
-      imageWidget->set_visible(true);
 
       widget.size_allocate(Gtk::Allocation{0, 0, 180, 300}, -1);
       CHECK(widget.get_width() == 180);

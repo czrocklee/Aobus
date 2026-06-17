@@ -19,7 +19,7 @@ namespace ao::gtk::layout::test
     compRegistry.registerComponent(
       {.type = "app.actionButton",
        .displayName = "Action Button",
-       .category = "Generic",
+       .category = ComponentCategory::Generic,
        .props = {{.name = "primaryAction",
                   .kind = PropertyKind::Enum,
                   .label = "Primary Action",

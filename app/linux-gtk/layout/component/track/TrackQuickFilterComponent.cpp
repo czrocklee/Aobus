@@ -79,8 +79,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "track.quickFilter",
                                 .displayName = "Quick Filter",
-                                .category = "Tracks",
-                                .container = false,
+                                .category = ComponentCategory::Track,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

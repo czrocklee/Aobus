@@ -279,7 +279,7 @@ namespace ao::gtk
                                 int& /*minimum_baseline*/,
                                 int& /*natural_baseline*/) const
   {
-    // CSS controls the real glyph size via parent padding or min-width/min-height.
+    // The parent allocation controls the rendered glyph size.
     minimum = 0;
     natural = 0;
   }

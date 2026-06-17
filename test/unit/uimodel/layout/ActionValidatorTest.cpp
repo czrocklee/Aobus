@@ -36,7 +36,7 @@ namespace ao::uimodel::layout::test
       catalog.registerComponentDescriptor(
         ComponentDescriptor{.type = "test.button",
                             .displayName = "Test Button",
-                            .category = "Test",
+                            .category = ComponentCategory::Generic,
                             .props = {{.name = "primaryAction",
                                        .kind = PropertyKind::Enum,
                                        .label = "Primary Action",

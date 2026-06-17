@@ -9,7 +9,6 @@ namespace ao::gtk
 {
   constexpr std::int32_t kDefaultWindowWidth = 989;
   constexpr std::int32_t kDefaultWindowHeight = 801;
-  constexpr std::int32_t kDefaultPanedPosition = 330;
 
   struct WindowState final
   {

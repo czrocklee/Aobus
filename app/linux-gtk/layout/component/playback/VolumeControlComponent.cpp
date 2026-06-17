@@ -52,8 +52,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.volumeControl",
                                 .displayName = "Volume Control",
-                                .category = "Playback",
-                                .container = false,
+                                .category = ComponentCategory::Playback,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

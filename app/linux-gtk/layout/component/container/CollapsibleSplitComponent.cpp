@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
+#include "layout/state/ILayoutComponentStateStore.h"
+#include "layout/state/LayoutComponentState.h"
+#include "layout/state/StatefulLayoutComponentType.h"
+#include <ao/utility/Log.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/box.h>
@@ -22,17 +27,22 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk::layout
 {
   namespace
   {
-    constexpr std::int32_t kDefaultCollapsibleSplitSize = 300;
     constexpr std::int32_t kMinCollapsibleSplitSize = 50;
+    constexpr std::int32_t kCollapsibleSplitGutterReserve = 12;
     constexpr double kCollapsibleSplitDragThreshold = 3.0;
+    constexpr std::int32_t kBootstrapSize = 50;
 
     class FixedSplitPane final : public Gtk::Widget
     {
@@ -112,7 +122,8 @@ namespace ao::gtk::layout
 
         if (_child != nullptr)
         {
-          _child->measure(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
+          _child->measure(
+            orientation, constrainedChildForSize(forSize), minimum, natural, minimumBaseline, naturalBaseline);
           return;
         }
 
@@ -126,14 +137,26 @@ namespace ao::gtk::layout
       {
         if (_child != nullptr)
         {
-          _child->size_allocate({0, 0, width, height}, baseline);
+          auto const childWidth = (_orientation == Gtk::Orientation::HORIZONTAL) ? std::max(width, _paneSize) : width;
+          auto const childHeight = (_orientation == Gtk::Orientation::VERTICAL) ? std::max(height, _paneSize) : height;
+          _child->size_allocate({0, 0, childWidth, childHeight}, baseline);
         }
+      }
+
+      std::int32_t constrainedChildForSize(std::int32_t forSize) const
+      {
+        if (forSize < 0)
+        {
+          return forSize;
+        }
+
+        return std::max(forSize, _paneSize);
       }
 
     private:
       Gtk::Widget* _child = nullptr;
       Gtk::Orientation _orientation = Gtk::Orientation::HORIZONTAL;
-      std::int32_t _paneSize = kDefaultCollapsibleSplitSize;
+      std::int32_t _paneSize = 0;
     };
 
     /**
@@ -149,6 +172,15 @@ namespace ao::gtk::layout
       };
 
       CollapsibleSplitComponent(LayoutContext& ctx, LayoutNode const& node)
+        : _ctx{&ctx}
+        , _stateDoc{&ctx.componentState}
+        , _stateStore{ctx.componentStateStore}
+        , _componentId{node.id}
+        , _activePresetId{ctx.activePresetId}
+        , _baselineHash{layoutComponentBaselineHash(node)}
+        , _stateGeneration{ctx.componentStateGeneration}
+        , _persistWrites{!ctx.editMode && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
+                         !ctx.activePresetId.empty() && ctx.componentStateStore != nullptr}
       {
         if (node.children.size() != 2)
         {
@@ -165,12 +197,35 @@ namespace ao::gtk::layout
 
         _container.set_orientation(_orientation);
         _paneSizer.setSplitOrientation(_orientation);
+        _allocationRoot.setChild(_container);
 
         // Build children
         _startChildPtr = ctx.registry.create(ctx, node.children[0]);
         _endChildPtr = ctx.registry.create(ctx, node.children[1]);
 
-        bool const initiallyRevealed = node.getProp<bool>("revealed", true);
+        auto const optState = resolveLayoutComponentState(ctx.componentState, node);
+        bool initiallyRevealed = node.getProp<bool>("revealed", true);
+        auto optRestoredSize = std::optional<std::int32_t>{};
+
+        if (optState)
+        {
+          if (auto const it = optState->state.find("revealed"); it != optState->state.end())
+          {
+            initiallyRevealed = it->second.asBool(initiallyRevealed);
+          }
+
+          if (auto const it = optState->state.find("size"); it != optState->state.end())
+          {
+            auto const size = static_cast<std::int32_t>(it->second.asInt());
+
+            if (size > 0)
+            {
+              optRestoredSize = size;
+              _optPersistedSizeFallback = size;
+            }
+          }
+        }
+
         _revealer.set_reveal_child(initiallyRevealed);
 
         // Setup expansion
@@ -199,12 +254,109 @@ namespace ao::gtk::layout
         _revealer.set_vexpand(_orientation == Gtk::Orientation::HORIZONTAL);
         _revealer.set_transition_type(getTransitionType());
 
-        // Initial size from "position" (we treat it as the fixed size of the collapsible panel)
-        auto const requestedSize = node.getProp<std::int64_t>("position", kDefaultCollapsibleSplitSize);
-        _currentSize = requestedSize > 0 ? static_cast<std::int32_t>(requestedSize) : kDefaultCollapsibleSplitSize;
-        setSize(_currentSize);
+        applyInitialProps(node, initiallyRevealed, optRestoredSize);
 
         // Layout assembly
+        assembleLayout();
+
+        // Drag logic
+        setupDragGesture();
+
+        _toggleButton.signal_clicked().connect([this] { toggleRevealed(); });
+
+        updateHandleIcon();
+      }
+
+      ~CollapsibleSplitComponent() override
+      {
+        if (_dragGesturePtr != nullptr)
+        {
+          _container.remove_controller(_dragGesturePtr);
+        }
+
+        _allocationRoot.setAllocatedCallback({});
+        _allocationRoot.clearChild();
+        _paneSizer.clearChild();
+
+        // Unparent the direct child before its component is destroyed. The
+        // collapsible child lives inside _paneSizer and is cleared above.
+        if (_collapseSide == Side::End)
+        {
+          if (_startChildPtr != nullptr)
+          {
+            _container.remove(_startChildPtr->widget());
+          }
+        }
+        else
+        {
+          if (_endChildPtr != nullptr)
+          {
+            _container.remove(_endChildPtr->widget());
+          }
+        }
+      }
+
+      CollapsibleSplitComponent(CollapsibleSplitComponent const&) = delete;
+      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent const&) = delete;
+      CollapsibleSplitComponent(CollapsibleSplitComponent&&) = delete;
+      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent&&) = delete;
+
+      Gtk::Widget& widget() override
+      {
+        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr)
+                                      : static_cast<Gtk::Widget&>(_allocationRoot);
+      }
+
+    private:
+      void applyInitialProps(LayoutNode const& node,
+                             bool initiallyRevealed,
+                             std::optional<std::int32_t> optRestoredSize)
+      {
+        // Initial size from "position" (we treat it as the fixed size of the collapsible panel)
+        auto const requestedSize = node.getProp<std::int64_t>("position", -1);
+        auto const hasPosition = node.props.find("position") != node.props.end();
+        auto const percentIt = node.props.find("initialPositionPercent");
+
+        APP_LOG_INFO("CollapsibleSplit: construct id='{}' requestedSize={} hasPosition={} hasPercent={} revealed={}",
+                     node.id,
+                     requestedSize,
+                     hasPosition,
+                     percentIt != node.props.end(),
+                     initiallyRevealed);
+
+        if (optRestoredSize)
+        {
+          APP_LOG_INFO("CollapsibleSplit: using persisted state id='{}' size={}", node.id, *optRestoredSize);
+          _currentSize = kBootstrapSize;
+          setSize(_currentSize);
+          scheduleRestoredSize(*optRestoredSize);
+        }
+        else if (requestedSize > 0)
+        {
+          APP_LOG_INFO("CollapsibleSplit: using fixed position id='{}' size={}", node.id, requestedSize);
+          _currentSize = static_cast<std::int32_t>(requestedSize);
+          _persistableSizeKnown = true;
+          setSize(_currentSize);
+        }
+        else if (percentIt != node.props.end())
+        {
+          double const percent = percentIt->second.asDouble();
+          APP_LOG_INFO("CollapsibleSplit: using percent id='{}' percent={}", node.id, percent);
+
+          // Use bootstrap size to avoid measurement warnings during the first frame
+          _currentSize = kBootstrapSize;
+          setSize(_currentSize);
+          scheduleInitialPercent(percent);
+        }
+        else
+        {
+          _currentSize = 0;
+          setSize(_currentSize);
+        }
+      }
+
+      void assembleLayout()
+      {
         _gutterBox.set_orientation(_orientation);
         _gutterBox.add_css_class("ao-detail-resize-grip");
         _gutterBox.set_cursor(resizeCursor());
@@ -230,28 +382,8 @@ namespace ao::gtk::layout
           _container.append(_gutterBox);
           _container.append(_revealer);
         }
-
-        // Drag logic
-        setupDragGesture();
-
-        _toggleButton.signal_clicked().connect([this] { toggleRevealed(); });
-
-        updateHandleIcon();
       }
 
-      ~CollapsibleSplitComponent() override { _paneSizer.clearChild(); }
-
-      CollapsibleSplitComponent(CollapsibleSplitComponent const&) = delete;
-      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent const&) = delete;
-      CollapsibleSplitComponent(CollapsibleSplitComponent&&) = delete;
-      CollapsibleSplitComponent& operator=(CollapsibleSplitComponent&&) = delete;
-
-      Gtk::Widget& widget() override
-      {
-        return (_errorPtr != nullptr) ? static_cast<Gtk::Widget&>(*_errorPtr) : static_cast<Gtk::Widget&>(_container);
-      }
-
-    private:
       void setupDragGesture()
       {
         _dragGesturePtr = Gtk::GestureDrag::create();
@@ -298,6 +430,7 @@ namespace ao::gtk::layout
 
               _dragGesturePtr->set_state(Gtk::EventSequenceState::CLAIMED);
               _dragActive = true;
+              _manualSizeSelected = true;
               applyDragCursor();
             }
 
@@ -318,6 +451,7 @@ namespace ao::gtk::layout
             }
 
             _currentSize = std::max(kMinCollapsibleSplitSize, newSize);
+            _persistableSizeKnown = true;
             setSize(_currentSize);
           });
 
@@ -327,6 +461,7 @@ namespace ao::gtk::layout
             if (_dragActive)
             {
               restoreDragCursor();
+              saveRuntimeState();
             }
 
             _dragAccepted = false;
@@ -344,6 +479,105 @@ namespace ao::gtk::layout
 
         return (_collapseSide == Side::Start) ? Gtk::RevealerTransitionType::SLIDE_DOWN
                                               : Gtk::RevealerTransitionType::SLIDE_UP;
+      }
+
+      static std::int32_t percentSize(std::int32_t total, double percent)
+      {
+        auto const scaled = static_cast<std::int32_t>(static_cast<double>(total) * percent);
+        return std::max(kMinCollapsibleSplitSize, scaled);
+      }
+
+      static std::int32_t clampedRestoredSize(std::int32_t total, std::int32_t requested)
+      {
+        if (total <= 0)
+        {
+          return std::max(kMinCollapsibleSplitSize, requested);
+        }
+
+        auto const maxSize =
+          std::max(kMinCollapsibleSplitSize, total - kMinCollapsibleSplitSize - kCollapsibleSplitGutterReserve);
+        return std::clamp(requested, kMinCollapsibleSplitSize, maxSize);
+      }
+
+      void scheduleInitialPercent(double percent)
+      {
+        _initialPercent = percent;
+
+        _allocationRoot.setAllocatedCallback([this](std::int32_t width, std::int32_t height)
+                                             { applyInitialPercentAllocation(width, height); });
+      }
+
+      void applyInitialPercentAllocation(std::int32_t width, std::int32_t height)
+      {
+        if (_manualSizeSelected)
+        {
+          APP_LOG_INFO("CollapsibleSplit: percent allocation stop manual={}", _manualSizeSelected);
+          _allocationRoot.setAllocatedCallback({});
+          return;
+        }
+
+        std::int32_t const total = (_orientation == Gtk::Orientation::HORIZONTAL) ? width : height;
+
+        if (total <= kBootstrapSize)
+        {
+          APP_LOG_INFO(
+            "CollapsibleSplit: percent allocation waiting total={} width={} height={}", total, width, height);
+          return;
+        }
+
+        std::int32_t const newSize = percentSize(total, _initialPercent);
+
+        if (_initialPositionSet && _currentSize == newSize)
+        {
+          return;
+        }
+
+        _currentSize = newSize;
+        APP_LOG_INFO("CollapsibleSplit: percent allocation {} percent={} total={} size={}",
+                     _initialPositionSet ? "update" : "apply",
+                     _initialPercent,
+                     total,
+                     _currentSize);
+        setSize(_currentSize);
+        _initialPositionSet = true;
+        _persistableSizeKnown = true;
+      }
+
+      void scheduleRestoredSize(std::int32_t size)
+      {
+        _optPendingRestoredSize = size;
+
+        _allocationRoot.setAllocatedCallback([this](std::int32_t width, std::int32_t height)
+                                             { applyRestoredSizeAllocation(width, height); });
+      }
+
+      void applyRestoredSizeAllocation(std::int32_t width, std::int32_t height)
+      {
+        if (!_optPendingRestoredSize)
+        {
+          _allocationRoot.setAllocatedCallback({});
+          return;
+        }
+
+        std::int32_t const total = (_orientation == Gtk::Orientation::HORIZONTAL) ? width : height;
+
+        if (total <= kBootstrapSize)
+        {
+          APP_LOG_INFO(
+            "CollapsibleSplit: restored allocation waiting total={} width={} height={}", total, width, height);
+          return;
+        }
+
+        _currentSize = clampedRestoredSize(total, *_optPendingRestoredSize);
+        _optPersistedSizeFallback = _currentSize;
+        _persistableSizeKnown = true;
+        APP_LOG_INFO("CollapsibleSplit: restored allocation apply requested={} total={} size={}",
+                     *_optPendingRestoredSize,
+                     total,
+                     _currentSize);
+        setSize(_currentSize);
+        _optPendingRestoredSize.reset();
+        _allocationRoot.setAllocatedCallback({});
       }
 
       void setSize(std::int32_t size) { _paneSizer.setPaneSize(size); }
@@ -393,6 +627,44 @@ namespace ao::gtk::layout
         bool const revealed = !_revealer.get_reveal_child();
         _revealer.set_reveal_child(revealed);
         updateHandleIcon();
+        saveRuntimeState();
+      }
+
+      bool canWriteState() const
+      {
+        return _persistWrites && _ctx != nullptr && _stateDoc != nullptr && _stateStore != nullptr &&
+               _ctx->componentStateGeneration == _stateGeneration;
+      }
+
+      void saveRuntimeState()
+      {
+        if (!canWriteState())
+        {
+          return;
+        }
+
+        auto state = std::map<std::string, LayoutValue, std::less<>>{};
+
+        if (_persistableSizeKnown && _currentSize > 0)
+        {
+          state["size"] = LayoutValue{static_cast<std::int64_t>(_currentSize)};
+          _optPersistedSizeFallback = _currentSize;
+        }
+        else if (_optPersistedSizeFallback)
+        {
+          state["size"] = LayoutValue{static_cast<std::int64_t>(*_optPersistedSizeFallback)};
+        }
+
+        state["revealed"] = LayoutValue{_revealer.get_reveal_child()};
+
+        _stateDoc->preset = _activePresetId;
+        _stateDoc->components[_componentId] = LayoutComponentStateEntry{
+          .type = std::string{kCollapsibleSplitComponentType},
+          .stateVersion = kLayoutComponentStateEntryVersion,
+          .baselineHash = _baselineHash,
+          .state = std::move(state),
+        };
+        _stateStore->save(*_stateDoc, _activePresetId);
       }
 
       void updateHandleIcon()
@@ -421,17 +693,32 @@ namespace ao::gtk::layout
         }
       }
 
+      AllocationObserver _allocationRoot;
       Gtk::Box _container;
       Gtk::Box _gutterBox;
       Gtk::Button _toggleButton;
       Gtk::Revealer _revealer;
       FixedSplitPane _paneSizer;
+      LayoutContext* _ctx = nullptr;
+      LayoutComponentStateDocument* _stateDoc = nullptr;
+      ILayoutComponentStateStore* _stateStore = nullptr;
       Gtk::Orientation _orientation;
       Side _collapseSide;
       Glib::RefPtr<Gtk::GestureDrag> _dragGesturePtr;
 
-      std::int32_t _currentSize = kDefaultCollapsibleSplitSize;
-      std::int32_t _startSizeOnDrag = kDefaultCollapsibleSplitSize;
+      std::int32_t _currentSize = 0;
+      std::int32_t _startSizeOnDrag = 0;
+      std::optional<std::int32_t> _optPendingRestoredSize;
+      std::optional<std::int32_t> _optPersistedSizeFallback;
+      std::string _componentId;
+      std::string _activePresetId;
+      std::string _baselineHash;
+      std::uint64_t _stateGeneration = 0;
+      double _initialPercent = 0.0;
+      bool _initialPositionSet = false;
+      bool _manualSizeSelected = false;
+      bool _persistableSizeKnown = false;
+      bool _persistWrites = false;
       bool _dragAccepted = false;
       bool _dragActive = false;
 
@@ -449,32 +736,34 @@ namespace ao::gtk::layout
 
   void registerCollapsibleSplitComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent(
-      {.type = "collapsibleSplit",
-       .displayName = "Collapsible Split",
-       .category = "Containers",
-       .container = true,
-       .props = {{.name = "orientation",
-                  .kind = PropertyKind::Enum,
-                  .label = "Orientation",
-                  .defaultValue = LayoutValue{"vertical"},
-                  .enumValues = {"vertical", "horizontal"}},
-                 {.name = "position",
-                  .kind = PropertyKind::Int,
-                  .label = "Position",
-                  .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCollapsibleSplitSize)}},
-                 {.name = "collapseSide",
-                  .kind = PropertyKind::Enum,
-                  .label = "Collapse Side",
-                  .defaultValue = LayoutValue{"end"},
-                  .enumValues = {"start", "end"}},
-                 {.name = "revealed",
-                  .kind = PropertyKind::Bool,
-                  .label = "Initially Revealed",
-                  .defaultValue = LayoutValue{true}}},
-       .layoutProps = {},
-       .minChildren = 2,
-       .optMaxChildren = 2},
-      createCollapsibleSplit);
+    registry.registerComponent({.type = std::string{kCollapsibleSplitComponentType},
+                                .displayName = "Collapsible Split",
+                                .category = ComponentCategory::Container,
+                                .props = {{.name = "orientation",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Orientation",
+                                           .defaultValue = LayoutValue{"vertical"},
+                                           .enumValues = {"vertical", "horizontal"}},
+                                          {.name = "position",
+                                           .kind = PropertyKind::Int,
+                                           .label = "Position",
+                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}},
+                                          {.name = "initialPositionPercent",
+                                           .kind = PropertyKind::Double,
+                                           .label = "Initial Position (%)",
+                                           .defaultValue = LayoutValue{0.0}},
+                                          {.name = "collapseSide",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Collapse Side",
+                                           .defaultValue = LayoutValue{"end"},
+                                           .enumValues = {"start", "end"}},
+                                          {.name = "revealed",
+                                           .kind = PropertyKind::Bool,
+                                           .label = "Initially Revealed",
+                                           .defaultValue = LayoutValue{true}}},
+                                .layoutProps = {},
+                                .minChildren = 2,
+                                .optMaxChildren = 2},
+                               createCollapsibleSplit);
   }
 } // namespace ao::gtk::layout

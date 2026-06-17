@@ -1,6 +1,7 @@
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
+    runtime/AtomicFile.cpp
     runtime/CoreRuntime.cpp
     runtime/LibraryYamlImporter.cpp
     runtime/LibraryYamlExporter.cpp

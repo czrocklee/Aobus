@@ -143,8 +143,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "track.detailScope",
        .displayName = "Detail Scope",
-       .category = "Tracks",
-       .container = true,
+       .category = ComponentCategory::Track,
        .props = {},
        .layoutProps = {{.name = "cssClasses", .kind = PropertyKind::String, .label = "CSS Classes"}},
        .minChildren = 1,

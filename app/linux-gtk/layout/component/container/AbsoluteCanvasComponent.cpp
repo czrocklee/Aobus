@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "ContainerComponentRegistrations.h"
-#include "layout/component/common/CommonLayoutProps.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
@@ -580,7 +579,6 @@ namespace ao::gtk::layout
         for (auto const& childNode : node.children)
         {
           auto childPtr = ctx.registry.create(ctx, childNode);
-          applyCommonProps(childPtr->widget(), childNode);
 
           int const posX = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("x", 0));
           int const posY = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("y", 0));
@@ -619,8 +617,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "absoluteCanvas",
                                 .displayName = "Absolute Canvas",
-                                .category = "Containers",
-                                .container = true,
+                                .category = ComponentCategory::Container,
                                 .props = {{.name = "snapToGrid",
                                            .kind = PropertyKind::Bool,
                                            .label = "Snap To Grid",

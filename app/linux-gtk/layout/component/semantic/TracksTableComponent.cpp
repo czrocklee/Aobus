@@ -57,8 +57,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "tracks.table",
                                 .displayName = "Tracks Table",
-                                .category = "Tracks",
-                                .container = false,
+                                .category = ComponentCategory::Track,
                                 .props = {{.name = "view",
                                            .kind = PropertyKind::String,
                                            .label = "View Source",

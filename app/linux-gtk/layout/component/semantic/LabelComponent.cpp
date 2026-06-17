@@ -46,8 +46,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "label",
                                 .displayName = "Text Label",
-                                .category = "Generic",
-                                .container = false,
+                                .category = ComponentCategory::Generic,
                                 .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"}},
                                 .layoutProps = {},
                                 .minChildren = 0,

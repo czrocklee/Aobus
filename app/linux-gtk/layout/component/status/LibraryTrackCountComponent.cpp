@@ -41,6 +41,7 @@ namespace ao::gtk::layout
   void registerLibraryTrackCountComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.trackCount", .displayName = "Library Track Count", .category = "Status"}, createTrackCount);
+      {.type = "status.trackCount", .displayName = "Library Track Count", .category = ComponentCategory::Status},
+      createTrackCount);
   }
 } // namespace ao::gtk::layout

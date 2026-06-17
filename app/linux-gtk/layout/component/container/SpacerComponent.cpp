@@ -40,8 +40,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "spacer",
                                 .displayName = "Spacer",
-                                .category = "Containers",
-                                .container = false,
+                                .category = ComponentCategory::Container,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

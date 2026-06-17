@@ -49,8 +49,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "library.openLibraryButton",
                                 .displayName = "Open Library Button",
-                                .category = "Library",
-                                .container = false,
+                                .category = ComponentCategory::Library,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

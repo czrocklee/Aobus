@@ -6,16 +6,16 @@
 
   /* Unify Geometry: Softer, larger corners for everything */
   --ao-radius-sm: 8px;
-  /* 原本是 4px，提升到 8px 让悬浮项更圆润 */
+  /* Raised from 4px so floating rows feel softer. */
   --ao-radius-md: 12px;
-  /* 原本是 8px，提升到 12px */
+  /* Raised from 8px to keep the corner scale consistent. */
   --ao-card-radius: 16px;
   --ao-card-padding: 16px;
 
   --ao-row-min-height: 52px;
   --ao-list-row-min-height: 36px;
   --ao-row-radius: 8px;
-  /* 进一步柔化列表行边缘 */
+  /* Further soften list row edges. */
   --ao-row-hover-bg: alpha(currentColor, 0.04);
   --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.1);
 
@@ -144,15 +144,15 @@
   border: 1px solid alpha(currentColor, 0.08);
 }
 
-/* Tooltip Unified Aesthetics (匹配 Popover 的悬浮玻璃质感) */
+/* Tooltip unified aesthetics matching the floating popover surface. */
 .ao-theme-modern tooltip {
   background: alpha(@view_bg_color, 0.95);
   border: 1px solid alpha(currentColor, 0.08);
   box-shadow: 0 8px 24px alpha(black, 0.15);
   border-radius: 12px;
-  /* 比 Popover 稍微精巧一点的圆角 */
+  /* Slightly tighter than popovers. */
   color: @theme_fg_color;
-  /* 强制覆盖 GTK 默认的白字/黑字，保持与 Popover 一致的色系 */
+  /* Override GTK's default tooltip colors to match popovers. */
   padding: 6px 10px;
 }
 
@@ -177,12 +177,12 @@
 
 /* Navigation Rail (Modern) */
 .ao-theme-modern .ao-list-pane-modern {
-  /* 营造极其柔和的下沉物理景深感：减弱透明度，去掉突兀的锐化效果，增加晕染面积 */
+  /* Use a very soft inset depth cue without a hard divider. */
   box-shadow: inset -2px 0 12px 0 alpha(black, 0.05);
   border-right: none;
 }
 
-/* 隐藏 GTK 默认的 Paned (Split) 分割线，让阴影成为唯一的空间分割 */
+/* Hide the default Paned divider so the shadow is the only spatial separator. */
 .ao-theme-modern paned>separator {
   background-color: transparent;
   background-image: none;
@@ -193,7 +193,7 @@
 .ao-theme-modern .ao-list-pane-modern listview {
   background: transparent;
   padding-right: 4px;
-  /* 稍微推开一点，避免高亮药丸被右侧阴影覆盖 */
+  /* Leave room so selected rows are not clipped by the rail shadow. */
 }
 
 .ao-theme-modern .ao-list-pane-modern listview>row {
@@ -205,7 +205,7 @@
 
 /* padding handled by --ao-row-min-height globally */
 
-/* 优雅地隐藏过长的过滤代码，仅在 Hover 或选中时显示 */
+/* Hide long filter expressions until hover, focus, or selection. */
 .ao-theme-modern .ao-list-pane-modern .ao-list-filter-label {
   opacity: 0;
   transition: opacity 200ms ease;
@@ -219,14 +219,14 @@
 
 /* Hover handled by tokens */
 
-/* 高级悬浮药丸 (Floating Pill) 态 - 类 macOS / iOS 侧边栏 */
+/* Floating pill state for the modern sidebar. */
 .ao-theme-modern .ao-list-pane-modern listview>row:selected {
   background-image: none;
   background-color: alpha(@theme_selected_bg_color, 0.15);
   border-color: transparent;
-  /* 防止跳动 */
+  /* Keep border geometry stable. */
   border-radius: 8px;
-  /* 恢复饱满的圆角 */
+  /* Match the full modern row radius. */
   color: inherit;
 }
 
@@ -246,7 +246,7 @@
   border-radius: var(--ao-radius-md);
   margin: var(--ao-spacing-md);
   border: none;
-  /* 去掉突兀的物理边框，依靠色彩对和右侧的景深阴影自然分割 */
+  /* Let contrast and rail depth separate the shell instead of a hard border. */
 }
 
 /* Modern Track Controls Bar (The Header Island) */
@@ -258,7 +258,7 @@
 .ao-theme-modern .ao-section-title-modern {
   font-size: 2rem;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: @theme_fg_color;
   opacity: 0.9;
 }
@@ -272,7 +272,7 @@
   box-shadow: none;
   font-size: 2rem;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: @theme_fg_color;
   opacity: 0.9;
   transition: opacity 200ms ease, color 200ms ease;
@@ -317,6 +317,33 @@
   padding: 0 4px 0 0;
   min-height: 36px;
   transition: all var(--ao-transition-fast) ease-out;
+}
+
+.ao-theme-modern .ao-width-wide .ao-search-pill-modern {
+  min-width: 320px;
+}
+
+.ao-theme-modern .ao-width-regular .ao-search-pill-modern {
+  min-width: 260px;
+}
+
+.ao-theme-modern .ao-width-compact .ao-track-controls-bar-modern {
+  padding: 12px 10px 8px 10px;
+}
+
+.ao-theme-modern .ao-width-compact .ao-section-title-modern-button button {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.ao-theme-modern .ao-width-compact .ao-search-pill-modern {
+  min-width: 140px;
+}
+
+.ao-theme-modern .ao-width-compact .ao-header-stats-modern {
+  opacity: 0;
+  font-size: 0;
+  min-width: 0;
 }
 
 .ao-theme-modern .ao-quick-filter button.ao-quick-filter-action {
@@ -459,11 +486,11 @@
 .ao-theme-modern columnview row.ao-playing-row {
   background-image: none;
   background-color: alpha(@warning_bg_color, 0.08);
-  /* 极低透明度的环境光背景 */
+  /* Very low-opacity ambient highlight. */
   border-color: transparent;
-  /* 绝对不能用 border: none，否则会吃掉系统默认的 1px 边框宽度导致跳帧！ */
+  /* Keep the transparent border so row geometry does not jump. */
   border-radius: 8px;
-  /* 统一为饱满的圆角药丸 */
+  /* Match the full modern pill radius. */
 }
 
 .ao-theme-modern .ao-playing-title {
@@ -483,7 +510,7 @@ listview>row:first-child .ao-track-section-box {
   font-size: 1.2rem;
   font-weight: 800;
   color: @theme_fg_color;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .ao-theme-modern .ao-track-section-subtitle {
@@ -714,11 +741,11 @@ listview>row:first-child .ao-track-section-box {
   box-shadow: none;
 }
 
-/* 统一 Detail Pane 内的编辑框风格为圆润拟态 */
+/* Keep detail pane entries consistent with the rounded modern surface. */
 .ao-theme-modern .ao-detail-pane .ao-inline-editor-entry {
   border-radius: 8px;
   background: alpha(currentColor, 0.04);
-  /* 放弃纯底色，改用轻度玻璃质感 */
+  /* Use a subtle glass surface instead of a flat fill. */
   border: 1px solid alpha(currentColor, 0.06);
   padding: 4px 8px;
   transition: all 200ms ease;

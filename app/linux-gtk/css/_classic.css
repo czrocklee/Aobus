@@ -1,30 +1,30 @@
 .ao-theme-classic {
-  /* 极致紧凑的无圆角设计 (True Classic UI) */
+  /* Dense square-cornered geometry for the classic UI. */
   --ao-card-radius: 0px;
   --ao-card-padding: 4px;
 
-  /* 极致高密度的行高 (类似原生树状列表或 Foobar2000) */
+  /* High-density row height similar to native tree/list UIs. */
   --ao-row-min-height: 26px;
   --ao-list-row-min-height: 24px;
   --ao-row-radius: 0px;
 
-  /* 硬朗且更清晰的控件边缘 */
+  /* Crisp control edges. */
   --ao-control-radius: 2px;
   --ao-surface-border-color: alpha(currentColor, 0.18);
   --ao-surface-border-width: 1px;
 }
 
-/* 经典的高对比原生选中态 (无圆角、无边距、全宽填充) */
+/* High-contrast native selection state with square full-width fill. */
 .ao-theme-classic columnview > listview > row:selected,
 .ao-theme-classic listview > row:selected {
   background-color: @theme_selected_bg_color;
   color: @theme_selected_fg_color;
   border-radius: 0px;
   margin: 0px;
-  border-color: transparent; /* 防止跳动 */
+  border-color: transparent; /* Keep row geometry stable. */
 }
 
-/* 坚硬的物理分割线 (不同于 Modern 的悬浮，Classic 必须有明确的网格线) */
+/* Hard physical divider for the grid-like classic layout. */
 .ao-theme-classic paned > separator {
   background-color: alpha(currentColor, 0.15);
   background-image: none;
@@ -32,7 +32,7 @@
   min-height: 1px;
 }
 
-/* 经典模式下的“正在播放” (全宽度实色背景，零圆角) */
+/* Classic now-playing state: full-width solid background, square corners. */
 .ao-theme-classic columnview row.ao-playing-row {
   background-color: alpha(@warning_bg_color, 0.15);
   border-radius: 0px;
@@ -54,12 +54,12 @@
 /* StatusBar */
 .ao-status-bar-classic {
   min-height: 24px;
-  padding: 0 12px; /* 取消上下多余 padding */
+  padding: 0 12px; /* Remove extra vertical padding. */
 }
 
-/* 全局规范 Classic 模式下的 Separator，确保它永远是一根完美的 1px 实线 */
+/* Keep classic separators as strict 1px solid lines. */
 .ao-theme-classic separator {
-  background-color: alpha(currentColor, 0.12); /* 与原本硬编码的边框颜色一致 */
+  background-color: alpha(currentColor, 0.12); /* Matches the previous hardcoded border color. */
   background-image: none;
   border: none;
   min-width: 1px;
@@ -78,18 +78,18 @@
 
 /* ===== Classic Detail Pane — "Embedded Data Panel" (maximum density) ===== */
 .ao-theme-classic .ao-detail-pane {
-  /* 使用标准窗口背景色，与主列表形成明确的物理切割感 */
+  /* Use the standard window background to clearly separate it from the main list. */
   background: @theme_bg_color;
   
-  /* 极致压缩内边距，最大化信息展示面积 */
+  /* Tight padding maximizes information density. */
   padding: 6px 10px;
 
-  /* 明确且硬朗的左侧结构线，无任何冗余阴影 */
+  /* Hard structural divider with no extra shadow. */
   border-left: 1px solid alpha(currentColor, 0.2);
   box-shadow: none;
 }
 
-/* 封面去装饰化 */
+/* Keep cover art undecorated. */
 .ao-theme-classic .ao-detail-pane .ao-hero-cover {
   box-shadow: none;
   border: 1px solid alpha(currentColor, 0.2);
@@ -97,7 +97,7 @@
   margin-bottom: 6px;
 }
 
-/* 属性字段排版紧凑化 */
+/* Compact property field rhythm. */
 .ao-theme-classic .ao-detail-pane .ao-inline-editor-stack {
   margin-bottom: 4px;
 }
@@ -108,7 +108,7 @@
   margin-bottom: 1px; 
 }
 
-/* 标签 (Tags) 极简化 */
+/* Minimal tag styling. */
 .ao-theme-classic .ao-tag-chip {
   padding: 1px 6px; /* tighter square chip */
   border-radius: 2px;

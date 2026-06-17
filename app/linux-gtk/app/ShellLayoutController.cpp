@@ -4,6 +4,7 @@
 #include "ShellLayoutController.h"
 
 #include "AppConfig.h"
+#include "ShellLayoutComponentStateStore.h"
 #include "ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
 #include "app/ThemePreset.h"
@@ -16,6 +17,9 @@
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/LayoutRuntime.h"
+#include "layout/state/LayoutComponentState.h"
+#include "layout/state/LayoutNodeId.h"
+#include "layout/state/LayoutStatePromoter.h"
 #include "playback/AobusSoulWindow.h"
 #include "playback/AudioDeviceSelector.h"
 #include "tag/TagEditController.h"
@@ -46,7 +50,21 @@ namespace ao::gtk
 {
   namespace
   {
-    std::pair<std::string, layout::LayoutDocument> loadLayoutOnWorker(ShellLayoutStore& store, AppConfig& config)
+    struct LayoutLoadResult final
+    {
+      std::string presetId;
+      layout::LayoutDocument document;
+      layout::LayoutComponentStateDocument componentState;
+    };
+
+    layout::LayoutComponentStateDocument emptyComponentState(std::string_view presetId)
+    {
+      return layout::LayoutComponentStateDocument{.preset = std::string{presetId}};
+    }
+
+    LayoutLoadResult loadLayoutOnWorker(ShellLayoutStore& store,
+                                        ShellLayoutComponentStateStore* componentStateStore,
+                                        AppConfig& config)
     {
       auto prefs = rt::AppPrefsState{};
       config.loadAppPrefs(prefs);
@@ -67,14 +85,18 @@ namespace ao::gtk
 
       auto optDoc = store.load(presetIdStr);
       auto doc = optDoc ? std::move(*optDoc) : layout::createBuiltInLayout(presetId);
+      auto stateDoc = componentStateStore == nullptr
+                        ? emptyComponentState(presetIdStr)
+                        : componentStateStore->load(presetIdStr).value_or(emptyComponentState(presetIdStr));
 
-      return {presetIdStr, std::move(doc)};
+      return {.presetId = presetIdStr, .document = std::move(doc), .componentState = std::move(stateDoc)};
     }
   } // namespace
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
                                                Gtk::Window& window,
                                                std::shared_ptr<AppConfig> configPtr,
                                                std::shared_ptr<ShellLayoutStore> layoutStorePtr,
+                                               std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                                                ThemeCoordinator& themeCoordinator)
     : _registry{}
     , _actionRegistry{}
@@ -82,8 +104,10 @@ namespace ao::gtk
     , _host{_registry}
     , _configPtr{std::move(configPtr)}
     , _layoutStorePtr{std::move(layoutStorePtr)}
+    , _componentStateStorePtr{std::move(componentStateStorePtr)}
     , _themeCoordinator{themeCoordinator}
   {
+    _context.componentStateStore = _componentStateStorePtr.get();
     layout::LayoutRuntime::registerStandardComponents(_registry);
 
     auto const refreshActionStates = [this]
@@ -416,6 +440,7 @@ namespace ao::gtk
     runtime.spawnWithLifetime(&_tasks,
                               [](ShellLayoutController* self,
                                  std::shared_ptr<ShellLayoutStore> storePtr,
+                                 std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                                  std::shared_ptr<AppConfig> configPtr) -> async::Task<void>
                               {
                                 APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
@@ -426,16 +451,48 @@ namespace ao::gtk
 
                                 if (storePtr && configPtr)
                                 {
-                                  auto result = loadLayoutOnWorker(*storePtr, *configPtr);
+                                  auto result = loadLayoutOnWorker(*storePtr, componentStateStorePtr.get(), *configPtr);
 
                                   co_await asyncRuntime->resumeOnCallbackExecutor();
                                   APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
 
-                                  self->_activePresetId = std::move(result.first);
-                                  self->_activeLayout = std::move(result.second);
-                                  self->_host.setLayout(self->_context, self->_activeLayout);
+                                  self->applyLoadedLayout(std::move(result.presetId),
+                                                          std::move(result.document),
+                                                          std::move(result.componentState));
                                 }
-                              }(this, _layoutStorePtr, _configPtr));
+                              }(this, _layoutStorePtr, _componentStateStorePtr, _configPtr));
+  }
+
+  void ShellLayoutController::applyLoadedLayout(std::string presetId,
+                                                layout::LayoutDocument document,
+                                                layout::LayoutComponentStateDocument componentState)
+  {
+    _activePresetId = std::move(presetId);
+    _activeLayout = std::move(document);
+    _context.activePresetId = _activePresetId;
+    _context.componentState = std::move(componentState);
+
+    for (auto const& diagnostic : layout::validateStatefulLayoutNodeIds(_activeLayout))
+    {
+      if (diagnostic.severity == layout::LayoutNodeIdDiagnosticSeverity::Error)
+      {
+        APP_LOG_ERROR("ShellLayoutController: Layout id error in preset '{}' component '{}' ({}): {}",
+                      _activePresetId,
+                      diagnostic.componentId,
+                      diagnostic.componentType,
+                      diagnostic.message);
+      }
+      else
+      {
+        APP_LOG_WARN("ShellLayoutController: Layout id warning in preset '{}' component '{}' ({}): {}",
+                     _activePresetId,
+                     diagnostic.componentId,
+                     diagnostic.componentType,
+                     diagnostic.message);
+      }
+    }
+
+    _host.setLayout(_context, _activeLayout);
   }
 
   void ShellLayoutController::openEditor(AppConfig& config)
@@ -486,46 +543,8 @@ namespace ao::gtk
     dialogRaw->signalThemePreview().connect([this](std::string_view themeId)
                                             { _themeCoordinator.setTheme(themePresetFromString(themeId)); });
 
-    dialogRaw->signalSaveRequest().connect(
-      [this, weakDialogPtr = std::weak_ptr{_editorDialogPtr}, configPtr = _configPtr](
-        layout::editor::LayoutSaveResult const& result)
-      {
-        if (_layoutStorePtr)
-        {
-          for (auto const& [id, doc] : result.modified)
-          {
-            _layoutStorePtr->save(doc, id);
-          }
-
-          for (auto const& id : result.resets)
-          {
-            _layoutStorePtr->remove(id);
-          }
-        }
-
-        _activeLayout = result.activeDocument;
-        _activePresetId = result.activePresetId;
-
-        if (configPtr)
-        {
-          auto prefsUpdate = rt::AppPrefsState{};
-          configPtr->loadAppPrefs(prefsUpdate);
-          prefsUpdate.lastLayoutPreset = _activePresetId;
-
-          if (auto const sharedDialogPtr = weakDialogPtr.lock(); sharedDialogPtr != nullptr)
-          {
-            if (auto const themeIdStr = sharedDialogPtr->selectedThemeId(); !themeIdStr.empty())
-            {
-              _themeCoordinator.setTheme(themePresetFromString(themeIdStr));
-              prefsUpdate.lastThemePreset = themeIdStr;
-            }
-          }
-
-          configPtr->saveAppPrefs(prefsUpdate);
-        }
-
-        _host.setLayout(_context, _activeLayout);
-      });
+    dialogRaw->signalSaveRequest().connect([this](layout::editor::LayoutSaveResult const& result)
+                                           { this->onEditorSaveRequest(result); });
 
     dialogRaw->signal_hide().connect(
       [this]
@@ -537,8 +556,7 @@ namespace ao::gtk
       });
 
     dialogRaw->signal_response().connect(
-      [this, weakDialogPtr = std::weak_ptr{_editorDialogPtr}, oldTheme = _themeCoordinator.activeTheme()](
-        std::int32_t responseId)
+      [this, oldTheme = _themeCoordinator.activeTheme()](std::int32_t responseId)
       {
         if (responseId == Gtk::ResponseType::CANCEL)
         {
@@ -548,6 +566,163 @@ namespace ao::gtk
       });
 
     dialogRaw->present();
+  }
+
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  void ShellLayoutController::onEditorSaveRequest(layout::editor::LayoutSaveResult const& result)
+  {
+    if (_layoutStorePtr)
+    {
+      for (auto const& [id, doc] : result.modified)
+      {
+        _layoutStorePtr->save(doc, id);
+      }
+
+      for (auto const& id : result.resets)
+      {
+        _layoutStorePtr->remove(id);
+      }
+    }
+
+    if (_componentStateStorePtr)
+    {
+      for (auto const& [id, doc] : result.modified)
+      {
+        if (!_componentStateStorePtr->prune(id, doc))
+        {
+          APP_LOG_WARN("ShellLayoutController: Failed to prune runtime state for preset '{}'", id);
+        }
+      }
+
+      for (auto const& id : result.resets)
+      {
+        if (!_componentStateStorePtr->removePreset(id))
+        {
+          APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", id);
+        }
+      }
+    }
+
+    _activeLayout = result.activeDocument;
+    _activePresetId = result.activePresetId;
+    _context.activePresetId = _activePresetId;
+    _context.componentState =
+      _componentStateStorePtr == nullptr
+        ? emptyComponentState(_activePresetId)
+        : _componentStateStorePtr->load(_activePresetId).value_or(emptyComponentState(_activePresetId));
+
+    if (_configPtr)
+    {
+      auto prefsUpdate = rt::AppPrefsState{};
+      _configPtr->loadAppPrefs(prefsUpdate);
+      prefsUpdate.lastLayoutPreset = _activePresetId;
+
+      if (_editorDialogPtr)
+      {
+        if (auto const themeIdStr = _editorDialogPtr->selectedThemeId(); !themeIdStr.empty())
+        {
+          _themeCoordinator.setTheme(themePresetFromString(themeIdStr));
+          prefsUpdate.lastThemePreset = themeIdStr;
+        }
+      }
+
+      _configPtr->saveAppPrefs(prefsUpdate);
+    }
+
+    _host.setLayout(_context, _activeLayout);
+  }
+
+  void ShellLayoutController::resetRuntimeLayoutState()
+  {
+    auto const presetId = _activePresetId.empty() ? std::string{"classic"} : _activePresetId;
+
+    if (_componentStateStorePtr)
+    {
+      if (!_componentStateStorePtr->removePreset(presetId))
+      {
+        APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", presetId);
+      }
+    }
+
+    _context.activePresetId = presetId;
+    _context.componentState = emptyComponentState(presetId);
+    _host.setLayout(_context, _activeLayout);
+    refreshExportedActions();
+  }
+
+  void ShellLayoutController::saveCurrentPanelSizesAsLayoutDefaults()
+  {
+    auto const presetId = _activePresetId.empty() ? std::string{"classic"} : _activePresetId;
+    auto promotedLayout = _activeLayout;
+    auto promotedState = _context.componentState;
+    promotedState.preset = presetId;
+
+    auto const promotion = layout::promotePanelSizeDefaults(promotedLayout, promotedState);
+
+    if (!promotion.changed)
+    {
+      APP_LOG_INFO("ShellLayoutController: No panel sizes to promote for preset '{}'", presetId);
+      return;
+    }
+
+    auto apply = [this, presetId, promotedLayout = std::move(promotedLayout), promotedState = std::move(promotedState)](
+                   bool confirmed) mutable
+    {
+      if (!confirmed)
+      {
+        APP_LOG_INFO("ShellLayoutController: User cancelled promoting panel sizes for preset '{}'", presetId);
+        return;
+      }
+
+      applyPromotedPanelSizes(presetId, std::move(promotedLayout), std::move(promotedState));
+    };
+
+    if (_confirmPromotionFn)
+    {
+      _confirmPromotionFn(presetId, std::move(apply));
+    }
+    else
+    {
+      apply(true);
+    }
+  }
+
+  void ShellLayoutController::applyPromotedPanelSizes(std::string const& presetId,
+                                                      layout::LayoutDocument promotedLayout,
+                                                      layout::LayoutComponentStateDocument promotedState)
+  {
+    if (_layoutStorePtr)
+    {
+      _layoutStorePtr->save(promotedLayout, presetId);
+      APP_LOG_INFO("ShellLayoutController: Promoted panel sizes to layout defaults for preset '{}'", presetId);
+    }
+
+    if (_componentStateStorePtr)
+    {
+      if (promotedState.components.empty())
+      {
+        if (!_componentStateStorePtr->removePreset(presetId))
+        {
+          APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", presetId);
+        }
+      }
+      else
+      {
+        _componentStateStorePtr->save(promotedState, presetId);
+      }
+    }
+
+    _activePresetId = presetId;
+    _activeLayout = std::move(promotedLayout);
+    _context.activePresetId = _activePresetId;
+    _context.componentState = std::move(promotedState);
+    _host.setLayout(_context, _activeLayout);
+    refreshExportedActions();
+  }
+
+  void ShellLayoutController::setConfirmPromotionCallback(ConfirmPromotionFn fn)
+  {
+    _confirmPromotionFn = std::move(fn);
   }
 
   layout::ActionActivationOutcome ShellLayoutController::activateAction(std::string_view id)

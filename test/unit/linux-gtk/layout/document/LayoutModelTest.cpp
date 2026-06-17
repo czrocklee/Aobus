@@ -3,6 +3,8 @@
 
 #include "layout/document/LayoutDocument.h"
 #include "layout/document/LayoutNode.h"
+#include "layout/state/LayoutNodeId.h"
+#include "layout/state/StatefulLayoutComponentType.h"
 #include <ao/uimodel/layout/LayoutYaml.h>
 #include <ao/yaml/Utils.h>
 
@@ -19,11 +21,6 @@
 namespace ao::gtk::layout::test
 {
   namespace yaml = ao::yaml;
-
-  namespace
-  {
-    constexpr std::int64_t kMinimumDetailPaneSize = 300;
-  }
 
   TEST_CASE("Layout model GTK serialization", "[layout][unit][gtk][model]")
   {
@@ -66,13 +63,14 @@ namespace ao::gtk::layout::test
       CHECK(statusBar.getProp<std::string>("templateId", "") == "status.defaultBar");
     }
 
-    SECTION("built-in detail panes start at the minimum split size")
+    SECTION("built-in detail panes start with responsive percentage")
     {
       auto const classicDoc = createBuiltInLayout(LayoutPresetId::Classic);
       auto const classicDetailSplit = classicDoc.templates.at("app.defaultLayout");
 
+      CHECK(classicDetailSplit.id == "main-workspace-split");
       CHECK(classicDetailSplit.type == "collapsibleSplit");
-      CHECK(classicDetailSplit.getProp<std::int64_t>("position", -1) == kMinimumDetailPaneSize);
+      CHECK(classicDetailSplit.getProp<double>("initialPositionPercent", 0.0) == 0.2);
 
       auto const modernDoc = createBuiltInLayout(LayoutPresetId::Modern);
       REQUIRE(!modernDoc.root.children.empty());
@@ -86,7 +84,143 @@ namespace ao::gtk::layout::test
       auto const& modernDetailSplit = contentShell.children[1];
       CHECK(modernDetailSplit.id == "main-workspace-split");
       CHECK(modernDetailSplit.type == "collapsibleSplit");
-      CHECK(modernDetailSplit.getProp<std::int64_t>("position", -1) == kMinimumDetailPaneSize);
+      CHECK(modernDetailSplit.getProp<double>("initialPositionPercent", 0.0) == 0.2);
+    }
+
+    SECTION("built-in stateful components have stable ids")
+    {
+      for (auto const presetId : {LayoutPresetId::Classic, LayoutPresetId::Modern})
+      {
+        auto const doc = createBuiltInLayout(presetId);
+        auto missingStatefulIds = std::vector<std::string>{};
+
+        visitLayoutDocumentNodes(doc,
+                                 [&](LayoutNode const& node)
+                                 {
+                                   if (isStatefulLayoutComponentType(node.type) && node.id.empty())
+                                   {
+                                     missingStatefulIds.push_back(node.type);
+                                   }
+                                 });
+
+        CHECK(missingStatefulIds.empty());
+        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(doc)));
+      }
+    }
+
+    SECTION("duplicate stateful ids are errors after template expansion")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.id = "shared-split", .type = "split"},
+        LayoutNode{.id = "shared-split", .type = "collapsibleSplit"},
+      };
+
+      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
+
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
+      CHECK(diagnostics[0].componentId == "shared-split");
+      CHECK(hasLayoutNodeIdErrors(diagnostics));
+    }
+
+    SECTION("anonymous stateful nodes warn but remain valid")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "split";
+
+      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
+
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Warning);
+      CHECK(diagnostics[0].componentType == "split");
+      CHECK_FALSE(hasLayoutNodeIdErrors(diagnostics));
+    }
+
+    SECTION("non-stateful duplicate ids do not create ambiguous runtime state keys")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.id = "same", .type = "spacer"},
+        LayoutNode{.id = "same", .type = "separator"},
+      };
+
+      CHECK(validateStatefulLayoutNodeIds(doc).empty());
+    }
+
+    SECTION("template expansion participates in duplicate detection")
+    {
+      auto doc = LayoutDocument{};
+      doc.templates["pane"] = LayoutNode{.id = "templated-split", .type = "split"};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"pane"}}}}},
+        LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"pane"}}}}},
+      };
+
+      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
+
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].componentId == "templated-split");
+      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
+    }
+
+    SECTION("duplicate stateful ids are errors even when the type matches")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.id = "shared", .type = "split"},
+        LayoutNode{.id = "shared", .type = "split"},
+      };
+
+      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
+      CHECK(diagnostics[0].componentId == "shared");
+      CHECK(hasLayoutNodeIdErrors(diagnostics));
+    }
+
+    SECTION("anonymous non-stateful duplicates do not warn")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.type = "spacer"},
+        LayoutNode{.type = "spacer"},
+      };
+
+      CHECK(validateStatefulLayoutNodeIds(doc).empty());
+    }
+
+    SECTION("new stateful ids are stable and unique across root and templates")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {LayoutNode{.id = "split-new", .type = "split"}};
+      doc.templates["copy"] = LayoutNode{.id = "split-new-2", .type = "split"};
+
+      CHECK(makeUniqueLayoutNodeId(doc, "split", "new") == "split-new-3");
+    }
+
+    SECTION("freshening a copied stateful subtree replaces ids recursively")
+    {
+      auto owner = LayoutDocument{};
+      owner.root.type = "box";
+      owner.root.children = {LayoutNode{.id = "split-original", .type = "split"}};
+
+      auto copy = LayoutNode{.id = "split-original", .type = "split"};
+      copy.children = {LayoutNode{.id = "child", .type = "spacer"}, LayoutNode{.type = "collapsibleSplit"}};
+
+      freshenLayoutNodeIds(copy, owner);
+
+      CHECK(copy.id != "split-original");
+      CHECK(copy.id == "split-split-original");
+      REQUIRE(copy.children.size() == 2);
+      CHECK(copy.children[0].id == "spacer-child");
+      CHECK(copy.children[1].id == "collapsiblesplit-copy");
     }
 
     SECTION("modern bottom bar artwork follows the transport row height")
@@ -111,6 +245,34 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(image.layout.contains("heightRequest"));
       CHECK(image.getLayout<bool>("vexpand", false) == true);
       CHECK(image.getLayout<std::string>("valign", "") == "fill");
+    }
+
+    SECTION("modern header uses allocation breakpoints instead of fixed search width")
+    {
+      auto const doc = createBuiltInLayout(LayoutPresetId::Modern);
+      REQUIRE(!doc.root.children.empty());
+
+      auto const& mainPaned = doc.root.children[0];
+      REQUIRE(mainPaned.children.size() == 2);
+
+      auto const& contentShell = mainPaned.children[1];
+      REQUIRE(!contentShell.children.empty());
+
+      auto const& responsiveHeader = contentShell.children[0];
+      CHECK(responsiveHeader.type == "responsiveClass");
+      CHECK(responsiveHeader.getProp<std::int64_t>("compactMax", 0) == 900);
+      CHECK(responsiveHeader.getProp<std::int64_t>("regularMax", 0) == 1280);
+      CHECK(responsiveHeader.getLayout<bool>("hexpand", false) == true);
+
+      REQUIRE(responsiveHeader.children.size() == 1);
+      auto const& header = responsiveHeader.children[0];
+      CHECK(header.type == "centerBox");
+      REQUIRE(header.children.size() == 3);
+
+      auto const& search = header.children[1];
+      CHECK(search.type == "track.quickFilter");
+      CHECK_FALSE(search.layout.contains("widthRequest"));
+      CHECK(search.getLayout<bool>("hexpand", false) == true);
     }
 
     SECTION("LayoutDocument round-trip preserves layout props and child order")

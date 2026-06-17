@@ -16,7 +16,7 @@ namespace ao::uimodel::layout::test
       auto const registered = catalog.registerComponentDescriptor(
         ComponentDescriptor{.type = "playback.playPauseButton",
                             .displayName = "Play/Pause Button",
-                            .category = "Playback",
+                            .category = ComponentCategory::Playback,
                             .props = {{.name = "showLabel", .kind = PropertyKind::Bool, .label = "Show Label"}}});
       CHECK(registered == true);
 
@@ -24,7 +24,7 @@ namespace ao::uimodel::layout::test
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->type == "playback.playPauseButton");
       CHECK(optDesc->displayName == "Play/Pause Button");
-      CHECK(optDesc->category == "Playback");
+      CHECK(optDesc->category == ComponentCategory::Playback);
       CHECK(optDesc->props.size() == 1);
       CHECK(optDesc->props[0].name == "showLabel");
     }
@@ -32,9 +32,9 @@ namespace ao::uimodel::layout::test
     SECTION("rejects duplicate type")
     {
       CHECK(catalog.registerComponentDescriptor(
-        ComponentDescriptor{.type = "box", .displayName = "Box", .category = "Containers"}));
-      CHECK(catalog.registerComponentDescriptor(
-              ComponentDescriptor{.type = "box", .displayName = "Box Duplicate", .category = "Containers"}) == false);
+        ComponentDescriptor{.type = "box", .displayName = "Box", .category = ComponentCategory::Container}));
+      CHECK(catalog.registerComponentDescriptor(ComponentDescriptor{
+              .type = "box", .displayName = "Box Duplicate", .category = ComponentCategory::Container}) == false);
     }
 
     SECTION("returns nullopt for unknown type")
@@ -45,8 +45,10 @@ namespace ao::uimodel::layout::test
 
     SECTION("returns descriptors in registration order")
     {
-      catalog.registerComponentDescriptor(ComponentDescriptor{.type = "a", .displayName = "A", .category = "X"});
-      catalog.registerComponentDescriptor(ComponentDescriptor{.type = "b", .displayName = "B", .category = "Y"});
+      catalog.registerComponentDescriptor(
+        ComponentDescriptor{.type = "a", .displayName = "A", .category = ComponentCategory::Container});
+      catalog.registerComponentDescriptor(
+        ComponentDescriptor{.type = "b", .displayName = "B", .category = ComponentCategory::Track});
 
       auto const& all = catalog.descriptors();
       REQUIRE(all.size() == 2);

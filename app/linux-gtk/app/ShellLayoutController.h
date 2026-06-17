@@ -5,11 +5,13 @@
 
 #include "app/ThemeCoordinator.h"
 #include "layout/document/LayoutDocument.h"
+#include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/GioActionBridge.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutHost.h"
+#include "layout/state/LayoutStatePromoter.h"
 #include <ao/async/LifetimeScope.h>
 #include <ao/rt/CorePrimitives.h>
 
@@ -30,6 +32,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class AppConfig;
+  class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
   class ThemeCoordinator;
   namespace layout::editor
@@ -51,6 +54,7 @@ namespace ao::gtk
                           Gtk::Window& parentWindow,
                           std::shared_ptr<AppConfig> configPtr,
                           std::shared_ptr<ShellLayoutStore> layoutStorePtr,
+                          std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                           ThemeCoordinator& themeCoordinator);
 
     layout::ComponentRegistry& registry() { return _registry; }
@@ -62,6 +66,13 @@ namespace ao::gtk
     void refreshExportedActions();
     void loadLayout(AppConfig& config);
     void openEditor(AppConfig& config);
+    void resetRuntimeLayoutState();
+    void saveCurrentPanelSizesAsLayoutDefaults();
+
+    using ConfirmPromotionAnswer = std::function<void(bool confirmed)>;
+    using ConfirmPromotionFn = std::function<void(std::string const& presetId, ConfirmPromotionAnswer answer)>;
+    void setConfirmPromotionCallback(ConfirmPromotionFn fn);
+
     layout::ActionActivationOutcome activateAction(std::string_view id);
 
     layout::ActionActivationContext getActionContext(std::string_view componentId) override;
@@ -75,6 +86,16 @@ namespace ao::gtk
                                   layout::ActionStateProvider const& hasActiveQueue);
     void registerTrackActions(RegisterActionFn const& registerAction);
 
+    void applyPromotedPanelSizes(std::string const& presetId,
+                                 layout::LayoutDocument promotedLayout,
+                                 layout::LayoutComponentStateDocument promotedState);
+
+    void applyLoadedLayout(std::string presetId,
+                           layout::LayoutDocument document,
+                           layout::LayoutComponentStateDocument componentState);
+
+    void onEditorSaveRequest(layout::editor::LayoutSaveResult const& result);
+
     static void setupCss();
 
     layout::ComponentRegistry _registry;
@@ -87,9 +108,11 @@ namespace ao::gtk
     std::string _activePresetId;
     std::shared_ptr<AppConfig> _configPtr;
     std::shared_ptr<ShellLayoutStore> _layoutStorePtr;
+    std::shared_ptr<ShellLayoutComponentStateStore> _componentStateStorePtr;
     ThemeCoordinator& _themeCoordinator;
     std::optional<ThemeRegistrationToken> _optEditorThemeToken;
     std::shared_ptr<layout::editor::LayoutEditorDialog> _editorDialogPtr;
     async::LifetimeScope _tasks;
+    ConfirmPromotionFn _confirmPromotionFn;
   };
 } // namespace ao::gtk

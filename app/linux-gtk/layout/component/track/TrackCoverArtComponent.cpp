@@ -203,8 +203,7 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "track.coverArt",
        .displayName = "Cover Art",
-       .category = "Tracks",
-       .container = false,
+       .category = ComponentCategory::Track,
        .props = {{.name = "targetSize",
                   .kind = PropertyKind::Int,
                   .label = "Target Size",

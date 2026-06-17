@@ -5,6 +5,7 @@
 #include "app/GtkMainContextExecutor.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/MainWindow.h"
+#include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/AppVersion.h>
@@ -69,7 +70,8 @@ namespace
   Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app,
                                         LibraryPaths paths,
                                         std::shared_ptr<AppConfig> appConfigPtr,
-                                        std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr)
+                                        std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+                                        std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
   {
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
 
@@ -82,8 +84,8 @@ namespace
                                  .databasePath = paths.databasePath,
                                  .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr)});
 
-    auto windowPtr =
-      Glib::make_refptr_for_instance<MainWindow>(new MainWindow{*appRuntimePtr, appConfigPtr, shellLayoutStorePtr});
+    auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(
+      new MainWindow{*appRuntimePtr, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr});
 
     // Store AppRuntime alongside window (lifetime tied to window via pointer)
     windowPtr->set_data("app-runtime",
@@ -167,12 +169,16 @@ namespace
                             Glib::RefPtr<Gtk::Application> const& app,
                             std::vector<Glib::RefPtr<MainWindow>>& windows,
                             std::shared_ptr<AppConfig> appConfigPtr,
-                            std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr)
+                            std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+                            std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
   {
     if (std::filesystem::is_directory(path))
     {
-      windows.push_back(createWindow(
-        *app, {.musicRoot = path, .databasePath = path / ".aobus" / "library"}, appConfigPtr, shellLayoutStorePtr));
+      windows.push_back(createWindow(*app,
+                                     {.musicRoot = path, .databasePath = path / ".aobus" / "library"},
+                                     appConfigPtr,
+                                     shellLayoutStorePtr,
+                                     componentStateStorePtr));
     }
   }
 
@@ -238,6 +244,18 @@ namespace
     app->set_accels_for_action("win.workspace.revealCurrentTrack", {"<Primary>l"});
   }
 
+  std::filesystem::path layoutStateDir()
+  {
+    auto const* const xdgStateHome = std::getenv("XDG_STATE_HOME");
+
+    if (xdgStateHome != nullptr && xdgStateHome[0] != '\0')
+    {
+      return std::filesystem::path{xdgStateHome} / "aobus" / "layout-state";
+    }
+
+    return std::filesystem::path{Glib::get_user_data_dir()}.parent_path() / "state" / "aobus" / "layout-state";
+  }
+
   void onAppActivate(Glib::RefPtr<Gtk::Application>& app, std::vector<Glib::RefPtr<MainWindow>>& windows)
   {
     GtkStyleRuntime::instance().initialize();
@@ -246,14 +264,15 @@ namespace
     auto appConfigPtr = std::make_shared<AppConfig>(globalConfigPath);
     auto const layoutsDir = globalConfigPath.parent_path() / "layouts";
     auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
+    auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());
 
     auto paths = resolveLibraryPaths(*appConfigPtr);
 
-    auto windowPtr = createWindow(*app, std::move(paths), appConfigPtr, shellLayoutStorePtr);
+    auto windowPtr = createWindow(*app, std::move(paths), appConfigPtr, shellLayoutStorePtr, componentStateStorePtr);
 
     windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary =
-      [&app, &windows, appConfigPtr, shellLayoutStorePtr](std::filesystem::path const& path)
-    { handleOpenNewLibrary(path, app, windows, appConfigPtr, shellLayoutStorePtr); };
+      [&app, &windows, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr](std::filesystem::path const& path)
+    { handleOpenNewLibrary(path, app, windows, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr); };
 
     windows.push_back(std::move(windowPtr));
   }

@@ -7,6 +7,7 @@
 #include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
 #include "app/PlaybackShortcutPolicy.h"
+#include "app/ShellLayoutComponentStateStore.h"
 #include "app/UIState.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/rt/AppRuntime.h>
@@ -15,19 +16,25 @@
 
 #include <gdkmm/enums.h>
 #include <gtkmm/applicationwindow.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/messagedialog.h>
 
 #include <cstdint>
 #include <exception>
+#include <format>
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace ao::gtk
 {
   MainWindow::MainWindow(rt::AppRuntime& runtime,
                          std::shared_ptr<AppConfig> configPtr,
-                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr)
+                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+                         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
     : _runtime{runtime}
     , _configPtr{std::move(configPtr)}
     , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configPtr)}
@@ -35,6 +42,7 @@ namespace ao::gtk
                    *this,
                    _configPtr,
                    std::move(shellLayoutStorePtr),
+                   std::move(componentStateStorePtr),
                    *_mainWindowCoordinatorPtr->themeController()}
   {
     set_title("Aobus");
@@ -43,11 +51,40 @@ namespace ao::gtk
     _mainWindowCoordinatorPtr->loadSession();
 
     _menuControllerPtr = std::make_unique<MenuController>(
-      _mainWindowCoordinatorPtr->importExport(), [this] { _shellLayout.openEditor(*_configPtr); });
+      _mainWindowCoordinatorPtr->importExport(),
+      [this] { _shellLayout.openEditor(*_configPtr); },
+      [this] { _shellLayout.resetRuntimeLayoutState(); },
+      [this] { _shellLayout.saveCurrentPanelSizesAsLayoutDefaults(); });
     _menuControllerPtr->setup(*this);
     _shellLayout.context().shell.menuModelPtr = _menuControllerPtr->menuModel();
 
     _shellLayout.attachToWindow();
+
+    _shellLayout.setConfirmPromotionCallback(
+      [this](std::string const& presetId, ShellLayoutController::ConfirmPromotionAnswer answer)
+      {
+        auto dialogPtr = std::make_shared<Gtk::MessageDialog>(*this,
+                                                              "Save Current Panel Sizes as Layout Defaults?",
+                                                              false,
+                                                              Gtk::MessageType::QUESTION,
+                                                              Gtk::ButtonsType::YES_NO,
+                                                              true);
+        dialogPtr->set_secondary_text(std::format(
+          "This will update the '{}' layout preset on disk with the current panel sizes.\n\n"
+          "Promoted sizes will be removed from runtime state; other runtime values such as revealed state will remain.",
+          presetId));
+
+        dialogPtr->set_default_response(Gtk::ResponseType::NO);
+
+        dialogPtr->signal_response().connect(
+          [dialogPtr, answer = std::move(answer)](std::int32_t const responseId) mutable
+          {
+            answer(responseId == Gtk::ResponseType::YES);
+            dialogPtr->close();
+          });
+        dialogPtr->present();
+      });
+
     setupPlaybackSpaceShortcut();
 
     // Mouse back/forward navigation (buttons 8/9).

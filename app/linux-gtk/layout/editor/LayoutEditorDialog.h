@@ -84,6 +84,7 @@ namespace ao::gtk::layout::editor
 
     // Test helper methods
     void testAddComponent(std::string type) { addComponent(std::move(type)); }
+    void testWrapNode(std::string containerType) { wrapNode(std::move(containerType)); }
     void testOnResetDefault() { onResetDefault(); }
     void testMarkEdited() { markEdited(); }
 
@@ -143,6 +144,7 @@ namespace ao::gtk::layout::editor
     void onPresetChanged();
 
     bool validateAllDirtyDocuments();
+    void presentErrorDialog(std::string const& title, std::string const& message);
 
     LayoutNode* findParentOf(LayoutNode* root, LayoutNode* target);
     LayoutNode* selectedNonRootNode() const;
