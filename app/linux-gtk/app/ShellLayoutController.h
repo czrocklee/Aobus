@@ -4,16 +4,16 @@
 #pragma once
 
 #include "app/ThemeCoordinator.h"
-#include "layout/document/LayoutDocument.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/GioActionBridge.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutHost.h"
-#include "layout/state/LayoutStatePromoter.h"
 #include <ao/async/LifetimeScope.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/LayoutStatePromoter.h>
 
 #include <gtkmm/window.h>
 
@@ -46,7 +46,7 @@ namespace ao::gtk
     using RegisterActionFn = std::function<void(std::string_view,
                                                 std::string_view,
                                                 std::string_view,
-                                                layout::ActionCapabilities,
+                                                uimodel::layout::ActionCapabilities,
                                                 layout::ActionHandler,
                                                 layout::ActionStateProvider)>;
 
@@ -60,7 +60,7 @@ namespace ao::gtk
     layout::ComponentRegistry& registry() { return _registry; }
     layout::LayoutContext& context() { return _context; }
     layout::LayoutHost& host() { return _host; }
-    layout::LayoutDocument const& activeLayout() const { return _activeLayout; }
+    uimodel::layout::LayoutDocument const& activeLayout() const { return _activeLayout; }
 
     void attachToWindow();
     void refreshExportedActions();
@@ -73,10 +73,10 @@ namespace ao::gtk
     using ConfirmPromotionFn = std::function<void(std::string const& presetId, ConfirmPromotionAnswer answer)>;
     void setConfirmPromotionCallback(ConfirmPromotionFn fn);
 
-    layout::ActionActivationOutcome activateAction(std::string_view id);
+    uimodel::layout::ActionActivationOutcome activateAction(std::string_view id);
 
     layout::ActionActivationContext getActionContext(std::string_view componentId) override;
-    bool canProvideSafeAnchor(layout::ActionDescriptor const& desc) const override;
+    bool canProvideSafeAnchor(uimodel::layout::ActionDescriptor const& desc) const override;
 
   private:
     void registerPlaybackActions(RegisterActionFn const& registerAction,
@@ -87,12 +87,12 @@ namespace ao::gtk
     void registerTrackActions(RegisterActionFn const& registerAction);
 
     void applyPromotedPanelSizes(std::string const& presetId,
-                                 layout::LayoutDocument promotedLayout,
-                                 layout::LayoutComponentStateDocument promotedState);
+                                 uimodel::layout::LayoutDocument promotedLayout,
+                                 uimodel::layout::LayoutComponentStateDocument promotedState);
 
     void applyLoadedLayout(std::string presetId,
-                           layout::LayoutDocument document,
-                           layout::LayoutComponentStateDocument componentState);
+                           uimodel::layout::LayoutDocument document,
+                           uimodel::layout::LayoutComponentStateDocument componentState);
 
     void onEditorSaveRequest(layout::editor::LayoutSaveResult const& result);
 
@@ -104,7 +104,7 @@ namespace ao::gtk
     layout::LayoutHost _host;
     std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
     std::vector<rt::Subscription> _playbackSubs;
-    layout::LayoutDocument _activeLayout;
+    uimodel::layout::LayoutDocument _activeLayout;
     std::string _activePresetId;
     std::shared_ptr<AppConfig> _configPtr;
     std::shared_ptr<ShellLayoutStore> _layoutStorePtr;

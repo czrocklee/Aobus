@@ -3,6 +3,7 @@
 
 #include "layout/runtime/ActionRegistry.h"
 
+#include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/utility/Log.h>
 
 #include <algorithm>
@@ -16,7 +17,7 @@ namespace ao::gtk::layout
   ActionRegistry::ActionRegistry() = default;
   ActionRegistry::~ActionRegistry() = default;
 
-  bool ActionRegistry::registerAction(ActionDescriptor descriptor,
+  bool ActionRegistry::registerAction(uimodel::layout::ActionDescriptor descriptor,
                                       ActionHandler handler,
                                       ActionStateProvider stateProvider)
   {
@@ -30,22 +31,22 @@ namespace ao::gtk::layout
     return true;
   }
 
-  std::optional<ActionDescriptor> ActionRegistry::descriptor(std::string_view id) const
+  std::optional<uimodel::layout::ActionDescriptor> ActionRegistry::descriptor(std::string_view id) const
   {
     return _catalog.descriptor(id);
   }
 
-  std::vector<ActionDescriptor> ActionRegistry::descriptors() const
+  std::vector<uimodel::layout::ActionDescriptor> ActionRegistry::descriptors() const
   {
     return _catalog.descriptors();
   }
 
-  bool ActionRegistry::canBind(std::string_view id, ActionBindingContext const& ctx) const
+  bool ActionRegistry::canBind(std::string_view id, uimodel::layout::ActionBindingContext const& ctx) const
   {
     return _catalog.canBind(id, ctx);
   }
 
-  bool ActionRegistry::tryBind(std::string_view id, ActionBindingContext const& ctx) const
+  bool ActionRegistry::tryBind(std::string_view id, uimodel::layout::ActionBindingContext const& ctx) const
   {
     if (id == "none" || id.empty())
     {
@@ -64,7 +65,7 @@ namespace ao::gtk::layout
     return true;
   }
 
-  ActionState ActionRegistry::state(std::string_view id, ActionActivationContext const& ctx) const
+  uimodel::layout::ActionState ActionRegistry::state(std::string_view id, ActionActivationContext const& ctx) const
   {
     auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.id == id; });
 
@@ -73,19 +74,20 @@ namespace ao::gtk::layout
       return it->stateProvider(ctx);
     }
 
-    return ActionState{.enabled = true, .disabledReason = ""};
+    return uimodel::layout::ActionState{.enabled = true, .disabledReason = ""};
   }
 
-  ActionActivationOutcome ActionRegistry::activate(std::string_view id, ActionActivationContext& ctx) const
+  uimodel::layout::ActionActivationOutcome ActionRegistry::activate(std::string_view id,
+                                                                    ActionActivationContext& ctx) const
   {
     auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.id == id; });
 
     if (it == _entries.end())
     {
-      return ActionActivationOutcome{.result = ActionActivationResult::UnknownAction};
+      return uimodel::layout::ActionActivationOutcome{.result = uimodel::layout::ActionActivationResult::UnknownAction};
     }
 
-    auto actionState = ActionState{.enabled = true, .disabledReason = ""};
+    auto actionState = uimodel::layout::ActionState{.enabled = true, .disabledReason = ""};
 
     if (it->stateProvider)
     {
@@ -93,7 +95,8 @@ namespace ao::gtk::layout
 
       if (!actionState.enabled)
       {
-        return ActionActivationOutcome{.result = ActionActivationResult::Disabled, .state = std::move(actionState)};
+        return uimodel::layout::ActionActivationOutcome{
+          .result = uimodel::layout::ActionActivationResult::Disabled, .state = std::move(actionState)};
       }
     }
 
@@ -102,25 +105,27 @@ namespace ao::gtk::layout
       it->handler(ctx);
     }
 
-    return ActionActivationOutcome{.result = ActionActivationResult::Activated, .state = std::move(actionState)};
+    return uimodel::layout::ActionActivationOutcome{
+      .result = uimodel::layout::ActionActivationResult::Activated, .state = std::move(actionState)};
   }
 
-  ActionActivationOutcome ActionRegistry::tryActivate(std::string_view id, ActionActivationContext& ctx) const
+  uimodel::layout::ActionActivationOutcome ActionRegistry::tryActivate(std::string_view id,
+                                                                       ActionActivationContext& ctx) const
   {
     auto outcome = activate(id, ctx);
 
     switch (outcome.result)
     {
-      case ActionActivationResult::UnknownAction:
+      case uimodel::layout::ActionActivationResult::UnknownAction:
         APP_LOG_WARN("ActionRegistry: Attempt to activate unknown action id '{}'", id);
         break;
-      case ActionActivationResult::Disabled:
+      case uimodel::layout::ActionActivationResult::Disabled:
         APP_LOG_DEBUG("ActionRegistry: Action '{}' is disabled: {}", id, outcome.state.disabledReason);
         break;
-      case ActionActivationResult::Activated:
+      case uimodel::layout::ActionActivationResult::Activated:
         APP_LOG_DEBUG("ActionRegistry: Activated action '{}' for component '{}'", id, ctx.componentId);
         break;
-      case ActionActivationResult::InvalidBinding:
+      case uimodel::layout::ActionActivationResult::InvalidBinding:
         APP_LOG_ERROR("ActionRegistry: Action '{}' has invalid binding for component '{}'", id, ctx.componentId);
         break;
     }

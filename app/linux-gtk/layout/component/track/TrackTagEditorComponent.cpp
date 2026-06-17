@@ -3,7 +3,6 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
@@ -15,6 +14,8 @@
 #include <ao/rt/ListSourceStore.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackSource.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <gtkmm/widget.h>
 #include <sigc++/scoped_connection.h>
@@ -24,6 +25,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     class TrackTagEditorComponent final : public ILayoutComponent

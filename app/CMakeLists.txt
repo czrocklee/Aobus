@@ -1,7 +1,6 @@
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
-    runtime/AtomicFile.cpp
     runtime/CoreRuntime.cpp
     runtime/LibraryYamlImporter.cpp
     runtime/LibraryYamlExporter.cpp
@@ -38,7 +37,10 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/ActionCatalog.cpp
     uimodel/layout/ActionValidator.cpp
     uimodel/layout/ComponentCatalog.cpp
+    uimodel/layout/LayoutComponentState.cpp
     uimodel/layout/LayoutDocument.cpp
+    uimodel/layout/LayoutNodeId.cpp
+    uimodel/layout/LayoutStatePromoter.cpp
     uimodel/layout/LayoutTemplateExpander.cpp
     uimodel/layout/LayoutValue.cpp
     uimodel/list/ListActionPolicy.cpp

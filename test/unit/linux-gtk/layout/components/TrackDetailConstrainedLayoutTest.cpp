@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "../../GtkTestSupport.h"
-#include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
@@ -16,6 +15,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <glibmm/ustring.h>
@@ -42,6 +42,7 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
   using namespace ao::lmdb::test;
   using ao::gtk::test::makeRuntime;
 

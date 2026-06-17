@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
@@ -10,6 +9,8 @@
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
 #include <ao/Type.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/track/TrackPageRoute.h>
 
 #include <gtkmm/widget.h>
@@ -21,6 +22,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     /**

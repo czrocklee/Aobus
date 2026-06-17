@@ -2,13 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
-#include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "layout/document/LayoutDocument.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -24,6 +24,7 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
   using ao::gtk::test::makeRuntime;
   using namespace ao::lmdb::test;
 

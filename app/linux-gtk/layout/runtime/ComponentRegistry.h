@@ -18,11 +18,6 @@
 
 namespace ao::gtk::layout
 {
-  using PropertyKind = uimodel::layout::PropertyKind;
-  using PropertyDescriptor = uimodel::layout::PropertyDescriptor;
-  using ComponentCategory = uimodel::layout::ComponentCategory;
-  using ComponentDescriptor = uimodel::layout::ComponentDescriptor;
-
   using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(LayoutContext&, uimodel::layout::LayoutNode const&);
 
   class ComponentRegistry final

@@ -2,10 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "ContainerComponentRegistrations.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <gtkmm/centerbox.h>
 #include <gtkmm/enums.h>
@@ -19,6 +20,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     /**

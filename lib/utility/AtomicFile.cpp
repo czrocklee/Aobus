@@ -141,6 +141,28 @@ namespace ao::utility
 
       ::close(parentFd);
     }
+    struct [[nodiscard]] FdGuard final
+    {
+      int fd = -1;
+
+      explicit FdGuard(std::int32_t fdValue)
+        : fd{fdValue}
+      {
+      }
+
+      ~FdGuard()
+      {
+        if (fd >= 0)
+        {
+          ::close(fd);
+        }
+      }
+
+      FdGuard(FdGuard const&) = delete;
+      FdGuard& operator=(FdGuard const&) = delete;
+      FdGuard(FdGuard&&) = delete;
+      FdGuard& operator=(FdGuard&&) = delete;
+    };
   } // namespace
 
   Result<> writeAtomically(std::filesystem::path const& targetPath,
@@ -163,28 +185,7 @@ namespace ao::utility
     }
 
     int const fd = *fdResult;
-    struct [[nodiscard]] FdGuard
-    {
-      int fd = -1;
-
-      explicit FdGuard(int f)
-        : fd(f)
-      {
-      }
-
-      ~FdGuard()
-      {
-        if (fd >= 0)
-        {
-          ::close(fd);
-        }
-      }
-
-      FdGuard(FdGuard const&) = delete;
-      FdGuard& operator=(FdGuard const&) = delete;
-      FdGuard(FdGuard&&) = delete;
-      FdGuard& operator=(FdGuard&&) = delete;
-    } guard{fd};
+    auto guard = FdGuard{fd};
 
     if (auto const result = setTempPermissions(fd, permissions); !result)
     {

@@ -2,12 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/AudioDeviceSelector.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/playback/AudioOutputViewModel.h>
 
 #include <gtkmm/button.h>
@@ -20,6 +21,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     /**

@@ -7,11 +7,11 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
-#include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
-#include "layout/state/ILayoutComponentStateStore.h"
-#include "layout/state/LayoutComponentState.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/uimodel/layout/ILayoutComponentStateStore.h>
+#include <ao/uimodel/layout/LayoutComponentState.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/applicationwindow.h>
@@ -24,45 +24,46 @@
 
 namespace ao::gtk::test
 {
+  using namespace uimodel::layout;
   namespace
   {
-    layout::LayoutNode splitNode(std::string_view id)
+    uimodel::layout::LayoutNode splitNode(std::string_view id)
     {
-      auto node = layout::LayoutNode{};
+      auto node = uimodel::layout::LayoutNode{};
       node.id = std::string{id};
       node.type = "split";
-      node.props["orientation"] = layout::LayoutValue{std::string{"horizontal"}};
-      node.props["position"] = layout::LayoutValue{static_cast<std::int64_t>(200)};
-      node.children.push_back(layout::LayoutNode{.type = "spacer"});
-      node.children.push_back(layout::LayoutNode{.type = "spacer"});
+      node.props["orientation"] = uimodel::layout::LayoutValue{std::string{"horizontal"}};
+      node.props["position"] = uimodel::layout::LayoutValue{static_cast<std::int64_t>(200)};
+      node.children.push_back(uimodel::layout::LayoutNode{.type = "spacer"});
+      node.children.push_back(uimodel::layout::LayoutNode{.type = "spacer"});
       return node;
     }
 
-    layout::LayoutNode collapsibleSplitNode(std::string_view id)
+    uimodel::layout::LayoutNode collapsibleSplitNode(std::string_view id)
     {
-      auto node = layout::LayoutNode{};
+      auto node = uimodel::layout::LayoutNode{};
       node.id = std::string{id};
       node.type = "collapsibleSplit";
-      node.props["orientation"] = layout::LayoutValue{std::string{"horizontal"}};
-      node.props["position"] = layout::LayoutValue{static_cast<std::int64_t>(150)};
-      node.props["initialPositionPercent"] = layout::LayoutValue{0.25};
-      node.props["revealed"] = layout::LayoutValue{true};
-      node.children.push_back(layout::LayoutNode{.type = "spacer"});
-      node.children.push_back(layout::LayoutNode{.type = "spacer"});
+      node.props["orientation"] = uimodel::layout::LayoutValue{std::string{"horizontal"}};
+      node.props["position"] = uimodel::layout::LayoutValue{static_cast<std::int64_t>(150)};
+      node.props["initialPositionPercent"] = uimodel::layout::LayoutValue{0.25};
+      node.props["revealed"] = uimodel::layout::LayoutValue{true};
+      node.children.push_back(uimodel::layout::LayoutNode{.type = "spacer"});
+      node.children.push_back(uimodel::layout::LayoutNode{.type = "spacer"});
       return node;
     }
 
-    layout::LayoutDocument panelLayoutDocument()
+    uimodel::layout::LayoutDocument panelLayoutDocument()
     {
-      auto doc = layout::LayoutDocument{};
+      auto doc = uimodel::layout::LayoutDocument{};
       doc.root.type = "box";
-      doc.root.props["orientation"] = layout::LayoutValue{std::string{"vertical"}};
+      doc.root.props["orientation"] = uimodel::layout::LayoutValue{std::string{"vertical"}};
       doc.root.children.push_back(splitNode("main-paned"));
       doc.root.children.push_back(collapsibleSplitNode("detail-split"));
       return doc;
     }
 
-    layout::LayoutNode const* findNodeById(layout::LayoutNode const& node, std::string_view id)
+    uimodel::layout::LayoutNode const* findNodeById(uimodel::layout::LayoutNode const& node, std::string_view id)
     {
       if (node.id == id)
       {
@@ -140,7 +141,7 @@ namespace ao::gtk::test
       controller.loadLayout(*configPtr);
       drainGtkEvents();
       CHECK(controller.context().componentStateStore ==
-            static_cast<layout::ILayoutComponentStateStore*>(componentStateStorePtr.get()));
+            static_cast<uimodel::layout::ILayoutComponentStateStore*>(componentStateStorePtr.get()));
     }
 
     SECTION("attachToWindow exports actions and refreshExportedActions works")
@@ -167,16 +168,16 @@ namespace ao::gtk::test
       auto doc = panelLayoutDocument();
       storePtr->save(doc, "classic");
 
-      auto stateDoc = layout::LayoutComponentStateDocument{.preset = "classic"};
+      auto stateDoc = uimodel::layout::LayoutComponentStateDocument{.preset = "classic"};
       auto const* split = findNodeById(doc.root, "main-paned");
       REQUIRE(split != nullptr);
-      stateDoc.components["main-paned"] = layout::LayoutComponentStateEntry{
+      stateDoc.components["main-paned"] = uimodel::layout::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = layout::kLayoutComponentStateEntryVersion,
-        .baselineHash = layout::layoutComponentBaselineHash(*split),
-        .state = {{"positionPercent", layout::LayoutValue{0.42}}},
+        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = uimodel::layout::layoutComponentBaselineHash(*split),
+        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.42}}},
       };
-      componentStateStorePtr->save(stateDoc, "classic");
+      componentStateStorePtr->save("classic", stateDoc);
 
       controller.loadLayout(*configPtr);
       REQUIRE(drainGtkEventsUntil([&controller]
@@ -198,14 +199,14 @@ namespace ao::gtk::test
       auto const* split = findNodeById(doc.root, "main-paned");
       REQUIRE(split != nullptr);
 
-      auto stateDoc = layout::LayoutComponentStateDocument{.preset = "classic"};
-      stateDoc.components["main-paned"] = layout::LayoutComponentStateEntry{
+      auto stateDoc = uimodel::layout::LayoutComponentStateDocument{.preset = "classic"};
+      stateDoc.components["main-paned"] = uimodel::layout::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = layout::kLayoutComponentStateEntryVersion,
-        .baselineHash = layout::layoutComponentBaselineHash(*split),
-        .state = {{"positionPercent", layout::LayoutValue{0.42}}},
+        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = uimodel::layout::layoutComponentBaselineHash(*split),
+        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.42}}},
       };
-      componentStateStorePtr->save(stateDoc, "classic");
+      componentStateStorePtr->save("classic", stateDoc);
 
       controller.loadLayout(*configPtr);
       REQUIRE(drainGtkEventsUntil([&controller]
@@ -237,21 +238,21 @@ namespace ao::gtk::test
       REQUIRE(split != nullptr);
       REQUIRE(collapsible != nullptr);
 
-      auto stateDoc = layout::LayoutComponentStateDocument{.preset = "classic"};
-      stateDoc.components["main-paned"] = layout::LayoutComponentStateEntry{
+      auto stateDoc = uimodel::layout::LayoutComponentStateDocument{.preset = "classic"};
+      stateDoc.components["main-paned"] = uimodel::layout::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = layout::kLayoutComponentStateEntryVersion,
-        .baselineHash = layout::layoutComponentBaselineHash(*split),
-        .state = {{"positionPercent", layout::LayoutValue{0.42}}},
+        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = uimodel::layout::layoutComponentBaselineHash(*split),
+        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.42}}},
       };
-      stateDoc.components["detail-split"] = layout::LayoutComponentStateEntry{
+      stateDoc.components["detail-split"] = uimodel::layout::LayoutComponentStateEntry{
         .type = "collapsibleSplit",
-        .stateVersion = layout::kLayoutComponentStateEntryVersion,
-        .baselineHash = layout::layoutComponentBaselineHash(*collapsible),
-        .state = {{"size", layout::LayoutValue{static_cast<std::int64_t>(320)}},
-                  {"revealed", layout::LayoutValue{false}}},
+        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = uimodel::layout::layoutComponentBaselineHash(*collapsible),
+        .state = {{"size", uimodel::layout::LayoutValue{static_cast<std::int64_t>(320)}},
+                  {"revealed", uimodel::layout::LayoutValue{false}}},
       };
-      componentStateStorePtr->save(stateDoc, "classic");
+      componentStateStorePtr->save("classic", stateDoc);
 
       controller.loadLayout(*configPtr);
       REQUIRE(drainGtkEventsUntil([&controller]
@@ -279,7 +280,7 @@ namespace ao::gtk::test
       CHECK_FALSE(optPromotedState->components.contains("main-paned"));
       REQUIRE(optPromotedState->components.contains("detail-split"));
       auto const& remainingEntry = optPromotedState->components.at("detail-split");
-      CHECK(remainingEntry.baselineHash == layout::layoutComponentBaselineHash(*savedCollapsible));
+      CHECK(remainingEntry.baselineHash == uimodel::layout::layoutComponentBaselineHash(*savedCollapsible));
       CHECK(remainingEntry.state.size() == 1);
       CHECK(remainingEntry.state.at("revealed").asBool(true) == false);
     }

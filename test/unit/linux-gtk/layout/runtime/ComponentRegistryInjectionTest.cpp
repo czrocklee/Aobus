@@ -11,6 +11,8 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
+
   TEST_CASE("ComponentRegistry action descriptor injection", "[layout][unit][runtime]")
   {
     auto registry = ComponentRegistry{};
@@ -77,7 +79,7 @@ namespace ao::gtk::layout::test
         {.type = "test.overwrite",
          .displayName = "Overwrite",
          .category = ComponentCategory::Generic,
-         .props = {{.name = "primaryAction", .kind = uimodel::layout::PropertyKind::String, .label = "Custom Label"}},
+         .props = {{.name = "primaryAction", .kind = PropertyKind::String, .label = "Custom Label"}},
          .actionPolicy = uimodel::layout::kAllExternalActions},
         nullptr);
 
@@ -88,7 +90,7 @@ namespace ao::gtk::layout::test
         optDesc->props.begin(), optDesc->props.end(), [](auto const& p) { return p.name == "primaryAction"; });
       REQUIRE(it != optDesc->props.end());
       CHECK(it->label == "Custom Label");
-      CHECK(it->kind == uimodel::layout::PropertyKind::String);
+      CHECK(it->kind == PropertyKind::String);
     }
   }
 }

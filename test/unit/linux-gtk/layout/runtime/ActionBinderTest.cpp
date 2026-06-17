@@ -3,9 +3,10 @@
 
 #include "layout/runtime/ActionBinder.h"
 
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -15,6 +16,7 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
   using namespace ao::gtk::test;
 
   TEST_CASE("ActionBinder - unit", "[layout][unit][runtime]")

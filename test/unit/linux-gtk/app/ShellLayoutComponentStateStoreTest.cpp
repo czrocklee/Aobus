@@ -3,9 +3,9 @@
 
 #include "app/ShellLayoutComponentStateStore.h"
 
-#include "layout/state/LayoutComponentState.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Exception.h>
+#include <ao/uimodel/layout/LayoutComponentState.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
@@ -18,6 +18,7 @@
 
 namespace ao::gtk::test
 {
+  using namespace uimodel::layout;
   using namespace ao::lmdb::test;
 
   namespace
@@ -33,14 +34,14 @@ namespace ao::gtk::test
       return node;
     }
 
-    layout::LayoutComponentStateDocument stateDocFor(uimodel::layout::LayoutNode const& node)
+    uimodel::layout::LayoutComponentStateDocument stateDocFor(uimodel::layout::LayoutNode const& node)
     {
-      auto doc = layout::LayoutComponentStateDocument{};
+      auto doc = uimodel::layout::LayoutComponentStateDocument{};
       doc.preset = "classic";
-      doc.components[node.id] = layout::LayoutComponentStateEntry{
+      doc.components[node.id] = uimodel::layout::LayoutComponentStateEntry{
         .type = node.type,
-        .stateVersion = layout::kLayoutComponentStateEntryVersion,
-        .baselineHash = layout::layoutComponentBaselineHash(node),
+        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = uimodel::layout::layoutComponentBaselineHash(node),
         .state = {{"positionPercent", uimodel::layout::LayoutValue{0.35}}},
       };
       return doc;
@@ -64,7 +65,7 @@ namespace ao::gtk::test
       auto const node = splitNode();
       auto doc = stateDocFor(node);
 
-      store.save(doc, "classic");
+      store.save("classic", doc);
 
       auto const optLoaded = store.load("classic");
       REQUIRE(optLoaded.has_value());
@@ -96,25 +97,25 @@ namespace ao::gtk::test
       auto liveNode = splitNode("live-split");
       auto staleNode = splitNode("stale-split");
       auto doc = stateDocFor(liveNode);
-      doc.components["orphan-split"] = layout::LayoutComponentStateEntry{
+      doc.components["orphan-split"] = uimodel::layout::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = layout::kLayoutComponentStateEntryVersion,
+        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
         .baselineHash = "orphan",
         .state = {{"positionPercent", uimodel::layout::LayoutValue{0.10}}},
       };
-      doc.components["wrong-type"] = layout::LayoutComponentStateEntry{
+      doc.components["wrong-type"] = uimodel::layout::LayoutComponentStateEntry{
         .type = "collapsibleSplit",
-        .stateVersion = layout::kLayoutComponentStateEntryVersion,
-        .baselineHash = layout::layoutComponentBaselineHash(liveNode),
+        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .baselineHash = uimodel::layout::layoutComponentBaselineHash(liveNode),
         .state = {{"positionPercent", uimodel::layout::LayoutValue{0.20}}},
       };
-      doc.components["stale-split"] = layout::LayoutComponentStateEntry{
+      doc.components["stale-split"] = uimodel::layout::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = layout::kLayoutComponentStateEntryVersion,
+        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
         .baselineHash = "stale",
         .state = {{"positionPercent", uimodel::layout::LayoutValue{0.30}}},
       };
-      store.save(doc, "classic");
+      store.save("classic", doc);
 
       auto layoutDoc = uimodel::layout::LayoutDocument{};
       layoutDoc.root.type = "box";
@@ -131,7 +132,7 @@ namespace ao::gtk::test
     SECTION("removePreset deletes the file and reports success")
     {
       auto store = ShellLayoutComponentStateStore{stateDir};
-      store.save(stateDocFor(splitNode()), "classic");
+      store.save("classic", stateDocFor(splitNode()));
 
       CHECK(std::filesystem::exists(stateDir / "classic.yaml"));
 
@@ -145,7 +146,7 @@ namespace ao::gtk::test
       auto store = ShellLayoutComponentStateStore{stateDir};
       auto const node = splitNode("live-split");
       auto doc = stateDocFor(node);
-      store.save(doc, "classic");
+      store.save("classic", doc);
 
       auto layoutDoc = uimodel::layout::LayoutDocument{};
       layoutDoc.root.type = "box";
@@ -169,7 +170,7 @@ namespace ao::gtk::test
     SECTION("saved state file is readable only by owner")
     {
       auto store = ShellLayoutComponentStateStore{stateDir};
-      store.save(stateDocFor(splitNode()), "classic");
+      store.save("classic", stateDocFor(splitNode()));
 
       auto const perms = std::filesystem::status(stateDir / "classic.yaml").permissions();
       CHECK((perms & std::filesystem::perms::owner_read) != std::filesystem::perms::none);

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "layout/document/LayoutNode.h"
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <gtkmm/widget.h>
 
@@ -12,5 +12,5 @@ namespace ao::gtk::layout
   /**
    * @brief Apply common layout properties (align, sizing, etc.) to a widget.
    */
-  void applyCommonProps(Gtk::Widget& widget, LayoutNode const& node);
+  void applyCommonProps(Gtk::Widget& widget, uimodel::layout::LayoutNode const& node);
 }

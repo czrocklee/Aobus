@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SemanticComponentRegistrations.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackPageHost.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -21,6 +22,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     /**

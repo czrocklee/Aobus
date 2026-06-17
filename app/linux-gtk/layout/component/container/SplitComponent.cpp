@@ -3,13 +3,13 @@
 
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "layout/state/ILayoutComponentStateStore.h"
-#include "layout/state/LayoutComponentState.h"
-#include "layout/state/StatefulLayoutComponentType.h"
+#include "layout/runtime/StatefulComponentState.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/StatefulLayoutComponentType.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/enums.h>
@@ -26,6 +26,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     constexpr auto kSplitPositionSaveDelay = std::chrono::milliseconds{150};
@@ -37,15 +38,7 @@ namespace ao::gtk::layout
     {
     public:
       SplitComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _ctx{&ctx}
-        , _stateDoc{&ctx.componentState}
-        , _stateStore{ctx.componentStateStore}
-        , _componentId{node.id}
-        , _activePresetId{ctx.activePresetId}
-        , _baselineHash{layoutComponentBaselineHash(node)}
-        , _stateGeneration{ctx.componentStateGeneration}
-        , _persistWrites{!ctx.editMode && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
-                         !ctx.activePresetId.empty() && ctx.componentStateStore != nullptr}
+        : _state{ctx, node, kSplitComponentType}
       {
         if (node.children.size() != 2)
         {
@@ -77,8 +70,7 @@ namespace ao::gtk::layout
         _paned.set_resize_end_child(node.getProp<bool>("resizeEnd", true));
         _paned.set_shrink_end_child(node.getProp<bool>("shrinkEnd", false));
 
-        if (auto const optState = resolveLayoutComponentState(ctx.componentState, node);
-            optState && optState->state.contains("positionPercent"))
+        if (auto const& optState = _state.restored(); optState && optState->state.contains("positionPercent"))
         {
           _initialPercent = std::clamp(optState->state.at("positionPercent").asDouble(), 0.0, 1.0);
           _allocationRoot.setAllocatedCallback([this](std::int32_t width, std::int32_t height)
@@ -147,7 +139,7 @@ namespace ao::gtk::layout
 
       void schedulePositionSave()
       {
-        if (_suppressPositionSave || !_persistWrites)
+        if (_suppressPositionSave || !_state.canWrite())
         {
           return;
         }
@@ -162,15 +154,9 @@ namespace ao::gtk::layout
           kSplitPositionSaveDelay.count());
       }
 
-      bool canWriteState() const
-      {
-        return _persistWrites && _ctx != nullptr && _stateDoc != nullptr && _stateStore != nullptr &&
-               _ctx->componentStateGeneration == _stateGeneration;
-      }
-
       void savePositionPercent()
       {
-        if (!canWriteState())
+        if (!_state.canWrite())
         {
           return;
         }
@@ -185,14 +171,7 @@ namespace ao::gtk::layout
 
         auto const percent =
           std::clamp(static_cast<double>(_paned.get_position()) / static_cast<double>(total), 0.0, 1.0);
-        _stateDoc->preset = _activePresetId;
-        _stateDoc->components[_componentId] = LayoutComponentStateEntry{
-          .type = std::string{kSplitComponentType},
-          .stateVersion = kLayoutComponentStateEntryVersion,
-          .baselineHash = _baselineHash,
-          .state = {{"positionPercent", LayoutValue{percent}}},
-        };
-        _stateStore->save(*_stateDoc, _activePresetId);
+        _state.write({{"positionPercent", LayoutValue{percent}}});
       }
 
       struct ScopedPositionSaveSuppressor final
@@ -214,20 +193,13 @@ namespace ao::gtk::layout
         bool previous;
       };
 
+      StatefulComponentState _state;
       AllocationObserver _allocationRoot;
       Gtk::Paned _paned;
-      LayoutContext* _ctx = nullptr;
-      LayoutComponentStateDocument* _stateDoc = nullptr;
-      ILayoutComponentStateStore* _stateStore = nullptr;
       sigc::connection _positionChangedConn;
       sigc::connection _saveDebounceConn;
-      std::string _componentId;
-      std::string _activePresetId;
-      std::string _baselineHash;
-      std::uint64_t _stateGeneration = 0;
       double _initialPercent = 0.0;
       bool _initialPositionSet = false;
-      bool _persistWrites = false;
       bool _suppressPositionSave = false;
       std::unique_ptr<Gtk::Label> _errorPtr;
       std::unique_ptr<ILayoutComponent> _startChildPtr;

@@ -3,13 +3,13 @@
 
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "layout/state/ILayoutComponentStateStore.h"
-#include "layout/state/LayoutComponentState.h"
-#include "layout/state/StatefulLayoutComponentType.h"
+#include "layout/runtime/StatefulComponentState.h"
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/StatefulLayoutComponentType.h>
 #include <ao/utility/Log.h>
 
 #include <gdkmm/cursor.h>
@@ -37,6 +37,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     constexpr std::int32_t kMinCollapsibleSplitSize = 50;
@@ -172,15 +173,7 @@ namespace ao::gtk::layout
       };
 
       CollapsibleSplitComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _ctx{&ctx}
-        , _stateDoc{&ctx.componentState}
-        , _stateStore{ctx.componentStateStore}
-        , _componentId{node.id}
-        , _activePresetId{ctx.activePresetId}
-        , _baselineHash{layoutComponentBaselineHash(node)}
-        , _stateGeneration{ctx.componentStateGeneration}
-        , _persistWrites{!ctx.editMode && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
-                         !ctx.activePresetId.empty() && ctx.componentStateStore != nullptr}
+        : _state{ctx, node, kCollapsibleSplitComponentType}
       {
         if (node.children.size() != 2)
         {
@@ -203,7 +196,7 @@ namespace ao::gtk::layout
         _startChildPtr = ctx.registry.create(ctx, node.children[0]);
         _endChildPtr = ctx.registry.create(ctx, node.children[1]);
 
-        auto const optState = resolveLayoutComponentState(ctx.componentState, node);
+        auto const& optState = _state.restored();
         bool initiallyRevealed = node.getProp<bool>("revealed", true);
         auto optRestoredSize = std::optional<std::int32_t>{};
 
@@ -630,15 +623,9 @@ namespace ao::gtk::layout
         saveRuntimeState();
       }
 
-      bool canWriteState() const
-      {
-        return _persistWrites && _ctx != nullptr && _stateDoc != nullptr && _stateStore != nullptr &&
-               _ctx->componentStateGeneration == _stateGeneration;
-      }
-
       void saveRuntimeState()
       {
-        if (!canWriteState())
+        if (!_state.canWrite())
         {
           return;
         }
@@ -657,14 +644,7 @@ namespace ao::gtk::layout
 
         state["revealed"] = LayoutValue{_revealer.get_reveal_child()};
 
-        _stateDoc->preset = _activePresetId;
-        _stateDoc->components[_componentId] = LayoutComponentStateEntry{
-          .type = std::string{kCollapsibleSplitComponentType},
-          .stateVersion = kLayoutComponentStateEntryVersion,
-          .baselineHash = _baselineHash,
-          .state = std::move(state),
-        };
-        _stateStore->save(*_stateDoc, _activePresetId);
+        _state.write(std::move(state));
       }
 
       void updateHandleIcon()
@@ -693,15 +673,13 @@ namespace ao::gtk::layout
         }
       }
 
+      StatefulComponentState _state;
       AllocationObserver _allocationRoot;
       Gtk::Box _container;
       Gtk::Box _gutterBox;
       Gtk::Button _toggleButton;
       Gtk::Revealer _revealer;
       FixedSplitPane _paneSizer;
-      LayoutContext* _ctx = nullptr;
-      LayoutComponentStateDocument* _stateDoc = nullptr;
-      ILayoutComponentStateStore* _stateStore = nullptr;
       Gtk::Orientation _orientation;
       Side _collapseSide;
       Glib::RefPtr<Gtk::GestureDrag> _dragGesturePtr;
@@ -710,15 +688,10 @@ namespace ao::gtk::layout
       std::int32_t _startSizeOnDrag = 0;
       std::optional<std::int32_t> _optPendingRestoredSize;
       std::optional<std::int32_t> _optPersistedSizeFallback;
-      std::string _componentId;
-      std::string _activePresetId;
-      std::string _baselineHash;
-      std::uint64_t _stateGeneration = 0;
       double _initialPercent = 0.0;
       bool _initialPositionSet = false;
       bool _manualSizeSelected = false;
       bool _persistableSizeKnown = false;
-      bool _persistWrites = false;
       bool _dragAccepted = false;
       bool _dragActive = false;
 

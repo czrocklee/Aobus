@@ -9,6 +9,7 @@
 #include "layout/runtime/DecoratedLayoutComponent.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
+#include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
@@ -31,19 +32,18 @@ namespace ao::gtk::layout
   {
     void injectActionDescriptors(uimodel::layout::ComponentDescriptor& descriptor)
     {
-      using namespace uimodel::layout;
-
       auto const& descriptorPolicy = descriptor.actionPolicy;
 
       auto const inject = [&descriptor, &descriptorPolicy](
-                            std::string_view name, std::string_view label, ActionSlot slot)
+                            std::string_view name, std::string_view label, uimodel::layout::ActionSlot slot)
       {
         if (auto it = std::ranges::find_if(
-              descriptor.props, [name](PropertyDescriptor const& prop) { return prop.name == name; });
+              descriptor.props, [name](uimodel::layout::PropertyDescriptor const& prop) { return prop.name == name; });
             it != descriptor.props.end())
         {
           // Existing property found — validate it matches expected semantics
-          if (it->kind != PropertyKind::Enum || !it->optActionBinding || it->optActionBinding->slot != slot)
+          if (it->kind != uimodel::layout::PropertyKind::Enum || !it->optActionBinding ||
+              it->optActionBinding->slot != slot)
           {
             APP_LOG_ERROR("component",
                           "Incompatible manual property declaration '{}' in component '{}'. "
@@ -63,34 +63,38 @@ namespace ao::gtk::layout
         }
 
         descriptor.props.push_back({.name = std::string{name},
-                                    .kind = PropertyKind::Enum,
+                                    .kind = uimodel::layout::PropertyKind::Enum,
                                     .label = std::string{label},
-                                    .defaultValue = LayoutValue{""},
+                                    .defaultValue = uimodel::layout::LayoutValue{""},
                                     .enumValues = {},
-                                    .optActionBinding = ActionBindingProperty{.slot = slot},
+                                    .optActionBinding = uimodel::layout::ActionBindingProperty{.slot = slot},
                                     .optDefaultActionId = std::move(optDefaultId)});
       };
 
       auto const policy = descriptor.actionPolicy;
 
-      if (policy.allows(ActionSlot::PrimaryClick))
+      if (policy.allows(uimodel::layout::ActionSlot::PrimaryClick))
       {
-        inject(kPrimaryActionProp, "Primary Action", ActionSlot::PrimaryClick);
+        inject(uimodel::layout::kPrimaryActionProp, "Primary Action", uimodel::layout::ActionSlot::PrimaryClick);
       }
 
-      if (policy.allows(ActionSlot::PrimaryLongPress))
+      if (policy.allows(uimodel::layout::ActionSlot::PrimaryLongPress))
       {
-        inject(kPrimaryLongPressActionProp, "Primary Long Press", ActionSlot::PrimaryLongPress);
+        inject(uimodel::layout::kPrimaryLongPressActionProp,
+               "Primary Long Press",
+               uimodel::layout::ActionSlot::PrimaryLongPress);
       }
 
-      if (policy.allows(ActionSlot::SecondaryClick))
+      if (policy.allows(uimodel::layout::ActionSlot::SecondaryClick))
       {
-        inject(kSecondaryActionProp, "Secondary Action", ActionSlot::SecondaryClick);
+        inject(uimodel::layout::kSecondaryActionProp, "Secondary Action", uimodel::layout::ActionSlot::SecondaryClick);
       }
 
-      if (policy.allows(ActionSlot::SecondaryLongPress))
+      if (policy.allows(uimodel::layout::ActionSlot::SecondaryLongPress))
       {
-        inject(kSecondaryLongPressActionProp, "Secondary Long Press", ActionSlot::SecondaryLongPress);
+        inject(uimodel::layout::kSecondaryLongPressActionProp,
+               "Secondary Long Press",
+               uimodel::layout::ActionSlot::SecondaryLongPress);
       }
     }
 
@@ -151,7 +155,7 @@ namespace ao::gtk::layout
 
       bool hasActions = false;
 
-      auto const check = [&](std::string_view propName, ActionSlot slot)
+      auto const check = [&](std::string_view propName, uimodel::layout::ActionSlot slot)
       {
         if (!policy.allows(slot))
         {
@@ -166,11 +170,11 @@ namespace ao::gtk::layout
         return !policy.getDefault(slot).empty();
       };
 
-      using namespace uimodel::layout;
-      hasActions = check(kPrimaryActionProp, ActionSlot::PrimaryClick) ||
-                   check(kPrimaryLongPressActionProp, ActionSlot::PrimaryLongPress) ||
-                   check(kSecondaryActionProp, ActionSlot::SecondaryClick) ||
-                   check(kSecondaryLongPressActionProp, ActionSlot::SecondaryLongPress);
+      hasActions =
+        check(uimodel::layout::kPrimaryActionProp, uimodel::layout::ActionSlot::PrimaryClick) ||
+        check(uimodel::layout::kPrimaryLongPressActionProp, uimodel::layout::ActionSlot::PrimaryLongPress) ||
+        check(uimodel::layout::kSecondaryActionProp, uimodel::layout::ActionSlot::SecondaryClick) ||
+        check(uimodel::layout::kSecondaryLongPressActionProp, uimodel::layout::ActionSlot::SecondaryLongPress);
 
       if (hasActions)
       {

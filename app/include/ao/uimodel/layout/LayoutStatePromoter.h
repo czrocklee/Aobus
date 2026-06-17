@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include "layout/document/LayoutDocument.h"
-
 #include <cstddef>
 
-namespace ao::gtk::layout
+namespace ao::uimodel::layout
 {
   struct LayoutComponentStateDocument;
+  struct LayoutDocument;
+
   struct PanelSizePromotionResult final
   {
     bool changed = false;
@@ -26,4 +26,4 @@ namespace ao::gtk::layout
    * refreshed baseline hash.
    */
   PanelSizePromotionResult promotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc);
-} // namespace ao::gtk::layout
+} // namespace ao::uimodel::layout

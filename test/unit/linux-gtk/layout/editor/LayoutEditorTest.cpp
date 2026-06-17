@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "../../GtkTestSupport.h"
-#include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -10,6 +9,8 @@
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -35,6 +36,7 @@
 
 namespace ao::gtk::layout::editor::test
 {
+  using namespace uimodel::layout;
   using ao::gtk::test::collectScrolledWindows;
   using ao::gtk::test::makeRuntime;
 
@@ -142,7 +144,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("playback.playPauseButton");
 
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->category == uimodel::layout::ComponentCategory::Playback);
+      CHECK(optDesc->category == ComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
       { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
@@ -156,7 +158,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("playback.qualityIndicator");
 
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->category == uimodel::layout::ComponentCategory::Playback);
+      CHECK(optDesc->category == ComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
       {
@@ -343,10 +345,11 @@ namespace ao::gtk::layout::editor::test
 
       auto dialogPtr = std::make_unique<LayoutEditorDialog>(
         window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader);
+      dialogPtr->testSuppressErrorDialogs();
 
       // Attempting to save an invalid document should fail validation and keep dialog open
       dialogPtr->response(Gtk::ResponseType::OK);
-      // We can't check visible here since we didn't show(), but we verify it's still alive/active
+      // We verify the dialog object remains alive after validation rejects the response.
       CHECK(dialogPtr != nullptr);
       dialogPtr->close();
 
@@ -368,6 +371,7 @@ namespace ao::gtk::layout::editor::test
       invalidDoc.root.props["primaryAction"] = LayoutValue{std::string{"this.does.not.exist"}};
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader};
+      dialog.testSuppressErrorDialogs();
 
       auto saveCount = 0;
       dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
@@ -442,6 +446,7 @@ namespace ao::gtk::layout::editor::test
       };
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, duplicateDoc, "classic", "modern", stubLoader};
+      dialog.testSuppressErrorDialogs();
 
       auto saveCount = 0;
       dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
@@ -677,6 +682,7 @@ namespace ao::gtk::layout::editor::test
       };
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", customLoader};
+      dialog.testSuppressErrorDialogs();
 
       auto const collectCombos = [](auto& self, Gtk::Widget& widget, std::vector<Gtk::ComboBoxText*>& combos) -> void
       {

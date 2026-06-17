@@ -99,9 +99,6 @@ add_library(aobus-gtk-lib STATIC
     layout/runtime/ActionValidator.cpp
     layout/runtime/ActionBinder.cpp
     layout/runtime/LayoutHost.cpp
-    layout/state/LayoutComponentState.cpp
-    layout/state/LayoutNodeId.cpp
-    layout/state/LayoutStatePromoter.cpp
     layout/component/common/CommonLayoutProps.cpp
     layout/component/track/TrackDetailSizing.cpp
     layout/component/track/TrackRegistry.cpp

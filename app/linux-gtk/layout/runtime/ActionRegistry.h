@@ -25,17 +25,6 @@ namespace Gtk
 
 namespace ao::gtk::layout
 {
-  // Using aliases for shared action types
-  using ActionCapability = uimodel::layout::ActionCapability;
-  using ActionCapabilities = uimodel::layout::ActionCapabilities;
-  using ActionDescriptor = uimodel::layout::ActionDescriptor;
-  using ActionState = uimodel::layout::ActionState;
-  using ActionSlot = uimodel::layout::ActionSlot;
-  using ActionBindingProperty = uimodel::layout::ActionBindingProperty;
-  using ActionBindingContext = uimodel::layout::ActionBindingContext;
-  using ActionActivationResult = uimodel::layout::ActionActivationResult;
-  using ActionActivationOutcome = uimodel::layout::ActionActivationOutcome;
-
   struct ActionActivationContext final
   {
     rt::AppRuntime& runtime;
@@ -45,7 +34,7 @@ namespace ao::gtk::layout
   };
 
   using ActionHandler = std::function<void(ActionActivationContext&)>;
-  using ActionStateProvider = std::function<ActionState(ActionActivationContext const&)>;
+  using ActionStateProvider = std::function<uimodel::layout::ActionState(ActionActivationContext const&)>;
 
   class ActionRegistry final
   {
@@ -58,17 +47,19 @@ namespace ao::gtk::layout
     ActionRegistry(ActionRegistry&&) = delete;
     ActionRegistry& operator=(ActionRegistry&&) = delete;
 
-    bool registerAction(ActionDescriptor descriptor, ActionHandler handler, ActionStateProvider stateProvider = {});
+    bool registerAction(uimodel::layout::ActionDescriptor descriptor,
+                        ActionHandler handler,
+                        ActionStateProvider stateProvider = {});
 
-    std::optional<ActionDescriptor> descriptor(std::string_view id) const;
-    std::vector<ActionDescriptor> descriptors() const;
+    std::optional<uimodel::layout::ActionDescriptor> descriptor(std::string_view id) const;
+    std::vector<uimodel::layout::ActionDescriptor> descriptors() const;
 
-    bool canBind(std::string_view id, ActionBindingContext const& ctx) const;
-    bool tryBind(std::string_view id, ActionBindingContext const& ctx) const;
+    bool canBind(std::string_view id, uimodel::layout::ActionBindingContext const& ctx) const;
+    bool tryBind(std::string_view id, uimodel::layout::ActionBindingContext const& ctx) const;
 
-    ActionState state(std::string_view id, ActionActivationContext const& ctx) const;
-    ActionActivationOutcome activate(std::string_view id, ActionActivationContext& ctx) const;
-    ActionActivationOutcome tryActivate(std::string_view id, ActionActivationContext& ctx) const;
+    uimodel::layout::ActionState state(std::string_view id, ActionActivationContext const& ctx) const;
+    uimodel::layout::ActionActivationOutcome activate(std::string_view id, ActionActivationContext& ctx) const;
+    uimodel::layout::ActionActivationOutcome tryActivate(std::string_view id, ActionActivationContext& ctx) const;
 
     uimodel::layout::ActionCatalog const& catalog() const noexcept;
 

@@ -6,12 +6,14 @@
 #include "app/AppDialog.h"
 #include "layout/document/GtkLayoutPresets.h"
 #include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ActionValidator.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/state/LayoutNodeId.h"
+#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/ActionValidator.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/LayoutNodeId.h>
 
 #include <giomm/menu.h>
 #include <giomm/simpleactiongroup.h>
@@ -57,6 +59,7 @@
 
 namespace ao::gtk::layout::editor
 {
+  using namespace uimodel::layout;
   namespace
   {
     constexpr int kTreeMinContentWidth = 220;
@@ -426,7 +429,7 @@ namespace ao::gtk::layout::editor
 
     auto newNode = LayoutNode{};
     newNode.type = std::move(type);
-    newNode.id = layout::makeUniqueLayoutNodeId(_document, newNode.type, "new");
+    newNode.id = uimodel::layout::makeUniqueLayoutNodeId(_document, newNode.type, "new");
 
     markEdited();
     parentNode->children.push_back(std::move(newNode));
@@ -462,7 +465,7 @@ namespace ao::gtk::layout::editor
       {
         auto containerNode = LayoutNode{};
         containerNode.type = std::move(containerType);
-        containerNode.id = layout::makeUniqueLayoutNodeId(_document, containerNode.type, "wrap");
+        containerNode.id = uimodel::layout::makeUniqueLayoutNodeId(_document, containerNode.type, "wrap");
 
         markEdited();
         // Move the target node into the new container
@@ -645,14 +648,14 @@ namespace ao::gtk::layout::editor
     {
       if (entry.dirty || presetId == _currentPresetId)
       {
-        auto const idDiagnostics = layout::validateStatefulLayoutNodeIds(entry.doc);
+        auto const idDiagnostics = uimodel::layout::validateStatefulLayoutNodeIds(entry.doc);
 
-        if (layout::hasLayoutNodeIdErrors(idDiagnostics))
+        if (uimodel::layout::hasLayoutNodeIdErrors(idDiagnostics))
         {
-          auto const firstErrorIt =
-            std::ranges::find_if(idDiagnostics,
-                                 [](layout::LayoutNodeIdDiagnostic const& diagnostic)
-                                 { return diagnostic.severity == layout::LayoutNodeIdDiagnosticSeverity::Error; });
+          auto const firstErrorIt = std::ranges::find_if(
+            idDiagnostics,
+            [](uimodel::layout::LayoutNodeIdDiagnostic const& diagnostic)
+            { return diagnostic.severity == uimodel::layout::LayoutNodeIdDiagnosticSeverity::Error; });
           auto const& firstError = *firstErrorIt;
           presentErrorDialog("Invalid Layout Component IDs",
                              std::format("Validation failed on preset '{}' component '{}' type '{}':\n\n{}",
@@ -663,7 +666,7 @@ namespace ao::gtk::layout::editor
           return false;
         }
 
-        auto const diagnostics = validateActions(
+        auto const diagnostics = uimodel::layout::validateActions(
           entry.doc, _registry.catalog(), _actionRegistry.catalog(), resolveGtkLayoutActionBindingContext);
 
         if (!diagnostics.empty())
@@ -685,6 +688,11 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::presentErrorDialog(std::string const& title, std::string const& message)
   {
+    if (_suppressErrorDialogsForTests)
+    {
+      return;
+    }
+
     auto msgPtr =
       std::make_shared<Gtk::MessageDialog>(*this, title, false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
     msgPtr->set_secondary_text(message);
@@ -869,11 +877,10 @@ namespace ao::gtk::layout::editor
       return;
     }
 
-    auto const bindCtx =
-      ao::gtk::layout::ActionBindingContext{.slot = prop.optActionBinding->slot,
-                                            .hasAnchor = true,      // We assume standard UI buttons have anchors
-                                            .hasFocusedView = true, // And we assume focus is valid during edit
-                                            .componentType = node->type};
+    auto const bindCtx = ActionBindingContext{.slot = prop.optActionBinding->slot,
+                                              .hasAnchor = true,      // We assume standard UI buttons have anchors
+                                              .hasFocusedView = true, // And we assume focus is valid during edit
+                                              .componentType = node->type};
 
     combo->append("none", "none");
 

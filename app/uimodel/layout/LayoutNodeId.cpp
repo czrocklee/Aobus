@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/state/LayoutNodeId.h"
-
-#include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
-#include "layout/state/StatefulLayoutComponentType.h"
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/LayoutNodeId.h>
 #include <ao/uimodel/layout/LayoutTemplateExpander.h>
+#include <ao/uimodel/layout/StatefulLayoutComponentType.h>
 
 #include <algorithm>
 #include <cctype>
@@ -18,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::gtk::layout
+namespace ao::uimodel::layout
 {
   namespace
   {
@@ -153,7 +152,7 @@ namespace ao::gtk::layout
 
   void visitExpandedLayoutNodes(LayoutDocument const& doc, LayoutNodeVisitor const& visitor)
   {
-    auto const expandedRoot = uimodel::layout::LayoutTemplateExpander::expand(doc);
+    auto const expandedRoot = LayoutTemplateExpander::expand(doc);
     visitNodeRecursive(expandedRoot, visitor);
   }
 
@@ -214,4 +213,4 @@ namespace ao::gtk::layout
     collectIds(ownerDoc, reserved);
     freshenRecursive(subtree, reserved);
   }
-} // namespace ao::gtk::layout
+} // namespace ao::uimodel::layout

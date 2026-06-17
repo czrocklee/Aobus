@@ -3,13 +3,17 @@
 
 #pragma once
 
-#include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutRuntime.h"
 
 #include <gtkmm/box.h>
 
 #include <memory>
+
+namespace ao::uimodel::layout
+{
+  struct LayoutDocument;
+}
 
 namespace ao::gtk::layout
 {
@@ -29,7 +33,7 @@ namespace ao::gtk::layout
      *
      * This will rebuild the entire layout tree.
      */
-    void setLayout(LayoutContext& ctx, LayoutDocument const& doc);
+    void setLayout(LayoutContext& ctx, uimodel::layout::LayoutDocument const& doc);
 
   private:
     LayoutRuntime _runtime;

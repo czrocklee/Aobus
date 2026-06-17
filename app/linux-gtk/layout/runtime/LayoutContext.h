@@ -4,8 +4,8 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
-#include "layout/state/LayoutComponentState.h"
 #include <ao/Type.h>
+#include <ao/uimodel/layout/LayoutComponentState.h>
 
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
@@ -35,6 +35,11 @@ namespace ao::gtk
   class ListNavigationController;
 } // namespace ao::gtk
 
+namespace ao::uimodel::layout
+{
+  class ILayoutComponentStateStore;
+}
+
 namespace ao::uimodel::playback
 {
   class PlaybackQueueModel;
@@ -55,7 +60,6 @@ namespace ao::gtk::layout
   class ITrackDetailScope;
   class ComponentRegistry;
   class ActionRegistry;
-  class ILayoutComponentStateStore;
 
   struct TrackUiContext final
   {
@@ -115,8 +119,8 @@ namespace ao::gtk::layout
     rt::AppRuntime& runtime;
     Gtk::Window& parentWindow;
     std::string activePresetId{};
-    LayoutComponentStateDocument componentState{};
-    ILayoutComponentStateStore* componentStateStore = nullptr;
+    uimodel::layout::LayoutComponentStateDocument componentState{};
+    uimodel::layout::ILayoutComponentStateStore* componentStateStore = nullptr;
 
     /**
      * @brief Monotonically incremented when the active component state document is replaced.

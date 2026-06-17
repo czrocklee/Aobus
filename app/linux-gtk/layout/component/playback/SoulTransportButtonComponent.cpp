@@ -3,13 +3,14 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/TransportButton.h"
 #include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/playback/AobusSoulViewModel.h>
 #include <ao/uimodel/playback/TransportViewModel.h>
 
@@ -21,9 +22,9 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
-    using uimodel::layout::ActionSlot;
     using uimodel::layout::ComponentActionPolicy;
     using uimodel::layout::slotBit;
 

@@ -3,21 +3,25 @@
 
 #pragma once
 
-#include "app/linux-gtk/layout/state/ILayoutComponentStateStore.h"
-#include "app/linux-gtk/layout/state/LayoutComponentState.h"
-#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/ILayoutComponentStateStore.h>
+#include <ao/uimodel/layout/LayoutComponentState.h>
 
 #include <cstdint>
 #include <optional>
 #include <string_view>
 #include <utility>
 
+namespace ao::uimodel::layout
+{
+  struct LayoutDocument;
+}
+
 namespace ao::gtk::layout::test
 {
-  class FakeLayoutComponentStateStore final : public ILayoutComponentStateStore
+  class FakeLayoutComponentStateStore final : public uimodel::layout::ILayoutComponentStateStore
   {
   public:
-    std::optional<LayoutComponentStateDocument> load(std::string_view presetId) const override
+    std::optional<uimodel::layout::LayoutComponentStateDocument> load(std::string_view presetId) const override
     {
       if (_document.preset == presetId)
       {
@@ -27,7 +31,7 @@ namespace ao::gtk::layout::test
       return std::nullopt;
     }
 
-    void save(LayoutComponentStateDocument const& doc, std::string_view presetId) override
+    void save(std::string_view presetId, uimodel::layout::LayoutComponentStateDocument const& doc) override
     {
       _document = doc;
       _document.preset = presetId;
@@ -50,13 +54,13 @@ namespace ao::gtk::layout::test
       return false;
     }
 
-    LayoutComponentStateDocument const& document() const noexcept { return _document; }
-    void setDocument(LayoutComponentStateDocument doc) { _document = std::move(doc); }
+    uimodel::layout::LayoutComponentStateDocument const& document() const noexcept { return _document; }
+    void setDocument(uimodel::layout::LayoutComponentStateDocument doc) { _document = std::move(doc); }
 
     std::int32_t saveCount() const noexcept { return _saveCount; }
 
   private:
-    LayoutComponentStateDocument _document{};
+    uimodel::layout::LayoutComponentStateDocument _document{};
     std::int32_t _saveCount = 0;
   };
 } // namespace ao::gtk::layout::test

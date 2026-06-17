@@ -3,13 +3,13 @@
 
 #include "../../GtkTestSupport.h"
 #include "app/linux-gtk/image/ImageCache.h"
-#include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -27,6 +27,7 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
   using namespace ao::lmdb::test;
   using ao::gtk::test::makeRuntime;
 

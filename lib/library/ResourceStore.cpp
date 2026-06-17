@@ -5,6 +5,7 @@
 #include <ao/Type.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -21,31 +22,10 @@ namespace ao::library
     return Writer{_database.writer(txn)};
   }
 
-  namespace
-  {
-    // FNV-1a 32-bit hash
-    // Created by Glenn Fowler, Landon Curt Noll, and Peter Vo in 1991
-    // Simple, fast, and good distribution for content-addressable storage
-    ResourceId fnv1a(std::span<std::byte const> data)
-    {
-      constexpr std::uint32_t kFnvOffsetBasis = 2166136261U;
-      constexpr std::uint32_t kFnvPrime = 16777619U;
-
-      std::uint32_t hash = kFnvOffsetBasis;
-
-      for (std::byte const byte : data)
-      {
-        hash ^= static_cast<std::uint8_t>(byte);
-        hash *= kFnvPrime;
-      }
-
-      return ResourceId{hash};
-    }
-  }
-
   ResourceId Writer::create(std::span<std::byte const> data)
   {
-    ResourceId key = fnv1a(data);
+    // 32-bit FNV-1a: simple, fast, and good distribution for content-addressable storage.
+    auto key = ResourceId{utility::fnv1a32(data)};
 
     if (key == kInvalidResourceId)
     {

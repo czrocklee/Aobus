@@ -5,7 +5,7 @@
 
 #include <string_view>
 
-namespace ao::gtk::layout
+namespace ao::uimodel::layout
 {
   inline constexpr std::string_view kSplitComponentType = "split";
   inline constexpr std::string_view kCollapsibleSplitComponentType = "collapsibleSplit";
@@ -14,4 +14,4 @@ namespace ao::gtk::layout
   {
     return type == kSplitComponentType || type == kCollapsibleSplitComponentType;
   }
-} // namespace ao::gtk::layout
+} // namespace ao::uimodel::layout

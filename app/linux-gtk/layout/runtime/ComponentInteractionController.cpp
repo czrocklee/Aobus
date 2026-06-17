@@ -6,6 +6,7 @@
 #include "layout/runtime/ActionBinder.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/LayoutContext.h"
+#include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
@@ -52,15 +53,15 @@ namespace ao::gtk::layout
                                                           uimodel::layout::ComponentActionPolicy const& policy,
                                                           ActionBinder const& binder)
   {
-    if (!policy.allows(ActionSlot::PrimaryClick))
+    if (!policy.allows(uimodel::layout::ActionSlot::PrimaryClick))
     {
       return;
     }
 
     _primaryClick = binder.bind(node,
                                 uimodel::layout::kPrimaryActionProp,
-                                policy.getDefault(ActionSlot::PrimaryClick),
-                                ActionSlot::PrimaryClick,
+                                policy.getDefault(uimodel::layout::ActionSlot::PrimaryClick),
+                                uimodel::layout::ActionSlot::PrimaryClick,
                                 target);
 
     if (!_primaryClick)
@@ -92,15 +93,15 @@ namespace ao::gtk::layout
                                                             uimodel::layout::ComponentActionPolicy const& policy,
                                                             ActionBinder const& binder)
   {
-    if (!policy.allows(ActionSlot::SecondaryClick))
+    if (!policy.allows(uimodel::layout::ActionSlot::SecondaryClick))
     {
       return;
     }
 
     _secondaryClick = binder.bind(node,
                                   uimodel::layout::kSecondaryActionProp,
-                                  policy.getDefault(ActionSlot::SecondaryClick),
-                                  ActionSlot::SecondaryClick,
+                                  policy.getDefault(uimodel::layout::ActionSlot::SecondaryClick),
+                                  uimodel::layout::ActionSlot::SecondaryClick,
                                   target);
 
     if (!_secondaryClick)
@@ -132,15 +133,15 @@ namespace ao::gtk::layout
                                                               uimodel::layout::ComponentActionPolicy const& policy,
                                                               ActionBinder const& binder)
   {
-    if (!policy.allows(ActionSlot::PrimaryLongPress))
+    if (!policy.allows(uimodel::layout::ActionSlot::PrimaryLongPress))
     {
       return;
     }
 
     _primaryLongPress = binder.bind(node,
                                     uimodel::layout::kPrimaryLongPressActionProp,
-                                    policy.getDefault(ActionSlot::PrimaryLongPress),
-                                    ActionSlot::PrimaryLongPress,
+                                    policy.getDefault(uimodel::layout::ActionSlot::PrimaryLongPress),
+                                    uimodel::layout::ActionSlot::PrimaryLongPress,
                                     target);
 
     if (!_primaryLongPress)
@@ -169,15 +170,15 @@ namespace ao::gtk::layout
                                                                 uimodel::layout::ComponentActionPolicy const& policy,
                                                                 ActionBinder const& binder)
   {
-    if (!policy.allows(ActionSlot::SecondaryLongPress))
+    if (!policy.allows(uimodel::layout::ActionSlot::SecondaryLongPress))
     {
       return;
     }
 
     _secondaryLongPress = binder.bind(node,
                                       uimodel::layout::kSecondaryLongPressActionProp,
-                                      policy.getDefault(ActionSlot::SecondaryLongPress),
-                                      ActionSlot::SecondaryLongPress,
+                                      policy.getDefault(uimodel::layout::ActionSlot::SecondaryLongPress),
+                                      uimodel::layout::ActionSlot::SecondaryLongPress,
                                       target);
 
     if (!_secondaryLongPress)

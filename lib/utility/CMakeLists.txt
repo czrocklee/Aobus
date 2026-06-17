@@ -1,5 +1,6 @@
 # ao_utility
 add_library(ao_utility STATIC
+    AtomicFile.cpp
     Base64.cpp
     MappedFile.cpp
     Log.cpp

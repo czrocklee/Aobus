@@ -5,6 +5,7 @@
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/uimodel/layout/ActionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -16,6 +17,7 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
   using namespace ao::lmdb::test;
   using ao::gtk::test::makeRuntime;
 

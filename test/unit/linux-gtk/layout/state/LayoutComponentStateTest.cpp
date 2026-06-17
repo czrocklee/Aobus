@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
-#include "layout/state/LayoutComponentState.h"
-
-#include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
-#include "layout/state/LayoutComponentStateYaml.h"
+#include <ao/uimodel/layout/LayoutComponentState.h>
+#include <ao/uimodel/layout/LayoutComponentStateYaml.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -14,6 +13,7 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
   namespace yaml = ao::yaml;
 
   namespace

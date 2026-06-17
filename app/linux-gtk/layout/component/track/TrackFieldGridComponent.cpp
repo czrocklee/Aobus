@@ -6,7 +6,6 @@
 #include "layout/component/track/TrackFieldGridCustomControls.h"
 #include "layout/component/track/TrackFieldGridRows.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
@@ -18,6 +17,8 @@
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/utility/Log.h>
 
 #include <glib.h>
@@ -42,6 +43,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     constexpr float kLabelOpacity = 0.6F;

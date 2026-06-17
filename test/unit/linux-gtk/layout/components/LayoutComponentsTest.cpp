@@ -4,7 +4,6 @@
 #include "../../GtkTestSupport.h"
 #include "app/ThemeCoordinator.h"
 #include "app/linux-gtk/image/ImageCache.h"
-#include "app/linux-gtk/layout/document/LayoutNode.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
@@ -22,6 +21,10 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
@@ -54,6 +57,7 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
   using namespace ao::lmdb::test;
   using ao::gtk::test::makeRuntime;
 

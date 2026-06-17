@@ -27,6 +27,8 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
+
   namespace
   {
     void walkWidgets(Gtk::Widget& root, auto const& visit)
@@ -102,7 +104,7 @@ namespace ao::gtk::layout::test
     rt::trackFieldArrayAt(snap.fields, rt::TrackField::SampleRate).optValue = std::uint32_t{44100};
     scope.setSnapshot(snap);
 
-    auto const node = uimodel::layout::LayoutNode{.type = "track.fieldGrid"};
+    auto const node = LayoutNode{.type = "track.fieldGrid"};
     auto const compPtr = registry.create(ctx, node);
     REQUIRE(compPtr != nullptr);
     auto& root = compPtr->widget();
@@ -312,8 +314,8 @@ namespace ao::gtk::layout::test
     SECTION("Empty sections suppress headers")
     {
       // Create a grid with no requested categories
-      auto const emptyNode = uimodel::layout::LayoutNode{
-        .type = "track.fieldGrid", .props = {{"categories", LayoutValue{std::vector<std::string>{}}}}};
+      auto const emptyNode =
+        LayoutNode{.type = "track.fieldGrid", .props = {{"categories", LayoutValue{std::vector<std::string>{}}}}};
       auto const emptyCompPtr = registry.create(ctx, emptyNode);
       REQUIRE(emptyCompPtr != nullptr);
       auto& emptyRoot = emptyCompPtr->widget();

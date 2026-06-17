@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <cstdint>
@@ -14,8 +12,9 @@
 #include <string>
 #include <string_view>
 
-namespace ao::gtk::layout
+namespace ao::uimodel::layout
 {
+  struct LayoutDocument;
   inline constexpr std::uint32_t kLayoutComponentStateFileVersion = 1;
   inline constexpr std::uint32_t kLayoutComponentStateEntryVersion = 1;
 
@@ -24,7 +23,7 @@ namespace ao::gtk::layout
     std::string type{};
     std::uint32_t stateVersion = kLayoutComponentStateEntryVersion;
     std::string baselineHash{};
-    std::map<std::string, uimodel::layout::LayoutValue, std::less<>> state{};
+    std::map<std::string, LayoutValue, std::less<>> state{};
   };
 
   struct LayoutComponentStateDocument final
@@ -45,4 +44,4 @@ namespace ao::gtk::layout
                                                                        LayoutNode const& node);
 
   void pruneLayoutComponentState(LayoutComponentStateDocument& stateDoc, LayoutDocument const& effectiveDoc);
-} // namespace ao::gtk::layout
+} // namespace ao::uimodel::layout

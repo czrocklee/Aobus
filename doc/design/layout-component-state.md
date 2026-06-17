@@ -12,7 +12,7 @@ Stateful layout component types currently include:
 - `split`
 - `collapsibleSplit`
 
-These type names are declared as constants in `app/linux-gtk/layout/state/StatefulLayoutComponentType.h`
+These type names are declared as constants in `app/include/ao/uimodel/layout/StatefulLayoutComponentType.h`
 and used by runtime-state logic, baseline hashing, and promotion so the set of
 stateful types is maintained in one place.
 

@@ -4,13 +4,14 @@
 #include "TrackDetailScope.h"
 
 #include "TrackComponentRegistrations.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackDetailProjection.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
@@ -26,6 +27,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     // Helper to walk widget tree and reset scrolled windows

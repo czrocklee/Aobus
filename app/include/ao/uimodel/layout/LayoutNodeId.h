@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <cstdint>
 #include <functional>
@@ -12,8 +11,9 @@
 #include <string_view>
 #include <vector>
 
-namespace ao::gtk::layout
+namespace ao::uimodel::layout
 {
+  struct LayoutDocument;
   enum class LayoutNodeIdDiagnosticSeverity : std::uint8_t
   {
     Warning,
@@ -39,4 +39,4 @@ namespace ao::gtk::layout
 
   std::string makeUniqueLayoutNodeId(LayoutDocument const& doc, std::string_view componentType, std::string_view role);
   void freshenLayoutNodeIds(LayoutNode& subtree, LayoutDocument const& ownerDoc);
-} // namespace ao::gtk::layout
+} // namespace ao::uimodel::layout

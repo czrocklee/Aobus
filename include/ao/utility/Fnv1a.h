@@ -3,53 +3,72 @@
 
 #pragma once
 
-#include <array>
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
-#include <iomanip>
-#include <ios>
-#include <sstream>
+#include <format>
+#include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 namespace ao::utility
 {
-  inline constexpr std::uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
-  inline constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
+  inline constexpr std::uint32_t kFnv32OffsetBasis = 2166136261U;
+  inline constexpr std::uint32_t kFnv32Prime = 16777619U;
 
-  constexpr std::uint64_t fnv1a64(std::string_view text) noexcept
+  inline constexpr std::uint64_t kFnv64OffsetBasis = 14695981039346656037ULL;
+  inline constexpr std::uint64_t kFnv64Prime = 1099511628211ULL;
+
+  /// 32-bit FNV-1a over a byte range. Stable enough for content-addressable keys.
+  constexpr std::uint32_t fnv1a32(std::span<std::byte const> data) noexcept
   {
-    auto hash = kFnvOffsetBasis;
+    auto hash = kFnv32OffsetBasis;
 
-    for (char const ch : text)
+    for (std::byte const byte : data)
     {
-      hash ^= static_cast<std::uint64_t>(static_cast<unsigned char>(ch));
-      hash *= kFnvPrime;
+      hash ^= static_cast<std::uint32_t>(static_cast<std::uint8_t>(byte));
+      hash *= kFnv32Prime;
     }
 
     return hash;
   }
 
-  inline std::string fnv1a64Hex(std::string_view text)
+  constexpr std::uint64_t fnv1a64(std::string_view text) noexcept
   {
-    auto const hash = fnv1a64(text);
+    auto hash = kFnv64OffsetBasis;
 
-    auto buffer = std::array<char, 32>{};
-    auto const result = std::to_chars(buffer.data(), buffer.data() + buffer.size(), hash, 16);
-
-    if (result.ec == std::errc{})
+    for (char const ch : text)
     {
-      auto const len = static_cast<std::size_t>(result.ptr - buffer.data());
-      auto stream = std::ostringstream{};
-      stream << std::hex << std::setfill('0') << std::setw(16);
-      stream.write(buffer.data(), static_cast<std::streamsize>(len));
-      return stream.str();
+      hash ^= static_cast<std::uint64_t>(static_cast<unsigned char>(ch));
+      hash *= kFnv64Prime;
     }
 
-    auto fallback = std::ostringstream{};
-    fallback << std::hex << std::setfill('0') << std::setw(16) << hash;
-    return fallback.str();
+    return hash;
   }
+
+  /// Fixed-width 16-hex-digit form, suitable for stable keys and fingerprints.
+  inline std::string fnv1a64Hex(std::string_view text)
+  {
+    return std::format("{:016x}", fnv1a64(text));
+  }
+
+  /// Incremental 64-bit FNV-1a, for inputs that arrive in chunks (e.g. streamed files).
+  class Fnv1a64Accumulator final
+  {
+  public:
+    void mix(std::string_view bytes) noexcept
+    {
+      for (char const ch : bytes)
+      {
+        _hash ^= static_cast<std::uint64_t>(static_cast<unsigned char>(ch));
+        _hash *= kFnv64Prime;
+      }
+    }
+
+    std::uint64_t value() const noexcept { return _hash; }
+
+    std::string hex() const { return std::format("{:016x}", _hash); }
+
+  private:
+    std::uint64_t _hash = kFnv64OffsetBasis;
+  };
 } // namespace ao::utility

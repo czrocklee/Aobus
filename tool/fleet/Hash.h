@@ -3,11 +3,12 @@
 
 #pragma once
 
+#include <ao/utility/Fnv1a.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <ios>
 #include <string>
@@ -16,17 +17,11 @@
 namespace ao::fleet
 {
   // Incremental 64-bit FNV-1a, shared by oracle version fingerprints and tree canaries.
+  // Wraps the shared ao::utility accumulator and adds streamed-file mixing.
   class Fnv1a64 final
   {
   public:
-    void mix(std::string_view bytes)
-    {
-      for (auto const byte : bytes)
-      {
-        _hash ^= static_cast<unsigned char>(byte);
-        _hash *= kPrime;
-      }
-    }
+    void mix(std::string_view bytes) noexcept { _accumulator.mix(bytes); }
 
     // Streams a regular file through the hash in fixed-size chunks.
     void mixFile(std::filesystem::path const& path)
@@ -43,15 +38,12 @@ namespace ao::fleet
       }
     }
 
-    std::uint64_t value() const noexcept { return _hash; }
+    std::uint64_t value() const noexcept { return _accumulator.value(); }
 
     // Canonical 16-hex-digit form used in route keys and fingerprints.
-    std::string hex() const { return std::format("{:016x}", _hash); }
+    std::string hex() const { return _accumulator.hex(); }
 
   private:
-    static constexpr auto kPrime = std::uint64_t{1099511628211ULL};
-    static constexpr auto kOffsetBasis = std::uint64_t{1469598103934665603ULL};
-
-    std::uint64_t _hash = kOffsetBasis;
+    utility::Fnv1a64Accumulator _accumulator;
   };
 } // namespace ao::fleet

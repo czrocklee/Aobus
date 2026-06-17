@@ -3,14 +3,19 @@
 
 #include "layout/runtime/ActionValidator.h"
 
-#include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/ActionValidator.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
+
   TEST_CASE("ActionValidator", "[layout][unit][runtime]")
   {
     auto registry = ActionRegistry{};
@@ -42,8 +47,8 @@ namespace ao::gtk::layout::test
       doc.root.type = "app.actionButton";
       doc.root.props["primaryAction"] = LayoutValue{std::string{"test.action"}};
 
-      auto diagnostics =
-        validateActions(doc, compRegistry.catalog(), registry.catalog(), resolveGtkLayoutActionBindingContext);
+      auto diagnostics = uimodel::layout::validateActions(
+        doc, compRegistry.catalog(), registry.catalog(), resolveGtkLayoutActionBindingContext);
       CHECK(diagnostics.empty());
     }
 
@@ -54,8 +59,8 @@ namespace ao::gtk::layout::test
       doc.root.id = "my-btn";
       doc.root.props["primaryAction"] = LayoutValue{std::string{"unknown.id"}};
 
-      auto diagnostics =
-        validateActions(doc, compRegistry.catalog(), registry.catalog(), resolveGtkLayoutActionBindingContext);
+      auto diagnostics = uimodel::layout::validateActions(
+        doc, compRegistry.catalog(), registry.catalog(), resolveGtkLayoutActionBindingContext);
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].componentId == "my-btn");
       CHECK(diagnostics[0].propertyName == "primaryAction");
@@ -68,8 +73,8 @@ namespace ao::gtk::layout::test
       doc.root.type = "app.actionButton";
       doc.root.props["primaryAction"] = LayoutValue{std::string{"none"}};
 
-      auto diagnostics =
-        validateActions(doc, compRegistry.catalog(), registry.catalog(), resolveGtkLayoutActionBindingContext);
+      auto diagnostics = uimodel::layout::validateActions(
+        doc, compRegistry.catalog(), registry.catalog(), resolveGtkLayoutActionBindingContext);
       CHECK(diagnostics.empty());
     }
   }

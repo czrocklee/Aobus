@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "layout/document/LayoutNode.h"
 #include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <functional>
 #include <string_view>
@@ -24,7 +24,6 @@ namespace ao::gtk::layout
 {
   class ActionRegistry;
   struct LayoutContext;
-  using ActionSlot = uimodel::layout::ActionSlot;
 
   class ActionBinder final
   {
@@ -41,10 +40,10 @@ namespace ao::gtk::layout
      *                     NOTE: The caller must ensure 'anchorWidget' outlives the returned function.
      * @return A function that activates the action.
      */
-    std::function<void()> bind(LayoutNode const& node,
+    std::function<void()> bind(uimodel::layout::LayoutNode const& node,
                                std::string_view propName,
                                std::string_view defaultActionId,
-                               ActionSlot slot,
+                               uimodel::layout::ActionSlot slot,
                                Gtk::Widget& anchorWidget) const;
 
   private:

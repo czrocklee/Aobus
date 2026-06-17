@@ -2,10 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
-#include "layout/state/LayoutNodeId.h"
-#include "layout/state/StatefulLayoutComponentType.h"
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/LayoutNodeId.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
+#include <ao/uimodel/layout/StatefulLayoutComponentType.h>
 #include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -20,6 +21,7 @@
 
 namespace ao::gtk::layout::test
 {
+  using namespace uimodel::layout;
   namespace yaml = ao::yaml;
 
   TEST_CASE("Layout model GTK serialization", "[layout][unit][gtk][model]")

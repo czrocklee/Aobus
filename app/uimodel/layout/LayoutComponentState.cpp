@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/state/LayoutComponentState.h"
-
-#include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
-#include "layout/state/LayoutComponentStateYaml.h"
-#include "layout/state/LayoutNodeId.h"
-#include "layout/state/StatefulLayoutComponentType.h"
+#include <ao/uimodel/layout/LayoutComponentState.h>
+#include <ao/uimodel/layout/LayoutComponentStateYaml.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/LayoutNodeId.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
+#include <ao/uimodel/layout/StatefulLayoutComponentType.h>
 #include <ao/utility/Fnv1a.h>
 #include <ao/yaml/ConfigTraits.h>
 #include <ao/yaml/Utils.h>
@@ -26,7 +25,7 @@
 #include <string_view>
 #include <system_error>
 
-namespace ao::gtk::layout
+namespace ao::uimodel::layout
 {
   namespace
   {
@@ -210,11 +209,11 @@ namespace ao::gtk::layout
                            entry.baselineHash != layoutComponentBaselineHash(node);
                   });
   }
-} // namespace ao::gtk::layout
+} // namespace ao::uimodel::layout
 
 namespace ao::yaml
 {
-  using namespace ao::gtk::layout;
+  using namespace ao::uimodel::layout;
 
   void write(ryml::NodeRef node, LayoutComponentStateEntry const& value)
   {

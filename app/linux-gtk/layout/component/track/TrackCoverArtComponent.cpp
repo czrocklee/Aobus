@@ -5,13 +5,14 @@
 #include "image/ImageWidget.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailSizing.h"
-#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ProjectionTypes.h>
+#include <ao/uimodel/layout/ComponentCatalog.h>
+#include <ao/uimodel/layout/LayoutNode.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
@@ -24,6 +25,7 @@
 
 namespace ao::gtk::layout
 {
+  using namespace uimodel::layout;
   namespace
   {
     class TrackCoverArtComponent final : public ILayoutComponent

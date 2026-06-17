@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/state/LayoutStatePromoter.h"
-
-#include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutNode.h"
-#include "layout/state/LayoutComponentState.h"
-#include "layout/state/StatefulLayoutComponentType.h"
+#include <ao/uimodel/layout/LayoutComponentState.h>
+#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/LayoutStatePromoter.h>
+#include <ao/uimodel/layout/StatefulLayoutComponentType.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <string>
 #include <utility>
 
-namespace ao::gtk::layout
+namespace ao::uimodel::layout
 {
   namespace
   {
@@ -139,4 +138,4 @@ namespace ao::gtk::layout
     result.residualCount = stateDoc.components.size();
     return result;
   }
-} // namespace ao::gtk::layout
+} // namespace ao::uimodel::layout
