@@ -19,7 +19,6 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
-#include <format>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -187,8 +186,7 @@ namespace ao::gtk
 
   void TrackListModel::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch)
   {
-    auto const timer = utility::ScopedTimer{
-      std::format("TrackListModel::applyDeltas ({} deltas, rev={})", batch.deltas.size(), batch.revision)};
+    auto const timer = utility::ScopedTimer{"TrackListModel::applyDeltas"};
 
     for (auto const& delta : batch.deltas)
     {

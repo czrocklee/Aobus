@@ -25,6 +25,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <variant>
 
 #pragma GCC diagnostic push
@@ -40,6 +41,9 @@ namespace ao::query
   {
     // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
     constexpr std::uint32_t kBloomBitMask = 31;
+    // The Phase 0 Query IN threshold sweep shows the membership plan is faster
+    // than repeated field-load/equality expansion even for a one-item list.
+    constexpr std::size_t kInSetCompilationThreshold = 1;
 
     OpCode toOpCode(Operator op)
     {
@@ -478,6 +482,19 @@ namespace ao::query
     return static_cast<std::uint32_t>(_plan.stringConstants.size() - 1);
   }
 
+  std::uint32_t QueryCompiler::addInSet(InSet set)
+  {
+    if (set.stringValues)
+    {
+      std::ranges::sort(set.strings);
+      auto const last = std::ranges::unique(set.strings).begin();
+      set.strings.erase(last, set.strings.end());
+    }
+
+    _plan.inSets.emplace_back(std::move(set));
+    return static_cast<std::uint32_t>(_plan.inSets.size() - 1);
+  }
+
   void QueryCompiler::compileExpression(Expression const& expr)
   {
     std::visit(utility::makeVisitor([this](std::unique_ptr<BinaryExpression> const& binary) { compileBinary(*binary); },
@@ -861,6 +878,11 @@ namespace ao::query
         throwException<Exception>("operator 'in' expects a non-empty list");
       }
 
+      if (list->values.size() >= kInSetCompilationThreshold && compileInSetList(lhs, *list))
+      {
+        return;
+      }
+
       auto first = true;
 
       for (auto const& value : list->values)
@@ -967,6 +989,49 @@ namespace ao::query
     }
   }
 
+  bool QueryCompiler::compileInSetList(Expression const& lhs, ListExpression const& list)
+  {
+    auto const* variable = std::get_if<VariableExpression>(&lhs);
+
+    if (variable == nullptr)
+    {
+      return false;
+    }
+
+    auto const field = resolveVariableField(*variable);
+
+    if (isTagField(field))
+    {
+      return false;
+    }
+
+    auto set = InSet{};
+    set.stringValues = isStringField(field) || field == Field::Custom;
+
+    for (auto const& value : list.values)
+    {
+      if (!appendInSetValue(set, value, field))
+      {
+        return false;
+      }
+    }
+
+    compileExpression(lhs);
+
+    auto const setIndex = addInSet(std::move(set));
+    auto const leftReg = _nextReg - 1;
+    _plan.instructions.push_back(Instruction{
+      .op = OpCode::InSet,
+      .field = 0,
+      .operand = static_cast<std::int32_t>(leftReg),
+      .constValue = static_cast<std::int64_t>(setIndex),
+      .size = 0,
+      .data = nullptr,
+    });
+
+    return true;
+  }
+
   std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)
   {
     // Only resolve for metadata ID fields and tag fields
@@ -983,6 +1048,85 @@ namespace ao::query
     // Reserve in memory - if already exists, returns existing ID; if not, adds to memory only
     auto const id = _dict->getOrIntern(str);
     return static_cast<std::int64_t>(id.raw());
+  }
+
+  bool QueryCompiler::appendInSetValue(InSet& set, ConstantExpression const& constant, Field field)
+  {
+    return std::visit(utility::makeVisitor(
+                        [&set](bool value)
+                        {
+                          if (set.stringValues)
+                          {
+                            return false;
+                          }
+
+                          set.numericValues.insert(value ? 1 : 0);
+                          return true;
+                        },
+                        [&set](std::int64_t value)
+                        {
+                          if (set.stringValues)
+                          {
+                            return false;
+                          }
+
+                          set.numericValues.insert(value);
+                          return true;
+                        },
+                        [&set, field](UnitConstantExpression const& value)
+                        {
+                          if (set.stringValues)
+                          {
+                            return false;
+                          }
+
+                          set.numericValues.insert(scaleUnitConstant(value, field));
+                          return true;
+                        },
+                        [this, &set, field](std::string const& value)
+                        {
+                          if (set.stringValues)
+                          {
+                            set.strings.push_back(value);
+                            return true;
+                          }
+
+                          if (field == Field::Codec)
+                          {
+                            if (auto const optCodec = library::parseAudioCodecName(value); optCodec)
+                            {
+                              set.numericValues.insert(library::audioCodecStorageValue(*optCodec));
+                              return true;
+                            }
+
+                            throwException<Exception>("unknown audio codec '{}'", value);
+                          }
+
+                          if (!isDictionaryField(field) || _dict == nullptr)
+                          {
+                            return false;
+                          }
+
+                          auto const id = _dict->getOrIntern(value);
+                          set.numericValues.insert(static_cast<std::int64_t>(id.raw()));
+                          return true;
+                        }),
+                      constant);
+  }
+
+  void ExecutionPlan::indexFieldLoads()
+  {
+    fieldLoadIndex.assign(instructions.size(), -1);
+
+    for (std::int32_t lastLoadField = -1; auto const idx : std::views::iota(0UZ, instructions.size()))
+    {
+      fieldLoadIndex[idx] = lastLoadField;
+
+      if (instructions[idx].op == OpCode::LoadField)
+      {
+        lastLoadField = static_cast<std::int32_t>(idx);
+      }
+    }
   }
 
   ExecutionPlan QueryCompiler::compile(Expression const& expr)
@@ -1008,6 +1152,8 @@ namespace ao::query
     }
 
     compilePredicate(expr);
+
+    _plan.indexFieldLoads();
 
     // Set access profile based on what data was accessed
     if (_hasHotAccess && _hasColdAccess)

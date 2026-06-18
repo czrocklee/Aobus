@@ -10,6 +10,8 @@
 #include <ao/Error.h>
 #include <ao/Type.h>
 
+#include <boost/container/small_vector.hpp>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -57,7 +59,11 @@ namespace ao::rt
   struct TrackListProjectionDeltaBatch final
   {
     std::uint64_t revision = 0;
-    std::vector<TrackListProjectionDelta> deltas{};
+
+    // Nearly every publish carries exactly one delta, so a small_vector with inline
+    // capacity for one element keeps the common case allocation-free. Larger batches
+    // (rare) spill to the heap transparently.
+    boost::container::small_vector<TrackListProjectionDelta, 1> deltas{};
   };
 
   class ITrackListProjection

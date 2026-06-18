@@ -1114,6 +1114,40 @@ namespace ao::query::test
       auto plan = compiler.compile(parse(R"(%mood in ["study", "focus"])"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
+
+    SECTION("LargeNumericListMatch")
+    {
+      auto plan = compiler.compile(parse("$year in [1984, 1985, 1986, 1987, 1988, 1989, 1990, 1991]"));
+
+      REQUIRE(plan.inSets.size() == 1);
+      CHECK(evaluator.evaluateFull(plan, track.view()));
+    }
+
+    SECTION("LargeDictionaryBackedStringListMatch")
+    {
+      auto plan = compiler.compile(
+        parse(R"($artist in ["Adams", "Bach", "Chopin", "Debussy", "Elgar", "Faure", "Glass", "Haydn"])"));
+
+      REQUIRE(plan.inSets.size() == 1);
+      CHECK(evaluator.evaluateFull(plan, track.view()));
+    }
+
+    SECTION("LargeCustomStringListMatch")
+    {
+      auto plan =
+        compiler.compile(parse(R"(%mood in ["ambient", "deep", "focus", "late", "mix", "quiet", "study", "warm"])"));
+
+      REQUIRE(plan.inSets.size() == 1);
+      CHECK(evaluator.evaluateFull(plan, track.view()));
+    }
+
+    SECTION("LargeListNonMatch")
+    {
+      auto plan = compiler.compile(parse("$year in [1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987]"));
+
+      REQUIRE(plan.inSets.size() == 1);
+      CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
+    }
   }
 
   TEST_CASE("PlanEvaluator - In Range", "[query][unit][plan_evaluator]")

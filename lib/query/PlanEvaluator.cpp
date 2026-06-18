@@ -15,6 +15,7 @@
 #include <cstring>
 #include <functional>
 #include <ranges>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -26,27 +27,6 @@ namespace ao::query
 
   namespace
   {
-    // Helper to find the previous LoadField instruction
-    Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
-    {
-      auto const it = std::ranges::find(instructions, current, [](auto const& instr) { return &instr; });
-
-      if (it == instructions.end())
-      {
-        return nullptr;
-      }
-
-      auto const found =
-        std::ranges::find_last(std::ranges::subrange{instructions.begin(), it}, OpCode::LoadField, &Instruction::op);
-
-      if (found.empty())
-      {
-        return nullptr;
-      }
-
-      return &found.front();
-    }
-
     bool isOrderedComparison(OpCode op)
     {
       return op == OpCode::Lt || op == OpCode::Le || op == OpCode::Gt || op == OpCode::Ge;
@@ -174,10 +154,9 @@ namespace ao::query
                            library::TrackView const& track,
                            ExecutionPlan const* plan,
                            Instruction const& instr,
+                           Instruction const* prevLoadField,
                            Op&& op)
     {
-      auto const* prevLoadField = findPrevLoadField(plan->instructions, &instr);
-
       if (auto const stringIdx = reg(registers, instr.operand);
           prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
       {
@@ -210,10 +189,8 @@ namespace ao::query
                    library::TrackView const& track,
                    ExecutionPlan const* plan,
                    Instruction const& instr,
-                   std::vector<Instruction> const& instructions)
+                   Instruction const* prevLoadField)
     {
-      auto const* prevLoadField = findPrevLoadField(instructions, &instr);
-
       if (prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag)
       {
         auto tagIdToMatch = DictionaryId{static_cast<std::uint32_t>(reg(registers, instr.operand))};
@@ -244,12 +221,11 @@ namespace ao::query
                      library::TrackView const& track,
                      ExecutionPlan const* plan,
                      Instruction const& instr,
-                     std::vector<Instruction> const& instructions)
+                     Instruction const* prevLoadField)
     {
       // instr.field contains the left field from the LoadField instruction
       auto field = static_cast<Field>(instr.field);
       auto rhs = reg(registers, instr.operand);
-      auto const* prevLoadField = findPrevLoadField(instructions, &instr);
 
       auto fieldStr = std::string_view{};
 
@@ -311,6 +287,62 @@ namespace ao::query
         default: return false;
       }
     }
+
+    bool containsString(InSet const& set, std::string_view value)
+    {
+      auto const less = [](std::string_view lhs, std::string_view rhs) { return lhs < rhs; };
+      return std::ranges::binary_search(
+        set.strings, value, less, [](std::string const& item) { return std::string_view{item}; });
+    }
+
+    void executeInSet(std::vector<std::int64_t>& registers,
+                      library::TrackView const& track,
+                      ExecutionPlan const* plan,
+                      Instruction const& instr,
+                      Instruction const* prevLoadField)
+    {
+      if (plan == nullptr || instr.constValue < 0)
+      {
+        reg(registers, instr.operand) = 0;
+        return;
+      }
+
+      auto const setIdx = static_cast<std::size_t>(instr.constValue);
+
+      if (setIdx >= plan->inSets.size())
+      {
+        reg(registers, instr.operand) = 0;
+        return;
+      }
+
+      auto const& set = plan->inSets[setIdx];
+
+      if (set.stringValues)
+      {
+        if (prevLoadField == nullptr)
+        {
+          reg(registers, instr.operand) = 0;
+          return;
+        }
+
+        auto const field = static_cast<Field>(prevLoadField->field);
+        auto fieldValue = std::string_view{};
+
+        if (isStringField(field) || field == Field::Custom)
+        {
+          fieldValue = loadStringFieldValue(track, field, prevLoadField);
+        }
+        else if (isDictionaryField(field) && plan->dictionary != nullptr)
+        {
+          fieldValue = loadDictionaryFieldValue(track, field, plan);
+        }
+
+        reg(registers, instr.operand) = containsString(set, fieldValue) ? 1 : 0;
+        return;
+      }
+
+      reg(registers, instr.operand) = set.numericValues.contains(reg(registers, instr.operand)) ? 1 : 0;
+    }
   }
 
   bool PlanEvaluator::matches(ExecutionPlan const& plan, library::TrackView const& track) const
@@ -351,11 +383,40 @@ namespace ao::query
       return false;
     }
 
-    _registers.clear();
-    _registers.resize(plan.instructions.size() + kReservedRegisters, 0);
+    _registers.assign(plan.instructions.size() + kReservedRegisters, 0);
 
-    for (auto const& instr : plan.instructions)
+    // The nearest-preceding-LoadField mapping is a static property of the plan, so
+    // comparison ops can resolve their field operand in O(1). Compiled plans carry it
+    // precomputed (zero per-track cost); for plans assembled without it (e.g. by hand
+    // in tests) we derive it once here into a scratch member instead of per comparison.
+    auto const& fieldLoadIndex = [&] -> std::vector<std::int32_t> const&
     {
+      if (plan.fieldLoadIndex.size() == plan.instructions.size())
+      {
+        return plan.fieldLoadIndex;
+      }
+
+      _fieldLoadIndex.assign(plan.instructions.size(), -1);
+
+      for (std::int32_t lastLoadField = -1; auto const idx : std::views::iota(0UZ, plan.instructions.size()))
+      {
+        _fieldLoadIndex[idx] = lastLoadField;
+
+        if (plan.instructions[idx].op == OpCode::LoadField)
+        {
+          lastLoadField = static_cast<std::int32_t>(idx);
+        }
+      }
+
+      return _fieldLoadIndex;
+    }();
+
+    for (auto const idx : std::views::iota(0UZ, plan.instructions.size()))
+    {
+      auto const& instr = plan.instructions[idx];
+      auto const* const prevLoadField =
+        fieldLoadIndex[idx] >= 0 ? &plan.instructions[static_cast<std::size_t>(fieldLoadIndex[idx])] : nullptr;
+
       switch (instr.op)
       {
         case OpCode::LoadField:
@@ -364,26 +425,31 @@ namespace ao::query
 
         case OpCode::LoadConstant: reg(_registers, instr.operand) = instr.constValue; break;
 
-        case OpCode::Eq: executeEq(_registers, track, &plan, instr, plan.instructions); break;
+        case OpCode::Eq: executeEq(_registers, track, &plan, instr, prevLoadField); break;
 
         case OpCode::Ne:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs != rhs; });
+          executeComparison(
+            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs != rhs; });
           break;
 
         case OpCode::Lt:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs < rhs; });
+          executeComparison(
+            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs < rhs; });
           break;
 
         case OpCode::Le:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs <= rhs; });
+          executeComparison(
+            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs <= rhs; });
           break;
 
         case OpCode::Gt:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs > rhs; });
+          executeComparison(
+            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs > rhs; });
           break;
 
         case OpCode::Ge:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs >= rhs; });
+          executeComparison(
+            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs >= rhs; });
           break;
 
         case OpCode::And:
@@ -409,9 +475,11 @@ namespace ao::query
           break;
         }
 
-        case OpCode::Like: executeLike(_registers, track, &plan, instr, plan.instructions); break;
+        case OpCode::Like: executeLike(_registers, track, &plan, instr, prevLoadField); break;
 
         case OpCode::Exists: reg(_registers, instr.operand) = executeExists(track, instr) ? 1 : 0; break;
+
+        case OpCode::InSet: executeInSet(_registers, track, &plan, instr, prevLoadField); break;
 
         case OpCode::Nop:
         default: break;

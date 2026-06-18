@@ -126,6 +126,43 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.set_defaults(func=run_command)
 
 
+_LSAN_SUPPRESSIONS = """\
+# Known leaks in third-party libraries (fontconfig, pango, gtk, etc.)
+# These are one-time allocations or internal caches not explicitly freed on exit.
+
+leak:libfontconfig.so
+leak:libfontconfig
+leak:FcValueSave
+leak:FcPatternObjectAddWithBinding
+
+leak:libpango-1.0.so
+leak:libpangocairo-1.0.so
+leak:libpangoft2-1.0.so
+leak:libpango
+leak:pango_font_map_load_fontset
+leak:pango_cairo_fc_font_map_fontset_key_substitute
+
+leak:libgtk-4.so
+leak:libgdk-4.so
+leak:gtk_widget_realize
+leak:gtk_text_get_scroll_limits
+
+leak:libglib-2.0.so
+leak:libgobject-2.0.so
+leak:g_signal_emit
+"""
+
+_LSAN_SUPP_PATH = Path("/tmp/aobus-lsan.supp")
+
+
+def _lsan_env(build_dir: Path) -> dict[str, str]:
+    """Return LSAN_OPTIONS env when *build_dir* is an ASan tree."""
+    if "asan" not in build_dir.name:
+        return {}
+    _LSAN_SUPP_PATH.write_text(_LSAN_SUPPRESSIONS)
+    return {"LSAN_OPTIONS": f"suppressions={_LSAN_SUPP_PATH}"}
+
+
 def run_suite(
     name: str,
     build_dir: Path,
@@ -153,11 +190,13 @@ def run_suite(
     print(f"CMD: {' '.join(command)}")
     print("=====================================")
 
+    sanitizer_env = _lsan_env(build_dir)
+
     if name == "gtk" and not list_only:
         with virtual_gtk_display() as env:
-            return run(command, env=env, log=log, append=log is not None)
+            return run(command, env={**sanitizer_env, **env}, log=log, append=log is not None)
 
-    return run(command, log=log, append=log is not None)
+    return run(command, env=sanitizer_env or None, log=log, append=log is not None)
 
 
 def run_non_catch2_suite(name: str, build_dir: Path, *, list_only: bool = False, log: Path | None = None) -> int:

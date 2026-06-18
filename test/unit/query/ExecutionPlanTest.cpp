@@ -225,15 +225,27 @@ namespace ao::query::test
   {
     auto compiler = QueryCompiler{};
 
-    SECTION("CompilesEachListItemAsEquality")
+    SECTION("CompilesConstantListAsMembershipSet")
     {
       auto const plan = compiler.compile(parse("$year in [1990, 1991, 1992]"));
 
-      auto const eqCount = std::ranges::count(plan.instructions, OpCode::Eq, &Instruction::op);
-      auto const orCount = std::ranges::count(plan.instructions, OpCode::Or, &Instruction::op);
+      REQUIRE(plan.inSets.size() == 1);
+      CHECK(plan.inSets[0].numericValues.contains(1991));
+      CHECK(plan.inSets[0].numericValues.contains(2000) == false);
+      CHECK(std::ranges::count(plan.instructions, OpCode::InSet, &Instruction::op) == 1);
+      CHECK(std::ranges::count(plan.instructions, OpCode::Eq, &Instruction::op) == 0);
+      CHECK(std::ranges::count(plan.instructions, OpCode::Or, &Instruction::op) == 0);
+    }
 
-      CHECK(eqCount == 3);
-      CHECK(orCount == 2);
+    SECTION("CompilesSingleItemListAsMembershipSet")
+    {
+      auto const plan = compiler.compile(parse("$year in [1990]"));
+
+      REQUIRE(plan.inSets.size() == 1);
+      CHECK(plan.inSets[0].numericValues.contains(1990));
+      CHECK(std::ranges::count(plan.instructions, OpCode::InSet, &Instruction::op) == 1);
+      CHECK(std::ranges::count(plan.instructions, OpCode::Eq, &Instruction::op) == 0);
+      CHECK(std::ranges::count(plan.instructions, OpCode::Or, &Instruction::op) == 0);
     }
 
     SECTION("RejectsStandaloneList")

@@ -7,6 +7,8 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 
+#include <boost/unordered/unordered_flat_set.hpp>
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -33,6 +35,14 @@ namespace ao::query
     Not,
     Like,
     Exists,
+    InSet,
+  };
+
+  struct InSet final
+  {
+    bool stringValues = false;
+    boost::unordered_flat_set<std::int64_t> numericValues;
+    std::vector<std::string> strings;
   };
 
   /**
@@ -60,6 +70,13 @@ namespace ao::query
   {
     std::vector<Instruction> instructions;
     std::vector<std::string> stringConstants;
+    std::vector<InSet> inSets;
+
+    // For each instruction, the index of the nearest preceding LoadField (or -1).
+    // This is a static property of the instruction stream, so it is computed once
+    // here (via indexFieldLoads) rather than rescanned per track at evaluation time.
+    // Empty when not yet populated; the evaluator derives it on the fly in that case.
+    std::vector<std::int32_t> fieldLoadIndex;
 
     // Dictionary used to resolve DictionaryId-backed metadata during evaluation.
     library::DictionaryStore const* dictionary = nullptr;
@@ -72,6 +89,11 @@ namespace ao::query
 
     // Access profile for the query
     AccessProfile accessProfile = AccessProfile::HotOnly;
+
+    // Populate fieldLoadIndex from the current instruction stream. Idempotent;
+    // call after instructions are finalized so evaluation can resolve a comparison's
+    // field operand in O(1) without rescanning.
+    void indexFieldLoads();
   };
 
   /**
@@ -103,6 +125,7 @@ namespace ao::query
   private:
     // Compile helper functions
     std::uint32_t addStringConstant(std::string_view str);
+    std::uint32_t addInSet(InSet set);
     void compileExpression(Expression const& expr);
     void compilePredicate(Expression const& expr);
     void compileBinary(BinaryExpression const& binary);
@@ -113,9 +136,11 @@ namespace ao::query
     void compileList(ListExpression const& list);
     void compileRange(RangeExpression const& range);
     void compileIn(Expression const& lhs, Expression const& rhs);
+    bool compileInSetList(Expression const& lhs, ListExpression const& list);
 
     // Resolve string to ID using dictionary (if available)
     std::int64_t resolveStringConstant(std::string const& str, Field field);
+    bool appendInSetValue(InSet& set, ConstantExpression const& constant, Field field);
 
     // Member variables
     ExecutionPlan _plan;

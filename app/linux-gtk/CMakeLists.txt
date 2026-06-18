@@ -166,9 +166,3 @@ add_executable(aobus-gtk main.cpp)
 target_link_libraries(aobus-gtk PRIVATE aobus-gtk-lib ao PkgGTKMM glibmm-2.68 mimalloc -Wl,-u,aobus_get_resource)
 target_include_directories(aobus-gtk PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
-# Configure ASan leak detection
-if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
-  set(ASAN_SUPPRESSIONS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../.asan_suppressions")
-  set(ASAN_ENV "LSAN_OPTIONS=suppressions=${ASAN_SUPPRESSIONS_FILE}")
-  set_target_properties(aobus-gtk PROPERTIES ENVIRONMENT "${ASAN_ENV}")
-endif()

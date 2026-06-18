@@ -6,6 +6,7 @@ add_executable(ao_core_test
     unit/utility/MappedFileTest.cpp
     unit/utility/LogTest.cpp
     unit/utility/ByteViewTest.cpp
+    unit/utility/StringArenaTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
 

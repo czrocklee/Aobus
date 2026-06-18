@@ -67,13 +67,13 @@ namespace ao::rt
     // vocabulary -- both silent. Validate they agree once, instead of letting the lists drift.
     void assertValueCompletionFieldsConsistent()
     {
-      for (auto const& spec : kValueCompletionFields)
+      for ([[maybe_unused]] auto const& spec : kValueCompletionFields)
       {
         assert(trackFieldSupportsValueCompletion(spec.field) &&
                "kValueCompletionFields lists a field the TrackField table does not flag for value completion");
       }
 
-      for (auto const& def : trackFieldDefinitions())
+      for ([[maybe_unused]] auto const& def : trackFieldDefinitions())
       {
         assert((!def.valueCompletion || valueCompletionSpecForField(def.field) != nullptr) &&
                "TrackField table flags a value-completion field absent from kValueCompletionFields");

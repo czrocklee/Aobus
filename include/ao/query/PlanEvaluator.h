@@ -42,5 +42,10 @@ namespace ao::query
   private:
     // Register stack for evaluation
     mutable std::vector<std::int64_t> _registers;
+
+    // Scratch nearest-preceding-LoadField map, used only as a fallback when the plan
+    // does not carry its own precomputed ExecutionPlan::fieldLoadIndex (e.g. plans
+    // assembled by hand). Compiled plans bypass this entirely.
+    mutable std::vector<std::int32_t> _fieldLoadIndex;
   };
 } // namespace ao::query

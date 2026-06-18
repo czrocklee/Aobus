@@ -6,8 +6,7 @@
 #include <ao/utility/Log.h>
 
 #include <chrono>
-#include <string>
-#include <utility>
+#include <string_view>
 
 namespace ao::utility
 {
@@ -16,8 +15,11 @@ namespace ao::utility
   public:
     using Clock = std::chrono::steady_clock;
 
-    explicit ScopedTimer(std::string label)
-      : _label{std::move(label)}, _start{Clock::now()}
+    // The label is stored non-owning: callers must pass a string literal or another label
+    // whose storage outlives the timer. This keeps construction allocation-free on the hot
+    // measurement paths (a previous owning std::string copied/allocated every scope).
+    explicit ScopedTimer(std::string_view label)
+      : _label{label}, _start{Clock::now()}
     {
     }
 
@@ -34,7 +36,7 @@ namespace ao::utility
     ScopedTimer& operator=(ScopedTimer&&) = delete;
 
   private:
-    std::string _label;
+    std::string_view _label;
     Clock::time_point _start;
   };
 }
