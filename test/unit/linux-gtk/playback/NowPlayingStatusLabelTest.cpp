@@ -25,6 +25,7 @@ namespace ao::gtk::test
     class DummyAudioProvider final : public audio::IBackendProvider
     {
     public:
+      void shutdown() noexcept override {}
       audio::Subscription subscribeDevices(OnDevicesChangedCallback /*callback*/) override { return {}; }
       std::unique_ptr<audio::IBackend> createBackend(audio::Device const& /*device*/,
                                                      audio::ProfileId const& /*profileId*/) override

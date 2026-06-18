@@ -68,6 +68,16 @@ namespace ao::audio
     IBackendProvider& operator=(IBackendProvider&&) = delete;
 
     /**
+     * @brief Stops provider-owned asynchronous activity without destroying provider-owned state.
+     *
+     * After this returns, provider-owned asynchronous sources must not invoke new device or graph callbacks. Existing
+     * backends created by the provider may still use provider-owned services until the provider is destroyed.
+     *
+     * @note Implementations must not throw.
+     */
+    virtual void shutdown() noexcept = 0;
+
+    /**
      * @brief Subscribe to incremental device updates.
      * The callback is typically triggered immediately with current devices.
      * @return A subscription handle that unregisters the callback upon destruction.

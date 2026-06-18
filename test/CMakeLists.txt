@@ -80,6 +80,7 @@ add_executable(ao_core_test
     unit/audio/StreamingSourceTest.cpp
     unit/audio/PcmRingBufferTest.cpp
     unit/audio/backend/detail/PipeWireSharedTest.cpp
+    unit/audio/backend/PipeWireMonitorTest.cpp
     unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
     unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
     unit/audio/PcmConverterTest.cpp

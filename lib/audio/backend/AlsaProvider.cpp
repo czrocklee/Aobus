@@ -60,6 +60,7 @@ namespace ao::audio::backend
     };
     std::vector<DeviceSub> deviceSubs;
     std::uint64_t nextSubId = 1;
+    bool shutdownDone = false;
 
     Impl()
     {
@@ -120,16 +121,42 @@ namespace ao::audio::backend
               subs = deviceSubs;
             }
 
+            auto const snapshot = [this]
+            {
+              auto const lock = std::scoped_lock{mutex};
+              return cachedDevices;
+            }();
+
             for (auto const& sub : subs)
             {
               if (sub.callback)
               {
-                sub.callback(cachedDevices);
+                sub.callback(snapshot);
               }
             }
           }
         }
       }
+    }
+
+    void shutdown() noexcept
+    {
+      if (shutdownDone)
+      {
+        return;
+      }
+
+      shutdownDone = true;
+
+      monitorThread.request_stop();
+
+      if (monitorThread.joinable() && std::this_thread::get_id() != monitorThread.get_id())
+      {
+        monitorThread.join();
+      }
+
+      auto const lock = std::scoped_lock{mutex};
+      deviceSubs.clear();
     }
   };
 
@@ -138,7 +165,15 @@ namespace ao::audio::backend
   {
   }
 
-  AlsaProvider::~AlsaProvider() = default;
+  AlsaProvider::~AlsaProvider()
+  {
+    shutdown();
+  }
+
+  void AlsaProvider::shutdown() noexcept
+  {
+    _implPtr->shutdown();
+  }
 
   Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {

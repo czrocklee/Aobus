@@ -49,6 +49,8 @@ namespace ao::gtk::test
       {
       }
 
+      void shutdown() noexcept override {}
+
       audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
       {
         if (callback)

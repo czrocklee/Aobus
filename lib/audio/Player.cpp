@@ -49,11 +49,30 @@ namespace ao::audio
 
     ~Impl()
     {
-      // Order matters: stop discovery callbacks and join their threads before stopping the engine,
-      // as callbacks (like handleDevicesChanged) might access the engine.
+      // Teardown order:
+      //   1. Unsubscribe graph and device callbacks so no new callbacks fire.
+      //   2. Shut down providers' async activity (monitor threads, PW event loops) so no
+      //      in-flight callbacks can race with engine/backend destruction.
+      //   3. Destroy the engine (which closes/destroys the active backend). At this point
+      //      the backend may still touch provider-owned state (e.g. AlsaGraphRegistry),
+      //      which is why providers are still alive.
+      //   4. Destroy providers last.
       graphSubscription.reset();
-      providers.clear(); // This joins provider threads
-      enginePtr.reset(); // Now safe to stop playback thread
+
+      for (auto& record : providers)
+      {
+        record->subscription.reset();
+      }
+
+      for (auto& record : providers)
+      {
+        record->providerPtr->shutdown();
+      }
+
+      // Defensive: prevent dangling use if Engine teardown somehow triggers handleRouteChanged.
+      activeManager = nullptr;
+      enginePtr.reset();
+      providers.clear();
     }
 
     std::uint64_t playbackGeneration = 1;

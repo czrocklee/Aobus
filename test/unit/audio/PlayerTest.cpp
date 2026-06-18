@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -59,6 +60,7 @@ namespace ao::audio::test
   TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][unit][player][lifecycle]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
+    Fake(Method(mockProvider, shutdown));
 
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
@@ -183,6 +185,7 @@ namespace ao::audio::test
   TEST_CASE("Player - Pending Output", "[playback][unit][player][pending]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
+    Fake(Method(mockProvider, shutdown));
     auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
 
     When(Method(mockProvider, subscribeDevices))
@@ -291,5 +294,108 @@ namespace ao::audio::test
     }
 
     REQUIRE(called == true);
+  }
+
+  TEST_CASE("Player - Provider state outlives backend shutdown", "[playback][unit][player][lifecycle]")
+  {
+    struct Events final
+    {
+      std::vector<std::string> values;
+    };
+
+    struct LifetimeBackend final : NullBackend
+    {
+      explicit LifetimeBackend(Events& eventsArg)
+        : events{eventsArg}
+      {
+      }
+
+      LifetimeBackend(LifetimeBackend const&) = delete;
+      LifetimeBackend& operator=(LifetimeBackend const&) = delete;
+      LifetimeBackend(LifetimeBackend&&) = delete;
+      LifetimeBackend& operator=(LifetimeBackend&&) = delete;
+
+      ~LifetimeBackend() override { close(); }
+
+      void close() override
+      {
+        if (!closed)
+        {
+          events.values.emplace_back("backend close");
+          closed = true;
+        }
+      }
+
+      BackendId backendId() const noexcept override { return kBackendAlsa; }
+      ProfileId profileId() const noexcept override { return kProfileExclusive; }
+
+      Events& events;
+      bool closed = false;
+    };
+
+    struct LifetimeProvider final : IBackendProvider
+    {
+      explicit LifetimeProvider(Events& eventsArg)
+        : events{eventsArg}
+      {
+      }
+
+      LifetimeProvider(LifetimeProvider const&) = delete;
+      LifetimeProvider& operator=(LifetimeProvider const&) = delete;
+      LifetimeProvider(LifetimeProvider&&) = delete;
+      LifetimeProvider& operator=(LifetimeProvider&&) = delete;
+
+      ~LifetimeProvider() override { events.values.emplace_back("provider destroy"); }
+
+      void shutdown() noexcept override { events.values.emplace_back("provider shutdown"); }
+
+      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        callback({Device{.id = DeviceId{"alsa-device"},
+                         .displayName = "ALSA Device",
+                         .description = "ALSA",
+                         .backendId = kBackendAlsa}});
+        return {};
+      }
+
+      Status status() const override
+      {
+        return {.metadata = {.id = kBackendAlsa,
+                             .name = "ALSA",
+                             .description = "ALSA",
+                             .iconName = "audio-card-symbolic",
+                             .supportedProfiles = {{kProfileExclusive, "Exclusive", "Exclusive"}}},
+                .devices = {Device{.id = DeviceId{"alsa-device"},
+                                   .displayName = "ALSA Device",
+                                   .description = "ALSA",
+                                   .backendId = kBackendAlsa}}};
+      }
+
+      std::unique_ptr<IBackend> createBackend(Device const& /*device*/, ProfileId const& /*profile*/) override
+      {
+        return std::make_unique<LifetimeBackend>(events);
+      }
+
+      Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      {
+        return {};
+      }
+
+      Events& events;
+    };
+
+    auto events = Events{};
+
+    {
+      auto player = Player{};
+      player.addProvider(std::make_unique<LifetimeProvider>(events));
+      player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive);
+    }
+
+    // Old (broken) order was: providers.clear() → enginePtr.reset(), which destroyed the provider
+    // before the engine had a chance to close the backend — backends that touch provider-owned state
+    // (e.g. AlsaGraphRegistry) during close() would access a destroyed object.
+    // Correct order: provider shutdown → engine destroy (backend close) → provider destroy.
+    REQUIRE(events.values == std::vector<std::string>{"provider shutdown", "backend close", "provider destroy"});
   }
 } // namespace ao::audio::test

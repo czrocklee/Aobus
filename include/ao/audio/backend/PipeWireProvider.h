@@ -27,6 +27,7 @@ namespace ao::audio::backend
     PipeWireProvider(PipeWireProvider&&) = delete;
     PipeWireProvider& operator=(PipeWireProvider&&) = delete;
 
+    void shutdown() noexcept override;
     Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
     IBackendProvider::Status status() const override;
     std::unique_ptr<IBackend> createBackend(Device const& device, ProfileId const& profile) override;

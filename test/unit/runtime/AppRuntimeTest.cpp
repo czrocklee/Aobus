@@ -28,6 +28,7 @@ namespace ao::rt::test
     class DummyAudioProvider final : public audio::IBackendProvider
     {
     public:
+      void shutdown() noexcept override {}
       audio::Subscription subscribeDevices(OnDevicesChangedCallback /*callback*/) override { return {}; }
       Status status() const override { return Status{.metadata = {.id = audio::BackendId{"dummy"}}}; }
       std::unique_ptr<audio::IBackend> createBackend(audio::Device const& /*device*/,

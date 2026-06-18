@@ -22,7 +22,7 @@ namespace ao::audio::backend
 
     Impl() { monitor.start(); }
 
-    ~Impl() { monitor.stop(); }
+    ~Impl() = default;
 
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;
@@ -36,6 +36,11 @@ namespace ao::audio::backend
   }
 
   PipeWireProvider::~PipeWireProvider() = default;
+
+  void PipeWireProvider::shutdown() noexcept
+  {
+    _implPtr->monitor.stop();
+  }
 
   Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {

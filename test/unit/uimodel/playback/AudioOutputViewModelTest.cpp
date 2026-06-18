@@ -61,6 +61,8 @@ namespace ao::uimodel::playback::test
       {
       }
 
+      void shutdown() noexcept override {}
+
       audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
       {
         if (callback)

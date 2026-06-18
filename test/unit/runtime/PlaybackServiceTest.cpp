@@ -42,6 +42,7 @@ namespace ao::rt::test
     auto playbackService = PlaybackService{executor, viewService, testLib.library()};
 
     auto mockProvider = fakeit::Mock<audio::IBackendProvider>{};
+    fakeit::Fake(Method(mockProvider, shutdown));
     auto onDevicesChangedCb = audio::IBackendProvider::OnDevicesChangedCallback{};
     fakeit::When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
@@ -356,6 +357,7 @@ namespace ao::rt::test
       auto freshService = PlaybackService{freshExecutor, freshViewService, testLib.library()};
 
       auto freshMockProvider = fakeit::Mock<audio::IBackendProvider>{};
+      fakeit::Fake(Method(freshMockProvider, shutdown));
 
       // Capture the devices-changed callback but do NOT invoke it
       auto freshDevicesCb = audio::IBackendProvider::OnDevicesChangedCallback{};

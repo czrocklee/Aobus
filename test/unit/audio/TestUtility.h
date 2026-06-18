@@ -65,6 +65,8 @@ namespace ao::audio::test
     {
     }
 
+    void shutdown() noexcept override {}
+
     Subscription subscribeDevices(OnDevicesChangedCallback callback) override
     {
       return _real.subscribeDevices(callback);

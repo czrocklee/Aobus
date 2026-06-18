@@ -494,6 +494,8 @@ namespace ao::audio::backend
       return;
     }
 
+    _implPtr->stopping.store(false, std::memory_order_release);
+
     _implPtr->refreshEventPtr.get_deleter().loop = _implPtr->threadLoopPtr.get();
     auto* const event = ::pw_loop_add_event(
       ::pw_thread_loop_get_loop(_implPtr->threadLoopPtr.get()), &Impl::onRefreshEvent, _implPtr.get());
@@ -530,8 +532,12 @@ namespace ao::audio::backend
 
   void PipeWireMonitor::stop()
   {
+    _implPtr->stopping.store(true, std::memory_order_release);
+
     auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
     auto const lock = std::scoped_lock{_implPtr->mutex};
+    _implPtr->deviceSubscriptions.clear();
+    _implPtr->graphSubscriptions.clear();
     _implPtr->refreshEventPtr.reset();
     _implPtr->linkBindings.clear();
     _implPtr->streamNodeBindings.clear();
