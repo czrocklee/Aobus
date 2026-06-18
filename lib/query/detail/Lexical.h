@@ -12,6 +12,7 @@
 #include <lexy/dsl/ascii.hpp>
 #include <lexy/dsl/brackets.hpp>
 #include <lexy/dsl/capture.hpp>
+#include <lexy/dsl/case_folding.hpp>
 #include <lexy/dsl/delimited.hpp>
 #include <lexy/dsl/digit.hpp>
 #include <lexy/dsl/identifier.hpp>
@@ -79,7 +80,9 @@ namespace ao::query::detail
   constexpr auto kUserVarTypes =
     lexy::symbol_table<VariableType>.map<LEXY_SYMBOL("#")>(VariableType::Tag).map<LEXY_SYMBOL("%")>(VariableType::Custom);
 
-  constexpr auto kBoolTable = lexy::symbol_table<bool>.map<LEXY_SYMBOL("true")>(true).map<LEXY_SYMBOL("false")>(false);
+  // Boolean keywords are matched case-insensitively (true/TRUE/True ... all fold to the same value).
+  constexpr auto kBoolTable =
+    lexy::symbol_table<bool>.case_folding(dsl::ascii::case_folding).map<LEXY_SYMBOL("true")>(true).map<LEXY_SYMBOL("false")>(false);
 
   // Shared escape sequences for quoted strings and user-variable names:
   // \", \\, \', \n, \t and \r are recognized in both single- and double-quoted literals.
@@ -93,7 +96,11 @@ namespace ao::query::detail
   {
     auto const id = dsl::identifier(dsl::ascii::alpha_digit_underscore);
 
-    return id.reserve(LEXY_KEYWORD("and", id), LEXY_KEYWORD("or", id), LEXY_KEYWORD("not", id), LEXY_KEYWORD("in", id));
+    // Reserve the logical keywords case-insensitively so AND/Or/In ... are never treated as barewords.
+    return id.reserve(dsl::ascii::case_folding(LEXY_KEYWORD("and", id)),
+                      dsl::ascii::case_folding(LEXY_KEYWORD("or", id)),
+                      dsl::ascii::case_folding(LEXY_KEYWORD("not", id)),
+                      dsl::ascii::case_folding(LEXY_KEYWORD("in", id)));
   }();
 
   // Operator spellings, defined once and shared between the parser's expression grammar (dsl::op<>)
@@ -105,14 +112,18 @@ namespace ao::query::detail
     constexpr auto kLessEqual = LEXY_LIT("<=");
     constexpr auto kGreaterEqual = LEXY_LIT(">=");
     constexpr auto kLike = dsl::lit_c<'~'>;
-    constexpr auto kIn = LEXY_KEYWORD("in", kBarewordIdentifier);
+    constexpr auto kIn = dsl::ascii::case_folding(LEXY_KEYWORD("in", kBarewordIdentifier));
     constexpr auto kLess = dsl::lit_c<'<'>;
     constexpr auto kGreater = dsl::lit_c<'>'>;
-    constexpr auto kAndWord = LEXY_KEYWORD("and", dsl::identifier(dsl::ascii::alpha));
+    // Reserve keyword operators against the same identifier rule as barewords (kBarewordIdentifier),
+    // matching kIn above, and case-fold them so any casing (AND/And/and) parses as the operator.
+    // Using an alpha-only boundary here would split barewords like "and_x" or "or9" into a keyword
+    // operator plus a residual token, inconsistent with how "in" is tokenized.
+    constexpr auto kAndWord = dsl::ascii::case_folding(LEXY_KEYWORD("and", kBarewordIdentifier));
     constexpr auto kAndSymbol = LEXY_LIT("&&");
-    constexpr auto kOrWord = LEXY_KEYWORD("or", dsl::identifier(dsl::ascii::alpha));
+    constexpr auto kOrWord = dsl::ascii::case_folding(LEXY_KEYWORD("or", kBarewordIdentifier));
     constexpr auto kOrSymbol = LEXY_LIT("||");
-    constexpr auto kNotWord = LEXY_KEYWORD("not", dsl::identifier(dsl::ascii::alpha));
+    constexpr auto kNotWord = dsl::ascii::case_folding(LEXY_KEYWORD("not", kBarewordIdentifier));
     constexpr auto kNotSymbol = dsl::lit_c<'!'>;
     constexpr auto kExists = dsl::lit_c<'?'>;
     constexpr auto kAdd = dsl::lit_c<'+'>;

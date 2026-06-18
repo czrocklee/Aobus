@@ -317,6 +317,43 @@ namespace ao::query::test
       CHECK("[c{s}in_value]" == canonicalize(parse("in_value")));
     }
 
+    SECTION("Keyword Operators Honor Bareword Boundary")
+    {
+      // and/or/not must only act as operators when standing as a complete token, exactly like in.
+      // A trailing digit or underscore keeps them part of a bareword rather than splitting off.
+      CHECK("[c{s}and9]" == canonicalize(parse("and9")));
+      CHECK("[c{s}or9]" == canonicalize(parse("or9")));
+      CHECK("[c{s}not9]" == canonicalize(parse("not9")));
+      CHECK("[c{s}and_x]" == canonicalize(parse("and_x")));
+      CHECK("[c{s}or_x]" == canonicalize(parse("or_x")));
+      CHECK("[c{s}not_x]" == canonicalize(parse("not_x")));
+
+      // In operator position, a near-keyword token must stay a single bareword (here concatenated
+      // onto the preceding operand) rather than being mis-split into an operator plus a residual.
+      CHECK("[b{add}[v{m}a],[c{s}and_b]]" == canonicalize(parse("$a and_b")));
+      CHECK("[b{add}[v{m}a],[c{s}or_b]]" == canonicalize(parse("$a or_b")));
+    }
+
+    SECTION("Logical Keywords Are Case Insensitive")
+    {
+      // Any casing of and/or/not/in folds to the same operator (identical AST to the lowercase form).
+      CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach AND true")));
+      CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach And true")));
+      CHECK("[u{not}[v{m}artist]]" == canonicalize(parse("NOT $artist")));
+      CHECK("[u{not}[v{m}artist]]" == canonicalize(parse("Not $artist")));
+      CHECK("[b{in}[v{m}year],[l[c{i}1990][c{i}1991]]]" == canonicalize(parse("$year IN [1990, 1991]")));
+
+      // Boolean constants fold across casing too.
+      CHECK("[c{b}true]" == canonicalize(parse("TRUE")));
+      CHECK("[c{b}true]" == canonicalize(parse("True")));
+      CHECK("[c{b}false]" == canonicalize(parse("FALSE")));
+
+      // Reserved in any case: an unquoted bareword equal to a keyword (any casing) is rejected,
+      // so it must be quoted; a longer bareword merely containing it stays a plain string.
+      CHECK("[b{eq}[v{m}a],[c{s}AND]]" == canonicalize(parse("$a = 'AND'")));
+      CHECK("[c{s}ANDROID]" == canonicalize(parse("ANDROID")));
+    }
+
     SECTION("Custom Identifier Allows Underscore And Digits")
     {
       CHECK("[v{c}replaygain_track_gain_db]" == canonicalize(parse("%replaygain_track_gain_db")));

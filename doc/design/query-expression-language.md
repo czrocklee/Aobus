@@ -54,11 +54,11 @@ quoted-user-variable-char
 constant            ::= boolean | unit-number | integer | string ;
 list                ::= "[" constant ("," constant)* "]" ;
 range               ::= constant ".." constant ;
-boolean             ::= "true" | "false" ;
+boolean             ::= "true" | "false" (any casing) ;
 integer             ::= "-"? ASCII digit+ ;
 unit-number         ::= "-"? ASCII digit+ ("." ASCII digit+)? ASCII letter+ (ASCII digit+ ASCII letter+)* ;
 string              ::= bare-string | single-quoted-string | double-quoted-string ;
-bare-string         ::= (ASCII letter | ASCII digit | "_")+ except "and", "or", "not", "in" ;
+bare-string         ::= (ASCII letter | ASCII digit | "_")+ except "and", "or", "not", "in" (any casing) ;
 single-quoted-char  ::= any non-control Unicode character except "'" and "\\"
                       | '\\"'
                       | '\\\\'
@@ -83,6 +83,9 @@ Important implementation notes:
 
 - Whitespace is ASCII whitespace and may appear between tokens.
 - `and`, `or`, `not`, and `in` are keyword operators only when followed by an identifier boundary.
+- Keyword operators (`and`, `or`, `not`, `in`) and boolean constants (`true`, `false`) are matched
+  case-insensitively (`AND`, `Or`, `In`, `TRUE` all work). Because matching is case-insensitive, no
+  casing of these words is usable as a bare-string value; quote it (e.g. `'AND'`) to use it as text.
 - User variable names after `#` and `%` may start with a digit. System variables after `$` and `@` may not.
 - `#"..."` and `%"..."` are the compact quoted user-variable-name forms. `#["..."]` and `%["..."]` are the
   explicit bracketed forms, useful when visual separation from the surrounding expression matters.

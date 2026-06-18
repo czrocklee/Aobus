@@ -37,6 +37,10 @@ The parser accepts the broader query expression grammar first, then `FormatCompi
 forms outside this subset. This keeps field tokenization and quoting rules consistent with query
 expressions while preserving a distinct string-producing contract.
 
+Constants follow query literal tokenization: boolean constants are matched case-insensitively and
+format as `true`/`false`, while logical keywords (`and`, `or`, `not`, `in`) are reserved as bare
+strings in any casing and must be quoted to produce literal text.
+
 ## Field Formatting
 
 | Field kind | Formatted value |

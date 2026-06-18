@@ -157,6 +157,15 @@ namespace ao::query::test
     CHECK(evaluate(R"($title + " " + 3m)", fixture) == "Cello Suite 3m");
   }
 
+  TEST_CASE("FormatExpression - Shares query literal keyword tokenization", "[query][unit][format_expression]")
+  {
+    auto fixture = FormatTrackFixture{};
+
+    CHECK(evaluate(R"(TRUE + " " + False)", fixture) == "true false");
+    CHECK(evaluate(R"('AND' + " " + "Or")", fixture) == "AND Or");
+    CHECK_THROWS_AS(evaluate("AND", fixture), Exception);
+  }
+
   TEST_CASE("FormatExpression - Missing values format as empty strings", "[query][unit][format_expression]")
   {
     auto fixture = FormatTrackFixture{FormatTrackSpec{
