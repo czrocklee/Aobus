@@ -60,7 +60,7 @@ namespace ao::gtk
                            Glib::RefPtr<TrackListModel> modelPtr,
                            uimodel::track::TrackPresentationViewModel& presentationStore,
                            rt::AppRuntime& runtime,
-                           ImageCache& imageCache,
+                           ImageCache& thumbnailCache,
                            rt::ViewId viewId = rt::kInvalidViewId);
     ~TrackViewPage() override;
 
@@ -117,7 +117,7 @@ namespace ao::gtk
     Glib::RefPtr<TrackListModel> _modelPtr;
     uimodel::track::TrackPresentationViewModel& _presentationStore;
     rt::AppRuntime& _runtime;
-    ImageCache& _imageCache;
+    ImageCache& _thumbnailCache;
     Glib::RefPtr<Gtk::SortListModel> _groupModelPtr;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactoryPtr;

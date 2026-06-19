@@ -15,6 +15,7 @@
 #include "track/TrackRowObject.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
+#include <ao/async/Runtime.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
@@ -117,15 +118,21 @@ namespace ao::gtk
       Glib::RefPtr<TrackListModel> _modelPtr;
     };
 
+    // Decode budget for section cover thumbnails, in logical pixels. Mirrors the
+    // `.ao-track-section-cover` size in css/_common.css; this only bounds the
+    // off-thread decode resolution, the displayed size remains CSS-driven.
+    constexpr std::int32_t kSectionCoverLogicalSize = 48;
+
     class TrackSectionHeaderWidget final : public Gtk::Box
     {
     public:
-      TrackSectionHeaderWidget(library::MusicLibrary& library, ImageCache& imageCache)
-        : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _coverArt{library, imageCache}
+      TrackSectionHeaderWidget(library::MusicLibrary& library, async::Runtime& asyncRuntime, ImageCache& thumbnailCache)
+        : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _coverArt{library, thumbnailCache}
       {
         set_spacing(layout::kSpacingXLarge);
         add_css_class("ao-track-section-box");
 
+        _coverArt.enableThumbnailMode(asyncRuntime, kSectionCoverLogicalSize);
         _coverArt.add_css_class("ao-track-section-cover");
         _coverArt.set_valign(Gtk::Align::CENTER);
         append(_coverArt);
@@ -212,7 +219,7 @@ namespace ao::gtk
                                Glib::RefPtr<TrackListModel> modelPtr,
                                uimodel::track::TrackPresentationViewModel& presentationStore,
                                rt::AppRuntime& runtime,
-                               ImageCache& imageCache,
+                               ImageCache& thumbnailCache,
                                rt::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
@@ -221,7 +228,7 @@ namespace ao::gtk
 
     , _presentationStore{presentationStore}
     , _runtime{runtime}
-    , _imageCache{imageCache}
+    , _thumbnailCache{thumbnailCache}
     , _groupModelPtr{Gtk::SortListModel::create(_modelPtr, Glib::RefPtr<Gtk::Sorter>{})}
     , _selectionModelPtr{Gtk::MultiSelection::create(_groupModelPtr)}
     , _viewHostPtr{std::make_unique<TrackColumnViewHost>(_modelPtr, _presentationStore, _selectionModelPtr, listId)}
@@ -296,7 +303,8 @@ namespace ao::gtk
           return;
         }
 
-        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_runtime.musicLibrary(), _imageCache);
+        auto* const widget =
+          Gtk::make_managed<TrackSectionHeaderWidget>(_runtime.musicLibrary(), _runtime.async(), _thumbnailCache);
         headerPtr->set_child(*widget);
       });
 

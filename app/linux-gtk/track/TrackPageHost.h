@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "image/ImageCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
@@ -10,6 +11,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
+#include <cstddef>
 #include <map>
 #include <memory>
 
@@ -34,7 +36,6 @@ namespace ao::gtk
   class TrackRowCache;
   class TrackListModel;
   class TrackViewPage;
-  class ImageCache;
 
   /**
    * TrackPageContext holds the per-page state for a track list.
@@ -45,6 +46,8 @@ namespace ao::gtk
     Glib::RefPtr<TrackListModel> modelPtr = {};
     std::unique_ptr<TrackViewPage> pagePtr = {};
   };
+
+  inline constexpr std::size_t kSectionThumbnailCacheCapacity = 512;
 
   /**
    * TrackPageHost manages the creation, lookup, and lifecycle of track pages.
@@ -57,8 +60,7 @@ namespace ao::gtk
                   uimodel::playback::PlaybackQueueModel* queueModel,
                   TagEditController& tagEditController,
                   ListNavigationController& listNavigation,
-                  uimodel::track::TrackPresentationViewModel& presentationStore,
-                  ImageCache* imageCache);
+                  uimodel::track::TrackPresentationViewModel& presentationStore);
     ~TrackPageHost();
 
     // Not copyable or movable
@@ -101,13 +103,18 @@ namespace ao::gtk
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;
     uimodel::track::TrackPresentationViewModel& _presentationStore;
-    ImageCache* _imageCache = nullptr;
     rt::Subscription _revealSub;
     rt::Subscription _nowPlayingSub;
     rt::Subscription _focusSub;
     rt::Subscription _viewDestroyedSub;
     rt::Subscription _projectionChangedSub;
     rt::Subscription _presentationChangedSub;
+
+    // Dedicated cache for section-header cover thumbnails (small, decode-at-scale
+    // results). Declared before _trackPages so it outlives the pages — and thus
+    // their in-flight async decodes — during destruction. Larger than the
+    // full-resolution cache because thumbnail entries are cheap.
+    ImageCache _thumbnailCache{kSectionThumbnailCacheCapacity};
 
     std::map<rt::ViewId, TrackPageContext> _trackPages;
     TrackId _playingTrackId{kInvalidTrackId};

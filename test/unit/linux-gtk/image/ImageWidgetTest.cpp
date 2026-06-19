@@ -5,18 +5,29 @@
 
 #include "image/ImageCache.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ProjectionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/pixbuf.h>
 #include <gdkmm/rectangle.h>
+#include <glib.h>
+#include <glibmm/main.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
 
 #include <algorithm>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <span>
+#include <thread>
 #include <utility>
 
 namespace ao::gtk::test
@@ -26,6 +37,42 @@ namespace ao::gtk::test
     Glib::RefPtr<Gdk::Pixbuf> makePixbuf(std::int32_t width, std::int32_t height)
     {
       return Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, width, height);
+    }
+
+    // Encodes a pixbuf as PNG and stores it in the library's resource store,
+    // returning the resource id of the persisted cover blob.
+    ResourceId writeCoverResource(library::MusicLibrary& library, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+    {
+      gchar* buffer = nullptr;
+      gsize bufferSize = 0;
+      pixbufPtr->save_to_buffer(buffer, bufferSize, "png");
+
+      auto const bytes =
+        std::span<std::byte const>{reinterpret_cast<std::byte const*>(buffer), static_cast<std::size_t>(bufferSize)};
+
+      auto txn = library.writeTransaction();
+      auto const id = library.resources().writer(txn).create(bytes);
+      txn.commit();
+
+      ::g_free(buffer);
+      return id;
+    }
+
+    // Pumps the default GTK main context until @p predicate holds or the timeout
+    // elapses. Needed because the thumbnail decode completes on a worker thread
+    // and posts its result back through the callback executor.
+    bool pumpUntil(std::function<bool()> const& predicate, std::chrono::milliseconds timeout = std::chrono::seconds{5})
+    {
+      auto const contextPtr = Glib::MainContext::get_default();
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+      while (!predicate() && std::chrono::steady_clock::now() < deadline)
+      {
+        contextPtr->iteration(false);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+      }
+
+      return predicate();
     }
 
     class AllocationHost final : public Gtk::Widget
@@ -310,6 +357,93 @@ namespace ao::gtk::test
       REQUIRE(paintablePtr);
       CHECK(paintablePtr->get_intrinsic_width() == 58 * scaleFactor);
       CHECK(paintablePtr->get_intrinsic_height() == 58 * scaleFactor);
+    }
+  }
+
+  TEST_CASE("ImageWidget - async thumbnail mode", "[gtk][image]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& library = runtime.musicLibrary();
+    auto thumbnailCache = ImageCache{200};
+
+    constexpr std::int32_t kLogicalSize = 48;
+
+    SECTION("cache miss decodes off-thread at scale and populates the cache")
+    {
+      // A large square source so we can prove the cached result is downscaled.
+      auto const resourceId = writeCoverResource(library, makePixbuf(256, 256));
+
+      auto widget = ImageWidget{library, thumbnailCache};
+      widget.enableThumbnailMode(runtime.async(), kLogicalSize);
+      widget.loadImage(resourceId);
+
+      auto const scaleFactor = widget.get_scale_factor();
+      auto const expectedSide = kLogicalSize * scaleFactor;
+
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(thumbnailCache.get(resourceId)); }));
+
+      auto const cachedPtr = thumbnailCache.get(resourceId);
+      REQUIRE(cachedPtr);
+      // Decode-at-scale: the stored thumbnail is bounded by the logical size
+      // times the display scale, never the full 256px source.
+      CHECK(cachedPtr->get_width() <= expectedSide);
+      CHECK(cachedPtr->get_height() <= expectedSide);
+      CHECK(cachedPtr->get_width() < 256);
+
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
+      CHECK(widget.get_paintable());
+    }
+
+    SECTION("cache hit renders synchronously without touching the database")
+    {
+      // Resource id that does not exist in the database; a synchronous hit must
+      // not require any decode, proving the fast path bypasses the worker.
+      auto const resourceId = ResourceId{9001};
+      thumbnailCache.put(resourceId, makePixbuf(kLogicalSize, kLogicalSize));
+
+      auto widget = ImageWidget{library, thumbnailCache};
+      widget.enableThumbnailMode(runtime.async(), kLogicalSize);
+      widget.loadImage(resourceId);
+      drainGtkEvents();
+
+      CHECK(widget.get_paintable());
+    }
+
+    SECTION("invalid resource id clears the image")
+    {
+      auto widget = ImageWidget{library, thumbnailCache};
+      widget.enableThumbnailMode(runtime.async(), kLogicalSize);
+      widget.loadImage(kInvalidResourceId);
+      drainGtkEvents();
+
+      CHECK_FALSE(widget.get_paintable());
+    }
+
+    SECTION("destroying a widget mid-decode is safe")
+    {
+      auto const resourceId = writeCoverResource(library, makePixbuf(256, 256));
+
+      {
+        auto widget = ImageWidget{library, thumbnailCache};
+        widget.enableThumbnailMode(runtime.async(), kLogicalSize);
+        widget.loadImage(resourceId);
+        // Leave the scope immediately: the decode is likely still in flight on a
+        // worker thread. The widget's lifetime scope must cancel it so the
+        // resumed coroutine never touches the destroyed widget.
+      }
+
+      // Pump long enough for the in-flight decode to resume and observe the
+      // cancellation; a use-after-free here would surface under ASan.
+      pumpUntil([] { return false; }, std::chrono::milliseconds{300});
+
+      // The runtime remains usable afterwards.
+      auto widget = ImageWidget{library, thumbnailCache};
+      widget.enableThumbnailMode(runtime.async(), kLogicalSize);
+      widget.loadImage(resourceId);
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
+      CHECK(widget.get_paintable());
     }
   }
 } // namespace ao::gtk::test

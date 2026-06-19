@@ -22,6 +22,12 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::async
+{
+  class Runtime;
+  class LifetimeScope;
+}
+
 namespace ao::gtk
 {
   struct RenderTarget final
@@ -51,6 +57,13 @@ namespace ao::gtk
     void setMaxRenderSize(std::int32_t width, std::int32_t height);
     void setForceSquareTarget(bool forceSquare);
 
+    /// Switch this widget to asynchronous thumbnail loading: cover blobs are
+    /// decoded off the UI thread at roughly @p logicalSizePx (decode-at-scale)
+    /// and stored in the widget's cache. Intended for list/section thumbnails
+    /// where synchronous full-resolution decoding stalls scrolling. The cache
+    /// passed at construction is used as the dedicated thumbnail cache.
+    void enableThumbnailMode(async::Runtime& runtime, std::int32_t logicalSizePx);
+
     void setImageFromBytes(std::span<std::byte const> bytes);
     void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
     void clearImage();
@@ -70,6 +83,10 @@ namespace ao::gtk
     void queueRefresh();
     RenderTarget requestedRenderTarget() const;
     double currentDisplayScale() const;
+
+    void loadThumbnail(ResourceId coverArtId);
+    void spawnThumbnailDecode(ResourceId coverArtId);
+    std::int32_t thumbnailPhysicalSize() const;
 
     library::MusicLibrary& _library;
     ImageCache& _cache;
@@ -97,5 +114,12 @@ namespace ao::gtk
     sigc::connection _refreshConnection;
     bool _refreshQueued = false;
     bool _forceSquareTarget = false;
+
+    // Asynchronous thumbnail mode (off-thread decode-at-scale).
+    bool _thumbnailMode = false;
+    async::Runtime* _asyncRuntime = nullptr;
+    std::int32_t _thumbnailLogicalSize = 0;
+    std::uint64_t _thumbnailGeneration = 0;
+    std::unique_ptr<async::LifetimeScope> _decodeScopePtr;
   };
 } // namespace ao::gtk

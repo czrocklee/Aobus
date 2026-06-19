@@ -85,8 +85,7 @@ namespace ao::gtk
                       &playbackQueueModel,
                       tagEditController,
                       listNavigationController,
-                      trackPresentationStore,
-                      &imageCache}
+                      trackPresentationStore}
       , importExportCoordinator{window,
                                 runtime,
                                 portal::ImportExportCallbacks{

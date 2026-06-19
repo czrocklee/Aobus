@@ -5,6 +5,9 @@
 
 #include "image/ImageCache.h"
 #include <ao/Type.h>
+#include <ao/async/LifetimeScope.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/ProjectionTypes.h>
@@ -185,8 +188,26 @@ namespace ao::gtk
     loadImage(snap.singleCoverArtId);
   }
 
+  void ImageWidget::enableThumbnailMode(async::Runtime& runtime, std::int32_t logicalSizePx)
+  {
+    _thumbnailMode = true;
+    _asyncRuntime = &runtime;
+    _thumbnailLogicalSize = std::max(1, logicalSizePx);
+
+    if (!_decodeScopePtr)
+    {
+      _decodeScopePtr = std::make_unique<async::LifetimeScope>();
+    }
+  }
+
   void ImageWidget::loadImage(ResourceId const coverArtId)
   {
+    if (_thumbnailMode)
+    {
+      loadThumbnail(coverArtId);
+      return;
+    }
+
     if (coverArtId == kInvalidResourceId)
     {
       clearImage();
@@ -225,6 +246,112 @@ namespace ao::gtk
     _sourcePixbufPtr = cachedPtr;
     invalidateRenderedImage();
     queueRefresh();
+  }
+
+  void ImageWidget::loadThumbnail(ResourceId const coverArtId)
+  {
+    // Any decode already in flight is now stale; bump the generation so its
+    // result is dropped when it resumes on the UI thread.
+    ++_thumbnailGeneration;
+
+    if (coverArtId == kInvalidResourceId)
+    {
+      clearImage();
+      return;
+    }
+
+    if (auto cachedPtr = _cache.get(coverArtId); cachedPtr)
+    {
+      _currentCoverId = coverArtId;
+      _sourcePixbufPtr = cachedPtr;
+      invalidateRenderedImage();
+      queueRefresh();
+      return;
+    }
+
+    // Cache miss: clear the (possibly recycled) previous cover so a neighbouring
+    // section's art is never shown, then decode off the UI thread.
+    clearImage();
+    spawnThumbnailDecode(coverArtId);
+  }
+
+  void ImageWidget::spawnThumbnailDecode(ResourceId const coverArtId)
+  {
+    if (_asyncRuntime == nullptr || !_decodeScopePtr)
+    {
+      return;
+    }
+
+    auto const generation = _thumbnailGeneration;
+    auto const targetPixels = thumbnailPhysicalSize();
+
+    // All state the coroutine needs is passed by value: a coroutine lambda's
+    // captures would dangle once the temporary closure is destroyed, whereas
+    // parameters are copied into the coroutine frame.
+    _asyncRuntime->spawnWithLifetime(_decodeScopePtr.get(),
+                                     [](ImageWidget* self,
+                                        async::Runtime* runtime,
+                                        library::MusicLibrary* library,
+                                        ResourceId id,
+                                        std::uint64_t expectedGeneration,
+                                        std::int32_t pixelSize) -> async::Task<void>
+                                     {
+                                       // Only stable, application-lifetime pointers (runtime, library) may be
+                                       // touched here; `self` must not be dereferenced until execution has
+                                       // resumed back on the callback executor.
+                                       auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+
+                                       co_await runtime->resumeOnWorker();
+
+                                       try
+                                       {
+                                         // The LMDB read transaction and the byte span it yields are valid only
+                                         // within this worker segment; decode-at-scale before suspending again.
+                                         auto const txn = library->readTransaction();
+                                         auto const resReader = library->resources().reader(txn);
+
+                                         if (auto const optData = resReader.get(id); optData)
+                                         {
+                                           auto const memStreamPtr = Gio::MemoryInputStream::create();
+                                           memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
+                                           decodedPtr = Gdk::Pixbuf::create_from_stream_at_scale(
+                                             memStreamPtr, pixelSize, pixelSize, true);
+                                         }
+                                       }
+                                       catch (Glib::Error const&)
+                                       {
+                                         decodedPtr.reset();
+                                       }
+
+                                       // Resuming throws operation_aborted if the widget's lifetime scope was
+                                       // cancelled (widget destroyed), so `self` is safe to use past this point.
+                                       co_await runtime->resumeOnCallbackExecutor();
+
+                                       if (expectedGeneration != self->_thumbnailGeneration)
+                                       {
+                                         // A newer load superseded this request while it was in flight.
+                                         co_return;
+                                       }
+
+                                       if (!decodedPtr)
+                                       {
+                                         self->clearImage();
+                                         co_return;
+                                       }
+
+                                       self->_cache.put(id, decodedPtr);
+                                       self->_currentCoverId = id;
+                                       self->_sourcePixbufPtr = decodedPtr;
+                                       self->invalidateRenderedImage();
+                                       self->queueRefresh();
+                                     }(this, _asyncRuntime, &_library, coverArtId, generation, targetPixels));
+  }
+
+  std::int32_t ImageWidget::thumbnailPhysicalSize() const
+  {
+    auto const scale = currentDisplayScale();
+    auto const physical = static_cast<std::int32_t>(std::ceil(static_cast<double>(_thumbnailLogicalSize) * scale));
+    return std::max(1, physical);
   }
 
   void ImageWidget::setImageFromBytes(std::span<std::byte const> bytes)

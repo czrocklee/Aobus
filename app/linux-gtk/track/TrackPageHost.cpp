@@ -46,15 +46,13 @@ namespace ao::gtk
                                ao::uimodel::playback::PlaybackQueueModel* queueModel,
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
-                               uimodel::track::TrackPresentationViewModel& presentationStore,
-                               ImageCache* imageCache)
+                               uimodel::track::TrackPresentationViewModel& presentationStore)
     : _stack{stack}
     , _runtime{runtime}
     , _playbackQueueModel{queueModel}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _presentationStore{presentationStore}
-    , _imageCache{imageCache}
   {
     _revealSub = _runtime.playback().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
 
@@ -319,7 +317,7 @@ namespace ao::gtk
     modelPtr->bindProjection(projPtr);
 
     auto trackPagePtr =
-      std::make_unique<TrackViewPage>(listId, modelPtr, _presentationStore, _runtime, *_imageCache, viewId);
+      std::make_unique<TrackViewPage>(listId, modelPtr, _presentationStore, _runtime, _thumbnailCache, viewId);
     auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = std::string{"List"};

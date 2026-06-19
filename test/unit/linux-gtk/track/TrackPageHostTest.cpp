@@ -4,7 +4,6 @@
 #include "track/TrackPageHost.h"
 
 #include "app/ThemeCoordinator.h"
-#include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
@@ -31,7 +30,6 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
     auto cache = TrackRowCache{library};
-    auto imageCache = ImageCache{200};
     auto window = Gtk::Window{};
 
     auto stack = Gtk::Stack{};
@@ -46,8 +44,7 @@ namespace ao::gtk::test
     auto queueModel = uimodel::playback::PlaybackQueueModel{
       runtime.playback(), [&cache](TrackId id) { return cache.playbackDescriptor(id); }};
 
-    auto host =
-      TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, presentationStore, &imageCache};
+    auto host = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, presentationStore};
 
     SECTION("initial state")
     {

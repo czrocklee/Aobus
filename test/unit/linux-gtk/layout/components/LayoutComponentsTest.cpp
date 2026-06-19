@@ -606,7 +606,6 @@ namespace ao::gtk::layout::test
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
     auto cache = TrackRowCache{library};
-    auto imageCache = ImageCache{200};
     auto window = Gtk::Window{};
     auto stack = Gtk::Stack{};
     auto themeController = ThemeCoordinator{};
@@ -617,8 +616,7 @@ namespace ao::gtk::layout::test
     auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
     auto queueModel = uimodel::playback::PlaybackQueueModel{
       runtime.playback(), [&cache](TrackId id) { return cache.playbackDescriptor(id); }};
-    auto pageHost =
-      TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, presentationStore, &imageCache};
+    auto pageHost = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, presentationStore};
 
     runtime.workspace().navigateTo(rt::kAllTracksListId);
     ao::gtk::test::drainGtkEvents();
