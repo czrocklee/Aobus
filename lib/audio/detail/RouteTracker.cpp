@@ -4,6 +4,7 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/detail/RouteTracker.h>
+#include <ao/library/AudioCodec.h>
 
 #include <mutex>
 #include <optional>
@@ -12,12 +13,13 @@
 
 namespace ao::audio::detail
 {
-  void RouteTracker::setDecoder(Format sourceFormat, Format outputFormat, bool isLossy)
+  void RouteTracker::setDecoder(Format sourceFormat, Format outputFormat, bool isLossy, library::AudioCodec codec)
   {
     auto const lock = std::scoped_lock{_mutex};
     _state.sourceFormat = sourceFormat;
     _state.decoderOutputFormat = outputFormat;
     _state.isLossySource = isLossy;
+    _state.codec = codec;
   }
 
   void RouteTracker::setEngineFormat(Format format)

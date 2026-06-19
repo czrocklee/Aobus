@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/audio/Format.h>
+#include <ao/library/AudioCodec.h>
 
 #include <chrono>
 #include <cstddef>
@@ -30,5 +31,6 @@ namespace ao::audio
     Format outputFormat;
     std::chrono::milliseconds duration{0};
     bool isLossy = false;
+    library::AudioCodec codec = library::AudioCodec::Unknown;
   };
 } // namespace ao::audio

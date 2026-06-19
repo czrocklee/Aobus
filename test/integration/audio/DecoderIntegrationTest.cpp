@@ -6,6 +6,7 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/utility/Log.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -104,6 +105,7 @@ namespace ao::audio::test
         auto const format = Format{.bitDepth = 16, .isInterleaved = true};
         auto decoder = FlacDecoderSession{format};
         REQUIRE(decoder.open(testFile));
+        CHECK(decoder.streamInfo().codec == library::AudioCodec::Flac);
         samples16 = extractSamples<std::int16_t>(decoder, 100);
       }
 
@@ -135,6 +137,7 @@ namespace ao::audio::test
         auto const format = Format{.bitDepth = 24, .isInterleaved = true};
         auto decoder = AlacDecoderSession{format};
         REQUIRE(decoder.open(testFile));
+        CHECK(decoder.streamInfo().codec == library::AudioCodec::Alac);
         auto const block = decoder.readNextBlock();
 
         REQUIRE(block);

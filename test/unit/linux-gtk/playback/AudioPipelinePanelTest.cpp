@@ -67,7 +67,7 @@ namespace ao::gtk::test
     auto peer = AudioPipelinePanelTestPeer{widget};
 
     auto view = uimodel::playback::AudioPipelineView{};
-    view.flow.nodes.push_back({.id = "ao-decoder", .name = "Decoder"});
+    view.flow.nodes.push_back({.id = "ao-source", .name = "Source"});
     view.quality = audio::Quality::BitwisePerfect;
 
     widget.apply(view);

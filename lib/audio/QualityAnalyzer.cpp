@@ -217,7 +217,7 @@ namespace ao::audio
       return result;
     }
 
-    auto const path = findPlaybackPath(graph, "ao-decoder");
+    auto const path = findPlaybackPath(graph, "ao-source");
 
     if (path.empty())
     {

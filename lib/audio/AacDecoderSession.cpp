@@ -9,6 +9,7 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/detail/AacConfigParser.h>
+#include <ao/library/AudioCodec.h>
 
 #include <fdk-aac/FDK_audio.h>
 #include <fdk-aac/aacdecoder_lib.h>
@@ -198,6 +199,7 @@ namespace ao::audio
       info.sourceFormat.isInterleaved = true;
       applyOutputFormat();
       info.isLossy = true;
+      info.codec = library::AudioCodec::Aac;
     }
   };
 

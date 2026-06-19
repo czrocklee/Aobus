@@ -5,6 +5,7 @@
 #include <ao/audio/AacDecoderSession.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
+#include <ao/library/AudioCodec.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -30,6 +31,7 @@ namespace ao::audio::test
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
+    CHECK(info.codec == library::AudioCodec::Aac);
     CHECK(info.duration >= std::chrono::milliseconds{950});
     CHECK(info.sourceFormat.bitDepth == 16);
     CHECK(info.sourceFormat.isInterleaved);

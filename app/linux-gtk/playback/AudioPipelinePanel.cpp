@@ -121,7 +121,11 @@ namespace ao::gtk
       // Format details
       if (node->optFormat)
       {
-        auto const formatStr = std::string{"("} + uimodel::playback::audioFormatLabel(*node->optFormat) + ")";
+        // The source node reports the track's true resolution (valid bits);
+        // downstream nodes report the transport container width.
+        auto const preferValidBits = node->type == audio::flow::NodeType::Source;
+        auto const formatStr =
+          std::string{"("} + uimodel::playback::audioFormatLabel(*node->optFormat, preferValidBits) + ")";
         auto* formatLabel = Gtk::make_managed<Gtk::Label>(formatStr);
         formatLabel->add_css_class("dim-label");
         headerBox->append(*formatLabel);

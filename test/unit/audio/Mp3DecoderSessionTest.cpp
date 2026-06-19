@@ -6,6 +6,7 @@
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/library/AudioCodec.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -31,6 +32,7 @@ namespace ao::audio::test
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
+    CHECK(info.codec == library::AudioCodec::Mp3);
     REQUIRE(info.sourceFormat.sampleRate == 48000);
     REQUIRE(info.sourceFormat.channels == 2);
     REQUIRE(info.outputFormat.sampleRate == info.sourceFormat.sampleRate);

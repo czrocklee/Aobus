@@ -18,7 +18,18 @@ namespace ao::audio
 namespace ao::uimodel::playback
 {
   std::string audioNodeTypeLabel(audio::flow::NodeType type);
-  std::string audioFormatLabel(audio::Format const& format);
+
+  /**
+   * @brief Formats a sample format as "kHz · bit · channels" for display.
+   *
+   * @param preferValidBits When true and the format carries a non-zero valid-bit
+   * count, report the meaningful precision (validBits) instead of the storage
+   * container width (bitDepth). Used for the source node so a low-resolution
+   * track padded into a wider container (e.g. 16-bit into a 32-bit word) is shown
+   * at its true resolution, while downstream nodes still report the transport
+   * container width.
+   */
+  std::string audioFormatLabel(audio::Format const& format, bool preferValidBits = false);
   std::string audioFindingLabel(audio::QualityFinding const& finding);
   std::string audioQualityConclusion(audio::Quality quality);
 

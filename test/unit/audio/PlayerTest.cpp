@@ -9,11 +9,13 @@
 #include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/library/AudioCodec.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -35,6 +37,7 @@ namespace ao::audio::test
             .sourceFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
             .decoderOutputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
             .engineOutputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+            .codec = library::AudioCodec::Flac,
           },
         .optAnchor = RouteAnchor{.backend = kBackendNone, .id = "mock-stream-id"},
       };
@@ -152,7 +155,12 @@ namespace ao::audio::test
 
       auto const snap = player.status();
       // Should still work, but no connection from engine to system
-      REQUIRE(snap.flow.nodes.size() == 3); // Decoder, Engine, Sink
+      REQUIRE(snap.flow.nodes.size() == 4); // Source, Decoder, Engine, Sink
+
+      // The source node is labelled with the detected codec.
+      auto const srcIt = std::ranges::find(snap.flow.nodes, std::string_view{"ao-source"}, &flow::Node::id);
+      REQUIRE(srcIt != snap.flow.nodes.end());
+      CHECK(srcIt->name == "FLAC");
     }
 
     SECTION("handleRouteChanged with stale generation is ignored")

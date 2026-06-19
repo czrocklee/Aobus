@@ -17,6 +17,7 @@ namespace ao::audio::flow
    */
   enum class NodeType : std::uint8_t
   {
+    Source,
     Decoder,
     Engine,
     Stream,

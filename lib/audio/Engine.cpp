@@ -327,7 +327,8 @@ namespace ao::audio
       status.duration = session.info.duration;
       status.elapsed = std::chrono::milliseconds{0};
       accumulatedFrames.store(0, std::memory_order_relaxed);
-      routeTracker.setDecoder(session.info.sourceFormat, session.info.outputFormat, session.info.isLossy);
+      routeTracker.setDecoder(
+        session.info.sourceFormat, session.info.outputFormat, session.info.isLossy, session.info.codec);
       routeTracker.setEngineFormat(session.info.outputFormat);
       status.routeState = routeTracker.state();
       engineSampleRate.store(session.info.outputFormat.sampleRate, std::memory_order_relaxed);

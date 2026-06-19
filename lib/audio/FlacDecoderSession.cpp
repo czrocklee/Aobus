@@ -10,6 +10,7 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/Types.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/utility/ByteView.h>
 
 #include <FLAC/format.h>
@@ -527,6 +528,7 @@ namespace ao::audio
       }
 
       impl->info.isLossy = false;
+      impl->info.codec = library::AudioCodec::Flac;
     }
   }
 

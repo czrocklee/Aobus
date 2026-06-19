@@ -19,13 +19,19 @@ namespace ao::audio::test
     {
       auto graph = flow::Graph{};
 
-      // Base nodes added by Player
+      // Base nodes added by Player: source -> decoder -> engine
+      graph.nodes.push_back(
+        flow::Node{.id = "ao-source",
+                   .type = flow::NodeType::Source,
+                   .name = "Source",
+                   .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+                   .isLossySource = false});
+
       graph.nodes.push_back(
         flow::Node{.id = "ao-decoder",
                    .type = flow::NodeType::Decoder,
                    .name = "Decoder",
-                   .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
-                   .isLossySource = false});
+                   .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false}});
 
       graph.nodes.push_back(
         flow::Node{.id = "ao-engine",
@@ -33,6 +39,7 @@ namespace ao::audio::test
                    .name = "Engine",
                    .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false}});
 
+      graph.connections.push_back(flow::Connection{.sourceId = "ao-source", .destId = "ao-decoder", .isActive = true});
       graph.connections.push_back(flow::Connection{.sourceId = "ao-decoder", .destId = "ao-engine", .isActive = true});
 
       // System nodes (simulating a simple output)
@@ -77,7 +84,7 @@ namespace ao::audio::test
     auto const result = analyzeAudioQuality(graph);
 
     REQUIRE(result.quality == Quality::BitwisePerfect);
-    REQUIRE(result.assessments.size() == 4);
+    REQUIRE(result.assessments.size() == 5);
 
     for (auto const& assessment : result.assessments)
     {
@@ -89,21 +96,21 @@ namespace ao::audio::test
   TEST_CASE("QualityAnalyzer - Lossy Source", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
-    graph.nodes[0].isLossySource = true;
+    graph.nodes[0].isLossySource = true; // ao-source
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LossySource);
 
-    auto const* dec = findAssessment(result, "ao-decoder");
-    REQUIRE(hasFinding(dec, QualityFindingKind::LossySource));
-    REQUIRE(dec->worstQuality == Quality::LossySource);
+    auto const* src = findAssessment(result, "ao-source");
+    REQUIRE(hasFinding(src, QualityFindingKind::LossySource));
+    REQUIRE(src->worstQuality == Quality::LossySource);
   }
 
   TEST_CASE("QualityAnalyzer - Resampling", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     // Modify Engine output format to trigger resampling at Decoder -> Engine
-    graph.nodes[1].optFormat->sampleRate = 48000;
+    graph.nodes[2].optFormat->sampleRate = 48000;
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
@@ -116,7 +123,7 @@ namespace ao::audio::test
   TEST_CASE("QualityAnalyzer - Software Volume Modification", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
-    graph.nodes[1].softwareVolumeNotUnity = true;
+    graph.nodes[2].softwareVolumeNotUnity = true;
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
@@ -129,7 +136,7 @@ namespace ao::audio::test
   TEST_CASE("QualityAnalyzer - Hardware Volume Modification", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
-    graph.nodes[1].hardwareVolumeNotUnity = true;
+    graph.nodes[2].hardwareVolumeNotUnity = true;
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::BitwisePerfect);
@@ -142,7 +149,7 @@ namespace ao::audio::test
   TEST_CASE("QualityAnalyzer - Unclassified Volume Modification", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
-    graph.nodes[1].unclassifiedVolumeNotUnity = true;
+    graph.nodes[2].unclassifiedVolumeNotUnity = true;
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
@@ -155,8 +162,8 @@ namespace ao::audio::test
   TEST_CASE("QualityAnalyzer - Mixed Hardware and Software Volume", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
-    graph.nodes[1].hardwareVolumeNotUnity = true;
-    graph.nodes[1].softwareVolumeNotUnity = true;
+    graph.nodes[2].hardwareVolumeNotUnity = true;
+    graph.nodes[2].softwareVolumeNotUnity = true;
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
@@ -170,7 +177,7 @@ namespace ao::audio::test
   TEST_CASE("QualityAnalyzer - Mute Detected", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
-    graph.nodes[2].isMuted = true;
+    graph.nodes[3].isMuted = true;
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LinearIntervention);
@@ -206,9 +213,9 @@ namespace ao::audio::test
   {
     auto graph = buildBaseMergedGraph();
     // decoder 16b -> engine 24b -> stream 24b -> sink 24b
-    graph.nodes[1].optFormat->bitDepth = 24;
     graph.nodes[2].optFormat->bitDepth = 24;
     graph.nodes[3].optFormat->bitDepth = 24;
+    graph.nodes[4].optFormat->bitDepth = 24;
 
     auto const result = analyzeAudioQuality(graph);
     REQUIRE(result.quality == Quality::LosslessPadded);
@@ -216,6 +223,32 @@ namespace ao::audio::test
     auto const* eng = findAssessment(result, "ao-engine");
     REQUIRE(hasFinding(eng, QualityFindingKind::LosslessPadding));
     REQUIRE(eng->worstQuality == Quality::LosslessPadded);
+  }
+
+  TEST_CASE("QualityAnalyzer - Source padded into wider container", "[audio][unit][quality]")
+  {
+    auto graph = buildBaseMergedGraph();
+    // 16-bit source carried in a 32-bit container from the decoder onward: the
+    // padding surfaces as a lossless source -> decoder bit-depth transition.
+    graph.nodes[1].optFormat->bitDepth = 32; // decoder
+    graph.nodes[1].optFormat->validBits = 16;
+    graph.nodes[2].optFormat->bitDepth = 32; // engine
+    graph.nodes[2].optFormat->validBits = 16;
+    graph.nodes[3].optFormat->bitDepth = 32; // stream
+    graph.nodes[3].optFormat->validBits = 16;
+    graph.nodes[4].optFormat->bitDepth = 32; // sink
+    graph.nodes[4].optFormat->validBits = 16;
+
+    auto const result = analyzeAudioQuality(graph);
+    REQUIRE(result.quality == Quality::LosslessPadded);
+
+    // The padding is attributed to the decoder (destination of source -> decoder),
+    // not the source itself.
+    auto const* dec = findAssessment(result, "ao-decoder");
+    REQUIRE(hasFinding(dec, QualityFindingKind::LosslessPadding));
+
+    auto const* src = findAssessment(result, "ao-source");
+    REQUIRE(hasFinding(src, QualityFindingKind::BitPerfect));
   }
 
   TEST_CASE("QualityAnalyzer - Empty Graph", "[audio][unit][quality]")
@@ -242,12 +275,12 @@ namespace ao::audio::test
 
     SECTION("16-bit to 32-bit float is lossless")
     {
-      graph.nodes[1].optFormat->bitDepth = 32;
-      graph.nodes[1].optFormat->isFloat = true;
       graph.nodes[2].optFormat->bitDepth = 32;
       graph.nodes[2].optFormat->isFloat = true;
       graph.nodes[3].optFormat->bitDepth = 32;
       graph.nodes[3].optFormat->isFloat = true;
+      graph.nodes[4].optFormat->bitDepth = 32;
+      graph.nodes[4].optFormat->isFloat = true;
 
       auto const result = analyzeAudioQuality(graph);
       REQUIRE(result.quality == Quality::LosslessFloat);
@@ -258,13 +291,14 @@ namespace ao::audio::test
 
     SECTION("32-bit integer to 32-bit float is lossy (mantissa truncation)")
     {
-      graph.nodes[0].optFormat->bitDepth = 32;
-      graph.nodes[1].optFormat->bitDepth = 32;
-      graph.nodes[1].optFormat->isFloat = true;
+      graph.nodes[0].optFormat->bitDepth = 32; // source 32-bit int
+      graph.nodes[1].optFormat->bitDepth = 32; // decoder 32-bit int
       graph.nodes[2].optFormat->bitDepth = 32;
       graph.nodes[2].optFormat->isFloat = true;
       graph.nodes[3].optFormat->bitDepth = 32;
       graph.nodes[3].optFormat->isFloat = true;
+      graph.nodes[4].optFormat->bitDepth = 32;
+      graph.nodes[4].optFormat->isFloat = true;
 
       auto const result = analyzeAudioQuality(graph);
       REQUIRE(result.quality == Quality::LinearIntervention);
@@ -275,13 +309,14 @@ namespace ao::audio::test
 
     SECTION("32-bit integer to 64-bit float is lossless")
     {
-      graph.nodes[0].optFormat->bitDepth = 32;
-      graph.nodes[1].optFormat->bitDepth = 64;
-      graph.nodes[1].optFormat->isFloat = true;
+      graph.nodes[0].optFormat->bitDepth = 32; // source 32-bit int
+      graph.nodes[1].optFormat->bitDepth = 32; // decoder 32-bit int
       graph.nodes[2].optFormat->bitDepth = 64;
       graph.nodes[2].optFormat->isFloat = true;
       graph.nodes[3].optFormat->bitDepth = 64;
       graph.nodes[3].optFormat->isFloat = true;
+      graph.nodes[4].optFormat->bitDepth = 64;
+      graph.nodes[4].optFormat->isFloat = true;
 
       auto const result = analyzeAudioQuality(graph);
       REQUIRE(result.quality == Quality::LosslessFloat);

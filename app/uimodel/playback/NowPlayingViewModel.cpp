@@ -106,10 +106,12 @@ namespace ao::uimodel::playback
 
       auto const it = std::ranges::find_if(state.flow.nodes,
                                            [](auto const& node)
-                                           { return node.type == audio::flow::NodeType::Decoder && node.optFormat; });
+                                           { return node.type == audio::flow::NodeType::Source && node.optFormat; });
 
+      // The source node carries the track's native format, so show its true
+      // resolution (valid bits) rather than a padded transport container width.
       view.streamInfo =
-        (it != state.flow.nodes.end() && it->optFormat) ? audioFormatLabel(*it->optFormat) : std::string{};
+        (it != state.flow.nodes.end() && it->optFormat) ? audioFormatLabel(*it->optFormat, true) : std::string{};
 
       auto plainTextFallback = std::string{"Audio Pipeline:\n"};
       auto const conclusionText = audioQualityConclusion(state.quality);

@@ -10,6 +10,7 @@
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/utility/Log.h>
 
 #include <algorithm>
@@ -19,6 +20,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -196,19 +198,35 @@ namespace ao::audio
   {
     auto const& rs = cachedRouteStatus.state;
 
+    // Label the source node with the detected codec (e.g. "FLAC"); fall back to a
+    // generic name before a track is decoded or when the codec is unknown.
+    auto const codecName = library::audioCodecName(rs.codec);
+    auto sourceName = codecName.empty() ? std::string{"Source"} : std::string{codecName};
+
     mergedGraph = flow::Graph{
       .nodes =
         {
+          // The source node carries the track's native format and lossy-ness; the
+          // decoder node carries the PCM it emits. Keeping them separate makes any
+          // container padding (source -> decoder bit-depth change) a first-class
+          // transition rather than a hidden property of a single conflated node.
+          flow::Node{.id = "ao-source",
+                     .type = flow::NodeType::Source,
+                     .name = std::move(sourceName),
+                     .optFormat = rs.sourceFormat,
+                     .isLossySource = rs.isLossySource},
           flow::Node{.id = "ao-decoder",
                      .type = flow::NodeType::Decoder,
-                     .name = "Decoder",
-                     .optFormat = rs.decoderOutputFormat,
-                     .isLossySource = rs.isLossySource},
-          flow::Node{
-            .id = "ao-engine", .type = flow::NodeType::Engine, .name = "Engine", .optFormat = rs.engineOutputFormat},
+                     .name = "Decoded PCM",
+                     .optFormat = rs.decoderOutputFormat},
+          flow::Node{.id = "ao-engine",
+                     .type = flow::NodeType::Engine,
+                     .name = "Aobus Engine",
+                     .optFormat = rs.engineOutputFormat},
         },
       .connections =
         {
+          flow::Connection{.sourceId = "ao-source", .destId = "ao-decoder", .isActive = true},
           flow::Connection{.sourceId = "ao-decoder", .destId = "ao-engine", .isActive = true},
         },
     };

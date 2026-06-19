@@ -8,6 +8,7 @@
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
+#include <ao/library/AudioCodec.h>
 #include <ao/utility/ByteView.h>
 
 #include <alac/ALACAudioTypes.h>
@@ -171,6 +172,7 @@ namespace ao::audio
     }
 
     _implPtr->info.duration = _implPtr->packetSource.duration(config.sampleRate);
+    _implPtr->info.codec = library::AudioCodec::Alac;
 
     _implPtr->info.sourceFormat.channels = config.numChannels;
     _implPtr->info.sourceFormat.sampleRate = config.sampleRate;

@@ -41,7 +41,8 @@ namespace ao::uimodel::playback
 
     switch (type)
     {
-      case Type::Decoder: return "[Source]";
+      case Type::Source: return "[Source]";
+      case Type::Decoder: return "[Decoder]";
       case Type::Engine: return "[Engine]";
       case Type::Stream: return "[Stream]";
       case Type::Intermediary: return "[Filter]";
@@ -52,7 +53,7 @@ namespace ao::uimodel::playback
     return "[Unknown]";
   }
 
-  std::string audioFormatLabel(audio::Format const& format)
+  std::string audioFormatLabel(audio::Format const& format, bool preferValidBits)
   {
     constexpr auto kKhzMultiplier = 1000.0;
     auto const channelsText = [&] -> std::string
@@ -70,7 +71,14 @@ namespace ao::uimodel::playback
       return std::format("{} ch", format.channels);
     }();
 
-    return std::format("{:.1f} kHz · {}-bit · {}", format.sampleRate / kKhzMultiplier, format.bitDepth, channelsText);
+    // For the source node, report the meaningful precision (valid bits) rather
+    // than the storage container width: a 16/24-bit track padded into a 32-bit
+    // container has validBits 16/24 but bitDepth 32, and showing the container
+    // would misleadingly present a low-resolution source as 32-bit. Downstream
+    // nodes keep reporting the transport container width.
+    auto const bits = (preferValidBits && format.validBits != 0) ? format.validBits : format.bitDepth;
+
+    return std::format("{:.1f} kHz · {}-bit · {}", format.sampleRate / kKhzMultiplier, bits, channelsText);
   }
 
   std::string audioFindingLabel(audio::QualityFinding const& finding)
@@ -164,7 +172,7 @@ namespace ao::uimodel::playback
   std::vector<audio::flow::Node const*> playbackPath(audio::flow::Graph const& graph)
   {
     auto path = std::vector<audio::flow::Node const*>{};
-    auto currentId = std::string{"ao-decoder"};
+    auto currentId = std::string{"ao-source"};
     auto visited = std::unordered_set<std::string>{};
 
     while (!currentId.empty() && !visited.contains(currentId))
