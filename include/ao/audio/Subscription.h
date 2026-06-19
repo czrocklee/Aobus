@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <ao/utility/Subscription.h>
+#include <ao/utility/ScopedRegistration.h>
 
 namespace ao::audio
 {
   /**
    * @brief A move-only handle that unsubscribes a listener when destroyed.
    */
-  using Subscription = utility::Subscription;
+  using Subscription = utility::ScopedRegistration;
 } // namespace ao::audio

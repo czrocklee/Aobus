@@ -229,6 +229,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp
     unit/linux-gtk/image/ImageWidgetTest.cpp
     unit/linux-gtk/image/ImageCacheTest.cpp
+    unit/linux-gtk/image/ThumbnailLoaderTest.cpp
     unit/linux-gtk/app/AppDialogTest.cpp
     unit/linux-gtk/app/ThemeCoordinatorTest.cpp
     unit/linux-gtk/app/ThemePresetTest.cpp
@@ -256,6 +257,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/track/TrackPresentationTest.cpp
     unit/linux-gtk/track/TrackFieldUiTest.cpp
     unit/linux-gtk/track/TrackRowCacheTest.cpp
+    unit/linux-gtk/track/TrackScrollBaselineTest.cpp
     unit/linux-gtk/track/SelectionInfoLabelTest.cpp
     unit/linux-gtk/track/StatusSlotTest.cpp
     unit/linux-gtk/portal/LibraryTaskProgressDialogTest.cpp

@@ -3,6 +3,7 @@
 
 #include "TrackComponentRegistrations.h"
 #include "image/ImageWidget.h"
+#include "image/ResourceImageController.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -126,7 +127,7 @@ namespace ao::gtk::layout
       };
 
       TrackCoverArtComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _imageWidget{ctx.runtime.musicLibrary(), *ctx.detail.imageCache}, _slot{_imageWidget}
+        : _imageController{_imageWidget, ctx.runtime.musicLibrary(), *ctx.detail.imageCache}, _slot{_imageWidget}
       {
         _imageWidget.set_halign(Gtk::Align::CENTER);
         _imageWidget.set_valign(Gtk::Align::CENTER);
@@ -179,17 +180,18 @@ namespace ao::gtk::layout
       {
         if (snap.singleCoverArtId == kInvalidResourceId)
         {
-          _imageWidget.clearImage();
+          _imageController.clear();
           _imageWidget.set_visible(true);
         }
         else
         {
-          _imageWidget.loadImage(snap.singleCoverArtId);
+          _imageController.load(snap.singleCoverArtId);
           _imageWidget.set_visible(true);
         }
       }
 
       ImageWidget _imageWidget;
+      ResourceImageController _imageController;
       CoverArtSlot _slot;
       sigc::connection _scopeConn;
     };

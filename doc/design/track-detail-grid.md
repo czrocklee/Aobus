@@ -182,3 +182,14 @@ one-character ellipsis, and the action controls remain anchored inside the panel
 ## Cover Art Stability
 
 The cover art widget in the detail pane uses a responsive square slot with a target size (default 250 in `default_layout.yaml`). For a given panel width, the slot's natural size is deterministic: it shrinks to the available width below the target and caps at the target size above it. Its minimum size remains compressible so animated or constrained parent allocations do not violate GTK measurement invariants. Track changes, image aspect ratio changes, and missing cover art do not change the slot footprint. The `ImageWidget` renders inside that square and clips overflow, preventing cover art from consuming space needed by fields and tags.
+
+## Track Row Display State
+
+Track list rows cache display strings on the `TrackRowObject` so recycled GTK cells can bind without
+reformatting computed fields on every scroll step. Text-backed fields are stored directly; computed
+fields are memoized until a contributing row value changes.
+
+Now-playing row styling is model-driven rather than per-row property-driven. `TrackListModel`
+records the current playing track id and emits a dedicated playing-changed signal for visible cells
+to restyle in place. Newly bound or recycled rows are stamped from the same model state when GTK asks
+for the item.

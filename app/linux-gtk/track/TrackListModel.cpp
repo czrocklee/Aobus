@@ -158,30 +158,18 @@ namespace ao::gtk
 
   void TrackListModel::setPlayingTrackId(TrackId id)
   {
-    auto const oldId = _playingTrackId;
-    _playingTrackId = id;
-
-    if (_projectionPtr == nullptr)
+    if (_playingTrackId == id)
     {
       return;
     }
 
-    // Notify UI that the playing/previously-playing rows need a refresh
-    if (oldId != kInvalidTrackId)
-    {
-      if (auto const optIdx = _projectionPtr->indexOf(oldId); optIdx)
-      {
-        items_changed(static_cast<::guint>(*optIdx), 1, 1);
-      }
-    }
+    _playingTrackId = id;
 
-    if (id != kInvalidTrackId)
-    {
-      if (auto const optIdx = _projectionPtr->indexOf(id); optIdx)
-      {
-        items_changed(static_cast<::guint>(*optIdx), 1, 1);
-      }
-    }
+    // Do not emit items_changed for the old/new rows: the row objects are shared
+    // and cached, so get_item_vfunc hands GTK back an identical pointer and the
+    // rebind is deduplicated away. Instead notify cells directly; each one is
+    // subscribed (once, at setup) and restyles from playingTrackId().
+    _playingChanged.emit();
   }
 
   void TrackListModel::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch)

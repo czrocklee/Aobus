@@ -4,6 +4,8 @@
 #pragma once
 
 #include "image/ImageCache.h"
+#include "image/ThumbnailLoader.h"
+#include "layout/LayoutConstants.h"
 #include "track/TrackViewPage.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
@@ -11,7 +13,6 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
-#include <cstddef>
 #include <map>
 #include <memory>
 
@@ -46,8 +47,6 @@ namespace ao::gtk
     Glib::RefPtr<TrackListModel> modelPtr = {};
     std::unique_ptr<TrackViewPage> pagePtr = {};
   };
-
-  inline constexpr std::size_t kSectionThumbnailCacheCapacity = 512;
 
   /**
    * TrackPageHost manages the creation, lookup, and lifecycle of track pages.
@@ -111,10 +110,14 @@ namespace ao::gtk
     rt::Subscription _presentationChangedSub;
 
     // Dedicated cache for section-header cover thumbnails (small, decode-at-scale
-    // results). Declared before _trackPages so it outlives the pages — and thus
-    // their in-flight async decodes — during destruction. Larger than the
-    // full-resolution cache because thumbnail entries are cheap.
-    ImageCache _thumbnailCache{kSectionThumbnailCacheCapacity};
+    // results). Destruction order is reverse declaration order:
+    // _trackPages -> _thumbnailLoader -> _thumbnailCache. Keep these members in
+    // this order so pages lose their widgets before the loader is cancelled, and
+    // the loader is cancelled before the backing cache is destroyed.
+    ImageCache _thumbnailCache{layout::kSectionThumbnailCacheCapacity};
+
+    // Shared, off-thread thumbnail decoder over the cache above.
+    ThumbnailLoader _thumbnailLoader{_runtime.musicLibrary(), _thumbnailCache, _runtime.async()};
 
     std::map<rt::ViewId, TrackPageContext> _trackPages;
     TrackId _playingTrackId{kInvalidTrackId};

@@ -80,7 +80,9 @@ add_library(aobus-gtk-lib STATIC
     playback/VolumeBar.cpp
 
     image/ImageCache.cpp
+    image/ResourceImageController.cpp
     image/ImageWidget.cpp
+    image/ThumbnailLoader.cpp
 
     tag/TagEditController.cpp
     tag/TagPopover.cpp
@@ -165,4 +167,3 @@ target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 add_executable(aobus-gtk main.cpp)
 target_link_libraries(aobus-gtk PRIVATE aobus-gtk-lib ao PkgGTKMM glibmm-2.68 mimalloc -Wl,-u,aobus_get_resource)
 target_include_directories(aobus-gtk PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-

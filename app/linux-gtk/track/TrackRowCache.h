@@ -21,6 +21,11 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::lmdb
+{
+  class ReadTransaction;
+}
+
 namespace ao::audio
 {
   struct TrackPlaybackDescriptor;
@@ -49,11 +54,6 @@ namespace ao::gtk
      * @return TrackRowObject if it was loaded, nullptr otherwise.
      */
     Glib::RefPtr<TrackRowObject> trackRow(TrackId id) const;
-
-    /**
-     * Get the shared TrackRowObject for a given ID, reusing a caller-provided reader.
-     */
-    Glib::RefPtr<TrackRowObject> trackRow(TrackId id, library::TrackStore::Reader const& reader) const;
 
     /**
      * Resolve a dictionary string and cache it.
@@ -104,6 +104,8 @@ namespace ao::gtk
     mutable std::unordered_map<TrackId, Glib::RefPtr<TrackRowObject>> _rowCache;
     mutable std::unordered_map<DictionaryId, Glib::ustring> _stringCache;
 
-    Glib::RefPtr<TrackRowObject> createRowFromView(TrackId id, library::TrackView const& view) const;
+    Glib::RefPtr<TrackRowObject> createRowFromView(TrackId id,
+                                                   library::TrackView const& view,
+                                                   lmdb::ReadTransaction const& txn) const;
   };
 } // namespace ao::gtk

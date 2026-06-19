@@ -44,7 +44,7 @@ namespace ao::rt
 
 namespace ao::gtk
 {
-  class ImageCache;
+  class ThumbnailLoader;
   class TagPopover;
 
   class TrackViewPage final : public Gtk::Box
@@ -60,7 +60,7 @@ namespace ao::gtk
                            Glib::RefPtr<TrackListModel> modelPtr,
                            uimodel::track::TrackPresentationViewModel& presentationStore,
                            rt::AppRuntime& runtime,
-                           ImageCache& thumbnailCache,
+                           ThumbnailLoader& thumbnailLoader,
                            rt::ViewId viewId = rt::kInvalidViewId);
     ~TrackViewPage() override;
 
@@ -117,7 +117,7 @@ namespace ao::gtk
     Glib::RefPtr<TrackListModel> _modelPtr;
     uimodel::track::TrackPresentationViewModel& _presentationStore;
     rt::AppRuntime& _runtime;
-    ImageCache& _thumbnailCache;
+    ThumbnailLoader& _thumbnailLoader;
     Glib::RefPtr<Gtk::SortListModel> _groupModelPtr;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactoryPtr;

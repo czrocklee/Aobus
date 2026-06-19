@@ -5,8 +5,8 @@
 
 #include <ao/Type.h>
 #include <ao/async/Executor.h>
+#include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/StrongType.h>
-#include <ao/utility/Subscription.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -32,7 +32,7 @@ namespace ao::rt
     std::size_t count = 0;
   };
 
-  using Subscription = utility::Subscription;
+  using Subscription = utility::ScopedRegistration;
 
   template<typename... Args>
   class Signal final

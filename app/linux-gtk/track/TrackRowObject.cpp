@@ -11,7 +11,6 @@
 #include <ao/rt/TrackField.h>
 
 #include <glibmm/objectbase.h>
-#include <glibmm/propertyproxy.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
@@ -42,23 +41,8 @@ namespace ao::gtk
   } // namespace
 
   TrackRowObject::TrackRowObject()
-    : Glib::ObjectBase{"TrackRowObject"}, _propertyPlaying{*this, "playing", false}
+    : Glib::ObjectBase{"TrackRowObject"}
   {
-  }
-
-  Glib::PropertyProxy<bool> TrackRowObject::property_playing()
-  {
-    return _propertyPlaying.get_proxy();
-  }
-
-  bool TrackRowObject::isPlaying() const
-  {
-    return _propertyPlaying.get_value();
-  }
-
-  void TrackRowObject::setPlaying(bool playing)
-  {
-    _propertyPlaying.set_value(playing);
   }
 
   Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, TrackRowCache const& provider)
@@ -149,58 +133,95 @@ namespace ao::gtk
     _fileSize = fileSize;
     _modifiedTime = modifiedTime;
     _status = status;
+
+    // Fresh metadata: drop any computed strings memoized from a prior populate
+    // (rows are re-materialized in place after an invalidate).
+    invalidateComputedCache();
+  }
+
+  Glib::ustring const* TrackRowObject::displayText(rt::TrackField field) const
+  {
+    static_assert(rt::kTrackFieldCount <= 32, "_computedFilled bitmask only covers up to 32 fields");
+
+    auto const idx = static_cast<std::size_t>(field);
+
+    if (idx >= _text.size())
+    {
+      return nullptr;
+    }
+
+    // Text-backed fields are materialized at populate(); the stored slot is the
+    // source of truth and never goes through the computed cache.
+    if (isTextBackedField(field))
+    {
+      return &_text.at(idx);
+    }
+
+    // UI-thread only. Computed field: format once into the slot and remember it
+    // via the filled bit (so an empty formatter result is cached too, not re-run
+    // every bind).
+    if (auto const bit = std::uint32_t{1} << idx; (_computedFilled & bit) == 0)
+    {
+      auto const* uiDef = trackFieldUiDefinition(field);
+      _text.at(idx) = (uiDef != nullptr && uiDef->readRowText != nullptr)
+                        ? Glib::ustring{uiDef->readRowText(*this, *_provider)}
+                        : Glib::ustring{};
+      _computedFilled |= bit;
+    }
+
+    return &_text.at(idx);
   }
 
   Glib::ustring TrackRowObject::fieldText(rt::TrackField field) const
   {
-    if (auto const* text = stringField(field); text != nullptr)
+    if (auto const* const text = displayText(field); text != nullptr)
     {
       return *text;
     }
 
-    auto const* uiDef = trackFieldUiDefinition(field);
-
-    if (uiDef == nullptr || uiDef->readRowText == nullptr)
-    {
-      static Glib::ustring const kEmpty;
-      return kEmpty;
-    }
-
-    return Glib::ustring{uiDef->readRowText(*this, *_provider)};
+    static Glib::ustring const kEmpty;
+    return kEmpty;
   }
 
   void TrackRowObject::setYear(std::uint16_t year)
   {
     _year = year;
+    invalidateComputedCache();
   }
 
   void TrackRowObject::setDiscNumber(std::uint16_t discNumber)
   {
     _discNumber = discNumber;
+    invalidateComputedCache();
   }
 
   void TrackRowObject::setDiscTotal(std::uint16_t discTotal)
   {
     _discTotal = discTotal;
+    invalidateComputedCache();
   }
 
   void TrackRowObject::setTrackNumber(std::uint16_t trackNumber)
   {
     _trackNumber = trackNumber;
+    invalidateComputedCache();
   }
 
   void TrackRowObject::setTrackTotal(std::uint16_t trackTotal)
   {
     _trackTotal = trackTotal;
+    invalidateComputedCache();
   }
 
   void TrackRowObject::setMovementNumber(std::uint16_t movementNumber)
   {
     _movementNumber = movementNumber;
+    invalidateComputedCache();
   }
 
   void TrackRowObject::setMovementTotal(std::uint16_t movementTotal)
   {
     _movementTotal = movementTotal;
+    invalidateComputedCache();
   }
 } // namespace ao::gtk

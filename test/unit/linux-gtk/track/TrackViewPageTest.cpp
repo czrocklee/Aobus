@@ -4,6 +4,7 @@
 #include "track/TrackViewPage.h"
 
 #include "image/ImageCache.h"
+#include "image/ThumbnailLoader.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
@@ -23,12 +24,13 @@ namespace ao::gtk::test
     auto& library = runtime.musicLibrary();
     auto cache = TrackRowCache{library};
     auto imageCache = ImageCache{200};
+    auto thumbnailLoader = ThumbnailLoader{library, imageCache, runtime.async()};
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);
     auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
 
-    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, presentationStore, runtime, imageCache};
+    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, presentationStore, runtime, thumbnailLoader};
     window.set_child(page);
 
     SECTION("initial state")

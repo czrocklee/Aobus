@@ -216,16 +216,82 @@ namespace ao::gtk::test
       CHECK(castRowPtr->fieldText(rt::TrackField::Artist) == "Artist A");
     }
 
-    SECTION("Playing state updates refresh model items")
+    SECTION("Setting the playing track emits the playing-changed signal, not items_changed")
     {
+      auto playingChangedCount = 0;
+      modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+
       CHECK(spy.events.empty());
       modelPtr->setPlayingTrackId(id1);
 
-      REQUIRE(spy.events.size() == 1);
-      CHECK(spy.events[0].position == 0);
-      CHECK(spy.events[0].removed == 1);
-      CHECK(spy.events[0].added == 1);
-      CHECK(spy.events[0].sizeDuringEvent == 2);
+      // The shared, cached row objects make items_changed a no-op (GTK dedups the
+      // rebind), so the highlight is driven by the dedicated signal instead.
+      CHECK(spy.events.empty());
+      CHECK(playingChangedCount == 1);
+      CHECK(modelPtr->playingTrackId() == id1);
+
+      // get_item_vfunc still stamps isPlaying() on the object it hands back, so a
+      // freshly bound (scrolled-in) row reflects the current playing track.
+      auto const playingRowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(0));
+      REQUIRE(playingRowPtr);
+      CHECK(playingRowPtr->isPlaying());
+    }
+
+    SECTION("Setting the same playing track twice is a no-op")
+    {
+      auto playingChangedCount = 0;
+      modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+
+      modelPtr->setPlayingTrackId(id1);
+      modelPtr->setPlayingTrackId(id1);
+
+      CHECK(playingChangedCount == 1);
+    }
+
+    SECTION("Setting playing track outside the projection emits only the playing signal")
+    {
+      auto playingChangedCount = 0;
+      modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+
+      modelPtr->setPlayingTrackId(TrackId{987654});
+
+      CHECK(playingChangedCount == 1);
+      CHECK(spy.events.empty());
+      CHECK(modelPtr->get_n_items() == 2);
+      CHECK(modelPtr->playingTrackId() == TrackId{987654});
+    }
+
+    SECTION("Setting playing track before binding a projection records state and emits the signal")
+    {
+      auto emptyModelPtr = TrackListModel::create(rowCache);
+      auto playingChangedCount = 0;
+      emptyModelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+
+      emptyModelPtr->setPlayingTrackId(id1);
+
+      CHECK(playingChangedCount == 1);
+      CHECK(emptyModelPtr->playingTrackId() == id1);
+      CHECK(emptyModelPtr->get_n_items() == 0);
+    }
+
+    SECTION("Switching the playing track re-emits the signal and restamps both rows")
+    {
+      auto playingChangedCount = 0;
+      modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+
+      modelPtr->setPlayingTrackId(id1);
+      modelPtr->setPlayingTrackId(id2);
+
+      CHECK(playingChangedCount == 2);
+      CHECK(spy.events.empty());
+      CHECK(modelPtr->playingTrackId() == id2);
+
+      auto const oldRowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(0));
+      auto const newRowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(1));
+      REQUIRE(oldRowPtr);
+      REQUIRE(newRowPtr);
+      CHECK_FALSE(oldRowPtr->isPlaying());
+      CHECK(newRowPtr->isPlaying());
     }
 
     SECTION("Delta batch notifications - Insert")

@@ -317,7 +317,7 @@ namespace ao::gtk
     modelPtr->bindProjection(projPtr);
 
     auto trackPagePtr =
-      std::make_unique<TrackViewPage>(listId, modelPtr, _presentationStore, _runtime, _thumbnailCache, viewId);
+      std::make_unique<TrackViewPage>(listId, modelPtr, _presentationStore, _runtime, _thumbnailLoader, viewId);
     auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = std::string{"List"};

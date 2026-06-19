@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <chrono>
+#include <cstddef>
+
 namespace ao::gtk::layout
 {
   // Spacing presets (Used for Gtk::Box spacing and other UI gaps in C++)
@@ -18,6 +21,10 @@ namespace ao::gtk::layout
 
   // UI Element sizing
   constexpr int kMinCoverArtHeight = 50;
+  constexpr int kSectionCoverLogicalSize = 48;
+  constexpr std::size_t kSectionThumbnailCacheCapacity = 512;
   constexpr int kCompletionPopoverWidth = 260;
   constexpr int kCompletionPopoverMaxHeight = 180;
+
+  constexpr auto kImageResizeSettleDuration = std::chrono::milliseconds{120};
 } // namespace ao::gtk::layout

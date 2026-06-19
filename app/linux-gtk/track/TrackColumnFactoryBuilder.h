@@ -14,6 +14,8 @@
 
 namespace ao::gtk
 {
+  class TrackListModel;
+
   /**
    * Callback for committing inline metadata edits from the UI.
    */
@@ -30,6 +32,10 @@ namespace ao::gtk
    *
    * @param field The track field to build a column factory for.
    * @param commitFn A callback to handle metadata changes if the column is editable.
+   * @param playingModel Model used to drive the now-playing highlight. Each cell
+   *        subscribes once to its playing-changed signal and styles from playingTrackId().
    */
-  Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field, MetadataCommitFn const& commitFn);
+  Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
+                                                              MetadataCommitFn const& commitFn,
+                                                              TrackListModel& playingModel);
 } // namespace ao::gtk

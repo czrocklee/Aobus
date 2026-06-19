@@ -4,8 +4,9 @@
 #include "track/TrackViewPage.h"
 
 #include "app/GtkStyleRuntime.h"
-#include "image/ImageCache.h"
 #include "image/ImageWidget.h"
+#include "image/ResourceImageController.h"
+#include "image/ThumbnailLoader.h"
 #include "layout/LayoutConstants.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnFactoryBuilder.h"
@@ -15,7 +16,6 @@
 #include "track/TrackRowObject.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/async/Runtime.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/LibraryMutationService.h>
@@ -50,6 +50,7 @@
 #include <gtkmm/sorter.h>
 #include <gtkmm/sortlistmodel.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <format>
@@ -118,21 +119,16 @@ namespace ao::gtk
       Glib::RefPtr<TrackListModel> _modelPtr;
     };
 
-    // Decode budget for section cover thumbnails, in logical pixels. Mirrors the
-    // `.ao-track-section-cover` size in css/_common.css; this only bounds the
-    // off-thread decode resolution, the displayed size remains CSS-driven.
-    constexpr std::int32_t kSectionCoverLogicalSize = 48;
-
     class TrackSectionHeaderWidget final : public Gtk::Box
     {
     public:
-      TrackSectionHeaderWidget(library::MusicLibrary& library, async::Runtime& asyncRuntime, ImageCache& thumbnailCache)
-        : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _coverArt{library, thumbnailCache}
+      TrackSectionHeaderWidget(library::MusicLibrary& library, ThumbnailLoader& thumbnailLoader)
+        : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _coverArtController{_coverArt, library, thumbnailLoader.cache()}
       {
         set_spacing(layout::kSpacingXLarge);
         add_css_class("ao-track-section-box");
 
-        _coverArt.enableThumbnailMode(asyncRuntime, kSectionCoverLogicalSize);
+        _coverArtController.enableThumbnailMode(thumbnailLoader, layout::kSectionCoverLogicalSize);
         _coverArt.add_css_class("ao-track-section-cover");
         _coverArt.set_valign(Gtk::Align::CENTER);
         append(_coverArt);
@@ -196,17 +192,19 @@ namespace ao::gtk
 
         if (snap.imageId != kInvalidResourceId)
         {
-          _coverArt.loadImage(snap.imageId);
+          _coverArtController.load(snap.imageId);
           _coverArt.set_visible(true);
         }
         else
         {
+          _coverArtController.clear();
           _coverArt.set_visible(false);
         }
       }
 
     private:
       ImageWidget _coverArt;
+      ResourceImageController _coverArtController;
       Gtk::Label _primaryLabel;
       Gtk::Label _secondaryLabel;
       Gtk::Label _separatorLabel;
@@ -219,7 +217,7 @@ namespace ao::gtk
                                Glib::RefPtr<TrackListModel> modelPtr,
                                uimodel::track::TrackPresentationViewModel& presentationStore,
                                rt::AppRuntime& runtime,
-                               ImageCache& thumbnailCache,
+                               ThumbnailLoader& thumbnailLoader,
                                rt::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
@@ -228,7 +226,7 @@ namespace ao::gtk
 
     , _presentationStore{presentationStore}
     , _runtime{runtime}
-    , _thumbnailCache{thumbnailCache}
+    , _thumbnailLoader{thumbnailLoader}
     , _groupModelPtr{Gtk::SortListModel::create(_modelPtr, Glib::RefPtr<Gtk::Sorter>{})}
     , _selectionModelPtr{Gtk::MultiSelection::create(_groupModelPtr)}
     , _viewHostPtr{std::make_unique<TrackColumnViewHost>(_modelPtr, _presentationStore, _selectionModelPtr, listId)}
@@ -250,7 +248,7 @@ namespace ao::gtk
     // 1. Configure columns and layout first (Off-tree)
     _viewHostPtr->setupColumns(
       [this](rt::TrackField field)
-      { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
+      { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this), *_modelPtr); });
 
     if (_viewId != rt::kInvalidViewId)
     {
@@ -303,8 +301,7 @@ namespace ao::gtk
           return;
         }
 
-        auto* const widget =
-          Gtk::make_managed<TrackSectionHeaderWidget>(_runtime.musicLibrary(), _runtime.async(), _thumbnailCache);
+        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_runtime.musicLibrary(), _thumbnailLoader);
         headerPtr->set_child(*widget);
       });
 
@@ -328,6 +325,15 @@ namespace ao::gtk
           if (auto const optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
           {
             snap = proj->groupAt(*optGroupIndex);
+
+            // Warm the next section's cover so its header binds from cache as the
+            // user scrolls down. Decode budget mirrors the section thumbnail size.
+            if (auto const nextGroupIndex = *optGroupIndex + 1; nextGroupIndex < proj->groupCount())
+            {
+              auto const nextImageId = proj->groupAt(nextGroupIndex).imageId;
+              auto const scale = std::max(1, _viewHostPtr->columnView().get_scale_factor());
+              _thumbnailLoader.prefetch(nextImageId, layout::kSectionCoverLogicalSize * scale);
+            }
           }
         }
 
@@ -383,7 +389,7 @@ namespace ao::gtk
   void TrackViewPage::rebuildColumnView(std::span<rt::TrackField const> visibleFields)
   {
     auto const factoryProvider = [this](rt::TrackField field)
-    { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this)); };
+    { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this), *_modelPtr); };
 
     // 1. Detach UI from Model and Tree immediately.
     _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});

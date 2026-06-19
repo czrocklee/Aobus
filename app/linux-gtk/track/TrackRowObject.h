@@ -9,8 +9,6 @@
 #include <ao/rt/TrackField.h>
 
 #include <glibmm/object.h>
-#include <glibmm/property.h>
-#include <glibmm/propertyproxy.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
@@ -32,10 +30,21 @@ namespace ao::gtk
     Glib::ustring const* stringField(rt::TrackField field) const noexcept;
     bool setStringField(rt::TrackField field, Glib::ustring const& value);
 
+    // Display text for any field, without a by-value copy. Text-backed fields
+    // return their stored slot directly; computed fields are formatted on first
+    // access and memoized, so a recycled cell rebinding to this row re-reads the
+    // cached string instead of re-running the formatter. Never null for a valid
+    // field index. Prefer this over fieldText() on hot paths.
+    Glib::ustring const* displayText(rt::TrackField field) const;
+
     Glib::ustring fieldText(rt::TrackField field) const;
 
     Glib::ustring const& tags() const { return _tags; }
-    void setTags(Glib::ustring const& tags) { _tags = tags; }
+    void setTags(Glib::ustring const& tags)
+    {
+      _tags = tags;
+      invalidateComputedCache();
+    }
 
     std::chrono::milliseconds duration() const { return _duration; }
 
@@ -72,10 +81,8 @@ namespace ao::gtk
     std::uint64_t modifiedTime() const { return _modifiedTime; }
     library::FileStatus status() const { return _status; }
 
-    Glib::PropertyProxy<bool> property_playing();
-
-    bool isPlaying() const;
-    void setPlaying(bool playing);
+    bool isPlaying() const { return _playing; }
+    void setPlaying(bool playing) { _playing = playing; }
 
     void populate(Glib::ustring const& title,
                   DictionaryId artist,
@@ -108,10 +115,20 @@ namespace ao::gtk
     explicit TrackRowObject();
 
   private:
+    // Clears every memoized computed-field string. Called by any mutator: computed
+    // display values derive from the numeric/text members, so changing one of them
+    // invalidates the cache wholesale. Editing is rare, so a full reset is simpler
+    // and safer than a per-field dependency map.
+    void invalidateComputedCache() noexcept { _computedFilled = 0; }
+
     TrackId _id;
     TrackRowCache const* _provider = nullptr;
 
-    std::array<Glib::ustring, rt::kTrackFieldCount> _text{};
+    // Holds both text-backed fields (filled at populate) and lazily memoized
+    // computed-field strings; mutable so displayText() can fill computed slots
+    // from a const accessor. _computedFilled marks which computed slots are valid.
+    mutable std::array<Glib::ustring, rt::kTrackFieldCount> _text{};
+    mutable std::uint32_t _computedFilled = 0;
 
     Glib::ustring _tags;
 
@@ -134,6 +151,10 @@ namespace ao::gtk
     std::uint64_t _modifiedTime = 0;
     library::FileStatus _status = library::FileStatus::Available;
 
-    Glib::Property<bool> _propertyPlaying;
+    // Plain bool: do not replace with Glib::Property<bool>. Nothing subscribes
+    // to per-row property notifications; now-playing highlight is driven by
+    // TrackListModel's dedicated signal, and this flag is only stamped by
+    // get_item_vfunc and read at bind time.
+    bool _playing = false;
   };
 } // namespace ao::gtk

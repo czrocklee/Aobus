@@ -30,6 +30,14 @@ C++ owns intrinsic and allocation-driven behavior:
 
 Display scale must not be used to compute panel widths, split defaults, or workspace geometry. Monitor geometry is reserved for real top-level display behavior such as a fullscreen overlay.
 
+## Image Render Targets
+
+`ImageWidget` chooses raster render targets from the widget's logical allocation and the current
+display scale. During an interactive resize of an already-rendered image, it may produce an interim
+bilinear resample immediately, then re-render the final stable size at high quality after a short
+settle window. Fresh image loads render at high quality immediately; the cheaper path is only for
+allocation churn on the same source.
+
 ## Responsive Classes
 
 `responsiveClass` is a decorator component that observes its own allocation and applies one class to its root widget:

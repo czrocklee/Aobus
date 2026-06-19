@@ -84,7 +84,9 @@ namespace ao::gtk
   {
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromView(TrackId id, library::TrackView const& view) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromView(TrackId id,
+                                                                library::TrackView const& view,
+                                                                lmdb::ReadTransaction const& txn) const
   {
     auto const rowPtr = TrackRowObject::create(id, *this);
 
@@ -97,7 +99,8 @@ namespace ao::gtk
 
     if (auto const uri = view.property().uri(); !uri.empty())
     {
-      auto txn = _ml.readTransaction();
+      // Reuse the caller's read transaction for the manifest lookup rather than
+      // opening a second one per row.
       auto const reader = _ml.manifest().reader(txn);
 
       if (auto const optManifestView = reader.get(uri); optManifestView)
@@ -158,26 +161,7 @@ namespace ao::gtk
       return nullptr;
     }
 
-    auto const rowPtr = createRowFromView(id, *optView);
-    _rowCache[id] = rowPtr;
-    return rowPtr;
-  }
-
-  Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id, library::TrackStore::Reader const& reader) const
-  {
-    if (auto const it = _rowCache.find(id); it != _rowCache.end())
-    {
-      return it->second;
-    }
-
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
-
-    if (!optView)
-    {
-      return nullptr;
-    }
-
-    auto const rowPtr = createRowFromView(id, *optView);
+    auto const rowPtr = createRowFromView(id, *optView, txn);
     _rowCache[id] = rowPtr;
     return rowPtr;
   }

@@ -20,12 +20,18 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/singleselection.h>
+#include <gtkmm/stack.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -57,6 +63,22 @@ namespace ao::gtk::test
     private:
       std::vector<TrackId> _ids;
     };
+
+    void realizeColumnView(Gtk::Window& window, Gtk::ColumnView& columnView)
+    {
+      window.set_default_size(400, 200);
+      window.set_visible(true);
+      drainGtkEvents();
+
+      auto minimum = std::int32_t{};
+      auto natural = std::int32_t{};
+      auto minimumBaseline = std::int32_t{};
+      auto naturalBaseline = std::int32_t{};
+      columnView.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+      columnView.measure(Gtk::Orientation::VERTICAL, 400, minimum, natural, minimumBaseline, naturalBaseline);
+      columnView.size_allocate(Gtk::Allocation{0, 0, 400, 200}, -1);
+      drainGtkEvents();
+    }
   } // namespace
 
   TEST_CASE("TrackColumnFactoryBuilder - factory lifecycle", "[gtk][track][column]")
@@ -94,7 +116,7 @@ namespace ao::gtk::test
 
       SECTION("static column (e.g. Duration)")
       {
-        auto factoryPtr = buildColumnFactory(rt::TrackField::Duration, [](auto, auto, auto) {});
+        auto factoryPtr = buildColumnFactory(rt::TrackField::Duration, [](auto, auto, auto) {}, *modelPtr);
         auto columnPtr = Gtk::ColumnViewColumn::create("Duration", factoryPtr);
         columnView.append_column(columnPtr);
 
@@ -108,7 +130,7 @@ namespace ao::gtk::test
       {
         auto committedValue = std::string{};
         auto factoryPtr =
-          buildColumnFactory(rt::TrackField::Title, [&](auto, auto, auto val) { committedValue = val; });
+          buildColumnFactory(rt::TrackField::Title, [&](auto, auto, auto val) { committedValue = val; }, *modelPtr);
         auto columnPtr = Gtk::ColumnViewColumn::create("Title", factoryPtr);
         columnView.append_column(columnPtr);
 
@@ -117,11 +139,36 @@ namespace ao::gtk::test
         auto rowPtr = cache.trackRow(trackId);
         REQUIRE(rowPtr);
 
-        rowPtr->setPlaying(true);
+        // Realize the cell, then drive an inline edit through the commit handler
+        // that is now wired once at setup (not per bind). The slot must resolve
+        // the currently-bound row from the ListItem and invoke commitFn with the
+        // typed value, then collapse the editor back to its display child.
+        realizeColumnView(window, columnView);
+
+        // Drive the now-playing highlight through the model signal (the path used
+        // in production); the per-cell subscription must restyle the realized row.
+        CHECK(findWidgetByClass<Gtk::Widget>(columnView, "ao-playing-row") == nullptr);
+
+        modelPtr->setPlayingTrackId(trackId);
+        drainGtkEvents();
+        REQUIRE(findWidgetByClass<Gtk::Widget>(columnView, "ao-playing-row") != nullptr);
+
+        modelPtr->setPlayingTrackId(kInvalidTrackId);
+        drainGtkEvents();
+        CHECK(findWidgetByClass<Gtk::Widget>(columnView, "ao-playing-row") == nullptr);
+
+        auto* const entry = findWidget<Gtk::Entry>(columnView);
+        REQUIRE(entry != nullptr);
+
+        entry->set_text("Edited Title");
+        ::g_signal_emit_by_name(entry->gobj(), "activate");
         drainGtkEvents();
 
-        rowPtr->setPlaying(false);
-        drainGtkEvents();
+        CHECK(committedValue == "Edited Title");
+
+        auto* const stack = findWidget<Gtk::Stack>(columnView);
+        REQUIRE(stack != nullptr);
+        CHECK(stack->get_visible_child_name() == "display");
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
         drainGtkEvents();
@@ -131,7 +178,7 @@ namespace ao::gtk::test
       {
         for (auto const& def : rt::trackFieldDefinitions())
         {
-          auto factoryPtr = buildColumnFactory(def.field, [](auto, auto, auto) {});
+          auto factoryPtr = buildColumnFactory(def.field, [](auto, auto, auto) {}, *modelPtr);
           auto columnPtr = Gtk::ColumnViewColumn::create(std::string{def.label}, factoryPtr);
           columnView.append_column(columnPtr);
         }

@@ -1,15 +1,16 @@
 ---
 name: run-council
 description: >-
-  Convene the aobus-fleet SynthesisEngine for a high-stakes plan or code review. Members draft
-  independently, challenge peers, optionally revise, and return an advisory dossier for chair synthesis.
+  Convene the aobus-fleet SynthesisEngine only when the user explicitly asks for a council
+  (for example, says "ask council", "convene council", "summon council", "consult council",
+  "council", or "run-council") for a plan or code review.
+  Do not use this skill merely because a task is high-stakes, architectural, concurrent, or risky.
 ---
 
 # Run Council
 
-Use a council when independent model diversity is worth the cost: architecture, risky reviews,
-error-contract choices, concurrency design, or disputed root cause. The fleet runs member rounds only;
-the chair performs final synthesis and owns the verdict.
+Follow the frontmatter trigger rule strictly. The fleet runs member rounds only; the chair performs
+final synthesis and owns the verdict.
 
 ## Intent
 

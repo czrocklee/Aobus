@@ -3,6 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "image/ImageWidget.h"
+#include "image/ResourceImageController.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
@@ -116,7 +117,9 @@ namespace ao::gtk::layout
           return;
         }
 
-        _imageWidgetPtr = std::make_unique<ImageWidget>(ctx.runtime.musicLibrary(), *ctx.detail.imageCache);
+        _imageWidgetPtr = std::make_unique<ImageWidget>();
+        _imageControllerPtr = std::make_unique<ResourceImageController>(
+          *_imageWidgetPtr, ctx.runtime.musicLibrary(), *ctx.detail.imageCache);
         _imageWidgetPtr->set_overflow(Gtk::Overflow::HIDDEN);
 
         auto const targetSize = node.getProp<std::int64_t>("targetSize", kThumbnailSize);
@@ -228,7 +231,7 @@ namespace ao::gtk::layout
       {
         if (_currentTrackId == kInvalidTrackId)
         {
-          _imageWidgetPtr->clearImage();
+          _imageControllerPtr->clear();
           return;
         }
 
@@ -240,19 +243,20 @@ namespace ao::gtk::layout
         {
           if (auto const optPrimary = optView->coverArt().primary(); optPrimary)
           {
-            _imageWidgetPtr->loadImage(optPrimary->resourceId);
+            _imageControllerPtr->load(optPrimary->resourceId);
             _button.set_visible(true);
             return;
           }
         }
 
-        _imageWidgetPtr->clearImage();
+        _imageControllerPtr->clear();
         _button.set_visible(false);
       }
 
       rt::AppRuntime& _runtime;
       Action _action = Action::None;
       std::unique_ptr<ImageWidget> _imageWidgetPtr;
+      std::unique_ptr<ResourceImageController> _imageControllerPtr;
       std::unique_ptr<PassiveImageSlot> _passiveSlotPtr;
       Gtk::Button _button;
       Gtk::Label* _error = nullptr;

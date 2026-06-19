@@ -126,12 +126,12 @@ namespace ao::gtk::test
       CHECK(row2Ptr->fieldText(rt::TrackField::Title) == "Track 2");
       CHECK(row2Ptr->duration() == std::chrono::minutes{4});
 
-      // Verify playing properties and setters/getters
+      // Verify the playing flag setter/getter
       CHECK_FALSE(row1Ptr->isPlaying());
       row1Ptr->setPlaying(true);
       CHECK(row1Ptr->isPlaying());
-      auto const proxy = row1Ptr->property_playing();
-      CHECK(proxy.get_value() == true);
+      row1Ptr->setPlaying(false);
+      CHECK_FALSE(row1Ptr->isPlaying());
 
       // Verify custom string fields and failure paths
       CHECK(row1Ptr->setStringField(rt::TrackField::Artist, "New Artist"));
@@ -152,6 +152,24 @@ namespace ao::gtk::test
       CHECK(row1Ptr->sampleRate() == 44100);
       CHECK(row1Ptr->channels() == 2);
       CHECK(row1Ptr->bitDepth() == 16);
+
+      // displayText() memoizes computed fields and must drop the cached string
+      // when a contributing setter runs. Year was set to 2025 above; read it once
+      // (fills the cache), then mutate and confirm the refreshed value, not stale.
+      REQUIRE(row1Ptr->displayText(rt::TrackField::Year) != nullptr);
+      CHECK(*row1Ptr->displayText(rt::TrackField::Year) == "2025");
+      row1Ptr->setYear(1999);
+      CHECK(*row1Ptr->displayText(rt::TrackField::Year) == "1999");
+
+      // The TrackNumber setter ran above (value 4); a first-time computed read
+      // must still format correctly from scratch (lazy fill).
+      CHECK(*row1Ptr->displayText(rt::TrackField::TrackNumber) == "4");
+
+      // Text-backed fields share the same stored slot as stringField() — no
+      // separate cache, so displayText() returns the identical pointer.
+      CHECK(row1Ptr->displayText(rt::TrackField::Artist) == row1Ptr->stringField(rt::TrackField::Artist));
+      CHECK(*row1Ptr->displayText(rt::TrackField::Artist) == "New Artist");
+      CHECK(row1Ptr->displayText(static_cast<rt::TrackField>(255)) == nullptr);
     }
 
     SECTION("Cache helper methods")

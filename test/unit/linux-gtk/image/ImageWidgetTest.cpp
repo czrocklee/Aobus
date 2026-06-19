@@ -4,77 +4,28 @@
 #include "image/ImageWidget.h"
 
 #include "image/ImageCache.h"
+#include "image/ResourceImageController.h"
+#include "image/ThumbnailLoader.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ProjectionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gdkmm/pixbuf.h>
 #include <gdkmm/rectangle.h>
-#include <glib.h>
-#include <glibmm/main.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
 
 #include <algorithm>
-#include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
-#include <span>
-#include <thread>
 #include <utility>
 
 namespace ao::gtk::test
 {
   namespace
   {
-    Glib::RefPtr<Gdk::Pixbuf> makePixbuf(std::int32_t width, std::int32_t height)
-    {
-      return Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, width, height);
-    }
-
-    // Encodes a pixbuf as PNG and stores it in the library's resource store,
-    // returning the resource id of the persisted cover blob.
-    ResourceId writeCoverResource(library::MusicLibrary& library, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
-    {
-      gchar* buffer = nullptr;
-      gsize bufferSize = 0;
-      pixbufPtr->save_to_buffer(buffer, bufferSize, "png");
-
-      auto const bytes =
-        std::span<std::byte const>{reinterpret_cast<std::byte const*>(buffer), static_cast<std::size_t>(bufferSize)};
-
-      auto txn = library.writeTransaction();
-      auto const id = library.resources().writer(txn).create(bytes);
-      txn.commit();
-
-      ::g_free(buffer);
-      return id;
-    }
-
-    // Pumps the default GTK main context until @p predicate holds or the timeout
-    // elapses. Needed because the thumbnail decode completes on a worker thread
-    // and posts its result back through the callback executor.
-    bool pumpUntil(std::function<bool()> const& predicate, std::chrono::milliseconds timeout = std::chrono::seconds{5})
-    {
-      auto const contextPtr = Glib::MainContext::get_default();
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-      while (!predicate() && std::chrono::steady_clock::now() < deadline)
-      {
-        contextPtr->iteration(false);
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
-      }
-
-      return predicate();
-    }
-
     class AllocationHost final : public Gtk::Widget
     {
     public:
@@ -221,34 +172,11 @@ namespace ao::gtk::test
   TEST_CASE("ImageWidget - basic functionality", "[gtk][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-    auto& runtime = fixture.runtime();
-    auto imageCache = ImageCache{200};
-
-    auto widget = ImageWidget{runtime.musicLibrary(), imageCache};
+    auto widget = ImageWidget{};
 
     SECTION("initial state has alt text")
     {
       CHECK(widget.get_alternative_text() == "No cover art");
-    }
-
-    SECTION("bind to projection updates image")
-    {
-      auto mockProjPtr = std::make_unique<ManualTrackDetailMock>();
-      auto* mock = mockProjPtr.get();
-
-      auto snapshot = rt::TrackDetailSnapshot{};
-      snapshot.selectionKind = rt::SelectionKind::Single;
-      snapshot.trackIds = {TrackId{1}};
-      snapshot.singleCoverArtId = ResourceId{123};
-
-      widget.bindToDetailProjection(std::move(mockProjPtr));
-
-      mock->emit(snapshot);
-      drainGtkEvents();
-
-      // Since we don't have a real resource with ID 123, it won't actually load an image,
-      // but it covers the branch in onDetailSnapshot.
     }
 
     SECTION("allocated rendering uses current widget size")
@@ -309,16 +237,14 @@ namespace ao::gtk::test
       CHECK(paintablePtr->get_intrinsic_height() == expectedSize);
     }
 
-    SECTION("same resource reload refreshes rendered image")
+    SECTION("new pixbuf refreshes rendered image")
     {
       auto const scaleFactor = widget.get_scale_factor();
-      auto const resourceId = ResourceId{42};
       auto const smallPixbufPtr = makePixbuf(40, 40);
       auto const largePixbufPtr = makePixbuf(200, 200);
 
-      imageCache.put(resourceId, smallPixbufPtr);
       widget.setTargetSize(56);
-      widget.loadImage(resourceId);
+      widget.setImagePixbuf(smallPixbufPtr);
       drainGtkEvents();
 
       auto paintablePtr = widget.get_paintable();
@@ -326,14 +252,101 @@ namespace ao::gtk::test
       CHECK(paintablePtr->get_intrinsic_width() == 40);
       CHECK(paintablePtr->get_intrinsic_height() == 40);
 
-      imageCache.put(resourceId, largePixbufPtr);
-      widget.loadImage(resourceId);
+      widget.setImagePixbuf(largePixbufPtr);
       drainGtkEvents();
 
       paintablePtr = widget.get_paintable();
       REQUIRE(paintablePtr);
       CHECK(paintablePtr->get_intrinsic_width() == 56 * scaleFactor);
       CHECK(paintablePtr->get_intrinsic_height() == 56 * scaleFactor);
+    }
+
+    SECTION("resize settles to a full-quality render at the final size")
+    {
+      auto const scaleFactor = widget.get_scale_factor();
+      // A source far larger than any target so the fit always downscales to the
+      // requested size exactly (no clamping to the source dimensions).
+      auto const sourcePixbufPtr = makePixbuf(2000, 2000);
+
+      // First paint at a known size: a fresh source goes straight to full quality.
+      widget.setTargetSize(56);
+      widget.setImagePixbuf(sourcePixbufPtr);
+      drainGtkEvents();
+
+      auto const firstPaintablePtr = widget.get_paintable();
+      REQUIRE(firstPaintablePtr);
+      CHECK(firstPaintablePtr->get_intrinsic_width() == 56 * scaleFactor);
+
+      // Changing the render target on the same source is a resize step: it paints
+      // immediately (cheap interim filter) at the new size...
+      widget.setTargetSize(96);
+      drainGtkEvents();
+
+      auto const interimPaintablePtr = widget.get_paintable();
+      REQUIRE(interimPaintablePtr);
+      REQUIRE(interimPaintablePtr.get() != firstPaintablePtr.get());
+      CHECK(interimPaintablePtr->get_intrinsic_width() == 96 * scaleFactor);
+
+      // ...then, once the settle window elapses, it is replaced by a fresh
+      // full-quality re-render: a different texture object at the same size.
+      REQUIRE(pumpUntil([&] { return widget.get_paintable().get() != interimPaintablePtr.get(); }));
+
+      auto const settledPaintablePtr = widget.get_paintable();
+      REQUIRE(settledPaintablePtr);
+      CHECK(settledPaintablePtr->get_intrinsic_width() == 96 * scaleFactor);
+      CHECK(settledPaintablePtr->get_intrinsic_height() == 96 * scaleFactor);
+    }
+
+    SECTION("resize settle timer follows the last target size")
+    {
+      auto const scaleFactor = widget.get_scale_factor();
+      auto const sourcePixbufPtr = makePixbuf(2000, 2000);
+
+      widget.setTargetSize(56);
+      widget.setImagePixbuf(sourcePixbufPtr);
+      drainGtkEvents();
+
+      widget.setTargetSize(96);
+      drainGtkEvents();
+      widget.setTargetSize(64);
+      drainGtkEvents();
+
+      auto const interimPaintablePtr = widget.get_paintable();
+      REQUIRE(interimPaintablePtr);
+      CHECK(interimPaintablePtr->get_intrinsic_width() == 64 * scaleFactor);
+
+      REQUIRE(pumpUntil([&] { return widget.get_paintable().get() != interimPaintablePtr.get(); }));
+
+      auto const settledPaintablePtr = widget.get_paintable();
+      REQUIRE(settledPaintablePtr);
+      CHECK(settledPaintablePtr->get_intrinsic_width() == 64 * scaleFactor);
+      CHECK(settledPaintablePtr->get_intrinsic_height() == 64 * scaleFactor);
+    }
+
+    SECTION("new source during resize settle renders the new image")
+    {
+      auto const scaleFactor = widget.get_scale_factor();
+      auto const firstPixbufPtr = makePixbuf(2000, 2000);
+      auto const secondPixbufPtr = makePixbuf(3000, 3000);
+
+      widget.setTargetSize(56);
+      widget.setImagePixbuf(firstPixbufPtr);
+      drainGtkEvents();
+
+      widget.setTargetSize(96);
+      drainGtkEvents();
+
+      auto const interimPaintablePtr = widget.get_paintable();
+      REQUIRE(interimPaintablePtr);
+
+      widget.setImagePixbuf(secondPixbufPtr);
+      drainGtkEvents();
+
+      auto const newSourcePaintablePtr = widget.get_paintable();
+      REQUIRE(newSourcePaintablePtr);
+      CHECK(newSourcePaintablePtr.get() != interimPaintablePtr.get());
+      CHECK(newSourcePaintablePtr->get_intrinsic_width() == 96 * scaleFactor);
+      CHECK(newSourcePaintablePtr->get_intrinsic_height() == 96 * scaleFactor);
     }
 
     SECTION("small target growth refreshes undersized render")
@@ -360,13 +373,62 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ImageWidget - async thumbnail mode", "[gtk][image]")
+  TEST_CASE("ResourceImageController", "[gtk][image]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& library = runtime.musicLibrary();
+    auto imageCache = ImageCache{200};
+
+    SECTION("loads a cached resource into the widget")
+    {
+      auto const resourceId = ResourceId{42};
+      imageCache.put(resourceId, makePixbuf(80, 80));
+
+      auto widget = ImageWidget{};
+      auto controller = ResourceImageController{widget, library, imageCache};
+
+      widget.setTargetSize(56);
+      controller.load(resourceId);
+      drainGtkEvents();
+
+      auto const paintablePtr = widget.get_paintable();
+      REQUIRE(paintablePtr);
+      CHECK(paintablePtr->get_intrinsic_width() == 56 * widget.get_scale_factor());
+      CHECK(paintablePtr->get_intrinsic_height() == 56 * widget.get_scale_factor());
+    }
+
+    SECTION("binds to a projection and ignores missing resources")
+    {
+      auto mockProjPtr = std::make_unique<ManualTrackDetailMock>();
+      auto* mock = mockProjPtr.get();
+
+      auto widget = ImageWidget{};
+      auto controller = ResourceImageController{widget, library, imageCache};
+
+      controller.bindToDetailProjection(std::move(mockProjPtr));
+
+      auto snapshot = rt::TrackDetailSnapshot{};
+      snapshot.selectionKind = rt::SelectionKind::Single;
+      snapshot.trackIds = {TrackId{1}};
+      snapshot.singleCoverArtId = ResourceId{123};
+
+      mock->emit(snapshot);
+      drainGtkEvents();
+
+      CHECK_FALSE(widget.get_paintable());
+    }
+  }
+
+  TEST_CASE("ResourceImageController - async thumbnail mode", "[gtk][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
     auto thumbnailCache = ImageCache{200};
+    auto loader = ThumbnailLoader{library, thumbnailCache, runtime.async()};
 
     constexpr std::int32_t kLogicalSize = 48;
 
@@ -375,9 +437,10 @@ namespace ao::gtk::test
       // A large square source so we can prove the cached result is downscaled.
       auto const resourceId = writeCoverResource(library, makePixbuf(256, 256));
 
-      auto widget = ImageWidget{library, thumbnailCache};
-      widget.enableThumbnailMode(runtime.async(), kLogicalSize);
-      widget.loadImage(resourceId);
+      auto widget = ImageWidget{};
+      auto controller = ResourceImageController{widget, library, thumbnailCache};
+      controller.enableThumbnailMode(loader, kLogicalSize);
+      controller.load(resourceId);
 
       auto const scaleFactor = widget.get_scale_factor();
       auto const expectedSide = kLogicalSize * scaleFactor;
@@ -403,9 +466,10 @@ namespace ao::gtk::test
       auto const resourceId = ResourceId{9001};
       thumbnailCache.put(resourceId, makePixbuf(kLogicalSize, kLogicalSize));
 
-      auto widget = ImageWidget{library, thumbnailCache};
-      widget.enableThumbnailMode(runtime.async(), kLogicalSize);
-      widget.loadImage(resourceId);
+      auto widget = ImageWidget{};
+      auto controller = ResourceImageController{widget, library, thumbnailCache};
+      controller.enableThumbnailMode(loader, kLogicalSize);
+      controller.load(resourceId);
       drainGtkEvents();
 
       CHECK(widget.get_paintable());
@@ -413,9 +477,10 @@ namespace ao::gtk::test
 
     SECTION("invalid resource id clears the image")
     {
-      auto widget = ImageWidget{library, thumbnailCache};
-      widget.enableThumbnailMode(runtime.async(), kLogicalSize);
-      widget.loadImage(kInvalidResourceId);
+      auto widget = ImageWidget{};
+      auto controller = ResourceImageController{widget, library, thumbnailCache};
+      controller.enableThumbnailMode(loader, kLogicalSize);
+      controller.load(kInvalidResourceId);
       drainGtkEvents();
 
       CHECK_FALSE(widget.get_paintable());
@@ -426,22 +491,25 @@ namespace ao::gtk::test
       auto const resourceId = writeCoverResource(library, makePixbuf(256, 256));
 
       {
-        auto widget = ImageWidget{library, thumbnailCache};
-        widget.enableThumbnailMode(runtime.async(), kLogicalSize);
-        widget.loadImage(resourceId);
+        auto widget = ImageWidget{};
+        auto controller = ResourceImageController{widget, library, thumbnailCache};
+        controller.enableThumbnailMode(loader, kLogicalSize);
+        controller.load(resourceId);
         // Leave the scope immediately: the decode is likely still in flight on a
-        // worker thread. The widget's lifetime scope must cancel it so the
-        // resumed coroutine never touches the destroyed widget.
+        // worker thread. The shared loader outlives the widget and still completes
+        // the decode, but the controller's request handle must cancel the UI
+        // callback so it never touches the destroyed widget.
       }
 
-      // Pump long enough for the in-flight decode to resume and observe the
-      // cancellation; a use-after-free here would surface under ASan.
-      pumpUntil([] { return false; }, std::chrono::milliseconds{300});
+      // The shared loader still salvages the decode into the cache, while the
+      // controller's destroyed request handle prevents the callback from touching it.
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(thumbnailCache.get(resourceId)); }));
 
       // The runtime remains usable afterwards.
-      auto widget = ImageWidget{library, thumbnailCache};
-      widget.enableThumbnailMode(runtime.async(), kLogicalSize);
-      widget.loadImage(resourceId);
+      auto widget = ImageWidget{};
+      auto controller = ResourceImageController{widget, library, thumbnailCache};
+      controller.enableThumbnailMode(loader, kLogicalSize);
+      controller.load(resourceId);
       REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
       CHECK(widget.get_paintable());
     }

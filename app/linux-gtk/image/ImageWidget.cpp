@@ -3,20 +3,11 @@
 
 #include "image/ImageWidget.h"
 
-#include "image/ImageCache.h"
-#include <ao/Type.h>
-#include <ao/async/LifetimeScope.h>
-#include <ao/async/Runtime.h>
-#include <ao/async/Task.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/rt/ProjectionTypes.h>
+#include "layout/LayoutConstants.h"
 
 #include <gdkmm/pixbuf.h>
 #include <gdkmm/surface.h> // NOLINT(misc-include-cleaner)
 #include <gdkmm/texture.h>
-#include <giomm/memoryinputstream.h>
-#include <glibmm/error.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
@@ -25,13 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <iterator>
-#include <memory>
-#include <span>
-#include <utility>
 
 namespace ao::gtk
 {
@@ -117,8 +102,7 @@ namespace ao::gtk
     return widthDiff >= widthThreshold || heightDiff >= heightThreshold;
   }
 
-  ImageWidget::ImageWidget(library::MusicLibrary& library, ImageCache& cache)
-    : _library{library}, _cache{cache}
+  ImageWidget::ImageWidget()
   {
     set_content_fit(Gtk::ContentFit::CONTAIN);
     set_can_shrink(true);
@@ -141,6 +125,7 @@ namespace ao::gtk
   ImageWidget::~ImageWidget()
   {
     _refreshConnection.disconnect();
+    _resizeSettleConnection.disconnect();
   }
 
   void ImageWidget::setTargetSize(std::int32_t size)
@@ -171,212 +156,6 @@ namespace ao::gtk
     }
   }
 
-  void ImageWidget::bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr)
-  {
-    _detailProjectionPtr = std::move(projectionPtr);
-    _detailSub = _detailProjectionPtr->subscribe(std::bind_front(&ImageWidget::onDetailSnapshot, this));
-  }
-
-  void ImageWidget::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)
-  {
-    if (snap.selectionKind == rt::SelectionKind::None || snap.trackIds.empty())
-    {
-      clearImage();
-      return;
-    }
-
-    loadImage(snap.singleCoverArtId);
-  }
-
-  void ImageWidget::enableThumbnailMode(async::Runtime& runtime, std::int32_t logicalSizePx)
-  {
-    _thumbnailMode = true;
-    _asyncRuntime = &runtime;
-    _thumbnailLogicalSize = std::max(1, logicalSizePx);
-
-    if (!_decodeScopePtr)
-    {
-      _decodeScopePtr = std::make_unique<async::LifetimeScope>();
-    }
-  }
-
-  void ImageWidget::loadImage(ResourceId const coverArtId)
-  {
-    if (_thumbnailMode)
-    {
-      loadThumbnail(coverArtId);
-      return;
-    }
-
-    if (coverArtId == kInvalidResourceId)
-    {
-      clearImage();
-      return;
-    }
-
-    auto cachedPtr = _cache.get(coverArtId);
-
-    if (!cachedPtr)
-    {
-      auto const txn = _library.readTransaction();
-      auto const resReader = _library.resources().reader(txn);
-      auto const optData = resReader.get(coverArtId);
-
-      if (!optData)
-      {
-        clearImage();
-        return;
-      }
-
-      try
-      {
-        auto const memStreamPtr = Gio::MemoryInputStream::create();
-        memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
-        cachedPtr = Gdk::Pixbuf::create_from_stream(memStreamPtr);
-        _cache.put(coverArtId, cachedPtr);
-      }
-      catch (Glib::Error const&)
-      {
-        clearImage();
-        return;
-      }
-    }
-
-    _currentCoverId = coverArtId;
-    _sourcePixbufPtr = cachedPtr;
-    invalidateRenderedImage();
-    queueRefresh();
-  }
-
-  void ImageWidget::loadThumbnail(ResourceId const coverArtId)
-  {
-    // Any decode already in flight is now stale; bump the generation so its
-    // result is dropped when it resumes on the UI thread.
-    ++_thumbnailGeneration;
-
-    if (coverArtId == kInvalidResourceId)
-    {
-      clearImage();
-      return;
-    }
-
-    if (auto cachedPtr = _cache.get(coverArtId); cachedPtr)
-    {
-      _currentCoverId = coverArtId;
-      _sourcePixbufPtr = cachedPtr;
-      invalidateRenderedImage();
-      queueRefresh();
-      return;
-    }
-
-    // Cache miss: clear the (possibly recycled) previous cover so a neighbouring
-    // section's art is never shown, then decode off the UI thread.
-    clearImage();
-    spawnThumbnailDecode(coverArtId);
-  }
-
-  void ImageWidget::spawnThumbnailDecode(ResourceId const coverArtId)
-  {
-    if (_asyncRuntime == nullptr || !_decodeScopePtr)
-    {
-      return;
-    }
-
-    auto const generation = _thumbnailGeneration;
-    auto const targetPixels = thumbnailPhysicalSize();
-
-    // All state the coroutine needs is passed by value: a coroutine lambda's
-    // captures would dangle once the temporary closure is destroyed, whereas
-    // parameters are copied into the coroutine frame.
-    _asyncRuntime->spawnWithLifetime(_decodeScopePtr.get(),
-                                     [](ImageWidget* self,
-                                        async::Runtime* runtime,
-                                        library::MusicLibrary* library,
-                                        ResourceId id,
-                                        std::uint64_t expectedGeneration,
-                                        std::int32_t pixelSize) -> async::Task<void>
-                                     {
-                                       // Only stable, application-lifetime pointers (runtime, library) may be
-                                       // touched here; `self` must not be dereferenced until execution has
-                                       // resumed back on the callback executor.
-                                       auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
-
-                                       co_await runtime->resumeOnWorker();
-
-                                       try
-                                       {
-                                         // The LMDB read transaction and the byte span it yields are valid only
-                                         // within this worker segment; decode-at-scale before suspending again.
-                                         auto const txn = library->readTransaction();
-                                         auto const resReader = library->resources().reader(txn);
-
-                                         if (auto const optData = resReader.get(id); optData)
-                                         {
-                                           auto const memStreamPtr = Gio::MemoryInputStream::create();
-                                           memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
-                                           decodedPtr = Gdk::Pixbuf::create_from_stream_at_scale(
-                                             memStreamPtr, pixelSize, pixelSize, true);
-                                         }
-                                       }
-                                       catch (Glib::Error const&)
-                                       {
-                                         decodedPtr.reset();
-                                       }
-
-                                       // Resuming throws operation_aborted if the widget's lifetime scope was
-                                       // cancelled (widget destroyed), so `self` is safe to use past this point.
-                                       co_await runtime->resumeOnCallbackExecutor();
-
-                                       if (expectedGeneration != self->_thumbnailGeneration)
-                                       {
-                                         // A newer load superseded this request while it was in flight.
-                                         co_return;
-                                       }
-
-                                       if (!decodedPtr)
-                                       {
-                                         self->clearImage();
-                                         co_return;
-                                       }
-
-                                       self->_cache.put(id, decodedPtr);
-                                       self->_currentCoverId = id;
-                                       self->_sourcePixbufPtr = decodedPtr;
-                                       self->invalidateRenderedImage();
-                                       self->queueRefresh();
-                                     }(this, _asyncRuntime, &_library, coverArtId, generation, targetPixels));
-  }
-
-  std::int32_t ImageWidget::thumbnailPhysicalSize() const
-  {
-    auto const scale = currentDisplayScale();
-    auto const physical = static_cast<std::int32_t>(std::ceil(static_cast<double>(_thumbnailLogicalSize) * scale));
-    return std::max(1, physical);
-  }
-
-  void ImageWidget::setImageFromBytes(std::span<std::byte const> bytes)
-  {
-    if (bytes.empty())
-    {
-      clearImage();
-      return;
-    }
-
-    try
-    {
-      auto const memStreamPtr = Gio::MemoryInputStream::create();
-      memStreamPtr->add_data(bytes.data(), std::ssize(bytes), nullptr);
-      _currentCoverId = kInvalidResourceId;
-      _sourcePixbufPtr = Gdk::Pixbuf::create_from_stream(memStreamPtr);
-      invalidateRenderedImage();
-      queueRefresh();
-    }
-    catch (Glib::Error const&)
-    {
-      clearImage();
-    }
-  }
-
   void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
   {
     if (!pixbuf)
@@ -385,7 +164,6 @@ namespace ao::gtk
       return;
     }
 
-    _currentCoverId = kInvalidResourceId;
     _sourcePixbufPtr = pixbuf;
     invalidateRenderedImage();
     queueRefresh();
@@ -394,7 +172,6 @@ namespace ao::gtk
   void ImageWidget::clearImage()
   {
     _sourcePixbufPtr.reset();
-    _currentCoverId = kInvalidResourceId;
 
     invalidateRenderedImage();
 
@@ -404,11 +181,11 @@ namespace ao::gtk
   void ImageWidget::invalidateRenderedImage()
   {
     _renderedSourcePixbufPtr.reset();
-    _renderedCoverId = kInvalidResourceId;
     _renderedTargetPixelWidth = 0;
     _renderedTargetPixelHeight = 0;
     _renderedPixelWidth = 0;
     _renderedPixelHeight = 0;
+    _renderedWithInterim = false;
   }
 
   void ImageWidget::size_allocate_vfunc(int width, int height, int baseline)
@@ -419,6 +196,27 @@ namespace ao::gtk
     _allocatedHeight = std::max(0, height);
 
     queueRefresh();
+  }
+
+  void ImageWidget::beginResizeSettle()
+  {
+    _resizeActive = true;
+    _resizeSettleConnection.disconnect();
+    _resizeSettleConnection = Glib::signal_timeout().connect(
+      [this]
+      {
+        _resizeActive = false;
+
+        // Re-render the now-stable frame at full quality if the last paint used
+        // the cheap interim filter.
+        if (_renderedWithInterim)
+        {
+          queueRefresh();
+        }
+
+        return false;
+      },
+      static_cast<std::uint32_t>(layout::kImageResizeSettleDuration.count()));
   }
 
   void ImageWidget::queueRefresh()
@@ -442,7 +240,7 @@ namespace ao::gtk
   {
     if (!_sourcePixbufPtr)
     {
-      if (_renderedSourcePixbufPtr || _renderedCoverId != kInvalidResourceId)
+      if (_renderedSourcePixbufPtr)
       {
         clearImage();
       }
@@ -457,36 +255,53 @@ namespace ao::gtk
       return;
     }
 
-    auto sourcePixbufPtr = _sourcePixbufPtr;
-    auto fitTarget = RenderTarget{};
-
-    if (_forceSquareTarget)
-    {
-      sourcePixbufPtr = centerCropToAspect(_sourcePixbufPtr, target);
-      fitTarget = target;
-    }
-    else
-    {
-      fitTarget =
-        fitSourceIntoTarget({.width = sourcePixbufPtr->get_width(), .height = sourcePixbufPtr->get_height()}, target);
-    }
+    // The center crop only affects pixel content, not the fit dimensions, so we
+    // can size the render target without it and defer the (allocating) crop until
+    // we know a re-render is actually needed.
+    auto const fitTarget =
+      _forceSquareTarget
+        ? target
+        : fitSourceIntoTarget(
+            {.width = _sourcePixbufPtr->get_width(), .height = _sourcePixbufPtr->get_height()}, target);
 
     if (fitTarget.width <= 0 || fitTarget.height <= 0)
     {
       return;
     }
 
-    bool const sourceChanged = (_sourcePixbufPtr != _renderedSourcePixbufPtr) || (_currentCoverId != _renderedCoverId);
+    bool const sourceChanged = _sourcePixbufPtr != _renderedSourcePixbufPtr;
     bool const sizeChanged =
       shouldRefresh({.width = _renderedTargetPixelWidth, .height = _renderedTargetPixelHeight}, target);
     bool const renderedTooSmall = _renderedPixelWidth < fitTarget.width || _renderedPixelHeight < fitTarget.height;
+    // After a resize settles, the last frame may still be the cheap interim
+    // render even though nothing else changed; re-render it at full quality.
+    bool const qualityUpgrade = _renderedWithInterim && !_resizeActive;
 
-    if (!sourceChanged && !sizeChanged && !renderedTooSmall)
+    if (!sourceChanged && !sizeChanged && !renderedTooSmall && !qualityUpgrade)
+    {
+      return;
+    }
+
+    // A size change on an already-rendered source means the widget is being
+    // resized (e.g. a window/pane drag): resample cheaply now and re-render at
+    // full quality once the size has been stable for the settle window. A fresh
+    // source load (sourceChanged) or the very first paint goes straight to HYPER.
+    bool const hasPriorRender = _renderedTargetPixelWidth > 0 && _renderedTargetPixelHeight > 0;
+
+    if (sizeChanged && !sourceChanged && hasPriorRender)
+    {
+      beginResizeSettle();
+    }
+
+    auto const sourcePixbufPtr = _forceSquareTarget ? centerCropToAspect(_sourcePixbufPtr, target) : _sourcePixbufPtr;
+
+    if (!sourcePixbufPtr)
     {
       return;
     }
 
     auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+    bool scaled = false;
 
     if (fitTarget.width == sourcePixbufPtr->get_width() && fitTarget.height == sourcePixbufPtr->get_height())
     {
@@ -494,22 +309,26 @@ namespace ao::gtk
     }
     else
     {
-      renderedPixbufPtr = sourcePixbufPtr->scale_simple(fitTarget.width, fitTarget.height, Gdk::InterpType::HYPER);
+      auto const interp = _resizeActive ? Gdk::InterpType::BILINEAR : Gdk::InterpType::HYPER;
+      renderedPixbufPtr = sourcePixbufPtr->scale_simple(fitTarget.width, fitTarget.height, interp);
+      scaled = true;
     }
 
     _renderedSourcePixbufPtr = _sourcePixbufPtr;
-    _renderedCoverId = _currentCoverId;
     _renderedTargetPixelWidth = target.width;
     _renderedTargetPixelHeight = target.height;
     _renderedPixelWidth = fitTarget.width;
     _renderedPixelHeight = fitTarget.height;
+    // Only an actual downscale with the cheap filter counts as interim; a 1:1
+    // blit is already full fidelity.
+    _renderedWithInterim = scaled && _resizeActive;
 
     set_paintable(Gdk::Texture::create_for_pixbuf(renderedPixbufPtr));
   }
 
   RenderTarget ImageWidget::requestedRenderTarget() const
   {
-    double const scale = currentDisplayScale();
+    double const scale = displayScale();
     std::int32_t logicalWidth = 0;
     std::int32_t logicalHeight = 0;
 
@@ -560,7 +379,7 @@ namespace ao::gtk
                                static_cast<std::int32_t>(std::ceil(static_cast<double>(logicalHeight) * scale)))};
   }
 
-  double ImageWidget::currentDisplayScale() const
+  double ImageWidget::displayScale() const
   {
     if (auto const* const native = get_native(); native != nullptr)
     {

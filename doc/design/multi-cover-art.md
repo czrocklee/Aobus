@@ -32,6 +32,18 @@ Image data remains deduplicated in `ResourceStore`.
 The primary image used by existing single-image UI surfaces is the first `FrontCover` entry. If
 there is no front cover, the first stored entry is used. An empty table has no primary image.
 
+## GTK Thumbnails
+
+GTK section headers use a shared `ThumbnailLoader` for cover thumbnails. The loader decodes image
+bytes off the UI thread at a requested physical-pixel size, coalesces concurrent requests for the
+same resource and size, and writes successful decodes into a small shared thumbnail cache. Requests
+are size-aware: a larger cached thumbnail may satisfy a smaller request, but a smaller cached or
+in-flight decode must not satisfy a larger request.
+
+Section-header widgets still guard their own lifetime and binding generation. A decode may complete
+after a recycled or destroyed header has moved on; in that case the loader may salvage the thumbnail
+into cache, but the widget must drop the stale callback result.
+
 ## Tag Import
 
 FLAC picture blocks, ID3v2 APIC frames, and MP4 cover entries are accumulated in source order.
