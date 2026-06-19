@@ -7,9 +7,10 @@
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/utility/TransparentStringHash.h>
 
-#include <functional>
-#include <map>
+#include <boost/unordered/unordered_flat_map.hpp>
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -37,6 +38,8 @@ namespace ao::gtk::layout
 
   private:
     uimodel::layout::ComponentCatalog _catalog;
-    std::map<std::string, ComponentFactory, std::less<>> _factories;
+    boost::
+      unordered_flat_map<std::string, ComponentFactory, utility::TransparentStringHash, utility::TransparentStringEqual>
+        _factories;
   };
 }

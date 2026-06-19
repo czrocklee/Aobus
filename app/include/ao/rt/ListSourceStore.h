@@ -9,8 +9,10 @@
 #include "TrackSource.h"
 #include <ao/Type.h>
 
+#include <boost/unordered/unordered_flat_map.hpp>
+
+#include <functional>
 #include <memory>
-#include <unordered_map>
 
 namespace ao::library
 {
@@ -50,6 +52,6 @@ namespace ao::rt
 
     Subscription _listsMutatedSubscription;
 
-    std::unordered_map<ListId, std::unique_ptr<TrackSource>> _sources;
+    boost::unordered_flat_map<ListId, std::unique_ptr<TrackSource>, std::hash<ListId>> _sources;
   };
 }

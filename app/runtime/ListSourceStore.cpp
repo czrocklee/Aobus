@@ -118,7 +118,7 @@ namespace ao::rt
     // For now, since we only erase by ID, we simply erase it.
     // If we need child-before-parent, we should search through `_sources`
     // for any sources whose `_source` pointer points to this list's source.
-    // But since it's an unordered_map, we'd have to walk the graph.
+    // But since it's an unordered (flat) map, we'd have to walk the graph.
     // Given that `WorkspaceService` handles closing views,
     // this might be sufficient for now.
 

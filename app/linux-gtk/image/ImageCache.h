@@ -5,12 +5,13 @@
 
 #include <ao/Type.h>
 
+#include <boost/unordered/unordered_flat_map.hpp>
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
 
 #include <cstddef>
+#include <functional>
 #include <list>
-#include <unordered_map>
 
 namespace ao::gtk
 {
@@ -60,6 +61,6 @@ namespace ao::gtk
 
     std::size_t _maxSize;
     std::list<CacheEntry> _entries;
-    std::unordered_map<ResourceId, std::list<CacheEntry>::iterator> _cacheMap;
+    boost::unordered_flat_map<ResourceId, std::list<CacheEntry>::iterator, std::hash<ResourceId>> _cacheMap;
   };
 } // namespace ao::gtk

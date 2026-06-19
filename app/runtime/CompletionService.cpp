@@ -10,16 +10,18 @@
 #include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/TrackField.h>
 
+#include <boost/unordered/unordered_flat_map.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <thread>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -44,7 +46,7 @@ namespace ao::rt
       {.field = TrackField::Work, .coldStore = true},
     });
 
-    using CountMap = std::unordered_map<std::string_view, std::uint32_t>;
+    using CountMap = boost::unordered_flat_map<std::string_view, std::uint32_t, std::hash<std::string_view>>;
 
     constexpr ValueCompletionFieldSpec const* valueCompletionSpecForField(TrackField field)
     {

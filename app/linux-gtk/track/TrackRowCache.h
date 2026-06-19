@@ -9,10 +9,12 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 
+#include <boost/unordered/unordered_flat_map.hpp>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <unordered_map>
 
@@ -101,7 +103,7 @@ namespace ao::gtk
     library::TrackStore& _store;
     library::DictionaryStore& _dict;
 
-    mutable std::unordered_map<TrackId, Glib::RefPtr<TrackRowObject>> _rowCache;
+    mutable boost::unordered_flat_map<TrackId, Glib::RefPtr<TrackRowObject>, std::hash<TrackId>> _rowCache;
     mutable std::unordered_map<DictionaryId, Glib::ustring> _stringCache;
 
     Glib::RefPtr<TrackRowObject> createRowFromView(TrackId id,

@@ -6,13 +6,14 @@
 #include <ao/uimodel/layout/LayoutNodeId.h>
 #include <ao/uimodel/layout/LayoutTemplateExpander.h>
 #include <ao/uimodel/layout/StatefulLayoutComponentType.h>
+#include <ao/utility/TransparentStringHash.h>
+
+#include <boost/unordered/unordered_flat_map.hpp>
+#include <boost/unordered/unordered_flat_set.hpp>
 
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
-#include <functional>
-#include <map>
-#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,6 +23,11 @@ namespace ao::uimodel::layout
 {
   namespace
   {
+    using StringSet =
+      boost::unordered_flat_set<std::string, utility::TransparentStringHash, utility::TransparentStringEqual>;
+    using StringMap = boost::
+      unordered_flat_map<std::string, std::string, utility::TransparentStringHash, utility::TransparentStringEqual>;
+
     void visitNodeRecursive(LayoutNode const& node, LayoutNodeVisitor const& visitor)
     {
       visitor(node);
@@ -37,7 +43,7 @@ namespace ao::uimodel::layout
       }
     }
 
-    void collectIds(LayoutDocument const& doc, std::set<std::string, std::less<>>& ids)
+    void collectIds(LayoutDocument const& doc, StringSet& ids)
     {
       visitLayoutDocumentNodes(doc,
                                [&ids](LayoutNode const& node)
@@ -97,7 +103,7 @@ namespace ao::uimodel::layout
       return result;
     }
 
-    std::string makeUniqueFromReserved(std::set<std::string, std::less<>>& reserved, std::string const& stem)
+    std::string makeUniqueFromReserved(StringSet& reserved, std::string const& stem)
     {
       if (!reserved.contains(stem))
       {
@@ -115,7 +121,7 @@ namespace ao::uimodel::layout
       }
     }
 
-    void freshenRecursive(LayoutNode& node, std::set<std::string, std::less<>>& reserved)
+    void freshenRecursive(LayoutNode& node, StringSet& reserved)
     {
       if (!node.id.empty() || isStatefulLayoutComponentType(node.type))
       {
@@ -160,7 +166,7 @@ namespace ao::uimodel::layout
   std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(LayoutDocument const& doc)
   {
     auto diagnostics = std::vector<LayoutNodeIdDiagnostic>{};
-    auto seenIds = std::map<std::string, std::string, std::less<>>{};
+    auto seenIds = StringMap{};
 
     visitExpandedLayoutNodes(
       doc,
@@ -203,14 +209,14 @@ namespace ao::uimodel::layout
 
   std::string makeUniqueLayoutNodeId(LayoutDocument const& doc, std::string_view componentType, std::string_view role)
   {
-    auto reserved = std::set<std::string, std::less<>>{};
+    auto reserved = StringSet{};
     collectIds(doc, reserved);
     return makeUniqueFromReserved(reserved, idStem(componentType, role));
   }
 
   void freshenLayoutNodeIds(LayoutNode& subtree, LayoutDocument const& ownerDoc)
   {
-    auto reserved = std::set<std::string, std::less<>>{};
+    auto reserved = StringSet{};
     collectIds(ownerDoc, reserved);
     freshenRecursive(subtree, reserved);
   }

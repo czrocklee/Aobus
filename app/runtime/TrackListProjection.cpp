@@ -35,7 +35,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -314,7 +313,9 @@ namespace ao::rt
     // Resolve a dictionary id to its normalized sort key, cached per id. The normalized text
     // is interned into the shared arena so the cache stores a stable view rather than owning
     // a string; repeated ids and repeated content both reuse the same arena bytes.
-    std::string_view normalizeCached(std::unordered_map<DictionaryId, std::string_view>& normCache,
+    using NormCache = boost::unordered_flat_map<DictionaryId, std::string_view, std::hash<DictionaryId>>;
+
+    std::string_view normalizeCached(NormCache& normCache,
                                      utility::StringArena& arena,
                                      std::string& scratch,
                                      library::DictionaryStore& dict,
@@ -335,7 +336,7 @@ namespace ao::rt
                       library::TrackView const& view,
                       library::DictionaryStore& dict,
                       std::vector<TrackSortTerm> const& sortBy,
-                      std::unordered_map<DictionaryId, std::string_view>& normCache,
+                      NormCache& normCache,
                       utility::StringArena& arena,
                       std::string& scratch)
     {
@@ -369,7 +370,7 @@ namespace ao::rt
                              library::TrackView const& view,
                              library::DictionaryStore& dict,
                              TrackGroupKey groupBy,
-                             std::unordered_map<DictionaryId, std::string_view>& normCache,
+                             NormCache& normCache,
                              utility::StringArena& arena,
                              std::string& scratch)
     {
@@ -583,7 +584,7 @@ namespace ao::rt
     // per-track title path allocation-free.
     utility::StringArena stringArena;
     std::string normScratch;
-    std::unordered_map<DictionaryId, std::string_view> normCache;
+    NormCache normCache;
 
     std::vector<OrderEntry> orderIndex;
     // Flat (open-addressing) map: contiguous bucket array, so rebuilding the index costs

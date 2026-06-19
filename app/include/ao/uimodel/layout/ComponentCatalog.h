@@ -6,11 +6,12 @@
 #include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/utility/TransparentStringHash.h>
+
+#include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -116,6 +117,7 @@ namespace ao::uimodel::layout
 
   private:
     std::vector<ComponentDescriptor> _descriptors = {};
-    std::map<std::string, std::size_t, std::less<>> _descriptorIndexMap = {};
+    boost::unordered_flat_map<std::string, std::size_t, utility::TransparentStringHash, utility::TransparentStringEqual>
+      _descriptorIndexMap = {};
   };
 }

@@ -7,8 +7,9 @@
 #include <ao/Type.h>
 #include <ao/library/TrackStore.h>
 
+#include <boost/unordered/unordered_flat_map.hpp>
+
 #include <cstddef>
-#include <map>
 #include <memory>
 #include <span>
 #include <vector>
@@ -105,7 +106,7 @@ namespace ao::rt
     static library::TrackStore::Reader::LoadMode getUnionMode(std::span<SmartListSource*> lists);
 
     library::MusicLibrary& _ml;
-    std::map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
+    boost::unordered_flat_map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
 
     friend class SourceObserver;
