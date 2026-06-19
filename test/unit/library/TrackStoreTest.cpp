@@ -593,7 +593,7 @@ namespace ao::library::test
     auto it = reader.begin(TrackStore::Reader::LoadMode::Cold);
     auto endIt = reader.end(TrackStore::Reader::LoadMode::Cold);
 
-    auto count = 0;
+    std::int32_t count = 0;
     auto collectedIds = std::vector<TrackId>{};
 
     while (it != endIt)

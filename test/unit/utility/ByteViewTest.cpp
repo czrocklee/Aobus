@@ -131,7 +131,7 @@ namespace ao::utility::test
 
     SECTION("uint64Parts")
     {
-      auto const val = std::uint64_t{0x1122334455667788ULL};
+      std::uint64_t const val = 0x1122334455667788ULL;
       auto const [lo, hi] = uint64Parts::split(val);
       CHECK(lo == 0x55667788U);
       CHECK(hi == 0x11223344U);

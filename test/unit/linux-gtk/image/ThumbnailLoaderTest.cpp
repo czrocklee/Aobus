@@ -38,7 +38,7 @@ namespace ao::gtk::test
       auto const resourceId = writeCoverResource(library, 256);
 
       auto receivedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
-      auto callbackCount = 0;
+      std::int32_t callbackCount = 0;
       auto request = loader.request(resourceId,
                                     kPixelSize,
                                     [&](Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
@@ -67,8 +67,8 @@ namespace ao::gtk::test
 
       auto firstPtr = Glib::RefPtr<Gdk::Pixbuf>{};
       auto secondPtr = Glib::RefPtr<Gdk::Pixbuf>{};
-      auto firstDone = false;
-      auto secondDone = false;
+      bool firstDone = false;
+      bool secondDone = false;
 
       auto firstRequest = loader.request(resourceId,
                                          kPixelSize,
@@ -100,7 +100,7 @@ namespace ao::gtk::test
       auto callbackOrder = std::vector<int>{};
       auto requests = std::vector<ThumbnailLoader::Request>{};
 
-      for (auto idx = 0; idx < 4; ++idx)
+      for (std::int32_t idx = 0; idx < 4; ++idx)
       {
         requests.push_back(loader.request(
           resourceId, kPixelSize, [&, idx](Glib::RefPtr<Gdk::Pixbuf> const&) { callbackOrder.push_back(idx); }));
@@ -148,7 +148,7 @@ namespace ao::gtk::test
       loader.prefetch(kInvalidResourceId, kPixelSize);
       CHECK_FALSE(loader.get(kInvalidResourceId, kPixelSize));
 
-      auto callbackCount = 0;
+      std::int32_t callbackCount = 0;
       auto request = loader.request(resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
       REQUIRE(request);
       loader.prefetch(resourceId, kPixelSize);
@@ -166,7 +166,7 @@ namespace ao::gtk::test
       auto const resourceId = ResourceId{4242};
       cache.put(resourceId, makePixbuf(kPixelSize));
 
-      auto invokedSynchronously = false;
+      bool invokedSynchronously = false;
       auto request = loader.request(resourceId,
                                     kPixelSize,
                                     [&](Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
@@ -190,8 +190,8 @@ namespace ao::gtk::test
 
     SECTION("an invalid id reports an empty result and caches nothing")
     {
-      auto called = false;
-      auto wasEmpty = false;
+      bool called = false;
+      bool wasEmpty = false;
       auto request = loader.request(kInvalidResourceId,
                                     kPixelSize,
                                     [&](Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
@@ -208,8 +208,8 @@ namespace ao::gtk::test
 
     SECTION("a missing resource id reports an empty result and clears the in-flight entry")
     {
-      auto callbackCount = 0;
-      auto wasEmpty = false;
+      std::int32_t callbackCount = 0;
+      bool wasEmpty = false;
       auto const missingId = ResourceId{987654};
 
       auto request = loader.request(missingId,
@@ -235,8 +235,8 @@ namespace ao::gtk::test
     {
       auto const badBytes = std::array{std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
       auto const resourceId = writeRawResource(library, std::span<std::byte const>{badBytes});
-      auto callbackCount = 0;
-      auto wasEmpty = false;
+      std::int32_t callbackCount = 0;
+      bool wasEmpty = false;
 
       auto request = loader.request(resourceId,
                                     kPixelSize,
@@ -255,7 +255,7 @@ namespace ao::gtk::test
     SECTION("destroying a request cancels its callback without cancelling the shared decode")
     {
       auto const resourceId = writeCoverResource(library, 256);
-      auto callbackCount = 0;
+      std::int32_t callbackCount = 0;
 
       auto request = loader.request(resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
       REQUIRE(request);
@@ -269,7 +269,7 @@ namespace ao::gtk::test
     SECTION("destroying the loader cancels pending callbacks")
     {
       auto const resourceId = writeCoverResource(library, 256);
-      auto callbackCount = 0;
+      std::int32_t callbackCount = 0;
       auto request = ThumbnailLoader::Request{};
 
       {

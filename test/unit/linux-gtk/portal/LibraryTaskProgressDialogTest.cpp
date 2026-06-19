@@ -94,7 +94,7 @@ namespace ao::gtk::test
       auto dialog = LibraryTaskProgressDialog{42, parent};
       drainGtkEvents();
 
-      auto responseId = std::int32_t{-1};
+      std::int32_t responseId = -1;
       dialog.signal_response().connect([&](std::int32_t id) { responseId = id; });
 
       auto* const titlebar = dialog.get_titlebar();

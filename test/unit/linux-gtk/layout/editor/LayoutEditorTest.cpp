@@ -304,7 +304,7 @@ namespace ao::gtk::layout::editor::test
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader};
 
-      auto saveCount = 0;
+      std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
 
       dialog.response(Gtk::ResponseType::OK);
@@ -317,7 +317,7 @@ namespace ao::gtk::layout::editor::test
     {
       auto dialogPtr =
         std::make_unique<LayoutEditorDialog>(window, registry, actionRegistry, doc, "classic", "modern", stubLoader);
-      auto count = std::int32_t{0};
+      std::int32_t count = 0;
 
       dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
 
@@ -378,7 +378,7 @@ namespace ao::gtk::layout::editor::test
 
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, duplicateDoc, "classic", "modern", stubLoader};
 
-      auto saveCount = 0;
+      std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
 
       dialog.response(Gtk::ResponseType::OK);
@@ -414,7 +414,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("Session caching and dirty tracking")
     {
-      auto loadCount = std::int32_t{0};
+      std::int32_t loadCount = 0;
       auto loadedPresets = std::vector<std::string>{};
       auto const customLoader = [&](std::string_view presetId)
       {
@@ -482,7 +482,7 @@ namespace ao::gtk::layout::editor::test
 
       // Save and verify result
       auto saveResult = LayoutSaveResult{};
-      auto saveCount = 0;
+      std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect(
         [&](LayoutSaveResult const& res)
         {
@@ -555,7 +555,7 @@ namespace ao::gtk::layout::editor::test
 
       // Save and verify result
       auto saveResult = LayoutSaveResult{};
-      auto saveCount = 0;
+      std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect(
         [&](LayoutSaveResult const& res)
         {
@@ -576,7 +576,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("Multi-preset validation and caching re-visit")
     {
-      auto loadCount = std::int32_t{0};
+      std::int32_t loadCount = 0;
       auto loadedPresets = std::vector<std::string>{};
       auto const customLoader = [&](std::string_view presetId)
       {
@@ -636,7 +636,7 @@ namespace ao::gtk::layout::editor::test
       combo->set_active_id("classic");
 
       auto saveResult = LayoutSaveResult{};
-      auto saveCount = 0;
+      std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect(
         [&](LayoutSaveResult const& res)
         {
@@ -660,7 +660,7 @@ namespace ao::gtk::layout::editor::test
       emitClicked(*resetButton);
 
       auto saveResult = LayoutSaveResult{};
-      auto saveCount = 0;
+      std::int32_t saveCount = 0;
       dialog.signalSaveRequest().connect(
         [&](LayoutSaveResult const& res)
         {
@@ -756,7 +756,7 @@ namespace ao::gtk::layout::editor::test
       auto const templates = getBuiltInTemplates();
       auto const& pane = templates.at("track.selectionDetailPane");
 
-      auto hasFieldGrid = false;
+      bool hasFieldGrid = false;
 
       auto visit = std::function<void(LayoutNode const&)>{};
       visit = [&](LayoutNode const& node)

@@ -53,7 +53,7 @@ namespace ao::audio::detail
   Result<std::uint64_t> MappedFileCursor::seek(std::int64_t offset, SeekOrigin origin) noexcept
   {
     auto const fileSize = size();
-    auto base = std::uint64_t{0};
+    std::uint64_t base = 0;
 
     switch (origin)
     {

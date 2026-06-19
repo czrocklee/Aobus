@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <set>
@@ -54,7 +55,7 @@ namespace ao::uimodel::layout
 
       auto appendSanitized = [&result](std::string_view text)
       {
-        auto previousWasSeparator = false;
+        bool previousWasSeparator = false;
 
         for (char const ch : text)
         {
@@ -104,7 +105,7 @@ namespace ao::uimodel::layout
         return stem;
       }
 
-      for (auto index = 2; true; ++index)
+      for (std::int32_t index = 2; true; ++index)
       {
         if (auto candidate = stem + "-" + std::to_string(index); !reserved.contains(candidate))
         {

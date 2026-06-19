@@ -17,6 +17,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <vector>
@@ -101,7 +102,7 @@ namespace ao::uimodel::track::test
 
     SECTION("active presentation ignores unchanged ids")
     {
-      auto changeCount = 0;
+      std::int32_t changeCount = 0;
       auto sub = store.signalChanged().connect([&](auto, auto) { ++changeCount; });
 
       store.setActivePresentationId("albums");
@@ -149,7 +150,7 @@ namespace ao::uimodel::track::test
     {
       auto const listId = rt::kAllTracksListId;
       auto const layout = std::vector{ColumnState{.field = rt::TrackField::Artist, .width = 180}};
-      auto changeCount = 0;
+      std::int32_t changeCount = 0;
       auto sub = store.signalChanged().connect([&](auto, auto) { ++changeCount; });
 
       store.updateLayout(kInvalidListId, layout);
@@ -183,7 +184,7 @@ namespace ao::uimodel::track::test
 
     SECTION("active list ignores unchanged ids")
     {
-      auto changeCount = 0;
+      std::int32_t changeCount = 0;
       auto sub = store.signalChanged().connect([&](auto, auto) { ++changeCount; });
 
       store.setActiveListId(rt::kAllTracksListId);
@@ -197,7 +198,7 @@ namespace ao::uimodel::track::test
       auto const layouts = std::map<ListId, std::vector<ColumnState>>{
         {rt::kAllTracksListId, {ColumnState{.field = rt::TrackField::Duration, .width = 95}}},
       };
-      auto changeCount = 0;
+      std::int32_t changeCount = 0;
       auto sub = store.signalChanged().connect([&](auto, auto) { ++changeCount; });
 
       store.setListLayouts(layouts);
@@ -227,7 +228,7 @@ namespace ao::uimodel::track::test
     SECTION("bulk presentation preferences emit only when changed")
     {
       auto const presentations = std::map<ListId, std::string>{{rt::kAllTracksListId, "albums"}};
-      auto changeCount = 0;
+      std::int32_t changeCount = 0;
       auto sub = store.signalChanged().connect([&](auto, auto) { ++changeCount; });
 
       store.setListPresentations(presentations);
@@ -279,7 +280,7 @@ namespace ao::uimodel::track::test
 
     SECTION("signal propagation on change")
     {
-      auto changed = false;
+      bool changed = false;
       auto sub = store.signalChanged().connect([&](auto, auto) { changed = true; });
 
       store.setActivePresentationId("modern");

@@ -143,7 +143,7 @@ namespace ao::gtk::test
 
       SECTION("signal propagation")
       {
-        auto changed = false;
+        bool changed = false;
         controller.signalSelectionChanged().connect([&] { changed = true; });
 
         selectionModelPtr->select_item(1, true);

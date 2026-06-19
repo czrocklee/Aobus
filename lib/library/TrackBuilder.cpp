@@ -583,7 +583,7 @@ namespace ao::library
     // Compute sizes with overflow validation.
     // All offset/count/length fields in TrackColdHeader are uint16_t, so every
     // intermediate value must be checked before narrowing.
-    constexpr auto kU16Max = std::size_t{std::numeric_limits<std::uint16_t>::max()};
+    constexpr std::size_t kU16Max = std::numeric_limits<std::uint16_t>::max();
 
     std::size_t const coverCount = _coverArt.size();
     std::size_t const entryCount = _resolvedPairs.size();

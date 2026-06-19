@@ -55,7 +55,7 @@ namespace ao::uimodel::playback
 
   std::string audioFormatLabel(audio::Format const& format, bool preferValidBits)
   {
-    constexpr auto kKhzMultiplier = 1000.0;
+    constexpr double kKhzMultiplier = 1000.0;
     auto const channelsText = [&] -> std::string
     {
       if (format.channels == 1)

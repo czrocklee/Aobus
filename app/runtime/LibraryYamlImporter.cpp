@@ -123,7 +123,7 @@ namespace ao::rt
     std::array<std::byte, 16> parseUuid(std::string_view uuidStr)
     {
       auto result = std::array<std::byte, 16>{};
-      auto byteIndex = 0;
+      std::int32_t byteIndex = 0;
 
       for (std::size_t i = 0; i < uuidStr.size() && byteIndex < 16; ++i)
       {

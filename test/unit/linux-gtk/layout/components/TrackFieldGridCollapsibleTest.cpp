@@ -84,10 +84,10 @@ namespace ao::gtk::layout::test
 
     auto allocate = [&](std::int32_t const width, std::int32_t const height)
     {
-      auto minWidth = 0;
-      auto natWidth = 0;
-      auto minHeight = 0;
-      auto natHeight = 0;
+      std::int32_t minWidth = 0;
+      std::int32_t natWidth = 0;
+      std::int32_t minHeight = 0;
+      std::int32_t natHeight = 0;
       root.measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, natWidth, minHeight, natHeight);
       root.measure(Gtk::Orientation::VERTICAL, width, minHeight, natHeight, minWidth, natWidth);
       root.size_allocate(Gtk::Allocation{0, 0, width, height}, -1);
@@ -218,18 +218,18 @@ namespace ao::gtk::layout::test
 
         REQUIRE(labelSlot != nullptr);
 
-        auto keyLeft = 0;
-        auto keyTop = 0;
-        auto keyWidth = 0;
-        auto keyHeight = 0;
+        std::int32_t keyLeft = 0;
+        std::int32_t keyTop = 0;
+        std::int32_t keyWidth = 0;
+        std::int32_t keyHeight = 0;
         grid->query_child(*labelSlot, keyLeft, keyTop, keyWidth, keyHeight);
 
         for (auto* child = grid->get_first_child(); child != nullptr; child = child->get_next_sibling())
         {
-          auto left = 0;
-          auto top = 0;
-          auto width = 0;
-          auto height = 0;
+          std::int32_t left = 0;
+          std::int32_t top = 0;
+          std::int32_t width = 0;
+          std::int32_t height = 0;
           grid->query_child(*child, left, top, width, height);
 
           if (left == 1 && top == keyTop)
@@ -344,18 +344,18 @@ namespace ao::gtk::layout::test
 
         REQUIRE(labelSlot != nullptr);
 
-        auto keyLeft = 0;
-        auto keyTop = 0;
-        auto keyWidth = 0;
-        auto keyHeight = 0;
+        std::int32_t keyLeft = 0;
+        std::int32_t keyTop = 0;
+        std::int32_t keyWidth = 0;
+        std::int32_t keyHeight = 0;
         grid->query_child(*labelSlot, keyLeft, keyTop, keyWidth, keyHeight);
 
         for (auto* child = grid->get_first_child(); child != nullptr; child = child->get_next_sibling())
         {
-          auto left = 0;
-          auto top = 0;
-          auto width = 0;
-          auto height = 0;
+          std::int32_t left = 0;
+          std::int32_t top = 0;
+          std::int32_t width = 0;
+          std::int32_t height = 0;
           grid->query_child(*child, left, top, width, height);
 
           if (left == 1 && top == keyTop)
@@ -372,10 +372,10 @@ namespace ao::gtk::layout::test
 
       auto measureMinimumHeight = [](Gtk::Widget& widget, std::int32_t const width)
       {
-        auto minimum = 0;
-        auto natural = 0;
-        auto minimumBaseline = -1;
-        auto naturalBaseline = -1;
+        std::int32_t minimum = 0;
+        std::int32_t natural = 0;
+        std::int32_t minimumBaseline = -1;
+        std::int32_t naturalBaseline = -1;
         widget.measure(Gtk::Orientation::VERTICAL, width, minimum, natural, minimumBaseline, naturalBaseline);
         return minimum;
       };
@@ -385,8 +385,8 @@ namespace ao::gtk::layout::test
       auto const [titleKeySlot, titleValueSlot] = findSlotsForLabel("Title");
       REQUIRE(titleValueSlot != nullptr);
       auto const keyWidthBeforeCollapse = titleKeySlot->get_width();
-      auto valueLeftBeforeCollapse = 0.0;
-      auto valueTopBeforeCollapse = 0.0;
+      double valueLeftBeforeCollapse = 0.0;
+      double valueTopBeforeCollapse = 0.0;
       REQUIRE(titleValueSlot->translate_coordinates(*grid, 0.0, 0.0, valueLeftBeforeCollapse, valueTopBeforeCollapse));
       auto const valueWidthBeforeCollapse = titleValueSlot->get_width();
 
@@ -430,8 +430,8 @@ namespace ao::gtk::layout::test
                   });
       CHECK(foundHiddenCustom);
       CHECK(titleKeySlot->get_width() == keyWidthBeforeCollapse);
-      auto valueLeftAfterCollapse = 0.0;
-      auto valueTopAfterCollapse = 0.0;
+      double valueLeftAfterCollapse = 0.0;
+      double valueTopAfterCollapse = 0.0;
       REQUIRE(titleValueSlot->translate_coordinates(*grid, 0.0, 0.0, valueLeftAfterCollapse, valueTopAfterCollapse));
       CHECK(valueLeftAfterCollapse == valueLeftBeforeCollapse);
       CHECK(titleValueSlot->get_width() == valueWidthBeforeCollapse);

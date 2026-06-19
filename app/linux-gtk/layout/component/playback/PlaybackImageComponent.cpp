@@ -83,10 +83,10 @@ namespace ao::gtk::layout
     private:
       void measureImageForAllocation(int const side) const
       {
-        auto minimum = 0;
-        auto natural = 0;
-        auto minimumBaseline = -1;
-        auto naturalBaseline = -1;
+        std::int32_t minimum = 0;
+        std::int32_t natural = 0;
+        std::int32_t minimumBaseline = -1;
+        std::int32_t naturalBaseline = -1;
         _imageWidget.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
         _imageWidget.measure(Gtk::Orientation::VERTICAL, side, minimum, natural, minimumBaseline, naturalBaseline);
       }

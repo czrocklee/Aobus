@@ -190,7 +190,7 @@ namespace ao::query
       _hasHotAccess = true;
     }
 
-    auto constValue = std::int64_t{0};
+    std::int64_t constValue = 0;
 
     if (variable.type == VariableType::Custom)
     {

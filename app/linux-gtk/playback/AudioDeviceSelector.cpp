@@ -120,7 +120,7 @@ namespace ao::gtk
 
       auto* const checkIcon = Gtk::make_managed<Gtk::Image>();
       checkIcon->set_pixel_size(16);
-      auto constexpr kCheckIconWidth = 20;
+      int constexpr kCheckIconWidth = 20;
       checkIcon->set_size_request(kCheckIconWidth, -1);
       checkIcon->add_css_class("ao-output-check");
 

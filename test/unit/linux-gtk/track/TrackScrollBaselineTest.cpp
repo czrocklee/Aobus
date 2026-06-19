@@ -58,7 +58,7 @@ namespace ao::gtk::test
       auto txn = library.writeTransaction();
       auto writer = library.tracks().writer(txn);
 
-      for (auto i = std::size_t{0}; i < count; ++i)
+      for (std::size_t i = 0; i < count; ++i)
       {
         auto builder = library::TrackBuilder::createNew();
         // Spread metadata across many distinct dictionary strings so resolution
@@ -94,8 +94,8 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
 
-    constexpr auto kRowCount = std::size_t{5000};
-    constexpr auto kReScrollPasses = std::size_t{20};
+    constexpr std::size_t kRowCount = 5000;
+    constexpr std::size_t kReScrollPasses = 20;
 
     auto const ids = seedLibrary(library, kRowCount);
     REQUIRE(ids.size() == kRowCount);
@@ -106,7 +106,7 @@ namespace ao::gtk::test
     // lazily (the first trackRow() opens a read txn, resolves dictionary strings,
     // populates) and every computed column is formatted for the first time. This
     // is the cost of scrolling through a library that has never been viewed.
-    auto coldSink = std::size_t{0};
+    std::size_t coldSink = 0;
     auto const coldStart = std::chrono::steady_clock::now();
 
     for (auto const id : ids)
@@ -125,10 +125,10 @@ namespace ao::gtk::test
     // Warm re-scroll: rows are cached and computed strings memoized, so this is the
     // steady-state cost of recycling cells back over already-seen rows — a cache
     // lookup plus a displayText() pointer fetch, no formatting, no allocation.
-    auto warmSink = std::size_t{0};
+    std::size_t warmSink = 0;
     auto const warmStart = std::chrono::steady_clock::now();
 
-    for (auto pass = std::size_t{0}; pass < kReScrollPasses; ++pass)
+    for (std::size_t pass = 0; pass < kReScrollPasses; ++pass)
     {
       for (auto const id : ids)
       {

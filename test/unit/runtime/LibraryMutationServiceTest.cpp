@@ -234,7 +234,7 @@ namespace ao::rt::test
         deletedLists = ev.deleted;
       });
 
-    auto taskCount = std::size_t{0};
+    std::size_t taskCount = 0;
     auto sub3 = service.onLibraryTaskCompleted([&](auto count) { taskCount = count; });
 
     auto taskProgress = LibraryMutationService::LibraryTaskProgressUpdated{};

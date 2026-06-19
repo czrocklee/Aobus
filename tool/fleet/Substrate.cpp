@@ -199,7 +199,7 @@ namespace ao::fleet
     }
 
     auto btrfsCheck = _runner.run(localRequest({"btrfs", "subvolume", "show", repo.string()}, repo));
-    auto btrfsSnapshot = false;
+    bool btrfsSnapshot = false;
 
     if (btrfsCheck.status == ProcessStatus::Exited && btrfsCheck.exitCode == 0)
     {
@@ -493,7 +493,7 @@ namespace ao::fleet
 
       auto parseCount = [](std::string_view text)
       {
-        auto value = std::size_t{};
+        std::size_t value = std::size_t{};
         auto conversion = std::from_chars(text.data(), text.data() + text.size(), value);
         return conversion.ec == std::errc{} ? value : std::size_t{};
       };

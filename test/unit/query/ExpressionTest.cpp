@@ -90,7 +90,7 @@ namespace ao::query::test
       {
         oss << "[";
 
-        auto first = true;
+        bool first = true;
 
         for (auto const& value : list.values)
         {

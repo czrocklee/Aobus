@@ -116,7 +116,7 @@ namespace ao::uimodel::layout
                                {
                                  if (auto const optEntry = resolveLayoutComponentState(stateDoc, node); optEntry)
                                  {
-                                   auto promoted = false;
+                                   bool promoted = false;
 
                                    if (node.type == kSplitComponentType)
                                    {

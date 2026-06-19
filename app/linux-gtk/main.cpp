@@ -308,7 +308,7 @@ namespace
 
 int main(int argc, char* argv[])
 {
-  auto exitCode = 0;
+  std::int32_t exitCode = 0;
 
   try
   {

@@ -64,7 +64,7 @@ namespace ao::gtk::test
     entry.set_text("你 $al");
     entry.set_position(charCount("你 $al"));
 
-    auto providerCalled = false;
+    bool providerCalled = false;
     auto controller = EntryCompletionController{
       entry,
       [&providerCalled](std::string_view text, std::size_t cursor) -> std::optional<rt::CompletionResult>
@@ -105,7 +105,7 @@ namespace ao::gtk::test
     entry.set_text("$al");
     entry.set_position(charCount("$al"));
 
-    auto providerCalls = 0;
+    std::int32_t providerCalls = 0;
     auto controller = EntryCompletionController{
       entry,
       [&providerCalls](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
@@ -226,7 +226,7 @@ namespace ao::gtk::test
     entry.set_text("$");
     entry.set_position(charCount("$"));
 
-    auto providerCalls = 0;
+    std::int32_t providerCalls = 0;
     auto controller = EntryCompletionController{
       entry,
       [&providerCalls](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>

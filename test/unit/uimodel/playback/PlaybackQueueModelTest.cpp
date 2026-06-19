@@ -14,6 +14,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -33,7 +34,7 @@ namespace ao::uimodel::playback::test
 
     auto playbackService = PlaybackService{executor, viewService, testLib.library()};
 
-    auto providerCalledCount = 0;
+    std::int32_t providerCalledCount = 0;
     auto descriptorProvider = [&](TrackId id) -> std::optional<audio::TrackPlaybackDescriptor>
     {
       providerCalledCount++;

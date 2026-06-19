@@ -317,8 +317,8 @@ namespace ao::library::test
 
     auto data = serializeHeader(h);
 
-    auto const tag1 = std::uint32_t{10};
-    auto const tag2 = std::uint32_t{20};
+    std::uint32_t const tag1 = 10;
+    std::uint32_t const tag2 = 20;
     data.insert_range(data.end(), utility::bytes::view(tag1));
     data.insert_range(data.end(), utility::bytes::view(tag2));
 
@@ -347,8 +347,8 @@ namespace ao::library::test
 
     auto data = serializeHeader(h);
 
-    auto const tag1 = std::uint32_t{10};
-    auto const tag2 = std::uint32_t{20};
+    std::uint32_t const tag1 = 10;
+    std::uint32_t const tag2 = 20;
     data.insert_range(data.end(), utility::bytes::view(tag1));
     data.insert_range(data.end(), utility::bytes::view(tag2));
 
@@ -377,8 +377,8 @@ namespace ao::library::test
     h.tagLength = 8;
 
     auto data = serializeHeader(h);
-    auto const tag1 = std::uint32_t{10};
-    auto const tag2 = std::uint32_t{20};
+    std::uint32_t const tag1 = 10;
+    std::uint32_t const tag2 = 20;
     data.insert_range(data.end(), utility::bytes::view(tag1));
     data.insert_range(data.end(), utility::bytes::view(tag2));
 
@@ -404,8 +404,8 @@ namespace ao::library::test
     h.tagLength = 8;
 
     auto data = serializeHeader(h);
-    auto const tag1 = std::uint32_t{10};
-    auto const tag2 = std::uint32_t{20};
+    std::uint32_t const tag1 = 10;
+    std::uint32_t const tag2 = 20;
     data.insert_range(data.end(), utility::bytes::view(tag1));
     data.insert_range(data.end(), utility::bytes::view(tag2));
 

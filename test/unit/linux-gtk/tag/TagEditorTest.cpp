@@ -154,10 +154,10 @@ namespace ao::gtk::test
     {
       auto measureMinimumHeight = [&](std::int32_t const width)
       {
-        auto minimum = 0;
-        auto natural = 0;
-        auto minimumBaseline = -1;
-        auto naturalBaseline = -1;
+        std::int32_t minimum = 0;
+        std::int32_t natural = 0;
+        std::int32_t minimumBaseline = -1;
+        std::int32_t naturalBaseline = -1;
         editor.measure(Gtk::Orientation::VERTICAL, width, minimum, natural, minimumBaseline, naturalBaseline);
         return minimum;
       };
@@ -210,7 +210,7 @@ namespace ao::gtk::test
       CHECK(entry->get_text().empty()); // cleared for rapid successive adds
       CHECK(entry->get_visible());      // stays open
 
-      auto position = 0;
+      std::int32_t position = 0;
       entry->insert_text("123 Mix", -1, position);
       CHECK(entry->get_text() == "123 Mix");
 
@@ -314,7 +314,7 @@ namespace ao::gtk::test
       editor.measure(Gtk::Orientation::VERTICAL, kPaneWidth, edMinH, edNatH, b1, b2);
       editor.size_allocate(Gtk::Allocation{0, 0, kPaneWidth, edNatH}, -1);
 
-      auto checked = 0;
+      std::int32_t checked = 0;
 
       for (auto* child = editor.get_first_child(); child != nullptr; child = child->get_next_sibling())
       {

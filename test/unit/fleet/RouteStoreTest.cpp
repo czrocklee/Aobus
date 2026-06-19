@@ -9,6 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
 #include <format>
 #include <optional>
 
@@ -36,7 +37,7 @@ namespace ao::fleet::test
     };
     auto store = RouteStore{tempPath(temp)};
 
-    for (auto index = 0; index < 5; ++index)
+    for (std::int32_t index = 0; index < 5; ++index)
     {
       manifest.phaseId = std::format("phase-{}", index);
       writeFile(temp, manifest.phaseId + "/manifest.yaml", emitManifest(manifest));

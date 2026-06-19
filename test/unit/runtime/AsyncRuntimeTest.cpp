@@ -194,7 +194,7 @@ namespace ao::rt::test
         if (value == 1)
         {
           // Enough connects to force handler-vector reallocation while the emit loop is live.
-          for (auto added = 0; added < 16; ++added)
+          for (std::int32_t added = 0; added < 16; ++added)
           {
             subscriptions.push_back(signal.connect([&](std::int32_t inner) { order.push_back(100 + inner); }));
           }

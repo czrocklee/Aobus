@@ -421,7 +421,7 @@ namespace ao::gtk
 
     if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin != nullptr)
     {
-      auto intValue = 0;
+      std::int32_t intValue = 0;
 
       if (!value.empty())
       {

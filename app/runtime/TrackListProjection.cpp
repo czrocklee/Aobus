@@ -175,7 +175,7 @@ namespace ao::rt
     // the result is meant to be interned immediately, not retained.
     void normalizeInto(std::string& out, std::string_view title)
     {
-      auto offset = 0UZ;
+      std::size_t offset = 0;
 
       if (iStartsWith(title, "the "))
       {
@@ -1036,7 +1036,7 @@ namespace ao::rt
       auto retained = std::vector<OrderEntry>{};
       retained.reserve(orderIndex.size() - positions.size());
 
-      auto removeIdx = 0UZ;
+      std::size_t removeIdx = 0;
 
       for (std::size_t idx = 0; idx < orderIndex.size(); ++idx)
       {

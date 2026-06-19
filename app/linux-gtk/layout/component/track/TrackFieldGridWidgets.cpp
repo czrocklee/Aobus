@@ -37,8 +37,8 @@ namespace ao::gtk::layout::track_field_grid
     MeasureResult measureWidget(Gtk::Widget const& widget, Gtk::Orientation orientation, std::int32_t forSize)
     {
       auto result = MeasureResult{};
-      auto minimumBaseline = -1;
-      auto naturalBaseline = -1;
+      std::int32_t minimumBaseline = -1;
+      std::int32_t naturalBaseline = -1;
       widget.measure(orientation, forSize, result.minimum, result.natural, minimumBaseline, naturalBaseline);
       return result;
     }

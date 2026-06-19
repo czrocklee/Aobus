@@ -203,10 +203,10 @@ namespace ao::gtk::portal
       return;
     }
 
-    auto constexpr kDeltaIndex = 0;
-    auto constexpr kMetadataIndex = 1;
-    auto constexpr kFullIndex = 2;
-    auto constexpr kListOnlyIndex = 3;
+    int constexpr kDeltaIndex = 0;
+    int constexpr kMetadataIndex = 1;
+    int constexpr kFullIndex = 2;
+    int constexpr kListOnlyIndex = 3;
 
     auto mode = rt::ExportMode::Metadata;
 

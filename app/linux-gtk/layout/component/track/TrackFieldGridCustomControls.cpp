@@ -200,7 +200,7 @@ namespace ao::gtk::layout::track_field_grid
     auto key = trimmedCopy(keyText.raw());
     auto value = std::string{valueText.raw()};
 
-    auto hasError = false;
+    bool hasError = false;
 
     if (key.empty())
     {

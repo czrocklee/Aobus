@@ -70,10 +70,10 @@ namespace ao::gtk::test
       window.set_visible(true);
       drainGtkEvents();
 
-      auto minimum = std::int32_t{};
-      auto natural = std::int32_t{};
-      auto minimumBaseline = std::int32_t{};
-      auto naturalBaseline = std::int32_t{};
+      std::int32_t minimum = std::int32_t{};
+      std::int32_t natural = std::int32_t{};
+      std::int32_t minimumBaseline = std::int32_t{};
+      std::int32_t naturalBaseline = std::int32_t{};
       columnView.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
       columnView.measure(Gtk::Orientation::VERTICAL, 400, minimum, natural, minimumBaseline, naturalBaseline);
       columnView.size_allocate(Gtk::Allocation{0, 0, 400, 200}, -1);

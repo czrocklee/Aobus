@@ -539,7 +539,7 @@ namespace ao::media::mp4
                                  std::vector<SampleToChunkEntry>& sampleToChunk,
                                  std::vector<TimeToSampleEntry>& timeToSample)
   {
-    auto sampleTableValid = true;
+    bool sampleTableValid = true;
 
     table.visitChildren(
       [this, &chunkOffsets, &sampleToChunk, &timeToSample, &sampleTableValid](Atom const& atom)

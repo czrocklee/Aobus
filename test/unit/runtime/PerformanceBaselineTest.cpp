@@ -335,7 +335,7 @@ namespace ao::rt::test
 
     std::uint64_t checksumSortCacheEntries(std::vector<SortCacheOrderEntry> const& entries)
     {
-      auto checksum = std::uint64_t{1469598103934665603ULL};
+      std::uint64_t checksum = 1469598103934665603ULL;
 
       for (auto const& entry : entries)
       {
@@ -348,7 +348,7 @@ namespace ao::rt::test
 
     std::uint64_t checksumRankedSortCacheEntries(std::vector<RankedSortCacheOrderEntry> const& entries)
     {
-      auto checksum = std::uint64_t{1469598103934665603ULL};
+      std::uint64_t checksum = 1469598103934665603ULL;
 
       for (auto const& entry : entries)
       {
@@ -361,7 +361,7 @@ namespace ao::rt::test
 
     std::uint64_t checksumCompactSortCacheEntries(std::vector<CompactSortCacheEntry> const& entries)
     {
-      auto checksum = std::uint64_t{1469598103934665603ULL};
+      std::uint64_t checksum = 1469598103934665603ULL;
 
       for (auto const& entry : entries)
       {
@@ -375,7 +375,7 @@ namespace ao::rt::test
     std::uint64_t checksumSortCacheIndices(std::vector<SortCacheOrderEntry> const& entries,
                                            std::vector<std::uint32_t> const& indices)
     {
-      auto checksum = std::uint64_t{1469598103934665603ULL};
+      std::uint64_t checksum = 1469598103934665603ULL;
 
       for (auto const index : indices)
       {
@@ -723,7 +723,7 @@ namespace ao::rt::test
       auto const positionEnd = std::chrono::steady_clock::now();
 
       auto const groupStart = std::chrono::steady_clock::now();
-      auto sectionCount = std::size_t{0};
+      std::size_t sectionCount = 0;
 
       if (!entries.empty())
       {
@@ -759,8 +759,8 @@ namespace ao::rt::test
     query::ExecutionPlan makeExpandedYearInPlan(std::size_t listSize)
     {
       auto plan = query::ExecutionPlan{};
-      auto nextReg = std::int32_t{0};
-      auto first = true;
+      std::int32_t nextReg = 0;
+      bool first = true;
 
       for (std::size_t idx = 0; idx < listSize; ++idx)
       {

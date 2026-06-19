@@ -177,7 +177,7 @@ namespace ao::gtk
         ensureColumnPosition(columnsPtr, static_cast<std::size_t>(idx), binding->columnPtr);
 
         // Find width in stored layout if it exists
-        auto width = 0;
+        std::int32_t width = 0;
         auto const it = std::ranges::find(storedLayout, field, &uimodel::track::ColumnState::field);
 
         if (it != storedLayout.end())

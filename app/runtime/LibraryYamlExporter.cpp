@@ -59,16 +59,16 @@ namespace ao::rt
     {
       auto result = std::string{};
       result.reserve(kUuidTextLength);
-      auto byteIndex = std::size_t{0};
+      std::size_t byteIndex = 0;
 
-      for (auto groupIndex = std::size_t{0}; groupIndex < kUuidGroupByteCounts.size(); ++groupIndex)
+      for (std::size_t groupIndex = 0; groupIndex < kUuidGroupByteCounts.size(); ++groupIndex)
       {
         if (groupIndex > 0)
         {
           result.push_back('-');
         }
 
-        for (auto groupByte = std::size_t{0}; groupByte < kUuidGroupByteCounts.at(groupIndex); ++groupByte)
+        for (std::size_t groupByte = 0; groupByte < kUuidGroupByteCounts.at(groupIndex); ++groupByte)
         {
           result += std::format("{:02x}", static_cast<unsigned char>(id.at(byteIndex)));
           ++byteIndex;
@@ -270,8 +270,8 @@ namespace ao::rt
         }
       }
 
-      auto fileSize = std::uint64_t{0};
-      auto mtime = std::uint64_t{0};
+      std::uint64_t fileSize = 0;
+      std::uint64_t mtime = 0;
 
       if (auto const optManifestView = manifestReader.get(property.uri()); optManifestView)
       {

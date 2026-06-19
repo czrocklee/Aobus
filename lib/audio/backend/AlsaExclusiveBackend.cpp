@@ -104,7 +104,7 @@ namespace ao::audio::backend
 
     std::optional<std::ptrdiff_t> optPlaybackVolume(::snd_mixer_elem_t* elem, ::snd_mixer_selem_channel_id_t channel)
     {
-      auto value = 0L;
+      long value = 0L;
 
       if (::snd_mixer_selem_get_playback_volume(elem, channel, &value) < 0)
       {
@@ -116,8 +116,8 @@ namespace ao::audio::backend
 
     std::optional<AlsaMixerRange> optPlaybackVolumeRange(::snd_mixer_elem_t* elem)
     {
-      auto min = 0L;
-      auto max = 0L;
+      long min = 0L;
+      long max = 0L;
 
       if (::snd_mixer_selem_get_playback_volume_range(elem, &min, &max) < 0 || max <= min)
       {
@@ -268,13 +268,13 @@ namespace ao::audio::backend
 
         if (_hasDB)
         {
-          if (auto db = 0L; ::snd_mixer_selem_get_playback_dB(_mixerElem, SND_MIXER_SCHN_MONO, &db) == 0)
+          if (long db = 0L; ::snd_mixer_selem_get_playback_dB(_mixerElem, SND_MIXER_SCHN_MONO, &db) == 0)
           {
             return std::clamp(static_cast<float>(db - _dbMin) / static_cast<float>(_dbMax - _dbMin), 0.0F, 1.0F);
           }
         }
 
-        if (auto val = 0L; ::snd_mixer_selem_get_playback_volume(_mixerElem, SND_MIXER_SCHN_MONO, &val) == 0)
+        if (long val = 0L; ::snd_mixer_selem_get_playback_volume(_mixerElem, SND_MIXER_SCHN_MONO, &val) == 0)
         {
           return std::clamp(static_cast<float>(val - _volMin) / static_cast<float>(_volMax - _volMin), 0.0F, 1.0F);
         }
@@ -345,8 +345,8 @@ namespace ao::audio::backend
           return false;
         }
 
-        auto dbRangeMin = 0L;
-        auto dbRangeMax = 0L;
+        long dbRangeMin = 0L;
+        long dbRangeMax = 0L;
 
         _mixerElem = candidate.elem;
         _mixerElemName = candidate.name;

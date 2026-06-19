@@ -399,8 +399,8 @@ namespace ao::query
         lexeme.remove_prefix(1);
       }
 
-      auto total = std::uint64_t{0};
-      auto segmentCount = std::uint32_t{0};
+      std::uint64_t total = 0;
+      std::uint32_t segmentCount = 0;
 
       while (!lexeme.empty())
       {
@@ -662,7 +662,7 @@ namespace ao::query
       _hasHotAccess = true;
     }
 
-    auto constValue = std::int64_t{0};
+    std::int64_t constValue = 0;
 
     if ((var->type == VariableType::Custom || var->type == VariableType::Tag) && _dict != nullptr)
     {
@@ -883,7 +883,7 @@ namespace ao::query
         return;
       }
 
-      auto first = true;
+      bool first = true;
 
       for (auto const& value : list->values)
       {

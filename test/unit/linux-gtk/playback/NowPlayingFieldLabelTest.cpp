@@ -182,7 +182,7 @@ namespace ao::gtk::test
                               ListId{32});
       drainGtkEvents();
 
-      auto started = false;
+      bool started = false;
       auto startSub = runtime.playback().onStarted([&] { started = true; });
       REQUIRE(emitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
       drainGtkEvents();

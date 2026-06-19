@@ -18,6 +18,7 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <cstdint>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -147,7 +148,7 @@ namespace ao::gtk::test
       auto* const listBox = dynamic_cast<Gtk::ListBox*>(viewport->get_first_child());
       REQUIRE(listBox != nullptr);
 
-      auto rowCount = 0;
+      std::int32_t rowCount = 0;
 
       for (auto* child = listBox->get_first_child(); child != nullptr; child = child->get_next_sibling())
       {

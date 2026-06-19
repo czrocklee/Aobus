@@ -33,7 +33,7 @@ namespace ao::gtk::test
 
     SECTION("reload triggers signal after debounce")
     {
-      auto refreshed = false;
+      bool refreshed = false;
       auto conn = manager.signalRefreshed().connect([&] { refreshed = true; });
 
       manager.reload();

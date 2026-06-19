@@ -29,7 +29,7 @@ namespace ao::audio::detail
 
       std::optional<std::uint32_t> read(std::uint8_t bitCount) noexcept
       {
-        auto value = std::uint32_t{0};
+        std::uint32_t value = 0;
 
         for (std::uint8_t idx = 0; idx < bitCount; ++idx)
         {

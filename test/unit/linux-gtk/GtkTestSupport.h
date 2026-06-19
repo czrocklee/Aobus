@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -158,7 +159,7 @@ namespace ao::gtk::test
 
     auto const count = controllersPtr->get_n_items();
 
-    for (auto i = 0U; i < count; ++i)
+    for (std::uint32_t i = 0U; i < count; ++i)
     {
       if (auto const controllerPtr = std::dynamic_pointer_cast<T>(controllersPtr->get_object(i)); controllerPtr)
       {
@@ -184,7 +185,7 @@ namespace ao::gtk::test
 
     auto const count = controllersPtr->get_n_items();
 
-    for (auto i = 0U; i < count; ++i)
+    for (std::uint32_t i = 0U; i < count; ++i)
     {
       auto const controllerPtr = std::dynamic_pointer_cast<T>(controllersPtr->get_object(i));
 

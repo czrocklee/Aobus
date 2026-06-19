@@ -189,7 +189,7 @@ namespace ao::uimodel::track
       return TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(0)};
     }
 
-    auto parsed = std::uint32_t{0};
+    std::uint32_t parsed = 0;
     auto const* const begin = trimmed.data();
     auto const* const end = trimmed.data() + trimmed.size();
     auto const [ptr, ec] = std::from_chars(begin, end, parsed);

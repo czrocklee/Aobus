@@ -93,8 +93,8 @@ namespace ao::gtk
     auto const& metadata = view.metadata();
     auto const title = metadata.title();
 
-    auto fileSize = std::uint64_t{0};
-    auto mtime = std::uint64_t{0};
+    std::uint64_t fileSize = 0;
+    std::uint64_t mtime = 0;
     auto status = library::FileStatus::Available;
 
     if (auto const uri = view.property().uri(); !uri.empty())

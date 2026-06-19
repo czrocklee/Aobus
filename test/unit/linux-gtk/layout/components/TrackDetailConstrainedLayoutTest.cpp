@@ -435,7 +435,7 @@ namespace ao::gtk::layout::test
       auto const gridMinWidth = measureGridMinWidth();
       CHECK(gridMinWidth <= 66);
 
-      auto const panelWidth = 66;
+      int const panelWidth = 66;
       allocate(panelWidth, 2000);
 
       CHECK(root.get_width() == panelWidth);
@@ -459,7 +459,7 @@ namespace ao::gtk::layout::test
       CHECK(scrolled->get_propagate_natural_width() == false);
       CHECK(scrolled->get_propagate_natural_height() == false);
 
-      auto const expectedViewportHeight = 280;
+      int const expectedViewportHeight = 280;
       auto const [viewportMinHeight, viewportNatHeight] = measureHeight(*viewport, 320);
       CHECK(viewportMinHeight == 0);
       CHECK(viewportNatHeight == expectedViewportHeight);
@@ -472,7 +472,7 @@ namespace ao::gtk::layout::test
       CHECK(wrapperOverallMinHeight == 0);
       CHECK(wrapperOverallNatHeight == 0);
 
-      auto const expandedHeight = 600;
+      int const expandedHeight = 600;
       allocate(320, expandedHeight);
       CHECK(viewport->get_height() == expandedHeight);
       CHECK(scrolled->get_height() == expandedHeight);
@@ -729,7 +729,7 @@ namespace ao::gtk::layout::test
             optCustomPoint->get_x() + customValueBox->get_width());
       CHECK(customValueBox->get_width() > deleteButton->get_width());
 
-      auto const narrowPanelWidth = 120;
+      int const narrowPanelWidth = 120;
       scopedRoot.measure(Gtk::Orientation::VERTICAL, narrowPanelWidth, minHeight, natHeight, minWidth, natWidth);
       scopedRoot.size_allocate(Gtk::Allocation{0, 0, narrowPanelWidth, 2000}, -1);
 
@@ -966,9 +966,9 @@ namespace ao::gtk::layout::test
       auto const expectedTitle = replacementText("title");
       auto const expectedKey = replacementText("key");
       auto const expectedValue = replacementText("value");
-      auto sawTitle = false;
-      auto sawKey = false;
-      auto sawValue = false;
+      bool sawTitle = false;
+      bool sawKey = false;
+      bool sawValue = false;
 
       walkWidgets(scopedCompPtr->widget(),
                   [&](Gtk::Widget& widget)
@@ -1020,10 +1020,10 @@ namespace ao::gtk::layout::test
 
     SECTION("Grid rows keep a fixed allocation height")
     {
-      auto const expectedRowHeight = 28;
+      int const expectedRowHeight = 28;
       allocate(320, 2000);
 
-      auto sawGridChild = false;
+      bool sawGridChild = false;
 
       for (auto* child = grid->get_first_child(); child != nullptr; child = child->get_next_sibling())
       {

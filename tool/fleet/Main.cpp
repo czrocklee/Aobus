@@ -114,7 +114,7 @@ namespace
 
   std::int32_t handleStats(std::filesystem::path const& statsOut, std::size_t window)
   {
-    auto trailingCorruption = false;
+    bool trailingCorruption = false;
     auto result = ao::fleet::RouteStore{statsOut}.statistics(window, &trailingCorruption);
 
     if (!result)

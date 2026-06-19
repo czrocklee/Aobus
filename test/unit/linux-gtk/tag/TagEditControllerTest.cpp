@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
@@ -66,7 +67,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto themeController = ThemeCoordinator{};
-    auto mutationCallbacks = 0;
+    std::int32_t mutationCallbacks = 0;
     auto callbacks = TagEditController::Callbacks{.onTagsMutated = [&mutationCallbacks] { ++mutationCallbacks; }};
 
     auto controller = TagEditController{window, fixture.runtime(), std::move(callbacks), themeController};

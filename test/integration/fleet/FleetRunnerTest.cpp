@@ -268,7 +268,7 @@ namespace ao::fleet::test
       CHECK(std::filesystem::exists(out / "proposal-phase" / "trace.yaml"));
       CHECK(std::filesystem::exists(out / "audit.yaml"));
 
-      auto hasJsonArtifact = false;
+      bool hasJsonArtifact = false;
 
       for (auto const& entry : std::filesystem::recursive_directory_iterator{out})
       {

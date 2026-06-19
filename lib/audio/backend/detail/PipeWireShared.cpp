@@ -75,7 +75,7 @@ namespace ao::audio::backend::detail
     }
 
     auto const text = std::string_view{value};
-    auto parsed = std::uint32_t{0};
+    std::uint32_t parsed = 0;
     auto const* const begin = text.data();
     auto const* const end = begin + text.size();
     auto const [ptr, ec] = std::from_chars(begin, end, parsed);

@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string_view>
@@ -68,7 +69,7 @@ namespace ao::gtk::test
     auto theme = ThemeCoordinator{};
 
     auto receivedPath = std::filesystem::path{};
-    auto mutationCallbackCount = 0;
+    std::int32_t mutationCallbackCount = 0;
     auto callbacks = ImportExportCallbacks{
       .onOpenNewLibrary = [&receivedPath](std::filesystem::path const& path) { receivedPath = path; },
       .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },

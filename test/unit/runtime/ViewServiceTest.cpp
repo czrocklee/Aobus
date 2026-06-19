@@ -426,7 +426,7 @@ namespace ao::rt::test
     auto filterSub = service.onFilterChanged([&](auto const& ev) { filterStr = ev.filterExpression; });
 
     auto statusStr = std::string{};
-    auto statusHasError = true;
+    bool statusHasError = true;
     auto statusSub = service.onFilterStatusChanged(
       [&](auto const& ev)
       {
@@ -435,7 +435,7 @@ namespace ao::rt::test
       });
 
     auto projView = kInvalidViewId;
-    auto projectionChangedCount = std::int32_t{0};
+    std::int32_t projectionChangedCount = 0;
     auto projSub = service.onProjectionChanged(
       [&](auto const& ev)
       {

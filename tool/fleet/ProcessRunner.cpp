@@ -166,7 +166,7 @@ namespace ao::fleet
                                     std::chrono::milliseconds gracePeriod)
     {
       auto deadline = std::chrono::steady_clock::now() + timeout;
-      auto killed = false;
+      bool killed = false;
 
       while (!statePtr->childExited)
       {

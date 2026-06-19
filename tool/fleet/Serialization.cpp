@@ -189,7 +189,7 @@ namespace ao::fleet
         auto parsed = ParsedYaml{};
         parsed.source = std::move(*source);
         ryml::parse_in_arena(yaml::toCsubstr(parsed.source), &parsed.tree);
-        auto entries = std::size_t{};
+        std::size_t entries = std::size_t{};
         validateTree(parsed.tree.rootref(), 0, entries);
         return parsed;
       }
@@ -287,7 +287,7 @@ namespace ao::fleet
     std::size_t unsignedValue(ryml::ConstNodeRef node, std::string_view context)
     {
       auto const text = scalar(node, context);
-      auto result = std::size_t{};
+      std::size_t result = std::size_t{};
       auto const conversion = std::from_chars(text.data(), text.data() + text.size(), result);
 
       if (conversion.ec != std::errc{} || conversion.ptr != text.data() + text.size())
@@ -582,7 +582,7 @@ namespace ao::fleet
 
     std::string substitutePlaceholder(std::string value, std::string_view placeholder, std::string_view replacement)
     {
-      auto cursor = std::size_t{};
+      std::size_t cursor = std::size_t{};
 
       while ((cursor = value.find(placeholder, cursor)) != std::string::npos)
       {
@@ -821,7 +821,7 @@ namespace ao::fleet
 
       for (auto const& argument : harness.argvTemplate)
       {
-        auto cursor = std::size_t{};
+        std::size_t cursor = std::size_t{};
 
         while ((cursor = argument.find('{', cursor)) != std::string::npos)
         {
@@ -950,7 +950,7 @@ namespace ao::fleet
     {
       auto result = std::string{};
       auto prefix = std::string(spaces, ' ');
-      auto start = std::size_t{};
+      std::size_t start = std::size_t{};
 
       while (start <= value.size())
       {
@@ -1236,7 +1236,7 @@ namespace ao::fleet
   {
     bool hasIntentOverrides(IntentOverrides const& overrides)
     {
-      auto result = false;
+      bool result = false;
       forEachOverrideField([&](std::string_view /*name*/, auto member, OverridePolicy /*policy*/, auto /*target*/)
                            { result = result || static_cast<bool>(overrides.*member); });
       return result;
@@ -1374,7 +1374,7 @@ namespace ao::fleet
       out << "    passed: " << (evidence.passed ? "true" : "false") << "\n";
       out << "    infrastructure-error: " << (evidence.infrastructureError ? "true" : "false") << "\n";
       out << "    exit-code: " << evidence.exitCode << "\n";
-      constexpr auto kGapsIndent = std::size_t{6};
+      constexpr std::size_t kGapsIndent = 6;
       out << "    known-gaps:" << emitStringSequence(evidence.knownGaps, kGapsIndent);
     }
 
@@ -1518,7 +1518,7 @@ namespace ao::fleet
     }
 
     auto result = ScalarStreamResult{};
-    auto cursor = std::size_t{};
+    std::size_t cursor = std::size_t{};
 
     while (cursor < source->size())
     {
@@ -1545,7 +1545,7 @@ namespace ao::fleet
       {
         auto tree = ryml::Tree{yaml::callbacks()};
         ryml::parse_in_arena(yaml::toCsubstr(document), &tree);
-        auto entries = std::size_t{};
+        std::size_t entries = std::size_t{};
         validateTree(tree.rootref(), 0, entries);
         auto root = documentRoot(tree);
         requireMap(root, "stream document");

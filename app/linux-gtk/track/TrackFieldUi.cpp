@@ -147,7 +147,7 @@ namespace ao::gtk
       auto const tags = view.tags();
       auto result = std::string{};
 
-      for (auto idx = std::uint8_t{0}; idx < tags.count(); ++idx)
+      for (std::uint8_t idx = 0; idx < tags.count(); ++idx)
       {
         if (idx > 0)
         {

@@ -218,7 +218,7 @@ namespace ao::gtk::test
 
     SECTION("Setting the playing track emits the playing-changed signal, not items_changed")
     {
-      auto playingChangedCount = 0;
+      std::int32_t playingChangedCount = 0;
       modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
       CHECK(spy.events.empty());
@@ -239,7 +239,7 @@ namespace ao::gtk::test
 
     SECTION("Setting the same playing track twice is a no-op")
     {
-      auto playingChangedCount = 0;
+      std::int32_t playingChangedCount = 0;
       modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
       modelPtr->setPlayingTrackId(id1);
@@ -250,7 +250,7 @@ namespace ao::gtk::test
 
     SECTION("Setting playing track outside the projection emits only the playing signal")
     {
-      auto playingChangedCount = 0;
+      std::int32_t playingChangedCount = 0;
       modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
       modelPtr->setPlayingTrackId(TrackId{987654});
@@ -264,7 +264,7 @@ namespace ao::gtk::test
     SECTION("Setting playing track before binding a projection records state and emits the signal")
     {
       auto emptyModelPtr = TrackListModel::create(rowCache);
-      auto playingChangedCount = 0;
+      std::int32_t playingChangedCount = 0;
       emptyModelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
       emptyModelPtr->setPlayingTrackId(id1);
@@ -276,7 +276,7 @@ namespace ao::gtk::test
 
     SECTION("Switching the playing track re-emits the signal and restamps both rows")
     {
-      auto playingChangedCount = 0;
+      std::int32_t playingChangedCount = 0;
       modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
       modelPtr->setPlayingTrackId(id1);

@@ -30,9 +30,9 @@ namespace ao::gtk::test
     auto callbacks = ImportExportCallbacks{.onOpenNewLibrary = {}, .onLibraryDataMutated = {}, .onTitleChanged = {}};
     auto coordinator = ImportExportCoordinator{parent, fixture.runtime(), callbacks, theme};
 
-    auto editLayoutCalled = false;
-    auto resetCalled = false;
-    auto savePanelsCalled = false;
+    bool editLayoutCalled = false;
+    bool resetCalled = false;
+    bool savePanelsCalled = false;
 
     auto controller = MenuController{coordinator,
                                      [&editLayoutCalled] { editLayoutCalled = true; },

@@ -96,10 +96,10 @@ namespace ao::gtk::layout
             continue;
           }
 
-          auto labelMinimum = 0;
-          auto labelNatural = 0;
-          auto labelMinimumBaseline = -1;
-          auto labelNaturalBaseline = -1;
+          std::int32_t labelMinimum = 0;
+          std::int32_t labelNatural = 0;
+          std::int32_t labelMinimumBaseline = -1;
+          std::int32_t labelNaturalBaseline = -1;
           widget->measure(
             Gtk::Orientation::HORIZONTAL, -1, labelMinimum, labelNatural, labelMinimumBaseline, labelNaturalBaseline);
           natural = std::max(natural, labelNatural);
@@ -574,7 +574,7 @@ namespace ao::gtk::layout
 
         if (!keysChanged)
         {
-          for (auto i = 0U; i < snap.customMetadata.size(); ++i)
+          for (std::uint32_t i = 0U; i < snap.customMetadata.size(); ++i)
           {
             if (snap.customMetadata[i].key != _customRows[i].key)
             {
@@ -602,7 +602,7 @@ namespace ao::gtk::layout
           buildGrid();
         }
 
-        for (auto i = 0U; i < snap.customMetadata.size(); ++i)
+        for (std::uint32_t i = 0U; i < snap.customMetadata.size(); ++i)
         {
           updateCustomRow(_customRows[i], snap.customMetadata[i]);
         }

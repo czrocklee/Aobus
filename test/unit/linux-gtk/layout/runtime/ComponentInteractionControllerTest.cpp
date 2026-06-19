@@ -30,10 +30,10 @@ namespace ao::gtk::layout::test
     auto registry = ActionRegistry{};
     auto compRegistry = ComponentRegistry{};
 
-    auto primaryClicked = false;
-    auto secondaryClicked = false;
-    auto primaryLongPressed = false;
-    auto secondaryLongPressed = false;
+    bool primaryClicked = false;
+    bool secondaryClicked = false;
+    bool primaryLongPressed = false;
+    bool secondaryLongPressed = false;
 
     registry.registerAction(
       {.id = "primary", .label = "Primary", .category = "Test"}, [&](auto&) { primaryClicked = true; });

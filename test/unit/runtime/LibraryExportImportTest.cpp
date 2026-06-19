@@ -1139,7 +1139,7 @@ library:
     auto const trackReader = ml.tracks().reader(txn);
     auto const manifestReader = ml.manifest().reader(txn);
 
-    auto count = 0;
+    std::int32_t count = 0;
 
     for (auto const& [id, view] : trackReader)
     {

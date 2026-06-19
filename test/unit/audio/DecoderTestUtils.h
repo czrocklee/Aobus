@@ -63,8 +63,8 @@ namespace ao::audio::test
 
   inline std::uint64_t readUntilStableEndOfStream(IDecoderSession& decoder, std::size_t maxBlocks)
   {
-    auto totalFrames = std::uint64_t{0};
-    auto sawEndOfStream = false;
+    std::uint64_t totalFrames = 0;
+    bool sawEndOfStream = false;
 
     for (std::size_t count = 0; count < maxBlocks && !sawEndOfStream; ++count)
     {

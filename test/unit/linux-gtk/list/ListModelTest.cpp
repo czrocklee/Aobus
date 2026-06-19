@@ -17,8 +17,8 @@ namespace ao::gtk::test
 
     auto const id = ListId{42};
     auto const parentId = ListId{10};
-    auto const depth = 2;
-    auto const isSmart = true;
+    int const depth = 2;
+    bool const isSmart = true;
     auto const* const name = "Test List";
     auto const* const filter = "artist:\"Test Artist\"";
 
@@ -38,8 +38,8 @@ namespace ao::gtk::test
     {
       auto const newId = ListId{100};
       auto const newParentId = ListId{200};
-      auto const newDepth = 5;
-      auto const newSmart = false;
+      int const newDepth = 5;
+      bool const newSmart = false;
       auto const* const newName = "Updated Name";
 
       rowPtr->setListId(newId);

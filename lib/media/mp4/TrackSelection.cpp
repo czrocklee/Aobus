@@ -63,7 +63,7 @@ namespace ao::media::mp4
 
     void visitMovieTracks(Atom const& root, Atom::Visitor visitor)
     {
-      auto keepGoing = true;
+      bool keepGoing = true;
 
       root.visitChildren(
         [&](Atom const& movie)

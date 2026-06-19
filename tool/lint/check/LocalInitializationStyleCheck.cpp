@@ -3,20 +3,27 @@
 
 #include "check/LocalInitializationStyleCheck.h"
 
+#include "check/AstUtil.h"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
+#include <clang/AST/OperationKinds.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/StmtCXX.h>
 #include <clang/AST/Type.h>
+#include <clang/AST/TypeLoc.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/ADT/StringSwitch.h>
+
+#include <string>
 
 using namespace clang::ast_matchers;
 
@@ -85,6 +92,138 @@ namespace clang::tidy::readability
       }
 
       return false;
+    }
+
+    AutoTypeLoc getAutoTypeLoc(VarDecl const* var)
+    {
+      if (var == nullptr)
+      {
+        return {};
+      }
+
+      auto const* typeInfo = var->getTypeSourceInfo();
+
+      if (typeInfo == nullptr)
+      {
+        return {};
+      }
+
+      return typeInfo->getTypeLoc().getContainedAutoTypeLoc();
+    }
+
+    bool hasAutoTypeSpelling(VarDecl const* var)
+    {
+      return !getAutoTypeLoc(var).isNull();
+    }
+
+    bool isFixableAutoPrimitiveType(QualType type)
+    {
+      type = type.getNonReferenceType().getUnqualifiedType();
+
+      if (type->isPointerType() || type->isReferenceType() || type->isNullPtrType())
+      {
+        return false;
+      }
+
+      return type->isArithmeticType() || type->isAnyCharacterType();
+    }
+
+    std::string getExplicitPrimitiveTypeName(QualType type, ASTContext const& context)
+    {
+      auto policy = PrintingPolicy{context.getPrintingPolicy()};
+      policy.SuppressTagKeyword = true;
+
+      return type.getNonReferenceType().getUnqualifiedType().getAsString(policy);
+    }
+
+    std::string getWrittenTypeName(TypeSourceInfo const& typeInfo,
+                                   SourceManager const& sm,
+                                   LangOptions const& langOpts,
+                                   ASTContext const& context)
+    {
+      auto const typeRange = CharSourceRange::getTokenRange(typeInfo.getTypeLoc().getSourceRange());
+      auto spelling = Lexer::getSourceText(typeRange, sm, langOpts).str();
+
+      if (!spelling.empty())
+      {
+        return spelling;
+      }
+
+      return getExplicitPrimitiveTypeName(typeInfo.getType(), context);
+    }
+
+    CXXFunctionalCastExpr const* getPrimitiveFunctionalCast(Expr const* init)
+    {
+      auto const* functionalCast =
+        dyn_cast_or_null<CXXFunctionalCastExpr>(init == nullptr ? nullptr : init->IgnoreImplicit());
+
+      if (functionalCast == nullptr)
+      {
+        return nullptr;
+      }
+
+      auto const* typeInfo = functionalCast->getTypeInfoAsWritten();
+
+      if (typeInfo == nullptr || !isFixableAutoPrimitiveType(typeInfo->getType()))
+      {
+        return nullptr;
+      }
+
+      return functionalCast;
+    }
+
+    Expr const* getSingleFunctionalCastArg(CXXFunctionalCastExpr const* functionalCast)
+    {
+      if (functionalCast == nullptr)
+      {
+        return nullptr;
+      }
+
+      auto const* arg = functionalCast->getSubExprAsWritten();
+
+      if (auto const* initList = dyn_cast_or_null<InitListExpr>(arg); initList != nullptr)
+      {
+        if (initList->getNumInits() != 1)
+        {
+          return nullptr;
+        }
+
+        return initList->getInit(0);
+      }
+
+      return arg;
+    }
+
+    bool isAllowedPrimitiveAutoInitializer(Expr const* init)
+    {
+      return isa_and_nonnull<CXXStaticCastExpr>(init == nullptr ? nullptr : init->IgnoreImplicit());
+    }
+
+    bool isPrimitiveLiteralInitializer(Expr const* init)
+    {
+      auto const* clean = aobus::stripImplicitNodes(init);
+
+      if (clean == nullptr)
+      {
+        return false;
+      }
+
+      clean = clean->IgnoreParens();
+
+      if (auto const* unary = dyn_cast<UnaryOperator>(clean); unary != nullptr)
+      {
+        if (unary->getOpcode() == UO_Plus || unary->getOpcode() == UO_Minus)
+        {
+          clean = unary->getSubExpr()->IgnoreParens();
+        }
+      }
+
+      return isa<IntegerLiteral, FloatingLiteral, CXXBoolLiteralExpr, CharacterLiteral>(clean);
+    }
+
+    bool shouldDiagnosePrimitiveAutoInitializer(Expr const* init)
+    {
+      return getPrimitiveFunctionalCast(init) != nullptr || isPrimitiveLiteralInitializer(init);
     }
   } // namespace
 
@@ -163,14 +302,6 @@ namespace clang::tidy::readability
         return false;
       }
 
-      if (TypeSourceInfo const* tsi = var->getTypeSourceInfo(); tsi != nullptr)
-      {
-        if (tsi->getType()->getContainedAutoType() != nullptr)
-        {
-          return false;
-        }
-      }
-
       if (SourceLocation const loc = var->getLocation(); loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
       {
         return false;
@@ -238,9 +369,15 @@ namespace clang::tidy::readability
 
     SourceLocation const loc = var->getLocation();
     QualType const varType = var->getType();
+    bool const hasAuto = hasAutoTypeSpelling(var);
 
     if (bool const primitive = isPrimitiveType(varType); !primitive)
     {
+      if (hasAuto)
+      {
+        return;
+      }
+
       auto const info = analyzeInitialization(init);
 
       if (info.shouldSkip)
@@ -266,9 +403,59 @@ namespace clang::tidy::readability
         diag(loc, "use 'auto %0 = Type{...}' instead of explicit type initialization") << var->getName();
       }
     }
+    else if (hasAuto)
+    {
+      diagnosePrimitiveAutoType(var, init, sm, *result.Context);
+      return;
+    }
     else if (var->getInitStyle() != VarDecl::CInit)
     {
       diag(loc, "primitive type should use assignment-style initialization 'Type %0 = ...'") << var->getName();
+    }
+  }
+  void LocalInitializationStyleCheck::diagnosePrimitiveAutoType(VarDecl const* var,
+                                                                Expr const* init,
+                                                                SourceManager const& sm,
+                                                                ASTContext& context)
+  {
+    QualType const varType = var->getType();
+    SourceLocation const loc = var->getLocation();
+
+    if (!isFixableAutoPrimitiveType(varType))
+    {
+      return;
+    }
+
+    if (isAllowedPrimitiveAutoInitializer(init))
+    {
+      return;
+    }
+
+    if (!shouldDiagnosePrimitiveAutoInitializer(init))
+    {
+      return;
+    }
+
+    auto const autoLoc = getAutoTypeLoc(var);
+    auto const* functionalCast = getPrimitiveFunctionalCast(init);
+    auto const replacement =
+      functionalCast != nullptr
+        ? getWrittenTypeName(*functionalCast->getTypeInfoAsWritten(), sm, context.getLangOpts(), context)
+        : getExplicitPrimitiveTypeName(varType, context);
+    auto diagnostic = diag(loc, "primitive type should use explicit type '%0' instead of auto") << replacement;
+
+    if (!autoLoc.isDecltypeAuto() && !autoLoc.isConstrained() && !aobus::isInMacro(autoLoc.getSourceRange()))
+    {
+      diagnostic << FixItHint::CreateReplacement(CharSourceRange::getTokenRange(autoLoc.getSourceRange()), replacement);
+
+      auto const* singleArg = getSingleFunctionalCastArg(functionalCast);
+
+      if (singleArg != nullptr && !aobus::isInMacro(functionalCast->getSourceRange()) &&
+          !aobus::isInMacro(singleArg->getSourceRange()))
+      {
+        diagnostic << FixItHint::CreateReplacement(CharSourceRange::getTokenRange(functionalCast->getSourceRange()),
+                                                   aobus::getExprSourceText(*singleArg, sm, context.getLangOpts()));
+      }
     }
   }
 } // namespace clang::tidy::readability

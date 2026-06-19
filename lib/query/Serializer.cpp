@@ -146,7 +146,7 @@ namespace ao::query
       {
         oss << "[";
 
-        auto first = true;
+        bool first = true;
 
         for (auto const& value : list.values)
         {

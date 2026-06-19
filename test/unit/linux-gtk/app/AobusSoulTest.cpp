@@ -45,10 +45,10 @@ namespace ao::gtk::test
 
     SECTION("Gtk::Widget vfuncs")
     {
-      auto min = std::int32_t{-1};
-      auto nat = std::int32_t{-1};
-      auto minB = std::int32_t{-1};
-      auto natB = std::int32_t{-1};
+      std::int32_t min = -1;
+      std::int32_t nat = -1;
+      std::int32_t minB = -1;
+      std::int32_t natB = -1;
       soul.measure(Gtk::Orientation::HORIZONTAL, 100, min, nat, minB, natB);
       CHECK(min >= 0);
       CHECK(nat >= 0);

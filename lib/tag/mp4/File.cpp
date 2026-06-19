@@ -190,7 +190,7 @@ namespace ao::tag::mp4
       {
         // Read the child atom header: [length(4)][type(4)]
         auto const* const childLayout = utility::layout::view<AtomLayout>(remaining);
-        auto const childLength = std::size_t{childLayout->length.value()};
+        std::size_t const childLength = childLayout->length.value();
 
         if (childLength < kDataChildMinSize || childLength > remaining.size())
         {

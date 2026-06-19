@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -153,9 +154,9 @@ namespace ao::audio::test
     REQUIRE(decoder.open(temp.path));
     auto const initialInfo = decoder.streamInfo();
 
-    auto rejectedFormatChange = false;
+    bool rejectedFormatChange = false;
 
-    for (auto count = 0; count < 512 && !rejectedFormatChange; ++count)
+    for (std::int32_t count = 0; count < 512 && !rejectedFormatChange; ++count)
     {
       if (auto const block = decoder.readNextBlock(); !block)
       {

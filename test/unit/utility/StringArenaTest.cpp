@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <string>
 #include <string_view>
@@ -71,14 +72,14 @@ namespace ao::utility::test
     auto views = std::vector<std::string_view>{};
     views.reserve(1000);
 
-    for (auto idx = 0; idx < 1000; ++idx)
+    for (std::int32_t idx = 0; idx < 1000; ++idx)
     {
       views.push_back(arena.intern(std::format("entry-{:04d}", idx)));
     }
 
     CHECK(arena.size() == 1000);
 
-    for (auto idx = 0; idx < 1000; ++idx)
+    for (std::int32_t idx = 0; idx < 1000; ++idx)
     {
       CHECK(views[static_cast<std::size_t>(idx)] == std::format("entry-{:04d}", idx));
     }

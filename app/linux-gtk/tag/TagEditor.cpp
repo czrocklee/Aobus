@@ -51,8 +51,8 @@ namespace ao::gtk
     MeasureResult measureWidget(Gtk::Widget const& widget, Gtk::Orientation orientation, std::int32_t forSize)
     {
       auto result = MeasureResult{};
-      auto minimumBaseline = -1;
-      auto naturalBaseline = -1;
+      std::int32_t minimumBaseline = -1;
+      std::int32_t naturalBaseline = -1;
       widget.measure(orientation, forSize, result.minimum, result.natural, minimumBaseline, naturalBaseline);
       return result;
     }
@@ -91,8 +91,8 @@ namespace ao::gtk
 
       auto items = std::vector<Item>{};
       auto rowHeights = std::vector<std::int32_t>{0};
-      auto cursorX = std::int32_t{0};
-      auto row = std::int32_t{0};
+      std::int32_t cursorX = 0;
+      std::int32_t row = 0;
 
       for (auto* child = first; child != nullptr; child = child->get_next_sibling())
       {
@@ -122,9 +122,9 @@ namespace ao::gtk
       }
 
       auto rowTops = std::vector<std::int32_t>(rowHeights.size(), 0);
-      auto yPos = std::int32_t{0};
+      std::int32_t yPos = 0;
 
-      for (auto rowIdx = std::size_t{0}; rowIdx < rowHeights.size(); ++rowIdx)
+      for (std::size_t rowIdx = 0; rowIdx < rowHeights.size(); ++rowIdx)
       {
         if (rowIdx > 0)
         {

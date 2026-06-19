@@ -97,7 +97,7 @@ namespace ao::fleet
 
     std::string replaceAll(std::string value, std::string_view from, std::string_view to)
     {
-      auto cursor = std::size_t{};
+      std::size_t cursor = std::size_t{};
 
       while ((cursor = value.find(from, cursor)) != std::string::npos)
       {
@@ -1324,8 +1324,8 @@ namespace ao::fleet
     auto feedback = std::string{};
     auto candidates = std::vector<Candidate>{};
     auto fallback = gateFallback(context.registry);
-    auto hadGuardedCandidate = false;
-    auto hadOracleFailure = false;
+    bool hadGuardedCandidate = false;
+    bool hadOracleFailure = false;
     auto baseline = evaluateGateBaseline(store, phase, context);
 
     if (!baseline)
@@ -1483,7 +1483,7 @@ namespace ao::fleet
                                   revisionCouncilContexts(roster, drafts, challenges));
     }
 
-    auto finalCount = std::size_t{0};
+    std::size_t finalCount = 0;
 
     if (depth == CouncilDepth::Panel)
     {
@@ -1557,7 +1557,7 @@ namespace ao::fleet
       }
     }
 
-    auto visited = std::size_t{};
+    std::size_t visited = std::size_t{};
 
     while (!ready.empty())
     {
