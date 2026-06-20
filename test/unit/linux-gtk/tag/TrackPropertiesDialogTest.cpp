@@ -11,6 +11,8 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/entry.h>
@@ -28,7 +30,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
-    auto cache = TrackRowCache{library};
+    auto cache = TrackRowCache{runtime.library()};
     auto window = Gtk::Window{};
 
     auto trackId1 = TrackId{kInvalidTrackId};
@@ -87,7 +89,8 @@ namespace ao::gtk::test
 
     SECTION("dialog creation and data loading")
     {
-      auto dialog = TrackPropertiesDialog{window, library, runtime.mutation(), runtime.completion(), cache, {trackId1}};
+      auto dialog = TrackPropertiesDialog{
+        window, runtime.library(), runtime.library().writer(), runtime.completion(), cache, {trackId1}};
       drainGtkEvents();
 
       auto const entries = collectAll<Gtk::Entry>(dialog);
@@ -101,8 +104,8 @@ namespace ao::gtk::test
 
     SECTION("multi-track selection marks differing fields as mixed")
     {
-      auto dialog =
-        TrackPropertiesDialog{window, library, runtime.mutation(), runtime.completion(), cache, {trackId1, trackId2}};
+      auto dialog = TrackPropertiesDialog{
+        window, runtime.library(), runtime.library().writer(), runtime.completion(), cache, {trackId1, trackId2}};
       drainGtkEvents();
 
       // Title and artist differ across the two tracks, so their editors surface the mixed-value

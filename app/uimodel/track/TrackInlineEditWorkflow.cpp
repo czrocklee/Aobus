@@ -34,11 +34,14 @@ namespace ao::uimodel::track
     auto const oldEditValue = hooks.readCurrentValue();
     hooks.applyValue(*editValueResult);
 
-    if (auto result = hooks.commitPatch(patch); !result)
+    // A failed write throws and is handled at the top-level boundary; reaching
+    // here with no mutated tracks means the edit did not land (e.g. the row was
+    // removed concurrently), so revert the optimistic UI change.
+    if (auto const reply = hooks.commitPatch(patch); reply.mutatedIds.empty())
     {
       hooks.applyValue(oldEditValue);
       return TrackInlineEditResult{
-        .outcome = TrackInlineEditOutcome::MutationRejected, .statusMessage = result.error().message};
+        .outcome = TrackInlineEditOutcome::MutationRejected, .statusMessage = "Change could not be applied."};
     }
 
     return TrackInlineEditResult{.outcome = TrackInlineEditOutcome::Applied, .statusMessage = ""};

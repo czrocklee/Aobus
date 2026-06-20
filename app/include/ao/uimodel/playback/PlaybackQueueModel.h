@@ -4,12 +4,10 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/audio/Types.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>
 
 #include <cstddef>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -31,9 +29,7 @@ namespace ao::uimodel::playback
   class PlaybackQueueModel final
   {
   public:
-    using DescriptorProvider = std::function<std::optional<audio::TrackPlaybackDescriptor>(TrackId)>;
-
-    PlaybackQueueModel(rt::PlaybackService& playback, DescriptorProvider descriptorProvider);
+    explicit PlaybackQueueModel(rt::PlaybackService& playback);
     ~PlaybackQueueModel();
 
     PlaybackQueueModel(PlaybackQueueModel const&) = delete;
@@ -68,7 +64,6 @@ namespace ao::uimodel::playback
     void unsubscribeEvents();
 
     rt::PlaybackService& _playback;
-    DescriptorProvider _descriptorProvider;
     std::unique_ptr<PlaybackQueueState> _queueStatePtr;
     rt::Subscription _idleSub;
     rt::Subscription _stoppedSub;

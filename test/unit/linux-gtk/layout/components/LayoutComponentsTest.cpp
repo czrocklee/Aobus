@@ -19,8 +19,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
@@ -359,7 +359,7 @@ namespace ao::gtk::layout::test
 
     SECTION("library.listTree shows error when listNavigationController missing")
     {
-      auto const rdpPtr = std::make_unique<TrackRowCache>(runtime.musicLibrary());
+      auto const rdpPtr = std::make_unique<TrackRowCache>(runtime.library());
       ctx.track.trackRowCache = rdpPtr.get();
       auto const node = LayoutNode{.type = "library.listTree"};
       auto const compPtr = registry.create(ctx, node);
@@ -605,7 +605,7 @@ namespace ao::gtk::layout::test
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
-    auto cache = TrackRowCache{library};
+    auto cache = TrackRowCache{runtime.library()};
     auto window = Gtk::Window{};
     auto stack = Gtk::Stack{};
     auto themeController = ThemeCoordinator{};
@@ -614,8 +614,7 @@ namespace ao::gtk::layout::test
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
     auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
-    auto queueModel = uimodel::playback::PlaybackQueueModel{
-      runtime.playback(), [&cache](TrackId id) { return cache.playbackDescriptor(id); }};
+    auto queueModel = uimodel::playback::PlaybackQueueModel{runtime.playback()};
     auto pageHost = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, presentationStore};
 
     runtime.workspace().navigateTo(rt::kAllTracksListId);

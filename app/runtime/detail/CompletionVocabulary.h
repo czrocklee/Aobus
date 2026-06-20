@@ -5,8 +5,8 @@
 
 // Internal vocabulary matching and rendering helpers for ao_app_runtime completion code.
 
-#include <ao/rt/CompletionItem.h>
-#include <ao/rt/CompletionService.h>
+#include <ao/rt/completion/CompletionItem.h>
+#include <ao/rt/completion/CompletionService.h>
 
 #include <algorithm>
 #include <cctype>

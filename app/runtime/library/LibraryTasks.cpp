@@ -1,0 +1,150 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include <ao/Exception.h>
+#include <ao/Type.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
+#include <ao/library/LibraryScanner.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ScanPlanExecutor.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTasks.h>
+#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/utility/ThreadUtils.h>
+
+#include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <memory>
+#include <utility>
+#include <vector>
+
+namespace ao::rt
+{
+  struct LibraryTasks::Impl final
+  {
+    async::Runtime& asyncRuntime;
+    library::MusicLibrary& library;
+    LibraryChanges& changes;
+  };
+
+  LibraryTasks::LibraryTasks(async::Runtime& asyncRuntime, library::MusicLibrary& library, LibraryChanges& changes)
+    : _implPtr{std::make_unique<Impl>(asyncRuntime, library, changes)}
+  {
+  }
+
+  LibraryTasks::~LibraryTasks() = default;
+
+  async::Task<void> LibraryTasks::importLibraryAsync(std::filesystem::path path)
+  {
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    setCurrentThreadName("LibraryImport");
+    auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
+
+    if (auto const result = importer.importFromYaml(path); !result)
+    {
+      throwException<Exception>("Library import failed: {}", result.error().message);
+    }
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+  }
+
+  async::Task<void> LibraryTasks::exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode)
+  {
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    setCurrentThreadName("LibraryExport");
+    auto exporter = ao::rt::LibraryYamlExporter{_implPtr->library};
+
+    if (auto const result = exporter.exportToYaml(path, mode); !result)
+    {
+      throwException<Exception>("Library export failed: {}", result.error().message);
+    }
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+  }
+
+  async::Task<library::ScanPlan> LibraryTasks::buildScanPlanAsync()
+  {
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    setCurrentThreadName("LibraryScanner");
+
+    auto scanner = library::LibraryScanner{_implPtr->library};
+    auto plan = scanner.buildPlan(
+      [this](std::filesystem::path const& path)
+      {
+        _implPtr->asyncRuntime.callbackExecutor().dispatch(
+          [this, path]
+          {
+            _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
+              .fraction = 0.0,
+              .message = "Scanning: " + path.filename().string(),
+            });
+          });
+      });
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+
+    if (plan.items.empty())
+    {
+      _implPtr->changes.notifyLibraryTaskCompleted(0);
+    }
+
+    co_return plan;
+  }
+
+  async::Task<void> LibraryTasks::applyScanPlanAsync(library::ScanPlan plan)
+  {
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    setCurrentThreadName("ApplyScanPlan");
+
+    auto resultIds = std::vector<TrackId>{};
+    auto const totalItems = plan.items.size();
+
+    auto executor = ao::library::ScanPlanExecutor{
+      _implPtr->library,
+      std::move(plan),
+      [this, totalItems](std::filesystem::path const& filePath, std::int32_t index)
+      {
+        _implPtr->asyncRuntime.callbackExecutor().dispatch(
+          [this, filePath, index, totalItems]
+          {
+            auto const fraction = totalItems > 0 ? static_cast<double>(index) / static_cast<double>(totalItems) : 0.0;
+            auto const message = "Updating: " + filePath.filename().string();
+            _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
+              .fraction = fraction,
+              .message = message,
+            });
+          });
+      },
+      [] {}};
+
+    auto exceptionPtr = std::exception_ptr{};
+
+    try
+    {
+      executor.run();
+      resultIds = executor.result().processedIds;
+    }
+    catch (...)
+    {
+      exceptionPtr = std::current_exception();
+    }
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+
+    if (exceptionPtr)
+    {
+      _implPtr->changes.notifyLibraryTaskCompleted(0);
+      std::rethrow_exception(exceptionPtr);
+    }
+
+    _implPtr->changes.notifyLibraryTaskCompleted(resultIds.size());
+
+    if (!resultIds.empty())
+    {
+      _implPtr->changes.notifyTracksMutated(resultIds);
+    }
+  }
+} // namespace ao::rt

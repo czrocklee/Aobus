@@ -57,10 +57,10 @@ namespace ao::uimodel::track::test
           patch.optTitle = *text;
         }
       },
-      .commitPatch = [&](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
+      .commitPatch = [&](rt::MetadataPatch const& patch) -> rt::UpdateTrackMetadataReply
       {
         committedPatch = patch;
-        return rt::UpdateTrackMetadataReply{};
+        return rt::UpdateTrackMetadataReply{.mutatedIds = {TrackId{1}}};
       },
     };
 
@@ -107,17 +107,17 @@ namespace ao::uimodel::track::test
       CHECK(*committedPatch.optTitle == "New Title");
     }
 
-    SECTION("mutation errors roll back the optimistic edit")
+    SECTION("a write that mutates nothing rolls back the optimistic edit")
     {
-      hooks.commitPatch = [](rt::MetadataPatch const&) -> Result<rt::UpdateTrackMetadataReply>
-      { return makeError(Error::Code::Generic, "metadata write failed"); };
+      hooks.commitPatch = [](rt::MetadataPatch const&) -> rt::UpdateTrackMetadataReply
+      { return rt::UpdateTrackMetadataReply{}; };
 
       auto const result = TrackInlineEditWorkflow::apply(
         TrackInlineEditRequest{.field = rt::TrackField::Title, .oldText = "Old Title", .newText = "Temporary Title"},
         hooks);
 
       CHECK(result.outcome == TrackInlineEditOutcome::MutationRejected);
-      CHECK(result.statusMessage == "metadata write failed");
+      CHECK(result.statusMessage == "Change could not be applied.");
       CHECK(textFrom(currentValue) == "Old Title");
     }
   }

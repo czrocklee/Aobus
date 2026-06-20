@@ -5,13 +5,14 @@
 #include <ao/Type.h>
 #include <ao/async/Runtime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/source/ListSourceStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -32,13 +33,15 @@ namespace ao::rt::test
       TestMusicLibrary library;
       MockExecutor executor;
       async::Runtime runtime;
-      LibraryMutationService mutation;
+      LibraryChanges changes;
+      LibraryWriter writer;
       std::unique_ptr<ListSourceStore> storePtr;
 
       TestEnv()
         : runtime{executor}
-        , mutation{runtime, library.library()}
-        , storePtr{std::make_unique<ListSourceStore>(library.library(), mutation)}
+        , changes{}
+        , writer{library.library(), changes}
+        , storePtr{std::make_unique<ListSourceStore>(library.library(), changes)}
       {
       }
 
@@ -350,8 +353,8 @@ namespace ao::rt::test
     auto env = TestEnv{};
     auto service = env.makeService();
     auto const trackId = env.library.addTrack(TrackSpec{.title = "List Track"});
-    auto const listId = env.mutation.createList(LibraryMutationService::ListDraft{
-      .kind = LibraryMutationService::ListKind::Manual,
+    auto const listId = env.writer.createList(LibraryWriter::ListDraft{
+      .kind = LibraryWriter::ListKind::Manual,
       .name = "Manual",
       .trackIds = {trackId},
     });
@@ -497,8 +500,8 @@ namespace ao::rt::test
     auto const newTrackId = env.library.addTrack(TrackSpec{.title = "New", .year = 2021});
     env.storePtr->reloadAllTracks();
 
-    auto const oldListId = env.mutation.createList(LibraryMutationService::ListDraft{
-      .kind = LibraryMutationService::ListKind::Manual,
+    auto const oldListId = env.writer.createList(LibraryWriter::ListDraft{
+      .kind = LibraryWriter::ListKind::Manual,
       .name = "Old only",
       .trackIds = {oldTrackId},
     });

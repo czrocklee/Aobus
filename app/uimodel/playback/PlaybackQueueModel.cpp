@@ -24,8 +24,8 @@ namespace ao::uimodel::playback
     constexpr auto kRestartThreshold = std::chrono::seconds{3};
   }
 
-  PlaybackQueueModel::PlaybackQueueModel(rt::PlaybackService& playback, DescriptorProvider descriptorProvider)
-    : _playback{playback}, _descriptorProvider{std::move(descriptorProvider)}
+  PlaybackQueueModel::PlaybackQueueModel(rt::PlaybackService& playback)
+    : _playback{playback}
   {
   }
 
@@ -50,9 +50,7 @@ namespace ao::uimodel::playback
 
     auto const startIndex = static_cast<std::size_t>(std::distance(trackIds.begin(), it));
 
-    auto const optDesc = _descriptorProvider(startTrackId);
-
-    if (!optDesc)
+    if (!_playback.playTrack(startTrackId, sourceListId))
     {
       return false;
     }
@@ -64,8 +62,6 @@ namespace ao::uimodel::playback
       .currentIndex = startIndex,
       .sourceListId = sourceListId,
     });
-
-    _playback.play(*optDesc, sourceListId);
 
     subscribeEvents();
     return true;
@@ -137,9 +133,8 @@ namespace ao::uimodel::playback
     // If we are more than 3 seconds into the song, just restart it
     if (state.elapsed > kRestartThreshold)
     {
-      if (auto const optDesc = _descriptorProvider(_queueStatePtr->trackIds[_queueStatePtr->currentIndex]); optDesc)
+      if (_playback.playTrack(_queueStatePtr->trackIds[_queueStatePtr->currentIndex], _queueStatePtr->sourceListId))
       {
-        _playback.play(*optDesc, _queueStatePtr->sourceListId);
         return;
       }
     }
@@ -151,10 +146,9 @@ namespace ao::uimodel::playback
       for (auto [idx, trackId] :
            _queueStatePtr->trackIds | std::views::take(prevIndex + 1) | std::views::enumerate | std::views::reverse)
       {
-        if (auto const optDesc = _descriptorProvider(trackId); optDesc)
+        if (_playback.playTrack(trackId, _queueStatePtr->sourceListId))
         {
           _queueStatePtr->currentIndex = static_cast<std::size_t>(idx);
-          _playback.play(*optDesc, _queueStatePtr->sourceListId);
           return;
         }
       }
@@ -163,10 +157,9 @@ namespace ao::uimodel::playback
     {
       for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::reverse)
       {
-        if (auto const optDesc = _descriptorProvider(trackId); optDesc)
+        if (_playback.playTrack(trackId, _queueStatePtr->sourceListId))
         {
           _queueStatePtr->currentIndex = static_cast<std::size_t>(idx);
-          _playback.play(*optDesc, _queueStatePtr->sourceListId);
           return;
         }
       }
@@ -230,9 +223,8 @@ namespace ao::uimodel::playback
 
     if (state.repeatMode == rt::RepeatMode::One)
     {
-      if (auto const optDesc = _descriptorProvider(_queueStatePtr->trackIds[_queueStatePtr->currentIndex]); optDesc)
+      if (_playback.playTrack(_queueStatePtr->trackIds[_queueStatePtr->currentIndex], _queueStatePtr->sourceListId))
       {
-        _playback.play(*optDesc, _queueStatePtr->sourceListId);
         return;
       }
     }
@@ -250,10 +242,9 @@ namespace ao::uimodel::playback
         nextIdx = (nextIdx + 1) % _queueStatePtr->trackIds.size();
       }
 
-      if (auto const optDesc = _descriptorProvider(_queueStatePtr->trackIds[nextIdx]); optDesc)
+      if (_playback.playTrack(_queueStatePtr->trackIds[nextIdx], _queueStatePtr->sourceListId))
       {
         _queueStatePtr->currentIndex = nextIdx;
-        _playback.play(*optDesc, _queueStatePtr->sourceListId);
         return;
       }
     }
@@ -262,10 +253,9 @@ namespace ao::uimodel::playback
 
     for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::drop(nextIndex))
     {
-      if (auto const optDesc = _descriptorProvider(trackId); optDesc)
+      if (_playback.playTrack(trackId, _queueStatePtr->sourceListId))
       {
         _queueStatePtr->currentIndex = static_cast<std::size_t>(idx);
-        _playback.play(*optDesc, _queueStatePtr->sourceListId);
         return;
       }
     }
@@ -274,10 +264,9 @@ namespace ao::uimodel::playback
     {
       for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate)
       {
-        if (auto const optDesc = _descriptorProvider(trackId); optDesc)
+        if (_playback.playTrack(trackId, _queueStatePtr->sourceListId))
         {
           _queueStatePtr->currentIndex = static_cast<std::size_t>(idx);
-          _playback.play(*optDesc, _queueStatePtr->sourceListId);
           return;
         }
       }

@@ -8,12 +8,15 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/TrackCommandService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <CLI/App.hpp>
 
+#include <array>
 #include <cstdint>
 #include <iostream>
+#include <span>
 #include <string>
 
 namespace ao::cli
@@ -64,10 +67,14 @@ namespace ao::cli
     add->callback(
       [&runtime, addId, addTagName]
       {
-        if (runtime.trackCommands().addTag(TrackId{addId->as<std::uint32_t>()}, addTagName->as<std::string>()))
+        auto const trackId = TrackId{addId->as<std::uint32_t>()};
+        auto const tagName = addTagName->as<std::string>();
+        auto const reply =
+          runtime.library().writer().editTags(std::array{trackId}, std::array{tagName}, std::span<std::string const>{});
+
+        if (!reply.mutatedIds.empty())
         {
-          std::cout << "added tag: " << addTagName->as<std::string>() << " to track " << addId->as<std::uint32_t>()
-                    << '\n';
+          std::cout << "added tag: " << tagName << " to track " << addId->as<std::uint32_t>() << '\n';
         }
         else
         {
@@ -81,10 +88,14 @@ namespace ao::cli
     remove->callback(
       [&runtime, remId, remTagName]
       {
-        if (runtime.trackCommands().removeTag(TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>()))
+        auto const trackId = TrackId{remId->as<std::uint32_t>()};
+        auto const tagName = remTagName->as<std::string>();
+        auto const reply =
+          runtime.library().writer().editTags(std::array{trackId}, std::span<std::string const>{}, std::array{tagName});
+
+        if (!reply.mutatedIds.empty())
         {
-          std::cout << "removed tag: " << remTagName->as<std::string>() << " from track " << remId->as<std::uint32_t>()
-                    << '\n';
+          std::cout << "removed tag: " << tagName << " from track " << remId->as<std::uint32_t>() << '\n';
         }
         else
         {

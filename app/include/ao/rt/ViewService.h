@@ -4,9 +4,9 @@
 #pragma once
 
 #include "CorePrimitives.h"
-#include "ProjectionTypes.h"
 #include "StateTypes.h"
 #include "TrackPresentation.h"
+#include "projection/ProjectionTypes.h"
 #include <ao/Type.h>
 
 #include <chrono>
@@ -31,7 +31,7 @@ namespace ao::rt
   class ListSourceStore;
   class TrackSource;
   class WorkspaceService;
-  class LibraryMutationService;
+  class LibraryChanges;
 
   class ViewService final
   {
@@ -95,7 +95,7 @@ namespace ao::rt
     std::shared_ptr<ITrackListProjection> trackListProjection(ViewId viewId);
     std::unique_ptr<ITrackDetailProjection> detailProjection(DetailTarget const& target,
                                                              WorkspaceService& workspace,
-                                                             LibraryMutationService& mutation);
+                                                             LibraryChanges const& changes);
 
   private:
     struct Impl;

@@ -12,6 +12,7 @@
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -59,7 +60,7 @@ namespace ao::rt::test
     CHECK(appPtr->databasePath() == std::filesystem::path{tempDir.path()} / ".aobus" / "library");
 
     // Verify accessors
-    [[maybe_unused]] auto& commands = appPtr->trackCommands();
+    [[maybe_unused]] auto& commands = appPtr->library().writer();
     [[maybe_unused]] auto& notifications = appPtr->notifications();
 
     // addAudioProvider

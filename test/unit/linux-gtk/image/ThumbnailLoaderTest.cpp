@@ -29,7 +29,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
     auto cache = ImageCache{200};
-    auto loader = ThumbnailLoader{library, cache, runtime.async()};
+    auto loader = ThumbnailLoader{runtime.library(), cache, runtime.async()};
 
     constexpr std::int32_t kPixelSize = 48;
 
@@ -273,7 +273,7 @@ namespace ao::gtk::test
       auto request = ThumbnailLoader::Request{};
 
       {
-        auto scopedLoader = ThumbnailLoader{library, cache, runtime.async()};
+        auto scopedLoader = ThumbnailLoader{runtime.library(), cache, runtime.async()};
         request =
           scopedLoader.request(resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
         REQUIRE(request);
@@ -283,7 +283,7 @@ namespace ao::gtk::test
       CHECK(callbackCount == 0);
       request.reset();
 
-      auto replacementLoader = ThumbnailLoader{library, cache, runtime.async()};
+      auto replacementLoader = ThumbnailLoader{runtime.library(), cache, runtime.async()};
       auto replacementRequest =
         replacementLoader.request(resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
       REQUIRE(replacementRequest);

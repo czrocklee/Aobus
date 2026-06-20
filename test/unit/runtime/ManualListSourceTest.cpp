@@ -4,8 +4,8 @@
 #include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListView.h>
-#include <ao/rt/ManualListSource.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/source/ManualListSource.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 

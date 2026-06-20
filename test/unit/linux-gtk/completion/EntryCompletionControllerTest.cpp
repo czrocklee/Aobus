@@ -4,8 +4,8 @@
 #include "completion/EntryCompletionController.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/rt/CompletionItem.h>
-#include <ao/rt/CompletionResult.h>
+#include <ao/rt/completion/CompletionItem.h>
+#include <ao/rt/completion/CompletionResult.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/listmodel.h>

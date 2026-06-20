@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#pragma once
+
+#include "TrackSource.h"
+#include <ao/Type.h>
+
+namespace ao::library
+{
+  class TrackStore;
+}
+
+namespace ao::lmdb
+{
+  class ReadTransaction;
+}
+
+#include <cstddef>
+#include <flat_set>
+#include <optional>
+
+namespace ao::rt
+{
+  /**
+   * AllTracksSource - Authoritative ordered list of all TrackIds in the library.
+   * Loaded from TrackStore and maintained in ascending TrackId order.
+   *
+   * All notifications are emitted AFTER DB commit to ensure consistency.
+   */
+  class AllTracksSource final : public TrackSource
+  {
+  public:
+    using TrackSource::notifyInserted;
+    using TrackSource::notifyRemoved;
+    using TrackSource::notifyUpdated;
+
+    explicit AllTracksSource(library::TrackStore& store);
+
+    void reloadFromStore(lmdb::ReadTransaction const& txn);
+    void notifyInserted(TrackId id);
+    void notifyRemoved(TrackId id);
+    void clear();
+
+    // TrackSource interface
+    std::size_t size() const override { return _trackIds.size(); }
+    TrackId trackIdAt(std::size_t index) const override
+    {
+      return *(_trackIds.begin() + static_cast<std::ptrdiff_t>(index));
+    }
+    std::optional<std::size_t> indexOf(TrackId id) const override;
+
+  private:
+    library::TrackStore& _store;
+    std::flat_set<TrackId> _trackIds;
+  };
+}

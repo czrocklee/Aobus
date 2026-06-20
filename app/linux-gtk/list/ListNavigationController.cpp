@@ -8,14 +8,14 @@
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/list/ListActionPolicy.h>
 #include <ao/utility/Log.h>
 
@@ -94,11 +94,11 @@ namespace ao::gtk
     actionMap.add_action(_editListActionPtr);
   }
 
-  void ListNavigationController::rebuildTree(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn)
+  void ListNavigationController::rebuildTree(TrackRowCache& dataProvider)
   {
     _dataProvider = &dataProvider;
 
-    _panelPtr->rebuildTree(_runtime, txn);
+    _panelPtr->rebuildTree(_runtime.library());
 
     if (_pendingSelectId != kInvalidListId)
     {
@@ -203,15 +203,14 @@ namespace ao::gtk
       return;
     }
 
-    auto readTxn = _runtime.musicLibrary().readTransaction();
-    auto reader = _runtime.musicLibrary().lists().reader(readTxn);
+    auto scope = _runtime.library().reader();
 
-    if (auto const optView = reader.get(listId); optView)
+    if (auto const optNode = scope.listNode(listId); optNode)
     {
       auto const optPres = _callbacks.getListPresentation ? _callbacks.getListPresentation(listId) : std::nullopt;
-      auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optView->parentId(), *_dataProvider);
+      auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optNode->parentId, *_dataProvider);
       auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
-      dialog->populate(listId, *optView, optPres);
+      dialog->populate(listId, *optNode, optPres);
       dialog->signal_response().connect(
         [this, dialog, tokenPtr](std::int32_t responseId)
         {
@@ -230,7 +229,7 @@ namespace ao::gtk
     }
   }
 
-  ListId ListNavigationController::submitListDraft(rt::LibraryMutationService::ListDraft const& draft,
+  ListId ListNavigationController::submitListDraft(rt::LibraryWriter::ListDraft const& draft,
                                                    std::string presentationId)
   {
     if (draft.listId != kInvalidListId)
@@ -255,16 +254,16 @@ namespace ao::gtk
     return newListId;
   }
 
-  ListId ListNavigationController::createList(rt::LibraryMutationService::ListDraft const& draft)
+  ListId ListNavigationController::createList(rt::LibraryWriter::ListDraft const& draft)
   {
-    auto listId = _runtime.mutation().createList(draft);
+    auto listId = _runtime.library().writer().createList(draft);
     _pendingSelectId = listId;
     return listId;
   }
 
-  void ListNavigationController::updateList(rt::LibraryMutationService::ListDraft const& draft)
+  void ListNavigationController::updateList(rt::LibraryWriter::ListDraft const& draft)
   {
-    _runtime.mutation().updateList(draft);
+    _runtime.library().writer().updateList(draft);
     _pendingSelectId = draft.listId;
   }
 
@@ -305,7 +304,7 @@ namespace ao::gtk
       return;
     }
 
-    _runtime.mutation().deleteList(listId);
+    _runtime.library().writer().deleteList(listId);
 
     _pendingSelectId = rt::kAllTracksListId;
   }

@@ -3,14 +3,14 @@
 
 #include "TestUtils.h"
 #include <ao/Type.h>
-#include <ao/async/Runtime.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/CompletionItem.h>
-#include <ao/rt/CompletionService.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/MetadataValueCompleter.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/completion/CompletionItem.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/MetadataValueCompleter.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -64,10 +64,8 @@ namespace ao::rt::test
     addMetadataValueTrack(testLib, "Massive Attack", "Protection");
     addMetadataValueTrack(testLib, "Mazzy Star", "So Tonight That I Might See");
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = LibraryMutationService{runtime, testLib.library()};
-    auto service = CompletionService{testLib.library(), mutation};
+    auto changes = LibraryChanges{};
+    auto service = CompletionService{testLib.library(), changes};
 
     auto artistCompleter = MetadataValueCompleter{service, TrackField::Artist};
     auto artistItems = artistCompleter.complete("ma");
@@ -87,10 +85,8 @@ namespace ao::rt::test
     addMetadataValueTrack(testLib, "Artist A", "Album A");
     addMetadataValueTrack(testLib, "Artist B", "Album B");
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = LibraryMutationService{runtime, testLib.library()};
-    auto service = CompletionService{testLib.library(), mutation};
+    auto changes = LibraryChanges{};
+    auto service = CompletionService{testLib.library(), changes};
 
     auto titleCompleter = MetadataValueCompleter{service, TrackField::Title};
     CHECK(titleCompleter.complete("Metadata").empty());
@@ -106,10 +102,8 @@ namespace ao::rt::test
     addMetadataValueTrack(testLib, "Massive Attack", "Mezzanine");
     addMetadataValueTrack(testLib, "Mazzy Star", "She Hangs Brightly");
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = LibraryMutationService{runtime, testLib.library()};
-    auto service = CompletionService{testLib.library(), mutation};
+    auto changes = LibraryChanges{};
+    auto service = CompletionService{testLib.library(), changes};
 
     auto provider = MetadataValueCompleter{service, TrackField::Artist}.asProvider();
     auto optResult = provider("ma suffix", 2);

@@ -8,7 +8,6 @@
 #include "tag/TagEditController.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/WorkspaceService.h>
@@ -29,7 +28,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
-    auto cache = TrackRowCache{library};
+    auto cache = TrackRowCache{runtime.library()};
     auto window = Gtk::Window{};
 
     auto stack = Gtk::Stack{};
@@ -41,8 +40,7 @@ namespace ao::gtk::test
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
 
     auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
-    auto queueModel = uimodel::playback::PlaybackQueueModel{
-      runtime.playback(), [&cache](TrackId id) { return cache.playbackDescriptor(id); }};
+    auto queueModel = uimodel::playback::PlaybackQueueModel{runtime.playback()};
 
     auto host = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, presentationStore};
 

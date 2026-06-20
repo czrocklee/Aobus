@@ -5,7 +5,7 @@
 
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/StatusSlotModel.h>
 
 #include <glibmm/main.h>
@@ -38,7 +38,7 @@ namespace ao::gtk
   class StatusSlot final
   {
   public:
-    StatusSlot(rt::LibraryMutationService& mutation, rt::NotificationService& notifications, rt::ViewService& views);
+    StatusSlot(rt::LibraryChanges const& changes, rt::NotificationService& notifications, rt::ViewService& views);
     ~StatusSlot();
 
     StatusSlot(StatusSlot const&) = delete;
@@ -51,7 +51,7 @@ namespace ao::gtk
   private:
     void setupUi();
 
-    void onLibraryTaskProgress(rt::LibraryMutationService::LibraryTaskProgressUpdated const& ev);
+    void onLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& ev);
     void onLibraryTaskCompleted(std::size_t count);
     void onNotificationPosted(rt::NotificationId id);
 
@@ -60,7 +60,7 @@ namespace ao::gtk
     void clearSeverityClasses();
     void startAutoDismissTimer(std::chrono::milliseconds timeout);
 
-    rt::LibraryMutationService& _mutation;
+    rt::LibraryChanges const& _changes;
     rt::NotificationService& _notifications;
 
     Gtk::Box _box;

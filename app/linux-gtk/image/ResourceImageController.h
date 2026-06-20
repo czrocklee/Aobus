@@ -6,14 +6,14 @@
 #include "image/ThumbnailLoader.h"
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <cstdint>
 #include <memory>
 
-namespace ao::library
+namespace ao::rt
 {
-  class MusicLibrary;
+  class Library;
 }
 
 namespace ao::gtk
@@ -24,7 +24,7 @@ namespace ao::gtk
   class ResourceImageController final
   {
   public:
-    ResourceImageController(ImageWidget& widget, library::MusicLibrary& library, ImageCache& cache);
+    ResourceImageController(ImageWidget& widget, rt::Library const& reads, ImageCache& cache);
     ~ResourceImageController() = default;
 
     ResourceImageController(ResourceImageController const&) = delete;
@@ -45,7 +45,7 @@ namespace ao::gtk
     std::int32_t thumbnailPhysicalSize() const;
 
     ImageWidget& _widget;
-    library::MusicLibrary& _library;
+    rt::Library const& _reads;
     ImageCache& _cache;
     std::unique_ptr<rt::ITrackDetailProjection> _detailProjectionPtr;
     rt::Subscription _detailSub;

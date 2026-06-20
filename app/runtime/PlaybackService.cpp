@@ -6,6 +6,8 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
+#include <ao/library/CoverArt.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CorePrimitives.h>
@@ -15,8 +17,10 @@
 
 #include <chrono>
 #include <exception>
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -99,6 +103,50 @@ namespace ao::rt
         .quality = status.quality,
         .qualityAssessments = status.qualityAssessments,
       };
+    }
+
+    std::optional<audio::TrackPlaybackDescriptor> playbackDescriptorForTrack(library::MusicLibrary& library,
+                                                                             TrackId trackId)
+    {
+      auto const txn = library.readTransaction();
+      auto reader = library.tracks().reader(txn);
+      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+
+      if (!optView)
+      {
+        return std::nullopt;
+      }
+
+      auto const& view = *optView;
+      auto const metadata = view.metadata();
+      auto const property = view.property();
+      auto const uri = std::filesystem::path{property.uri()};
+      auto const optFilePath =
+        uri.empty() ? std::optional<std::filesystem::path>{}
+                    : std::optional<std::filesystem::path>{
+                        uri.is_absolute() ? uri.lexically_normal() : (library.rootPath() / uri).lexically_normal()};
+
+      auto descriptor = audio::TrackPlaybackDescriptor{
+        .trackId = trackId,
+        .title = std::string{metadata.title()},
+        .artist = std::string{library.dictionary().getOrDefault(metadata.artistId())},
+        .album = std::string{library.dictionary().getOrDefault(metadata.albumId())},
+        .coverArtId = view.coverArt()
+                        .primary()
+                        .transform([](library::CoverArt cover) { return cover.resourceId; })
+                        .value_or(kInvalidResourceId),
+        .duration = property.duration(),
+        .sampleRateHint = property.sampleRate().raw(),
+        .channelsHint = property.channels().raw(),
+        .bitDepthHint = property.bitDepth().raw(),
+      };
+
+      if (optFilePath)
+      {
+        descriptor.filePath = *optFilePath;
+      }
+
+      return descriptor;
     }
   }
 
@@ -340,25 +388,46 @@ namespace ao::rt
 
   void PlaybackService::play(audio::TrackPlaybackDescriptor const& descriptor, ListId const sourceListId)
   {
-    _implPtr->ensureReady();
+    auto& impl = *_implPtr;
+    impl.ensureReady();
 
     // Signal "about to play" so the UI resets the seekbar before the
     // blocking Engine::play call freezes the main thread.
-    _implPtr->preparingSignal.emit();
+    impl.preparingSignal.emit();
 
-    _implPtr->playerPtr->play(descriptor);
-    _implPtr->currentTrackId = descriptor.trackId;
-    _implPtr->currentSourceListId = sourceListId;
-    _implPtr->currentTrackTitle = descriptor.title;
-    _implPtr->currentTrackArtist = descriptor.artist;
-    _implPtr->currentTrackDuration = descriptor.duration;
-    _implPtr->state = _implPtr->buildState(*_implPtr->playerPtr);
-    _implPtr->startedSignal.emit();
+    impl.playerPtr->play(descriptor);
+    impl.currentTrackId = descriptor.trackId;
+    impl.currentSourceListId = sourceListId;
+    impl.currentTrackTitle = descriptor.title;
+    impl.currentTrackArtist = descriptor.artist;
+    impl.currentTrackDuration = descriptor.duration;
+    impl.state = impl.buildState(*impl.playerPtr);
+    impl.startedSignal.emit();
 
-    _implPtr->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
+    impl.nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
       .trackId = descriptor.trackId,
       .sourceListId = sourceListId,
     });
+  }
+
+  bool PlaybackService::playTrack(TrackId const trackId, ListId const sourceListId)
+  {
+    try
+    {
+      auto const optDescriptor = playbackDescriptorForTrack(_implPtr->library, trackId);
+
+      if (!optDescriptor)
+      {
+        return false;
+      }
+
+      play(*optDescriptor, sourceListId);
+      return true;
+    }
+    catch (std::exception const&)
+    {
+      return false;
+    }
   }
 
   TrackId PlaybackService::playSelectionInView(ViewId const viewId)
@@ -374,29 +443,7 @@ namespace ao::rt
       }
 
       auto const trackId = TrackId{sel.front()};
-      auto const txn = _implPtr->library.readTransaction();
-      auto reader = _implPtr->library.tracks().reader(txn);
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-
-      if (!optView)
-      {
-        return kInvalidTrackId;
-      }
-
-      auto const uri = std::filesystem::path{optView->property().uri()};
-      auto const filePath =
-        uri.is_absolute() ? uri.lexically_normal() : (_implPtr->library.rootPath() / uri).lexically_normal();
-
-      auto const desc = audio::TrackPlaybackDescriptor{
-        .trackId = trackId,
-        .filePath = filePath,
-        .title = std::string{optView->metadata().title()},
-        .duration = optView->coldHeader().duration,
-      };
-
-      play(desc, state.listId);
-
-      return trackId;
+      return playTrack(trackId, state.listId) ? trackId : kInvalidTrackId;
     }
     catch (std::exception const&)
     {

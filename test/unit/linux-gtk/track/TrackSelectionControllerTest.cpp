@@ -11,8 +11,8 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/rt/TrackListProjection.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/columnview.h>
@@ -59,7 +59,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& library = fixture.runtime().musicLibrary();
-    auto cache = TrackRowCache{library};
+    auto cache = TrackRowCache{fixture.runtime().library()};
 
     auto modelPtr = TrackListModel::create(cache);
     auto selectionModelPtr = Gtk::MultiSelection::create(modelPtr);

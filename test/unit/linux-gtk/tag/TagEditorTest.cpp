@@ -125,7 +125,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     window.set_child(editor);
 
-    editor.setup(library, fixture.runtime().completion(), {trackId});
+    editor.setup(fixture.runtime().library(), {trackId});
     drainGtkEvents();
 
     SECTION("Minimum width stays compressible for detail pane resize")
@@ -300,7 +300,7 @@ namespace ao::gtk::test
       // Reproduces the all-suggestions layout (a track with no current tags). Under GtkFlowBox a
       // narrow chip that shared a grid column with a wide chip in another row inherited the wide
       // width; the custom flow sizes every child independently, regardless of row.
-      editor.setup(library, fixture.runtime().completion(), {emptyTrackId});
+      editor.setup(fixture.runtime().library(), {emptyTrackId});
       drainGtkEvents();
 
       REQUIRE(countChipsByClass(editor, "ao-tag-chip-current") == 0);

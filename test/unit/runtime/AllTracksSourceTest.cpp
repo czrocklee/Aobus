@@ -4,8 +4,8 @@
 #include "TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/AllTracksSource.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/source/AllTracksSource.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 

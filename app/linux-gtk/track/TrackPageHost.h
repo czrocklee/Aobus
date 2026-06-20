@@ -117,7 +117,7 @@ namespace ao::gtk
     ImageCache _thumbnailCache{layout::kSectionThumbnailCacheCapacity};
 
     // Shared, off-thread thumbnail decoder over the cache above.
-    ThumbnailLoader _thumbnailLoader{_runtime.musicLibrary(), _thumbnailCache, _runtime.async()};
+    ThumbnailLoader _thumbnailLoader{_runtime.library(), _thumbnailCache, _runtime.async()};
 
     std::map<rt::ViewId, TrackPageContext> _trackPages;
     TrackId _playingTrackId{kInvalidTrackId};

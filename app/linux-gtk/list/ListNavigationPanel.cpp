@@ -6,8 +6,7 @@
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
 #include <ao/Type.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/rt/AppRuntime.h>
+#include <ao/rt/library/Library.h>
 
 #include <gdk/gdk.h>
 #include <gdkmm/graphene_point.h>
@@ -68,9 +67,9 @@ namespace ao::gtk
     _listContextMenu.unparent();
   }
 
-  void ListNavigationPanel::rebuildTree(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn)
+  void ListNavigationPanel::rebuildTree(rt::Library const& reads)
   {
-    auto result = ListTreeModelBuilder::build(runtime, txn);
+    auto result = ListTreeModelBuilder::build(reads);
     _nodesById = std::move(result.nodesById);
     _listTreeStorePtr = std::move(result.storePtr);
     _treeListModelPtr = std::move(result.treeModelPtr);

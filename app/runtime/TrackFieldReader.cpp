@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/TrackFieldReaderInternal.h"
 #include <ao/Type.h>
 #include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackFieldReader.h>
+#include <ao/rt/TrackFieldValue.h>
 
 #include <cstdint>
 #include <string>

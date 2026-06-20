@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/TestUtils.h"
-#include <ao/async/Runtime.h>
-#include <ao/rt/LibraryMutationService.h>
+#include <ao/Type.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/tag/TagEditWorkflow.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -18,10 +19,9 @@ namespace ao::uimodel::tag::test
   TEST_CASE("TagEditWorkflow - logic and messages", "[unit][uimodel][tag]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = rt::LibraryMutationService{runtime, testLib.library()};
-    auto workflow = TagEditWorkflow{mutation};
+    auto changes = rt::LibraryChanges{};
+    auto writer = rt::LibraryWriter{testLib.library(), changes};
+    auto workflow = TagEditWorkflow{writer};
 
     auto trackId = testLib.addTrack("Target 1");
     auto trackId2 = testLib.addTrack("Target 2");
@@ -55,6 +55,9 @@ namespace ao::uimodel::tag::test
 
     SECTION("remove single tag generates correct message")
     {
+      auto const initialTags = std::vector<std::string>{"Tag1"};
+      writer.editTags(std::vector{trackId, trackId2}, initialTags, {});
+
       auto req = TagEditRequest{};
       req.selectedIds = {trackId, trackId2};
       req.tagsToRemove = {"Tag1"};

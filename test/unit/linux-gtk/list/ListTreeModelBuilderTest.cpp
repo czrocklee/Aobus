@@ -8,7 +8,6 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/CorePrimitives.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -48,8 +47,7 @@ namespace ao::gtk::test
     }
 
     // 2. Build the model
-    auto txn = library.readTransaction();
-    auto const result = ListTreeModelBuilder::build(fixture.runtime(), txn);
+    auto const result = ListTreeModelBuilder::build(fixture.runtime().library());
 
     SECTION("Basic structure")
     {

@@ -5,8 +5,8 @@
 
 #include "completion/EntryCompletionController.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CompletionResult.h>
-#include <ao/rt/QueryExpressionCompleter.h>
+#include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/completion/QueryExpressionCompleter.h>
 #include <ao/uimodel/track/TrackFilterViewModel.h>
 
 #include <gdkmm/enums.h>

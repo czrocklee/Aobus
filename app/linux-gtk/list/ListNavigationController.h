@@ -4,10 +4,9 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -57,10 +56,10 @@ namespace ao::gtk
 
     Gtk::Widget& widget();
 
-    void rebuildTree(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
+    void rebuildTree(TrackRowCache& dataProvider);
     void select(ListId listId);
     void createSmartListFromExpression(ListId parentListId, std::string expression);
-    ListId submitListDraft(rt::LibraryMutationService::ListDraft const& draft, std::string presentationId);
+    ListId submitListDraft(rt::LibraryWriter::ListDraft const& draft, std::string presentationId);
 
     void addActionsTo(Gio::ActionMap& actionMap);
 
@@ -73,8 +72,8 @@ namespace ao::gtk
     void openNewSmartListDialog();
     void openEditListDialog(ListId listId);
 
-    ListId createList(rt::LibraryMutationService::ListDraft const& draft);
-    void updateList(rt::LibraryMutationService::ListDraft const& draft);
+    ListId createList(rt::LibraryWriter::ListDraft const& draft);
+    void updateList(rt::LibraryWriter::ListDraft const& draft);
     void onDeleteList();
     void onEditList();
 

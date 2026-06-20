@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <sigc++/signal.h>
 

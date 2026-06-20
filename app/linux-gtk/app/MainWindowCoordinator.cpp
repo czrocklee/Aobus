@@ -24,14 +24,15 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/source/ListSourceStore.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 #include <ao/utility/Log.h>
@@ -51,9 +52,9 @@ namespace ao::gtk
   {
     Impl(MainWindowCoordinator* coordinator, MainWindow& window, rt::AppRuntime& runtime)
       : layoutConfig{runtime.musicLibrary().rootPath() / ".aobus"}
-      , trackRowCache{runtime.musicLibrary()}
+      , trackRowCache{runtime.library()}
       , imageCache{100}
-      , playbackQueueModel{runtime.playback(), [this](TrackId id) { return trackRowCache.playbackDescriptor(id); }}
+      , playbackQueueModel{runtime.playback()}
       , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeController}
       , listNavigationController{window,
                                  runtime,
@@ -183,14 +184,14 @@ namespace ao::gtk
 
     registerPlatformAudioBackends(_runtime);
 
-    _libraryTaskCompletedSubscription = _runtime.mutation().onLibraryTaskCompleted(
+    _libraryTaskCompletedSubscription = _runtime.library().changes().onLibraryTaskCompleted(
       [this](auto)
       {
         _implPtr->trackRowCache.clearCache();
         _runtime.reloadAllTracks();
       });
 
-    _tracksMutatedSubscription = _runtime.mutation().onTracksMutated(
+    _tracksMutatedSubscription = _runtime.library().changes().onTracksMutated(
       [this](auto const& trackIds)
       {
         for (auto const trackId : trackIds)
@@ -201,7 +202,7 @@ namespace ao::gtk
         _runtime.sources().allTracks().notifyUpdated(trackIds);
       });
 
-    _listsMutatedSubscription = _runtime.mutation().onListsMutated(
+    _listsMutatedSubscription = _runtime.library().changes().onListsMutated(
       [this](auto const& mutation)
       {
         for (auto const deletedId : mutation.deleted)
@@ -317,7 +318,7 @@ namespace ao::gtk
     APP_LOG_DEBUG("rebuildListPages called");
     _implPtr->trackPageHost.rebuild(_implPtr->trackRowCache, txn);
 
-    _implPtr->listNavigationController.rebuildTree(_implPtr->trackRowCache, txn);
+    _implPtr->listNavigationController.rebuildTree(_implPtr->trackRowCache);
   }
 
   void MainWindowCoordinator::saveColumnLayout()

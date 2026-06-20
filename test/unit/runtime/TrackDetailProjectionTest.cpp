@@ -6,16 +6,17 @@
 #include <ao/async/Runtime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/rt/TrackDetailProjection.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackFieldReader.h>
+#include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/source/ListSourceStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -48,7 +49,8 @@ namespace ao::rt::test
       TestMusicLibrary lib;
       MockExecutor executor;
       async::Runtime runtime;
-      LibraryMutationService mutation;
+      LibraryChanges changes;
+      LibraryWriter writer;
       ListSourceStore sources;
       ViewService views;
       ConfigStore config;
@@ -57,12 +59,13 @@ namespace ao::rt::test
 
       Env()
         : runtime{executor}
-        , mutation{runtime, lib.library()}
-        , sources{lib.library(), mutation}
+        , changes{}
+        , writer{lib.library(), changes}
+        , sources{lib.library(), changes}
         , views{executor, lib.library(), sources}
         , config{lib.library().rootPath() / "config.json"}
         , playback{executor, views, lib.library()}
-        , workspace{views, playback, mutation, lib.library()}
+        , workspace{views, playback, changes, lib.library()}
       {
       }
     };
@@ -77,7 +80,7 @@ namespace ao::rt::test
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
 
-    auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
+    auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
 
     auto snap = projPtr->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
@@ -89,7 +92,7 @@ namespace ao::rt::test
     {
       auto const patch = MetadataPatch{.optTitle = "After"};
       auto const targetIds = std::array{id1};
-      env.mutation.updateMetadata(targetIds, patch);
+      env.writer.updateMetadata(targetIds, patch);
     }
 
     // Mutation service already published the signal
@@ -108,13 +111,13 @@ namespace ao::rt::test
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
 
-    auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
+    auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
 
     auto const revBefore = projPtr->snapshot().revision;
 
     // Mutate a track not in the selection
     auto const otherIds = std::array{id2};
-    env.mutation.updateMetadata(otherIds, MetadataPatch{.optTitle = "Something Else"});
+    env.writer.updateMetadata(otherIds, MetadataPatch{.optTitle = "Something Else"});
 
     // Revision should NOT change because the mutated track is not selected
     CHECK(projPtr->snapshot().revision == revBefore);
@@ -130,7 +133,7 @@ namespace ao::rt::test
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1, id2});
 
-    auto const projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
+    auto const projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
 
     REQUIRE(snap.selectionKind == SelectionKind::Multiple);
@@ -153,7 +156,7 @@ namespace ao::rt::test
     auto env = Env{};
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
     auto const projPtr =
-      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.mutation);
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
     CHECK(getString(snap.fields[static_cast<std::size_t>(F::Title)]) == "Song A");
@@ -165,7 +168,7 @@ namespace ao::rt::test
     auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
     auto const id2 = env.lib.addTrack(TrackSpec{.title = "Song B"});
 
-    auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.mutation);
+    auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);
 
     // Subscribe to verify notifications
     std::int32_t callCount = 0;
@@ -204,7 +207,7 @@ namespace ao::rt::test
     env.workspace.setFocusedView(reply.viewId);
     env.views.setSelection(reply.viewId, {id1});
 
-    auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.mutation);
+    auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
 
     REQUIRE(snap.selectionKind == SelectionKind::Single);
@@ -217,7 +220,7 @@ namespace ao::rt::test
   {
     auto env = Env{};
     auto const projPtr =
-      env.views.detailProjection(ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.mutation);
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
     CHECK_FALSE(snap.fields[static_cast<std::size_t>(F::Title)].optValue.has_value());
@@ -231,10 +234,10 @@ namespace ao::rt::test
     // Add tag
     auto const targetIds = std::vector{id1};
     auto const tagsToAdd = std::vector<std::string>{"MyTag"};
-    env.mutation.editTags(targetIds, tagsToAdd, {});
+    env.writer.editTags(targetIds, tagsToAdd, {});
 
     auto const projPtr =
-      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.mutation);
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
     REQUIRE(snap.selectionKind == SelectionKind::Single);
     CHECK(snap.commonTagIds.size() == 1);
@@ -253,7 +256,7 @@ namespace ao::rt::test
       patch.customUpdates["Key1"] = "Value1";
       patch.customUpdates["Shared"] = "Same";
       patch.customUpdates["Mixed"] = "One";
-      env.mutation.updateMetadata(std::vector{id1}, patch);
+      env.writer.updateMetadata(std::vector{id1}, patch);
     }
 
     // Add custom metadata to id2
@@ -262,11 +265,11 @@ namespace ao::rt::test
       patch.customUpdates["Key2"] = "Value2";
       patch.customUpdates["Shared"] = "Same";
       patch.customUpdates["Mixed"] = "Two";
-      env.mutation.updateMetadata(std::vector{id2}, patch);
+      env.writer.updateMetadata(std::vector{id2}, patch);
     }
 
     auto const projPtr =
-      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1, id2}}, env.workspace, env.mutation);
+      env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1, id2}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
 
     REQUIRE(snap.customMetadata.size() == 4); // Key1, Key2, Shared, Mixed (sorted by key)

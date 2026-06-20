@@ -6,17 +6,17 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
-#include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/SmartListSource.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/rt/TrackDetailProjection.h>
-#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/TrackSource.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/utility/ScopedTimer.h>
 
 #include <chrono>
@@ -426,8 +426,8 @@ namespace ao::rt
 
   std::unique_ptr<ITrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,
                                                                         WorkspaceService& workspace,
-                                                                        LibraryMutationService& mutation)
+                                                                        LibraryChanges const& changes)
   {
-    return std::make_unique<TrackDetailProjection>(target, *this, _implPtr->library, workspace, mutation);
+    return std::make_unique<TrackDetailProjection>(target, *this, _implPtr->library, workspace, changes);
   }
 } // namespace ao::rt

@@ -4,9 +4,9 @@
 #include "list/QueryExpressionBox.h"
 
 #include "completion/EntryCompletionController.h"
-#include <ao/rt/CompletionResult.h>
-#include <ao/rt/CompletionService.h>
-#include <ao/rt/QueryExpressionCompleter.h>
+#include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/QueryExpressionCompleter.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>

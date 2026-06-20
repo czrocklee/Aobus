@@ -10,20 +10,14 @@
 #include <sigc++/signal.h>
 
 #include <cstddef>
-#include <map>
 #include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
-namespace ao::library
-{
-  class MusicLibrary;
-}
-
 namespace ao::rt
 {
-  class CompletionService;
+  class Library;
 }
 
 namespace ao::gtk
@@ -53,9 +47,7 @@ namespace ao::gtk
     TagEditor(TagEditor&&) = delete;
     TagEditor& operator=(TagEditor&&) = delete;
 
-    void setup(library::MusicLibrary& library,
-               rt::CompletionService& completion,
-               std::vector<TrackId> selectedTrackIds);
+    void setup(rt::Library const& reads, std::vector<TrackId> selectedTrackIds);
 
     // Signals
     TagsChangedSignal& signalTagsChanged() { return _tagsChanged; }
@@ -84,15 +76,13 @@ namespace ao::gtk
     // suggested chips live-filter by the entry text), then reflow.
     void applyFilter();
 
-    library::MusicLibrary* _musicLibrary = nullptr;
-    rt::CompletionService* _completion = nullptr;
+    rt::Library const* _reads = nullptr;
     std::vector<TrackId> _selectedTrackIds;
 
     // Chips are direct children inserted before _addTrigger, which is the persistent trailing child.
     AddTagTrigger* _addTrigger = nullptr; // owned by this widget (make_managed + set_parent)
 
     std::vector<std::string> _currentTags;
-    std::map<std::string, std::size_t> _tagMembershipCounts;
     std::vector<std::pair<std::string, std::size_t>> _availableTagsByFrequency;
     std::vector<std::string> _pendingAdds;
     std::vector<std::string> _pendingRemoves;

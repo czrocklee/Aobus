@@ -13,8 +13,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>

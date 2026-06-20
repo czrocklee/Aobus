@@ -6,9 +6,11 @@
 #include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
@@ -88,8 +90,8 @@ namespace ao::gtk::test
     SECTION("scanLibrary reports an up-to-date empty library")
     {
       auto optCompletedCount = std::optional<std::size_t>{};
-      auto completedSub = fixture.runtime().mutation().onLibraryTaskCompleted([&optCompletedCount](std::size_t count)
-                                                                              { optCompletedCount = count; });
+      auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
+        [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
 
       coordinator.scanLibrary();
 

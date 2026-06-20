@@ -3,13 +3,12 @@
 
 #include "TestUtils.h"
 #include <ao/Type.h>
-#include <ao/async/Runtime.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/CompletionItem.h>
-#include <ao/rt/CompletionService.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/QueryExpressionCompleter.h>
+#include <ao/rt/completion/CompletionItem.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/QueryExpressionCompleter.h>
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -60,12 +59,11 @@ namespace ao::rt::test
     }
 
     QueryExpressionCompleter makeCompleter(TestMusicLibrary& testLib,
-                                           async::Runtime& runtime,
-                                           std::unique_ptr<LibraryMutationService>& mutationPtr,
+                                           std::unique_ptr<LibraryChanges>& changesPtr,
                                            std::unique_ptr<CompletionService>& servicePtr)
     {
-      mutationPtr = std::make_unique<LibraryMutationService>(runtime, testLib.library());
-      servicePtr = std::make_unique<CompletionService>(testLib.library(), *mutationPtr);
+      changesPtr = std::make_unique<LibraryChanges>();
+      servicePtr = std::make_unique<CompletionService>(testLib.library(), *changesPtr);
       return QueryExpressionCompleter{*servicePtr};
     }
 
@@ -85,11 +83,9 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - Completes Query Fields", "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationPtr = std::unique_ptr<LibraryMutationService>{};
+    auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, runtime, mutationPtr, servicePtr);
+    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
 
     auto optAlbum = completer.complete("$al", 3);
     REQUIRE(optAlbum);
@@ -110,11 +106,9 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - Completes Query Operators", "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationPtr = std::unique_ptr<LibraryMutationService>{};
+    auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, runtime, mutationPtr, servicePtr);
+    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
 
     auto optArtist = completer.complete("$artist ", 8);
     REQUIRE(optArtist);
@@ -132,11 +126,9 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - Completes Query Logical Operators", "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationPtr = std::unique_ptr<LibraryMutationService>{};
+    auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, runtime, mutationPtr, servicePtr);
+    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
 
     auto optAfterValue = completer.complete(R"($artist = "Miles" )", 18);
     REQUIRE(optAfterValue);
@@ -170,11 +162,9 @@ namespace ao::rt::test
     auto custom = std::vector<std::pair<std::string, std::string>>{};
     addCompletionTrack(testLib, tags, custom);
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationPtr = std::unique_ptr<LibraryMutationService>{};
+    auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, runtime, mutationPtr, servicePtr);
+    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
 
     auto optArtist = completer.complete("$artist = Ar", 12);
     REQUIRE(optArtist);
@@ -199,11 +189,9 @@ namespace ao::rt::test
     auto custom = std::vector<std::pair<std::string, std::string>>{{"Replay Gain", "-6"}, {"Mood", "Bright"}};
     addCompletionTrack(testLib, tags, custom);
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationPtr = std::unique_ptr<LibraryMutationService>{};
+    auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, runtime, mutationPtr, servicePtr);
+    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
 
     auto optTag = completer.complete("#90", 3);
     REQUIRE(optTag);
@@ -223,11 +211,9 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - Respects Limits And Token Boundaries", "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationPtr = std::unique_ptr<LibraryMutationService>{};
+    auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, runtime, mutationPtr, servicePtr);
+    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
 
     auto optLimited = completer.complete("$", 1, 2);
     REQUIRE(optLimited);

@@ -3,8 +3,8 @@
 
 #include "completion/EntryCompletionController.h"
 
-#include <ao/rt/CompletionItem.h>
-#include <ao/rt/CompletionResult.h>
+#include <ao/rt/completion/CompletionItem.h>
+#include <ao/rt/completion/CompletionResult.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>

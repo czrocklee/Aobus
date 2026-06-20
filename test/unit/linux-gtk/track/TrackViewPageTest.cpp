@@ -21,10 +21,9 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto& library = runtime.musicLibrary();
-    auto cache = TrackRowCache{library};
+    auto cache = TrackRowCache{runtime.library()};
     auto imageCache = ImageCache{200};
-    auto thumbnailLoader = ThumbnailLoader{library, imageCache, runtime.async()};
+    auto thumbnailLoader = ThumbnailLoader{runtime.library(), imageCache, runtime.async()};
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);

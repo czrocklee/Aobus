@@ -9,18 +9,18 @@
 #include "track/TrackRowObject.h"
 #include "track/TrackViewPage.h"
 #include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ListSourceStore.h>
-#include <ao/rt/SmartListEvaluator.h>
-#include <ao/rt/SmartListSource.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/SmartListEvaluator.h>
+#include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/list/SmartListEditorModel.h>
 
 #include <glibmm/main.h>
@@ -81,13 +81,13 @@ namespace ao::gtk
   }
 
   void SmartListDialog::populate(ListId id,
-                                 library::ListView const& view,
+                                 rt::ListNode const& node,
                                  std::optional<std::string> const& optPresentationId)
   {
     _editListId = id;
-    _nameEntry.set_text(std::string{view.name()});
-    _descEntry.set_text(std::string{view.description()});
-    _exprBox.entry().set_text(std::string{view.filter()});
+    _nameEntry.set_text(node.name);
+    _descEntry.set_text(node.description);
+    _exprBox.entry().set_text(node.smartExpression);
     set_title("Edit List");
     _okButton->set_label("Save");
 
@@ -346,17 +346,16 @@ namespace ao::gtk
 
   void SmartListDialog::updateSourceLabels()
   {
-    auto inheritedExpr = std::string_view{};
+    auto inheritedExpr = std::string{};
     auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
 
     if (!isAllTracks)
     {
-      auto readTxn = _runtime.musicLibrary().readTransaction();
-      auto reader = _runtime.musicLibrary().lists().reader(readTxn);
+      auto scope = _runtime.library().reader();
 
-      if (auto optView = reader.get(_parentListId); optView)
+      if (auto optNode = scope.listNode(_parentListId); optNode)
       {
-        inheritedExpr = optView->filter();
+        inheritedExpr = optNode->smartExpression;
       }
       else
       {
@@ -443,7 +442,7 @@ namespace ao::gtk
     updateDialogState();
   }
 
-  rt::LibraryMutationService::ListDraft SmartListDialog::draft() const
+  rt::LibraryWriter::ListDraft SmartListDialog::draft() const
   {
     return ao::uimodel::list::SmartListEditorModel::createDraft(
       _parentListId, _editListId, _nameEntry.get_text(), _descEntry.get_text(), _exprBox.entry().get_text());

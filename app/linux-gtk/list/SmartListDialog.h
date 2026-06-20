@@ -6,7 +6,7 @@
 #include "app/AppDialog.h"
 #include "list/QueryExpressionBox.h"
 #include <ao/Type.h>
-#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
@@ -27,16 +27,11 @@ namespace Gtk
   class Button;
 }
 
-namespace ao::library
-{
-  class MusicLibrary;
-  class ListView;
-}
-
 namespace ao::rt
 {
   class AppRuntime;
   class AllTracksSource;
+  struct ListNode;
   class SmartListSource;
   class SmartListEvaluator;
   class TrackSource;
@@ -59,13 +54,13 @@ namespace ao::gtk
     SmartListDialog& operator=(SmartListDialog&&) = delete;
 
     // Populate dialog fields from an existing list for editing
-    void populate(ListId id, library::ListView const& view, std::optional<std::string> const& optPresentationId);
+    void populate(ListId id, rt::ListNode const& node, std::optional<std::string> const& optPresentationId);
 
     // Returns the ListId for update (0 if creating a new list)
     ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
-    rt::LibraryMutationService::ListDraft draft() const;
+    rt::LibraryWriter::ListDraft draft() const;
 
     // Returns the selected presentation ID. Auto is resolved to a concrete ID.
     std::string presentationId() const;

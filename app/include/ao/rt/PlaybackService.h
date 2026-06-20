@@ -7,7 +7,6 @@
 #include "StateTypes.h"
 #include <ao/Type.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/IBackendProvider.h>
 #include <ao/audio/Types.h>
 
 #include <chrono>
@@ -23,6 +22,11 @@ namespace ao::library
 namespace ao::async
 {
   class IExecutor;
+}
+
+namespace ao::audio
+{
+  class IBackendProvider;
 }
 
 namespace ao::rt
@@ -99,8 +103,16 @@ namespace ao::rt
     Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
     Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
 
-    void play(audio::TrackPlaybackDescriptor const& descriptor, ListId sourceListId);
+    bool playTrack(TrackId trackId, ListId sourceListId);
     TrackId playSelectionInView(ViewId viewId);
+
+    // Lower-level playback entry point: start a fully-resolved descriptor.
+    // playTrack() resolves a TrackId via the library and forwards here.
+    void play(audio::TrackPlaybackDescriptor const& descriptor, ListId sourceListId);
+
+    // Register an audio backend provider. Called by the composition root
+    // (via AppRuntime::addAudioProvider) during bootstrap.
+    void addProvider(std::unique_ptr<audio::IBackendProvider> providerPtr);
     void pause();
     void resume();
     void stop();
@@ -114,8 +126,6 @@ namespace ao::rt
     void setMuted(bool muted);
     void revealPlayingTrack();
     void revealTrack(TrackId trackId, ViewId preferredViewId = kInvalidViewId, ListId preferredListId = kInvalidListId);
-
-    void addProvider(std::unique_ptr<audio::IBackendProvider> providerPtr);
 
   private:
     struct Impl;

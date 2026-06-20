@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/track/TrackFilterResolver.h>
 #include <ao/uimodel/track/TrackFilterViewModel.h>
 

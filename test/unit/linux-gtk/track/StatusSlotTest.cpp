@@ -4,10 +4,13 @@
 #include "track/StatusSlot.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/async/Runtime.h>
+#include <ao/library/LibraryScanner.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryTasks.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -16,6 +19,10 @@
 #include <gtkmm/widget.h>
 
 #include <chrono>
+#include <cstdint>
+#include <fstream>
+#include <future>
+#include <utility>
 
 namespace ao::gtk::test
 {
@@ -44,6 +51,71 @@ namespace ao::gtk::test
 
       return StatusSlotWidgets{.selection = selection, .message = message, .progress = progress};
     }
+
+    void iterateOneGtkEvent()
+    {
+      if (auto contextPtr = Glib::MainContext::get_default(); contextPtr->pending())
+      {
+        contextPtr->iteration(false);
+      }
+    }
+
+    void waitForFuture(std::future<void>& future)
+    {
+      for (std::int32_t attempts = 0; attempts < 1000; ++attempts)
+      {
+        iterateOneGtkEvent();
+
+        if (future.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready)
+        {
+          future.get();
+          drainGtkEvents();
+          return;
+        }
+      }
+
+      FAIL("Timed out waiting for library task");
+    }
+
+    template<typename T>
+    T waitForFuture(std::future<T>& future)
+    {
+      for (std::int32_t attempts = 0; attempts < 1000; ++attempts)
+      {
+        iterateOneGtkEvent();
+
+        if (future.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready)
+        {
+          auto value = future.get();
+          drainGtkEvents();
+          return value;
+        }
+      }
+
+      FAIL("Timed out waiting for library task");
+      return T{};
+    }
+
+    template<typename T>
+    bool waitUntilProgressVisible(StatusSlotWidgets const& widgets, std::future<T>& future)
+    {
+      for (std::int32_t attempts = 0; attempts < 1000; ++attempts)
+      {
+        iterateOneGtkEvent();
+
+        if (widgets.progress->get_visible())
+        {
+          return true;
+        }
+
+        if (future.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready)
+        {
+          return widgets.progress->get_visible();
+        }
+      }
+
+      return false;
+    }
   } // namespace
 
   TEST_CASE("StatusSlot - renders runtime status events", "[gtk][track][status]")
@@ -52,7 +124,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto slot = StatusSlot{runtime.mutation(), runtime.notifications(), runtime.views()};
+    auto slot = StatusSlot{runtime.library().changes(), runtime.notifications(), runtime.views()};
     auto const widgets = inspect(slot);
 
     SECTION("starts with selection info visible")
@@ -76,14 +148,21 @@ namespace ao::gtk::test
 
     SECTION("library progress renders the progress bar")
     {
-      runtime.mutation().notifyLibraryTaskProgress({.fraction = 0.5, .message = "Scanning Music"});
-      drainGtkEvents();
+      auto const path = runtime.musicRoot() / "status-slot.txt";
+      std::ofstream{path} << "unsupported audio fixture";
+
+      auto future = runtime.async().spawn(runtime.library().tasks().buildScanPlanAsync());
+      REQUIRE(waitUntilProgressVisible(widgets, future));
 
       CHECK_FALSE(widgets.selection->get_visible());
       CHECK(widgets.message->get_visible());
       CHECK(widgets.progress->get_visible());
-      CHECK(widgets.message->get_text() == "Scanning Music");
-      CHECK(widgets.progress->get_fraction() == 0.5);
+      CHECK(widgets.message->get_text() == "Scanning: status-slot.txt");
+      CHECK(widgets.progress->get_fraction() == 0.0);
+
+      auto const plan = waitForFuture(future);
+      REQUIRE(plan.items.size() == 1);
+      CHECK(plan.items[0].classification == library::ScanClassification::Unsupported);
     }
 
     SECTION("library completion renders the completion message")
@@ -92,13 +171,14 @@ namespace ao::gtk::test
         rt::NotificationSeverity::Info, "Saved playlist", false, std::chrono::milliseconds{5000});
       drainGtkEvents();
 
-      runtime.mutation().notifyLibraryTaskCompleted(5);
-      drainGtkEvents();
+      auto plan = library::ScanPlan{};
+      auto future = runtime.async().spawn(runtime.library().tasks().applyScanPlanAsync(std::move(plan)));
+      waitForFuture(future);
 
       CHECK_FALSE(widgets.selection->get_visible());
       CHECK(widgets.message->get_visible());
       CHECK_FALSE(widgets.progress->get_visible());
-      CHECK(widgets.message->get_text() == "Scan complete: 5 tracks added");
+      CHECK(widgets.message->get_text() == "Library is up to date");
       CHECK(widgets.message->has_css_class("ao-status-info"));
     }
   }

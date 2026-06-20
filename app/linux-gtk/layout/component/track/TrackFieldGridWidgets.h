@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/CompletionResult.h>
+#include <ao/rt/completion/CompletionResult.h>
 
 #include <glibmm/ustring.h>
 #include <gtkmm/box.h>

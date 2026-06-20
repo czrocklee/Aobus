@@ -79,13 +79,13 @@ namespace ao::gtk
   }
 
   void TrackRowObject::populate(Glib::ustring const& title,
-                                DictionaryId artist,
-                                DictionaryId album,
-                                DictionaryId albumArtist,
-                                DictionaryId genre,
-                                DictionaryId composer,
-                                DictionaryId work,
-                                DictionaryId movement,
+                                Glib::ustring const& artist,
+                                Glib::ustring const& album,
+                                Glib::ustring const& albumArtist,
+                                Glib::ustring const& genre,
+                                Glib::ustring const& composer,
+                                Glib::ustring const& work,
+                                Glib::ustring const& movement,
                                 Glib::ustring const& tags,
                                 std::chrono::milliseconds duration,
                                 std::uint16_t year,
@@ -106,13 +106,13 @@ namespace ao::gtk
                                 library::FileStatus status)
   {
     _text[static_cast<std::size_t>(rt::TrackField::Title)] = title;
-    _text[static_cast<std::size_t>(rt::TrackField::Artist)] = _provider->resolveDictionaryString(artist);
-    _text[static_cast<std::size_t>(rt::TrackField::Album)] = _provider->resolveDictionaryString(album);
-    _text[static_cast<std::size_t>(rt::TrackField::AlbumArtist)] = _provider->resolveDictionaryString(albumArtist);
-    _text[static_cast<std::size_t>(rt::TrackField::Genre)] = _provider->resolveDictionaryString(genre);
-    _text[static_cast<std::size_t>(rt::TrackField::Composer)] = _provider->resolveDictionaryString(composer);
-    _text[static_cast<std::size_t>(rt::TrackField::Work)] = _provider->resolveDictionaryString(work);
-    _text[static_cast<std::size_t>(rt::TrackField::Movement)] = _provider->resolveDictionaryString(movement);
+    _text[static_cast<std::size_t>(rt::TrackField::Artist)] = artist;
+    _text[static_cast<std::size_t>(rt::TrackField::Album)] = album;
+    _text[static_cast<std::size_t>(rt::TrackField::AlbumArtist)] = albumArtist;
+    _text[static_cast<std::size_t>(rt::TrackField::Genre)] = genre;
+    _text[static_cast<std::size_t>(rt::TrackField::Composer)] = composer;
+    _text[static_cast<std::size_t>(rt::TrackField::Work)] = work;
+    _text[static_cast<std::size_t>(rt::TrackField::Movement)] = movement;
 
     _tags = tags;
     _duration = duration;

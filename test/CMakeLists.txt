@@ -127,11 +127,12 @@ add_executable(ao_core_test
 
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp
+    unit/runtime/LibraryReaderTest.cpp
     unit/runtime/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/SmartListEvaluatorTest.cpp
     unit/runtime/TrackPresentationTest.cpp
-    unit/runtime/TrackCommandServiceTest.cpp
+    unit/runtime/LibraryWriterTrackCommandTest.cpp
     unit/runtime/TrackFieldTest.cpp
     unit/runtime/TrackListProjectionTest.cpp
     unit/runtime/TrackListProjectionScaleTest.cpp
@@ -139,7 +140,7 @@ add_executable(ao_core_test
   unit/runtime/AllTracksSourceTest.cpp
   unit/runtime/ListSourceStoreTest.cpp
     unit/runtime/TrackDetailProjectionTest.cpp
-    unit/runtime/LibraryMutationServiceTest.cpp
+    unit/runtime/LibraryWriterTest.cpp
     unit/runtime/MetadataValueCompleterTest.cpp
     unit/runtime/NotificationServiceTest.cpp
     unit/runtime/QueryExpressionCompleterTest.cpp

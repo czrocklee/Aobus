@@ -5,7 +5,6 @@
 #include "test/unit/audio/TestUtility.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/async/Runtime.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/IBackendProvider.h>
@@ -13,11 +12,12 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/source/ListSourceStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
@@ -34,9 +34,8 @@ namespace ao::rt::test
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationService = LibraryMutationService{runtime, testLib.library()};
-    auto listSourceStore = ListSourceStore{testLib.library(), mutationService};
+    auto changes = LibraryChanges{};
+    auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
 
     auto playbackService = PlaybackService{executor, viewService, testLib.library()};
@@ -346,13 +345,34 @@ namespace ao::rt::test
       }
     }
 
+    SECTION("playTrack fails when track does not exist")
+    {
+      CHECK_FALSE(playbackService.playTrack(TrackId{99999}, ListId{7}));
+    }
+
+    SECTION("playTrack resolves track metadata")
+    {
+      auto spec = TrackSpec{};
+      spec.title = "Playable Track";
+      spec.artist = "Queue Artist";
+      spec.album = "Queue Album";
+      spec.duration = std::chrono::minutes{3};
+      auto const trackId = testLib.addTrack(spec);
+
+      CHECK(playbackService.playTrack(trackId, ListId{7}));
+      CHECK(playbackService.state().trackId == trackId);
+      CHECK(playbackService.state().sourceListId == ListId{7});
+      CHECK(playbackService.state().trackTitle == "Playable Track");
+      CHECK(playbackService.state().trackArtist == "Queue Artist");
+      CHECK(playbackService.state().duration == std::chrono::minutes{3});
+    }
+
     SECTION("ensureReady auto-configures output on first play")
     {
       // Create a fresh PlaybackService without triggering onDevicesChanged
       auto freshExecutor = MockExecutor{};
-      auto freshRuntime = async::Runtime{freshExecutor};
-      auto freshMutation = LibraryMutationService{freshRuntime, testLib.library()};
-      auto freshListStore = ListSourceStore{testLib.library(), freshMutation};
+      auto freshChanges = LibraryChanges{};
+      auto freshListStore = ListSourceStore{testLib.library(), freshChanges};
       auto freshViewService = ViewService{freshExecutor, testLib.library(), freshListStore};
       auto freshService = PlaybackService{freshExecutor, freshViewService, testLib.library()};
 

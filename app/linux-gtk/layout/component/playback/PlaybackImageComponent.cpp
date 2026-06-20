@@ -8,11 +8,11 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
@@ -118,8 +118,8 @@ namespace ao::gtk::layout
         }
 
         _imageWidgetPtr = std::make_unique<ImageWidget>();
-        _imageControllerPtr = std::make_unique<ResourceImageController>(
-          *_imageWidgetPtr, ctx.runtime.musicLibrary(), *ctx.detail.imageCache);
+        _imageControllerPtr =
+          std::make_unique<ResourceImageController>(*_imageWidgetPtr, ctx.runtime.library(), *ctx.detail.imageCache);
         _imageWidgetPtr->set_overflow(Gtk::Overflow::HIDDEN);
 
         auto const targetSize = node.getProp<std::int64_t>("targetSize", kThumbnailSize);
@@ -235,18 +235,14 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const txn = _runtime.musicLibrary().readTransaction();
-        auto const reader = _runtime.musicLibrary().tracks().reader(txn);
-        auto const optView = reader.get(_currentTrackId, library::TrackStore::Reader::LoadMode::Both);
+        auto scope = _runtime.library().reader();
+        auto const coverArtId = scope.trackCoverArtId(_currentTrackId);
 
-        if (optView)
+        if (coverArtId != kInvalidResourceId)
         {
-          if (auto const optPrimary = optView->coverArt().primary(); optPrimary)
-          {
-            _imageControllerPtr->load(optPrimary->resourceId);
-            _button.set_visible(true);
-            return;
-          }
+          _imageControllerPtr->load(coverArtId);
+          _button.set_visible(true);
+          return;
         }
 
         _imageControllerPtr->clear();

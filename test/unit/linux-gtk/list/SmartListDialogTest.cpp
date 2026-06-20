@@ -7,7 +7,7 @@
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
@@ -19,7 +19,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().musicLibrary()};
+    auto cache = TrackRowCache{fixture.runtime().library()};
 
     auto dialog = SmartListDialog{window, fixture.runtime(), rt::kAllTracksListId, cache};
     window.set_child(dialog);
@@ -31,6 +31,6 @@ namespace ao::gtk::test
     auto const draft = dialog.draft();
     CHECK(dialog.editListId() == kInvalidListId);
     CHECK(draft.parentId == rt::kAllTracksListId);
-    CHECK(draft.kind == rt::LibraryMutationService::ListKind::Smart);
+    CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
   }
 } // namespace ao::gtk::test

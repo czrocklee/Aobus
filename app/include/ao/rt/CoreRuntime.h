@@ -20,8 +20,7 @@ namespace ao::async
 namespace ao::rt
 {
   class CompletionService;
-  class LibraryMutationService;
-  class TrackCommandService;
+  class Library;
   class ListSourceStore;
   class NotificationService;
 
@@ -43,13 +42,13 @@ namespace ao::rt
     CoreRuntime& operator=(CoreRuntime&&) = delete;
 
     library::MusicLibrary& musicLibrary() noexcept;
+    Library const& library() const noexcept;
+    Library& library() noexcept;
 
     std::filesystem::path const& musicRoot() const noexcept;
     std::filesystem::path const& databasePath() const noexcept;
 
-    LibraryMutationService& mutation() noexcept;
     CompletionService& completion() noexcept;
-    TrackCommandService& trackCommands() noexcept;
     ListSourceStore& sources() noexcept;
     NotificationService& notifications() noexcept;
 

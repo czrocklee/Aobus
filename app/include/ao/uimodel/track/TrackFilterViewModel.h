@@ -5,7 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <functional>
 #include <optional>

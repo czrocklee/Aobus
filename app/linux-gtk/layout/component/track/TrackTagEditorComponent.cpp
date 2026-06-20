@@ -10,10 +10,11 @@
 #include "tag/TagEditor.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
-#include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
@@ -32,7 +33,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackTagEditorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _mutation{ctx.runtime.mutation()}, _sources{ctx.runtime.sources()}
+        : _writer{ctx.runtime.library().writer()}, _sources{ctx.runtime.sources()}
       {
         if (ctx.track.detailScope != nullptr)
         {
@@ -52,9 +53,9 @@ namespace ao::gtk::layout
             else
             {
               // Fallback if controller is missing
-              if (auto const result = _mutation.editTags(_currentTrackIds, toAdd, toRemove); result)
+              if (auto const reply = _writer.editTags(_currentTrackIds, toAdd, toRemove); !reply.mutatedIds.empty())
               {
-                _sources.allTracks().notifyUpdated(_currentTrackIds);
+                _sources.allTracks().notifyUpdated(reply.mutatedIds);
               }
             }
           });
@@ -72,12 +73,12 @@ namespace ao::gtk::layout
       void onSnapshot(LayoutContext& ctx, rt::TrackDetailSnapshot const& snap)
       {
         _currentTrackIds = snap.trackIds;
-        _tagEditor.setup(ctx.runtime.musicLibrary(), ctx.runtime.completion(), _currentTrackIds);
+        _tagEditor.setup(ctx.runtime.library(), _currentTrackIds);
         _tagEditor.set_visible(true);
       }
 
       TagEditor _tagEditor;
-      rt::LibraryMutationService& _mutation;
+      rt::LibraryWriter& _writer;
       rt::ListSourceStore& _sources;
       std::vector<TrackId> _currentTrackIds;
       sigc::scoped_connection _scopeConn;

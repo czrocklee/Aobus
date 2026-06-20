@@ -10,14 +10,9 @@
 
 #include <vector>
 
-namespace ao::library
-{
-  class MusicLibrary;
-}
-
 namespace ao::rt
 {
-  class CompletionService;
+  class Library;
 }
 
 namespace ao::gtk
@@ -25,9 +20,7 @@ namespace ao::gtk
   class TagPopover final : public Gtk::Popover
   {
   public:
-    TagPopover(library::MusicLibrary& musicLibrary,
-               rt::CompletionService& completion,
-               std::vector<TrackId> selectedTrackIds);
+    TagPopover(rt::Library const& reads, std::vector<TrackId> selectedTrackIds);
     ~TagPopover() override;
 
     // Not copyable or movable

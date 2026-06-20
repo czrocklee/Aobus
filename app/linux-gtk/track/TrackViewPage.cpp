@@ -18,12 +18,13 @@
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 #include <ao/uimodel/track/TrackInlineEditWorkflow.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
@@ -122,8 +123,8 @@ namespace ao::gtk
     class TrackSectionHeaderWidget final : public Gtk::Box
     {
     public:
-      TrackSectionHeaderWidget(library::MusicLibrary& library, ThumbnailLoader& thumbnailLoader)
-        : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _coverArtController{_coverArt, library, thumbnailLoader.cache()}
+      TrackSectionHeaderWidget(rt::Library const& reads, ThumbnailLoader& thumbnailLoader)
+        : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _coverArtController{_coverArt, reads, thumbnailLoader.cache()}
       {
         set_spacing(layout::kSpacingXLarge);
         add_css_class("ao-track-section-box");
@@ -301,7 +302,7 @@ namespace ao::gtk
           return;
         }
 
-        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_runtime.musicLibrary(), _thumbnailLoader);
+        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_runtime.library(), _thumbnailLoader);
         headerPtr->set_child(*widget);
       });
 
@@ -498,10 +499,10 @@ namespace ao::gtk
           auto const ctx = TrackFieldEditContext{.patch = patch, .value = value};
           uiDef->writePatch(ctx);
         },
-        .commitPatch = [this, row](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
+        .commitPatch = [this, row](rt::MetadataPatch const& patch) -> rt::UpdateTrackMetadataReply
         {
           auto const trackIds = std::array{row->trackId()};
-          return _runtime.mutation().updateMetadata(trackIds, patch);
+          return _runtime.library().writer().updateMetadata(trackIds, patch);
         },
       });
 

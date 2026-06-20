@@ -7,7 +7,7 @@
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Task.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <giomm/asyncresult.h>
 #include <glibmm/refptr.h>

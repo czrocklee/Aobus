@@ -6,13 +6,13 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/SmartListEvaluator.h>
-#include <ao/rt/SmartListSource.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/SmartListEvaluator.h>
+#include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 

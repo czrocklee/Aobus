@@ -100,7 +100,7 @@ namespace ao::gtk::test
     auto const ids = seedLibrary(library, kRowCount);
     REQUIRE(ids.size() == kRowCount);
 
-    auto cache = TrackRowCache{library};
+    auto cache = TrackRowCache{fixture.runtime().library()};
 
     // Cold scroll: walk every row once, top to bottom. Each row is materialized
     // lazily (the first trackRow() opens a read txn, resolves dictionary strings,

@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -79,10 +79,10 @@ namespace ao::uimodel::list
                                              std::span<rt::TrackPresentationPreset const> builtinPresets,
                                              std::span<rt::CustomTrackPresentationPreset const> customPresets);
 
-    static rt::LibraryMutationService::ListDraft createDraft(ListId parentListId,
-                                                             ListId editListId,
-                                                             std::string const& name,
-                                                             std::string const& description,
-                                                             std::string const& expression);
+    static rt::LibraryWriter::ListDraft createDraft(ListId parentListId,
+                                                    ListId editListId,
+                                                    std::string const& name,
+                                                    std::string const& description,
+                                                    std::string const& expression);
   };
 } // namespace ao::uimodel::list

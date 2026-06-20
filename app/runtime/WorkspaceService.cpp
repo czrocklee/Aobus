@@ -5,13 +5,13 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/NavigationHistory.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/utility/Log.h>
 
 #include <algorithm>
@@ -55,7 +55,6 @@ namespace ao::rt
   {
     ViewService& views;
     PlaybackService& playback;
-    LibraryMutationService& mutation;
     library::MusicLibrary& library;
     LayoutState layoutState;
     NavigationHistory navigationHistory;
@@ -70,12 +69,12 @@ namespace ao::rt
     Impl(WorkspaceService* self,
          ViewService& views,
          PlaybackService& playback,
-         LibraryMutationService& mutation,
+         LibraryChanges const& changes,
          library::MusicLibrary& library)
-      : views{views}, playback{playback}, mutation{mutation}, library{library}
+      : views{views}, playback{playback}, library{library}
     {
-      listsMutatedSub = mutation.onListsMutated(
-        [this, self](LibraryMutationService::ListsMutated const& ev)
+      listsMutatedSub = changes.onListsMutated(
+        [this, self](LibraryChanges::ListsMutated const& ev)
         {
           auto toClose = std::vector<ViewId>{};
 
@@ -282,9 +281,9 @@ namespace ao::rt
 
   WorkspaceService::WorkspaceService(ViewService& views,
                                      PlaybackService& playback,
-                                     LibraryMutationService& mutation,
+                                     LibraryChanges const& changes,
                                      library::MusicLibrary& library)
-    : _implPtr{std::make_unique<Impl>(this, views, playback, mutation, library)}
+    : _implPtr{std::make_unique<Impl>(this, views, playback, changes, library)}
   {
   }
 

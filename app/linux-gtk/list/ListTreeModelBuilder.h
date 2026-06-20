@@ -13,14 +13,9 @@
 
 #include <map>
 
-namespace ao::lmdb
-{
-  class ReadTransaction;
-}
-
 namespace ao::rt
 {
-  class AppRuntime;
+  class Library;
 }
 
 namespace ao::gtk
@@ -36,6 +31,6 @@ namespace ao::gtk
       std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };
 
-    static Result build(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn);
+    static Result build(rt::Library const& reads);
   };
 } // namespace ao::gtk

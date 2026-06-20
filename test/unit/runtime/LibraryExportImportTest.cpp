@@ -17,8 +17,8 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/rt/LibraryYamlExporter.h>
-#include <ao/rt/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/yaml/Utils.h>
 
 #include <catch2/catch_message.hpp>

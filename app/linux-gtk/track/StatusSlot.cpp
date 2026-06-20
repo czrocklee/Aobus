@@ -5,9 +5,9 @@
 
 #include "layout/LayoutConstants.h"
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/StatusSlotModel.h>
 
 #include <glibmm/main.h>
@@ -22,15 +22,15 @@
 
 namespace ao::gtk
 {
-  StatusSlot::StatusSlot(rt::LibraryMutationService& mutation,
+  StatusSlot::StatusSlot(rt::LibraryChanges const& changes,
                          rt::NotificationService& notifications,
                          rt::ViewService& views)
-    : _mutation{mutation}, _notifications{notifications}, _selectionInfo{views}
+    : _changes{changes}, _notifications{notifications}, _selectionInfo{views}
   {
     setupUi();
 
-    _progressSub = _mutation.onLibraryTaskProgress([this](auto const& ev) { onLibraryTaskProgress(ev); });
-    _completedSub = _mutation.onLibraryTaskCompleted([this](auto count) { onLibraryTaskCompleted(count); });
+    _progressSub = _changes.onLibraryTaskProgress([this](auto const& ev) { onLibraryTaskProgress(ev); });
+    _completedSub = _changes.onLibraryTaskCompleted([this](auto count) { onLibraryTaskCompleted(count); });
     _notificationSub = _notifications.onPosted([this](auto id) { onNotificationPosted(id); });
 
     renderState(_model.initialState());
@@ -63,7 +63,7 @@ namespace ao::gtk
     _messageLabel.set_visible(false);
   }
 
-  void StatusSlot::onLibraryTaskProgress(rt::LibraryMutationService::LibraryTaskProgressUpdated const& ev)
+  void StatusSlot::onLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& ev)
   {
     renderState(_model.onLibraryTaskProgress(ev.message, ev.fraction));
   }

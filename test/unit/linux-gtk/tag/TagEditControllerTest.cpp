@@ -10,9 +10,10 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleactiongroup.h>
@@ -121,7 +122,8 @@ namespace ao::gtk::test
       auto& library = fixture.runtime().musicLibrary();
       auto const trackId = createTrack(library, "Mixed Tag Target");
       auto const existingTags = std::array<std::string, 1>{"OldTag"};
-      REQUIRE(fixture.runtime().mutation().editTags(std::array{trackId}, existingTags, {}));
+      REQUIRE_FALSE(
+        fixture.runtime().library().writer().editTags(std::array{trackId}, existingTags, {}).mutatedIds.empty());
 
       auto const selection = TrackSelectionContext{.listId = rt::kAllTracksListId, .selectedIds = {trackId}};
       auto const tagsToAdd = std::array<std::string, 1>{"NewTag"};

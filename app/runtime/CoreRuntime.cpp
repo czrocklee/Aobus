@@ -3,12 +3,12 @@
 
 #include <ao/async/Runtime.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/CompletionService.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/NotificationService.h>
-#include <ao/rt/TrackCommandService.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/source/ListSourceStore.h>
 
 #include <filesystem>
 #include <memory>
@@ -23,9 +23,9 @@ namespace ao::rt
     std::filesystem::path musicRoot;
     std::filesystem::path databasePath;
     library::MusicLibrary musicLibrary;
-    LibraryMutationService mutationService;
+    LibraryChanges libraryChanges;
+    Library libraryFacade;
     CompletionService completionService;
-    TrackCommandService trackCommandService;
     ListSourceStore listSourceStore;
     NotificationService notificationService;
 
@@ -35,10 +35,10 @@ namespace ao::rt
       , musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
       , musicLibrary{this->musicRoot, this->databasePath}
-      , mutationService{asyncRuntime, musicLibrary}
-      , completionService{musicLibrary, mutationService}
-      , trackCommandService{musicLibrary, mutationService}
-      , listSourceStore{musicLibrary, mutationService}
+      , libraryChanges{}
+      , libraryFacade{asyncRuntime, musicLibrary, libraryChanges}
+      , completionService{musicLibrary, libraryChanges}
+      , listSourceStore{musicLibrary, libraryChanges}
       , notificationService{}
     {
     }
@@ -58,6 +58,16 @@ namespace ao::rt
     return _implPtr->musicLibrary;
   }
 
+  Library const& CoreRuntime::library() const noexcept
+  {
+    return _implPtr->libraryFacade;
+  }
+
+  Library& CoreRuntime::library() noexcept
+  {
+    return _implPtr->libraryFacade;
+  }
+
   std::filesystem::path const& CoreRuntime::musicRoot() const noexcept
   {
     return _implPtr->musicRoot;
@@ -68,19 +78,9 @@ namespace ao::rt
     return _implPtr->databasePath;
   }
 
-  LibraryMutationService& CoreRuntime::mutation() noexcept
-  {
-    return _implPtr->mutationService;
-  }
-
   CompletionService& CoreRuntime::completion() noexcept
   {
     return _implPtr->completionService;
-  }
-
-  TrackCommandService& CoreRuntime::trackCommands() noexcept
-  {
-    return _implPtr->trackCommandService;
   }
 
   ListSourceStore& CoreRuntime::sources() noexcept

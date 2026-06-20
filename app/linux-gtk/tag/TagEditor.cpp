@@ -6,10 +6,8 @@
 #include "common/DismissController.h"
 #include "layout/LayoutConstants.h"
 #include <ao/Type.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/rt/CompletionService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -30,7 +28,6 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -439,12 +436,9 @@ namespace ao::gtk
       { child->size_allocate(Gtk::Allocation{xPos, yPos, childWidth, childHeight}, -1); });
   }
 
-  void TagEditor::setup(library::MusicLibrary& library,
-                        rt::CompletionService& completion,
-                        std::vector<TrackId> selectedTrackIds)
+  void TagEditor::setup(rt::Library const& reads, std::vector<TrackId> selectedTrackIds)
   {
-    _musicLibrary = &library;
-    _completion = &completion;
+    _reads = &reads;
     _selectedTrackIds = std::move(selectedTrackIds);
 
     collectTagData();
@@ -471,64 +465,27 @@ namespace ao::gtk
   void TagEditor::collectTagData()
   {
     _currentTags.clear();
-    _tagMembershipCounts.clear();
     _availableTagsByFrequency.clear();
     _pendingAdds.clear();
     _pendingRemoves.clear();
 
-    if (_musicLibrary == nullptr || _completion == nullptr || _selectedTrackIds.empty())
+    if (_reads == nullptr || _selectedTrackIds.empty())
     {
       return;
     }
 
-    auto const selectionCount = _selectedTrackIds.size();
+    auto scope = _reads->reader();
 
-    auto const txn = _musicLibrary->readTransaction();
-    auto const reader = _musicLibrary->tracks().reader(txn);
-    auto const& dictionary = _musicLibrary->dictionary();
+    _currentTags = scope.selectionTags(_selectedTrackIds);
 
-    for (auto const trackId : _selectedTrackIds)
-    {
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-
-      if (!optView)
-      {
-        continue;
-      }
-
-      auto tagsOnTrack = std::vector<std::string>{};
-
-      for (auto const tagId : optView->tags())
-      {
-        if (auto const tag = std::string{dictionary.get(tagId)};
-            !tag.empty() && !std::ranges::contains(tagsOnTrack, tag))
-        {
-          tagsOnTrack.push_back(tag);
-        }
-      }
-
-      for (auto const& tag : tagsOnTrack)
-      {
-        ++_tagMembershipCounts[tag];
-      }
-    }
-
-    for (auto const& [tag, count] : _tagMembershipCounts)
-    {
-      if (count == selectionCount)
-      {
-        _currentTags.push_back(tag);
-      }
-    }
-
-    for (auto const& tag : _completion->tags())
+    for (auto const& tag : scope.allTagsByFrequency())
     {
       if (_availableTagsByFrequency.size() >= kMaxAvailableTags)
       {
         break;
       }
 
-      _availableTagsByFrequency.emplace_back(tag.value, static_cast<std::size_t>(tag.frequency));
+      _availableTagsByFrequency.push_back(tag);
     }
   }
 

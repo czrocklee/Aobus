@@ -6,14 +6,14 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -544,13 +544,13 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto listId = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "Test List"});
+    auto listId = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Test List"});
     runtime.workspace().navigateTo(listId);
 
     auto activeViewId = runtime.workspace().layoutState().activeViewId;
     CHECK(activeViewId != kInvalidViewId);
 
-    runtime.mutation().deleteList(listId);
+    runtime.library().writer().deleteList(listId);
 
     auto layout = runtime.workspace().layoutState();
     CHECK(!std::ranges::contains(layout.openViews, activeViewId));
@@ -626,8 +626,8 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto const listA = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "A"});
-    auto const listB = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "B"});
+    auto const listA = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A"});
+    auto const listB = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "B"});
 
     runtime.workspace().navigateTo(listA, {.recordHistory = true});
     auto const viewA = runtime.workspace().layoutState().activeViewId;
@@ -653,7 +653,7 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto const listId = runtime.mutation().createList(LibraryMutationService::ListDraft{.name = "A list"});
+    auto const listId = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A list"});
     auto const configPath = tempDir.path() / "config.yaml";
 
     {

@@ -11,10 +11,9 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
@@ -59,7 +58,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().musicLibrary()};
+    auto cache = TrackRowCache{fixture.runtime().library()};
 
     auto selectedId = ListId{999};
     auto savedPresentationListId = kInvalidListId;
@@ -83,8 +82,7 @@ namespace ao::gtk::test
     {
       createList(fixture.runtime().musicLibrary(), "Test List");
 
-      auto txn = fixture.runtime().musicLibrary().readTransaction();
-      controller.rebuildTree(cache, txn);
+      controller.rebuildTree(cache);
       drainGtkEvents();
 
       // Navigation panel should contain "All Tracks" and "Test List"
@@ -94,8 +92,7 @@ namespace ao::gtk::test
     {
       auto const testListId = createList(fixture.runtime().musicLibrary(), "Select Target");
 
-      auto txn = fixture.runtime().musicLibrary().readTransaction();
-      controller.rebuildTree(cache, txn);
+      controller.rebuildTree(cache);
       drainGtkEvents();
 
       controller.select(testListId);
@@ -125,8 +122,7 @@ namespace ao::gtk::test
       auto const parentListId = createList(library, "Parent List");
       createList(library, "Child List", parentListId);
 
-      auto txn = library.readTransaction();
-      controller.rebuildTree(cache, txn);
+      controller.rebuildTree(cache);
       drainGtkEvents();
 
       controller.select(leafListId);
@@ -150,7 +146,7 @@ namespace ao::gtk::test
 
     SECTION("submitListDraft creates a list and selects it on rebuild")
     {
-      auto draft = rt::LibraryMutationService::ListDraft{};
+      auto draft = rt::LibraryWriter::ListDraft{};
       draft.name = "Recently Played";
       draft.description = "Tracks touched this week";
       draft.expression = "$lastPlayed >= 7d";
@@ -164,8 +160,7 @@ namespace ao::gtk::test
       CHECK(savedPresentationListId == listId);
       CHECK(savedPresentationId == "compact");
 
-      auto txn = fixture.runtime().musicLibrary().readTransaction();
-      controller.rebuildTree(cache, txn);
+      controller.rebuildTree(cache);
       drainGtkEvents();
 
       CHECK(selectedId == listId);
@@ -175,7 +170,7 @@ namespace ao::gtk::test
     {
       auto const listId = createList(fixture.runtime().musicLibrary(), "Old Name");
 
-      auto draft = rt::LibraryMutationService::ListDraft{};
+      auto draft = rt::LibraryWriter::ListDraft{};
       draft.listId = listId;
       draft.name = "High Energy";
       draft.description = "Updated description";
@@ -191,8 +186,7 @@ namespace ao::gtk::test
       CHECK(savedPresentationListId == listId);
       CHECK(savedPresentationId == "wide");
 
-      auto txn = fixture.runtime().musicLibrary().readTransaction();
-      controller.rebuildTree(cache, txn);
+      controller.rebuildTree(cache);
       drainGtkEvents();
 
       CHECK(selectedId == listId);
@@ -209,8 +203,7 @@ namespace ao::gtk::test
       auto& library = fixture.runtime().musicLibrary();
       auto const listId = createList(library, "Delete Target");
 
-      auto txn = library.readTransaction();
-      controller.rebuildTree(cache, txn);
+      controller.rebuildTree(cache);
       drainGtkEvents();
 
       controller.select(listId);
@@ -221,8 +214,7 @@ namespace ao::gtk::test
 
       CHECK_FALSE(findList(library, listId).has_value());
 
-      auto rebuildTxn = library.readTransaction();
-      controller.rebuildTree(cache, rebuildTxn);
+      controller.rebuildTree(cache);
       drainGtkEvents();
 
       CHECK(selectedId == rt::kAllTracksListId);

@@ -5,17 +5,13 @@
 
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/FileManifestStore.h>
-#include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <ctime>
 #include <format>
@@ -87,16 +83,6 @@ namespace ao::gtk
       return false;
     }
 
-    std::string_view resolve(library::DictionaryStore const& dict, DictionaryId id)
-    {
-      if (id.raw() == 0)
-      {
-        return {};
-      }
-
-      return dict.getOrDefault(id);
-    }
-
     std::string readDisplayTrackNumber(TrackRowObject const& row, TrackRowCache const& /*cache*/)
     {
       auto const disc = row.discNumber();
@@ -132,32 +118,12 @@ namespace ao::gtk
 
     std::string formatDurationValue(TrackFieldRawValue const& raw)
     {
-      if (auto const* duration = std::get_if<Duration>(&raw); duration != nullptr)
+      if (auto const* duration = std::get_if<rt::TrackFieldDuration>(&raw); duration != nullptr)
       {
         return uimodel::track::formatDuration(*duration);
       }
 
       return {};
-    }
-
-    TrackFieldRawValue readTagsViewRawValue(library::TrackView const& view,
-                                            library::DictionaryStore const& dict,
-                                            library::FileManifestStore::Reader const* /*unused*/)
-    {
-      auto const tags = view.tags();
-      auto result = std::string{};
-
-      for (std::uint8_t idx = 0; idx < tags.count(); ++idx)
-      {
-        if (idx > 0)
-        {
-          result += ", ";
-        }
-
-        result += dict.getOrDefault(tags.id(idx), "?");
-      }
-
-      return TrackFieldRawValue{std::in_place_type<std::string>, std::move(result)};
     }
 
     std::string readFilePathRowText(TrackRowObject const& row, TrackRowCache const& cache)
@@ -295,8 +261,7 @@ namespace ao::gtk
       return {};
     };
 
-    // Struct field order: field,
-    //   readRowText, readViewRawValue, formatValue, parseInlineEdit, writePatch
+    // Struct field order: field, readRowText, formatValue, parseInlineEdit, writePatch.
     auto buildUiDefs()
     {
       return std::to_array<TrackFieldUiDefinition>({
@@ -305,10 +270,6 @@ namespace ao::gtk
           .field = F::Title,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Title)->raw()}; },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::string>, view.metadata().title()}; },
           .formatValue = readStr,
           .parseInlineEdit = uimodel::track::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
@@ -319,10 +280,6 @@ namespace ao::gtk
           .field = F::Artist,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Artist)->raw()}; },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const& dict,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().artistId())}; },
           .formatValue = readStr,
           .parseInlineEdit = uimodel::track::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
@@ -333,10 +290,6 @@ namespace ao::gtk
           .field = F::Album,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Album)->raw()}; },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const& dict,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().albumId())}; },
           .formatValue = readStr,
           .parseInlineEdit = uimodel::track::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
@@ -347,12 +300,6 @@ namespace ao::gtk
           .field = F::AlbumArtist,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::AlbumArtist)->raw()}; },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const& dict,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          {
-            return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().albumArtistId())};
-          },
           .formatValue = readStr,
           .parseInlineEdit = uimodel::track::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
@@ -363,10 +310,6 @@ namespace ao::gtk
           .field = F::Genre,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Genre)->raw()}; },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const& dict,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().genreId())}; },
           .formatValue = readStr,
           .parseInlineEdit = uimodel::track::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
@@ -377,10 +320,6 @@ namespace ao::gtk
           .field = F::Composer,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Composer)->raw()}; },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const& dict,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().composerId())}; },
           .formatValue = readStr,
           .parseInlineEdit = uimodel::track::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
@@ -391,10 +330,6 @@ namespace ao::gtk
           .field = F::Work,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Work)->raw()}; },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const& dict,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().workId())}; },
           .formatValue = readStr,
           .parseInlineEdit = uimodel::track::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
@@ -405,10 +340,6 @@ namespace ao::gtk
           .field = F::Movement,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Movement)->raw()}; },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const& dict,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().movementId())}; },
           .formatValue = readStr,
           .parseInlineEdit = uimodel::track::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
@@ -420,10 +351,6 @@ namespace ao::gtk
           .field = F::Year,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatUint16(row.year()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().year()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::year>,
@@ -434,10 +361,6 @@ namespace ao::gtk
           .field = F::DiscNumber,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatUint16(row.discNumber()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().discNumber()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::discNumber>,
@@ -448,10 +371,6 @@ namespace ao::gtk
           .field = F::DiscTotal,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatUint16(row.discTotal()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().discTotal()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::discTotal>,
@@ -462,10 +381,6 @@ namespace ao::gtk
           .field = F::TrackNumber,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatUint16(row.trackNumber()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().trackNumber()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::trackNumber>,
@@ -476,10 +391,6 @@ namespace ao::gtk
           .field = F::TrackTotal,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatUint16(row.trackTotal()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().trackTotal()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::trackTotal>,
@@ -490,10 +401,6 @@ namespace ao::gtk
           .field = F::MovementNumber,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatUint16(row.movementNumber()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().movementNumber()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::movementNumber>,
@@ -504,10 +411,6 @@ namespace ao::gtk
           .field = F::MovementTotal,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatUint16(row.movementTotal()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().movementTotal()}; },
           .formatValue = readUint16,
           .parseInlineEdit = uimodel::track::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::movementTotal>,
@@ -519,10 +422,6 @@ namespace ao::gtk
           .field = F::Duration,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatDuration(row.duration()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<Duration>, view.property().duration()}; },
           .formatValue = formatDurationValue,
         },
         // ---- Tags ----
@@ -530,40 +429,24 @@ namespace ao::gtk
           .field = F::Tags,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return row.tags().raw(); },
-          .readViewRawValue = readTagsViewRawValue,
           .formatValue = readStr,
         },
         // ---- Technical ----
         {
           .field = F::FilePath,
           .readRowText = readFilePathRowText,
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::string>, view.property().uri()}; },
           .formatValue = readStr,
         },
         {
           .field = F::Codec,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const& /*cache*/) -> std::string
           { return uimodel::track::formatCodec(row.codec()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          {
-            return TrackFieldRawValue{
-              std::in_place_type<std::string>, uimodel::track::formatCodec(view.property().codec())};
-          },
           .formatValue = readStr,
         },
         {
           .field = F::SampleRate,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatSampleRate(row.sampleRate()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().sampleRate()}; },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
             if (auto const* val = std::get_if<std::uint32_t>(&raw); val != nullptr)
@@ -578,13 +461,6 @@ namespace ao::gtk
           .field = F::Channels,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatChannels(row.channels()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          {
-            return TrackFieldRawValue{
-              std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().channels().raw())};
-          },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
             if (auto const* val = std::get_if<std::uint32_t>(&raw); val != nullptr)
@@ -599,13 +475,6 @@ namespace ao::gtk
           .field = F::BitDepth,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatBitDepth(row.bitDepth()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          {
-            return TrackFieldRawValue{
-              std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(view.property().bitDepth().raw())};
-          },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
             if (auto const* val = std::get_if<std::uint32_t>(&raw); val != nullptr)
@@ -620,10 +489,6 @@ namespace ao::gtk
           .field = F::Bitrate,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatBitrate(row.bitrate()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const*) -> TrackFieldRawValue
-          { return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().bitrate()}; },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
             if (auto const* val = std::get_if<std::uint32_t>(&raw); val != nullptr)
@@ -638,20 +503,6 @@ namespace ao::gtk
           .field = F::FileSize,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatFileSize(row.fileSize()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const* reader) -> TrackFieldRawValue
-          {
-            if (reader)
-            {
-              if (auto const optManifestView = reader->get(view.property().uri()); optManifestView)
-              {
-                return TrackFieldRawValue{std::in_place_type<std::uint64_t>, optManifestView->fileSize()};
-              }
-            }
-
-            return TrackFieldRawValue{};
-          },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
             if (auto const* val = std::get_if<std::uint64_t>(&raw); val != nullptr)
@@ -666,20 +517,6 @@ namespace ao::gtk
           .field = F::ModifiedTime,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return uimodel::track::formatTime(row.modifiedTime()); },
-          .readViewRawValue = +[](library::TrackView const& view,
-                                  library::DictionaryStore const&,
-                                  library::FileManifestStore::Reader const* reader) -> TrackFieldRawValue
-          {
-            if (reader)
-            {
-              if (auto const optManifestView = reader->get(view.property().uri()); optManifestView)
-              {
-                return TrackFieldRawValue{std::in_place_type<std::uint64_t>, optManifestView->mtime()};
-              }
-            }
-
-            return TrackFieldRawValue{};
-          },
           .formatValue = +[](TrackFieldRawValue const& raw) -> std::string
           {
             if (auto const* val = std::get_if<std::uint64_t>(&raw); val != nullptr)
@@ -694,13 +531,11 @@ namespace ao::gtk
         {
           .field = F::DisplayTrackNumber,
           .readRowText = readDisplayTrackNumber,
-          .readViewRawValue = nullptr,
           .formatValue = readStr,
         },
         {
           .field = F::TechnicalSummary,
           .readRowText = readTechnicalSummary,
-          .readViewRawValue = nullptr,
           .formatValue = readStr,
         },
         {

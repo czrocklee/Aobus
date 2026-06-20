@@ -5,7 +5,7 @@
 
 #include "common/DismissController.h"
 #include "layout/LayoutConstants.h"
-#include <ao/rt/CompletionResult.h>
+#include <ao/rt/completion/CompletionResult.h>
 
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>

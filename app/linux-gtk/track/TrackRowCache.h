@@ -4,10 +4,6 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/audio/Types.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <glibmm/refptr.h>
@@ -18,19 +14,10 @@
 #include <optional>
 #include <unordered_map>
 
-namespace ao::library
+namespace ao::rt
 {
-  class MusicLibrary;
-}
-
-namespace ao::lmdb
-{
-  class ReadTransaction;
-}
-
-namespace ao::audio
-{
-  struct TrackPlaybackDescriptor;
+  class Library;
+  struct TrackRow;
 }
 
 namespace ao::gtk
@@ -49,7 +36,7 @@ namespace ao::gtk
   class TrackRowCache final
   {
   public:
-    explicit TrackRowCache(library::MusicLibrary& ml);
+    explicit TrackRowCache(rt::Library const& reads);
 
     /**
      * Get the shared TrackRowObject for a given ID.
@@ -73,11 +60,6 @@ namespace ao::gtk
     std::optional<std::filesystem::path> uriPath(TrackId id) const;
 
     /**
-     * Get playback descriptor for a track (direct from DB).
-     */
-    std::optional<audio::TrackPlaybackDescriptor> playbackDescriptor(TrackId id) const;
-
-    /**
      * Invalidate entry for a track (after updates).
      */
     void invalidate(TrackId id) const;
@@ -93,21 +75,12 @@ namespace ao::gtk
      */
     void clearCache();
 
-    /**
-     * Get the dictionary store reference.
-     */
-    library::DictionaryStore const& dictionary() const { return _dict; }
-
   private:
-    library::MusicLibrary& _ml;
-    library::TrackStore& _store;
-    library::DictionaryStore& _dict;
+    rt::Library const& _reads;
 
     mutable boost::unordered_flat_map<TrackId, Glib::RefPtr<TrackRowObject>, std::hash<TrackId>> _rowCache;
     mutable std::unordered_map<DictionaryId, Glib::ustring> _stringCache;
 
-    Glib::RefPtr<TrackRowObject> createRowFromView(TrackId id,
-                                                   library::TrackView const& view,
-                                                   lmdb::ReadTransaction const& txn) const;
+    Glib::RefPtr<TrackRowObject> createRowFromData(rt::TrackRow const& data) const;
   };
 } // namespace ao::gtk

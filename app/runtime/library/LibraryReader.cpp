@@ -1,0 +1,399 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "runtime/TrackFieldReaderInternal.h"
+#include <ao/Type.h>
+#include <ao/library/CoverArt.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/rt/ListNode.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackFieldValue.h>
+#include <ao/rt/TrackRow.h>
+#include <ao/rt/library/LibraryReader.h>
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <map>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace ao::rt
+{
+  namespace
+  {
+    std::string resolveDictionaryId(library::DictionaryStore const& dict, DictionaryId id)
+    {
+      if (id == kInvalidDictionaryId)
+      {
+        return {};
+      }
+
+      return std::string{dict.getOrDefault(id)};
+    }
+
+    std::string joinResolvedTags(library::TrackView::TagProxy tags, library::DictionaryStore const& dict)
+    {
+      auto result = std::string{};
+
+      for (auto const tagId : tags)
+      {
+        auto const tag = dict.getOrDefault(tagId);
+
+        if (tag.empty())
+        {
+          continue;
+        }
+
+        if (!result.empty())
+        {
+          result.append(", ");
+        }
+
+        result.append(tag);
+      }
+
+      return result;
+    }
+
+    std::optional<std::filesystem::path> resolveLibraryPath(std::filesystem::path const& libraryRoot,
+                                                            std::string_view uri)
+    {
+      if (uri.empty())
+      {
+        return std::nullopt;
+      }
+
+      auto const path = std::filesystem::path{uri};
+
+      if (path.is_absolute())
+      {
+        return path.lexically_normal();
+      }
+
+      return (libraryRoot / path).lexically_normal();
+    }
+
+    TrackRow rowDataFromView(TrackId id,
+                             library::MusicLibrary& library,
+                             library::TrackView const& view,
+                             lmdb::ReadTransaction const& txn)
+    {
+      auto const& dict = library.dictionary();
+      auto const metadata = view.metadata();
+      auto const property = view.property();
+
+      std::uint64_t fileSize = 0;
+      std::uint64_t modifiedTime = 0;
+      auto status = library::FileStatus::Available;
+
+      if (auto const uri = property.uri(); !uri.empty())
+      {
+        auto const manifestReader = library.manifest().reader(txn);
+
+        if (auto const optManifestView = manifestReader.get(uri); optManifestView)
+        {
+          fileSize = optManifestView->fileSize();
+          modifiedTime = optManifestView->mtime();
+          status = optManifestView->status();
+        }
+      }
+
+      return TrackRow{
+        .id = id,
+        .coverArtId = view.coverArt()
+                        .primary()
+                        .transform([](library::CoverArt cover) { return cover.resourceId; })
+                        .value_or(kInvalidResourceId),
+        .optUriPath = resolveLibraryPath(library.rootPath(), property.uri()),
+        .title = std::string{metadata.title()},
+        .artist = resolveDictionaryId(dict, metadata.artistId()),
+        .album = resolveDictionaryId(dict, metadata.albumId()),
+        .albumArtist = resolveDictionaryId(dict, metadata.albumArtistId()),
+        .genre = resolveDictionaryId(dict, metadata.genreId()),
+        .composer = resolveDictionaryId(dict, metadata.composerId()),
+        .work = resolveDictionaryId(dict, metadata.workId()),
+        .movement = resolveDictionaryId(dict, metadata.movementId()),
+        .tags = joinResolvedTags(view.tags(), dict),
+        .duration = property.duration(),
+        .year = metadata.year(),
+        .discNumber = metadata.discNumber(),
+        .discTotal = metadata.discTotal(),
+        .trackNumber = metadata.trackNumber(),
+        .trackTotal = metadata.trackTotal(),
+        .movementNumber = metadata.movementNumber(),
+        .movementTotal = metadata.movementTotal(),
+        .sampleRate = property.sampleRate().raw(),
+        .channels = property.channels().raw(),
+        .bitDepth = property.bitDepth().raw(),
+        .codec = property.codec(),
+        .bitrate = property.bitrate().raw(),
+        .fileSize = fileSize,
+        .modifiedTime = modifiedTime,
+        .status = status,
+      };
+    }
+
+    ListNode listNodeDataFromView(ListId id, library::ListView const& view)
+    {
+      return ListNode{
+        .id = id,
+        .parentId = view.parentId(),
+        .name = std::string{view.name()},
+        .description = std::string{view.description()},
+        .kind = view.isSmart() ? ListNodeKind::Smart : ListNodeKind::Manual,
+        .smartExpression = std::string{view.filter()},
+      };
+    }
+  } // namespace
+
+  struct LibraryReader::Impl final
+  {
+    library::MusicLibrary& library;
+    lmdb::ReadTransaction transaction;
+
+    explicit Impl(library::MusicLibrary& library)
+      : library{library}, transaction{library.readTransaction()}
+    {
+    }
+  };
+
+  LibraryReader::LibraryReader(library::MusicLibrary& library)
+    : _implPtr{std::make_unique<Impl>(library)}
+  {
+  }
+
+  LibraryReader::LibraryReader(LibraryReader&&) noexcept = default;
+  LibraryReader& LibraryReader::operator=(LibraryReader&&) noexcept = default;
+  LibraryReader::~LibraryReader() = default;
+
+  bool LibraryReader::valid() const noexcept
+  {
+    return _implPtr != nullptr;
+  }
+
+  std::optional<TrackRow> LibraryReader::trackRow(TrackId id) const
+  {
+    auto& library = _implPtr->library;
+    auto const& txn = _implPtr->transaction;
+    auto const reader = library.tracks().reader(txn);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return std::nullopt;
+    }
+
+    return rowDataFromView(id, library, *optView, txn);
+  }
+
+  ResourceId LibraryReader::trackCoverArtId(TrackId id) const
+  {
+    auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return kInvalidResourceId;
+    }
+
+    return optView->coverArt()
+      .primary()
+      .transform([](library::CoverArt cover) { return cover.resourceId; })
+      .value_or(kInvalidResourceId);
+  }
+
+  std::optional<std::filesystem::path> LibraryReader::trackUriPath(TrackId id) const
+  {
+    auto& library = _implPtr->library;
+    auto const reader = library.tracks().reader(_implPtr->transaction);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return std::nullopt;
+    }
+
+    return resolveLibraryPath(library.rootPath(), optView->property().uri());
+  }
+
+  TrackFieldRawValue LibraryReader::trackField(TrackId id, TrackField field) const
+  {
+    auto& library = _implPtr->library;
+    auto const& txn = _implPtr->transaction;
+    auto const reader = library.tracks().reader(txn);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return std::monostate{};
+    }
+
+    auto const manifestReader = library.manifest().reader(txn);
+    return readTrackFieldRawValue(field, *optView, library.dictionary(), &manifestReader);
+  }
+
+  std::string LibraryReader::resolve(DictionaryId id) const
+  {
+    return resolveDictionaryId(_implPtr->library.dictionary(), id);
+  }
+
+  std::vector<std::string> LibraryReader::resolveAll(std::span<DictionaryId const> ids) const
+  {
+    auto const& dict = _implPtr->library.dictionary();
+    auto result = std::vector<std::string>{};
+    result.reserve(ids.size());
+
+    for (auto const id : ids)
+    {
+      result.push_back(resolveDictionaryId(dict, id));
+    }
+
+    return result;
+  }
+
+  std::vector<ListNode> LibraryReader::lists() const
+  {
+    auto const reader = _implPtr->library.lists().reader(_implPtr->transaction);
+    auto result = std::vector<ListNode>{};
+
+    for (auto const& [id, view] : reader)
+    {
+      result.push_back(listNodeDataFromView(id, view));
+    }
+
+    return result;
+  }
+
+  std::optional<ListNode> LibraryReader::listNode(ListId id) const
+  {
+    auto const reader = _implPtr->library.lists().reader(_implPtr->transaction);
+    auto const optView = reader.get(id);
+
+    if (!optView)
+    {
+      return std::nullopt;
+    }
+
+    return listNodeDataFromView(id, *optView);
+  }
+
+  std::optional<std::vector<std::byte>> LibraryReader::loadResource(ResourceId id) const
+  {
+    auto const reader = _implPtr->library.resources().reader(_implPtr->transaction);
+    auto const optBytes = reader.get(id);
+
+    if (!optBytes)
+    {
+      return std::nullopt;
+    }
+
+    return std::vector<std::byte>{optBytes->begin(), optBytes->end()};
+  }
+
+  std::vector<std::string> LibraryReader::selectionTags(std::span<TrackId const> trackIds) const
+  {
+    if (trackIds.empty())
+    {
+      return {};
+    }
+
+    auto& library = _implPtr->library;
+    auto const reader = library.tracks().reader(_implPtr->transaction);
+    auto const& dictionary = library.dictionary();
+    auto const selectionCount = trackIds.size();
+
+    // Count how many selected tracks carry each tag; a tag shared by the whole
+    // selection has a count equal to the selection size. Missing tracks never
+    // increment any counter, so any stale id drives every count below the
+    // threshold and the intersection collapses to empty.
+    auto membershipCounts = std::map<std::string, std::size_t>{};
+
+    for (auto const trackId : trackIds)
+    {
+      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+
+      if (!optView)
+      {
+        continue;
+      }
+
+      auto tagsOnTrack = std::vector<std::string>{};
+
+      for (auto const tagId : optView->tags())
+      {
+        if (auto tag = std::string{dictionary.get(tagId)}; !tag.empty() && !std::ranges::contains(tagsOnTrack, tag))
+        {
+          tagsOnTrack.push_back(std::move(tag));
+        }
+      }
+
+      for (auto const& tag : tagsOnTrack)
+      {
+        ++membershipCounts[tag];
+      }
+    }
+
+    auto shared = std::vector<std::string>{};
+
+    for (auto const& [tag, count] : membershipCounts)
+    {
+      if (count == selectionCount)
+      {
+        shared.push_back(tag);
+      }
+    }
+
+    return shared;
+  }
+
+  std::vector<std::pair<std::string, std::size_t>> LibraryReader::allTagsByFrequency() const
+  {
+    auto& library = _implPtr->library;
+    auto const reader = library.tracks().reader(_implPtr->transaction);
+    auto const& dictionary = library.dictionary();
+
+    auto frequencyByTag = std::map<std::string, std::size_t>{};
+
+    for (auto const& [_, view] : reader.hot())
+    {
+      for (auto const tagId : view.tags())
+      {
+        if (auto tag = std::string{dictionary.getOrDefault(tagId)}; !tag.empty())
+        {
+          ++frequencyByTag[tag];
+        }
+      }
+    }
+
+    auto byFrequency = std::vector<std::pair<std::string, std::size_t>>{};
+    byFrequency.reserve(frequencyByTag.size());
+
+    for (auto const& [tag, frequency] : frequencyByTag)
+    {
+      byFrequency.emplace_back(tag, frequency);
+    }
+
+    std::ranges::sort(byFrequency,
+                      [](auto const& lhs, auto const& rhs)
+                      { return lhs.second > rhs.second || (lhs.second == rhs.second && lhs.first < rhs.first); });
+
+    return byFrequency;
+  }
+} // namespace ao::rt

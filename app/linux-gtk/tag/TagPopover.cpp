@@ -4,22 +4,19 @@
 #include "tag/TagPopover.h"
 
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/rt/CompletionService.h>
+#include <ao/rt/library/Library.h>
 
 #include <utility>
 #include <vector>
 
 namespace ao::gtk
 {
-  TagPopover::TagPopover(library::MusicLibrary& musicLibrary,
-                         rt::CompletionService& completion,
-                         std::vector<TrackId> selectedTrackIds)
+  TagPopover::TagPopover(rt::Library const& reads, std::vector<TrackId> selectedTrackIds)
   {
     set_autohide(true);
     set_has_arrow(false);
 
-    _tagEditor.setup(musicLibrary, completion, std::move(selectedTrackIds));
+    _tagEditor.setup(reads, std::move(selectedTrackIds));
     set_child(_tagEditor);
   }
 

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "completion/EntryCompletionController.h"
-#include <ao/rt/CompletionResult.h>
-#include <ao/rt/QueryExpressionCompleter.h>
+#include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/completion/QueryExpressionCompleter.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>

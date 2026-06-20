@@ -23,7 +23,8 @@ namespace clang::tidy::aobus
   namespace detail
   {
     inline constexpr std::string_view kRaiiSuffixPattern =
-      "::.*(Guard|Subscription|Scope|Session|Lock|Transaction|Timer|Writer|Handle|TempDir|TempFile|Token|Raii)$";
+      "::.*(Guard|Subscription|Scope|Session|Lock|Transaction|Timer|Writer|Reader|Changes|Tasks|Handle|TempDir|"
+      "TempFile|Token|Raii)$";
 
     inline constexpr auto kRaiiSuffixes = std::to_array<std::string_view>({"Guard",
                                                                            "Subscription",
@@ -33,6 +34,9 @@ namespace clang::tidy::aobus
                                                                            "Transaction",
                                                                            "Timer",
                                                                            "Writer",
+                                                                           "Reader",
+                                                                           "Changes",
+                                                                           "Tasks",
                                                                            "Handle",
                                                                            "TempDir",
                                                                            "TempFile",

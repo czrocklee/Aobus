@@ -20,10 +20,12 @@
 #include <CLI/CLI.hpp>
 #include <giomm/simpleaction.h>
 #include <glib-unix.h>
+#include <glibmm/exceptionhandler.h>
 #include <glibmm/miscutils.h>
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
 #include <gtkmm/aboutdialog.h>
+#include <gtkmm/alertdialog.h>
 #include <gtkmm/application.h>
 
 #include <csignal>
@@ -35,6 +37,7 @@
 #include <map>
 #include <memory>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -298,15 +301,42 @@ namespace
 
     return gtkArgv;
   }
-}
 
-int main(int argc, char* argv[])
-{
-  std::int32_t exitCode = 0;
-
-  try
+  void onSignalException(Glib::RefPtr<Gtk::Application> const& appPtr)
   {
-    auto const options = parseCommandLine({argv, static_cast<std::size_t>(argc)});
+    auto detail = std::string{};
+
+    try
+    {
+      throw;
+    }
+    catch (ao::Exception const& e)
+    {
+      APP_LOG_ERROR("Unhandled exception escaped a signal handler: {} (at {}:{})", e.what(), e.file(), e.line());
+      detail = e.what();
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Unhandled exception escaped a signal handler: {}", e.what());
+      detail = e.what();
+    }
+    catch (...)
+    {
+      APP_LOG_ERROR("Unhandled non-standard exception escaped a signal handler");
+      detail = "Unknown error";
+    }
+
+    if (auto* const window = appPtr->get_active_window(); window != nullptr)
+    {
+      auto dialogPtr = Gtk::AlertDialog::create("The operation could not be completed.");
+      dialogPtr->set_detail(detail);
+      dialogPtr->show(*window);
+    }
+  }
+
+  std::int32_t runApp(std::span<char*> args)
+  {
+    auto const options = parseCommandLine(args);
 
     if (options.shouldExit)
     {
@@ -322,6 +352,15 @@ int main(int argc, char* argv[])
 
     auto appPtr = Gtk::Application::create("org.aobus.app");
 
+    // Top-level boundary for exceptions that escape a GTK signal/action handler.
+    // Such exceptions must not unwind through glib's C frames (UB), so glibmm
+    // catches them at the slot boundary and routes here. By this point the
+    // throwing operation's RAII has already run (e.g. an uncommitted LMDB write
+    // transaction aborts on destruction), so the data store stays consistent;
+    // we log, surface a generic notice, and let the app keep running rather than
+    // terminate on a transient failure.
+    Glib::add_exception_handler([appPtr] { onSignalException(appPtr); });
+
     setupUnixSignalHandlers(appPtr);
 
     addAppActions(appPtr);
@@ -330,13 +369,24 @@ int main(int argc, char* argv[])
 
     appPtr->signal_activate().connect([&appPtr, &windows] { onAppActivate(appPtr, windows); });
 
-    auto gtkArgv = buildGtkArgv(argc, argv);
+    auto gtkArgv = buildGtkArgv(static_cast<std::int32_t>(args.size()), args.data());
     std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArgv.size());
 
     APP_LOG_INFO("Entering GTK main loop");
-    exitCode = appPtr->run(gtkArgc, gtkArgv.data());
+    auto exitCode = appPtr->run(gtkArgc, gtkArgv.data());
 
     releaseWindows(*appPtr, windows);
+    return exitCode;
+  }
+}
+
+int main(int argc, char* argv[])
+{
+  std::int32_t exitCode = 0;
+
+  try
+  {
+    exitCode = runApp({argv, static_cast<std::size_t>(argc)});
   }
   catch (ao::Exception const& e)
   {

@@ -6,7 +6,7 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/utility/ScopedTimer.h>
 #include <ao/utility/VariantVisitor.h>
 

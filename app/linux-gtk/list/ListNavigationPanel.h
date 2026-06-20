@@ -27,12 +27,7 @@ namespace Gio
 
 namespace ao::rt
 {
-  class AppRuntime;
-}
-
-namespace ao::lmdb
-{
-  class ReadTransaction;
+  class Library;
 }
 
 namespace ao::gtk
@@ -59,7 +54,7 @@ namespace ao::gtk
 
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
-    void rebuildTree(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn);
+    void rebuildTree(rt::Library const& reads);
     void selectList(ListId listId);
     bool listHasChildren(ListId listId) const;
     ListId selectedListId() const;

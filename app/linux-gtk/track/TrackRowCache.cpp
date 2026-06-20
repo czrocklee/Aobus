@@ -5,141 +5,63 @@
 
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
-#include <ao/audio/Types.h>
-#include <ao/library/CoverArt.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/FileManifestLayout.h>
-#include <ao/library/FileManifestStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-#include <ao/utility/Log.h>
+#include <ao/rt/TrackRow.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
 
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
-#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 
 namespace ao::gtk
 {
   namespace
   {
-    Glib::ustring joinResolvedTags(library::TrackView::TagProxy tags, library::DictionaryStore const& dictionary)
+    Glib::ustring toUString(std::string const& value)
     {
-      auto text = Glib::ustring{};
-      bool first = true;
-
-      for (auto const tagId : tags)
-      {
-        auto const tag = dictionary.getOrDefault(tagId, "");
-
-        if (tag.empty())
-        {
-          if (tagId.raw() != 0)
-          {
-            APP_LOG_ERROR("TrackRowCache: invalid tag ID {} not found in dictionary", tagId.raw());
-          }
-
-          continue;
-        }
-
-        if (!first)
-        {
-          text.append(", ");
-        }
-
-        text.append(tag.data(), tag.size());
-        first = false;
-      }
-
-      return text;
-    }
-
-    std::optional<std::filesystem::path> resolveLibraryPath(std::filesystem::path const& libraryRoot,
-                                                            std::string_view uri)
-    {
-      if (uri.empty())
-      {
-        return std::nullopt;
-      }
-
-      auto const path = std::filesystem::path{uri};
-
-      if (path.is_absolute())
-      {
-        return path.lexically_normal();
-      }
-
-      return (libraryRoot / path).lexically_normal();
+      return Glib::ustring{value.begin(), value.end()};
     }
   }
 
-  TrackRowCache::TrackRowCache(library::MusicLibrary& ml)
-    : _ml{ml}, _store{ml.tracks()}, _dict{ml.dictionary()}
+  TrackRowCache::TrackRowCache(rt::Library const& reads)
+    : _reads{reads}
   {
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromView(TrackId id,
-                                                                library::TrackView const& view,
-                                                                lmdb::ReadTransaction const& txn) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromData(rt::TrackRow const& data) const
   {
-    auto const rowPtr = TrackRowObject::create(id, *this);
+    auto const rowPtr = TrackRowObject::create(data.id, *this);
 
-    auto const& metadata = view.metadata();
-    auto const title = metadata.title();
-
-    std::uint64_t fileSize = 0;
-    std::uint64_t mtime = 0;
-    auto status = library::FileStatus::Available;
-
-    if (auto const uri = view.property().uri(); !uri.empty())
-    {
-      // Reuse the caller's read transaction for the manifest lookup rather than
-      // opening a second one per row.
-      auto const reader = _ml.manifest().reader(txn);
-
-      if (auto const optManifestView = reader.get(uri); optManifestView)
-      {
-        fileSize = optManifestView->fileSize();
-        mtime = optManifestView->mtime();
-        status = optManifestView->status();
-      }
-    }
-
-    rowPtr->populate(Glib::ustring{title.begin(), title.end()},
-                     metadata.artistId(),
-                     metadata.albumId(),
-                     metadata.albumArtistId(),
-                     metadata.genreId(),
-                     metadata.composerId(),
-                     metadata.workId(),
-                     metadata.movementId(),
-                     joinResolvedTags(view.tags(), _dict),
-                     view.property().duration(),
-                     metadata.year(),
-                     metadata.discNumber(),
-                     metadata.discTotal(),
-                     metadata.trackNumber(),
-                     metadata.trackTotal(),
-                     metadata.movementNumber(),
-                     metadata.movementTotal(),
-                     view.coverArt()
-                       .primary()
-                       .transform([](library::CoverArt cover) { return cover.resourceId; })
-                       .value_or(kInvalidResourceId),
-                     view.property().sampleRate().raw(),
-                     view.property().channels().raw(),
-                     view.property().bitDepth().raw(),
-                     view.property().codec(),
-                     view.property().bitrate().raw(),
-                     fileSize,
-                     mtime,
-                     status);
+    rowPtr->populate(toUString(data.title),
+                     toUString(data.artist),
+                     toUString(data.album),
+                     toUString(data.albumArtist),
+                     toUString(data.genre),
+                     toUString(data.composer),
+                     toUString(data.work),
+                     toUString(data.movement),
+                     toUString(data.tags),
+                     data.duration,
+                     data.year,
+                     data.discNumber,
+                     data.discTotal,
+                     data.trackNumber,
+                     data.trackTotal,
+                     data.movementNumber,
+                     data.movementTotal,
+                     data.coverArtId,
+                     data.sampleRate,
+                     data.channels,
+                     data.bitDepth,
+                     data.codec,
+                     data.bitrate,
+                     data.fileSize,
+                     data.modifiedTime,
+                     data.status);
 
     return rowPtr;
   }
@@ -151,109 +73,29 @@ namespace ao::gtk
       return it->second;
     }
 
-    // Lazy load the row if it's missing from the cache (e.g., after an invalidate)
-    auto const txn = _ml.readTransaction();
-    auto const reader = _store.reader(txn);
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+    auto scope = _reads.reader();
+    auto const optData = scope.trackRow(id);
 
-    if (!optView)
+    if (!optData)
     {
       return nullptr;
     }
 
-    auto const rowPtr = createRowFromView(id, *optView, txn);
+    auto const rowPtr = createRowFromData(*optData);
     _rowCache[id] = rowPtr;
     return rowPtr;
   }
 
   ResourceId TrackRowCache::coverArtId(TrackId id) const
   {
-    auto const txn = _ml.readTransaction();
-    auto const reader = _store.reader(txn);
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
-
-    if (!optView)
-    {
-      return kInvalidResourceId;
-    }
-
-    auto const optPrimary = optView->coverArt().primary();
-
-    if (!optPrimary)
-    {
-      return kInvalidResourceId;
-    }
-
-    return optPrimary->resourceId;
+    auto scope = _reads.reader();
+    return scope.trackCoverArtId(id);
   }
 
   std::optional<std::filesystem::path> TrackRowCache::uriPath(TrackId id) const
   {
-    // Need cold data for URI
-    auto const txn = _ml.readTransaction();
-    auto const reader = _store.reader(txn);
-
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
-
-    if (!optView)
-    {
-      return std::nullopt;
-    }
-
-    return resolveLibraryPath(_ml.rootPath(), optView->property().uri());
-  }
-
-  std::optional<audio::TrackPlaybackDescriptor> TrackRowCache::playbackDescriptor(TrackId id) const
-  {
-    // Need cold data for URI and property info
-    auto const txn = _ml.readTransaction();
-    auto const reader = _store.reader(txn);
-
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
-
-    if (!optView)
-    {
-      return std::nullopt;
-    }
-
-    auto const& view = *optView;
-    auto const& metadata = view.metadata();
-    auto const& property = view.property();
-
-    auto desc = audio::TrackPlaybackDescriptor{.trackId = id,
-                                               .duration = property.duration(),
-                                               .sampleRateHint = property.sampleRate().raw(),
-                                               .channelsHint = property.channels().raw(),
-                                               .bitDepthHint = property.bitDepth().raw()};
-
-    // File path
-    if (auto const optFilePath = resolveLibraryPath(_ml.rootPath(), property.uri()); optFilePath)
-    {
-      desc.filePath = *optFilePath;
-    }
-
-    // Title
-    desc.title = std::string{metadata.title()};
-
-    // Artist
-    if (auto const artistId = metadata.artistId(); artistId != kInvalidDictionaryId)
-    {
-      desc.artist = resolveDictionaryString(artistId).raw();
-    }
-
-    // Album
-    if (auto const albumId = metadata.albumId(); albumId != kInvalidDictionaryId)
-    {
-      desc.album = resolveDictionaryString(albumId).raw();
-    }
-
-    // Cover art
-    if (auto const optPrimary = view.coverArt().primary(); optPrimary)
-    {
-      desc.coverArtId = optPrimary->resourceId;
-    }
-
-    return desc;
+    auto scope = _reads.reader();
+    return scope.trackUriPath(id);
   }
 
   void TrackRowCache::invalidate(TrackId id) const
@@ -280,8 +122,8 @@ namespace ao::gtk
       return it->second;
     }
 
-    // Resolve from dictionary and cache
-    auto const str = _dict.getOrDefault(id, "");
+    auto scope = _reads.reader();
+    auto const str = scope.resolve(id);
     auto result = Glib::ustring{str.begin(), str.end()};
 
     auto const insertResult = _stringCache.emplace(id, std::move(result));

@@ -11,8 +11,8 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/library/Library.h>
 #include <ao/uimodel/tag/TagEditWorkflow.h>
-#include <ao/utility/Log.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/menu.h>
@@ -164,8 +164,7 @@ namespace ao::gtk
       return;
     }
 
-    _tagPopoverPtr =
-      std::make_unique<TagPopover>(_runtime.musicLibrary(), _runtime.completion(), _optActiveSelection->selectedIds);
+    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), _optActiveSelection->selectedIds);
 
     _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -182,8 +181,8 @@ namespace ao::gtk
     }
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
-                                                                  _runtime.musicLibrary(),
-                                                                  _runtime.mutation(),
+                                                                  _runtime.library(),
+                                                                  _runtime.library().writer(),
                                                                   _runtime.completion(),
                                                                   *_dataProvider,
                                                                   _optActiveSelection->selectedIds);
@@ -200,8 +199,8 @@ namespace ao::gtk
     }
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
-                                                                  _runtime.musicLibrary(),
-                                                                  _runtime.mutation(),
+                                                                  _runtime.library(),
+                                                                  _runtime.library().writer(),
                                                                   _runtime.completion(),
                                                                   *_dataProvider,
                                                                   selection.selectedIds);
@@ -219,8 +218,7 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
 
-    _tagPopoverPtr =
-      std::make_unique<TagPopover>(_runtime.musicLibrary(), _runtime.completion(), selection.selectedIds);
+    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), selection.selectedIds);
 
     _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -262,15 +260,8 @@ namespace ao::gtk
     request.tagsToAdd.assign(tagsToAdd.begin(), tagsToAdd.end());
     request.tagsToRemove.assign(tagsToRemove.begin(), tagsToRemove.end());
 
-    auto workflow = ao::uimodel::tag::TagEditWorkflow{_runtime.mutation()};
+    auto workflow = ao::uimodel::tag::TagEditWorkflow{_runtime.library().writer()};
     auto const result = workflow.apply(request);
-
-    if (result.optError)
-    {
-      APP_LOG_ERROR("{}", result.notificationText);
-      _runtime.notifications().post(rt::NotificationSeverity::Error, result.notificationText);
-      return;
-    }
 
     if (!result.applied)
     {

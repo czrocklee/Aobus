@@ -3,15 +3,15 @@
 
 #include "test/unit/runtime/TestUtils.h"
 #include <ao/Type.h>
-#include <ao/async/Runtime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/source/ListSourceStore.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -31,12 +31,11 @@ namespace ao::uimodel::track::test
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationService = LibraryMutationService{runtime, testLib.library()};
-    auto listSourceStore = ListSourceStore{testLib.library(), mutationService};
+    auto changes = LibraryChanges{};
+    auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playbackService = PlaybackService{executor, viewService, testLib.library()};
-    auto workspace = rt::WorkspaceService{viewService, playbackService, mutationService, testLib.library()};
+    auto workspace = rt::WorkspaceService{viewService, playbackService, changes, testLib.library()};
 
     auto store = TrackPresentationViewModel{workspace};
 

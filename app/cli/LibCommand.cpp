@@ -11,8 +11,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/LibraryYamlExporter.h>
-#include <ao/rt/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/utility/ByteView.h>
 
 #include <CLI/App.hpp>

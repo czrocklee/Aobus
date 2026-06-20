@@ -10,13 +10,13 @@
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/rt/CompletionService.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/MetadataValueCompleter.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/MetadataValueCompleter.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -64,20 +64,19 @@ namespace ao::gtk
 
     bool shouldShowReadonlyPropertyRow(rt::TrackFieldDefinition const& rtDef, TrackFieldUiDefinition const& uiDef)
     {
-      return rtDef.category == rt::TrackFieldCategory::Technical && !rtDef.synthetic &&
-             uiDef.readViewRawValue != nullptr && uiDef.formatValue != nullptr;
+      return rtDef.category == rt::TrackFieldCategory::Technical && !rtDef.synthetic && uiDef.formatValue != nullptr;
     }
   } // namespace
 
   TrackPropertiesDialog::TrackPropertiesDialog(Gtk::Window& parent,
-                                               library::MusicLibrary& library,
-                                               rt::LibraryMutationService& mutation,
+                                               rt::Library const& reads,
+                                               rt::LibraryWriter& writer,
                                                rt::CompletionService& completion,
                                                TrackRowCache& rowCache,
                                                std::vector<TrackId> trackIds)
     : AppDialog{}
-    , _library{library}
-    , _mutation{mutation}
+    , _reads{reads}
+    , _writer{writer}
     , _completion{completion}
     , _rowCache{rowCache}
     , _trackIds{std::move(trackIds)}
@@ -231,44 +230,41 @@ namespace ao::gtk
       return;
     }
 
-    auto const txn = _library.readTransaction();
-    auto const reader = _library.tracks().reader(txn);
-    auto const& dictionary = _library.dictionary();
-    auto const manifestReader = _library.manifest().reader(txn);
+    auto scope = _reads.reader();
 
     bool first = true;
 
     for (auto const trackId : _trackIds)
     {
-      if (auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both); optView)
+      if (!scope.trackRow(trackId))
       {
-        if (first)
-        {
-          loadFirstTrack(*optView, dictionary, &manifestReader);
-          first = false;
-        }
-        else
-        {
-          loadSubsequentTrack(*optView, dictionary, &manifestReader);
-        }
+        continue;
+      }
+
+      if (first)
+      {
+        loadFirstTrack(scope, trackId);
+        first = false;
+      }
+      else
+      {
+        loadSubsequentTrack(scope, trackId);
       }
     }
   }
 
-  void TrackPropertiesDialog::loadFirstTrack(library::TrackView const& view,
-                                             library::DictionaryStore const& dictionary,
-                                             library::FileManifestStore::Reader const* manifestReader)
+  void TrackPropertiesDialog::loadFirstTrack(rt::LibraryReader const& scope, TrackId trackId)
   {
     for (auto& editor : _editors)
     {
       auto const* const def = trackFieldUiDefinition(editor.field);
 
-      if (def == nullptr || def->readViewRawValue == nullptr || def->formatValue == nullptr)
+      if (def == nullptr || def->formatValue == nullptr)
       {
         continue;
       }
 
-      auto const rawValue = def->readViewRawValue(view, dictionary, manifestReader);
+      auto const rawValue = scope.trackField(trackId, editor.field);
       editor.originalRawValue = rawValue;
       setWidgetValue(editor.field, editor.widget, def->formatValue(rawValue));
     }
@@ -277,20 +273,18 @@ namespace ao::gtk
     {
       auto const* const def = trackFieldUiDefinition(row.field);
 
-      if (def == nullptr || def->readViewRawValue == nullptr || def->formatValue == nullptr)
+      if (def == nullptr || def->formatValue == nullptr)
       {
         continue;
       }
 
-      auto const rawValue = def->readViewRawValue(view, dictionary, manifestReader);
+      auto const rawValue = scope.trackField(trackId, row.field);
       row.originalRawValue = rawValue;
       setWidgetValue(row.field, row.widget, def->formatValue(rawValue));
     }
   }
 
-  void TrackPropertiesDialog::loadSubsequentTrack(library::TrackView const& view,
-                                                  library::DictionaryStore const& dictionary,
-                                                  library::FileManifestStore::Reader const* manifestReader)
+  void TrackPropertiesDialog::loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId)
   {
     for (auto& editor : _editors)
     {
@@ -299,16 +293,12 @@ namespace ao::gtk
         continue;
       }
 
-      auto const* const def = trackFieldUiDefinition(editor.field);
-
-      if (def == nullptr || def->readViewRawValue == nullptr || def->formatValue == nullptr)
+      if (auto const* const def = trackFieldUiDefinition(editor.field); def == nullptr || def->formatValue == nullptr)
       {
         continue;
       }
 
-      auto const rawValue = def->readViewRawValue(view, dictionary, manifestReader);
-
-      if (rawValue != editor.originalRawValue)
+      if (auto const rawValue = scope.trackField(trackId, editor.field); rawValue != editor.originalRawValue)
       {
         editor.mixed = true;
         setEditorMixed(editor.field, editor.widget);
@@ -322,16 +312,12 @@ namespace ao::gtk
         continue;
       }
 
-      auto const* const def = trackFieldUiDefinition(row.field);
-
-      if (def == nullptr || def->readViewRawValue == nullptr || def->formatValue == nullptr)
+      if (auto const* const def = trackFieldUiDefinition(row.field); def == nullptr || def->formatValue == nullptr)
       {
         continue;
       }
 
-      auto const rawValue = def->readViewRawValue(view, dictionary, manifestReader);
-
-      if (rawValue != row.originalRawValue)
+      if (auto const rawValue = scope.trackField(trackId, row.field); rawValue != row.originalRawValue)
       {
         row.mixed = true;
         setEditorMixed(row.field, row.widget);
@@ -391,14 +377,11 @@ namespace ao::gtk
       def->writePatch(ctx);
     }
 
-    auto const result = _mutation.updateMetadata(_trackIds, patch);
+    auto const reply = _writer.updateMetadata(_trackIds, patch);
 
-    if (result)
+    for (auto const trackId : reply.mutatedIds)
     {
-      for (auto const trackId : _trackIds)
-      {
-        _rowCache.invalidate(trackId);
-      }
+      _rowCache.invalidate(trackId);
     }
   }
 

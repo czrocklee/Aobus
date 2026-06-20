@@ -6,9 +6,9 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/SmartListEvaluator.h>
-#include <ao/rt/SmartListSource.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/source/SmartListEvaluator.h>
+#include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 

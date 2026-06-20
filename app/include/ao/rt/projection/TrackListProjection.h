@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#pragma once
+
+#include "../CorePrimitives.h"
+#include "../TrackPresentation.h"
+#include "../source/TrackSource.h"
+#include "ProjectionTypes.h"
+#include <ao/Type.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <span>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
+namespace ao::rt
+{
+  class SmartListSource;
+
+  class TrackListProjection final
+    : public ITrackListProjection
+    , private TrackSourceObserver
+  {
+  public:
+    TrackListProjection(ViewId viewId, TrackSource& source, library::MusicLibrary& library);
+    ~TrackListProjection() override;
+
+    TrackListProjection(TrackListProjection const&) = delete;
+    TrackListProjection& operator=(TrackListProjection const&) = delete;
+    TrackListProjection(TrackListProjection&&) = delete;
+    TrackListProjection& operator=(TrackListProjection&&) = delete;
+
+    ViewId viewId() const noexcept override;
+    std::uint64_t revision() const noexcept override;
+
+    TrackPresentationSpec presentation() const override;
+    std::size_t groupCount() const noexcept override;
+    TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const override;
+    std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const override;
+
+    std::size_t size() const noexcept override;
+    TrackId trackIdAt(std::size_t index) const override;
+    std::optional<std::size_t> indexOf(TrackId trackId) const noexcept override;
+
+    void setPresentation(TrackPresentationSpec const& presentation);
+
+    Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
+
+  private:
+    void onReset() override;
+    void onInserted(TrackId id, std::size_t index) override;
+    void onUpdated(TrackId id, std::size_t index) override;
+    void onRemoved(TrackId id, std::size_t index) override;
+
+    void onBulkInserted(std::span<TrackId const> ids) override;
+    void onBulkUpdated(std::span<TrackId const> ids) override;
+    void onBulkRemoved(std::span<TrackId const> ids) override;
+
+    void onSourceDestroyed() override;
+
+    void publishDelta(TrackListProjectionDeltaBatch const& batch);
+
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
+  };
+} // namespace ao::rt

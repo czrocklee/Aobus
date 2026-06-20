@@ -54,7 +54,6 @@ namespace ao::rt
     void reloadAllTracks();
 
     TrackId playSelectionInFocusedView();
-
     void addAudioProvider(std::unique_ptr<audio::IBackendProvider> providerPtr);
 
   private:

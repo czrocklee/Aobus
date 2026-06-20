@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/LibraryMutationService.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/tag/TagEditWorkflow.h>
 
 #include <cstddef>
@@ -43,8 +43,8 @@ namespace ao::uimodel::tag
     }
   } // namespace
 
-  TagEditWorkflow::TagEditWorkflow(rt::LibraryMutationService& mutation)
-    : _mutation{mutation}
+  TagEditWorkflow::TagEditWorkflow(rt::LibraryWriter& writer)
+    : _writer{writer}
   {
   }
 
@@ -57,18 +57,11 @@ namespace ao::uimodel::tag
       return result;
     }
 
-    auto const editResult = _mutation.editTags(request.selectedIds, request.tagsToAdd, request.tagsToRemove);
+    auto const reply = _writer.editTags(request.selectedIds, request.tagsToAdd, request.tagsToRemove);
 
-    if (!editResult)
-    {
-      result.optError = editResult.error();
-      result.notificationText = std::format("Failed to edit tags: {}", result.optError->message);
-      return result;
-    }
-
-    result.applied = true;
+    result.applied = !reply.mutatedIds.empty();
     result.notificationText =
-      tagChangeStatusMessage(request.selectedIds.size(), request.tagsToAdd.size(), request.tagsToRemove.size());
+      tagChangeStatusMessage(reply.mutatedIds.size(), request.tagsToAdd.size(), request.tagsToRemove.size());
     return result;
   }
 } // namespace ao::uimodel::tag

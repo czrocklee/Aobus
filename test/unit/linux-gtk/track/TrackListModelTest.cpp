@@ -3,7 +3,7 @@
 
 #include "track/TrackListModel.h"
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
@@ -12,8 +12,8 @@
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackListProjection.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/listmodel.h>
@@ -36,8 +36,6 @@ namespace ao::gtk::test
 {
   namespace
   {
-    using namespace ao::lmdb::test;
-
     struct TrackSpec final
     {
       std::string title = "Title";
@@ -67,17 +65,14 @@ namespace ao::gtk::test
     class TestMusicLibrary final
     {
     public:
-      TestMusicLibrary()
-        : _tempDir{}, _library{_tempDir.path(), _tempDir.path()}
-      {
-      }
-
-      library::MusicLibrary& library() { return _library; }
+      library::MusicLibrary& library() { return _fixture.runtime().musicLibrary(); }
+      rt::AppRuntime& runtime() { return _fixture.runtime(); }
 
       TrackId addTrack(TrackSpec const& spec)
       {
-        auto txn = _library.writeTransaction();
-        auto writer = _library.tracks().writer(txn);
+        auto& lib = library();
+        auto txn = lib.writeTransaction();
+        auto writer = lib.tracks().writer(txn);
 
         auto builder = library::TrackBuilder::createNew();
         builder.metadata()
@@ -97,16 +92,15 @@ namespace ao::gtk::test
           .channels(Channels{2})
           .bitDepth(BitDepth{16});
 
-        auto const hotData = builder.serializeHot(txn, _library.dictionary());
-        auto const coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
+        auto const hotData = builder.serializeHot(txn, lib.dictionary());
+        auto const coldData = builder.serializeCold(txn, lib.dictionary(), lib.resources());
         auto [id, _] = writer.createHotCold(hotData, coldData);
         txn.commit();
         return id;
       }
 
     private:
-      TempDir _tempDir;
-      library::MusicLibrary _library;
+      GtkRuntimeFixture _fixture;
     };
 
     class MutableTrackSource final : public rt::TrackSource
@@ -189,7 +183,7 @@ namespace ao::gtk::test
     source.addInitial(id1);
     source.addInitial(id2);
 
-    auto rowCache = TrackRowCache{testLibrary.library()};
+    auto rowCache = TrackRowCache{testLibrary.runtime().library()};
     auto const projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, source, testLibrary.library());
 
     auto const modelPtr = TrackListModel::create(rowCache);

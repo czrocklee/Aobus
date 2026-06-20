@@ -6,10 +6,10 @@
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
 #include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ListNode.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/liststore.h>
@@ -37,22 +37,23 @@ namespace ao::gtk
     };
   }
 
-  ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn)
+  ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::Library const& reads)
   {
     auto result = Result{};
     result.storePtr = Gio::ListStore<ListTreeItem>::create();
 
-    auto const reader = runtime.musicLibrary().lists().reader(txn);
+    auto scope = reads.reader();
+    auto const snapshot = scope.lists();
     auto nodes = std::map<ListId, StoredListNode>{};
 
-    for (auto const& [id, listView] : reader)
+    for (auto const& node : snapshot)
     {
-      nodes.emplace(id,
-                    StoredListNode{.id = id,
-                                   .parentId = listView.parentId(),
-                                   .name = std::string{listView.name()},
-                                   .isSmart = listView.isSmart(),
-                                   .localExpression = std::string{listView.filter()}});
+      nodes.emplace(node.id,
+                    StoredListNode{.id = node.id,
+                                   .parentId = node.parentId,
+                                   .name = node.name,
+                                   .isSmart = node.kind == rt::ListNodeKind::Smart,
+                                   .localExpression = node.smartExpression});
     }
 
     auto children = std::map<ListId, std::vector<ListId>>{};

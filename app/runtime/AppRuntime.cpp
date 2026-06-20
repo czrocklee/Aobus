@@ -3,14 +3,16 @@
 
 #include <ao/Type.h>
 #include <ao/async/Runtime.h>
+#include <ao/audio/IBackendProvider.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/ListSourceStore.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/source/ListSourceStore.h>
 
 #include <memory>
 #include <utility>
@@ -27,7 +29,7 @@ namespace ao::rt
     Impl(AppRuntime& runtime, std::unique_ptr<ConfigStore> workspaceConfigPtr)
       : viewService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.sources()}
       , playbackService{runtime.async().callbackExecutor(), viewService, runtime.musicLibrary()}
-      , workspaceService{viewService, playbackService, runtime.mutation(), runtime.musicLibrary()}
+      , workspaceService{viewService, playbackService, runtime.library().changes(), runtime.musicLibrary()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
     {
     }

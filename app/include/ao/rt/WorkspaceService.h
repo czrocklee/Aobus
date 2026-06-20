@@ -26,7 +26,7 @@ namespace ao::rt
 {
   class ViewService;
   class PlaybackService;
-  class LibraryMutationService;
+  class LibraryChanges;
   class ConfigStore;
 
   struct NavigationOptions final
@@ -54,7 +54,7 @@ namespace ao::rt
 
     WorkspaceService(ViewService& views,
                      PlaybackService& playback,
-                     LibraryMutationService& mutation,
+                     LibraryChanges const& changes,
                      library::MusicLibrary& library);
     ~WorkspaceService();
 

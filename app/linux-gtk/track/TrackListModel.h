@@ -3,10 +3,9 @@
 
 #pragma once
 
-#include "track/TrackRowCache.h"
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <giomm/listmodel.h>
 #include <glib-object.h>
@@ -21,6 +20,8 @@
 
 namespace ao::gtk
 {
+  class TrackRowCache;
+
   class TrackListModel final
     : public Gio::ListModel
     , public Glib::Object

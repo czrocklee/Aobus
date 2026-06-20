@@ -10,7 +10,7 @@
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/rectangle.h>
@@ -378,7 +378,6 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto& library = runtime.musicLibrary();
     auto imageCache = ImageCache{200};
 
     SECTION("loads a cached resource into the widget")
@@ -387,7 +386,7 @@ namespace ao::gtk::test
       imageCache.put(resourceId, makePixbuf(80, 80));
 
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, library, imageCache};
+      auto controller = ResourceImageController{widget, runtime.library(), imageCache};
 
       widget.setTargetSize(56);
       controller.load(resourceId);
@@ -405,7 +404,7 @@ namespace ao::gtk::test
       auto* mock = mockProjPtr.get();
 
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, library, imageCache};
+      auto controller = ResourceImageController{widget, runtime.library(), imageCache};
 
       controller.bindToDetailProjection(std::move(mockProjPtr));
 
@@ -428,7 +427,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto& library = runtime.musicLibrary();
     auto thumbnailCache = ImageCache{200};
-    auto loader = ThumbnailLoader{library, thumbnailCache, runtime.async()};
+    auto loader = ThumbnailLoader{runtime.library(), thumbnailCache, runtime.async()};
 
     constexpr std::int32_t kLogicalSize = 48;
 
@@ -438,7 +437,7 @@ namespace ao::gtk::test
       auto const resourceId = writeCoverResource(library, makePixbuf(256, 256));
 
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, library, thumbnailCache};
+      auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
       controller.enableThumbnailMode(loader, kLogicalSize);
       controller.load(resourceId);
 
@@ -467,7 +466,7 @@ namespace ao::gtk::test
       thumbnailCache.put(resourceId, makePixbuf(kLogicalSize, kLogicalSize));
 
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, library, thumbnailCache};
+      auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
       controller.enableThumbnailMode(loader, kLogicalSize);
       controller.load(resourceId);
       drainGtkEvents();
@@ -478,7 +477,7 @@ namespace ao::gtk::test
     SECTION("invalid resource id clears the image")
     {
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, library, thumbnailCache};
+      auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
       controller.enableThumbnailMode(loader, kLogicalSize);
       controller.load(kInvalidResourceId);
       drainGtkEvents();
@@ -492,7 +491,7 @@ namespace ao::gtk::test
 
       {
         auto widget = ImageWidget{};
-        auto controller = ResourceImageController{widget, library, thumbnailCache};
+        auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
         controller.enableThumbnailMode(loader, kLogicalSize);
         controller.load(resourceId);
         // Leave the scope immediately: the decode is likely still in flight on a
@@ -507,7 +506,7 @@ namespace ao::gtk::test
 
       // The runtime remains usable afterwards.
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, library, thumbnailCache};
+      auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
       controller.enableThumbnailMode(loader, kLogicalSize);
       controller.load(resourceId);
       REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));

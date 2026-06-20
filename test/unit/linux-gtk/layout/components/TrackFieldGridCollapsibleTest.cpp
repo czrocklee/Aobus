@@ -6,8 +6,8 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/component/track/TrackDetailScope.h"
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>

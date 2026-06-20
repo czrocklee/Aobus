@@ -9,12 +9,12 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/rt/SmartListEvaluator.h>
-#include <ao/rt/SmartListSource.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/SmartListEvaluator.h>
+#include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/utility/Log.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -25,8 +25,12 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <format>
+#include <fstream>
 #include <functional>
+#include <ios>
 #include <numeric>
 #include <optional>
 #include <ranges>
@@ -159,6 +163,151 @@ namespace ao::rt::test
       std::chrono::milliseconds totalDuration{};
       std::uint64_t checksum = 0;
     };
+
+    struct BaselineMetric final
+    {
+      std::string name{};
+      std::int64_t value = 0;
+      std::string unit{};
+    };
+
+    struct BaselineRecord final
+    {
+      std::string benchmark{};
+      std::vector<BaselineMetric> metrics{};
+    };
+
+    std::string jsonEscape(std::string_view value)
+    {
+      auto out = std::string{};
+      out.reserve(value.size() + 8);
+
+      for (auto const ch : value)
+      {
+        switch (ch)
+        {
+          case '"': out += "\\\""; break;
+          case '\\': out += "\\\\"; break;
+          case '\b': out += "\\b"; break;
+          case '\f': out += "\\f"; break;
+          case '\n': out += "\\n"; break;
+          case '\r': out += "\\r"; break;
+          case '\t': out += "\\t"; break;
+          default:
+            if (static_cast<unsigned char>(ch) < 0x20)
+            {
+              constexpr auto kHex = std::string_view{"0123456789abcdef"};
+              out += "\\u00";
+              out += kHex[(static_cast<unsigned char>(ch) >> 4) & 0x0f];
+              out += kHex[static_cast<unsigned char>(ch) & 0x0f];
+            }
+            else
+            {
+              out += ch;
+            }
+
+            break;
+        }
+      }
+
+      return out;
+    }
+
+    class BaselineRecorder final
+    {
+    public:
+      BaselineRecorder() = default;
+      BaselineRecorder(BaselineRecorder const&) = delete;
+      BaselineRecorder& operator=(BaselineRecorder const&) = delete;
+      BaselineRecorder(BaselineRecorder&&) = delete;
+      BaselineRecorder& operator=(BaselineRecorder&&) = delete;
+      ~BaselineRecorder()
+      {
+        auto const* const path = std::getenv("AOBUS_PERF_BASELINE_JSON");
+
+        if (path == nullptr || path[0] == '\0')
+        {
+          return;
+        }
+
+        auto out = std::ofstream{path, std::ios::trunc};
+
+        if (!out)
+        {
+          // NOLINTNEXTLINE(modernize-use-std-print) — destructor must not throw
+          std::fprintf(stderr, "Aobus performance baseline: failed to open %s\n", path);
+          return;
+        }
+
+        out << "{\n";
+        out << R"(  "schema": "aobus-performance-baseline/v1",)" << "\n";
+        out << "  \"records\": [\n";
+
+        for (std::size_t recordIdx = 0; recordIdx < _records.size(); ++recordIdx)
+        {
+          auto const& record = _records[recordIdx];
+
+          out << "    {\n";
+          out << R"(      "benchmark": ")" << jsonEscape(record.benchmark) << R"(",)" << "\n";
+          out << "      \"metrics\": [\n";
+
+          for (std::size_t metricIdx = 0; metricIdx < record.metrics.size(); ++metricIdx)
+          {
+            auto const& metric = record.metrics[metricIdx];
+
+            out << R"(        {"name": ")" << jsonEscape(metric.name) << R"(", "value": )" << metric.value
+                << R"(, "unit": ")" << jsonEscape(metric.unit) << R"("})";
+
+            if (metricIdx + 1 < record.metrics.size())
+            {
+              out << ",";
+            }
+
+            out << "\n";
+          }
+
+          out << "      ]\n";
+          out << "    }";
+
+          if (recordIdx + 1 < _records.size())
+          {
+            out << ",";
+          }
+
+          out << "\n";
+        }
+
+        out << "  ]\n";
+        out << "}\n";
+
+        if (!out)
+        {
+          // NOLINTNEXTLINE(modernize-use-std-print) — destructor must not throw
+          std::fprintf(stderr, "Aobus performance baseline: failed to write %s\n", path);
+        }
+      }
+
+      void record(BaselineRecord record) { _records.push_back(std::move(record)); }
+
+    private:
+      std::vector<BaselineRecord> _records;
+    };
+
+    BaselineRecorder& baselineRecorder()
+    {
+      static auto recorder = BaselineRecorder{};
+      return recorder;
+    }
+
+    BaselineMetric metric(std::string name, std::int64_t value, std::string unit)
+    {
+      return BaselineMetric{.name = std::move(name), .value = value, .unit = std::move(unit)};
+    }
+
+    void recordBaseline(std::string benchmark, std::vector<BaselineMetric> metrics)
+    {
+      baselineRecorder().record(BaselineRecord{.benchmark = std::move(benchmark), .metrics = std::move(metrics)});
+    }
 
     // A comparison-heavy predicate that every synthetic track satisfies, so the
     // PlanEvaluator runs each instruction to completion for every track. Unlike
@@ -972,6 +1121,21 @@ namespace ao::rt::test
       return t;
     }
 
+    void recordScaleBaseline(std::size_t trackCount, std::chrono::milliseconds buildDuration, Timings const& timing)
+    {
+      recordBaseline("scale-baseline",
+                     {
+                       metric("track_count", static_cast<std::int64_t>(trackCount), "count"),
+                       metric("library_build", buildDuration.count(), "ms"),
+                       metric("projection_construct", timing.createProjectionDuration.count(), "ms"),
+                       metric("set_presentation_sort", timing.setTitleSortDuration.count(), "ms"),
+                       metric("evaluate_members", timing.evaluateMembersDuration.count(), "ms"),
+                       metric("filter_eval_heavy_predicate", timing.filterEvalDuration.count(), "ms"),
+                       metric("filter_eval_large_in_list", timing.largeInEvalDuration.count(), "ms"),
+                       metric("index_of_10000", timing.indexOfLookupDuration.count(), "us"),
+                     });
+    }
+
     InThresholdTiming measureYearInThreshold(ScaleBench& bench, std::size_t listSize)
     {
       auto expandedPlan = makeExpandedYearInPlan(listSize);
@@ -1065,6 +1229,7 @@ namespace ao::rt::test
     APP_LOG_INFO("  Filter eval (heavy predicate): {} ms", t.filterEvalDuration.count());
     APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
+    recordScaleBaseline(kN, buildDuration, t);
 
     // Regression thresholds — deliberately generous to avoid flakes
     CHECK(t.createProjectionDuration < std::chrono::seconds{5});
@@ -1093,6 +1258,15 @@ namespace ao::rt::test
                    timing.expandedDuration.count(),
                    timing.setDuration.count(),
                    timing.expandedMatches);
+      recordBaseline("query-in-threshold",
+                     {
+                       metric("track_count", kN, "count"),
+                       metric("list_size", static_cast<std::int64_t>(timing.listSize), "count"),
+                       metric("expanded", timing.expandedDuration.count(), "us"),
+                       metric("set", timing.setDuration.count(), "us"),
+                       metric("expanded_matches", static_cast<std::int64_t>(timing.expandedMatches), "count"),
+                       metric("set_matches", static_cast<std::int64_t>(timing.setMatches), "count"),
+                     });
 
       CHECK(timing.expandedMatches == timing.setMatches);
     }
@@ -1118,6 +1292,12 @@ namespace ao::rt::test
 
       APP_LOG_INFO("  {:>7} entries: entry payload {} KiB", timing.count, entryBytes / 1024);
       APP_LOG_INFO("    direct entry sort:              {:>6} ms", timing.duration.count());
+      recordBaseline("order-entry-direct-sort-cache-pressure",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("entry_payload", static_cast<std::int64_t>(entryBytes / 1024), "KiB"),
+                       metric("duration", timing.duration.count(), "ms"),
+                     });
       CHECK(timing.checksum != 0);
     }
   }
@@ -1141,6 +1321,12 @@ namespace ao::rt::test
       APP_LOG_INFO("  {:>7} entries", count);
       APP_LOG_INFO("    generic loop/switch comparator: {:>6} ms", generic.duration.count());
       APP_LOG_INFO("    specialized comparator:         {:>6} ms", specialized.duration.count());
+      recordBaseline("order-entry-comparator-dispatch-cost",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(count), "count"),
+                       metric("generic_loop_switch_comparator", generic.duration.count(), "ms"),
+                       metric("specialized_comparator", specialized.duration.count(), "ms"),
+                     });
 
       CHECK(generic.checksum == specialized.checksum);
     }
@@ -1167,6 +1353,14 @@ namespace ao::rt::test
       APP_LOG_INFO("    build ranked entries:           {:>6} ms", timing.buildEntriesDuration.count());
       APP_LOG_INFO("    ranked integer sort:            {:>6} ms", timing.sortDuration.count());
       APP_LOG_INFO("    total rank+sort path:           {:>6} ms", timing.totalDuration.count());
+      recordBaseline("order-entry-ranked-integer-key-sort",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("build_rank_map", timing.buildRankMapDuration.count(), "ms"),
+                       metric("build_ranked_entries", timing.buildEntriesDuration.count(), "ms"),
+                       metric("ranked_integer_sort", timing.sortDuration.count(), "ms"),
+                       metric("total_rank_sort_path", timing.totalDuration.count(), "ms"),
+                     });
 
       CHECK(timing.checksum != 0);
     }
@@ -1192,6 +1386,13 @@ namespace ao::rt::test
       APP_LOG_INFO("    build compact entries:          {:>6} ms", timing.buildEntriesDuration.count());
       APP_LOG_INFO("    compact string sort:            {:>6} ms", timing.sortDuration.count());
       APP_LOG_INFO("    total compact path:             {:>6} ms", timing.totalDuration.count());
+      recordBaseline("order-entry-compact-active-key-sort",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("build_compact_entries", timing.buildEntriesDuration.count(), "ms"),
+                       metric("compact_string_sort", timing.sortDuration.count(), "ms"),
+                       metric("total_compact_path", timing.totalDuration.count(), "ms"),
+                     });
 
       CHECK(timing.checksum != 0);
     }
@@ -1221,6 +1422,13 @@ namespace ao::rt::test
                    entryBytes / 1024,
                    indexBytes / 1024);
       APP_LOG_INFO("    index sort:                     {:>6} ms", timing.duration.count());
+      recordBaseline("order-entry-index-sort-cache-pressure",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("entry_payload", static_cast<std::int64_t>(entryBytes / 1024), "KiB"),
+                       metric("index_payload", static_cast<std::int64_t>(indexBytes / 1024), "KiB"),
+                       metric("duration", timing.duration.count(), "ms"),
+                     });
       CHECK(timing.checksum != 0);
     }
   }
@@ -1249,6 +1457,13 @@ namespace ao::rt::test
                    entryBytes / 1024,
                    indexBytes / 1024);
       APP_LOG_INFO("    index sort + materialize:       {:>6} ms", timing.duration.count());
+      recordBaseline("order-entry-index-materialize-cache-pressure",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("entry_payload", static_cast<std::int64_t>(entryBytes / 1024), "KiB"),
+                       metric("index_payload", static_cast<std::int64_t>(indexBytes / 1024), "KiB"),
+                       metric("duration", timing.duration.count(), "ms"),
+                     });
       CHECK(timing.checksum != 0);
     }
   }
@@ -1274,6 +1489,16 @@ namespace ao::rt::test
       APP_LOG_INFO("    rebuild position index:         {:>6} ms", timing.rebuildPositionIndexDuration.count());
       APP_LOG_INFO("    build group sections:           {:>6} ms", timing.buildGroupSectionsDuration.count());
       APP_LOG_INFO("    total synthetic rebuild:        {:>6} ms", timing.totalDuration.count());
+      recordBaseline("projection-rebuild-stage-timing",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("section_count", static_cast<std::int64_t>(timing.sectionCount), "count"),
+                       metric("build_entries_keys", timing.buildEntriesDuration.count(), "ms"),
+                       metric("sort_entries", timing.sortDuration.count(), "ms"),
+                       metric("rebuild_position_index", timing.rebuildPositionIndexDuration.count(), "ms"),
+                       metric("build_group_sections", timing.buildGroupSectionsDuration.count(), "ms"),
+                       metric("total_synthetic_rebuild", timing.totalDuration.count(), "ms"),
+                     });
       CHECK(timing.checksum != 0);
     }
   }
@@ -1297,6 +1522,14 @@ namespace ao::rt::test
     APP_LOG_INFO("  artist sort: {} ms", artistDuration.count());
     APP_LOG_INFO("  album sort:  {} ms", albumDuration.count());
     APP_LOG_INFO("  genre sort:  {} ms", genreDuration.count());
+    recordBaseline("projection-sort-field-timing",
+                   {
+                     metric("track_count", kN, "count"),
+                     metric("title_sort", titleDuration.count(), "ms"),
+                     metric("artist_sort", artistDuration.count(), "ms"),
+                     metric("album_sort", albumDuration.count(), "ms"),
+                     metric("genre_sort", genreDuration.count(), "ms"),
+                   });
 
     CHECK(titleDuration < std::chrono::minutes{5});
     CHECK(artistDuration < std::chrono::minutes{5});
@@ -1318,6 +1551,11 @@ namespace ao::rt::test
     {
       auto const duration = measureProjectionPresentationDuration(bench, preset.spec);
       APP_LOG_INFO("  {:<20} {} ms", preset.spec.id, duration.count());
+      recordBaseline(std::format("projection-preset-timing/{}", preset.spec.id),
+                     {
+                       metric("track_count", kN, "count"),
+                       metric("duration", duration.count(), "ms"),
+                     });
       CHECK(duration < std::chrono::minutes{5});
     }
   }
@@ -1344,6 +1582,7 @@ namespace ao::rt::test
     APP_LOG_INFO("  Filter eval (heavy predicate): {} ms", t.filterEvalDuration.count());
     APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
+    recordScaleBaseline(kN, buildDuration, t);
 
     // Regression thresholds — deliberately generous to avoid flakes
     CHECK(t.createProjectionDuration < std::chrono::seconds{30});
@@ -1376,6 +1615,7 @@ namespace ao::rt::test
     APP_LOG_INFO("  Filter eval (heavy predicate): {} ms", t.filterEvalDuration.count());
     APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
+    recordScaleBaseline(kN, buildDuration, t);
 
     // Regression thresholds — deliberately generous to avoid flakes
     CHECK(t.createProjectionDuration < std::chrono::minutes{5});

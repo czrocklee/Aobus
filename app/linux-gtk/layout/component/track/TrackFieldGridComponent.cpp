@@ -12,12 +12,13 @@
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackFieldUi.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CompletionService.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/MetadataValueCompleter.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/MetadataValueCompleter.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/utility/Log.h>
@@ -119,7 +120,7 @@ namespace ao::gtk::layout
     public:
       TrackFieldGridComponent(LayoutContext& ctx, LayoutNode const& node)
         : _editCoordinator{ctx.parentWindow}
-        , _mutation{ctx.runtime.mutation()}
+        , _writer{ctx.runtime.library().writer()}
         , _completion{ctx.runtime.completion()}
         , _scope{ctx.track.detailScope}
         , _mainBox{Gtk::Orientation::VERTICAL, 0}
@@ -317,12 +318,7 @@ namespace ao::gtk::layout
         auto patch = rt::MetadataPatch{};
         patch.customUpdates[optPendingUndo->key] = optPendingUndo->value;
 
-        auto const result = _mutation.updateMetadata(optPendingUndo->trackIds, patch);
-
-        if (!result)
-        {
-          APP_LOG_ERROR("Failed to undo property deletion: {}", result.error().message);
-        }
+        _writer.updateMetadata(optPendingUndo->trackIds, patch);
       }
 
       void onSnapshot(rt::TrackDetailSnapshot const& snap)
@@ -496,15 +492,11 @@ namespace ao::gtk::layout
         auto patch = rt::MetadataPatch{};
         uiDef->writePatch({.patch = patch, .value = *editValResult});
 
-        auto const result = _mutation.updateMetadata(snap.trackIds, patch);
+        auto const reply = _writer.updateMetadata(snap.trackIds, patch);
 
-        if (!result)
-        {
-          APP_LOG_ERROR("Failed to update {}: {}", rt::trackFieldId(field), result.error().message);
-          return false;
-        }
-
-        return true;
+        // Empty mutatedIds means the edit did not land (e.g. the row was removed
+        // concurrently); report it so the caller reverts the optimistic UI value.
+        return !reply.mutatedIds.empty();
       }
 
       void onBuiltInEdited(rt::TrackField field)
@@ -694,12 +686,7 @@ namespace ao::gtk::layout
         auto patch = rt::MetadataPatch{};
         patch.customUpdates[key] = newValue;
 
-        auto const result = _mutation.updateMetadata(snap.trackIds, patch);
-
-        if (!result)
-        {
-          APP_LOG_ERROR("Failed to update custom property {}: {}", key, result.error().message);
-        }
+        _writer.updateMetadata(snap.trackIds, patch);
       }
 
       void onCustomDeleted(std::string const& key)
@@ -725,15 +712,11 @@ namespace ao::gtk::layout
         auto patch = rt::MetadataPatch{};
         patch.customUpdates[key] = std::nullopt;
 
-        auto const result = _mutation.updateMetadata(snap.trackIds, patch);
+        auto const reply = _writer.updateMetadata(snap.trackIds, patch);
 
-        if (result && optPrevValue)
+        if (!reply.mutatedIds.empty() && optPrevValue)
         {
           _undoBar.show(key, snap.trackIds, *optPrevValue);
-        }
-        else if (!result)
-        {
-          APP_LOG_ERROR("Failed to delete custom property {}: {}", key, result.error().message);
         }
       }
 
@@ -763,13 +746,7 @@ namespace ao::gtk::layout
 
         auto patch = rt::MetadataPatch{};
         patch.customUpdates[key] = value;
-        auto const result = _mutation.updateMetadata(snap.trackIds, patch);
-
-        if (!result)
-        {
-          APP_LOG_ERROR("Failed to add custom property {}: {}", key, result.error().message);
-          return;
-        }
+        _writer.updateMetadata(snap.trackIds, patch);
 
         _addPropertyRow.clearInputs();
       }
@@ -986,7 +963,7 @@ namespace ao::gtk::layout
 
       Gtk::Grid _grid;
       DetailEditCoordinator _editCoordinator;
-      rt::LibraryMutationService& _mutation;
+      rt::LibraryWriter& _writer;
       rt::CompletionService& _completion;
       ITrackDetailScope* _scope;
       std::deque<BuiltInRow> _metadataRows;

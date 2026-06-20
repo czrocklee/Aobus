@@ -25,10 +25,11 @@
 #include <ao/async/Task.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/rt/TrackDetailProjection.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/LayoutComponentState.h>
 #include <ao/uimodel/layout/LayoutNodeId.h>
@@ -363,10 +364,10 @@ namespace ao::gtk
         if (auto* tagController = _context.tag.editController; tagController != nullptr)
         {
           auto const target = rt::FocusedViewTarget{};
-          auto proj = rt::TrackDetailProjection{
-            target, ctx.runtime.views(), ctx.runtime.musicLibrary(), ctx.runtime.workspace(), ctx.runtime.mutation()};
+          auto projPtr =
+            ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
 
-          if (auto const snap = proj.snapshot(); !snap.trackIds.empty())
+          if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
             tagController->showProperties(
               TrackSelectionContext{.listId = kInvalidListId, .selectedIds = snap.trackIds});
@@ -376,9 +377,9 @@ namespace ao::gtk
       [](layout::ActionActivationContext const& ctx) -> uimodel::layout::ActionState
       {
         auto const target = rt::FocusedViewTarget{};
-        auto proj = rt::TrackDetailProjection{
-          target, ctx.runtime.views(), ctx.runtime.musicLibrary(), ctx.runtime.workspace(), ctx.runtime.mutation()};
-        return uimodel::layout::ActionState{.enabled = !proj.snapshot().trackIds.empty(), .disabledReason = ""};
+        auto projPtr =
+          ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
+        return uimodel::layout::ActionState{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
 
     registerAction(
@@ -391,10 +392,10 @@ namespace ao::gtk
         if (auto* tagController = _context.tag.editController; tagController != nullptr)
         {
           auto const target = rt::FocusedViewTarget{};
-          auto proj = rt::TrackDetailProjection{
-            target, ctx.runtime.views(), ctx.runtime.musicLibrary(), ctx.runtime.workspace(), ctx.runtime.mutation()};
+          auto projPtr =
+            ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
 
-          if (auto const snap = proj.snapshot(); !snap.trackIds.empty())
+          if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
             tagController->showTagEditor(
               TrackSelectionContext{.listId = kInvalidListId, .selectedIds = snap.trackIds}, ctx.anchorWidget);
@@ -404,9 +405,9 @@ namespace ao::gtk
       [](layout::ActionActivationContext const& ctx) -> uimodel::layout::ActionState
       {
         auto const target = rt::FocusedViewTarget{};
-        auto proj = rt::TrackDetailProjection{
-          target, ctx.runtime.views(), ctx.runtime.musicLibrary(), ctx.runtime.workspace(), ctx.runtime.mutation()};
-        return uimodel::layout::ActionState{.enabled = !proj.snapshot().trackIds.empty(), .disabledReason = ""};
+        auto projPtr =
+          ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
+        return uimodel::layout::ActionState{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
   }
 

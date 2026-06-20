@@ -7,6 +7,7 @@
 #include "layout/runtime/LayoutContext.h"
 #include "track/StatusSlot.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/library/Library.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
@@ -23,7 +24,7 @@ namespace ao::gtk::layout
     {
     public:
       StatusSlotComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.mutation(), ctx.runtime.notifications(), ctx.runtime.views()}
+        : _widget{ctx.runtime.library().changes(), ctx.runtime.notifications(), ctx.runtime.views()}
       {
       }
 

@@ -3,16 +3,14 @@
 
 #pragma once
 
-#include <ao/Error.h>
 #include <ao/Type.h>
 
-#include <optional>
 #include <string>
 #include <vector>
 
 namespace ao::rt
 {
-  class LibraryMutationService;
+  class LibraryWriter;
 }
 
 namespace ao::uimodel::tag
@@ -28,17 +26,16 @@ namespace ao::uimodel::tag
   {
     bool applied = false;
     std::string notificationText;
-    std::optional<Error> optError;
   };
 
   class TagEditWorkflow final
   {
   public:
-    explicit TagEditWorkflow(rt::LibraryMutationService& mutation);
+    explicit TagEditWorkflow(rt::LibraryWriter& writer);
 
     TagEditResult apply(TagEditRequest const& request);
 
   private:
-    rt::LibraryMutationService& _mutation;
+    rt::LibraryWriter& _writer;
   };
 } // namespace ao::uimodel::tag

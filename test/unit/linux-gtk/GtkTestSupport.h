@@ -9,8 +9,8 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <glib-object.h>
 #include <glibmm/main.h>

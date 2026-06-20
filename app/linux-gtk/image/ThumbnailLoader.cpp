@@ -8,8 +8,8 @@
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
 
 #include <gdkmm/pixbuf.h>
 #include <giomm/memoryinputstream.h>
@@ -22,13 +22,14 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
 namespace ao::gtk
 {
-  ThumbnailLoader::ThumbnailLoader(library::MusicLibrary& library, ImageCache& cache, async::Runtime& runtime)
-    : _library{library}, _cache{cache}, _runtime{runtime}, _scopePtr{std::make_unique<async::LifetimeScope>()}
+  ThumbnailLoader::ThumbnailLoader(rt::Library const& reads, ImageCache& cache, async::Runtime& runtime)
+    : _reads{reads}, _cache{cache}, _runtime{runtime}, _scopePtr{std::make_unique<async::LifetimeScope>()}
   {
   }
 
@@ -153,7 +154,7 @@ namespace ao::gtk
     _runtime.spawnWithLifetime(_scopePtr.get(),
                                [](ThumbnailLoader* self,
                                   async::Runtime* runtime,
-                                  library::MusicLibrary* library,
+                                  rt::Library const* reads,
                                   RequestKey requestKey) -> async::Task<void>
                                {
                                  auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
@@ -162,12 +163,14 @@ namespace ao::gtk
 
                                  try
                                  {
-                                   // The read transaction and the byte span it yields are valid only
-                                   // within this worker segment; decode-at-scale before suspending again.
-                                   auto const txn = library->readTransaction();
-                                   auto const resReader = library->resources().reader(txn);
+                                   auto optData = std::optional<std::vector<std::byte>>{};
 
-                                   if (auto const optData = resReader.get(requestKey.id); optData)
+                                   {
+                                     auto scope = reads->reader();
+                                     optData = scope.loadResource(requestKey.id);
+                                   }
+
+                                   if (optData)
                                    {
                                      auto const memStreamPtr = Gio::MemoryInputStream::create();
                                      memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
@@ -206,6 +209,6 @@ namespace ao::gtk
                                      waiter.onReady(decodedPtr);
                                    }
                                  }
-                               }(this, &_runtime, &_library, key));
+                               }(this, &_runtime, &_reads, key));
   }
 } // namespace ao::gtk

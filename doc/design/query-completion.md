@@ -124,7 +124,7 @@ Value completion is deliberately limited in v1:
   numeric fields are excluded.
 - The vocabulary is built by a full library scan, frequency-ranked (descending, then value
   ascending), and cached until invalidated.
-- Invalidation is coarse: any `LibraryMutationService::tracksMutated` marks every vocabulary dirty
+- Invalidation is coarse: any `LibraryChanges::onTracksMutated` event marks every vocabulary dirty
   and the next access rebuilds. Rebuild counting uses hash maps, then applies the stable final sort.
   Dirty metadata-value vocabularies are rebuilt per storage tier: Artist, Album, AlbumArtist, Genre,
   and Composer share one hot-store scan; Work uses a cold-store scan. The `span<TrackId>` is retained

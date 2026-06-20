@@ -13,7 +13,8 @@
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/TrackCommandService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <CLI/App.hpp>
 
@@ -292,10 +293,9 @@ namespace ao::cli
     create->callback(
       [&runtime, path]
       {
-        if (auto const trackId = runtime.trackCommands().createTrackFromFile(path->as<std::string>());
-            trackId != kInvalidTrackId)
+        if (auto const optTrackId = runtime.library().writer().createTrackFromFile(path->as<std::string>()); optTrackId)
         {
-          std::cout << "added track: " << trackId << '\n';
+          std::cout << "added track: " << *optTrackId << '\n';
         }
         else
         {
@@ -308,7 +308,7 @@ namespace ao::cli
     del->callback(
       [&runtime, id]
       {
-        if (auto const trackId = TrackId{id->as<std::uint32_t>()}; runtime.trackCommands().deleteTrack(trackId))
+        if (auto const trackId = TrackId{id->as<std::uint32_t>()}; runtime.library().writer().deleteTrack(trackId))
         {
           std::cout << "deleted track: " << trackId << '\n';
         }

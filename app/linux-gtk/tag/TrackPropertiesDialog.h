@@ -6,7 +6,6 @@
 #include "app/AppDialog.h"
 #include "track/TrackFieldUi.h"
 #include <ao/Type.h>
-#include <ao/library/FileManifestStore.h>
 #include <ao/rt/TrackField.h>
 
 #include <gtkmm/box.h>
@@ -20,17 +19,12 @@
 #include <string_view>
 #include <vector>
 
-namespace ao::library
-{
-  class DictionaryStore;
-  class MusicLibrary;
-  class TrackView;
-}
-
 namespace ao::rt
 {
   class CompletionService;
-  class LibraryMutationService;
+  class LibraryWriter;
+  class Library;
+  class LibraryReader;
 }
 
 namespace ao::gtk
@@ -42,8 +36,8 @@ namespace ao::gtk
   {
   public:
     TrackPropertiesDialog(Gtk::Window& parent,
-                          library::MusicLibrary& library,
-                          rt::LibraryMutationService& mutation,
+                          rt::Library const& reads,
+                          rt::LibraryWriter& writer,
                           rt::CompletionService& completion,
                           TrackRowCache& rowCache,
                           std::vector<TrackId> trackIds);
@@ -73,12 +67,8 @@ namespace ao::gtk
     void setupMetadataTab();
     void setupPropertiesTab();
     void loadData();
-    void loadFirstTrack(library::TrackView const& view,
-                        library::DictionaryStore const& dictionary,
-                        library::FileManifestStore::Reader const* manifestReader = nullptr);
-    void loadSubsequentTrack(library::TrackView const& view,
-                             library::DictionaryStore const& dictionary,
-                             library::FileManifestStore::Reader const* manifestReader = nullptr);
+    void loadFirstTrack(rt::LibraryReader const& scope, TrackId trackId);
+    void loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId);
     void onSave();
 
     Gtk::Widget* createEditorWidget(rt::TrackField field);
@@ -86,8 +76,8 @@ namespace ao::gtk
     void setWidgetValue(rt::TrackField field, Gtk::Widget* widget, std::string_view value);
     void setEditorMixed(rt::TrackField field, Gtk::Widget* widget);
 
-    library::MusicLibrary& _library;
-    rt::LibraryMutationService& _mutation;
+    rt::Library const& _reads;
+    rt::LibraryWriter& _writer;
     rt::CompletionService& _completion;
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;

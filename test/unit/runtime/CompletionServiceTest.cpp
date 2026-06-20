@@ -3,15 +3,16 @@
 
 #include "TestUtils.h"
 #include <ao/Type.h>
-#include <ao/async/Runtime.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/CompletionService.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <span>
@@ -105,10 +106,8 @@ namespace ao::rt::test
                          .custom = {{"Mood", "Dark"}},
                        });
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = LibraryMutationService{runtime, testLib.library()};
-    auto service = CompletionService{testLib.library(), mutation};
+    auto changes = LibraryChanges{};
+    auto service = CompletionService{testLib.library(), changes};
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"Rock", 2},
@@ -150,10 +149,8 @@ namespace ao::rt::test
                                                               .composer = "Glass",
                                                               .work = "Glassworks"}});
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = LibraryMutationService{runtime, testLib.library()};
-    auto service = CompletionService{testLib.library(), mutation};
+    auto changes = LibraryChanges{};
+    auto service = CompletionService{testLib.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 2},
@@ -182,16 +179,17 @@ namespace ao::rt::test
     auto testLib = TestMusicLibrary{};
     addCompletionTrack(testLib, CompletionTrackSpec{.track = TrackSpec{.title = "One"}, .tags = {"Rock"}});
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = LibraryMutationService{runtime, testLib.library()};
-    auto service = CompletionService{testLib.library(), mutation};
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{testLib.library(), changes};
+    auto service = CompletionService{testLib.library(), changes};
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Rock", 1}});
 
     auto const trackId =
       addCompletionTrack(testLib, CompletionTrackSpec{.track = TrackSpec{.title = "Two"}, .tags = {"Jazz"}});
-    mutation.notifyTracksMutated({trackId});
+    // addCompletionTrack writes directly; drive a writer mutation so the change
+    // notification fires and invalidates the completion cache.
+    REQUIRE_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"Jazz", 1},
@@ -208,10 +206,9 @@ namespace ao::rt::test
       CompletionTrackSpec{.track =
                             TrackSpec{.title = "One", .artist = "Bach", .album = "Goldberg", .work = "Variations"}});
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = LibraryMutationService{runtime, testLib.library()};
-    auto service = CompletionService{testLib.library(), mutation};
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{testLib.library(), changes};
+    auto service = CompletionService{testLib.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 1},
@@ -227,7 +224,9 @@ namespace ao::rt::test
       testLib,
       CompletionTrackSpec{.track =
                             TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"}});
-    mutation.notifyTracksMutated({trackId});
+    // addCompletionTrack writes directly; drive a writer mutation so the change
+    // notification fires and invalidates the completion cache.
+    REQUIRE_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 1},
@@ -252,10 +251,9 @@ namespace ao::rt::test
         .track = TrackSpec{
           .title = "One", .artist = "Bach", .album = "Goldberg", .genre = "Classical", .work = "Variations"}});
 
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutation = LibraryMutationService{runtime, testLib.library()};
-    auto service = CompletionService{testLib.library(), mutation};
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{testLib.library(), changes};
+    auto service = CompletionService{testLib.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 1},
@@ -274,7 +272,9 @@ namespace ao::rt::test
       testLib,
       CompletionTrackSpec{.track =
                             TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"}});
-    mutation.notifyTracksMutated({trackId});
+    // addCompletionTrack writes directly; drive a writer mutation so the change
+    // notification fires and invalidates the completion cache.
+    REQUIRE_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                           {"Etudes", 1},

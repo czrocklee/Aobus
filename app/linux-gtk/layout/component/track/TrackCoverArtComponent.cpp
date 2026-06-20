@@ -11,7 +11,7 @@
 #include "layout/runtime/LayoutContext.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
@@ -127,7 +127,7 @@ namespace ao::gtk::layout
       };
 
       TrackCoverArtComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _imageController{_imageWidget, ctx.runtime.musicLibrary(), *ctx.detail.imageCache}, _slot{_imageWidget}
+        : _imageController{_imageWidget, ctx.runtime.library(), *ctx.detail.imageCache}, _slot{_imageWidget}
       {
         _imageWidget.set_halign(Gtk::Align::CENTER);
         _imageWidget.set_valign(Gtk::Align::CENTER);

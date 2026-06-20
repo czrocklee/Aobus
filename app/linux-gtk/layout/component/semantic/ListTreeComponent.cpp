@@ -6,8 +6,6 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListNavigationController.h"
-#include <ao/library/MusicLibrary.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
@@ -45,8 +43,7 @@ namespace ao::gtk::layout
         _controller = ctx.list.navigationController;
 
         // Initial rebuild
-        auto const txn = ctx.runtime.musicLibrary().readTransaction();
-        _controller->rebuildTree(*ctx.track.trackRowCache, txn);
+        _controller->rebuildTree(*ctx.track.trackRowCache);
       }
 
       Gtk::Widget& widget() override

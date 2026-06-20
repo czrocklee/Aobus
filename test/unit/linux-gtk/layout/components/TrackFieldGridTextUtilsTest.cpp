@@ -4,8 +4,8 @@
 #include "app/linux-gtk/layout/component/track/TrackFieldGridTextUtils.h"
 
 #include "app/linux-gtk/track/TrackFieldUi.h"
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <bits/basic_string.h>
 #include <catch2/catch_test_macros.hpp>

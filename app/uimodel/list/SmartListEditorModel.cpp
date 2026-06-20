@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Type.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/list/SmartListEditorModel.h>
 #include <ao/uimodel/track/TrackPresentationRecommender.h>
 
@@ -172,14 +172,14 @@ namespace ao::uimodel::list
     return std::string{rt::kDefaultTrackPresentationId};
   }
 
-  rt::LibraryMutationService::ListDraft SmartListEditorModel::createDraft(ListId parentListId,
-                                                                          ListId editListId,
-                                                                          std::string const& name,
-                                                                          std::string const& description,
-                                                                          std::string const& expression)
+  rt::LibraryWriter::ListDraft SmartListEditorModel::createDraft(ListId parentListId,
+                                                                 ListId editListId,
+                                                                 std::string const& name,
+                                                                 std::string const& description,
+                                                                 std::string const& expression)
   {
-    auto draftData = rt::LibraryMutationService::ListDraft{};
-    draftData.kind = rt::LibraryMutationService::ListKind::Smart;
+    auto draftData = rt::LibraryWriter::ListDraft{};
+    draftData.kind = rt::LibraryWriter::ListKind::Smart;
     draftData.parentId = parentListId;
     draftData.listId = editListId;
     draftData.name = name;

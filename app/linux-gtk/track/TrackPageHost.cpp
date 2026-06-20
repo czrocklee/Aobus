@@ -9,18 +9,16 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/Type.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ManualListSource.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/uimodel/track/TrackPageRoute.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
@@ -324,12 +322,11 @@ namespace ao::gtk
 
     if (listId != rt::kAllTracksListId && listId != kInvalidListId)
     {
-      auto const txn = _runtime.musicLibrary().readTransaction();
-      auto lists = _runtime.musicLibrary().lists().reader(txn);
+      auto scope = _runtime.library().reader();
 
-      if (auto optView = lists.get(listId); optView)
+      if (auto optNode = scope.listNode(listId); optNode)
       {
-        listName = optView->name().empty() ? "<Unnamed List>" : std::string{optView->name()};
+        listName = optNode->name.empty() ? "<Unnamed List>" : optNode->name;
       }
     }
     else if (listId == rt::kAllTracksListId)

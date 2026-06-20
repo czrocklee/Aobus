@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Type.h>
-#include <ao/rt/LibraryMutationService.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/list/SmartListEditorModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -243,7 +243,7 @@ namespace ao::uimodel::list::test
     {
       auto const draft = SmartListEditorModel::createDraft(parentListId, editListId, name, description, expression);
 
-      CHECK(draft.kind == rt::LibraryMutationService::ListKind::Smart);
+      CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
       CHECK(draft.parentId == parentListId);
       CHECK(draft.listId == editListId);
       CHECK(draft.name == name);
@@ -255,7 +255,7 @@ namespace ao::uimodel::list::test
     {
       auto const draft = SmartListEditorModel::createDraft(parentListId, kInvalidListId, name, description, expression);
 
-      CHECK(draft.kind == rt::LibraryMutationService::ListKind::Smart);
+      CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
       CHECK(draft.parentId == parentListId);
       CHECK(draft.listId == kInvalidListId);
       CHECK(draft.name == name);
@@ -267,7 +267,7 @@ namespace ao::uimodel::list::test
     {
       auto const draft = SmartListEditorModel::createDraft(kInvalidListId, kInvalidListId, "", "", "");
 
-      CHECK(draft.kind == rt::LibraryMutationService::ListKind::Smart);
+      CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
       CHECK(draft.parentId == kInvalidListId);
       CHECK(draft.listId == kInvalidListId);
       CHECK(draft.name.empty());

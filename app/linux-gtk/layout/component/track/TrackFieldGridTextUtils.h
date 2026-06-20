@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <string>
 #include <string_view>

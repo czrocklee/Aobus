@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackFieldValue.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -25,7 +26,7 @@ namespace ao::gtk::test
   {
     using Raw = TrackFieldRawValue;
     using Edit = TrackFieldEditValue;
-    using Dur = Duration;
+    using Dur = TrackFieldDuration;
 
     auto const kAllFields = trackFieldDefinitions();
   } // namespace
@@ -519,7 +520,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackFieldUi readViewRawValue is non-null for non-synthetic fields", "[gtk][unit][trackfieldui]")
+  TEST_CASE("TrackFieldUi formatValue is non-null for non-synthetic fields", "[gtk][unit][trackfieldui]")
   {
     for (auto const& rtDef : kAllFields)
     {
@@ -529,12 +530,10 @@ namespace ao::gtk::test
 
       if (rtDef.synthetic)
       {
-        CHECK(uiDef->readViewRawValue == nullptr);
+        continue;
       }
-      else
-      {
-        CHECK(uiDef->readViewRawValue != nullptr);
-      }
+
+      CHECK(uiDef->formatValue != nullptr);
     }
   }
 

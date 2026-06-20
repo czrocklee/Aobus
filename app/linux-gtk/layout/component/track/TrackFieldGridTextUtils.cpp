@@ -4,8 +4,8 @@
 #include "layout/component/track/TrackFieldGridTextUtils.h"
 
 #include "track/TrackFieldUi.h"
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <glib.h>
 #include <glibmm/miscutils.h>

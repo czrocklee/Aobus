@@ -17,9 +17,9 @@
 #include <unordered_map>
 #include <vector>
 
-namespace ao::library
+namespace ao::rt
 {
-  class MusicLibrary;
+  class Library;
 }
 
 namespace ao::async
@@ -58,7 +58,7 @@ namespace ao::gtk
     using OnThumbnailReady = std::function<void(Glib::RefPtr<Gdk::Pixbuf> const&)>;
     using Request = utility::ScopedRegistration;
 
-    ThumbnailLoader(library::MusicLibrary& library, ImageCache& cache, async::Runtime& runtime);
+    ThumbnailLoader(rt::Library const& reads, ImageCache& cache, async::Runtime& runtime);
     ~ThumbnailLoader();
 
     ThumbnailLoader(ThumbnailLoader const&) = delete;
@@ -117,7 +117,7 @@ namespace ao::gtk
 
     void spawnDecode(RequestKey key);
 
-    library::MusicLibrary& _library;
+    rt::Library const& _reads;
     ImageCache& _cache;
     async::Runtime& _runtime;
     std::unique_ptr<async::LifetimeScope> _scopePtr;

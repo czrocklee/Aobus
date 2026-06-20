@@ -7,9 +7,9 @@
 #include "image/ImageWidget.h"
 #include "image/ThumbnailLoader.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/rt/ProjectionTypes.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <gdkmm/pixbuf.h>
 #include <giomm/memoryinputstream.h>
@@ -26,10 +26,8 @@
 
 namespace ao::gtk
 {
-  ResourceImageController::ResourceImageController(ImageWidget& widget,
-                                                   library::MusicLibrary& library,
-                                                   ImageCache& cache)
-    : _widget{widget}, _library{library}, _cache{cache}
+  ResourceImageController::ResourceImageController(ImageWidget& widget, rt::Library const& reads, ImageCache& cache)
+    : _widget{widget}, _reads{reads}, _cache{cache}
   {
   }
 
@@ -90,9 +88,8 @@ namespace ao::gtk
 
     if (!cachedPtr)
     {
-      auto const txn = _library.readTransaction();
-      auto const resReader = _library.resources().reader(txn);
-      auto const optData = resReader.get(resourceId);
+      auto scope = _reads.reader();
+      auto const optData = scope.loadResource(resourceId);
 
       if (!optData)
       {

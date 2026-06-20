@@ -9,9 +9,9 @@
 #include "track/TrackSelectionController.h"
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <glibmm/refptr.h>

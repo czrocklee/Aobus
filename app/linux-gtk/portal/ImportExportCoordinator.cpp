@@ -14,10 +14,12 @@
 #include <ao/async/Task.h>
 #include <ao/library/LibraryScanner.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/LibraryYamlExporter.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTasks.h>
+#include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/utility/Log.h>
 
 #include <giomm/asyncresult.h>
@@ -97,7 +99,7 @@ namespace ao::gtk::portal
       [](ImportExportCoordinator* self) -> async::Task<void>
       {
         // 1. Build Plan
-        auto plan = co_await self->_runtime.mutation().buildScanPlanAsync();
+        auto plan = co_await self->_runtime.library().tasks().buildScanPlanAsync();
 
         auto const newCount = plan.count(library::ScanClassification::New);
         auto const changedCount = plan.count(library::ScanClassification::Changed);
@@ -106,7 +108,6 @@ namespace ao::gtk::portal
         if (newCount == 0 && changedCount == 0 && missingCount == 0)
         {
           self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library is up to date");
-          self->_runtime.mutation().notifyLibraryTaskCompleted(0);
           co_return;
         }
 
@@ -123,14 +124,14 @@ namespace ao::gtk::portal
         self->_libraryTaskDialogPtr->signal_response().connect([dialog](std::int32_t /*responseId*/)
                                                                { dialog->close(); });
 
-        self->_libraryTaskProgressSub = self->_runtime.mutation().onLibraryTaskProgress(
+        self->_libraryTaskProgressSub = self->_runtime.library().changes().onLibraryTaskProgress(
           [dialog](auto const& ev) { dialog->updateProgress(ev.message, ev.fraction); });
 
         self->_libraryTaskDialogPtr->show();
 
         try
         {
-          co_await self->_runtime.mutation().applyScanPlanAsync(std::move(plan));
+          co_await self->_runtime.library().tasks().applyScanPlanAsync(std::move(plan));
           dialog->ready();
           self->onImportFinished();
         }
@@ -138,7 +139,6 @@ namespace ao::gtk::portal
         {
           APP_LOG_ERROR("Scan failed: {}", e.what());
           self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
-          self->_runtime.mutation().notifyLibraryTaskCompleted(0);
         }
 
         self->_libraryTaskProgressSub.reset();
@@ -264,7 +264,7 @@ namespace ao::gtk::portal
       {
         try
         {
-          co_await self->_runtime.mutation().exportLibraryAsync(std::move(exportPath), exportMode);
+          co_await self->_runtime.library().tasks().exportLibraryAsync(std::move(exportPath), exportMode);
           self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully");
         }
         catch (ao::Exception const& e)
@@ -303,7 +303,7 @@ namespace ao::gtk::portal
   {
     try
     {
-      co_await _runtime.mutation().importLibraryAsync(std::move(importPath));
+      co_await _runtime.library().tasks().importLibraryAsync(std::move(importPath));
 
       if (_callbacks.onLibraryDataMutated)
       {

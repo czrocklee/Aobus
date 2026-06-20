@@ -3,14 +3,14 @@
 
 #include "TestUtils.h"
 #include <ao/Type.h>
-#include <ao/async/Runtime.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/LibraryMutationService.h>
-#include <ao/rt/ListSourceStore.h>
-#include <ao/rt/ManualListSource.h>
-#include <ao/rt/SmartListSource.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/ManualListSource.h>
+#include <ao/rt/source/SmartListSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -21,11 +21,10 @@ namespace ao::rt::test
   TEST_CASE("ListSourceStore - Basic Operations", "[runtime][unit][ListSourceStore]")
   {
     auto testLib = TestMusicLibrary{};
-    auto executor = MockExecutor{};
-    auto runtime = async::Runtime{executor};
-    auto mutationService = LibraryMutationService{runtime, testLib.library()};
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{testLib.library(), changes};
 
-    auto store = ListSourceStore{testLib.library(), mutationService};
+    auto store = ListSourceStore{testLib.library(), changes};
 
     SECTION("sourceFor kInvalidListId returns allTracks")
     {
@@ -219,7 +218,7 @@ namespace ao::rt::test
       REQUIRE(&store.sourceFor(grandchildId) == &store.allTracks());
     }
 
-    SECTION("LibraryMutationService integration")
+    SECTION("LibraryWriter integration")
     {
       auto listId = ListId{0};
       {
@@ -232,14 +231,7 @@ namespace ao::rt::test
 
       store.sourceFor(listId);
 
-      {
-        auto txn = testLib.library().writeTransaction();
-        testLib.library().lists().writer(txn).del(listId);
-        txn.commit();
-      }
-
-      // This triggers the subscription
-      mutationService.notifyListsMutated({}, {listId});
+      writer.deleteList(listId);
 
       REQUIRE(&store.sourceFor(listId) == &store.allTracks());
     }

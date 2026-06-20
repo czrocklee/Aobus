@@ -8,8 +8,9 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ProjectionTypes.h>
-#include <ao/rt/TrackDetailProjection.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
@@ -59,13 +60,11 @@ namespace ao::gtk::layout
     public:
       TrackDetailScopeComponent(LayoutContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
-        , _projection{rt::FocusedViewTarget{},
-                      ctx.runtime.views(),
-                      ctx.runtime.musicLibrary(),
-                      ctx.runtime.workspace(),
-                      ctx.runtime.mutation()}
+        , _projectionPtr{ctx.runtime.views().detailProjection(rt::FocusedViewTarget{},
+                                                              ctx.runtime.workspace(),
+                                                              ctx.runtime.library().changes())}
       {
-        _currentSnap = _projection.snapshot();
+        _currentSnap = _projectionPtr->snapshot();
 
         // Intercept context
         auto* previousScope = ctx.track.detailScope;
@@ -99,7 +98,7 @@ namespace ao::gtk::layout
         }
 
         // Subscribe to projection
-        _sub = _projection.subscribe([this](auto const& snap) { onSnapshot(snap); });
+        _sub = _projectionPtr->subscribe([this](auto const& snap) { onSnapshot(snap); });
       }
 
       Gtk::Widget& widget() override { return _box; }
@@ -127,7 +126,7 @@ namespace ao::gtk::layout
       Gtk::Box _box;
       std::vector<std::unique_ptr<ILayoutComponent>> _children;
 
-      rt::TrackDetailProjection _projection;
+      std::unique_ptr<rt::ITrackDetailProjection> _projectionPtr;
       rt::Subscription _sub;
       rt::TrackDetailSnapshot _currentSnap;
 

@@ -3,10 +3,9 @@
 
 #include "track/TrackRowCache.h"
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
-#include <ao/audio/Types.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -26,8 +25,6 @@ namespace ao::gtk::test
 {
   namespace
   {
-    using namespace ao::lmdb::test;
-
     struct TrackSpec final
     {
       std::string title = "Title";
@@ -44,17 +41,14 @@ namespace ao::gtk::test
     class TestMusicLibrary final
     {
     public:
-      TestMusicLibrary()
-        : _tempDir{}, _library{_tempDir.path(), _tempDir.path()}
-      {
-      }
-
-      library::MusicLibrary& library() { return _library; }
+      library::MusicLibrary& library() { return _fixture.runtime().musicLibrary(); }
+      rt::AppRuntime& runtime() { return _fixture.runtime(); }
 
       TrackId addTrack(TrackSpec const& spec)
       {
-        auto txn = _library.writeTransaction();
-        auto writer = _library.tracks().writer(txn);
+        auto& lib = library();
+        auto txn = lib.writeTransaction();
+        auto writer = lib.tracks().writer(txn);
 
         auto builder = library::TrackBuilder::createNew();
         builder.metadata()
@@ -74,15 +68,14 @@ namespace ao::gtk::test
           .channels(Channels{2})
           .bitDepth(BitDepth{16});
 
-        auto const [hotData, coldData] = builder.serialize(txn, _library.dictionary(), _library.resources());
+        auto const [hotData, coldData] = builder.serialize(txn, lib.dictionary(), lib.resources());
         auto [id, _] = writer.createHotCold(hotData, coldData);
         txn.commit();
         return id;
       }
 
     private:
-      TempDir _tempDir;
-      library::MusicLibrary _library;
+      GtkRuntimeFixture _fixture;
     };
   } // namespace
 
@@ -109,7 +102,7 @@ namespace ao::gtk::test
       auto const id1 = testLibrary.addTrack(spec1);
       auto const id2 = testLibrary.addTrack(spec2);
 
-      auto provider = TrackRowCache{testLibrary.library()};
+      auto provider = TrackRowCache{testLibrary.runtime().library()};
 
       auto const row1Ptr = provider.trackRow(id1);
       REQUIRE(row1Ptr);
@@ -178,15 +171,11 @@ namespace ao::gtk::test
       spec.duration = std::chrono::minutes{2};
       auto const id = testLibrary.addTrack(spec);
 
-      auto provider = TrackRowCache{testLibrary.library()};
+      auto provider = TrackRowCache{testLibrary.runtime().library()};
 
       auto const optUri = provider.uriPath(id);
       REQUIRE(optUri.has_value());
       CHECK(optUri->string() == "/tmp/test.flac");
-
-      auto const optDesc = provider.playbackDescriptor(id);
-      REQUIRE(optDesc.has_value());
-      CHECK(optDesc->duration == std::chrono::minutes{2});
 
       CHECK(provider.coverArtId(id) == kInvalidResourceId);
 
@@ -197,7 +186,7 @@ namespace ao::gtk::test
     SECTION("Caching works")
     {
       auto const id1 = testLibrary.addTrack({});
-      auto provider = TrackRowCache{testLibrary.library()};
+      auto provider = TrackRowCache{testLibrary.runtime().library()};
 
       auto const row1APtr = provider.trackRow(id1);
       auto const row1BPtr = provider.trackRow(id1);
@@ -210,7 +199,7 @@ namespace ao::gtk::test
     SECTION("Invalidation")
     {
       auto const id1 = testLibrary.addTrack({});
-      auto provider = TrackRowCache{testLibrary.library()};
+      auto provider = TrackRowCache{testLibrary.runtime().library()};
 
       auto const row1Ptr = provider.trackRow(id1);
       REQUIRE(row1Ptr);
@@ -223,7 +212,7 @@ namespace ao::gtk::test
     SECTION("Dictionary resolution")
     {
       testLibrary.addTrack({.title = "Test Dictionary String"});
-      auto provider = TrackRowCache{testLibrary.library()};
+      auto provider = TrackRowCache{testLibrary.runtime().library()};
       auto const id = DictionaryId{1}; // Assuming ID 1 exists because it's the first string added to the dict
 
       auto const& name = provider.resolveDictionaryString(id);
@@ -234,7 +223,7 @@ namespace ao::gtk::test
 
     SECTION("Non-existent track")
     {
-      auto provider = TrackRowCache{testLibrary.library()};
+      auto provider = TrackRowCache{testLibrary.runtime().library()};
       auto const rowPtr = provider.trackRow(TrackId{999});
       CHECK_FALSE(rowPtr);
     }

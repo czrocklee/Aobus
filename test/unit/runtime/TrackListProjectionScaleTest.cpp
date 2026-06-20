@@ -3,11 +3,11 @@
 
 #include "TestUtils.h"
 #include <ao/Type.h>
-#include <ao/rt/ProjectionTypes.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackListProjection.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/TrackSource.h>
+#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 
