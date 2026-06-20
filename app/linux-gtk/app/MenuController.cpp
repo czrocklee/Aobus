@@ -18,11 +18,13 @@ namespace ao::gtk
   MenuController::MenuController(portal::ImportExportCoordinator& importExport,
                                  std::function<void()> onEditLayout,
                                  std::function<void()> onResetRuntimeLayoutState,
-                                 std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults)
+                                 std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults,
+                                 std::function<void()> onEditKeyboardShortcuts)
     : _importExport{importExport}
     , _onEditLayout{std::move(onEditLayout)}
     , _onResetRuntimeLayoutState{std::move(onResetRuntimeLayoutState)}
     , _onSaveCurrentPanelSizesAsLayoutDefaults{std::move(onSaveCurrentPanelSizesAsLayoutDefaults)}
+    , _onEditKeyboardShortcuts{std::move(onEditKeyboardShortcuts)}
   {
   }
 
@@ -41,6 +43,10 @@ namespace ao::gtk
 
     fileMenuPtr->append("Quit", "app.quit");
     _menuModelPtr->append_submenu("File", fileMenuPtr);
+
+    auto editMenuPtr = Gio::Menu::create();
+    editMenuPtr->append("Keyboard Shortcuts...", "win.keyboard-shortcuts");
+    _menuModelPtr->append_submenu("Edit", editMenuPtr);
 
     auto viewMenuPtr = Gio::Menu::create();
     viewMenuPtr->append("Edit Layout...", "win.edit-layout");
@@ -81,5 +87,10 @@ namespace ao::gtk
     resetRuntimeLayoutStateActionPtr->signal_activate().connect([this](Glib::VariantBase const&)
                                                                 { _onResetRuntimeLayoutState(); });
     window.add_action(resetRuntimeLayoutStateActionPtr);
+
+    auto keyboardShortcutsActionPtr = Gio::SimpleAction::create("keyboard-shortcuts");
+    keyboardShortcutsActionPtr->signal_activate().connect([this](Glib::VariantBase const&)
+                                                          { _onEditKeyboardShortcuts(); });
+    window.add_action(keyboardShortcutsActionPtr);
   }
 } // namespace ao::gtk

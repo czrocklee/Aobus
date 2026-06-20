@@ -12,6 +12,7 @@
 #include "layout/runtime/LayoutHost.h"
 #include <ao/async/LifetimeScope.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/uimodel/layout/ActionCatalog.h>
 #include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/ShellLayoutSessionModel.h>
@@ -59,6 +60,7 @@ namespace ao::gtk
                           ThemeCoordinator& themeCoordinator);
 
     layout::ComponentRegistry& registry() { return _registry; }
+    uimodel::layout::ActionCatalog const& actionCatalog() const { return _actionRegistry.catalog(); }
     layout::LayoutContext& context() { return _context; }
     layout::LayoutHost& host() { return _host; }
     uimodel::layout::LayoutDocument const& activeLayout() const { return _session.snapshot().layout; }

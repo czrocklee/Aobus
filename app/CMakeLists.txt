@@ -45,6 +45,9 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/LayoutTemplateExpander.cpp
     uimodel/layout/LayoutValue.cpp
     uimodel/layout/ShellLayoutSessionModel.cpp
+    uimodel/input/KeyChord.cpp
+    uimodel/input/KeymapModel.cpp
+    uimodel/input/KeymapStore.cpp
     uimodel/list/ListActionPolicy.cpp
     uimodel/list/SmartListEditorModel.cpp
     uimodel/playback/AobusSoulViewModel.cpp

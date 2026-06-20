@@ -6,10 +6,13 @@
 #include "UIState.h"
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/input/KeymapStore.h>
 #include <ao/utility/Log.h>
 
 #include <filesystem>
 #include <memory>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -57,5 +60,15 @@ namespace ao::gtk
     {
       APP_LOG_ERROR("AppConfig: Failed to flush app prefs: {}", res.error().message);
     }
+  }
+
+  uimodel::input::KeymapModel AppConfig::loadKeymap(uimodel::input::KeymapBindings defaults) const
+  {
+    return uimodel::input::loadKeymap(*_storePtr, std::move(defaults));
+  }
+
+  void AppConfig::saveKeymap(uimodel::input::KeymapModel const& keymap)
+  {
+    uimodel::input::saveKeymap(*_storePtr, keymap);
   }
 } // namespace ao::gtk

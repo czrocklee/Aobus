@@ -31,7 +31,8 @@ namespace ao::gtk
     MenuController(portal::ImportExportCoordinator& importExport,
                    std::function<void()> onEditLayout,
                    std::function<void()> onResetRuntimeLayoutState,
-                   std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults);
+                   std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults,
+                   std::function<void()> onEditKeyboardShortcuts);
 
     void setup(Gtk::ApplicationWindow& window);
 
@@ -42,6 +43,7 @@ namespace ao::gtk
     std::function<void()> _onEditLayout;
     std::function<void()> _onResetRuntimeLayoutState;
     std::function<void()> _onSaveCurrentPanelSizesAsLayoutDefaults;
+    std::function<void()> _onEditKeyboardShortcuts;
     Glib::RefPtr<Gio::Menu> _menuModelPtr;
   };
 } // namespace ao::gtk

@@ -21,6 +21,7 @@ namespace ao::gtk
   class ShellLayoutStore;
   class MenuController;
   class MainWindowCoordinator;
+  class KeyboardShortcutsWindow;
   namespace portal
   {
     class ImportExportCoordinator;
@@ -49,6 +50,7 @@ namespace ao::gtk
 
   private:
     void setupPlaybackSpaceShortcut();
+    void openKeyboardShortcutsWindow();
 
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfig> _configPtr;
@@ -56,5 +58,6 @@ namespace ao::gtk
     std::unique_ptr<MainWindowCoordinator> _mainWindowCoordinatorPtr;
     ShellLayoutController _shellLayout;
     std::unique_ptr<MenuController> _menuControllerPtr;
+    std::unique_ptr<KeyboardShortcutsWindow> _keyboardShortcutsWindowPtr;
   };
 } // namespace ao::gtk

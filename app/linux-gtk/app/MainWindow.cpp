@@ -4,6 +4,8 @@
 #include "app/MainWindow.h"
 
 #include "app/AppConfig.h"
+#include "app/KeyboardShortcutsWindow.h"
+#include "app/KeymapApplicator.h"
 #include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
 #include "app/MouseNavigationPolicy.h"
@@ -13,6 +15,7 @@
 #include "portal/ImportExportCoordinator.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/utility/Log.h>
 
 #include <gdkmm/enums.h>
@@ -55,7 +58,8 @@ namespace ao::gtk
       _mainWindowCoordinatorPtr->importExport(),
       [this] { _shellLayout.openEditor(*_configPtr); },
       [this] { _shellLayout.resetRuntimeLayoutState(); },
-      [this] { _shellLayout.saveCurrentPanelSizesAsLayoutDefaults(); });
+      [this] { _shellLayout.saveCurrentPanelSizesAsLayoutDefaults(); },
+      [this] { openKeyboardShortcutsWindow(); });
     _menuControllerPtr->setup(*this);
     _shellLayout.context().shell.menuModelPtr = _menuControllerPtr->menuModel();
 
@@ -168,5 +172,34 @@ namespace ao::gtk
       },
       false);
     add_controller(keyControllerPtr);
+  }
+
+  void MainWindow::openKeyboardShortcutsWindow()
+  {
+    if (_keyboardShortcutsWindowPtr)
+    {
+      _keyboardShortcutsWindowPtr->present();
+      return;
+    }
+
+    // The window is owned by MainWindow for its whole lifetime: closing it merely hides it, and a
+    // later open re-presents the same instance. This keeps teardown deterministic (the unique_ptr
+    // destroys it with MainWindow, while the type is complete here) and avoids deleting a window
+    // from inside its own hide signal or leaving a callback that could outlive MainWindow.
+    _keyboardShortcutsWindowPtr =
+      std::make_unique<KeyboardShortcutsWindow>(_shellLayout.actionCatalog(),
+                                                _configPtr->loadKeymap(uimodel::input::defaultKeymap()),
+                                                [this](uimodel::input::KeymapModel const& keymap)
+                                                {
+                                                  _configPtr->saveKeymap(keymap);
+
+                                                  if (auto const appPtr = get_application(); appPtr)
+                                                  {
+                                                    applyKeymapAccelerators(*appPtr, keymap);
+                                                  }
+                                                });
+
+    _keyboardShortcutsWindowPtr->set_transient_for(*this);
+    _keyboardShortcutsWindowPtr->present();
   }
 } // namespace ao::gtk

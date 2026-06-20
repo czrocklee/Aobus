@@ -33,11 +33,13 @@ namespace ao::gtk::test
     bool editLayoutCalled = false;
     bool resetCalled = false;
     bool savePanelsCalled = false;
+    bool keyboardShortcutsCalled = false;
 
     auto controller = MenuController{coordinator,
                                      [&editLayoutCalled] { editLayoutCalled = true; },
                                      [&resetCalled] { resetCalled = true; },
-                                     [&savePanelsCalled] { savePanelsCalled = true; }};
+                                     [&savePanelsCalled] { savePanelsCalled = true; },
+                                     [&keyboardShortcutsCalled] { keyboardShortcutsCalled = true; }};
 
     SECTION("menu model is only built once setup runs")
     {
@@ -69,6 +71,9 @@ namespace ao::gtk::test
 
       actions->activate_action("save-panel-sizes-as-layout-defaults");
       CHECK(savePanelsCalled);
+
+      actions->activate_action("keyboard-shortcuts");
+      CHECK(keyboardShortcutsCalled);
     }
   }
 } // namespace ao::gtk::test

@@ -20,7 +20,10 @@ add_library(aobus-gtk-lib STATIC
     app/AobusSoul.cpp
     app/AppDialog.cpp
     app/FormBuilder.cpp
+    app/GtkAccelTranslator.cpp
     app/GtkMainContextExecutor.cpp
+    app/KeyboardShortcutsWindow.cpp
+    app/KeymapApplicator.cpp
     app/MainWindow.cpp
     app/MenuController.cpp
     app/MouseNavigationPolicy.cpp

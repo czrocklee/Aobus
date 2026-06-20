@@ -4,6 +4,7 @@
 #include "app/AppConfig.h"
 #include "app/GtkMainContextExecutor.h"
 #include "app/GtkStyleRuntime.h"
+#include "app/KeymapApplicator.h"
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
@@ -13,6 +14,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/utility/Log.h>
 
 #include <CLI/CLI.hpp>
@@ -233,15 +235,6 @@ namespace
     auto const quitActionPtr = Gio::SimpleAction::create("quit");
     quitActionPtr->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
     app->add_action(quitActionPtr);
-
-    // Global layout action shortcuts (exported to the window ActionMap, so they use the 'win.' prefix)
-    app->set_accels_for_action("win.playback.playPause", {"<Primary>p", "AudioPlay", "AudioPause"});
-    app->set_accels_for_action("win.playback.stop", {"AudioStop"});
-    app->set_accels_for_action("win.playback.next", {"<Primary>Right", "AudioNext"});
-    app->set_accels_for_action("win.playback.previous", {"<Primary>Left", "AudioPrev"});
-    app->set_accels_for_action("win.playback.toggleShuffle", {"<Primary>u"});
-    app->set_accels_for_action("win.playback.cycleRepeat", {"<Primary>r"});
-    app->set_accels_for_action("win.workspace.revealCurrentTrack", {"<Primary>l"});
   }
 
   std::filesystem::path layoutStateDir()
@@ -262,6 +255,7 @@ namespace
 
     auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
     auto appConfigPtr = std::make_shared<AppConfig>(globalConfigPath);
+    applyKeymapAccelerators(*app, appConfigPtr->loadKeymap(uimodel::input::defaultKeymap()));
     auto const layoutsDir = globalConfigPath.parent_path() / "layouts";
     auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());

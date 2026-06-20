@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/rt/StateTypes.h>
+#include <ao/uimodel/input/KeymapModel.h>
 
 #include <filesystem>
 #include <memory>
@@ -38,6 +39,11 @@ namespace ao::gtk
 
     void loadAppPrefs(rt::AppPrefsState& state) const;
     void saveAppPrefs(rt::AppPrefsState const& state);
+
+    /// Loads the effective keyboard map: persisted overrides merged onto @p defaults.
+    uimodel::input::KeymapModel loadKeymap(uimodel::input::KeymapBindings defaults) const;
+    /// Persists the keymap's delta-from-defaults into the `shortcuts` group.
+    void saveKeymap(uimodel::input::KeymapModel const& keymap);
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;

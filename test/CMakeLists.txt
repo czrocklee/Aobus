@@ -90,6 +90,9 @@ add_executable(ao_core_test
     unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
 
     # ui model tests (no platform deps)
+    unit/uimodel/input/KeyChordTest.cpp
+    unit/uimodel/input/KeymapModelTest.cpp
+    unit/uimodel/input/KeymapStoreTest.cpp
     unit/uimodel/layout/AbsoluteCanvasModelTest.cpp
     unit/uimodel/layout/ActionCatalogTest.cpp
     unit/uimodel/layout/ActionValidatorTest.cpp
@@ -236,6 +239,9 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/MainWindowCoordinatorTest.cpp
     unit/linux-gtk/app/MenuControllerTest.cpp
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
+    unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
+    unit/linux-gtk/app/KeymapApplicatorTest.cpp
+    unit/linux-gtk/app/KeyboardShortcutsWindowTest.cpp
     unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
