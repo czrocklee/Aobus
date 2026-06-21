@@ -126,7 +126,9 @@ namespace ao::audio::backend
 
     std::atomic<float> volume{1.0F};
     std::atomic<bool> muted{false};
-    bool volumeAvailable = true;
+    std::atomic<bool> volumeAvailable{true};
+
+    void applyCachedControls() const;
 
   private:
     void handleFormatParam(::spa_pod const* param);
@@ -187,15 +189,21 @@ namespace ao::audio::backend
       return;
     }
 
-    auto const bytesRead = renderTarget->readPcm({static_cast<std::byte*>(data), maxSize});
+    // Honor the IRenderTarget frame-alignment contract: only ever request and
+    // commit whole frames, even when the PipeWire buffer's maxsize is not a
+    // whole multiple of the frame stride.
+    auto const strideBytes = static_cast<std::size_t>(stride);
+    auto const requestBytes = (static_cast<std::size_t>(maxSize) / strideBytes) * strideBytes;
+    auto const bytesRead = renderTarget->readPcm({static_cast<std::byte*>(data), requestBytes});
 
-    if (bytesRead > 0)
+    if (auto const framesRead = bytesRead / strideBytes; framesRead > 0)
     {
+      auto const committedBytes = framesRead * strideBytes;
       buffer->buffer->datas[0].chunk->offset = 0;
-      buffer->buffer->datas[0].chunk->size = static_cast<std::uint32_t>(bytesRead);
+      buffer->buffer->datas[0].chunk->size = static_cast<std::uint32_t>(committedBytes);
       buffer->buffer->datas[0].chunk->stride = static_cast<std::int32_t>(stride);
       ::pw_stream_queue_buffer(streamPtr.get(), buffer);
-      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(bytesRead / static_cast<std::size_t>(stride)));
+      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(framesRead));
     }
 
     else
@@ -293,6 +301,22 @@ namespace ao::audio::backend
     renderTarget->onDrainComplete();
   }
 
+  void PipeWireBackend::Impl::applyCachedControls() const
+  {
+    if (!streamPtr)
+    {
+      return;
+    }
+
+    auto vol = volume.load(std::memory_order_relaxed);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    ::pw_stream_set_control(streamPtr.get(), SPA_PROP_volume, 1, &vol);
+
+    auto mutedFloat = muted.load(std::memory_order_relaxed) ? 1.0F : 0.0F;
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    ::pw_stream_set_control(streamPtr.get(), SPA_PROP_mute, 1, &mutedFloat);
+  }
+
   PipeWireBackend::PipeWireBackend(Device const& device, ProfileId const& profile)
     : _implPtr{std::make_unique<Impl>()}, _targetDeviceId{device.id}, _exclusiveMode{profile == kProfileExclusive}
   {
@@ -318,17 +342,18 @@ namespace ao::audio::backend
 
   Result<> PipeWireBackend::open(Format const& format, IRenderTarget* target)
   {
-    _implPtr->renderTarget = target;
-    _implPtr->format = format;
-    _implPtr->routeAnchorReported = false;
     bool const useExclusive = _exclusiveMode && !_targetDeviceId.empty();
 
-    if (!_implPtr->threadLoopPtr)
+    if (!_implPtr->threadLoopPtr || !_implPtr->corePtr)
     {
       return makeError(Error::Code::InitFailed, "PipeWire not initialized");
     }
 
     auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+    _implPtr->renderTarget = target;
+    _implPtr->format = format;
+    _implPtr->routeAnchorReported = false;
+
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
     auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new(nullptr, nullptr));
     ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_TYPE, "Audio");
@@ -414,30 +439,33 @@ namespace ao::audio::backend
       return makeError(Error::Code::InitFailed, "Failed to connect stream");
     }
 
-    _implPtr->volumeAvailable = !useExclusive; // Default to available in shared mode
+    _implPtr->applyCachedControls();
+    _implPtr->volumeAvailable.store(!useExclusive, std::memory_order_relaxed); // Default to available in shared mode
 
     return {};
   }
 
   void PipeWireBackend::start()
   {
+    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+
     if (!_implPtr->streamPtr)
     {
       return;
     }
 
-    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
     ::pw_stream_set_active(_implPtr->streamPtr.get(), true);
   }
 
   void PipeWireBackend::pause()
   {
+    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+
     if (!_implPtr->streamPtr)
     {
       return;
     }
 
-    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
     ::pw_stream_set_active(_implPtr->streamPtr.get(), false);
   }
 
@@ -448,54 +476,33 @@ namespace ao::audio::backend
 
   void PipeWireBackend::flush()
   {
+    _implPtr->drainPending = false;
+    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+
     if (!_implPtr->streamPtr)
     {
       return;
     }
 
-    _implPtr->drainPending = false;
-    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
     ::pw_stream_flush(_implPtr->streamPtr.get(), false);
   }
 
   void PipeWireBackend::stop()
   {
+    _implPtr->drainPending = false;
+    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+
     if (!_implPtr->streamPtr)
     {
       return;
     }
 
-    _implPtr->drainPending = false;
-    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
     ::pw_stream_set_active(_implPtr->streamPtr.get(), false);
   }
 
   void PipeWireBackend::close()
   {
     _implPtr->destroyStream();
-  }
-
-  void PipeWireBackend::setExclusiveMode(bool exclusive)
-  {
-    if (_exclusiveMode == exclusive)
-    {
-      return;
-    }
-
-    _exclusiveMode = exclusive;
-
-    if (_implPtr->streamPtr && !_targetDeviceId.empty())
-    {
-      if (auto const openResult = open(_implPtr->format, _implPtr->renderTarget); !openResult)
-      {
-        AUDIO_LOG_ERROR("Failed to reopen stream after exclusive mode change: {}", openResult.error().message);
-      }
-    }
-  }
-
-  bool PipeWireBackend::isExclusiveMode() const noexcept
-  {
-    return _exclusiveMode;
   }
 
   BackendId PipeWireBackend::backendId() const noexcept
@@ -516,14 +523,15 @@ namespace ao::audio::backend
       auto const clamped = std::clamp(volValue, 0.0F, 1.0F);
       _implPtr->volume.store(clamped, std::memory_order_relaxed);
 
-      if (!_implPtr->streamPtr)
-      {
-        return {};
-      }
-
       auto vol = clamped;
       {
         auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+
+        if (!_implPtr->streamPtr)
+        {
+          return {};
+        }
+
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
         ::pw_stream_set_control(_implPtr->streamPtr.get(), SPA_PROP_volume, 1, &vol);
       }
@@ -535,14 +543,15 @@ namespace ao::audio::backend
       auto const muted = std::get<bool>(value);
       _implPtr->muted.store(muted, std::memory_order_relaxed);
 
-      if (!_implPtr->streamPtr)
-      {
-        return {};
-      }
-
       auto mutedFloat = muted ? 1.0F : 0.0F;
       {
         auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+
+        if (!_implPtr->streamPtr)
+        {
+          return {};
+        }
+
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
         ::pw_stream_set_control(_implPtr->streamPtr.get(), SPA_PROP_mute, 1, &mutedFloat);
       }
@@ -573,7 +582,7 @@ namespace ao::audio::backend
     {
       return {.canRead = true,
               .canWrite = true,
-              .isAvailable = _implPtr && _implPtr->volumeAvailable,
+              .isAvailable = _implPtr && _implPtr->volumeAvailable.load(std::memory_order_relaxed),
               .emitsChangeNotifications = true,
               .isHardwareAssisted = false};
     }

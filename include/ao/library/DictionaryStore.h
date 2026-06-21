@@ -11,6 +11,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -83,7 +85,11 @@ namespace ao::library
      * Get the total number of dictionary entries.
      * @return The number of entries
      */
-    std::size_t size() const noexcept { return _idToStringStorage.size() - _freeIds.size(); }
+    std::size_t size() const
+    {
+      auto const lock = std::shared_lock{_mutex};
+      return _idToStringStorage.size() - _freeIds.size();
+    }
 
     /**
      * Get the ID for a string, or intern it if it doesn't exist.
@@ -96,7 +102,7 @@ namespace ao::library
     struct DictHash final
     {
       using is_transparent = void; // NOLINT(readability-identifier-naming)
-      std::vector<std::string> const* storage;
+      std::deque<std::string> const* storage;
 
       std::size_t operator()(DictionaryId id) const { return std::hash<std::string_view>{}((*storage)[id.raw() - 1]); }
 
@@ -106,7 +112,7 @@ namespace ao::library
     struct DictEqual final
     {
       using is_transparent = void; // NOLINT(readability-identifier-naming)
-      std::vector<std::string> const* storage;
+      std::deque<std::string> const* storage;
 
       bool operator()(DictionaryId lhs, DictionaryId rhs) const { return lhs == rhs; }
 
@@ -134,8 +140,15 @@ namespace ao::library
 
     lmdb::Database _database;
 
-    // In-memory index: id → string (owner of all strings)
-    std::vector<std::string> _idToStringStorage;
+    // Guards the in-memory indices below. A shared_mutex lets the read-mostly
+    // lookups (get/getId/contains) run concurrently while put/getOrIntern take
+    // exclusive ownership during mutation.
+    mutable std::shared_mutex _mutex;
+
+    // In-memory index: id → string (owner of all strings). A deque keeps element
+    // addresses stable across growth, so a string_view returned by get() stays
+    // valid even after a later put()/getOrIntern() grows the storage.
+    std::deque<std::string> _idToStringStorage;
 
     // In-memory index: string_view → id (transparent lookup)
     boost::unordered_flat_set<DictionaryId, DictHash, DictEqual> _stringToId;

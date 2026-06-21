@@ -1036,14 +1036,14 @@ namespace ao::query::test
       auto binaryPtr = std::make_unique<BinaryExpression>();
       binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
       binaryPtr->optOperation =
-        BinaryExpression::Operation{.op = Operator::Add, .operand = ConstantExpression{std::int64_t(100)}};
+        BinaryExpression::Operation{.op = Operator::Add, .operand = ConstantExpression{std::int64_t{100}}};
 
       REQUIRE_THROWS(compiler.compile(std::move(binaryPtr)));
 
       auto binaryInvalidPtr = std::make_unique<BinaryExpression>();
       binaryInvalidPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
       binaryInvalidPtr->optOperation =
-        BinaryExpression::Operation{.op = static_cast<Operator>(99), .operand = ConstantExpression{std::int64_t(100)}};
+        BinaryExpression::Operation{.op = static_cast<Operator>(99), .operand = ConstantExpression{std::int64_t{100}}};
 
       REQUIRE_THROWS(compiler.compile(std::move(binaryInvalidPtr)));
     }

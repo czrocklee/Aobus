@@ -606,5 +606,25 @@ namespace ao::tag::mp4::test
       auto builder = file.loadTrack();
       CHECK(builder.metadata().title().empty());
     }
+
+    SECTION("Metadata atom shorter than the data-atom header")
+    {
+      // A ©nam atom whose declared length (16) is smaller than the fixed data-atom
+      // header (24). atomData() must refuse to interpret it instead of underflowing
+      // the payload size and reading past the atom.
+      auto child = std::vector<std::uint8_t>{};
+      auto common = AtomLayout{};
+      common.length = 16;
+      std::memcpy(common.type.data(), "\xA9nam", 4);
+      auto const* c = reinterpret_cast<std::uint8_t const*>(&common);
+      child.insert(child.end(), c, c + sizeof(common));
+      child.insert(child.end(), 8, 0); // filler to reach the declared length
+
+      auto const data = createMinimalM4aWithRawIlstAtom(child);
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const builder = file.loadTrack();
+      CHECK(builder.metadata().title().empty());
+    }
   }
 } // namespace ao::tag::mp4::test

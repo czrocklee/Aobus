@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -68,6 +69,55 @@ namespace ao::tag::mpeg::test
                   reinterpret_cast<std::uint8_t const*>(&header),
                   reinterpret_cast<std::uint8_t const*>(&header) + sizeof(header));
       data.insert(data.end(), body.begin(), body.end());
+    }
+
+    // Encode a 28-bit value into a 4-byte syncsafe integer (ID3v2.4 frame sizes).
+    void putSyncSafeSize(id3v2::EncodedSize& out, std::uint32_t value)
+    {
+      out.data[0] = (value >> 21) & 0x7F;
+      out.data[1] = (value >> 14) & 0x7F;
+      out.data[2] = (value >> 7) & 0x7F;
+      out.data[3] = value & 0x7F;
+    }
+
+    void addV24TextFrame(std::vector<std::uint8_t>& data,
+                         char const* id,
+                         id3v2::Encoding encoding,
+                         std::span<std::uint8_t const> text)
+    {
+      auto common = id3v2::V24CommonFrameLayout{};
+      std::memcpy(common.id.data(), id, 4);
+      putSyncSafeSize(common.size, static_cast<std::uint32_t>(1 + text.size())); // encoding byte + text
+      auto const* ptr = reinterpret_cast<std::uint8_t const*>(&common);
+      data.insert(data.end(), ptr, ptr + sizeof(common));
+      data.push_back(static_cast<std::uint8_t>(encoding));
+      data.insert(data.end(), text.begin(), text.end());
+    }
+
+    // Wrap an ID3v2 tag body in a header of the given major version (header size is
+    // always syncsafe regardless of version).
+    std::vector<std::uint8_t> wrapId3v2(std::uint8_t majorVersion, std::vector<std::uint8_t> const& body)
+    {
+      auto data = std::vector<std::uint8_t>{};
+      auto header = id3v2::HeaderLayout{};
+      std::memcpy(header.id.data(), "ID3", 3);
+      header.majorVersion = majorVersion;
+
+      auto const sz = static_cast<std::uint32_t>(body.size());
+      header.size.data[0] = (sz >> 21) & 0x7F;
+      header.size.data[1] = (sz >> 14) & 0x7F;
+      header.size.data[2] = (sz >> 7) & 0x7F;
+      header.size.data[3] = sz & 0x7F;
+
+      auto const* hdr = reinterpret_cast<std::uint8_t const*>(&header);
+      data.insert(data.end(), hdr, hdr + 10);
+      data.insert(data.end(), body.begin(), body.end());
+      return data;
+    }
+
+    std::span<std::uint8_t const> asBytes(std::string_view str)
+    {
+      return {reinterpret_cast<std::uint8_t const*>(str.data()), str.size()};
     }
 
     std::vector<std::uint8_t> createMp3WithTags()
@@ -189,6 +239,56 @@ namespace ao::tag::mpeg::test
     CHECK(builder.property().bitDepth() == 16);
   }
 
+  TEST_CASE("MPEG File - decodes ID3v2.4 syncsafe frame sizes", "[tag][unit][mpeg][id3v2]")
+  {
+    // A content size >= 128 makes the v2.4 syncsafe encoding differ from a plain
+    // big-endian 32-bit decode, so the parser must use the syncsafe path to step
+    // over the first frame and reach the second.
+    auto const longTitle = std::string(200, 'A');
+
+    auto body = std::vector<std::uint8_t>{};
+    addV24TextFrame(body, "TIT2", id3v2::Encoding::Latin1, asBytes(longTitle));
+    addV24TextFrame(body, "TPE1", id3v2::Encoding::Latin1, asBytes("Artist"));
+
+    auto const data = wrapId3v2(4, body);
+    auto const temp = TempFile{data};
+    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto const builder = file.loadTrack();
+    auto const meta = builder.metadata();
+
+    CHECK(meta.title() == longTitle);
+    CHECK(meta.artist() == "Artist");
+  }
+
+  TEST_CASE("MPEG File - decodes ID3v2.4 UTF-8 and UTF-16BE text", "[tag][unit][mpeg][id3v2]")
+  {
+    SECTION("UTF-8")
+    {
+      auto const utf8 = std::to_array<std::uint8_t>({0xC3, 0xA9, 'x'}); // "éx"
+      auto body = std::vector<std::uint8_t>{};
+      addV24TextFrame(body, "TIT2", id3v2::Encoding::Utf8, utf8);
+
+      auto const data = wrapId3v2(4, body);
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const builder = file.loadTrack();
+      CHECK(builder.metadata().title() == "\xC3\xA9x");
+    }
+
+    SECTION("UTF-16BE without BOM")
+    {
+      auto const utf16 = std::to_array<std::uint8_t>({0x00, 'H', 0x00, 'i'});
+      auto body = std::vector<std::uint8_t>{};
+      addV24TextFrame(body, "TIT2", id3v2::Encoding::Utf16Be, utf16);
+
+      auto const data = wrapId3v2(4, body);
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const builder = file.loadTrack();
+      CHECK(builder.metadata().title() == "Hi");
+    }
+  }
+
   TEST_CASE("MPEG File - handles unsupported or malformed input", "[tag][unit][mpeg][file]")
   {
     SECTION("Unsupported ID3v2.2 tag")
@@ -255,6 +355,28 @@ namespace ao::tag::mpeg::test
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
       auto builder = file.loadTrack();
       CHECK(builder.property().duration() == std::chrono::milliseconds{0});
+    }
+
+    SECTION("Truncated APIC frame does not overrun the buffer")
+    {
+      // APIC body with an unterminated MIME string and no picture-type/description/
+      // image data. The handler must stop at the frame boundary rather than walking
+      // past it (release builds strip the gsl bounds checks).
+      auto frameBody = std::vector<std::uint8_t>{0x00, 'i', 'm', 'g'};
+      auto header = id3v2::V23CommonFrameLayout{};
+      std::memcpy(header.id.data(), "APIC", 4);
+      header.size = static_cast<std::uint32_t>(frameBody.size());
+
+      auto body = std::vector<std::uint8_t>{};
+      auto const* hdr = reinterpret_cast<std::uint8_t const*>(&header);
+      body.insert(body.end(), hdr, hdr + sizeof(header));
+      body.insert(body.end(), frameBody.begin(), frameBody.end());
+
+      auto const data = wrapId3v2(3, body);
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const builder = file.loadTrack();
+      CHECK(builder.coverArt().entries().empty());
     }
   }
 } // namespace ao::tag::mpeg::test

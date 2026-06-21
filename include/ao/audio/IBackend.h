@@ -17,6 +17,21 @@ namespace ao::audio
 
   /**
    * @brief Interface for platform-specific audio output backends.
+   *
+   * Threading contract:
+   * - Engine serializes application control commands before calling backend public
+   *   methods, but backend callbacks may still be in flight while those methods
+   *   run. Implementations must protect native handles against public method /
+   *   callback interleavings.
+   * - Backends may call IRenderTarget methods from their render or backend event
+   *   threads. They must not hold a native-handle lock while invoking an
+   *   IRenderTarget callback if a public backend method can acquire that same
+   *   lock; callbacks may synchronously update Engine state.
+   * - close() is the render-target lifetime boundary. After close() returns, the
+   *   backend must not issue further callbacks to the IRenderTarget passed to
+   *   open(), and all in-flight callbacks for that target must have returned.
+   * - stop() stops active rendering but does not revoke the open target; seek-like
+   *   flows may call stop(), flush(), and start() on the same target.
    */
   class IBackend
   {

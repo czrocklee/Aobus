@@ -9,6 +9,7 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/IBackend.h>
 #include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/Types.h>
@@ -18,14 +19,20 @@
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <stop_token>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -688,6 +695,25 @@ namespace ao::audio::test
       REQUIRE(backendMuted);
       REQUIRE(std::get<bool>(*backendMuted) == true);
     }
+
+    SECTION("property controls survive backend open")
+    {
+      engine.setVolume(0.37F);
+      engine.setMuted(true);
+
+      engine.play(desc);
+
+      CHECK(engine.status().volume == Catch::Approx{0.37F});
+      CHECK(engine.status().muted == true);
+
+      auto const backendVol = backendRaw->property(PropertyId::Volume);
+      auto const backendMuted = backendRaw->property(PropertyId::Muted);
+
+      REQUIRE(backendVol);
+      REQUIRE(backendMuted);
+      CHECK(std::get<float>(*backendVol) == Catch::Approx{0.37F});
+      CHECK(std::get<bool>(*backendMuted) == true);
+    }
   }
 
   TEST_CASE("Engine - Backend callback simulation", "[playback][unit][engine][callback]")
@@ -766,6 +792,29 @@ namespace ao::audio::test
       target->onPropertyChanged(PropertyId::Volume);
     }
 
+    SECTION("Callbacks from retired render sessions are ignored")
+    {
+      auto const desc = TrackPlaybackDescriptor{
+        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .coverArtId = kInvalidResourceId};
+
+      engine.play(desc);
+      auto* const target = backendRaw->target();
+      REQUIRE(target != nullptr);
+
+      engine.stop();
+
+      target->onBackendError("late failure");
+      target->onRouteReady("late-anchor");
+      target->onUnderrun();
+      target->onPositionAdvanced(100);
+
+      auto const snap = engine.status();
+      CHECK(snap.transport == Transport::Idle);
+      CHECK(snap.statusText.empty());
+      CHECK(snap.underrunCount == 0);
+      CHECK_FALSE(engine.routeStatus().optAnchor);
+    }
+
     SECTION("setBackend with active track resumes playback")
     {
       auto const desc = TrackPlaybackDescriptor{.filePath = "test.flac", .title = "Test"};
@@ -799,6 +848,127 @@ namespace ao::audio::test
       engine.pause();
       REQUIRE(engine.status().transport == Transport::Idle);
     }
+  }
+
+  class BlockingPropertyBackend final : public IBackend
+  {
+  public:
+    Result<> open(Format const& /*format*/, IRenderTarget* /*target*/) override { return {}; }
+    void start() override {}
+    void pause() override {}
+    void resume() override {}
+    void flush() override {}
+    void stop() override {}
+    void close() override {}
+
+    BackendId backendId() const noexcept override { return BackendId{"blocking"}; }
+    ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
+
+    Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override
+    {
+      auto lock = std::unique_lock{_mutex};
+      ++_enteredCalls;
+      ++_activeCalls;
+      _maxActiveCalls = std::max(_maxActiveCalls, _activeCalls);
+      _cv.notify_all();
+
+      _cv.wait(lock, [this] { return _releaseCalls; });
+      --_activeCalls;
+      _cv.notify_all();
+      return {};
+    }
+
+    Result<PropertyValue> property(PropertyId id) const override
+    {
+      if (id == PropertyId::Volume)
+      {
+        return PropertyValue{1.0F};
+      }
+
+      if (id == PropertyId::Muted)
+      {
+        return PropertyValue{false};
+      }
+
+      return std::unexpected(Error{.code = Error::Code::NotSupported});
+    }
+
+    PropertyInfo queryProperty(PropertyId /*id*/) const noexcept override
+    {
+      return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
+    }
+
+    bool waitForEnteredCalls(std::size_t count, std::chrono::milliseconds timeout) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock, timeout, [this, count] { return _enteredCalls >= count; });
+    }
+
+    void releaseCalls()
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _releaseCalls = true;
+      _cv.notify_all();
+    }
+
+    std::size_t maxActiveCalls() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      return _maxActiveCalls;
+    }
+
+  private:
+    mutable std::mutex _mutex;
+    mutable std::condition_variable _cv;
+    std::size_t _enteredCalls = 0;
+    std::size_t _activeCalls = 0;
+    std::size_t _maxActiveCalls = 0;
+    bool _releaseCalls = false;
+  };
+
+  TEST_CASE("Engine - concurrent control commands are serialized", "[playback][unit][engine][concurrency]")
+  {
+    auto const device = Device{.id = DeviceId{"test-device"},
+                               .displayName = "Test",
+                               .description = "Test",
+                               .isDefault = false,
+                               .backendId = kBackendNone};
+    auto backendPtr = std::make_unique<BlockingPropertyBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr), device};
+
+    auto first = std::async(std::launch::async, [&engine] { engine.setVolume(0.25F); });
+    auto const firstEntered = backendRaw->waitForEnteredCalls(1, std::chrono::seconds{1});
+
+    if (!firstEntered)
+    {
+      backendRaw->releaseCalls();
+    }
+
+    REQUIRE(firstEntered);
+
+    auto secondStartedPromise = std::promise<void>{};
+    auto secondStarted = secondStartedPromise.get_future();
+    auto second = std::async(std::launch::async,
+                             [&]
+                             {
+                               secondStartedPromise.set_value();
+                               engine.setMuted(true);
+                             });
+
+    auto const secondStartedStatus = secondStarted.wait_for(std::chrono::seconds{1});
+
+    if (secondStartedStatus == std::future_status::ready)
+    {
+      CHECK_FALSE(backendRaw->waitForEnteredCalls(2, std::chrono::milliseconds{50}));
+    }
+
+    backendRaw->releaseCalls();
+
+    REQUIRE(secondStartedStatus == std::future_status::ready);
+    REQUIRE(first.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+    REQUIRE(second.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+    CHECK(backendRaw->maxActiveCalls() == 1);
   }
 
   TEST_CASE("Engine - Source Error Propagation", "[playback][unit][engine][error]")
@@ -844,5 +1014,141 @@ namespace ao::audio::test
     auto const snap = engine.status();
     REQUIRE(snap.transport == Transport::Error);
     REQUIRE(snap.statusText == "decode failed");
+  }
+
+  // A backend that faithfully models a real render thread: start() spawns a
+  // thread that hammers the lock-free readPcm/isSourceDrained path, stop() joins
+  // it. This mirrors the Engine's quiescent-point contract — sources are retired
+  // (publishSource) only after backendPtr->stop() has joined the render thread —
+  // so the simulated render thread never dereferences a freed source.
+  class RenderingBackend final : public IBackend
+  {
+  public:
+    Result<> open(Format const& format, IRenderTarget* target) override
+    {
+      _format = format;
+      _target.store(target, std::memory_order_relaxed);
+      return {};
+    }
+
+    void start() override
+    {
+      if (_thread.joinable())
+      {
+        return;
+      }
+
+      _thread = std::jthread{[this](std::stop_token const& st)
+                             {
+                               auto buffer = std::array<std::byte, 1024>{};
+
+                               while (!st.stop_requested())
+                               {
+                                 if (auto* const t = _target.load(std::memory_order_relaxed); t != nullptr)
+                                 {
+                                   std::ignore = t->readPcm(buffer);
+                                   std::ignore = t->isSourceDrained();
+                                 }
+                               }
+                             }};
+    }
+
+    void pause() override {}
+    void resume() override {}
+    void flush() override {}
+
+    void stop() override
+    {
+      _thread.request_stop();
+
+      if (_thread.joinable())
+      {
+        _thread.join();
+      }
+    }
+
+    void close() override {}
+
+    BackendId backendId() const noexcept override { return BackendId{"rendering"}; }
+    ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
+
+    Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override { return {}; }
+
+    Result<PropertyValue> property(PropertyId id) const override
+    {
+      if (id == PropertyId::Volume)
+      {
+        return PropertyValue{1.0F};
+      }
+
+      if (id == PropertyId::Muted)
+      {
+        return PropertyValue{false};
+      }
+
+      return std::unexpected(Error{.code = Error::Code::NotSupported});
+    }
+
+    PropertyInfo queryProperty(PropertyId /*id*/) const noexcept override
+    {
+      return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
+    }
+
+  private:
+    std::atomic<IRenderTarget*> _target{nullptr};
+    Format _format{};
+    std::jthread _thread;
+  };
+
+  // Run under TSan (./ao test --tsan): the control thread loops play/seek/stop
+  // (each publishing and retiring a source) while a render thread reads the
+  // lock-free activeSource pointer and a poller reads status() through the
+  // sourceMutex. TSan verifies the publish/retire happens-before chain holds.
+  TEST_CASE("Engine - concurrent source swap is race-free", "[playback][unit][engine][concurrency]")
+  {
+    auto const device = Device{.id = DeviceId{"test-device"},
+                               .displayName = "Test",
+                               .description = "Test",
+                               .isDefault = false,
+                               .backendId = kBackendNone};
+
+    auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+    auto const factory = [fmt](auto const&, auto const&)
+    {
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
+      auto data = std::vector(4096, std::byte{0});
+      decPtr->setReadScript({{data, false}, {data, false}, {data, false}, {{}, true}});
+      return decPtr;
+    };
+
+    auto engine = Engine{std::make_unique<RenderingBackend>(), device, factory};
+    auto const desc = TrackPlaybackDescriptor{
+      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+
+    // Poller: read status() concurrently with the control thread's source swaps.
+    auto poller = std::jthread{[&](std::stop_token const& st)
+                               {
+                                 while (!st.stop_requested())
+                                 {
+                                   std::ignore = engine.status();
+                                 }
+                               }};
+
+    for (std::int32_t i = 0; i < 50; ++i)
+    {
+      engine.play(desc);
+      engine.seek(std::chrono::milliseconds{10});
+      engine.stop();
+    }
+
+    poller.request_stop();
+
+    if (poller.joinable())
+    {
+      poller.join();
+    }
+
+    REQUIRE(engine.status().transport == Transport::Idle);
   }
 } // namespace ao::audio::test

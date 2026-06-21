@@ -153,6 +153,25 @@ namespace ao::tag::flac::test
       REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
     }
 
+    SECTION("Trailing bytes too small for the next block header")
+    {
+      auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
+
+      // Valid StreamInfo, not marked last, so the iterator advances.
+      addBlockHeader(data, MetadataBlockType::StreamInfo, false, 34);
+      auto si = StreamInfoLayout{};
+      auto const* siAddr = reinterpret_cast<std::uint8_t const*>(&si);
+      data.insert(data.end(), siAddr, siAddr + 34);
+
+      // Only two trailing bytes follow - not enough for a 4-byte block header.
+      data.push_back(0);
+      data.push_back(0);
+
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
+    }
+
     SECTION("Picture block is truncated after picture type")
     {
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};

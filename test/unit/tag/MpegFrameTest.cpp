@@ -158,6 +158,33 @@ namespace ao::tag::mpeg::test
     CHECK(optXing->bytes == 56789);
   }
 
+  TEST_CASE("MPEG Frame - keeps Xing fields inside the current frame", "[tag][unit][mpeg][frame]")
+  {
+    auto const header =
+      createHeader(VersionID::Ver2, LayerDescription::LayerIII, 1, 1, ChannelMode::SingleChannel); // 8kbps, 24000Hz
+    auto const headerView = FrameView{header.data(), header.size()};
+    auto const frameLength = headerView.length();
+    auto buffer = std::vector<std::uint8_t>(frameLength + sizeof(boost::endian::big_uint32_buf_t), 0);
+    std::ranges::copy(header, buffer.begin());
+
+    static constexpr std::size_t kXingOffsetVer2Mono = 13;
+    auto* xing = reinterpret_cast<XingLayout*>(buffer.data() + kXingOffsetVer2Mono);
+    std::memcpy(xing->magic.data(), "Xing", 4);
+    xing->flags = XingLayout::kFlagFrames;
+
+    auto const framesOffset = kXingOffsetVer2Mono + sizeof(XingLayout);
+    REQUIRE(framesOffset < frameLength);
+    REQUIRE(framesOffset + sizeof(boost::endian::big_uint32_buf_t) > frameLength);
+    auto* frames = reinterpret_cast<boost::endian::big_uint32_buf_t*>(buffer.data() + framesOffset);
+    *frames = 98765;
+
+    auto const optView = locate(buffer.data(), buffer.size());
+    REQUIRE(optView.has_value());
+    auto const optXing = optView->xingInfo();
+    REQUIRE(optXing.has_value());
+    CHECK(optXing->frames == 0);
+  }
+
   TEST_CASE("MPEG Frame - locates frame sync", "[tag][unit][mpeg][frame]")
   {
     auto buffer =

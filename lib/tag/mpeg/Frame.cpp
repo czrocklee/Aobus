@@ -6,6 +6,7 @@
 #include "FrameLayout.h"
 #include <ao/utility/ByteView.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -271,11 +272,21 @@ namespace ao::tag::mpeg
     // Header is 4 bytes
     offset += kXingHeaderSize;
 
-    auto const* ptr = static_cast<std::uint8_t const*>(_data) + offset;
+    // Bound every read below by the current MPEG frame, not trailing bytes.
+    auto const* const base = static_cast<std::uint8_t const*>(_data);
+    auto const frameSize = std::min(_size, length());
+    auto const bound = [frameSize](std::size_t fieldOffset, std::size_t fieldSize) noexcept
+    { return fieldOffset <= frameSize && fieldSize <= frameSize - fieldOffset; };
 
-    auto const* xing = utility::layout::view<XingLayout>(utility::bytes::view(ptr, sizeof(XingLayout)));
+    if (!bound(offset, sizeof(XingLayout)))
+    {
+      return {};
+    }
 
-    if (std::memcmp(xing->magic.data(), "Xing", 4) != 0 && std::memcmp(xing->magic.data(), "Info", 4) != 0)
+    auto const* xing = utility::bytes::tryLayout<XingLayout>(utility::bytes::view(base + offset, sizeof(XingLayout)));
+
+    if (xing == nullptr ||
+        (std::memcmp(xing->magic.data(), "Xing", 4) != 0 && std::memcmp(xing->magic.data(), "Info", 4) != 0))
     {
       return {};
     }
@@ -283,19 +294,27 @@ namespace ao::tag::mpeg
     auto info = XingInfo{};
     auto const flags = xing->flags.value();
 
-    std::size_t fieldOffset = sizeof(XingLayout);
+    std::size_t fieldOffset = offset + sizeof(XingLayout);
 
     if ((flags & XingLayout::kFlagFrames) != 0)
     {
-      auto const* framesBuf = utility::layout::viewAt<boost::endian::big_uint32_buf_t>(ptr, fieldOffset);
-      info.frames = framesBuf->value();
+      if (!bound(fieldOffset, sizeof(boost::endian::big_uint32_buf_t)))
+      {
+        return info;
+      }
+
+      info.frames = utility::layout::viewAt<boost::endian::big_uint32_buf_t>(base, fieldOffset)->value();
       fieldOffset += sizeof(boost::endian::big_uint32_buf_t);
     }
 
     if ((flags & XingLayout::kFlagBytes) != 0)
     {
-      auto const* bytesBuf = utility::layout::viewAt<boost::endian::big_uint32_buf_t>(ptr, fieldOffset);
-      info.bytes = bytesBuf->value();
+      if (!bound(fieldOffset, sizeof(boost::endian::big_uint32_buf_t)))
+      {
+        return info;
+      }
+
+      info.bytes = utility::layout::viewAt<boost::endian::big_uint32_buf_t>(base, fieldOffset)->value();
     }
 
     return info;

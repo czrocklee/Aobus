@@ -32,13 +32,25 @@ namespace ao::tag::mp4
     using NumberSetter =
       library::TrackBuilder::MetadataBuilder& (library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
+    // Safely overlay the data-atom header onto an atom's bytes. Returns nullptr when
+    // the atom is shorter than the fixed header. Always-checked (release builds strip
+    // the gsl contracts inside layout<>()).
+    DataAtomLayout const* dataAtomLayout(AtomView const& view) noexcept
+    {
+      return utility::bytes::tryLayout<DataAtomLayout>(view.bytes());
+    }
+
     std::span<std::byte const> atomData(AtomView const& view)
     {
-      auto const& layout = view.layout<DataAtomLayout>();
-      auto const* const data = utility::layout::viewAt<std::byte>(&layout, sizeof(DataAtomLayout));
-      auto const size = layout.common.length.value() - sizeof(DataAtomLayout);
+      // The atom's byte span is sized to its declared length, so the payload is
+      // everything past the fixed data-atom header. Guard against a header that does
+      // not fit to avoid an unsigned underflow on the payload size.
+      if (dataAtomLayout(view) == nullptr)
+      {
+        return {};
+      }
 
-      return utility::bytes::view(data, size);
+      return view.bytes().subspan(sizeof(DataAtomLayout));
     }
 
     std::string_view atomTextView(AtomView const& view)
@@ -135,8 +147,14 @@ namespace ao::tag::mp4
       constexpr std::uint32_t kIntegerDataType = 21;
       constexpr std::uint8_t kSignBitMask = 0x80U;
 
-      auto const& layout = view.layout<DataAtomLayout>();
-      auto const type = layout.type.value();
+      auto const* const layout = dataAtomLayout(view);
+
+      if (layout == nullptr)
+      {
+        return;
+      }
+
+      auto const type = layout->type.value();
       auto const version = type >> kVersionShift;
       auto const dataType = type & kDataTypeMask;
       auto const data = atomData(view);
@@ -258,6 +276,16 @@ namespace ao::tag::mp4
 
       if (entryLayout->length.value() < sizeof(AudioSampleEntryLayout) ||
           entryLayout->length.value() > entryBytes.size())
+      {
+        return nullptr;
+      }
+
+      // Only interpret the entry as an audio sample description when it is one of
+      // the codecs we actually read properties from. Other sample-entry kinds share
+      // a different field layout, so reading channel/sample data from them would be
+      // meaningless (and the codec is otherwise reported as Unknown anyway).
+      if (auto const entryType = utility::bytes::stringView(utility::bytes::view(entryLayout->type));
+          entryType != "mp4a" && entryType != "alac")
       {
         return nullptr;
       }

@@ -62,7 +62,11 @@ namespace ao::lmdb
     struct KeyView final : std::span<std::byte const>
     {
       using std::span<std::byte const>::span;
-      operator std::uint32_t() const noexcept;
+      // Coerce an integer key to uint32. Throws on a size mismatch rather than
+      // silently yielding 0, so a corrupt/non-integer key surfaces as an error
+      // instead of a bogus id (release builds strip gsl contracts, so this guard
+      // must be a plain throw).
+      operator std::uint32_t() const;
     };
 
     struct EndSentinel
@@ -191,6 +195,11 @@ namespace ao::lmdb
 
   private:
     Writer(::MDB_dbi dbi, WriteTransaction& txn, KeyKind kind);
+
+    // Throw if the owning transaction has already been committed. After commit
+    // LMDB has closed every cursor, so reusing this writer would dereference a
+    // dangling cursor. Always-on (not gsl-gated) since release strips contracts.
+    void ensureActive() const;
 
     ::MDB_dbi _dbi;
     WriteTransaction* _txn;

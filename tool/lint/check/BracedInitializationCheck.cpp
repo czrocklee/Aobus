@@ -233,11 +233,6 @@ namespace clang::tidy::readability
 
     std::optional<BraceTarget> analyzeFunctionalCast(CXXFunctionalCastExpr const* cast)
     {
-      if (isScalarType(cast->getType()))
-      {
-        return std::nullopt;
-      }
-
       auto const* construct = dyn_cast_or_null<CXXConstructExpr>(cast->getSubExpr()->IgnoreImplicit());
 
       if (construct == nullptr)

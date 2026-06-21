@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -88,6 +89,42 @@ namespace ao::utility
       }
 
       return {reinterpret_cast<char const*>(span.data()), span.size()};
+    }
+
+    /**
+     * Always-checked typed view over raw bytes. Unlike layout::view<T>, the bounds
+     * and alignment checks here are NOT gated on the gsl contract mode (contracts
+     * are compiled out in release builds), so this is safe for untrusted /
+     * attacker-controlled input. Returns nullptr when the span is shorter than
+     * sizeof(T) or misaligned for T.
+     */
+    template<typename T>
+    inline T const* tryLayout(std::span<std::byte const> span) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+
+      if (span.size() < sizeof(T) || !detail::isAligned(span.data(), alignof(T)))
+      {
+        return nullptr;
+      }
+
+      return reinterpret_cast<T const*>(span.data());
+    }
+
+    /**
+     * Always-checked typed view that throws std::out_of_range when the span is too
+     * short for T or misaligned. Use tryLayout for the non-throwing variant.
+     */
+    template<typename T>
+    inline T const* requireLayout(std::span<std::byte const> span)
+    {
+      if (auto const* const ptr = tryLayout<T>(span); ptr != nullptr)
+      {
+        return ptr;
+      }
+
+      // NOLINTNEXTLINE(aobus-readability-forbid-raw-throw)
+      throw std::out_of_range{"ByteView requireLayout: span too small or misaligned for target type"};
     }
   }
 

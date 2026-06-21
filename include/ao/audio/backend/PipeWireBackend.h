@@ -45,9 +45,6 @@ namespace ao::audio::backend
     BackendId backendId() const noexcept override;
     ProfileId profileId() const noexcept override;
 
-    void setExclusiveMode(bool exclusive);
-    bool isExclusiveMode() const noexcept;
-
     Result<> setProperty(PropertyId id, PropertyValue const& value) override;
     Result<PropertyValue> property(PropertyId id) const override;
     PropertyInfo queryProperty(PropertyId id) const noexcept override;

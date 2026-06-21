@@ -29,7 +29,16 @@ namespace ao::audio
     IRenderTarget(IRenderTarget&&) = delete;
     IRenderTarget& operator=(IRenderTarget&&) = delete;
 
-    /// Called by the backend when it needs more PCM data.
+    /**
+     * @brief Called by the backend when it needs more PCM data.
+     *
+     * Frame-alignment contract: @p output.size() is always a whole multiple of
+     * the negotiated frame size (bytesPerSample * channels), and the return
+     * value MUST likewise be a whole multiple of the frame size — a partial
+     * frame is never returned. Backends commit whole frames to the device and
+     * treat any sub-frame remainder as undefined. A short read (return value <
+     * output.size()) is the expected underrun/drain signal.
+     */
     virtual std::size_t readPcm(std::span<std::byte> output) noexcept = 0;
 
     /// Called by the backend to check if the source has finished sending data.

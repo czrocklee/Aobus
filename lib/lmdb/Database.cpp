@@ -143,11 +143,11 @@ namespace ao::lmdb
     return CursorPtr{cursor};
   }
 
-  Database::Reader::KeyView::operator std::uint32_t() const noexcept
+  Database::Reader::KeyView::operator std::uint32_t() const
   {
     if (size() != sizeof(std::uint32_t))
     {
-      return 0;
+      throwException<Exception>("KeyView: cannot coerce {}-byte key to uint32", size());
     }
 
     std::uint32_t val = 0;
@@ -250,6 +250,14 @@ namespace ao::lmdb
     }
   }
 
+  void Database::Writer::ensureActive() const
+  {
+    if (_txn->isCommitted())
+    {
+      throwException<Exception>("Database::Writer used after its transaction was committed");
+    }
+  }
+
   namespace
   {
     void put(::MDB_cursor* cursor,
@@ -286,6 +294,7 @@ namespace ao::lmdb
 
   void Database::Writer::create(std::span<std::byte const> key, std::span<std::byte const> data)
   {
+    ensureActive();
     put(_cursorPtr.get(), key, data, MDB_NOOVERWRITE);
   }
 
@@ -296,6 +305,7 @@ namespace ao::lmdb
 
   std::span<std::byte> Database::Writer::create(std::span<std::byte const> key, std::size_t size)
   {
+    ensureActive();
     return reserve(_cursorPtr.get(), key, size, MDB_NOOVERWRITE);
   }
 
@@ -320,6 +330,7 @@ namespace ao::lmdb
 
   void Database::Writer::update(std::span<std::byte const> key, std::span<std::byte const> data)
   {
+    ensureActive();
     put(_cursorPtr.get(), key, data, 0);
   }
 
@@ -330,6 +341,7 @@ namespace ao::lmdb
 
   std::span<std::byte> Database::Writer::update(std::span<std::byte const> key, std::size_t size)
   {
+    ensureActive();
     return reserve(_cursorPtr.get(), key, size, 0);
   }
 
@@ -340,6 +352,7 @@ namespace ao::lmdb
 
   bool Database::Writer::del(std::span<std::byte const> keyView)
   {
+    ensureActive();
     auto key = makeVal(keyView.data(), keyView.size());
     int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, nullptr, MDB_SET);
 
@@ -360,6 +373,7 @@ namespace ao::lmdb
 
   std::optional<std::span<std::byte const>> Database::Writer::get(std::span<std::byte const> keyView) const
   {
+    ensureActive();
     auto key = makeVal(keyView.data(), keyView.size());
     auto val = ::MDB_val{0, nullptr};
     int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, &val, MDB_SET);
@@ -375,6 +389,7 @@ namespace ao::lmdb
 
   void Database::Writer::clear()
   {
+    ensureActive();
     throwOnError("mdb_drop", ::mdb_drop(_txn->_txnPtr.get(), _dbi, 0));
   }
 } // namespace ao::lmdb

@@ -87,7 +87,10 @@ namespace ao::tag::mpeg::id3v2
   enum class Encoding : std::uint8_t
   {
     Latin1 = 0U,
-    Ucs2 = 1U
+    Ucs2 = 1U,
+    // ID3v2.4 adds UTF-16BE (without BOM) and UTF-8 text encodings.
+    Utf16Be = 2U,
+    Utf8 = 3U
   };
 
   struct V22TextFrameLayout
@@ -194,4 +197,18 @@ namespace ao::tag::mpeg::id3v2
   {
     return decodeSize(layout.size);
   }
+
+  struct V24TextFrameLayout
+  {
+    static constexpr std::size_t kSize = 11;
+    using CommonLayout = V24CommonFrameLayout;
+
+    V24CommonFrameLayout common;
+    Encoding encoding;
+    // text
+  };
+
+  static_assert(sizeof(V24TextFrameLayout) == V24TextFrameLayout::kSize);
+  static_assert(alignof(V24TextFrameLayout) == 1);
+  static_assert(utility::layout::kIsBinaryLayoutType<V24TextFrameLayout>);
 }

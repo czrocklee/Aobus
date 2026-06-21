@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -75,6 +76,26 @@ namespace ao::utility::test
 
       CHECK(bytes::stringView(v8) == "Hello");
       CHECK(bytes::stringView(std::span<std::byte const>{}).empty());
+    }
+
+    SECTION("bytes::tryLayout / requireLayout are always checked")
+    {
+      auto const dummy = Dummy{.a = 7, .b = 9};
+      auto const full = bytes::view(dummy); // aligned, exact size
+
+      CHECK(bytes::tryLayout<Dummy>(full) != nullptr);
+      CHECK(bytes::requireLayout<Dummy>(full)->a == 7);
+
+      // Too short for the target type.
+      auto const shortSpan = full.subspan(0, sizeof(Dummy) - 1);
+      CHECK(bytes::tryLayout<Dummy>(shortSpan) == nullptr);
+      CHECK_THROWS_AS(bytes::requireLayout<Dummy>(shortSpan), std::out_of_range);
+
+      // Misaligned for the target type (offset by one from an aligned buffer).
+      alignas(Dummy) auto aligned = std::array<std::byte, sizeof(Dummy) + alignof(Dummy)>{};
+      auto const misaligned = std::span<std::byte const>{aligned.data() + 1, sizeof(Dummy)};
+      CHECK(bytes::tryLayout<Dummy>(misaligned) == nullptr);
+      CHECK_THROWS_AS(bytes::requireLayout<Dummy>(misaligned), std::out_of_range);
     }
 
     SECTION("layout:: functions")

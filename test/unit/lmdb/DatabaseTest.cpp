@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <cstdint>
 #include <cstring>
 #include <optional>
 #include <string_view>
@@ -576,5 +577,45 @@ namespace ao::lmdb::test
       REQUIRE(!writer2.get(key1).has_value());
       wtxn2.commit();
     }
+  }
+
+  TEST_CASE("Database::Writer - throws when used after commit", "[lmdb][unit][database][writer]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    auto wtxn = WriteTransaction{env};
+    auto db = Database{wtxn, "test"};
+    auto writer = db.writer(wtxn);
+    writer.create(1, createStringData("before"));
+    wtxn.commit();
+
+    // After commit LMDB has closed the writer's cursor; every operation must
+    // throw instead of dereferencing the dangling handle.
+    REQUIRE_THROWS_AS(writer.create(2, createStringData("after")), Exception);
+    REQUIRE_THROWS_AS(writer.update(1, createStringData("after")), Exception);
+    REQUIRE_THROWS_AS(writer.del(1), Exception);
+    REQUIRE_THROWS_AS(writer.get(1), Exception);
+    REQUIRE_THROWS_AS(writer.clear(), Exception);
+  }
+
+  TEST_CASE("Database::Reader::KeyView - coercion throws on non-uint32 key", "[lmdb][unit][database][reader]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    auto wtxn = WriteTransaction{env};
+    auto db = Database{wtxn, "blobdb", Database::KeyKind::Blob};
+    auto writer = db.writer(wtxn);
+    writer.create(createStringData("xy"), createStringData("value")); // 2-byte key
+    wtxn.commit();
+
+    auto const rtxn = ReadTransaction{env};
+    auto const reader = db.reader(rtxn);
+    auto const it = reader.begin();
+    REQUIRE(it != reader.end());
+
+    // A 2-byte key cannot be coerced to uint32; it must throw rather than yield 0.
+    REQUIRE_THROWS_AS(static_cast<std::uint32_t>(it->first), Exception);
   }
 } // namespace ao::lmdb::test

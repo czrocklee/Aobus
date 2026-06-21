@@ -10,14 +10,14 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <mutex>
+#include <shared_mutex>
 #include <span>
 #include <string_view>
 #include <utility>
 
 namespace ao::library
 {
-  // Extra capacity for dictionary entries
-  constexpr std::uint32_t kExtraCapacity = 4096;
   // Initial bucket count for the string-to-id lookup map.
   constexpr std::uint32_t kInitialBucketCount = 1024;
 
@@ -26,8 +26,6 @@ namespace ao::library
     , _stringToId{kInitialBucketCount, DictHash{&_idToStringStorage}, DictEqual{&_idToStringStorage}}
   {
     auto const reader = _database.reader(txn);
-
-    _idToStringStorage.reserve(reader.maxKey() + kExtraCapacity);
 
     std::uint32_t expectedId = 1;
 
@@ -53,6 +51,8 @@ namespace ao::library
 
   DictionaryId DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
+    auto const lock = std::scoped_lock{_mutex};
+
     // Check in-memory index first (includes entries from reserve)
     if (auto it = _stringToId.find(value); it != _stringToId.end())
     {
@@ -90,6 +90,7 @@ namespace ao::library
 
   std::string_view DictionaryStore::get(DictionaryId id) const
   {
+    auto const lock = std::shared_lock{_mutex};
     auto idx = id.raw();
 
     // 0 is null/invalid
@@ -108,6 +109,7 @@ namespace ao::library
 
   std::string_view DictionaryStore::getOrDefault(DictionaryId id, std::string_view defaultValue) const
   {
+    auto const lock = std::shared_lock{_mutex};
     auto idx = id.raw();
 
     if (idx == 0 || idx - 1 >= _idToStringStorage.size())
@@ -120,6 +122,8 @@ namespace ao::library
 
   DictionaryId DictionaryStore::getId(std::string_view str) const
   {
+    auto const lock = std::shared_lock{_mutex};
+
     if (auto it = _stringToId.find(str); it != _stringToId.end())
     {
       return *it;
@@ -130,11 +134,14 @@ namespace ao::library
 
   bool DictionaryStore::contains(std::string_view str) const
   {
+    auto const lock = std::shared_lock{_mutex};
     return _stringToId.contains(str);
   }
 
   DictionaryId DictionaryStore::getOrIntern(std::string_view str)
   {
+    auto const lock = std::scoped_lock{_mutex};
+
     // Check if already exists
     if (auto it = _stringToId.find(str); it != _stringToId.end())
     {

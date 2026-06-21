@@ -29,6 +29,18 @@ namespace ao::audio
   class Engine final
   {
   public:
+    /**
+     * @brief Thread-tolerant playback coordinator.
+     *
+     * Application control commands are serialized internally: concurrent calls
+     * to play(), stop(), seek(), setBackend(), setVolume(), and setMuted() are
+     * applied in one internal order. The order is an implementation detail and
+     * does not encode user-intent priority.
+     *
+     * Query methods such as status(), routeStatus(), transport(), volume(), and
+     * isMuted() are safe to call concurrently and return self-consistent
+     * snapshots, but they are not linearized with in-flight control commands.
+     */
     struct Status final
     {
       Transport transport = Transport::Idle;

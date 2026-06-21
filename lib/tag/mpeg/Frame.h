@@ -15,8 +15,8 @@ namespace ao::tag::mpeg
   class FrameView
   {
   public:
-    FrameView(void const* data, std::size_t /*size*/)
-      : _data{data}
+    FrameView(void const* data, std::size_t size)
+      : _data{data}, _size{size}
     {
     }
 
@@ -25,6 +25,7 @@ namespace ao::tag::mpeg
 
     FrameLayout const& layout() const { return *static_cast<FrameLayout const*>(_data); }
     void const* data() const { return _data; }
+    std::size_t size() const { return _size; }
 
     std::uint32_t sampleRate() const;
     std::uint32_t bitrate() const;
@@ -40,6 +41,7 @@ namespace ao::tag::mpeg
 
   private:
     void const* _data = nullptr;
+    std::size_t _size = 0;
   };
 
   std::optional<FrameView> locate(void const* buffer, std::size_t size);

@@ -12,9 +12,16 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 using namespace std::string_view_literals;
 
@@ -427,5 +434,92 @@ namespace ao::library::test
 
     // And get() should resolve correctly
     REQUIRE(dict.get(firstId) == "very_first_string");
+  }
+
+  // Run under TSan (./ao test --tsan) to verify the shared_mutex guards every
+  // index, and under ASan to verify the deque keeps get()'s string_view valid
+  // while a concurrent writer grows the backing storage.
+  TEST_CASE("Dictionary - concurrent read/write is race-free", "[library][unit][dictionary][concurrency]")
+  {
+    auto const temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+    auto wtxn = WriteTransaction{env};
+    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+    wtxn.commit();
+
+    // Seed a stable set of entries that readers can always resolve. getOrIntern
+    // stays in memory (no write txn), so it is safe to call concurrently.
+    constexpr std::int32_t kSeed = 256;
+    auto seededIds = std::vector<DictionaryId>{};
+    seededIds.reserve(kSeed);
+
+    for (std::int32_t i = 0; i < kSeed; ++i)
+    {
+      seededIds.push_back(dict.getOrIntern("seed_" + std::to_string(i)));
+    }
+
+    auto failed = std::atomic<bool>{false};
+
+    // Writer: keep interning fresh strings to force storage growth underneath
+    // the readers.
+    auto writer = std::jthread{[&](std::stop_token const& st)
+                               {
+                                 for (std::int32_t i = 0; !st.stop_requested(); ++i)
+                                 {
+                                   dict.getOrIntern("grow_" + std::to_string(i));
+                                 }
+                               }};
+
+    // Readers: resolve seeded IDs/strings concurrently with the writer. The
+    // returned string_view must stay valid across the writer's growth.
+    auto reader = [&]
+    {
+      for (std::int32_t iter = 0; iter < 20000 && !failed.load(std::memory_order_relaxed); ++iter)
+      {
+        auto const idx = static_cast<std::size_t>(iter) % seededIds.size();
+        auto const id = seededIds[idx];
+
+        if (auto const expected = "seed_" + std::to_string(idx);
+            dict.get(id) != expected || !dict.contains(expected) || dict.getId(expected) != id)
+        {
+          failed.store(true, std::memory_order_relaxed);
+        }
+
+        std::ignore = dict.size();
+      }
+    };
+
+    auto r1 = std::jthread{reader};
+    auto r2 = std::jthread{reader};
+    auto r3 = std::jthread{reader};
+
+    r1.request_stop();
+    r2.request_stop();
+    r3.request_stop();
+
+    if (r1.joinable())
+    {
+      r1.join();
+    }
+
+    if (r2.joinable())
+    {
+      r2.join();
+    }
+
+    if (r3.joinable())
+    {
+      r3.join();
+    }
+
+    writer.request_stop();
+
+    if (writer.joinable())
+    {
+      writer.join();
+    }
+
+    REQUIRE(!failed.load());
   }
 } // namespace ao::library::test

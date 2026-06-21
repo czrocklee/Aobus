@@ -30,6 +30,7 @@ extern "C"
 #include <expected>
 #include <format>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -203,6 +204,8 @@ namespace ao::audio::backend
 
       bool init(::snd_pcm_t* pcm)
       {
+        auto const lock = std::scoped_lock{_handleMutex};
+
         if (!openMixer(pcm))
         {
           _volumeMode = detail::AlsaVolumeControlMode::SoftwareGain;
@@ -225,6 +228,7 @@ namespace ao::audio::backend
 
       void close()
       {
+        auto const lock = std::scoped_lock{_handleMutex};
         _mixerPtr.reset();
         _mixerElem = nullptr;
         _volumeMode = detail::AlsaVolumeControlMode::Unavailable;
@@ -232,6 +236,7 @@ namespace ao::audio::backend
 
       bool setVolume(float vol)
       {
+        auto const lock = std::scoped_lock{_handleMutex};
         float const clamped = std::clamp(vol, 0.0F, 1.0F);
         _softwareVolume = clamped;
 
@@ -247,6 +252,7 @@ namespace ao::audio::backend
 
       bool setMuted(bool mute)
       {
+        auto const lock = std::scoped_lock{_handleMutex};
         _softwareMuted = mute;
 
         if (_volumeMode.load() == detail::AlsaVolumeControlMode::HardwareMixer && !applyHardwareMute(mute))
@@ -261,6 +267,8 @@ namespace ao::audio::backend
 
       float readHardwareVolume() const
       {
+        auto const lock = std::scoped_lock{_handleMutex};
+
         if (_mixerElem == nullptr)
         {
           return 1.0F;
@@ -284,6 +292,13 @@ namespace ao::audio::backend
 
       bool readHardwareMuted() const
       {
+        auto const lock = std::scoped_lock{_handleMutex};
+
+        if (_mixerElem == nullptr)
+        {
+          return false;
+        }
+
         if (int val = 0; ::snd_mixer_selem_get_playback_switch(_mixerElem, SND_MIXER_SCHN_MONO, &val) == 0)
         {
           return val == 0;
@@ -408,6 +423,11 @@ namespace ao::audio::backend
       };
       using AlsaMixerPtr = std::unique_ptr<::snd_mixer_t, AlsaMixerDeleter>;
 
+      // Serializes every snd_mixer_* handle call. The playback loop only reads
+      // the atomics below (never the handle), so it never contends; this guards
+      // the control-thread set/read/graph-publish paths against each other.
+      mutable std::mutex _handleMutex;
+
       AlsaMixerPtr _mixerPtr;
       ::snd_mixer_elem_t* _mixerElem = nullptr; // non-owning
       std::string _mixerElemName;               // debug/log
@@ -459,6 +479,7 @@ namespace ao::audio::backend
     }
 
     void playbackLoop(std::stop_token const& stopToken) const;
+    void syncPauseState(bool& devicePaused) const;
     void recoverFromXrun(std::int32_t err) const;
 
     void publishGraphState() const;
@@ -495,9 +516,15 @@ namespace ao::audio::backend
 
     std::size_t const bytesPerFrame = (static_cast<std::size_t>(format.bitDepth) / 8) * format.channels;
 
+    // Tracks the device-side pause state owned exclusively by this thread.
+    // pause()/resume() only flip the `paused` atomic; the edge is applied here.
+    bool devicePaused = false;
+
     while (!stopToken.stop_requested())
     {
-      if (paused.load(std::memory_order_relaxed))
+      syncPauseState(devicePaused);
+
+      if (devicePaused)
       {
         std::this_thread::sleep_for(kPollRetryDelay);
         continue;
@@ -530,18 +557,24 @@ namespace ao::audio::backend
 
       std::size_t const bytesRead = renderTarget->readPcm({dst, bytesToRead});
 
-      if (bytesRead > 0)
+      // Per the IRenderTarget contract readPcm returns whole frames; commit only
+      // the whole-frame portion defensively. A partial frame must never be
+      // committed (it would desync channel alignment) nor gain-scaled.
+      auto const framesRead = static_cast<::snd_pcm_uframes_t>(bytesRead / bytesPerFrame);
+
+      if (framesRead > 0)
       {
+        auto const committedBytes = static_cast<std::size_t>(framesRead) * bytesPerFrame;
+
         if (mixer.volumeMode() == detail::AlsaVolumeControlMode::SoftwareGain)
         {
-          detail::applyAlsaSoftwareGain({dst, bytesRead},
+          detail::applyAlsaSoftwareGain({dst, committedBytes},
                                         format.bitDepth,
                                         format.validBits,
                                         is3Byte24Bit,
                                         mixer.softwareMuted() ? 0.0F : mixer.softwareVolume());
         }
 
-        auto const framesRead = static_cast<::snd_pcm_uframes_t>(bytesRead / (bytesPerFrame));
         commitFrames(offset, framesRead);
       }
       else
@@ -557,6 +590,33 @@ namespace ao::audio::backend
 
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
       }
+    }
+  }
+
+  void AlsaExclusiveBackend::Impl::syncPauseState(bool& devicePaused) const
+  {
+    // All snd_pcm_* state transitions are marshalled onto this loop thread
+    // because snd_pcm_t is not thread-safe. Detect the pause/resume edge and
+    // drive the device locally.
+    if (bool const wantPaused = paused.load(std::memory_order_relaxed); wantPaused != devicePaused)
+    {
+      if (wantPaused)
+      {
+        if (canPause)
+        {
+          ::snd_pcm_pause(pcmPtr.get(), 1);
+        }
+        else
+        {
+          ::snd_pcm_drop(pcmPtr.get());
+        }
+      }
+      else if (!canPause || ::snd_pcm_pause(pcmPtr.get(), 0) < 0)
+      {
+        ::snd_pcm_prepare(pcmPtr.get());
+      }
+
+      devicePaused = wantPaused;
     }
   }
 
@@ -901,7 +961,9 @@ namespace ao::audio::backend
                                       }};
     }
 
-    ::snd_pcm_start(_implPtr->pcmPtr.get());
+    // The device is started from the playback loop thread (commitFrames kicks a
+    // PREPARED device into RUNNING). snd_pcm_* is never touched here: the loop
+    // owns the handle and snd_pcm_t is not thread-safe.
   }
 
   void AlsaExclusiveBackend::pause()
@@ -911,16 +973,10 @@ namespace ao::audio::backend
       return;
     }
 
-    _implPtr->paused = true;
-
-    if (_implPtr->canPause)
-    {
-      ::snd_pcm_pause(_implPtr->pcmPtr.get(), 1);
-    }
-    else
-    {
-      ::snd_pcm_drop(_implPtr->pcmPtr.get());
-    }
+    // Flip the intent only; the playback loop applies the device-side pause
+    // (snd_pcm_pause / snd_pcm_drop) on its own thread to keep handle access
+    // single-threaded.
+    _implPtr->paused.store(true, std::memory_order_relaxed);
   }
 
   void AlsaExclusiveBackend::resume()
@@ -930,28 +986,16 @@ namespace ao::audio::backend
       return;
     }
 
-    _implPtr->paused = false;
-    std::int32_t err = 0;
-
-    if (_implPtr->canPause)
-    {
-      err = ::snd_pcm_pause(_implPtr->pcmPtr.get(), 0);
-    }
-
-    if (!_implPtr->canPause || err < 0)
-    {
-      ::snd_pcm_prepare(_implPtr->pcmPtr.get());
-      ::snd_pcm_start(_implPtr->pcmPtr.get());
-    }
+    // Flip the intent only; the playback loop applies the device-side resume
+    // (snd_pcm_pause release, or prepare + auto-start) on its own thread.
+    _implPtr->paused.store(false, std::memory_order_relaxed);
   }
 
   void AlsaExclusiveBackend::flush()
   {
-    if (_implPtr->pcmPtr)
-    {
-      ::snd_pcm_drop(_implPtr->pcmPtr.get());
-      ::snd_pcm_prepare(_implPtr->pcmPtr.get());
-    }
+    // The playback loop owns snd_pcm_t while it is running. Reuse stop() as
+    // the quiescent point before issuing flush-side state changes.
+    stop();
   }
 
   void AlsaExclusiveBackend::stop()

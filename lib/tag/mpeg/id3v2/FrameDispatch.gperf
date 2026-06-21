@@ -1,5 +1,6 @@
 %{
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 %}
 %language=C++
@@ -11,7 +12,7 @@
 %define lookup-function-name lookupFrame
 struct Id3v2FrameDispatchEntry
 {
-  using FrameHandler = void (*)(library::TrackBuilder&, TagFile const&, void const*, std::size_t);
+  using FrameHandler = void (*)(library::TrackBuilder&, TagFile const&, void const*, std::size_t, std::uint8_t);
   char const* name;
   FrameHandler handler;
 };

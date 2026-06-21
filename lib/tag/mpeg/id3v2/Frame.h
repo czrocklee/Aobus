@@ -11,65 +11,136 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <span>
 #include <string>
 #include <string_view>
 
 namespace ao::tag::mpeg::id3v2
 {
-  inline std::string convertToUtf8(char const* begin, char const* end, Encoding encoding)
+  namespace text
   {
-    if (begin >= end)
+    static constexpr std::uint8_t kUtf8TwoByteHeader = 0xC0;
+    static constexpr std::uint8_t kUtf8ThreeByteHeader = 0xE0;
+    static constexpr std::uint8_t kUtf8FourByteHeader = 0xF0;
+    static constexpr std::uint8_t kUtf8ContinuationHeader = 0x80;
+    static constexpr std::uint8_t kUtf8ContinuationMask = 0x3F;
+    static constexpr std::size_t kUtf8Shift18 = 18;
+    static constexpr std::size_t kUtf8Shift12 = 12;
+    static constexpr std::size_t kUtf8Shift6 = 6;
+    static constexpr std::uint32_t kUtf16HighSurrogateBegin = 0xD800;
+    static constexpr std::uint32_t kUtf16HighSurrogateEnd = 0xDBFF;
+    static constexpr std::uint32_t kUtf16LowSurrogateBegin = 0xDC00;
+    static constexpr std::uint32_t kUtf16LowSurrogateEnd = 0xDFFF;
+    static constexpr std::uint32_t kUtf16SupplementaryBase = 0x10000;
+    static constexpr std::uint32_t kUtf8ThreeByteLimit = 0x10000;
+    static constexpr std::uint32_t kUtf8MaxCodePoint = 0x10FFFF;
+    static constexpr std::uint32_t kReplacementCodePoint = 0xFFFD;
+
+    inline bool isHighSurrogate(std::uint32_t cp) noexcept
     {
-      return {};
+      return cp >= kUtf16HighSurrogateBegin && cp <= kUtf16HighSurrogateEnd;
     }
 
-    auto const size = static_cast<std::size_t>(end - begin);
-
-    if (encoding == Encoding::Latin1)
+    inline bool isLowSurrogate(std::uint32_t cp) noexcept
     {
-      static constexpr std::uint8_t kAsciiLimit = 0x80;
-      static constexpr std::uint8_t kUtf8TwoByteHeader = 0xC0;
-      static constexpr std::uint8_t kUtf8ContinuationHeader = 0x80;
-      static constexpr std::uint8_t kUtf8ContinuationMask = 0x3F;
-      static constexpr std::size_t kUtf8Shift6 = 6;
+      return cp >= kUtf16LowSurrogateBegin && cp <= kUtf16LowSurrogateEnd;
+    }
 
-      auto result = std::string{};
-      result.reserve(size);
+    inline void appendUtf8(std::string& out, std::uint32_t cp)
+    {
+      static constexpr std::uint32_t kAsciiLimit = 0x80;
+      static constexpr std::uint32_t kTwoByteLimit = 0x800;
 
-      for (auto const* it = begin; it != end; ++it)
+      if (isHighSurrogate(cp) || isLowSurrogate(cp) || cp > kUtf8MaxCodePoint)
       {
-        if (auto const ch = static_cast<unsigned char>(*it); ch < kAsciiLimit)
-        {
-          result.push_back(static_cast<char>(ch));
-        }
-        else
-        {
-          result.push_back(static_cast<char>(kUtf8TwoByteHeader | (ch >> kUtf8Shift6)));
-          result.push_back(static_cast<char>(kUtf8ContinuationHeader | (ch & kUtf8ContinuationMask)));
-        }
+        cp = kReplacementCodePoint;
+      }
+
+      if (cp < kAsciiLimit)
+      {
+        out.push_back(static_cast<char>(cp));
+      }
+      else if (cp < kTwoByteLimit)
+      {
+        out.push_back(static_cast<char>(kUtf8TwoByteHeader | (cp >> kUtf8Shift6)));
+        out.push_back(static_cast<char>(kUtf8ContinuationHeader | (cp & kUtf8ContinuationMask)));
+      }
+      else if (cp < kUtf8ThreeByteLimit)
+      {
+        out.push_back(static_cast<char>(kUtf8ThreeByteHeader | (cp >> kUtf8Shift12)));
+        out.push_back(static_cast<char>(kUtf8ContinuationHeader | ((cp >> kUtf8Shift6) & kUtf8ContinuationMask)));
+        out.push_back(static_cast<char>(kUtf8ContinuationHeader | (cp & kUtf8ContinuationMask)));
+      }
+      else
+      {
+        out.push_back(static_cast<char>(kUtf8FourByteHeader | (cp >> kUtf8Shift18)));
+        out.push_back(static_cast<char>(kUtf8ContinuationHeader | ((cp >> kUtf8Shift12) & kUtf8ContinuationMask)));
+        out.push_back(static_cast<char>(kUtf8ContinuationHeader | ((cp >> kUtf8Shift6) & kUtf8ContinuationMask)));
+        out.push_back(static_cast<char>(kUtf8ContinuationHeader | (cp & kUtf8ContinuationMask)));
+      }
+    }
+
+    inline std::string latin1ToUtf8(std::span<std::byte const> buf)
+    {
+      auto result = std::string{};
+      result.reserve(buf.size());
+
+      for (auto const byte : buf)
+      {
+        appendUtf8(result, std::to_integer<std::uint8_t>(byte));
       }
 
       return result;
     }
 
-    if (encoding == Encoding::Ucs2)
+    // ID3v2.4 UTF-8 text is already in the target encoding; copy it through,
+    // dropping an optional leading BOM (EF BB BF).
+    inline std::string utf8PassThrough(std::span<std::byte const> buf)
     {
-      static constexpr std::size_t kMinUcs2Size = 2;
+      static constexpr std::size_t kBomSize = 3;
+      static constexpr std::uint8_t kBom0 = 0xEF;
+      static constexpr std::uint8_t kBom1 = 0xBB;
+      static constexpr std::uint8_t kBom2 = 0xBF;
 
-      if (size < kMinUcs2Size)
+      auto const hasBom = buf.size() >= kBomSize && std::to_integer<std::uint8_t>(buf[0]) == kBom0 &&
+                          std::to_integer<std::uint8_t>(buf[1]) == kBom1 &&
+                          std::to_integer<std::uint8_t>(buf[2]) == kBom2;
+
+      auto const* const start = hasBom ? buf.data() + kBomSize : buf.data();
+      auto const size = hasBom ? buf.size() - kBomSize : buf.size();
+
+      auto result = std::string{};
+      result.reserve(size);
+
+      for (auto const byte : std::span<std::byte const>{start, size})
+      {
+        result.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+      }
+
+      return result;
+    }
+
+    // UCS-2 (ID3v2.3) and UTF-16BE (ID3v2.4) share this decoder: it is BOM-aware
+    // and defaults to big-endian when no BOM is present.
+    inline std::string utf16ToUtf8(std::span<std::byte const> buf)
+    {
+      static constexpr std::size_t kMinSize = 2;
+
+      if (buf.size() < kMinSize)
       {
         return {};
       }
 
-      auto const u16Span = utility::layout::viewArray<std::uint8_t>(utility::bytes::view(begin, size));
+      auto const u16Span = utility::layout::viewArray<std::uint8_t>(buf);
       auto const* u16Begin = u16Span.data();
-      auto const* u16End = u16Begin + u16Span.size();
+      auto const* const u16End = u16Begin + u16Span.size();
 
-      bool bigEndian = true;
       static constexpr std::uint8_t kBomByte1Le = 0xFF;
       static constexpr std::uint8_t kBomByte2Le = 0xFE;
       static constexpr std::uint8_t kBomByte1Be = 0xFE;
       static constexpr std::uint8_t kBomByte2Be = 0xFF;
+
+      bool bigEndian = true;
 
       if (u16Begin[0] == kBomByte1Le && u16Begin[1] == kBomByte2Le)
       {
@@ -78,44 +149,60 @@ namespace ao::tag::mpeg::id3v2
       }
       else if (u16Begin[0] == kBomByte1Be && u16Begin[1] == kBomByte2Be)
       {
-        bigEndian = true;
         u16Begin += 2;
       }
 
-      static constexpr std::uint16_t kUcs2AsciiLimit = 0x80;
-      static constexpr std::uint16_t kUcs2TwoByteLimit = 0x800;
-      static constexpr std::uint8_t kUtf8ThreeByteHeader = 0xE0;
-      static constexpr std::uint8_t kUtf8TwoByteHeader = 0xC0;
-      static constexpr std::uint8_t kUtf8ContinuationHeader = 0x80;
-      static constexpr std::uint8_t kUtf8ContinuationMask = 0x3F;
-      static constexpr std::size_t kUtf8Shift12 = 12;
-      static constexpr std::size_t kUtf8Shift6 = 6;
-
       auto result = std::string{};
-      result.reserve(size); // Heuristic
+      result.reserve(buf.size()); // Heuristic
+
+      auto readCodeUnit = [bigEndian](std::uint8_t const* it) noexcept
+      {
+        return bigEndian ? static_cast<std::uint16_t>((static_cast<std::uint16_t>(it[0]) << 8) | it[1])
+                         : static_cast<std::uint16_t>((static_cast<std::uint16_t>(it[1]) << 8) | it[0]);
+      };
 
       for (auto const* it = u16Begin; it + 1 < u16End; it += 2)
       {
-        if (std::uint16_t const cp = bigEndian ? (static_cast<std::uint16_t>(it[0]) << 8) | it[1]
-                                               : (static_cast<std::uint16_t>(it[1]) << 8) | it[0];
-            cp < kUcs2AsciiLimit)
+        auto const cp = readCodeUnit(it);
+
+        if (isHighSurrogate(cp))
         {
-          result.push_back(static_cast<char>(cp));
+          if (auto const* const next = it + 2; next + 1 < u16End)
+          {
+            if (auto const low = readCodeUnit(next); isLowSurrogate(low))
+            {
+              auto const codePoint =
+                kUtf16SupplementaryBase + ((cp - kUtf16HighSurrogateBegin) << 10) + (low - kUtf16LowSurrogateBegin);
+              appendUtf8(result, codePoint);
+              it = next;
+              continue;
+            }
+          }
+
+          appendUtf8(result, kReplacementCodePoint);
+          continue;
         }
-        else if (cp < kUcs2TwoByteLimit)
-        {
-          result.push_back(static_cast<char>(kUtf8TwoByteHeader | (cp >> kUtf8Shift6)));
-          result.push_back(static_cast<char>(kUtf8ContinuationHeader | (cp & kUtf8ContinuationMask)));
-        }
-        else
-        {
-          result.push_back(static_cast<char>(kUtf8ThreeByteHeader | (cp >> kUtf8Shift12)));
-          result.push_back(static_cast<char>(kUtf8ContinuationHeader | ((cp >> kUtf8Shift6) & kUtf8ContinuationMask)));
-          result.push_back(static_cast<char>(kUtf8ContinuationHeader | (cp & kUtf8ContinuationMask)));
-        }
+
+        appendUtf8(result, cp);
       }
 
       return result;
+    }
+  } // namespace text
+
+  inline std::string convertToUtf8(std::span<std::byte const> buf, Encoding encoding)
+  {
+    if (buf.empty())
+    {
+      return {};
+    }
+
+    switch (encoding)
+    {
+      case Encoding::Latin1: return text::latin1ToUtf8(buf);
+      case Encoding::Utf8: return text::utf8PassThrough(buf);
+      case Encoding::Ucs2:
+      case Encoding::Utf16Be: return text::utf16ToUtf8(buf);
     }
 
     return {};
@@ -183,10 +270,10 @@ namespace ao::tag::mpeg::id3v2
 
     std::string text() const
     {
-      auto const* begin = static_cast<char const*>(Base::data()) + sizeof(FrameViewLayout);
-      auto end = static_cast<char const*>(Base::data()) + Base::size();
-      auto encoding = Base::template layout<FrameViewLayout>().encoding;
-      std::string result = convertToUtf8(begin, end, encoding);
+      auto const* const begin = static_cast<std::byte const*>(Base::data()) + sizeof(FrameViewLayout);
+      auto const* const end = begin + (Base::size() - sizeof(FrameViewLayout));
+      std::string result =
+        convertToUtf8(std::span<std::byte const>{begin, end}, Base::template layout<FrameViewLayout>().encoding);
 
       while (!result.empty() && result.back() == '\0')
       {
@@ -198,6 +285,8 @@ namespace ao::tag::mpeg::id3v2
   };
 
   using V23TextFrameView = TextFrameView<V23TextFrameLayout>;
+
+  using V24TextFrameView = TextFrameView<V24TextFrameLayout>;
 
   template<typename ViewT>
   class FrameViewIterator

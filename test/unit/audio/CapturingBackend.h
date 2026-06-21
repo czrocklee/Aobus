@@ -67,6 +67,7 @@ namespace ao::audio::test
     {
       auto const lock = std::scoped_lock{_mutex};
       _events.push_back({"close", {}});
+      _target = nullptr;
     }
 
     BackendId backendId() const noexcept override { return BackendId{"capturing"}; }
