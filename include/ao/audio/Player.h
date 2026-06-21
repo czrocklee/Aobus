@@ -14,14 +14,32 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <string>
 #include <vector>
+
+namespace ao::async
+{
+  class IExecutor;
+}
 
 namespace ao::audio
 {
   /**
    * @brief High-level player that coordinates multiple backends and tracks playback state.
    * Manages audio routing graphs and quality analysis.
+   *
+   * State-change callbacks are delivered after asynchronous Engine
+   * backend/source events, provider device/graph events, or Player
+   * output-selection readiness changes. Player marshals those internal
+   * reactions onto the executor passed at construction before touching
+   * executor-owned Player state, so user callbacks always run on the
+   * executor's owning thread.
+   *
+   * Threading contract: public methods and the destructor are expected to run on
+   * the executor's owning thread, mirroring the layers that aggregate Player
+   * (e.g. ao::rt::PlaybackService). The executor must outlive Player. Teardown
+   * neutralizes marshalled callbacks that are still queued when destruction
+   * starts; callbacks already running are on the executor thread and must return
+   * promptly.
    */
   class Player final
   {
@@ -29,8 +47,6 @@ namespace ao::audio
     struct Status final
     {
       Engine::Status engine;
-      std::string trackTitle;
-      std::string trackArtist;
       std::vector<IBackendProvider::Status> availableBackends;
       flow::Graph flow;
       Quality quality = Quality::Unknown;
@@ -44,7 +60,7 @@ namespace ao::audio
       bool operator==(Status const&) const = default;
     };
 
-    Player();
+    explicit Player(async::IExecutor& executor);
     ~Player();
 
     Player(Player const&) = delete;
@@ -54,7 +70,7 @@ namespace ao::audio
 
     void addProvider(std::unique_ptr<IBackendProvider> providerPtr);
 
-    void play(TrackPlaybackDescriptor const& descriptor);
+    void play(PlaybackInput const& input);
     void setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
     void pause();
     void resume();
@@ -70,6 +86,7 @@ namespace ao::audio
     bool isReady() const;
 
     void setOnTrackEnded(std::function<void()> callback);
+    void setOnStateChanged(std::function<void()> callback);
 
     /// Called when available output devices change; receives per-provider status snapshots.
     void setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback);

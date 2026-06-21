@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/TrackFieldReaderInternal.h"
+#include <ao/AudioCodec.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackView.h>
@@ -74,7 +74,7 @@ namespace ao::rt
       case TrackField::Codec:
       {
         return TrackFieldRawValue{
-          std::in_place_type<std::string>, std::string{library::audioCodecName(view.property().codec())}};
+          std::in_place_type<std::string>, std::string{audioCodecName(view.property().codec())}};
       }
       case TrackField::SampleRate:
         return TrackFieldRawValue{std::in_place_type<std::uint32_t>, view.property().sampleRate().raw()};

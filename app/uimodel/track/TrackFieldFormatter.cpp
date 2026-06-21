@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 
 #include <charconv>
@@ -160,14 +160,14 @@ namespace ao::uimodel::track
     return std::format("{}-bit", bitDepth);
   }
 
-  std::string formatCodec(library::AudioCodec codec)
+  std::string formatCodec(AudioCodec codec)
   {
-    if (codec == library::AudioCodec::Unknown)
+    if (codec == AudioCodec::Unknown)
     {
       return {};
     }
 
-    return std::string{library::audioCodecName(codec)};
+    return std::string{audioCodecName(codec)};
   }
 
   TrackFieldEditValue makeTextEditValue(std::string_view value)

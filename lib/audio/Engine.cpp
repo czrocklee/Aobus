@@ -16,16 +16,22 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
+#include <variant>
+#include <vector>
 
 namespace ao::audio
 {
@@ -38,21 +44,115 @@ namespace ao::audio
   struct Engine::Impl final
   {
     struct RenderSession;
+    struct BackendErrorEvent;
+    struct SourceErrorEvent;
+    struct DrainCompleteEvent;
+    struct RouteReadyEvent;
+    struct FormatChangedEvent;
+    struct PropertyChangedEvent;
+
+    struct BackendErrorEvent final
+    {
+      std::uint64_t generation = 0;
+      std::string message;
+    };
+
+    struct SourceErrorEvent final
+    {
+      std::uint64_t sourceGeneration = 0;
+      Error error;
+    };
+
+    struct DrainCompleteEvent final
+    {
+      std::uint64_t generation = 0;
+    };
+
+    struct RouteReadyEvent final
+    {
+      std::uint64_t generation = 0;
+      BackendId backendId;
+      std::string routeAnchor;
+    };
+
+    struct FormatChangedEvent final
+    {
+      std::uint64_t generation = 0;
+      Format format;
+    };
+
+    struct PropertyChangedEvent final
+    {
+      std::uint64_t generation = 0;
+      PropertyId id{};
+      std::optional<PropertyValue> optValue;
+      PropertyInfo volumeInfo;
+    };
+
+    using PlaybackEvent = std::variant<BackendErrorEvent,
+                                       SourceErrorEvent,
+                                       DrainCompleteEvent,
+                                       RouteReadyEvent,
+                                       FormatChangedEvent,
+                                       PropertyChangedEvent>;
+    using Notification = std::function<void()>;
+    using Notifications = std::vector<Notification>;
 
     Device currentDevice;
 
-    // RT-visible raw pointer to the active source. The render thread
-    // (readPcm / isSourceDrained) does a plain lock-free acquire load:
-    // std::atomic<shared_ptr> is not lock-free on libstdc++ and must never sit
-    // on the audio callback path.
-    std::atomic<ISource*> activeSource{nullptr};
+    class RenderSourceSlot final
+    {
+    public:
+      ISource* active() const noexcept { return _active.load(std::memory_order_acquire); }
 
-    // Owns the active source's lifetime. Touched only off the RT path (play /
-    // stop / seek / status) under sourceMutex. The retired source is destroyed
-    // only after backendPtr->stop() has quiesced the render thread, so the RT
-    // thread can never dereference a freed pointer.
-    mutable std::mutex sourceMutex;
-    std::shared_ptr<ISource> ownedSourcePtr;
+      std::uint64_t generation() const noexcept { return _generation.load(std::memory_order_acquire); }
+
+      void setGeneration(std::uint64_t generation) noexcept
+      {
+        _generation.store(generation, std::memory_order_release);
+      }
+
+      void retireGeneration() noexcept { _generation.store(0, std::memory_order_release); }
+
+      // Publish `next` as the active source for the render thread and retire the
+      // previous owner. MUST be called only with the backend quiesced (after
+      // backendPtr->stop()/close(), or before the first start()), so destroying
+      // the retired source — which may join its decode thread — cannot race the
+      // RT render thread.
+      void publish(std::shared_ptr<ISource> nextPtr)
+      {
+        auto retiredPtr = std::shared_ptr<ISource>{};
+        {
+          auto const lock = std::scoped_lock{_mutex};
+          _active.store(nextPtr.get(), std::memory_order_release);
+          retiredPtr = std::move(_ownerPtr);
+          _ownerPtr = std::move(nextPtr);
+        }
+        // `retired` is destroyed here, outside the lock.
+      }
+
+      // Copy the owning source pointer for non-RT callers (status / seek /
+      // resume), keeping it alive for the duration of their use.
+      std::shared_ptr<ISource> current() const
+      {
+        auto const lock = std::scoped_lock{_mutex};
+
+        if (_generation.load(std::memory_order_acquire) == 0)
+        {
+          return {};
+        }
+
+        return _ownerPtr;
+      }
+
+    private:
+      std::atomic<ISource*> _active{nullptr};
+      std::atomic<std::uint64_t> _generation{0};
+      mutable std::mutex _mutex;
+      std::shared_ptr<ISource> _ownerPtr;
+    };
+
+    RenderSourceSlot sourceSlot;
 
     // Serializes external control commands that coordinate backend lifecycle,
     // source ownership, and status publication. Backend callbacks deliberately
@@ -69,15 +169,20 @@ namespace ao::audio
 
     mutable std::mutex stateMutex;
     std::uint64_t nextRenderGeneration = 1;
-    std::atomic<std::uint64_t> activeSourceGeneration{0};
     std::uint64_t nextSourceGeneration = 1;
-    std::optional<TrackPlaybackDescriptor> optCurrentTrack;
+    std::optional<PlaybackInput> optCurrentTrack;
     Engine::Status status;
     std::function<void()> onTrackEnded;
+    std::function<void()> onStateChanged;
     Engine::OnRouteChanged onRouteChanged;
     detail::RouteTracker routeTracker;
     DecoderFactoryFn decoderFactory;
     std::unique_ptr<RenderSession> renderSessionPtr;
+
+    mutable std::mutex eventMutex;
+    std::condition_variable_any eventCv;
+    std::deque<PlaybackEvent> eventQueue;
+    std::jthread eventThread;
 
     // Must be declared last so the PipeWire thread loop is stopped
     // before the callbacks and state it accesses are destroyed.
@@ -88,16 +193,19 @@ namespace ao::audio
       : currentDevice{std::move(device)}, decoderFactory{std::move(decoderFactory)}, backendPtr{std::move(backendPtr)}
     {
       syncBackendIdentity();
+      eventThread = std::jthread{[this](std::stop_token stopToken) { runEventLoop(stopToken); }};
     }
 
     ~Impl()
     {
       retireSessions();
+      stopEventLoop();
 
       if (backendPtr)
       {
         backendPtr->stop();
         backendPtr->close();
+        resetRenderSession();
       }
 
       publishSource(nullptr);
@@ -109,46 +217,8 @@ namespace ao::audio
     Impl& operator=(Impl&&) = delete;
 
     // ── Source publication ────────────────────────────────────────
-    // Publish `next` as the active source for the render thread and retire the
-    // previous owner. MUST be called only with the backend quiesced (after
-    // backendPtr->stop()/close(), or before the first start()), so destroying
-    // the retired source — which may join its decode thread — cannot race the
-    // RT render thread.
-    void publishSource(std::shared_ptr<ISource> nextPtr)
-    {
-      auto retiredPtr = std::shared_ptr<ISource>{};
-      {
-        auto const lock = std::scoped_lock{sourceMutex};
-        activeSource.store(nextPtr.get(), std::memory_order_release);
-        retiredPtr = std::move(ownedSourcePtr);
-        ownedSourcePtr = std::move(nextPtr);
-      }
-      // `retired` is destroyed here, outside the lock.
-    }
-
-    void deactivateSourceIfRetired()
-    {
-      auto const lock = std::scoped_lock{sourceMutex};
-
-      if (activeSourceGeneration.load(std::memory_order_acquire) == 0)
-      {
-        activeSource.store(nullptr, std::memory_order_release);
-      }
-    }
-
-    // Copy the owning source pointer for non-RT callers (status / seek / resume),
-    // keeping it alive for the duration of their use.
-    std::shared_ptr<ISource> currentSource() const
-    {
-      auto const lock = std::scoped_lock{sourceMutex};
-
-      if (activeSourceGeneration.load(std::memory_order_acquire) == 0)
-      {
-        return {};
-      }
-
-      return ownedSourcePtr;
-    }
+    void publishSource(std::shared_ptr<ISource> nextPtr) { sourceSlot.publish(std::move(nextPtr)); }
+    std::shared_ptr<ISource> currentSource() const { return sourceSlot.current(); }
 
     // ── Helpers ────────────────────────────────────────────────────
     void syncBackendIdentity()
@@ -178,7 +248,7 @@ namespace ao::audio
     void resetEngine()
     {
       optCurrentTrack.reset();
-      activeSourceGeneration.store(0, std::memory_order_release);
+      sourceSlot.retireGeneration();
       backendStarted = false;
       playbackDrainPending = false;
       status = {};
@@ -186,6 +256,75 @@ namespace ao::audio
       syncBackendStatus();
       accumulatedFrames.store(0, std::memory_order_relaxed);
       routeTracker.clear();
+    }
+
+    void enqueuePlaybackEvent(PlaybackEvent event)
+    {
+      if (eventThread.get_stop_token().stop_requested())
+      {
+        return;
+      }
+
+      {
+        auto const lock = std::scoped_lock{eventMutex};
+
+        if (eventThread.get_stop_token().stop_requested())
+        {
+          return;
+        }
+
+        eventQueue.push_back(std::move(event));
+      }
+
+      eventCv.notify_one();
+    }
+
+    void stopEventLoop() noexcept
+    {
+      if (eventThread.joinable())
+      {
+        eventThread.request_stop();
+        eventCv.notify_all();
+        eventThread.join();
+      }
+
+      auto const lock = std::scoped_lock{eventMutex};
+      eventQueue.clear();
+    }
+
+    void runEventLoop(std::stop_token stopToken)
+    {
+      while (true)
+      {
+        auto optEvent = std::optional<PlaybackEvent>{};
+        {
+          auto lock = std::unique_lock{eventMutex};
+          eventCv.wait(lock, stopToken, [this] { return !eventQueue.empty(); });
+
+          if (stopToken.stop_requested())
+          {
+            eventQueue.clear();
+            return;
+          }
+
+          optEvent = std::move(eventQueue.front());
+          eventQueue.pop_front();
+        }
+
+        auto notifications = Notifications{};
+        {
+          auto const lock = std::scoped_lock{controlMutex};
+          notifications = applyPlaybackEvent(*optEvent);
+        }
+
+        for (auto& notification : notifications)
+        {
+          if (notification)
+          {
+            notification();
+          }
+        }
+      }
     }
 
     struct RenderSession final : public IRenderTarget
@@ -224,8 +363,10 @@ namespace ao::audio
     void retireSessions() noexcept
     {
       activeRenderGeneration.store(0, std::memory_order_release);
-      activeSourceGeneration.store(0, std::memory_order_release);
+      sourceSlot.retireGeneration();
     }
+
+    void resetRenderSession() noexcept { renderSessionPtr.reset(); }
 
     IRenderTarget* createRenderSession(IBackend& backend)
     {
@@ -243,7 +384,7 @@ namespace ao::audio
         return 0;
       }
 
-      auto* const src = activeSource.load(std::memory_order_acquire);
+      auto* const src = sourceSlot.active();
       return src != nullptr ? src->read(output) : 0;
     }
 
@@ -254,7 +395,7 @@ namespace ao::audio
         return true;
       }
 
-      auto* const src = activeSource.load(std::memory_order_acquire);
+      auto* const src = sourceSlot.active();
 
       if (src == nullptr)
       {
@@ -298,7 +439,7 @@ namespace ao::audio
         return;
       }
 
-      handleDrainComplete(generation);
+      enqueuePlaybackEvent(DrainCompleteEvent{.generation = generation});
     }
 
     void onRouteReady(std::uint64_t generation, IBackend& backend, std::string_view routeAnchor) noexcept
@@ -308,15 +449,15 @@ namespace ao::audio
         return;
       }
 
-      auto anchor = std::string{routeAnchor};
-      handleRouteReady(generation, backend, anchor);
+      enqueuePlaybackEvent(RouteReadyEvent{
+        .generation = generation, .backendId = backend.backendId(), .routeAnchor = std::string{routeAnchor}});
     }
 
     void onFormatChanged(std::uint64_t generation, Format const& format) noexcept
     {
       if (isActiveRenderSession(generation))
       {
-        handleFormatChanged(generation, format);
+        enqueuePlaybackEvent(FormatChangedEvent{.generation = generation, .format = format});
       }
     }
 
@@ -324,7 +465,17 @@ namespace ao::audio
     {
       if (isActiveRenderSession(generation))
       {
-        handlePropertyChanged(generation, backend, id);
+        auto optValue = std::optional<PropertyValue>{};
+
+        if (auto value = backend.property(id); value)
+        {
+          optValue = *value;
+        }
+
+        enqueuePlaybackEvent(PropertyChangedEvent{.generation = generation,
+                                                  .id = id,
+                                                  .optValue = std::move(optValue),
+                                                  .volumeInfo = backend.queryProperty(PropertyId::Volume)});
       }
     }
 
@@ -335,8 +486,7 @@ namespace ao::audio
         return;
       }
 
-      auto msg = std::string{message};
-      handleBackendError(generation, msg);
+      enqueuePlaybackEvent(BackendErrorEvent{.generation = generation, .message = std::string{message}});
     }
 
     // ── Handlers ───────────────────────────────────────────────────
@@ -351,7 +501,7 @@ namespace ao::audio
       auto const volumeIsHardwareAssisted = status.volumeIsHardwareAssisted;
 
       optCurrentTrack.reset();
-      activeSourceGeneration.store(0, std::memory_order_release);
+      sourceSlot.retireGeneration();
       backendStarted = false;
       playbackDrainPending = false;
       status = {};
@@ -366,191 +516,296 @@ namespace ao::audio
       routeTracker.clear();
     }
 
-    void handleBackendError(std::uint64_t generation, std::string_view message)
+    Notifications applyPlaybackEvent(PlaybackEvent const& event)
+    {
+      return std::visit([this](auto const& typedEvent) { return applyPlaybackEvent(typedEvent); }, event);
+    }
+
+    Notifications applyPlaybackEvent(BackendErrorEvent const& event)
+    {
+      return handleBackendError(event.generation, event.message);
+    }
+
+    Notifications applyPlaybackEvent(SourceErrorEvent const& event)
+    {
+      return handleSourceError(event.sourceGeneration, event.error);
+    }
+
+    Notifications applyPlaybackEvent(DrainCompleteEvent const& event) { return handleDrainComplete(event.generation); }
+
+    Notifications applyPlaybackEvent(RouteReadyEvent const& event)
+    {
+      return handleRouteReady(event.generation, event.backendId, event.routeAnchor);
+    }
+
+    Notifications applyPlaybackEvent(FormatChangedEvent const& event)
+    {
+      return handleFormatChanged(event.generation, event.format);
+    }
+
+    Notifications applyPlaybackEvent(PropertyChangedEvent const& event) { return handlePropertyChanged(event); }
+
+    static void appendStateChangedNotification(Notifications& notifications, std::function<void()> callback)
+    {
+      if (callback)
+      {
+        notifications.emplace_back([callback = std::move(callback)] { callback(); });
+      }
+    }
+
+    Notifications handleBackendError(std::uint64_t generation, std::string_view message)
     {
       AUDIO_LOG_ERROR("Backend error: {}", message);
+      auto stateChanged = std::function<void()>{};
+      bool shouldQuiesce = false;
       {
         auto const lock = std::scoped_lock{stateMutex};
 
         if (!isActiveRenderSession(generation))
         {
-          return;
+          return {};
         }
 
         retireRenderSession();
         resetPlaybackStatePreservingOutput();
         status.transport = Transport::Error;
         status.statusText = std::string{message};
+        stateChanged = onStateChanged;
+        shouldQuiesce = true;
       }
 
-      deactivateSourceIfRetired();
+      if (shouldQuiesce)
+      {
+        backendPtr->stop();
+        backendPtr->close();
+        resetRenderSession();
+        publishSource(nullptr);
+      }
+
+      auto notifications = Notifications{};
+      appendStateChangedNotification(notifications, std::move(stateChanged));
+      return notifications;
     }
 
-    void handleSourceError(std::uint64_t sourceGeneration, Error const& error)
+    Notifications handleSourceError(std::uint64_t sourceGeneration, Error const& error)
     {
       auto const message = error.message.empty() ? std::string{"PCM source failed"} : error.message;
       AUDIO_LOG_ERROR("Source error: {}", message);
+      auto endedCallback = std::function<void()>{};
+      auto stateChanged = std::function<void()>{};
 
-      auto const endedCallback = [this]
-      {
-        auto const lock = std::scoped_lock{stateMutex};
-        return onTrackEnded;
-      }();
-
+      bool shouldQuiesce = false;
       {
         auto const lock = std::scoped_lock{stateMutex};
 
-        if (sourceGeneration != activeSourceGeneration.load(std::memory_order_acquire))
+        if (sourceGeneration != sourceSlot.generation())
         {
-          return;
+          return {};
         }
 
         if (status.transport == Transport::Idle)
         {
-          return;
+          return {};
         }
 
         retireRenderSession();
         resetPlaybackStatePreservingOutput();
         status.transport = Transport::Error;
         status.statusText = message;
+        endedCallback = onTrackEnded;
+        stateChanged = onStateChanged;
+        shouldQuiesce = true;
       }
 
-      deactivateSourceIfRetired();
+      if (shouldQuiesce)
+      {
+        backendPtr->stop();
+        backendPtr->close();
+        resetRenderSession();
+        publishSource(nullptr);
+      }
+
+      auto notifications = Notifications{};
+      appendStateChangedNotification(notifications, std::move(stateChanged));
 
       if (endedCallback)
       {
-        endedCallback();
+        notifications.emplace_back([callback = std::move(endedCallback)] { callback(); });
+      }
+
+      return notifications;
+    }
+
+    static void appendRouteNotification(Notifications& notifications,
+                                        Engine::OnRouteChanged callback,
+                                        Engine::RouteStatus snapshot)
+    {
+      if (callback)
+      {
+        notifications.emplace_back([callback = std::move(callback), snapshot = std::move(snapshot)]
+                                   { callback(snapshot); });
       }
     }
 
-    void notifyRouteChanged()
+    Notifications handleRouteReady(std::uint64_t generation, BackendId const& backendId, std::string_view routeAnchor)
     {
+      auto notifications = Notifications{};
+      auto stateChanged = std::function<void()>{};
       auto callback = Engine::OnRouteChanged{};
       auto snapshot = Engine::RouteStatus{};
       {
         auto const lock = std::scoped_lock{stateMutex};
+
+        if (!isActiveRenderSession(generation))
+        {
+          return {};
+        }
+
+        routeTracker.setAnchor(backendId, std::string{routeAnchor});
+        stateChanged = onStateChanged;
         callback = onRouteChanged;
         snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
 
-      if (callback)
-      {
-        callback(snapshot);
-      }
+      appendStateChangedNotification(notifications, std::move(stateChanged));
+      appendRouteNotification(notifications, std::move(callback), std::move(snapshot));
+      return notifications;
     }
 
-    void handleRouteReady(std::uint64_t generation, IBackend& backend, std::string_view routeAnchor)
+    Notifications handleFormatChanged(std::uint64_t generation, Format const& format)
     {
+      auto notifications = Notifications{};
+      auto stateChanged = std::function<void()>{};
+      auto callback = Engine::OnRouteChanged{};
+      auto snapshot = Engine::RouteStatus{};
       {
         auto const lock = std::scoped_lock{stateMutex};
 
         if (!isActiveRenderSession(generation))
         {
-          return;
-        }
-
-        routeTracker.setAnchor(backend.backendId(), std::string{routeAnchor});
-      }
-
-      notifyRouteChanged();
-    }
-
-    void handleFormatChanged(std::uint64_t generation, Format const& format)
-    {
-      {
-        auto const lock = std::scoped_lock{stateMutex};
-
-        if (!isActiveRenderSession(generation))
-        {
-          return;
+          return {};
         }
 
         routeTracker.setEngineFormat(format);
         status.routeState.engineOutputFormat = format;
+        stateChanged = onStateChanged;
+        callback = onRouteChanged;
+        snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
 
-      notifyRouteChanged();
+      appendStateChangedNotification(notifications, std::move(stateChanged));
+      appendRouteNotification(notifications, std::move(callback), std::move(snapshot));
+      return notifications;
     }
 
-    void handlePropertyChanged(std::uint64_t generation, IBackend& backend, PropertyId id)
+    Notifications handlePropertyChanged(PropertyChangedEvent const& event)
     {
+      auto notifications = Notifications{};
+      auto stateChanged = std::function<void()>{};
+      auto callback = Engine::OnRouteChanged{};
+      auto snapshot = Engine::RouteStatus{};
       {
         auto const lock = std::scoped_lock{stateMutex};
 
-        if (!isActiveRenderSession(generation))
+        if (!isActiveRenderSession(event.generation))
         {
-          return;
+          return {};
         }
 
-        if (id == PropertyId::Volume)
+        if (event.id == PropertyId::Volume)
         {
-          if (auto const vol = backend.get(props::kVolume); vol)
+          if (event.optValue)
           {
-            status.volume = *vol;
+            if (auto const* vol = std::get_if<float>(&*event.optValue); vol != nullptr)
+            {
+              status.volume = *vol;
+            }
           }
         }
-        else if (id == PropertyId::Muted)
+        else if (event.id == PropertyId::Muted)
         {
-          if (auto const mute = backend.get(props::kMuted); mute)
+          if (event.optValue)
           {
-            status.muted = *mute;
+            if (auto const* mute = std::get_if<bool>(&*event.optValue); mute != nullptr)
+            {
+              status.muted = *mute;
+            }
           }
         }
 
-        auto const volProp = backend.queryProperty(PropertyId::Volume);
-        status.volumeAvailable = volProp.isAvailable;
-        status.volumeIsHardwareAssisted = volProp.isHardwareAssisted;
+        status.volumeAvailable = event.volumeInfo.isAvailable;
+        status.volumeIsHardwareAssisted = event.volumeInfo.isHardwareAssisted;
+        stateChanged = onStateChanged;
+        callback = onRouteChanged;
+        snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
 
-      notifyRouteChanged();
+      appendStateChangedNotification(notifications, std::move(stateChanged));
+      appendRouteNotification(notifications, std::move(callback), std::move(snapshot));
+      return notifications;
     }
 
-    void handleDrainComplete(std::uint64_t generation)
+    Notifications handleDrainComplete(std::uint64_t generation)
     {
       auto onTrackEndedCallback = std::function<void()>{};
       auto onRouteChangedCallback = Engine::OnRouteChanged{};
+      auto stateChanged = std::function<void()>{};
+      bool shouldQuiesce = false;
 
       {
         auto const lock = std::scoped_lock{stateMutex};
 
         if (!isActiveRenderSession(generation))
         {
-          return;
+          return {};
         }
 
         retireRenderSession();
         onRouteChangedCallback = onRouteChanged;
         resetPlaybackStatePreservingOutput();
         onTrackEndedCallback = onTrackEnded;
+        stateChanged = onStateChanged;
+        shouldQuiesce = true;
       }
 
-      deactivateSourceIfRetired();
+      if (shouldQuiesce)
+      {
+        backendPtr->stop();
+        backendPtr->close();
+        resetRenderSession();
+        publishSource(nullptr);
+      }
+
+      auto notifications = Notifications{};
+      appendStateChangedNotification(notifications, std::move(stateChanged));
 
       if (onRouteChangedCallback)
       {
-        onRouteChangedCallback({});
+        notifications.emplace_back([callback = std::move(onRouteChangedCallback)] { callback({}); });
       }
 
       if (onTrackEndedCallback)
       {
-        onTrackEndedCallback();
+        notifications.emplace_back([callback = std::move(onTrackEndedCallback)] { callback(); });
       }
+
+      return notifications;
     }
 
     // ── Track opening ──────────────────────────────────────────────
-    bool openTrack(TrackPlaybackDescriptor const& descriptor,
+    bool openTrack(PlaybackInput const& input,
                    std::shared_ptr<ISource>& source,
                    Format& backendFormat,
                    std::uint64_t sourceGeneration)
     {
-      auto session = detail::TrackSession::create(descriptor,
-                                                  currentDevice,
-                                                  backendPtr->backendId(),
-                                                  backendPtr->profileId(),
-                                                  decoderFactory,
-                                                  [this, sourceGeneration](Error const& err)
-                                                  { handleSourceError(sourceGeneration, err); });
+      auto session = detail::TrackSession::create(
+        input,
+        currentDevice,
+        backendPtr->backendId(),
+        backendPtr->profileId(),
+        decoderFactory,
+        [this, sourceGeneration](Error const& err)
+        { enqueuePlaybackEvent(SourceErrorEvent{.sourceGeneration = sourceGeneration, .error = err}); });
 
       if (!session)
       {
@@ -580,7 +835,7 @@ namespace ao::audio
 
     void setBackendUnlocked(std::unique_ptr<IBackend> nextBackendPtr, Device const& device);
     void updateDeviceUnlocked(Device const& device);
-    void playUnlocked(TrackPlaybackDescriptor const& descriptor);
+    void playUnlocked(PlaybackInput const& input);
     void pauseUnlocked();
     void resumeUnlocked();
     void stopUnlocked();
@@ -593,7 +848,7 @@ namespace ao::audio
   {
     struct State
     {
-      std::optional<TrackPlaybackDescriptor> optTrack;
+      std::optional<PlaybackInput> optTrack;
       std::chrono::milliseconds elapsed{0};
       bool wasPlaying = false;
     };
@@ -626,7 +881,7 @@ namespace ao::audio
 
     if (state.optTrack)
     {
-      AUDIO_LOG_INFO("Resuming track '{}' after backend switch", state.optTrack->title);
+      AUDIO_LOG_INFO("Resuming {} after backend switch", state.optTrack->filePath.string());
       playUnlocked(*state.optTrack);
       seekUnlocked(state.elapsed);
 
@@ -642,18 +897,19 @@ namespace ao::audio
     currentDevice = device;
   }
 
-  void Engine::Impl::playUnlocked(TrackPlaybackDescriptor const& descriptor)
+  void Engine::Impl::playUnlocked(PlaybackInput const& input)
   {
-    AUDIO_LOG_INFO("Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
+    AUDIO_LOG_INFO("Play requested: {}", input.filePath.string());
 
     {
       auto const lock = std::scoped_lock{stateMutex};
       retireRenderSession();
-      activeSourceGeneration.store(0, std::memory_order_release);
+      sourceSlot.retireGeneration();
     }
 
     backendPtr->stop();
     backendPtr->close();
+    resetRenderSession();
     publishSource(nullptr);
 
     auto sourcePtr = std::shared_ptr<ISource>{};
@@ -664,20 +920,20 @@ namespace ao::audio
       auto const lock = std::scoped_lock{stateMutex};
       underrunCount = 0;
       routeTracker.clear();
-      activeSourceGeneration.store(sourceGeneration, std::memory_order_release);
+      sourceSlot.setGeneration(sourceGeneration);
       backendStarted = false;
       playbackDrainPending = false;
       status.transport = Transport::Opening;
-      optCurrentTrack = descriptor;
+      optCurrentTrack = input;
       syncBackendIdentity();
     }
 
-    if (!openTrack(descriptor, sourcePtr, backendFormat, sourceGeneration))
+    if (!openTrack(input, sourcePtr, backendFormat, sourceGeneration))
     {
       auto const lock = std::scoped_lock{stateMutex};
-      AUDIO_LOG_ERROR("Failed to open track '{}': {}", descriptor.filePath.string(), status.statusText);
+      AUDIO_LOG_ERROR("Failed to open track '{}': {}", input.filePath.string(), status.statusText);
       status.transport = Transport::Error;
-      activeSourceGeneration.store(0, std::memory_order_release);
+      sourceSlot.retireGeneration();
       optCurrentTrack.reset();
       return;
     }
@@ -694,11 +950,12 @@ namespace ao::audio
     {
       retireRenderSession();
       backendPtr->close();
-      AUDIO_LOG_ERROR("Failed to open backend for '{}': {}", descriptor.filePath.string(), openResult.error().message);
+      resetRenderSession();
+      AUDIO_LOG_ERROR("Failed to open backend for '{}': {}", input.filePath.string(), openResult.error().message);
       {
         auto const lock = std::scoped_lock{stateMutex};
         optCurrentTrack.reset();
-        activeSourceGeneration.store(0, std::memory_order_release);
+        sourceSlot.retireGeneration();
         status.transport = Transport::Error;
         status.statusText = openResult.error().message;
       }
@@ -719,6 +976,7 @@ namespace ao::audio
       retireRenderSession();
       backendPtr->stop();
       backendPtr->close();
+      resetRenderSession();
       publishSource(nullptr);
       auto const lock = std::scoped_lock{stateMutex};
       resetEngine();
@@ -728,11 +986,10 @@ namespace ao::audio
     {
       auto const lock = std::scoped_lock{stateMutex};
 
-      // A source decode error can fire asynchronously (handleSourceError) while
-      // this operation is still mid-setup. Error is terminal: never clobber it
-      // with Playing. The check and the write share this critical section with
-      // handleSourceError's, so Error wins regardless of interleaving and the
-      // backend is not started behind a stopped/dead source.
+      // Error is terminal: if an already-applied error moved the transport to
+      // Error, never clobber it with Playing. Source/backend errors that arrive
+      // while this control command is running are queued behind controlMutex and
+      // will be applied after this command returns.
       if (status.transport == Transport::Error)
       {
         return;
@@ -808,11 +1065,12 @@ namespace ao::audio
     {
       auto const lock = std::scoped_lock{stateMutex};
       retireRenderSession();
-      activeSourceGeneration.store(0, std::memory_order_release);
+      sourceSlot.retireGeneration();
     }
 
     backendPtr->stop();
     backendPtr->close();
+    resetRenderSession();
 
     {
       auto const lock = std::scoped_lock{stateMutex};
@@ -863,6 +1121,7 @@ namespace ao::audio
     {
       backendPtr->stop();
       backendPtr->close();
+      resetRenderSession();
       publishSource(nullptr);
       auto const lock = std::scoped_lock{stateMutex};
       resetEngine();
@@ -879,11 +1138,10 @@ namespace ao::audio
     {
       auto const lock = std::scoped_lock{stateMutex};
 
-      // A source decode error can fire asynchronously (handleSourceError) while
-      // this operation is still mid-setup. Error is terminal: never clobber it
-      // with Playing. The check and the write share this critical section with
-      // handleSourceError's, so Error wins regardless of interleaving and the
-      // backend is not started behind a stopped/dead source.
+      // Error is terminal: if an already-applied error moved the transport to
+      // Error, never clobber it with Playing. Source/backend errors that arrive
+      // while this control command is running are queued behind controlMutex and
+      // will be applied after this command returns.
       if (status.transport == Transport::Error)
       {
         return;
@@ -952,6 +1210,12 @@ namespace ao::audio
     _implPtr->onRouteChanged = std::move(callback);
   }
 
+  void Engine::setOnStateChanged(std::function<void()> callback)
+  {
+    auto const lock = std::scoped_lock{_implPtr->stateMutex};
+    _implPtr->onStateChanged = std::move(callback);
+  }
+
   Engine::RouteStatus Engine::routeStatus() const
   {
     auto const lock = std::scoped_lock{_implPtr->stateMutex};
@@ -984,10 +1248,10 @@ namespace ao::audio
     return snap;
   }
 
-  void Engine::play(TrackPlaybackDescriptor const& descriptor)
+  void Engine::play(PlaybackInput const& input)
   {
     auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
-    _implPtr->playUnlocked(descriptor);
+    _implPtr->playUnlocked(input);
   }
 
   void Engine::pause()

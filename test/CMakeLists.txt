@@ -7,6 +7,7 @@ add_executable(ao_core_test
     unit/utility/LogTest.cpp
     unit/utility/ByteViewTest.cpp
     unit/utility/StringArenaTest.cpp
+    unit/core/AudioCodecTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
 
@@ -34,7 +35,6 @@ add_executable(ao_core_test
     unit/media/mp4/SampleDescriptionTest.cpp
 
     # library tests
-    unit/library/AudioCodecTest.cpp
     unit/library/TrackLayoutTest.cpp
     unit/library/TrackViewTest.cpp
     unit/library/FileManifestViewTest.cpp
@@ -82,6 +82,7 @@ add_executable(ao_core_test
     unit/audio/backend/detail/PipeWireSharedTest.cpp
     unit/audio/backend/PipeWireMonitorTest.cpp
     unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
+    unit/audio/backend/detail/AlsaPcmErrorTest.cpp
     unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
     unit/audio/PcmConverterTest.cpp
     unit/audio/PlayerTest.cpp

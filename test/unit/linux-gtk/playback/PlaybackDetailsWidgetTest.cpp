@@ -28,7 +28,8 @@ namespace ao::gtk::test
       // Event triggers render
       fixture.runtime().playback().setShuffleMode(rt::ShuffleMode::On);
 
-      fixture.runtime().playback().stop(); // Trigger onStopped
+      fixture.runtime().playback().stop(); // Trigger onStopped (emitted synchronously on the executor thread)
+      drainGtkEvents();                    // flush any executor-deferred async Player state callbacks
       CHECK(!log.states.empty());
 
       log.clear();
@@ -36,6 +37,7 @@ namespace ao::gtk::test
       // Destroying controller disconnects events
       controllerPtr.reset();
       fixture.runtime().playback().stop();
+      drainGtkEvents();
       CHECK(log.empty());
     }
   }

@@ -3,8 +3,8 @@
 
 #include "test/unit/library/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/AudioCodec.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>

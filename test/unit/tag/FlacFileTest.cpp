@@ -3,8 +3,8 @@
 
 #include "lib/tag/flac/File.h"
 #include "test/unit/TestUtils.h"
+#include <ao/AudioCodec.h>
 #include <ao/Exception.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/tag/TagFile.h>
 
@@ -117,7 +117,7 @@ namespace ao::tag::flac::test
     CHECK(prop.sampleRate() == 44100);
     CHECK(prop.channels() == 2);
     CHECK(prop.bitDepth() == 16);
-    CHECK(prop.codec() == library::AudioCodec::Flac);
+    CHECK(prop.codec() == AudioCodec::Flac);
     CHECK(prop.duration() == std::chrono::seconds{1});
   }
 

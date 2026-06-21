@@ -4,8 +4,8 @@
 #include "File.h"
 
 #include "../detail/Decoder.h"
+#include <ao/AudioCodec.h>
 #include <ao/Exception.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlock.h>
@@ -89,7 +89,7 @@ namespace ao::tag::flac
             .sampleRate(SampleRate{view.sampleRate()})
             .channels(Channels{view.channels()})
             .bitDepth(BitDepth{view.bitDepth()})
-            .codec(library::AudioCodec::Flac);
+            .codec(AudioCodec::Flac);
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {

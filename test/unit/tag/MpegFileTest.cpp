@@ -5,8 +5,8 @@
 #include "lib/tag/mpeg/FrameLayout.h"
 #include "lib/tag/mpeg/id3v2/Layout.h"
 #include "test/unit/TestUtils.h"
+#include <ao/AudioCodec.h>
 #include <ao/Exception.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/tag/TagFile.h>
 
@@ -218,7 +218,7 @@ namespace ao::tag::mpeg::test
     CHECK(static_cast<std::uint8_t>(secondData[0]) == 0xCC);
 
     auto const prop = builder.property();
-    CHECK(prop.codec() == library::AudioCodec::Mp3);
+    CHECK(prop.codec() == AudioCodec::Mp3);
     CHECK(prop.bitDepth() == 16);
   }
 
@@ -235,7 +235,7 @@ namespace ao::tag::mpeg::test
 
     REQUIRE(builder.property().duration() >= std::chrono::seconds{1});
     CHECK(builder.property().duration() <= std::chrono::milliseconds{1010});
-    CHECK(builder.property().codec() == library::AudioCodec::Mp3);
+    CHECK(builder.property().codec() == AudioCodec::Mp3);
     CHECK(builder.property().bitDepth() == 16);
   }
 

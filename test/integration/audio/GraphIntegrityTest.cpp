@@ -37,8 +37,7 @@ namespace ao::audio::test
 
     auto engine = Engine{std::move(backendPtr), device};
 
-    auto const descriptor =
-      TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Test Title", .artist = "Test Artist"};
+    auto const descriptor = PlaybackInput{.filePath = testFile.string()};
 
     engine.play(descriptor);
 

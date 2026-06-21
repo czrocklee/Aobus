@@ -4,6 +4,7 @@
 #include "playback/NowPlayingFieldLabel.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/Type.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IBackendProvider.h>
@@ -26,7 +27,9 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::gtk::test
 {
@@ -48,6 +51,16 @@ namespace ao::gtk::test
         return {};
       }
     };
+
+    rt::PlaybackService::PlaybackRequest playbackRequest(TrackId trackId, std::string title, std::string artist = {})
+    {
+      return rt::PlaybackService::PlaybackRequest{
+        .trackId = trackId,
+        .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
+        .title = std::move(title),
+        .artist = std::move(artist),
+      };
+    }
   } // namespace
 
   TEST_CASE("NowPlayingFieldLabel - renders now playing fields", "[gtk][playback][viewmodel]")
@@ -69,8 +82,7 @@ namespace ao::gtk::test
       CHECK_FALSE(gtkLabel->has_css_class("ao-clickable"));
       CHECK_FALSE(hasController<Gtk::GestureClick>(*gtkLabel));
 
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{1}, .title = "Test Song", .artist = "Test Artist", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{1}, "Test Song", "Test Artist");
 
       playback.play(desc, ListId{7});
       drainGtkEvents();
@@ -84,8 +96,7 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&artistLabel.widget());
       REQUIRE(gtkLabel);
 
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{2}, .title = "Another Song", .artist = "Known Artist", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{2}, "Another Song", "Known Artist");
 
       playback.play(desc, ListId{8});
       drainGtkEvents();
@@ -101,8 +112,7 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&yearLabel.widget());
       REQUIRE(gtkLabel);
 
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{3}, .title = "Dated Song", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{3}, "Dated Song");
 
       playback.play(desc, ListId{9});
       drainGtkEvents();
@@ -127,11 +137,7 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
-      runtime.playback().play(audio::TrackPlaybackDescriptor{.trackId = TrackId{11},
-                                                             .title = "Filtered Song",
-                                                             .artist = "Filter Artist",
-                                                             .duration = std::chrono::seconds{1}},
-                              ListId{12});
+      runtime.playback().play(playbackRequest(TrackId{11}, "Filtered Song", "Filter Artist"), ListId{12});
       drainGtkEvents();
 
       CHECK(gtkLabel->has_css_class("ao-clickable"));
@@ -153,11 +159,7 @@ namespace ao::gtk::test
       auto optRequest = std::optional<rt::PlaybackService::RevealTrackRequested>{};
       auto sub = runtime.playback().onRevealTrackRequested([&](auto const& ev) { optRequest = ev; });
 
-      runtime.playback().play(audio::TrackPlaybackDescriptor{.trackId = TrackId{21},
-                                                             .title = "Reveal Song",
-                                                             .artist = "Reveal Artist",
-                                                             .duration = std::chrono::seconds{1}},
-                              ListId{22});
+      runtime.playback().play(playbackRequest(TrackId{21}, "Reveal Song", "Reveal Artist"), ListId{22});
       drainGtkEvents();
 
       REQUIRE(emitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
@@ -175,11 +177,7 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
-      runtime.playback().play(audio::TrackPlaybackDescriptor{.trackId = TrackId{31},
-                                                             .title = "Toggle Song",
-                                                             .artist = "Toggle Artist",
-                                                             .duration = std::chrono::seconds{1}},
-                              ListId{32});
+      runtime.playback().play(playbackRequest(TrackId{31}, "Toggle Song", "Toggle Artist"), ListId{32});
       drainGtkEvents();
 
       bool started = false;

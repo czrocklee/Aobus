@@ -5,8 +5,8 @@
 
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
+#include <ao/AudioCodec.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
 
@@ -99,7 +99,7 @@ namespace ao::gtk
                                 std::uint32_t sampleRate,
                                 std::uint8_t channels,
                                 std::uint8_t bitDepth,
-                                library::AudioCodec codec,
+                                AudioCodec codec,
                                 std::uint32_t bitrate,
                                 std::uint64_t fileSize,
                                 std::uint64_t modifiedTime,

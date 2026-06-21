@@ -3,8 +3,8 @@
 
 #include "TestUtils.h"
 #include "test/unit/TestUtils.h"
+#include <ao/AudioCodec.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -98,7 +98,7 @@ namespace ao::rt::test
         .sampleRate(SampleRate{48000})
         .channels(Channels{2})
         .bitDepth(BitDepth{24})
-        .codec(library::AudioCodec::Flac);
+        .codec(AudioCodec::Flac);
       trackBuilder.tags().add("Favorite").add("Live");
       trackBuilder.coverArt().add(library::PictureType::FrontCover, resourceId);
 
@@ -184,7 +184,7 @@ namespace ao::rt::test
     CHECK(row.sampleRate == 48000);
     CHECK(row.channels == 2);
     CHECK(row.bitDepth == 24);
-    CHECK(row.codec == library::AudioCodec::Flac);
+    CHECK(row.codec == AudioCodec::Flac);
     CHECK(row.bitrate == 960000);
     CHECK(row.fileSize == 123456789);
     CHECK(row.modifiedTime == 987654321);

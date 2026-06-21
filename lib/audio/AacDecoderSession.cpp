@@ -3,13 +3,13 @@
 
 #include "detail/Mp4PacketSource.h"
 #include "detail/OutputFormatValidation.h"
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/AacDecoderSession.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/detail/AacConfigParser.h>
-#include <ao/library/AudioCodec.h>
 
 #include <fdk-aac/FDK_audio.h>
 #include <fdk-aac/aacdecoder_lib.h>
@@ -199,7 +199,7 @@ namespace ao::audio
       info.sourceFormat.isInterleaved = true;
       applyOutputFormat();
       info.isLossy = true;
-      info.codec = library::AudioCodec::Aac;
+      info.codec = AudioCodec::Aac;
     }
   };
 

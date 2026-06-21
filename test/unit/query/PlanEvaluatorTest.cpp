@@ -3,8 +3,8 @@
 
 #include "test/unit/library/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/AudioCodec.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
@@ -64,7 +64,7 @@ namespace ao::query::test
       std::uint8_t channels = 2;
       std::uint8_t bitDepth = 16;
       ResourceId coverArtId{kInvalidResourceId};
-      library::AudioCodec codec = library::AudioCodec::Unknown;
+      AudioCodec codec = AudioCodec::Unknown;
       std::uint32_t artistId = 0;
       std::uint32_t albumId = 0;
       std::uint32_t genreId = 0;
@@ -667,7 +667,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Other Dictionary Fields", "[query][unit][plan_evaluator]")
   {
     auto spec = TrackSpec{};
-    spec.codec = library::AudioCodec::Flac;
+    spec.codec = AudioCodec::Flac;
     spec.trackNumber = 3;
     spec.trackTotal = 12;
     spec.discNumber = 1;
@@ -1011,12 +1011,12 @@ namespace ao::query::test
     {
       auto missingSpec = TrackSpec{};
       missingSpec.duration = std::chrono::milliseconds{0};
-      missingSpec.codec = library::AudioCodec::Unknown;
+      missingSpec.codec = AudioCodec::Unknown;
       auto missing = TrackFixture{missingSpec};
 
       auto presentSpec = TrackSpec{};
       presentSpec.duration = std::chrono::milliseconds{1};
-      presentSpec.codec = library::AudioCodec::Flac;
+      presentSpec.codec = AudioCodec::Flac;
       auto present = TrackFixture{presentSpec};
 
       CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@duration?")), missing.view()));
@@ -1676,7 +1676,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - AAC codec expression", "[query][unit][plan_evaluator]")
   {
     auto spec = TrackSpec{};
-    spec.codec = library::AudioCodec::Aac;
+    spec.codec = AudioCodec::Aac;
     auto track = TestTrack{spec};
 
     auto compiler = QueryCompiler{&track.dictionary()};

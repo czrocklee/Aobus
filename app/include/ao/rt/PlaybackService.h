@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 
 namespace ao::library
 {
@@ -77,6 +78,14 @@ namespace ao::rt
       ViewId preferredViewId = kInvalidViewId;
     };
 
+    struct PlaybackRequest final
+    {
+      TrackId trackId = kInvalidTrackId;
+      audio::PlaybackInput input{};
+      std::string title{};
+      std::string artist{};
+    };
+
     PlaybackService(async::IExecutor& executor, ViewService& views, library::MusicLibrary& library);
     ~PlaybackService();
 
@@ -85,7 +94,18 @@ namespace ao::rt
     PlaybackService(PlaybackService&&) = delete;
     PlaybackService& operator=(PlaybackService&&) = delete;
 
+    // Returns the latest published state. Control methods refresh this snapshot
+    // synchronously before they return, so after a control call returns state()
+    // already reflects that command's result. Only the asynchronous Player
+    // callbacks (backend/source events) advance the snapshot on a later executor
+    // turn. Like every public method below, must be called on the executor's
+    // owning thread (see the affinity note above the subscription methods).
     PlaybackState const& state() const;
+
+    // Subscription registration is part of the executor-affinity contract: these
+    // onXxx() methods must be called on the executor's owning thread, and the
+    // returned Subscription must likewise be reset on that thread. Handlers are
+    // invoked on the executor thread when the matching signal is emitted.
 
     Subscription onPreparing(std::move_only_function<void()> handler);
     Subscription onStarted(std::move_only_function<void()> handler);
@@ -106,9 +126,9 @@ namespace ao::rt
     bool playTrack(TrackId trackId, ListId sourceListId);
     TrackId playSelectionInView(ViewId viewId);
 
-    // Lower-level playback entry point: start a fully-resolved descriptor.
+    // Lower-level playback entry point: start a fully-resolved request.
     // playTrack() resolves a TrackId via the library and forwards here.
-    void play(audio::TrackPlaybackDescriptor const& descriptor, ListId sourceListId);
+    void play(PlaybackRequest const& request, ListId sourceListId);
 
     // Register an audio backend provider. Called by the composition root
     // (via AppRuntime::addAudioProvider) during bootstrap.

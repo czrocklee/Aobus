@@ -4,7 +4,7 @@
 #include "File.h"
 
 #include "../detail/Decoder.h"
-#include <ao/library/AudioCodec.h>
+#include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/Atom.h>
@@ -340,15 +340,15 @@ namespace ao::tag::mp4
         return;
       }
 
-      auto codec = library::AudioCodec::Unknown;
+      auto codec = AudioCodec::Unknown;
 
       if (optSelection->sampleEntryType == "alac")
       {
-        codec = library::AudioCodec::Alac;
+        codec = AudioCodec::Alac;
       }
       else if (optSelection->sampleEntryType == "mp4a")
       {
-        codec = library::AudioCodec::Aac;
+        codec = AudioCodec::Aac;
       }
 
       builder.property()

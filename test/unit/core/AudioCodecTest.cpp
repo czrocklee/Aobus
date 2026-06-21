@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/library/AudioCodec.h>
+#include <ao/AudioCodec.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace ao::library::test
+namespace ao::test
 {
-  TEST_CASE("AudioCodec - names map to stable display strings", "[library][unit][codec]")
+  TEST_CASE("AudioCodec - names map to stable display strings", "[core][unit][codec]")
   {
     CHECK(audioCodecName(AudioCodec::Unknown).empty());
     CHECK(audioCodecName(AudioCodec::Flac) == "FLAC");
@@ -16,7 +16,7 @@ namespace ao::library::test
     CHECK(audioCodecName(AudioCodec::Mp3) == "MP3");
   }
 
-  TEST_CASE("AudioCodec - parser accepts case-insensitive names", "[library][unit][codec]")
+  TEST_CASE("AudioCodec - parser accepts case-insensitive names", "[core][unit][codec]")
   {
     CHECK(parseAudioCodecName("Flac") == AudioCodec::Flac);
     CHECK(parseAudioCodecName("alac") == AudioCodec::Alac);
@@ -26,7 +26,7 @@ namespace ao::library::test
     CHECK_FALSE(parseAudioCodecName("not-a-codec").has_value());
   }
 
-  TEST_CASE("AudioCodec - storage conversion rejects unknown raw values", "[library][unit][codec]")
+  TEST_CASE("AudioCodec - storage conversion rejects unknown raw values", "[core][unit][codec]")
   {
     CHECK(audioCodecStorageValue(AudioCodec::Flac) == 1);
     CHECK(audioCodecStorageValue(AudioCodec::Alac) == 2);
@@ -39,4 +39,4 @@ namespace ao::library::test
     CHECK(audioCodecFromStorage(3) == AudioCodec::Unknown);
     CHECK(audioCodecFromStorage(255) == AudioCodec::Unknown);
   }
-} // namespace ao::library::test
+} // namespace ao::test

@@ -8,6 +8,7 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
+#include <ao/audio/backend/detail/AlsaPcmError.h>
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/ThreadUtils.h>
@@ -465,6 +466,7 @@ namespace ao::audio::backend
     AlsaPcmPtr pcmPtr;
     std::jthread thread;
     std::atomic<bool> paused{false};
+    mutable std::atomic<bool> fatalStreamError{false};
     bool canPause = false;
 
     AlsaMixerController mixer;
@@ -520,7 +522,7 @@ namespace ao::audio::backend
     // pause()/resume() only flip the `paused` atomic; the edge is applied here.
     bool devicePaused = false;
 
-    while (!stopToken.stop_requested())
+    while (!stopToken.stop_requested() && !fatalStreamError.load(std::memory_order_relaxed))
     {
       syncPauseState(devicePaused);
 
@@ -691,10 +693,11 @@ namespace ao::audio::backend
         std::this_thread::sleep_for(kPollRetryDelay);
       }
     }
-    else if (err == -ENODEV || err == -EBADF)
+    else if (detail::isUnrecoverableAlsaPcmError(err))
     {
       auto const errorMsg = std::string{"ALSA: Unrecoverable stream state"};
       AUDIO_LOG_ERROR("{}", errorMsg);
+      fatalStreamError.store(true, std::memory_order_relaxed);
       renderTarget->onBackendError(errorMsg);
     }
   }
@@ -872,6 +875,7 @@ namespace ao::audio::backend
                    static_cast<int>(format.channels));
 
     close();
+    _implPtr->fatalStreamError.store(false, std::memory_order_relaxed);
 
     ::snd_pcm_t* pcm = nullptr;
 

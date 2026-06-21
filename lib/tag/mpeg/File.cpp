@@ -6,7 +6,7 @@
 #include "Frame.h"
 #include "id3v2/Layout.h"
 #include "id3v2/Reader.h"
-#include <ao/library/AudioCodec.h>
+#include <ao/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 
 #include <chrono>
@@ -117,7 +117,7 @@ namespace ao::tag::mpeg
         .bitrate(Bitrate{bitrate})
         .channels(Channels{optFrameView->channels()})
         .bitDepth(BitDepth{16})
-        .codec(library::AudioCodec::Mp3);
+        .codec(AudioCodec::Mp3);
 
       auto const duration = calculateDuration(*optFrameView, hasId3v1);
       builder.property().duration(duration);

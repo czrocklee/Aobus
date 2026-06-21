@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/AudioCodec.h>
 #include <ao/Exception.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
@@ -108,9 +108,9 @@ namespace ao::query
         case Field::Channels: return decimalTextOrEmpty(track.property().channels().raw());
         case Field::BitDepth: return decimalTextOrEmpty(track.property().bitDepth().raw());
         case Field::Codec:
-          return track.property().codec() == library::AudioCodec::Unknown
+          return track.property().codec() == AudioCodec::Unknown
                    ? std::string{}
-                   : std::string{library::audioCodecName(track.property().codec())};
+                   : std::string{audioCodecName(track.property().codec())};
         default: return {};
       }
     }

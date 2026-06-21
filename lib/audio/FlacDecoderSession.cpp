@@ -4,13 +4,13 @@
 #include "detail/MappedFileCursor.h"
 #include "detail/OutputFormatValidation.h"
 #include "detail/TimeConversion.h"
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/Types.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/utility/ByteView.h>
 
 #include <FLAC/format.h>
@@ -528,7 +528,7 @@ namespace ao::audio
       }
 
       impl->info.isLossy = false;
-      impl->info.codec = library::AudioCodec::Flac;
+      impl->info.codec = AudioCodec::Flac;
     }
   }
 

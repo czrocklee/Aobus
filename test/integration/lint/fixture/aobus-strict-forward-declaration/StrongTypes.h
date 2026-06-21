@@ -36,7 +36,7 @@ class ExtraTargetC
 
 // Co-resident types: an enum plus a class in the same header.
 // Simulates the pattern in Graph.h (NodeType enum + Graph struct)
-// and Types.h (Transport enum + TrackPlaybackDescriptor struct).
+// and Types.h (Transport enum + PlaybackInput struct).
 enum class CoResidentNodeType : std::uint8_t
 {
   Decoder,

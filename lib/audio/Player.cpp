@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/AudioCodec.h>
+#include <ao/async/Executor.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
@@ -10,10 +12,10 @@
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/utility/Log.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -21,6 +23,8 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -42,7 +46,21 @@ namespace ao::audio
       ProfileId profile;
     };
 
-    Impl() = default;
+    // Teardown gate shared by executor-marshalled callbacks. Foreign threads
+    // may enqueue work after teardown begins, but queued work checks this gate
+    // before touching Impl and becomes a no-op once shutdown() has run.
+    struct CallbackGate final
+    {
+      std::atomic<bool> shuttingDown{false};
+
+      bool acceptsCallbacks() const noexcept { return !shuttingDown.load(std::memory_order_acquire); }
+      void shutdown() noexcept { shuttingDown.store(true, std::memory_order_release); }
+    };
+
+    explicit Impl(async::IExecutor& exec)
+      : executor{exec}
+    {
+    }
 
     Impl(Impl const&) = delete;
     Impl(Impl&&) = delete;
@@ -51,6 +69,8 @@ namespace ao::audio
 
     ~Impl()
     {
+      gatePtr->shutdown();
+
       // Teardown order:
       //   1. Unsubscribe graph and device callbacks so no new callbacks fire.
       //   2. Shut down providers' async activity (monitor threads, PW event loops) so no
@@ -77,12 +97,14 @@ namespace ao::audio
       providers.clear();
     }
 
-    std::uint64_t playbackGeneration = 1;
+    async::IExecutor& executor;
+    std::atomic<std::uint64_t> playbackGeneration{1};
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutput> optPendingOutput;
     IBackendProvider* activeManager = nullptr;
     Subscription graphSubscription;
     std::unique_ptr<Engine> enginePtr;
+    std::shared_ptr<CallbackGate> gatePtr = std::make_shared<CallbackGate>();
 
     mutable std::mutex backendsMutex;
     mutable std::vector<IBackendProvider::Status> cachedBackends;
@@ -93,15 +115,54 @@ namespace ao::audio
     flow::Graph cachedSystemGraph;
     flow::Graph mergedGraph;
     QualityResult qualityResult;
-    std::optional<TrackPlaybackDescriptor> optCurrentTrack;
-
     std::function<void()> onTrackEnded;
+    std::function<void()> onStateChanged;
     std::function<void(std::vector<IBackendProvider::Status> const&)> onDevicesChanged;
     std::function<void(Quality, bool)> onQualityChanged;
 
     void handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
     void updateMergedGraph();
+
+    template<typename Task>
+    static void dispatchInternal(async::IExecutor& executor, std::shared_ptr<CallbackGate> gatePtr, Task task)
+    {
+      executor.dispatch(
+        [gatePtr = std::move(gatePtr), task = std::move(task)] mutable
+        {
+          if (!gatePtr->acceptsCallbacks())
+          {
+            return;
+          }
+
+          task();
+        });
+    }
+
+    // Marshal one of the outward on* callback slots onto the executor thread.
+    // The task copies the user callback while the gate is open, then invokes the
+    // copy without holding any teardown wait state. This keeps queued tasks safe
+    // after teardown and avoids self-deadlock if a user callback destroys Player.
+    template<typename Slot, typename... Args>
+    void dispatchOutward(Slot Impl::* slot, Args... args)
+    {
+      executor.dispatch(
+        [this, slot, gatePtr = gatePtr, args = std::make_tuple(std::move(args)...)] mutable
+        {
+          if (!gatePtr->acceptsCallbacks())
+          {
+            return;
+          }
+
+          auto callback = std::decay_t<decltype(this->*slot)>{};
+          callback = this->*slot;
+
+          if (callback)
+          {
+            std::apply(callback, std::move(args));
+          }
+        });
+    }
   };
 
   void Player::Impl::handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices)
@@ -168,15 +229,18 @@ namespace ao::audio
       }
     }
 
-    if (onDevicesChanged)
+    auto snapshot = std::vector<IBackendProvider::Status>{};
     {
-      onDevicesChanged(cachedBackends);
+      auto const lock = std::scoped_lock{backendsMutex};
+      snapshot = cachedBackends;
     }
+
+    dispatchOutward(&Impl::onDevicesChanged, std::move(snapshot));
   }
 
   void Player::Impl::handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation)
   {
-    if (generation != playbackGeneration)
+    if (generation != playbackGeneration.load(std::memory_order_acquire))
     {
       return;
     }
@@ -187,11 +251,8 @@ namespace ao::audio
       updateMergedGraph();
     }
 
-    if (onQualityChanged)
-    {
-      auto const playerStatus = owner->status();
-      onQualityChanged(playerStatus.quality, playerStatus.isReady);
-    }
+    auto const playerStatus = owner->status();
+    dispatchOutward(&Impl::onQualityChanged, playerStatus.quality, playerStatus.isReady);
   }
 
   void Player::Impl::updateMergedGraph()
@@ -200,7 +261,7 @@ namespace ao::audio
 
     // Label the source node with the detected codec (e.g. "FLAC"); fall back to a
     // generic name before a track is decoded or when the codec is unknown.
-    auto const codecName = library::audioCodecName(rs.codec);
+    auto const codecName = audioCodecName(rs.codec);
     auto sourceName = codecName.empty() ? std::string{"Source"} : std::string{codecName};
 
     mergedGraph = flow::Graph{
@@ -267,8 +328,8 @@ namespace ao::audio
     qualityResult = analyzeAudioQuality(mergedGraph);
   }
 
-  Player::Player()
-    : _implPtr{std::make_unique<Impl>()}
+  Player::Player(async::IExecutor& executor)
+    : _implPtr{std::make_unique<Impl>(executor)}
   {
     // Start with a NullBackend until a provider provides something real
     _implPtr->enginePtr = std::make_unique<Engine>(std::make_unique<NullBackend>(),
@@ -279,27 +340,33 @@ namespace ao::audio
                                                           .capabilities = {}});
 
     _implPtr->enginePtr->setOnTrackEnded(
-      [this]
-      {
-        if (_implPtr->onTrackEnded)
-        {
-          _implPtr->onTrackEnded();
-        }
-      });
+      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
+      { Impl::dispatchInternal(executor, gatePtr, [this] { _implPtr->dispatchOutward(&Impl::onTrackEnded); }); });
 
+    _implPtr->enginePtr->setOnStateChanged(
+      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
+      { _implPtr->dispatchOutward(&Impl::onStateChanged); });
+
+    auto* const gen = &_implPtr->playbackGeneration;
     _implPtr->enginePtr->setOnRouteChanged(
-      [this](Engine::RouteStatus const& status)
+      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor, gen](Engine::RouteStatus const& status)
       {
-        // Capture generation to prevent stale updates
-        auto const generation = _implPtr->playbackGeneration;
-
-        handleRouteChanged(status, generation);
+        // Capture generation at the Engine event boundary so a route event
+        // queued before a later stop/play cannot be applied to the new session.
+        auto const generation = gen->load(std::memory_order_acquire);
+        Impl::dispatchInternal(
+          executor, gatePtr, [this, status, generation] { handleRouteChanged(status, generation); });
       });
   }
 
   void Player::setOnTrackEnded(std::function<void()> callback)
   {
     _implPtr->onTrackEnded = std::move(callback);
+  }
+
+  void Player::setOnStateChanged(std::function<void()> callback)
+  {
+    _implPtr->onStateChanged = std::move(callback);
   }
 
   void Player::setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
@@ -326,19 +393,18 @@ namespace ao::audio
 
     auto* const provider = recordPtr->providerPtr.get();
     auto* const record = recordPtr.get();
-
     _implPtr->providers.push_back(std::move(recordPtr));
 
     record->subscription = provider->subscribeDevices(
-      [this, provider, record](std::vector<Device> const& devices)
+      [this, provider, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](std::vector<Device> const& devices)
       {
-        record->devices = devices;
-        _implPtr->handleDevicesChanged(this, provider, devices);
+        Impl::dispatchInternal(
+          executor, gatePtr, [this, provider, devices] { _implPtr->handleDevicesChanged(this, provider, devices); });
         return true;
       });
   }
 
-  void Player::play(TrackPlaybackDescriptor const& descriptor)
+  void Player::play(PlaybackInput const& input)
   {
     if (!isReady())
     {
@@ -346,7 +412,7 @@ namespace ao::audio
       return;
     }
 
-    _implPtr->playbackGeneration++;
+    _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
     {
       auto const lock = std::scoped_lock{_implPtr->graphMutex};
       _implPtr->cachedRouteStatus = {};
@@ -355,8 +421,7 @@ namespace ao::audio
       _implPtr->qualityResult = {};
     }
     _implPtr->graphSubscription.reset();
-    _implPtr->optCurrentTrack = descriptor;
-    _implPtr->enginePtr->play(descriptor);
+    _implPtr->enginePtr->play(input);
   }
 
   void Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
@@ -365,6 +430,7 @@ namespace ao::audio
         backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
     {
       _implPtr->optPendingOutput.reset();
+      _implPtr->dispatchOutward(&Impl::onStateChanged);
       return;
     }
 
@@ -383,6 +449,7 @@ namespace ao::audio
       // If we don't have it yet, store it as pending.
       _implPtr->optPendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
       AUDIO_LOG_DEBUG("Player: Requested output {}:{} not yet available, pending discovery", backend, deviceId);
+      _implPtr->dispatchOutward(&Impl::onStateChanged);
       return;
     }
 
@@ -396,6 +463,7 @@ namespace ao::audio
     if (recordIt == _implPtr->providers.end())
     {
       AUDIO_LOG_ERROR("Player: No provider found for backend {}", backend);
+      _implPtr->dispatchOutward(&Impl::onStateChanged);
       return;
     }
 
@@ -403,7 +471,7 @@ namespace ao::audio
     auto const& device = *it;
     auto newBackendPtr = (*recordIt)->providerPtr->createBackend(device, profile);
     _implPtr->activeManager = (*recordIt)->providerPtr.get();
-    _implPtr->playbackGeneration++;
+    _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
     _implPtr->enginePtr->setBackend(std::move(newBackendPtr), device);
   }
 
@@ -419,7 +487,7 @@ namespace ao::audio
 
   void Player::stop()
   {
-    _implPtr->playbackGeneration++;
+    _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
     {
       auto const lock = std::scoped_lock{_implPtr->graphMutex};
       _implPtr->cachedRouteStatus = {};
@@ -428,7 +496,6 @@ namespace ao::audio
       _implPtr->qualityResult = {};
     }
     _implPtr->graphSubscription.reset();
-    _implPtr->optCurrentTrack.reset();
     _implPtr->enginePtr->stop();
   }
 
@@ -457,12 +524,6 @@ namespace ao::audio
   {
     auto status = Player::Status{};
     status.engine = _implPtr->enginePtr->status();
-
-    if (_implPtr->optCurrentTrack)
-    {
-      status.trackTitle = _implPtr->optCurrentTrack->title;
-      status.trackArtist = _implPtr->optCurrentTrack->artist;
-    }
 
     {
       auto const lock = std::scoped_lock{_implPtr->backendsMutex};
@@ -496,7 +557,7 @@ namespace ao::audio
 
   void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
   {
-    if (generation != _implPtr->playbackGeneration)
+    if (generation != _implPtr->playbackGeneration.load(std::memory_order_acquire))
     {
       return;
     }
@@ -512,10 +573,15 @@ namespace ao::audio
     {
       if (!_implPtr->graphSubscription)
       {
-        _implPtr->graphSubscription =
-          _implPtr->activeManager->subscribeGraph(status.optAnchor->id,
-                                                  [this, generation](flow::Graph const& graph)
-                                                  { _implPtr->handleSystemGraphChanged(this, graph, generation); });
+        _implPtr->graphSubscription = _implPtr->activeManager->subscribeGraph(
+          status.optAnchor->id,
+          [this, generation, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](flow::Graph const& graph)
+          {
+            Impl::dispatchInternal(executor,
+                                   gatePtr,
+                                   [this, graph, generation]
+                                   { _implPtr->handleSystemGraphChanged(this, graph, generation); });
+          });
       }
     }
     else
@@ -533,15 +599,12 @@ namespace ao::audio
     _implPtr->updateMergedGraph();
     lock.unlock();
 
-    if (_implPtr->onQualityChanged)
-    {
-      auto const playerStatus = this->status();
-      _implPtr->onQualityChanged(playerStatus.quality, playerStatus.isReady);
-    }
+    auto const playerStatus = this->status();
+    _implPtr->dispatchOutward(&Impl::onQualityChanged, playerStatus.quality, playerStatus.isReady);
   }
 
   std::uint64_t Player::playbackGeneration() const noexcept
   {
-    return _implPtr->playbackGeneration;
+    return _implPtr->playbackGeneration.load(std::memory_order_acquire);
   }
 } // namespace ao::audio

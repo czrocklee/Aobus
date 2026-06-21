@@ -316,8 +316,12 @@ namespace ao::uimodel::playback::test
 
     SECTION("onPreparing triggers refresh")
     {
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = trackId, .filePath = "test.flac", .duration = std::chrono::seconds{5}};
+      auto desc = PlaybackService::PlaybackRequest{
+        .trackId = trackId,
+        .input = audio::PlaybackInput{.filePath = "test.flac", .duration = std::chrono::seconds{5}},
+        .title = "Sub Test",
+        .artist = "Sub Artist",
+      };
       playback.play(desc, kInvalidListId);
 
       CHECK(log.states.size() > initialCount);

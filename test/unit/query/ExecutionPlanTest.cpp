@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/library/AudioCodec.h>
+#include <ao/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
@@ -161,7 +161,7 @@ namespace ao::query::test
     auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
 
     REQUIRE(it != plan.instructions.end());
-    CHECK(std::cmp_equal(it->constValue, library::audioCodecStorageValue(library::AudioCodec::Aac)));
+    CHECK(std::cmp_equal(it->constValue, audioCodecStorageValue(AudioCodec::Aac)));
   }
 
   TEST_CASE("ExecutionPlan - Unsupported Codec Constant", "[query][unit][execution_plan]")

@@ -23,110 +23,217 @@
 #include <fakeit.hpp>
 
 #include <chrono>
+#include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <string>
 #include <string_view>
+#include <thread>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    PlaybackService::PlaybackRequest playbackRequest(TrackId trackId,
+                                                     std::string_view filePath,
+                                                     std::string title,
+                                                     std::string artist,
+                                                     std::chrono::milliseconds duration)
+    {
+      return PlaybackService::PlaybackRequest{
+        .trackId = trackId,
+        .input = audio::PlaybackInput{.filePath = std::string{filePath}, .duration = duration},
+        .title = std::move(title),
+        .artist = std::move(artist),
+      };
+    }
+
+    // Canonical single-backend, single-device provider status shared by every
+    // harness instance below: "mock_backend" exposes one default "mock_device"
+    // and the shared profile.
+    audio::IBackendProvider::Status makeMockProviderStatus()
+    {
+      auto status = audio::IBackendProvider::Status{};
+      status.metadata.id = audio::BackendId{"mock_backend"};
+      status.metadata.name = "Mock Backend";
+      status.devices.push_back(audio::Device{.id = audio::DeviceId{"mock_device"},
+                                             .displayName = "Mock Device",
+                                             .description = "A mock audio device",
+                                             .isDefault = true,
+                                             .backendId = audio::BackendId{"mock_backend"}});
+      status.metadata.supportedProfiles.push_back(audio::IBackendProvider::ProfileMetadata{
+        .id = audio::ProfileId{audio::kProfileShared}, .name = "Shared", .description = "Shared profile"});
+      return status;
+    }
+  } // namespace
+
+  // Executor that queues tasks instead of running them inline, so a test can
+  // drive the executor turn boundary explicitly via drain(). isCurrent() answers
+  // truthfully so the PlaybackService affinity guard is exercised on a real
+  // thread-id comparison rather than the unconditional-true MockExecutor.
+  class QueuedExecutor final : public async::IExecutor
+  {
+  public:
+    bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
+
+    void dispatch(std::move_only_function<void()> task) override
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _tasks.push_back(std::move(task));
+    }
+
+    void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
+
+    void drain()
+    {
+      while (true)
+      {
+        auto task = std::move_only_function<void()>{};
+        {
+          auto const lock = std::scoped_lock{_mutex};
+
+          if (_tasks.empty())
+          {
+            return;
+          }
+
+          task = std::move(_tasks.front());
+          _tasks.pop_front();
+        }
+
+        if (task)
+        {
+          task();
+        }
+      }
+    }
+
+  private:
+    std::thread::id _ownerThreadId = std::this_thread::get_id();
+    std::deque<std::move_only_function<void()>> _tasks;
+    std::mutex _mutex;
+  };
+
+  // Shared wiring for the PlaybackService tests: a music library, a view service,
+  // a spy backend, and a mocked IBackendProvider that hands out that backend.
+  // ExecutorT selects the dispatch model (MockExecutor runs inline; QueuedExecutor
+  // defers until drain()). The provider's devices/graph callbacks and the render
+  // target are captured into public members so a test can drive them.
+  //
+  // The constructor wires the mocks and registers the provider, but it does NOT
+  // notify devices: each test triggers onDevicesChangedCb itself because the three
+  // call sites need different priming (auto-select-and-edge-cases, a single
+  // notify-then-drain, or no notify at all to exercise ensureReady()).
+  template<typename ExecutorT>
+  struct PlaybackHarness final
+  {
+    PlaybackHarness()
+    {
+      fakeit::Fake(Method(mockProvider, shutdown));
+
+      fakeit::When(Method(mockProvider, subscribeDevices))
+        .AlwaysDo(
+          [this](audio::IBackendProvider::OnDevicesChangedCallback cb)
+          {
+            onDevicesChangedCb = cb;
+            return audio::Subscription{};
+          });
+
+      fakeit::When(Method(mockProvider, subscribeGraph))
+        .AlwaysDo(
+          [this](std::string_view, audio::IBackendProvider::OnGraphChangedCallback cb)
+          {
+            onGraphChangedCb = cb;
+            return audio::Subscription{};
+          });
+
+      fakeit::When(Method(mockProvider, status)).AlwaysReturn(status);
+
+      fakeit::When(Method(spyBackendPtr->mock(), property))
+        .AlwaysDo(
+          [](audio::PropertyId id) -> Result<audio::PropertyValue>
+          {
+            if (id == audio::PropertyId::Volume)
+            {
+              return 1.0F;
+            }
+
+            if (id == audio::PropertyId::Muted)
+            {
+              return false;
+            }
+
+            return 0.0F;
+          });
+      fakeit::When(Method(spyBackendPtr->mock(), queryProperty))
+        .AlwaysReturn(audio::PropertyInfo{
+          .canRead = true,
+          .canWrite = true,
+          .isAvailable = true,
+          .emitsChangeNotifications = false,
+          .isHardwareAssisted = true,
+        });
+      fakeit::When(Method(spyBackendPtr->mock(), backendId)).AlwaysReturn(audio::BackendId{"mock_backend"});
+      fakeit::When(Method(spyBackendPtr->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
+      fakeit::When(Method(spyBackendPtr->mock(), open))
+        .AlwaysDo(
+          [this](audio::Format const& /*format*/, audio::IRenderTarget* target) -> Result<>
+          {
+            renderTarget = target;
+            return {};
+          });
+      fakeit::When(Method(mockProvider, createBackend))
+        .AlwaysDo([this](audio::Device const&, audio::ProfileId const&) { return spyBackendPtr->makeProxy(); });
+
+      playbackService.addProvider(std::make_unique<audio::test::MockProviderProxy>(mockProvider.get()));
+    }
+
+    PlaybackHarness(PlaybackHarness const&) = delete;
+    PlaybackHarness& operator=(PlaybackHarness const&) = delete;
+    PlaybackHarness(PlaybackHarness&&) = delete;
+    PlaybackHarness& operator=(PlaybackHarness&&) = delete;
+    ~PlaybackHarness() = default;
+
+    // Declaration order matters: the executor must outlive the view/playback
+    // services that hold references to it, and playbackService (destroyed first)
+    // tears down its Player while the provider mock is still alive.
+    TestMusicLibrary testLib;
+    ExecutorT executor;
+    LibraryChanges changes;
+    ListSourceStore listSourceStore{testLib.library(), changes};
+    ViewService viewService{executor, testLib.library(), listSourceStore};
+
+    std::shared_ptr<audio::test::SpyBackend<>> spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
+    fakeit::Mock<audio::IBackendProvider> mockProvider;
+    audio::IBackendProvider::Status status = makeMockProviderStatus();
+
+    audio::IBackendProvider::OnDevicesChangedCallback onDevicesChangedCb;
+    audio::IBackendProvider::OnGraphChangedCallback onGraphChangedCb;
+    audio::IRenderTarget* renderTarget = nullptr;
+
+    PlaybackService playbackService{executor, viewService, testLib.library()};
+  };
+
   TEST_CASE("PlaybackService - Basic Flow", "[app][unit][runtime][playback]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto executor = MockExecutor{};
-    auto changes = LibraryChanges{};
-    auto listSourceStore = ListSourceStore{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto h = PlaybackHarness<MockExecutor>{};
+    auto& playbackService = h.playbackService;
+    auto& viewService = h.viewService;
+    auto& testLib = h.testLib;
+    auto*& renderTarget = h.renderTarget;
+    auto& onGraphChangedCb = h.onGraphChangedCb;
 
-    auto playbackService = PlaybackService{executor, viewService, testLib.library()};
-
-    auto mockProvider = fakeit::Mock<audio::IBackendProvider>{};
-    fakeit::Fake(Method(mockProvider, shutdown));
-    auto onDevicesChangedCb = audio::IBackendProvider::OnDevicesChangedCallback{};
-    fakeit::When(Method(mockProvider, subscribeDevices))
-      .AlwaysDo(
-        [&](audio::IBackendProvider::OnDevicesChangedCallback cb)
-        {
-          onDevicesChangedCb = cb;
-          return audio::Subscription{};
-        });
-
-    auto onGraphChangedCb = audio::IBackendProvider::OnGraphChangedCallback{};
-    fakeit::When(Method(mockProvider, subscribeGraph))
-      .AlwaysDo(
-        [&](std::string_view, audio::IBackendProvider::OnGraphChangedCallback cb)
-        {
-          onGraphChangedCb = cb;
-          return audio::Subscription{};
-        });
-
-    auto status = audio::IBackendProvider::Status{};
-    status.metadata.id = audio::BackendId{"mock_backend"};
-    status.metadata.name = "Mock Backend";
-    status.devices.push_back(audio::Device{.id = audio::DeviceId{"mock_device"},
-                                           .displayName = "Mock Device",
-                                           .description = "A mock audio device",
-                                           .isDefault = true,
-                                           .backendId = audio::BackendId{"mock_backend"}});
-    status.metadata.supportedProfiles.push_back(audio::IBackendProvider::ProfileMetadata{
-      .id = audio::ProfileId{audio::kProfileShared}, .name = "Shared", .description = "Shared profile"});
-
-    fakeit::When(Method(mockProvider, status)).AlwaysReturn(status);
-
-    auto spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
-    fakeit::When(Method(spyBackendPtr->mock(), property))
-      .AlwaysDo(
-        [](audio::PropertyId id) -> Result<audio::PropertyValue>
-        {
-          if (id == audio::PropertyId::Volume)
-          {
-            return 1.0F;
-          }
-
-          if (id == audio::PropertyId::Muted)
-          {
-            return false;
-          }
-
-          return 0.0F;
-        });
-    fakeit::When(Method(spyBackendPtr->mock(), queryProperty))
-      .AlwaysReturn(audio::PropertyInfo{
-        .canRead = true,
-        .canWrite = true,
-        .isAvailable = true,
-        .emitsChangeNotifications = false,
-        .isHardwareAssisted = true,
-      });
-    fakeit::When(Method(spyBackendPtr->mock(), backendId)).AlwaysReturn(audio::BackendId{"mock_backend"});
-    fakeit::When(Method(spyBackendPtr->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
-
-    audio::IRenderTarget* renderTarget = nullptr;
-    fakeit::When(Method(spyBackendPtr->mock(), open))
-      .AlwaysDo(
-        [&](audio::Format const& /*format*/, audio::IRenderTarget* target) -> Result<>
-        {
-          renderTarget = target;
-          return {};
-        });
-
-    // We must return a unique_ptr to IBackend from createBackend
-    fakeit::When(Method(mockProvider, createBackend))
-      .AlwaysDo([&](audio::Device const&, audio::ProfileId const&) { return spyBackendPtr->makeProxy(); });
-
-    playbackService.addProvider(std::make_unique<audio::test::MockProviderProxy>(mockProvider.get()));
-
-    if (onDevicesChangedCb)
-    {
-      onDevicesChangedCb(status.devices);
-      // Trigger again to hit the early return when selectedOutput is already set
-      onDevicesChangedCb(status.devices);
-
-      // Trigger with a backend that has no devices
-      auto emptyStatus = status;
-      emptyStatus.devices.clear();
-      onDevicesChangedCb(emptyStatus.devices);
-    }
+    // Prime the device list. The first notification auto-selects the default
+    // output; the duplicate exercises the "already selected" early return, and the
+    // empty list exercises the no-devices guard.
+    h.onDevicesChangedCb(h.status.devices);
+    h.onDevicesChangedCb(h.status.devices);
+    auto emptyStatus = h.status;
+    emptyStatus.devices.clear();
+    h.onDevicesChangedCb(emptyStatus.devices);
 
     SECTION("Initial state is correct")
     {
@@ -184,13 +291,8 @@ namespace ao::rt::test
           }
         });
 
-      auto const desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{1},
-        .filePath = "/fake/path.flac",
-        .title = "Fake Track",
-        .artist = "Fake Artist",
-        .duration = std::chrono::minutes{2},
-      };
+      auto const desc =
+        playbackRequest(TrackId{1}, "/fake/path.flac", "Fake Track", "Fake Artist", std::chrono::minutes{2});
 
       playbackService.play(desc, ListId{1});
 
@@ -280,11 +382,12 @@ namespace ao::rt::test
       auto sub1 = playbackService.onDevicesChanged([&] { devicesChangedFired = true; });
 
       bool outputChangedFired = false;
+      auto lastOutput = OutputSelection{};
       auto sub2 = playbackService.onOutputChanged(
         [&](auto const& ev)
         {
           outputChangedFired = true;
-          CHECK(ev.backendId == audio::BackendId{"mock_backend"});
+          lastOutput = ev;
         });
 
       bool qualityChangedFired = false;
@@ -298,6 +401,14 @@ namespace ao::rt::test
       playbackService.setOutput(
         audio::BackendId{"mock_backend"}, audio::DeviceId{"mock_device"}, audio::ProfileId{audio::kProfileShared});
       CHECK(outputChangedFired);
+      // setOutput publishes the engine-confirmed selection taken from the
+      // refreshed state, not the raw request, so the emitted event mirrors
+      // state().selectedOutput exactly (and stays consistent with the
+      // auto-select path that also emits state.selectedOutput).
+      CHECK(lastOutput.backendId == audio::BackendId{"mock_backend"});
+      CHECK(lastOutput.deviceId == audio::DeviceId{"mock_device"});
+      CHECK(lastOutput.profileId == audio::ProfileId{audio::kProfileShared});
+      CHECK(lastOutput == playbackService.state().selectedOutput);
     }
 
     SECTION("playSelectionInView fails with empty selection")
@@ -369,71 +480,16 @@ namespace ao::rt::test
 
     SECTION("ensureReady auto-configures output on first play")
     {
-      // Create a fresh PlaybackService without triggering onDevicesChanged
-      auto freshExecutor = MockExecutor{};
-      auto freshChanges = LibraryChanges{};
-      auto freshListStore = ListSourceStore{testLib.library(), freshChanges};
-      auto freshViewService = ViewService{freshExecutor, testLib.library(), freshListStore};
-      auto freshService = PlaybackService{freshExecutor, freshViewService, testLib.library()};
+      // A second harness whose device list is never primed: the player is not
+      // ready, so play() must run ensureReady() and auto-configure the first
+      // available output before starting.
+      auto fresh = PlaybackHarness<MockExecutor>{};
 
-      auto freshMockProvider = fakeit::Mock<audio::IBackendProvider>{};
-      fakeit::Fake(Method(freshMockProvider, shutdown));
+      auto const desc =
+        playbackRequest(TrackId{1}, "/fake/path.flac", "Fake Track", "Fake Artist", std::chrono::minutes{2});
 
-      // Capture the devices-changed callback but do NOT invoke it
-      auto freshDevicesCb = audio::IBackendProvider::OnDevicesChangedCallback{};
-      fakeit::When(Method(freshMockProvider, subscribeDevices))
-        .AlwaysDo(
-          [&](audio::IBackendProvider::OnDevicesChangedCallback cb)
-          {
-            freshDevicesCb = cb;
-            return audio::Subscription{};
-          });
-
-      fakeit::When(Method(freshMockProvider, subscribeGraph))
-        .AlwaysDo([](std::string_view, audio::IBackendProvider::OnGraphChangedCallback)
-                  { return audio::Subscription{}; });
-
-      fakeit::When(Method(freshMockProvider, status)).AlwaysReturn(status);
-
-      auto freshSpyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
-      fakeit::When(Method(freshSpyBackendPtr->mock(), property))
-        .AlwaysDo(
-          [](audio::PropertyId id) -> Result<audio::PropertyValue>
-          {
-            if (id == audio::PropertyId::Volume)
-            {
-              return 1.0F;
-            }
-
-            if (id == audio::PropertyId::Muted)
-            {
-              return false;
-            }
-
-            return 0.0F;
-          });
-      fakeit::When(Method(freshSpyBackendPtr->mock(), queryProperty)).AlwaysReturn(audio::PropertyInfo{});
-      fakeit::When(Method(freshSpyBackendPtr->mock(), backendId)).AlwaysReturn(audio::BackendId{"mock_backend"});
-      fakeit::When(Method(freshSpyBackendPtr->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
-      fakeit::When(Method(freshSpyBackendPtr->mock(), open))
-        .AlwaysDo([](audio::Format const&, audio::IRenderTarget*) -> Result<> { return {}; });
-      fakeit::When(Method(freshMockProvider, createBackend))
-        .AlwaysDo([&](audio::Device const&, audio::ProfileId const&) { return freshSpyBackendPtr->makeProxy(); });
-
-      freshService.addProvider(std::make_unique<audio::test::MockProviderProxy>(freshMockProvider.get()));
-
-      // Do NOT call freshDevicesCb — player is not ready yet.
-      // Calling play() should trigger ensureReady() which auto-configures the output.
-      auto const desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{1},
-        .filePath = "/fake/path.flac",
-        .title = "Fake Track",
-        .artist = "Fake Artist",
-        .duration = std::chrono::minutes{2},
-      };
-
-      freshService.play(desc, ListId{1});
-      CHECK(freshService.state().trackId == TrackId{1});
+      fresh.playbackService.play(desc, ListId{1});
+      CHECK(fresh.playbackService.state().trackId == TrackId{1});
     }
 
     SECTION("revealPlayingTrack works")
@@ -444,5 +500,36 @@ namespace ao::rt::test
       playbackService.revealPlayingTrack();
       CHECK(revealFired);
     }
+  }
+
+  TEST_CASE("PlaybackService - control commands refresh state synchronously", "[app][unit][runtime][playback]")
+  {
+    auto h = PlaybackHarness<QueuedExecutor>{};
+
+    // The provider callback is marshalled onto the executor, so the auto-select
+    // does not take effect until the queued task drains.
+    h.onDevicesChangedCb(h.status.devices);
+    h.executor.drain();
+    REQUIRE(h.playbackService.state().ready);
+
+    bool startedFired = false;
+    auto subStarted = h.playbackService.onStarted([&] { startedFired = true; });
+    auto const desc =
+      playbackRequest(TrackId{77}, "/fake/path.flac", "Deferred Track", "Deferred Artist", std::chrono::minutes{4});
+
+    h.playbackService.play(desc, ListId{9});
+
+    // Control commands run on the executor thread (affinity contract), so they
+    // refresh the state snapshot and emit their signals synchronously — no
+    // executor turn is required, unlike the async Player callbacks.
+    CHECK(startedFired);
+    CHECK(h.playbackService.state().trackId == TrackId{77});
+    CHECK(h.playbackService.state().sourceListId == ListId{9});
+
+    // Draining any executor-deferred Player state callbacks leaves it intact.
+    h.executor.drain();
+
+    CHECK(h.playbackService.state().trackId == TrackId{77});
+    CHECK(h.playbackService.state().sourceListId == ListId{9});
   }
 } // namespace ao::rt::test

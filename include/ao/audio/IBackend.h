@@ -26,7 +26,8 @@ namespace ao::audio
    * - Backends may call IRenderTarget methods from their render or backend event
    *   threads. They must not hold a native-handle lock while invoking an
    *   IRenderTarget callback if a public backend method can acquire that same
-   *   lock; callbacks may synchronously update Engine state.
+   *   lock. Non-realtime Engine events are handed off internally, but the
+   *   backend must still avoid callback/native-lock reentrancy hazards.
    * - close() is the render-target lifetime boundary. After close() returns, the
    *   backend must not issue further callbacks to the IRenderTarget passed to
    *   open(), and all in-flight callbacks for that target must have returned.

@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/library/AudioCodec.h>
 
 #include <chrono>
 #include <cstdint>
@@ -30,7 +30,7 @@ namespace ao::uimodel::track
   std::string formatBitrate(std::uint32_t bitrate);
   std::string formatChannels(std::uint8_t channels);
   std::string formatBitDepth(std::uint8_t bitDepth);
-  std::string formatCodec(library::AudioCodec codec);
+  std::string formatCodec(AudioCodec codec);
 
   TrackFieldEditValue makeTextEditValue(std::string_view value);
   Result<TrackFieldEditValue> parseTextEditValue(std::string_view value);

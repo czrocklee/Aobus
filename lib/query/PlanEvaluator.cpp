@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/AudioCodec.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
@@ -112,7 +112,7 @@ namespace ao::query
         case Field::SampleRate: return static_cast<std::int64_t>(track.property().sampleRate().raw());
         case Field::Channels: return static_cast<std::int64_t>(track.property().channels().raw());
         case Field::BitDepth: return static_cast<std::int64_t>(track.property().bitDepth().raw());
-        case Field::Codec: return static_cast<std::int64_t>(library::audioCodecStorageValue(track.property().codec()));
+        case Field::Codec: return static_cast<std::int64_t>(audioCodecStorageValue(track.property().codec()));
 
         // Metadata ID fields
         case Field::ArtistId: return static_cast<std::int64_t>(track.metadata().artistId().raw());
@@ -272,7 +272,7 @@ namespace ao::query
         case Field::Channels:
         case Field::BitDepth: return loadFieldValue(track, field) > 0;
 
-        case Field::Codec: return track.property().codec() != library::AudioCodec::Unknown;
+        case Field::Codec: return track.property().codec() != AudioCodec::Unknown;
 
         case Field::Tag:
           return instr.constValue > 0 && track.tags().has(DictionaryId{static_cast<std::uint32_t>(instr.constValue)});

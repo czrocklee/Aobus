@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include <ao/AudioCodec.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
-#include <ao/library/AudioCodec.h>
 
 #include <functional>
 #include <mutex>
@@ -20,7 +20,7 @@ namespace ao::audio::detail
     Format decoderOutputFormat;
     Format engineOutputFormat;
     bool isLossySource = false;
-    library::AudioCodec codec = library::AudioCodec::Unknown;
+    AudioCodec codec = AudioCodec::Unknown;
 
     bool operator==(RouteState const&) const = default;
   };
@@ -30,7 +30,7 @@ namespace ao::audio::detail
   public:
     using OnChanged = std::function<void(RouteState const&)>;
 
-    void setDecoder(Format sourceFormat, Format outputFormat, bool isLossy, library::AudioCodec codec);
+    void setDecoder(Format sourceFormat, Format outputFormat, bool isLossy, AudioCodec codec);
     void setEngineFormat(Format format);
     void setAnchor(BackendId backend, std::string id);
     void clear();

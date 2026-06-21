@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/TestUtils.h"
+#include <ao/Type.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
@@ -13,13 +14,28 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <functional>
 #include <string>
+#include <utility>
 
 namespace ao::uimodel::playback::test
 {
   using namespace ao::rt::test;
   using namespace ao::rt;
+
+  namespace
+  {
+    PlaybackService::PlaybackRequest playbackRequest(TrackId trackId, std::string title, std::string artist = {})
+    {
+      return PlaybackService::PlaybackRequest{
+        .trackId = trackId,
+        .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
+        .title = std::move(title),
+        .artist = std::move(artist),
+      };
+    }
+  } // namespace
 
   TEST_CASE("NowPlayingViewModel - view state generation", "[unit][uimodel][playback]")
   {
@@ -42,8 +58,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("Metadata formatting")
     {
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{1}, .title = "Song", .artist = "Artist", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
 
       playback.play(desc, ListId{1});
       REQUIRE(!log.empty());
@@ -57,8 +72,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("Metadata with empty artist shows Unknown Artist")
     {
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{1}, .title = "Instrumental", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{1}, "Instrumental");
       playback.play(desc, ListId{1});
       CHECK(log.last().title == "Instrumental");
       CHECK(log.last().artist == "Unknown Artist");
@@ -67,8 +81,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("fieldText returns empty for unrelated field")
     {
-      auto desc =
-        audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .title = "Song", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{1}, "Song");
       playback.play(desc, ListId{1});
       CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Year).empty());
     }
@@ -87,8 +100,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("FilterByField with Title")
     {
-      auto desc =
-        audio::TrackPlaybackDescriptor{.trackId = TrackId{1}, .title = "Song", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{1}, "Song");
       playback.play(desc, ListId{1});
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
@@ -104,8 +116,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("Quoting with both quote types replaces double quotes with single")
     {
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{1}, .title = "A \"Song\" 'Name'", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{1}, "A \"Song\" 'Name'");
       playback.play(desc, ListId{1});
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
@@ -115,8 +126,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("Action resolution")
     {
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{1}, .title = "Song", .artist = "Artist", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
       playback.play(desc, ListId{1});
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Artist);
@@ -126,8 +136,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("Quoting and escaping in actions")
     {
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = TrackId{1}, .title = "A \"Song\"", .duration = std::chrono::seconds{1}};
+      auto desc = playbackRequest(TrackId{1}, "A \"Song\"");
       playback.play(desc, ListId{1});
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);

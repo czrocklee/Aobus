@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
@@ -237,7 +237,7 @@ namespace ao::rt
        .u32Get = [](auto const& prop) { return static_cast<std::uint32_t>(prop.duration().count()); }},
       {.field = TrackField::Bitrate, .u32Get = [](auto const& prop) { return prop.bitrate().raw(); }},
       {.field = TrackField::SampleRate, .u32Get = [](auto const& prop) { return prop.sampleRate().raw(); }},
-      {.field = TrackField::Codec, .stringGet = [](auto const& prop) { return library::audioCodecName(prop.codec()); }},
+      {.field = TrackField::Codec, .stringGet = [](auto const& prop) { return audioCodecName(prop.codec()); }},
       {.field = TrackField::Channels, .u8Get = [](auto const& prop) { return prop.channels().raw(); }},
       {.field = TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth().raw(); }},
     });

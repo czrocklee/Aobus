@@ -56,7 +56,7 @@ namespace ao::audio::detail
     }
   }
 
-  TrackSession::Result TrackSession::create(TrackPlaybackDescriptor const& descriptor,
+  TrackSession::Result TrackSession::create(PlaybackInput const& input,
                                             Device const& device,
                                             BackendId const& backendId,
                                             ProfileId const& profileId,
@@ -65,15 +65,15 @@ namespace ao::audio::detail
   {
     auto const outputFormat = [] { return Format{.isInterleaved = true}; }();
 
-    auto decoderPtr = decoderFactory ? decoderFactory(descriptor.filePath, outputFormat)
-                                     : createDecoderSession(descriptor.filePath, outputFormat);
+    auto decoderPtr = decoderFactory ? decoderFactory(input.filePath, outputFormat)
+                                     : createDecoderSession(input.filePath, outputFormat);
 
     if (decoderPtr == nullptr)
     {
       return {.error = {.message = "No audio decoder backend is available"}};
     }
 
-    if (auto const openResult = decoderPtr->open(descriptor.filePath); !openResult)
+    if (auto const openResult = decoderPtr->open(input.filePath); !openResult)
     {
       return {.error = openResult.error()};
     }
@@ -89,7 +89,7 @@ namespace ao::audio::detail
     auto errorMsg = std::string{};
 
     if (!negotiateFormat(
-          descriptor.filePath, info, decoderPtr, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))
+          input.filePath, info, decoderPtr, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))
     {
       return {.error = {.message = errorMsg}};
     }

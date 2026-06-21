@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtility.h"
+#include <ao/AudioCodec.h>
+#include <ao/async/ImmediateExecutor.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
@@ -9,7 +11,6 @@
 #include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
-#include <ao/library/AudioCodec.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -17,9 +18,14 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <deque>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -37,7 +43,7 @@ namespace ao::audio::test
             .sourceFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
             .decoderOutputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
             .engineOutputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
-            .codec = library::AudioCodec::Flac,
+            .codec = AudioCodec::Flac,
           },
         .optAnchor = RouteAnchor{.backend = kBackendNone, .id = "mock-stream-id"},
       };
@@ -58,6 +64,68 @@ namespace ao::audio::test
       BackendId _backendId;
       ProfileId _profileId;
     };
+
+    class QueuedExecutor final : public async::IExecutor
+    {
+    public:
+      bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
+
+      void dispatch(std::move_only_function<void()> task) override
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _tasks.push_back(std::move(task));
+      }
+
+      void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
+
+      void drain()
+      {
+        while (true)
+        {
+          auto task = std::move_only_function<void()>{};
+          {
+            auto const lock = std::scoped_lock{_mutex};
+
+            if (_tasks.empty())
+            {
+              return;
+            }
+
+            task = std::move(_tasks.front());
+            _tasks.pop_front();
+          }
+
+          if (task)
+          {
+            task();
+          }
+        }
+      }
+
+    private:
+      std::thread::id _ownerThreadId = std::this_thread::get_id();
+      std::deque<std::move_only_function<void()>> _tasks;
+      std::mutex _mutex;
+    };
+
+    Device pipeWireDevice(std::string displayName = "System Default")
+    {
+      return Device{.id = DeviceId{"system-default"},
+                    .displayName = std::move(displayName),
+                    .description = "PipeWire",
+                    .isDefault = true,
+                    .backendId = kBackendPipeWire};
+    }
+
+    IBackendProvider::Status pipeWireStatus()
+    {
+      return IBackendProvider::Status{.metadata = {.id = kBackendPipeWire,
+                                                   .name = "PipeWire",
+                                                   .description = "PipeWire Provider",
+                                                   .iconName = "audio-card-symbolic",
+                                                   .supportedProfiles = {}},
+                                      .devices = {}};
+    }
   } // namespace
 
   TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][unit][player][lifecycle]")
@@ -101,7 +169,8 @@ namespace ao::audio::test
                                                           .supportedProfiles = {}},
                                              .devices = {}});
 
-    auto player = Player{};
+    auto executor = async::ImmediateExecutor{};
+    auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
     player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
 
@@ -215,7 +284,8 @@ namespace ao::audio::test
                                                           .supportedProfiles = {}},
                                              .devices = {}});
 
-    auto player = Player{};
+    auto executor = async::ImmediateExecutor{};
+    auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
     // 1. Call setOutput before devices are available
@@ -226,7 +296,7 @@ namespace ao::audio::test
     REQUIRE(snapBefore.engine.currentDeviceId == "null");
 
     // 1b. Call play while pending - should be ignored
-    player.play(TrackPlaybackDescriptor{.filePath = "song.flac"});
+    player.play(PlaybackInput{.filePath = "song.flac"});
     REQUIRE(player.status().engine.transport == Transport::Idle);
 
     // 2. Simulate devices being discovered
@@ -252,9 +322,163 @@ namespace ao::audio::test
     // This should hit line 126 in Player.cpp
   }
 
+  TEST_CASE("Player - provider callbacks are marshalled onto the executor", "[playback][unit][player][executor]")
+  {
+    auto mockProvider = Mock<IBackendProvider>{};
+    Fake(Method(mockProvider, shutdown));
+
+    auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    When(Method(mockProvider, subscribeDevices))
+      .AlwaysDo(
+        [&](IBackendProvider::OnDevicesChangedCallback const& cb)
+        {
+          onDevicesChanged = cb;
+          return Subscription{};
+        });
+
+    When(Method(mockProvider, createBackend))
+      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
+    When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
+    When(Method(mockProvider, subscribeGraph))
+      .AlwaysDo([](std::string_view, IBackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
+
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
+
+    std::int32_t deviceSignals = 0;
+    auto observedStatuses = std::vector<IBackendProvider::Status>{};
+    player.setOnDevicesChanged(
+      [&](std::vector<IBackendProvider::Status> const& statuses)
+      {
+        ++deviceSignals;
+        observedStatuses = statuses;
+      });
+
+    REQUIRE(onDevicesChanged);
+    auto worker = std::jthread{[&] { onDevicesChanged({pipeWireDevice()}); }};
+    worker.join();
+
+    CHECK(player.status().availableBackends.empty());
+    CHECK(deviceSignals == 0);
+
+    executor.drain();
+
+    auto const snap = player.status();
+    REQUIRE(snap.availableBackends.size() == 1);
+    REQUIRE(snap.availableBackends.front().devices.size() == 1);
+    CHECK(snap.availableBackends.front().devices.front().id == DeviceId{"system-default"});
+    CHECK(deviceSignals == 1);
+    REQUIRE(observedStatuses.size() == 1);
+    REQUIRE(observedStatuses.front().devices.size() == 1);
+    CHECK(observedStatuses.front().devices.front().id == DeviceId{"system-default"});
+  }
+
+  TEST_CASE("Player - queued provider callback is ignored after teardown", "[playback][unit][player][executor]")
+  {
+    auto mockProvider = Mock<IBackendProvider>{};
+    Fake(Method(mockProvider, shutdown));
+
+    auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    When(Method(mockProvider, subscribeDevices))
+      .AlwaysDo(
+        [&](IBackendProvider::OnDevicesChangedCallback const& cb)
+        {
+          onDevicesChanged = cb;
+          return Subscription{};
+        });
+
+    When(Method(mockProvider, createBackend))
+      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
+    When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
+    When(Method(mockProvider, subscribeGraph))
+      .AlwaysDo([](std::string_view, IBackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
+
+    auto executor = QueuedExecutor{};
+    std::int32_t deviceSignals = 0;
+
+    {
+      auto player = Player{executor};
+      player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
+      player.setOnDevicesChanged([&](std::vector<IBackendProvider::Status> const&) { ++deviceSignals; });
+
+      REQUIRE(onDevicesChanged);
+      onDevicesChanged({pipeWireDevice()});
+    }
+
+    executor.drain();
+    CHECK(deviceSignals == 0);
+  }
+
+  TEST_CASE("Player - graph callbacks are marshalled onto the executor", "[playback][unit][player][executor]")
+  {
+    auto mockProvider = Mock<IBackendProvider>{};
+    Fake(Method(mockProvider, shutdown));
+
+    auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    When(Method(mockProvider, subscribeDevices))
+      .AlwaysDo(
+        [&](IBackendProvider::OnDevicesChangedCallback const& cb)
+        {
+          onDevicesChanged = cb;
+          return Subscription{};
+        });
+
+    When(Method(mockProvider, createBackend))
+      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
+    When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
+
+    auto onGraphChanged = IBackendProvider::OnGraphChangedCallback{};
+    When(Method(mockProvider, subscribeGraph))
+      .AlwaysDo(
+        [&](std::string_view, IBackendProvider::OnGraphChangedCallback const& cb)
+        {
+          onGraphChanged = cb;
+          return Subscription{[] {}};
+        });
+
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
+
+    REQUIRE(onDevicesChanged);
+    onDevicesChanged({pipeWireDevice()});
+    executor.drain();
+
+    player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared);
+    auto route = createBaseEngineRoute();
+    route.optAnchor = RouteAnchor{.backend = kBackendPipeWire, .id = "mock-stream-id"};
+    player.handleRouteChanged(route, player.playbackGeneration());
+
+    REQUIRE(onGraphChanged);
+    executor.drain();
+
+    std::int32_t qualitySignals = 0;
+    player.setOnQualityChanged([&](Quality, bool) { ++qualitySignals; });
+
+    auto worker =
+      std::jthread{[&]
+                   {
+                     onGraphChanged(flow::Graph{
+                       .nodes = {flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink}}, .connections = {}});
+                   }};
+    worker.join();
+
+    auto snap = player.status();
+    CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) == snap.flow.nodes.end());
+    CHECK(qualitySignals == 0);
+
+    executor.drain();
+
+    snap = player.status();
+    CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) != snap.flow.nodes.end());
+    CHECK(qualitySignals == 1);
+  }
+
   TEST_CASE("Player - Basic Control Propagation", "[playback][unit][player][control]")
   {
-    auto player = Player{};
+    auto executor = async::ImmediateExecutor{};
+    auto player = Player{executor};
 
     SECTION("addProvider(nullptr) is safe")
     {
@@ -395,7 +619,8 @@ namespace ao::audio::test
     auto events = Events{};
 
     {
-      auto player = Player{};
+      auto executor = async::ImmediateExecutor{};
+      auto player = Player{executor};
       player.addProvider(std::make_unique<LifetimeProvider>(events));
       player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive);
     }

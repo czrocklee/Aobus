@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/AudioCodec.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackFieldValue.h>
 
@@ -46,7 +46,7 @@ namespace ao::rt
     std::uint32_t sampleRate = 0;
     std::uint8_t channels = 0;
     std::uint8_t bitDepth = 0;
-    library::AudioCodec codec = library::AudioCodec::Unknown;
+    AudioCodec codec = AudioCodec::Unknown;
     std::uint32_t bitrate = 0;
     std::uint64_t fileSize = 0;
     std::uint64_t modifiedTime = 0;

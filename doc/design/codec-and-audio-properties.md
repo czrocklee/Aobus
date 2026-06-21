@@ -2,8 +2,8 @@
 
 ## Scope
 
-Aobus stores the audio codec as an application-owned enum, not as a container-specific numeric identifier.
-The codec describes the audio encoding format for formats Aobus currently treats as supported library
+Aobus stores the audio codec as a root `ao::AudioCodec` domain enum, not as a container-specific numeric
+identifier. The codec describes the audio encoding format for formats Aobus currently treats as supported
 codecs. It does not describe the file extension or container.
 
 ## Storage
@@ -20,7 +20,8 @@ header total at 68 bytes.
 
 ## Codec Mapping
 
-`AudioCodec` is the canonical storage value:
+`ao::AudioCodec` is the canonical value shared by tag parsing, library storage, query compilation,
+playback routing, YAML import/export, and UI formatting:
 
 - `Unknown`
 - `Flac`

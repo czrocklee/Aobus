@@ -4,13 +4,13 @@
 #include "detail/MappedFileCursor.h"
 #include "detail/OutputFormatValidation.h"
 #include "detail/TimeConversion.h"
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/detail/Mpg123Runtime.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/utility/ByteView.h>
 
 #include <mpg123.h>
@@ -215,7 +215,7 @@ namespace ao::audio
 
       info.outputFormat = actualOutput;
       info.isLossy = true;
-      info.codec = library::AudioCodec::Mp3;
+      info.codec = AudioCodec::Mp3;
       return {};
     }
 

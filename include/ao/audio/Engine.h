@@ -40,6 +40,14 @@ namespace ao::audio
      * Query methods such as status(), routeStatus(), transport(), volume(), and
      * isMuted() are safe to call concurrently and return self-consistent
      * snapshots, but they are not linearized with in-flight control commands.
+     *
+     * User callbacks registered through setOnStateChanged(), setOnTrackEnded(),
+     * and setOnRouteChanged() are delivered from Engine's internal event worker,
+     * not from backend or decoder callback stacks. setOnStateChanged() reports
+     * asynchronous backend/source state changes; synchronous control commands
+     * publish their result by returning. Callbacks may call back into Engine
+     * control methods. They must return promptly; blocking a user callback
+     * blocks subsequent Engine event delivery.
      */
     struct Status final
     {
@@ -85,10 +93,11 @@ namespace ao::audio
 
     void setOnTrackEnded(std::function<void()> callback);
     void setOnRouteChanged(OnRouteChanged callback);
+    void setOnStateChanged(std::function<void()> callback);
 
     RouteStatus routeStatus() const;
 
-    void play(TrackPlaybackDescriptor const& descriptor);
+    void play(PlaybackInput const& input);
     void pause();
     void resume();
     void stop();

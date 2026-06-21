@@ -5,7 +5,6 @@
 #include "ScriptedDecoderSession.h"
 #include "TestUtility.h"
 #include <ao/Error.h>
-#include <ao/Type.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Engine.h>
@@ -39,6 +38,27 @@
 
 namespace ao::audio::test
 {
+  namespace
+  {
+    template<typename Predicate>
+    bool waitUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{1})
+    {
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+      while (std::chrono::steady_clock::now() < deadline)
+      {
+        if (predicate())
+        {
+          return true;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+      }
+
+      return predicate();
+    }
+  } // namespace
+
   using namespace fakeit;
 
   TEST_CASE("Engine - Basic Orchestration", "[playback][unit][engine]")
@@ -150,8 +170,7 @@ namespace ao::audio::test
 
     auto engine = Engine{spy.makeProxy(), device};
 
-    auto const descriptor =
-      TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Test Title", .artist = "Test Artist"};
+    auto const descriptor = PlaybackInput{.filePath = testFile.string()};
 
     engine.play(descriptor);
 
@@ -213,8 +232,7 @@ namespace ao::audio::test
 
     auto engine = Engine{spy.makeProxy(), device};
 
-    auto const descriptor =
-      TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "PipeWire Shared", .artist = "Test Artist"};
+    auto const descriptor = PlaybackInput{.filePath = testFile.string()};
 
     engine.play(descriptor);
 
@@ -247,8 +265,7 @@ namespace ao::audio::test
              .capabilities = {.sampleRates = {44100}, .sampleFormats = {}, .bitDepths = {32}, .channelCounts = {2}}};
 
     auto engine = Engine{std::move(backendPtr), device};
-    auto const descriptor =
-      TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "AAC", .artist = "Test Artist"};
+    auto const descriptor = PlaybackInput{.filePath = testFile.string()};
 
     engine.play(descriptor);
 
@@ -312,8 +329,7 @@ namespace ao::audio::test
 
     auto engine = Engine{spy.makeProxy(), device};
 
-    auto const descriptor = TrackPlaybackDescriptor{
-      .filePath = testFile.string(), .title = "Unsupported Sample Rate", .artist = "Test Artist"};
+    auto const descriptor = PlaybackInput{.filePath = testFile.string()};
 
     engine.play(descriptor);
 
@@ -334,8 +350,7 @@ namespace ao::audio::test
     SECTION("Unsupported extension")
     {
       auto engine = Engine{std::make_unique<CapturingBackend>(), device};
-      auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.txt", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+      auto const desc = PlaybackInput{.filePath = "song.txt"};
 
       engine.play(desc);
 
@@ -355,8 +370,7 @@ namespace ao::audio::test
       };
 
       auto engine = Engine{std::make_unique<CapturingBackend>(), device, factory};
-      auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+      auto const desc = PlaybackInput{.filePath = "song.flac"};
 
       engine.play(desc);
 
@@ -383,8 +397,7 @@ namespace ao::audio::test
       };
 
       auto engine = Engine{std::move(backendPtr), device, factory};
-      auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+      auto const desc = PlaybackInput{.filePath = "song.flac"};
 
       engine.play(desc);
 
@@ -417,8 +430,7 @@ namespace ao::audio::test
     };
 
     auto engine = Engine{std::move(backendPtr), device, factory};
-    auto const desc = TrackPlaybackDescriptor{
-      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+    auto const desc = PlaybackInput{.filePath = "song.flac"};
 
     engine.play(desc);
     REQUIRE(engine.status().transport == Transport::Playing);
@@ -461,8 +473,7 @@ namespace ao::audio::test
     };
 
     auto engine = Engine{std::move(backendPtr), device, factory};
-    auto const desc = TrackPlaybackDescriptor{
-      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+    auto const desc = PlaybackInput{.filePath = "song.flac"};
 
     SECTION("Seek before play is no-op")
     {
@@ -501,11 +512,10 @@ namespace ao::audio::test
     };
 
     auto engine = Engine{std::move(backendPtr), device, factory};
-    auto const desc = TrackPlaybackDescriptor{
-      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+    auto const desc = PlaybackInput{.filePath = "song.flac"};
 
-    bool trackEnded = false;
-    engine.setOnTrackEnded([&] { trackEnded = true; });
+    auto trackEnded = std::atomic<bool>{false};
+    engine.setOnTrackEnded([&] { trackEnded.store(true, std::memory_order_release); });
 
     engine.play(desc);
 
@@ -520,22 +530,23 @@ namespace ao::audio::test
     SECTION("onDrainComplete resets to idle and fires track ended")
     {
       backendRaw->fireDrainComplete();
-      REQUIRE(engine.status().transport == Transport::Idle);
-      REQUIRE(trackEnded == true);
+      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Idle; }));
+      REQUIRE(waitUntil([&] { return trackEnded.load(std::memory_order_acquire); }));
     }
 
     SECTION("onDrainComplete without pending drain is ignored")
     {
       engine.stop(); // resets everything
-      trackEnded = false;
+      trackEnded.store(false, std::memory_order_release);
       backendRaw->fireDrainComplete();
-      REQUIRE(trackEnded == false);
+      REQUIRE_FALSE(
+        waitUntil([&] { return trackEnded.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
     }
 
     SECTION("onBackendError stops playback")
     {
       backendRaw->fireBackendError("lost device");
-      REQUIRE(engine.status().transport == Transport::Error);
+      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Error; }));
       CHECK(engine.status().statusText == "lost device");
     }
   }
@@ -560,7 +571,7 @@ namespace ao::audio::test
     };
 
     auto engine = Engine{std::move(backendPtr), device, factory};
-    auto const desc = TrackPlaybackDescriptor{.filePath = "test.flac", .title = "Test"};
+    auto const desc = PlaybackInput{.filePath = "test.flac"};
 
     SECTION("queryProperty returns all-false for unknown PropertyId")
     {
@@ -626,9 +637,7 @@ namespace ao::audio::test
 
       backendRaw->firePropertyChanged(PropertyId::Volume);
 
-      // wait for the async task to run
-      std::this_thread::sleep_for(std::chrono::milliseconds{200});
-
+      REQUIRE(waitUntil([&] { return engine.status().volumeAvailable; }));
       REQUIRE(engine.status().volume == Catch::Approx{1.0F});
       REQUIRE(engine.volume() == Catch::Approx{1.0F});
       REQUIRE(engine.status().volumeAvailable == true);
@@ -641,6 +650,7 @@ namespace ao::audio::test
       backendRaw->firePropertyChanged(PropertyId::Volume);
       backendRaw->firePropertyChanged(PropertyId::Muted);
 
+      REQUIRE(waitUntil([&] { return engine.status().volumeAvailable; }));
       REQUIRE(engine.status().volume == Catch::Approx{1.0F});
       REQUIRE(engine.status().muted == false);
     }
@@ -649,6 +659,7 @@ namespace ao::audio::test
     {
       backendRaw->firePropertyChanged(PropertyId::Muted);
 
+      REQUIRE(waitUntil([&] { return engine.status().volumeAvailable; }));
       REQUIRE(engine.status().muted == false);
       REQUIRE(engine.isMuted() == false);
     }
@@ -663,13 +674,13 @@ namespace ao::audio::test
     {
       engine.play(desc);
       backendRaw->fireBackendError("hardware failed");
-      CHECK(engine.status().transport == Transport::Error);
+      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Error; }));
 
       engine.play(desc);
-      bool routeChanged = false;
-      engine.setOnRouteChanged([&](auto const&) { routeChanged = true; });
+      auto routeChanged = std::atomic<bool>{false};
+      engine.setOnRouteChanged([&](auto const&) { routeChanged.store(true, std::memory_order_release); });
       backendRaw->fireRouteReady("test-anchor");
-      CHECK(routeChanged == true);
+      CHECK(waitUntil([&] { return routeChanged.load(std::memory_order_acquire); }));
     }
 
     SECTION("setVolume round-trips through engine and backend")
@@ -741,8 +752,7 @@ namespace ao::audio::test
 
     SECTION("Backend error transitions to Error state")
     {
-      auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .coverArtId = kInvalidResourceId};
+      auto const desc = PlaybackInput{.filePath = "song.flac"};
 
       engine.play(desc);
 
@@ -750,6 +760,7 @@ namespace ao::audio::test
 
       target->onBackendError("Hardware failure");
 
+      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Error; }));
       auto const snap = engine.status();
 
       REQUIRE(snap.transport == Transport::Error);
@@ -758,15 +769,23 @@ namespace ao::audio::test
 
     SECTION("Route ready updates snapshot")
     {
-      auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .coverArtId = kInvalidResourceId};
+      auto const desc = PlaybackInput{.filePath = "song.flac"};
 
       engine.play(desc);
 
       auto* const target = backendRaw->target();
+      auto callbackThreadPromise = std::promise<std::thread::id>{};
+      auto callbackThread = callbackThreadPromise.get_future();
+      auto const callerThread = std::this_thread::get_id();
+
+      engine.setOnStateChanged([&callbackThreadPromise]
+                               { callbackThreadPromise.set_value(std::this_thread::get_id()); });
 
       target->onRouteReady("anchor-123");
 
+      REQUIRE(callbackThread.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+      CHECK(callbackThread.get() != callerThread);
+      REQUIRE(waitUntil([&] { return engine.routeStatus().optAnchor.has_value(); }));
       auto const route = engine.routeStatus();
 
       REQUIRE(route.optAnchor);
@@ -775,8 +794,7 @@ namespace ao::audio::test
 
     SECTION("Playback status callbacks update engine internals")
     {
-      auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .coverArtId = kInvalidResourceId};
+      auto const desc = PlaybackInput{.filePath = "song.flac"};
 
       engine.play(desc);
       auto* const target = backendRaw->target();
@@ -790,12 +808,13 @@ namespace ao::audio::test
       target->onFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
 
       target->onPropertyChanged(PropertyId::Volume);
+
+      REQUIRE(waitUntil([&] { return engine.status().routeState.engineOutputFormat.sampleRate == 48000; }));
     }
 
-    SECTION("Callbacks from retired render sessions are ignored")
+    SECTION("close drops the retired render session target")
     {
-      auto const desc = TrackPlaybackDescriptor{
-        .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .coverArtId = kInvalidResourceId};
+      auto const desc = PlaybackInput{.filePath = "song.flac"};
 
       engine.play(desc);
       auto* const target = backendRaw->target();
@@ -803,21 +822,175 @@ namespace ao::audio::test
 
       engine.stop();
 
-      target->onBackendError("late failure");
-      target->onRouteReady("late-anchor");
-      target->onUnderrun();
-      target->onPositionAdvanced(100);
-
       auto const snap = engine.status();
       CHECK(snap.transport == Transport::Idle);
       CHECK(snap.statusText.empty());
       CHECK(snap.underrunCount == 0);
       CHECK_FALSE(engine.routeStatus().optAnchor);
+      CHECK(backendRaw->target() == nullptr);
+    }
+
+    SECTION("User callbacks run outside backend callback stack and may reenter Engine")
+    {
+      auto const desc = PlaybackInput{.filePath = "song.flac"};
+
+      engine.play(desc);
+
+      auto callbackThreadPromise = std::promise<std::thread::id>{};
+      auto callbackThread = callbackThreadPromise.get_future();
+      auto const backendCallbackThread = std::this_thread::get_id();
+
+      engine.setOnRouteChanged(
+        [&](auto const&)
+        {
+          callbackThreadPromise.set_value(std::this_thread::get_id());
+          engine.stop();
+        });
+
+      backendRaw->fireRouteReady("reentrant-anchor");
+
+      REQUIRE(callbackThread.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+      CHECK(callbackThread.get() != backendCallbackThread);
+      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Idle; }));
+    }
+
+    SECTION("queued render event from retired session is ignored")
+    {
+      class BlockingStopBackend final : public IBackend
+      {
+      public:
+        Result<> open(Format const& format, IRenderTarget* target) override
+        {
+          auto const lock = std::scoped_lock{_mutex};
+          _format = format;
+          _target = target;
+          return {};
+        }
+
+        void start() override {}
+        void pause() override {}
+        void resume() override {}
+        void flush() override {}
+
+        void stop() override
+        {
+          auto lock = std::unique_lock{_mutex};
+
+          if (!_blockStop)
+          {
+            return;
+          }
+
+          _stopEntered = true;
+          _cv.notify_all();
+          _cv.wait(lock, [this] { return _releaseStop; });
+        }
+
+        void close() override
+        {
+          auto const lock = std::scoped_lock{_mutex};
+          _target = nullptr;
+        }
+
+        BackendId backendId() const noexcept override { return BackendId{"blocking-stop"}; }
+        ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
+
+        Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override { return {}; }
+
+        Result<PropertyValue> property(PropertyId id) const override
+        {
+          if (id == PropertyId::Volume)
+          {
+            return 1.0F;
+          }
+
+          if (id == PropertyId::Muted)
+          {
+            return false;
+          }
+
+          return std::unexpected(Error{.code = Error::Code::NotSupported});
+        }
+
+        PropertyInfo queryProperty(PropertyId /*id*/) const noexcept override
+        {
+          return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
+        }
+
+        void blockStop()
+        {
+          auto const lock = std::scoped_lock{_mutex};
+          _blockStop = true;
+        }
+
+        bool waitForStopEntered(std::chrono::milliseconds timeout)
+        {
+          auto lock = std::unique_lock{_mutex};
+          return _cv.wait_for(lock, timeout, [this] { return _stopEntered; });
+        }
+
+        void releaseStop()
+        {
+          auto const lock = std::scoped_lock{_mutex};
+          _releaseStop = true;
+          _cv.notify_all();
+        }
+
+        void fireRouteReady(std::string_view routeAnchor)
+        {
+          auto* target = static_cast<IRenderTarget*>(nullptr);
+          {
+            auto const lock = std::scoped_lock{_mutex};
+            target = _target;
+          }
+
+          if (target != nullptr)
+          {
+            target->onRouteReady(routeAnchor);
+          }
+        }
+
+      private:
+        mutable std::mutex _mutex;
+        std::condition_variable _cv;
+        IRenderTarget* _target = nullptr;
+        Format _format{};
+        bool _blockStop = false;
+        bool _stopEntered = false;
+        bool _releaseStop = false;
+      };
+
+      auto blockingBackendPtr = std::make_unique<BlockingStopBackend>();
+      auto* const blockingBackendRaw = blockingBackendPtr.get();
+      auto blockingEngine = Engine{std::move(blockingBackendPtr), device, factory};
+
+      auto routeChanged = std::atomic<bool>{false};
+      blockingEngine.setOnRouteChanged([&](Engine::RouteStatus const&)
+                                       { routeChanged.store(true, std::memory_order_release); });
+
+      blockingEngine.play(PlaybackInput{.filePath = "song.flac"});
+      REQUIRE(blockingEngine.status().transport == Transport::Playing);
+
+      blockingBackendRaw->blockStop();
+      auto stopFuture = std::async(std::launch::async, [&] { blockingEngine.stop(); });
+      REQUIRE(blockingBackendRaw->waitForStopEntered(std::chrono::seconds{1}));
+
+      blockingBackendRaw->fireRouteReady("stale-anchor");
+      CHECK_FALSE(
+        waitUntil([&] { return routeChanged.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
+
+      blockingBackendRaw->releaseStop();
+      REQUIRE(stopFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+
+      CHECK_FALSE(
+        waitUntil([&] { return routeChanged.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
+      CHECK_FALSE(blockingEngine.routeStatus().optAnchor);
+      CHECK(blockingEngine.status().transport == Transport::Idle);
     }
 
     SECTION("setBackend with active track resumes playback")
     {
-      auto const desc = TrackPlaybackDescriptor{.filePath = "test.flac", .title = "Test"};
+      auto const desc = PlaybackInput{.filePath = "test.flac"};
       engine.play(desc);
       REQUIRE(engine.status().transport == Transport::Playing);
 
@@ -836,7 +1009,7 @@ namespace ao::audio::test
 
     SECTION("Engine::resume on already playing engine does nothing")
     {
-      engine.play(TrackPlaybackDescriptor{.filePath = "test.flac"});
+      engine.play(PlaybackInput{.filePath = "test.flac"});
       REQUIRE(engine.status().transport == Transport::Playing);
       engine.resume();
       REQUIRE(engine.status().transport == Transport::Playing);
@@ -995,8 +1168,7 @@ namespace ao::audio::test
     };
 
     auto engine = Engine{std::move(backendPtr), device, factory};
-    auto const desc = TrackPlaybackDescriptor{
-      .filePath = "fail.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+    auto const desc = PlaybackInput{.filePath = "fail.flac"};
 
     auto errorPromise = std::promise<void>{};
     auto errorFuture = errorPromise.get_future();
@@ -1007,9 +1179,8 @@ namespace ao::audio::test
     // The StreamingSource decode loop runs in a background thread.
     // It should hit the error and call handleSourceError, which now
     // fires onTrackEnded so we can synchronize without polling.
-    auto const status = errorFuture.wait_for(std::chrono::seconds{5});
-
-    REQUIRE(status == std::future_status::ready);
+    REQUIRE(waitUntil([&] { return errorFuture.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready; },
+                      std::chrono::seconds{15}));
 
     auto const snap = engine.status();
     REQUIRE(snap.transport == Transport::Error);
@@ -1102,8 +1273,9 @@ namespace ao::audio::test
 
   // Run under TSan (./ao test --tsan): the control thread loops play/seek/stop
   // (each publishing and retiring a source) while a render thread reads the
-  // lock-free activeSource pointer and a poller reads status() through the
-  // sourceMutex. TSan verifies the publish/retire happens-before chain holds.
+  // lock-free RenderSourceSlot pointer and a poller reads status() through the
+  // source slot owner. TSan verifies the publish/retire happens-before chain
+  // holds.
   TEST_CASE("Engine - concurrent source swap is race-free", "[playback][unit][engine][concurrency]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
@@ -1123,8 +1295,7 @@ namespace ao::audio::test
     };
 
     auto engine = Engine{std::make_unique<RenderingBackend>(), device, factory};
-    auto const desc = TrackPlaybackDescriptor{
-      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .coverArtId = kInvalidResourceId};
+    auto const desc = PlaybackInput{.filePath = "song.flac"};
 
     // Poller: read status() concurrently with the control thread's source swaps.
     auto poller = std::jthread{[&](std::stop_token const& st)

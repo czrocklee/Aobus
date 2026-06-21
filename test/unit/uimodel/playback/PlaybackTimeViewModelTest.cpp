@@ -42,8 +42,12 @@ namespace ao::uimodel::playback::test
     SECTION("onSeekUpdate triggers refresh with Preview and Final modes")
     {
       auto const trackId = testLib.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
-      auto desc = audio::TrackPlaybackDescriptor{
-        .trackId = trackId, .filePath = "test.flac", .duration = std::chrono::seconds{30}};
+      auto desc = PlaybackService::PlaybackRequest{
+        .trackId = trackId,
+        .input = audio::PlaybackInput{.filePath = "test.flac", .duration = std::chrono::seconds{30}},
+        .title = "Seek Test",
+        .artist = "Artist",
+      };
       playback.play(desc, kInvalidListId);
 
       log.clear();

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/library/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -804,7 +804,7 @@ namespace ao::rt
 
     if (auto codecNode = yaml::findChild(trackNode, rt::trackFieldId(rt::TrackField::Codec)); codecNode.readable())
     {
-      if (auto const optCodec = library::parseAudioCodecName(yaml::scalarView(codecNode)); optCodec)
+      if (auto const optCodec = parseAudioCodecName(yaml::scalarView(codecNode)); optCodec)
       {
         builder.property().codec(*optCodec);
       }

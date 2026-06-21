@@ -4,7 +4,7 @@
 #include "lib/tag/mp4/File.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/media/mp4/TestAtoms.h"
-#include <ao/library/AudioCodec.h>
+#include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/tag/TagFile.h>
@@ -328,7 +328,7 @@ namespace ao::tag::mp4::test
     CHECK(builder.property().duration() == std::chrono::seconds{1});
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
-    CHECK(builder.property().codec() == library::AudioCodec::Aac);
+    CHECK(builder.property().codec() == AudioCodec::Aac);
   }
 
   TEST_CASE("MP4 File - single covr with two data boxes", "[tag][unit][mp4][file][cover]")
@@ -510,7 +510,7 @@ namespace ao::tag::mp4::test
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
       auto builder = file.loadTrack();
 
-      CHECK(builder.property().codec() == library::AudioCodec::Alac);
+      CHECK(builder.property().codec() == AudioCodec::Alac);
     }
 
     SECTION("Reads AAC entries that contain child atoms")
@@ -522,7 +522,7 @@ namespace ao::tag::mp4::test
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
       auto builder = file.loadTrack();
 
-      CHECK(builder.property().codec() == library::AudioCodec::Aac);
+      CHECK(builder.property().codec() == AudioCodec::Aac);
       CHECK(builder.property().sampleRate() == 44100);
       CHECK(builder.property().channels() == 2);
       CHECK(builder.property().bitDepth() == 16);
@@ -536,7 +536,7 @@ namespace ao::tag::mp4::test
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
       auto builder = file.loadTrack();
 
-      CHECK(builder.property().codec() == library::AudioCodec::Aac);
+      CHECK(builder.property().codec() == AudioCodec::Aac);
       CHECK(builder.property().sampleRate() == 48000);
       CHECK(builder.property().duration().count() == 2000);
       CHECK(builder.property().channels() == 2);

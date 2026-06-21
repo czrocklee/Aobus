@@ -17,7 +17,7 @@
 
 namespace ao::audio
 {
-  struct TrackPlaybackDescriptor;
+  struct PlaybackInput;
 }
 
 namespace ao::audio::detail
@@ -45,7 +45,7 @@ namespace ao::audio::detail
     /**
      * @brief Creates a new track session by opening and negotiating the decoder.
      */
-    static Result create(TrackPlaybackDescriptor const& descriptor,
+    static Result create(PlaybackInput const& input,
                          Device const& device,
                          BackendId const& backendId,
                          ProfileId const& profileId,

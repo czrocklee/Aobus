@@ -3,12 +3,9 @@
 
 #pragma once
 
-#include <ao/Type.h>
-
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <string>
 
 namespace ao::audio
 {
@@ -27,14 +24,10 @@ namespace ao::audio
     Error,
   };
 
-  struct TrackPlaybackDescriptor final
+  // Audio-only playback input. Library/runtime metadata stays above lib/audio.
+  struct PlaybackInput final
   {
-    TrackId trackId{};
     std::filesystem::path filePath{};
-    std::string title{};
-    std::string artist{};
-    std::string album{};
-    ResourceId coverArtId{kInvalidResourceId};
     std::chrono::milliseconds duration{0};
     std::uint32_t sampleRateHint = 0;
     std::uint8_t channelsHint = 0;

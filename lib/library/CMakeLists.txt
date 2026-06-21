@@ -1,6 +1,5 @@
 # ao_library
 add_library(ao_library STATIC
-    AudioCodec.cpp
     MetaStore.cpp
     MusicLibrary.cpp
     ResourceStore.cpp
