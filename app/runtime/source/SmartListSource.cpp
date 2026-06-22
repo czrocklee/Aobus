@@ -4,8 +4,9 @@
 #include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
+#include <ao/query/QueryCompiler.h>
+#include <ao/query/detail/Bytecode.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>

@@ -9,9 +9,9 @@
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
+#include <ao/query/QueryCompiler.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>

@@ -4,9 +4,9 @@
 #include <ao/AudioCodec.h>
 #include <ao/Type.h>
 #include <ao/library/TrackView.h>
-#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
+#include <ao/query/detail/Bytecode.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 

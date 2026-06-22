@@ -24,37 +24,6 @@ namespace ao::audio
 {
   namespace
   {
-    std::size_t frameBytes(Format const& format) noexcept
-    {
-      if (format.channels == 0 || format.bitDepth == 0)
-      {
-        return 0;
-      }
-
-      std::uint32_t bytesPerSample = 2U;
-
-      if (format.bitDepth == 24U)
-      {
-        bytesPerSample = 3U;
-      }
-      else if (format.bitDepth > 16U)
-      {
-        bytesPerSample = 4U;
-      }
-
-      return static_cast<std::size_t>(format.channels) * bytesPerSample;
-    }
-
-    std::uint64_t bytesPerSecond(Format const& format) noexcept
-    {
-      if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
-      {
-        return 0;
-      }
-
-      return static_cast<std::uint64_t>(format.sampleRate) * frameBytes(format);
-    }
-
     std::chrono::milliseconds calculateBufferedDuration(std::size_t byteCount,
                                                         std::uint64_t bytesPerSecondValue) noexcept
     {

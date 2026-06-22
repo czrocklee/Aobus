@@ -136,6 +136,11 @@ namespace ao::lmdb
     return 0;
   }
 
+  void Database::Reader::MdbCursorDeleter::operator()(MDB_cursor* cur) const noexcept
+  {
+    ::mdb_cursor_close(cur);
+  }
+
   Database::Reader::CursorPtr Database::Reader::create(::MDB_txn* txn, ::MDB_dbi dbi)
   {
     ::MDB_cursor* cursor = nullptr;
@@ -244,7 +249,7 @@ namespace ao::lmdb
   Database::Writer::~Writer() noexcept
   {
     // When transaction is committed, LMDB automatically closes all cursors - release without closing
-    if (_txn->isCommitted())
+    if (_txn->committed())
     {
       std::ignore = _cursorPtr.release();
     }
@@ -252,7 +257,7 @@ namespace ao::lmdb
 
   void Database::Writer::ensureActive() const
   {
-    if (_txn->isCommitted())
+    if (_txn->committed())
     {
       throwException<Exception>("Database::Writer used after its transaction was committed");
     }

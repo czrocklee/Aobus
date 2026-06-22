@@ -33,27 +33,6 @@ namespace ao::audio::detail
     // blocking the GTK main thread. All tracks now use StreamingSource, which
     // decodes on a background thread.
     constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 0;
-
-    std::uint64_t bytesPerSecond(Format const& format) noexcept
-    {
-      if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
-      {
-        return 0;
-      }
-
-      std::uint32_t bytesPerSample = 4;
-
-      if (format.bitDepth <= 16)
-      {
-        bytesPerSample = 2;
-      }
-      else if (format.bitDepth == 24)
-      {
-        bytesPerSample = 3;
-      }
-
-      return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
-    }
   }
 
   TrackSession::Result TrackSession::create(PlaybackInput const& input,

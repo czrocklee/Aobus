@@ -94,9 +94,9 @@ namespace ao::lmdb::test
     auto db = Database{wtxn, "test"};
     auto writer = db.writer(wtxn);
     writer.create(1, createStringData("test data"));
-    CHECK(wtxn.isCommitted() == false);
+    CHECK(wtxn.committed() == false);
     wtxn.commit();
-    CHECK(wtxn.isCommitted() == true);
+    CHECK(wtxn.committed() == true);
 
     // Start a new transaction - should work now
     auto wtxn2 = WriteTransaction{env};

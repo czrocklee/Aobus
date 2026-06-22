@@ -4,10 +4,11 @@
 #include <ao/AudioCodec.h>
 #include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/Predicate.h>
+#include <ao/query/QueryCompiler.h>
+#include <ao/query/detail/Bytecode.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <gsl-lite/gsl-lite.hpp>

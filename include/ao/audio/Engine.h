@@ -6,7 +6,6 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Types.h>
-#include <ao/audio/detail/RouteTracker.h>
 
 #include <chrono>
 #include <cstdint>
@@ -60,7 +59,7 @@ namespace ao::audio
       std::uint32_t underrunCount = 0;
       std::string statusText;
       DeviceId currentDeviceId;
-      detail::RouteState routeState;
+      RouteState routeState;
 
       float volume = 1.0F;
       bool muted = false;
@@ -72,7 +71,7 @@ namespace ao::audio
 
     struct RouteStatus final
     {
-      detail::RouteState state;
+      RouteState state;
       std::optional<RouteAnchor> optAnchor;
 
       bool operator==(RouteStatus const&) const = default;

@@ -5,29 +5,30 @@
 
 #include <ao/Error.h>
 
-#include <boost/interprocess/file_mapping.hpp>
-#include <boost/interprocess/mapped_region.hpp>
-
 #include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <span>
 
 namespace ao::utility
 {
   /**
    * @brief A safe wrapper around boost::interprocess for memory-mapped file access.
+   *
+   * The boost::interprocess mapping state is held behind a pimpl so that the
+   * boost::interprocess headers stay out of this public header.
    */
   class MappedFile final
   {
   public:
-    MappedFile() = default;
-    ~MappedFile() = default;
+    MappedFile();
+    ~MappedFile();
 
     MappedFile(MappedFile const&) = delete;
     MappedFile& operator=(MappedFile const&) = delete;
 
-    MappedFile(MappedFile&&) noexcept = default;
-    MappedFile& operator=(MappedFile&&) noexcept = default;
+    MappedFile(MappedFile&&) noexcept;
+    MappedFile& operator=(MappedFile&&) noexcept;
 
     /**
      * @brief Maps the specified file into memory (read-only).
@@ -52,8 +53,7 @@ namespace ao::utility
     bool isMapped() const;
 
   private:
-    boost::interprocess::file_mapping _fileMapping;
-    boost::interprocess::mapped_region _mappedRegion;
-    bool _isMapped = false;
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::utility

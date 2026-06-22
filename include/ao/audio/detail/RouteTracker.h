@@ -6,6 +6,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/Types.h>
 
 #include <functional>
 #include <mutex>
@@ -14,16 +15,9 @@
 
 namespace ao::audio::detail
 {
-  struct RouteState final
-  {
-    Format sourceFormat;
-    Format decoderOutputFormat;
-    Format engineOutputFormat;
-    bool isLossySource = false;
-    AudioCodec codec = AudioCodec::Unknown;
-
-    bool operator==(RouteState const&) const = default;
-  };
+  // RouteState now lives in the public <ao/audio/Types.h>; this alias keeps the
+  // detail-namespace spelling working for the tracker implementation.
+  using audio::RouteState;
 
   class RouteTracker final
   {

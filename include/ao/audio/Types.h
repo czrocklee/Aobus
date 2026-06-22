@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <ao/AudioCodec.h>
+#include <ao/audio/Format.h>
+
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -11,6 +14,24 @@ namespace ao::audio
 {
   // Common audio sample type for internal PCM representation
   using Sample = float;
+
+  /**
+   * @brief Snapshot of the active playback route's format chain.
+   *
+   * Lives in the public audio types header (rather than detail/) so that
+   * Engine/Player status structs can embed it without pulling the RouteTracker
+   * implementation into public headers.
+   */
+  struct RouteState final
+  {
+    Format sourceFormat;
+    Format decoderOutputFormat;
+    Format engineOutputFormat;
+    bool isLossySource = false;
+    AudioCodec codec = AudioCodec::Unknown;
+
+    bool operator==(RouteState const&) const = default;
+  };
 
   enum class Transport : std::uint8_t
   {

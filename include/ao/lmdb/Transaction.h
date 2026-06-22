@@ -3,16 +3,17 @@
 
 #pragma once
 
-#include <ao/lmdb/Environment.h>
-
-#include <lmdb.h>
-
 #include <cstdint>
 #include <memory>
 #include <utility>
 
+// LMDB native handle, kept opaque (see Environment.h).
+struct MDB_env;
+struct MDB_txn;
+
 namespace ao::lmdb
 {
+  class Environment;
   class WriteTransaction; // Forward declaration
 
   // Read-only transaction
@@ -31,21 +32,23 @@ namespace ao::lmdb
   protected:
     struct MdbTxnDeleter
     {
-      void operator()(MDB_txn* txn) const noexcept { ::mdb_txn_abort(txn); }
+      void operator()(MDB_txn* txn) const noexcept;
     };
 
-    ReadTransaction(std::unique_ptr<MDB_txn, MdbTxnDeleter> txnPtr)
+    using TxnPtr = std::unique_ptr<MDB_txn, MdbTxnDeleter>;
+
+    ReadTransaction(TxnPtr txnPtr)
       : _txnPtr{std::move(txnPtr)}
     {
     }
 
-    static auto create(MDB_env* env, MDB_txn* parent, std::uint32_t flags);
+    static TxnPtr create(MDB_env* env, MDB_txn* parent, std::uint32_t flags);
 
     MDB_txn* handle() const noexcept { return _txnPtr.get(); }
     MDB_txn* releaseHandle() noexcept { return _txnPtr.release(); }
 
   private:
-    std::unique_ptr<MDB_txn, MdbTxnDeleter> _txnPtr;
+    TxnPtr _txnPtr;
     friend class Database;
   };
 
@@ -66,10 +69,10 @@ namespace ao::lmdb
     void commit();
 
     // Check if transaction was committed (cursors are now invalid)
-    bool isCommitted() const { return _cursorClosed; }
+    bool committed() const { return _cursorClosed; }
 
   private:
     bool _cursorClosed = false;
     friend class Database;
   };
-}
+} // namespace ao::lmdb

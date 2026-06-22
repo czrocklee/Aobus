@@ -7,9 +7,21 @@
 #include <lmdb.h>
 
 #include <string>
+#include <type_traits>
 
 namespace ao::lmdb
 {
+  // The public header mirrors these native LMDB types without including <lmdb.h>;
+  // assert the mirrors stay in sync with the real ABI.
+  static_assert(std::is_same_v<DbiHandle, ::MDB_dbi>);
+  static_assert(std::is_same_v<EnvMode, ::mdb_mode_t>);
+  static_assert(kEnvNoTls == MDB_NOTLS);
+
+  void Environment::MdbEnvDeleter::operator()(MDB_env* env) const noexcept
+  {
+    ::mdb_env_close(env);
+  }
+
   Environment::Environment(std::string const& path)
     : Environment{path, Options{}}
   {

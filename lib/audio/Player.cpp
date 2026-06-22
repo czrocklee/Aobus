@@ -343,9 +343,8 @@ namespace ao::audio
       [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
       { Impl::dispatchInternal(executor, gatePtr, [this] { _implPtr->dispatchOutward(&Impl::onTrackEnded); }); });
 
-    _implPtr->enginePtr->setOnStateChanged(
-      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
-      { _implPtr->dispatchOutward(&Impl::onStateChanged); });
+    _implPtr->enginePtr->setOnStateChanged([this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
+                                           { _implPtr->dispatchOutward(&Impl::onStateChanged); });
 
     auto* const gen = &_implPtr->playbackGeneration;
     _implPtr->enginePtr->setOnRouteChanged(

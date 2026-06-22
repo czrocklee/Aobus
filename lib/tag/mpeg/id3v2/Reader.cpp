@@ -3,6 +3,7 @@
 
 #include "Reader.h"
 
+#include "../../detail/Decoder.h"
 #include "Frame.h"
 #include "Layout.h"
 #include <ao/library/CoverArt.h>
@@ -10,14 +11,10 @@
 #include <ao/tag/TagFile.h>
 #include <ao/utility/ByteView.h>
 
-#include <charconv>
 #include <cstdint>
 #include <cstring>
-#include <limits>
-#include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 namespace ao::tag::mpeg::id3v2
 {
@@ -30,22 +27,6 @@ namespace ao::tag::mpeg::id3v2
     constexpr std::uint8_t kId3v22MajorVersion = 2;
     constexpr std::uint8_t kId3v23MajorVersion = 3;
     constexpr std::uint8_t kId3v24MajorVersion = 4;
-
-    template<typename T>
-    std::optional<T> parseUnsigned(std::string_view text)
-    {
-      std::uint32_t value = 0;
-      auto const* begin = text.data();
-      auto const* end = begin + text.size();
-
-      if (auto const [ptr, ec] = std::from_chars(begin, end, value);
-          ec == std::errc{} && ptr != begin && value <= std::numeric_limits<T>::max())
-      {
-        return static_cast<T>(value);
-      }
-
-      return std::nullopt;
-    }
 
     void handlePicture(library::TrackBuilder& builder,
                        TagFile const& owner,
@@ -90,7 +71,7 @@ namespace ao::tag::mpeg::id3v2
     {
       if (auto const text = decodeFrameText(version, data, size); !text.empty())
       {
-        if (auto const optValue = parseUnsigned<std::uint16_t>(text); optValue)
+        if (auto const optValue = decodeUint16(text); optValue)
         {
           (builder.metadata().*Setter)(*optValue);
         }
@@ -105,19 +86,16 @@ namespace ao::tag::mpeg::id3v2
                            std::uint8_t version)
     {
       auto const text = decodeFrameText(version, data, size);
-      auto const slashPos = text.find('/');
+      auto const pair = parseSlashPair(text);
 
-      if (auto const optValue = parseUnsigned<std::uint16_t>(text.substr(0, slashPos)); optValue)
+      if (pair.optPrimary)
       {
-        (builder.metadata().*PrimarySetter)(*optValue);
+        (builder.metadata().*PrimarySetter)(*pair.optPrimary);
       }
 
-      if (slashPos != std::string_view::npos)
+      if (pair.optSecondary)
       {
-        if (auto const optValue = parseUnsigned<std::uint16_t>(text.substr(slashPos + 1)); optValue)
-        {
-          (builder.metadata().*SecondarySetter)(*optValue);
-        }
+        (builder.metadata().*SecondarySetter)(*pair.optSecondary);
       }
     }
 

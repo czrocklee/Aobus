@@ -7,16 +7,21 @@
 
 #include <lmdb.h>
 
-#include <memory>
+#include <cstdint>
 #include <tuple>
 
 namespace ao::lmdb
 {
-  auto ReadTransaction::create(::MDB_env* env, ::MDB_txn* parent, unsigned int flags)
+  void ReadTransaction::MdbTxnDeleter::operator()(MDB_txn* txn) const noexcept
+  {
+    ::mdb_txn_abort(txn);
+  }
+
+  ReadTransaction::TxnPtr ReadTransaction::create(::MDB_env* env, ::MDB_txn* parent, std::uint32_t flags)
   {
     ::MDB_txn* handle = nullptr;
     throwOnError("mdb_txn_begin", ::mdb_txn_begin(env, parent, flags, &handle));
-    return std::unique_ptr<::MDB_txn, ReadTransaction::MdbTxnDeleter>{handle};
+    return TxnPtr{handle};
   }
 
   ReadTransaction::ReadTransaction(Environment const& env)

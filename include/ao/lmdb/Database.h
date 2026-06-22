@@ -3,9 +3,7 @@
 
 #pragma once
 
-#include <ao/lmdb/Transaction.h>
-
-#include <lmdb.h>
+#include <ao/lmdb/Environment.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -16,6 +14,10 @@
 #include <span>
 #include <string>
 #include <utility>
+
+// LMDB native handle, kept opaque (see Environment.h).
+struct MDB_cursor;
+struct MDB_txn;
 
 namespace ao::lmdb
 {
@@ -46,7 +48,7 @@ namespace ao::lmdb
     KeyKind kind() const noexcept { return _kind; }
 
   private:
-    ::MDB_dbi _dbi = std::numeric_limits<::MDB_dbi>::max();
+    DbiHandle _dbi = std::numeric_limits<DbiHandle>::max();
     KeyKind _kind = KeyKind::Integer;
   };
 
@@ -93,18 +95,18 @@ namespace ao::lmdb
     KeyKind kind() const noexcept { return _kind; }
 
   private:
-    Reader(::MDB_dbi dbi, ::MDB_txn* txn, KeyKind kind);
+    Reader(DbiHandle dbi, MDB_txn* txn, KeyKind kind);
 
     struct MdbCursorDeleter final
     {
-      void operator()(::MDB_cursor* cur) const noexcept { ::mdb_cursor_close(cur); }
+      void operator()(MDB_cursor* cur) const noexcept;
     };
 
-    using CursorPtr = std::unique_ptr<::MDB_cursor, MdbCursorDeleter>;
-    static CursorPtr create(::MDB_txn* txn, ::MDB_dbi dbi);
+    using CursorPtr = std::unique_ptr<MDB_cursor, MdbCursorDeleter>;
+    static CursorPtr create(MDB_txn* txn, DbiHandle dbi);
 
-    ::MDB_dbi _dbi;
-    ::MDB_txn* _txn;
+    DbiHandle _dbi;
+    MDB_txn* _txn;
     KeyKind _kind;
 
     friend class Database;
@@ -141,7 +143,7 @@ namespace ao::lmdb
     bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
 
   private:
-    Iterator(::MDB_txn* txn, ::MDB_dbi dbi, bool end);
+    Iterator(MDB_txn* txn, DbiHandle dbi, bool end);
 
     void next();
 
@@ -194,14 +196,14 @@ namespace ao::lmdb
     KeyKind kind() const noexcept { return _kind; }
 
   private:
-    Writer(::MDB_dbi dbi, WriteTransaction& txn, KeyKind kind);
+    Writer(DbiHandle dbi, WriteTransaction& txn, KeyKind kind);
 
     // Throw if the owning transaction has already been committed. After commit
     // LMDB has closed every cursor, so reusing this writer would dereference a
     // dangling cursor. Always-on (not gsl-gated) since release strips contracts.
     void ensureActive() const;
 
-    ::MDB_dbi _dbi;
+    DbiHandle _dbi;
     WriteTransaction* _txn;
     Reader::CursorPtr _cursorPtr;
     std::uint32_t _lastId = 0; // Start from 1 (0 = null, so first append returns 1)

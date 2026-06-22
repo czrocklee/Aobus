@@ -14,10 +14,11 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
+#include <ao/query/QueryCompiler.h>
+#include <ao/query/detail/Bytecode.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>

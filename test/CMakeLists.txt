@@ -29,6 +29,7 @@ add_executable(ao_core_test
     unit/tag/id3v2/ReaderTest.cpp
     unit/tag/FlacFileTest.cpp
     unit/tag/TagFileTest.cpp
+    unit/tag/DecoderTest.cpp
 
     # media tests
     unit/media/mp4/DemuxerTest.cpp
@@ -76,6 +77,7 @@ add_executable(ao_core_test
     unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatNegotiatorTest.cpp
+    unit/audio/FormatTest.cpp
     unit/audio/MemorySourceTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/PcmRingBufferTest.cpp

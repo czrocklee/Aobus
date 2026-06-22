@@ -47,21 +47,6 @@ namespace ao::audio
     constexpr std::size_t kBigEndian32Byte2Offset = 2;
     constexpr std::size_t kBigEndian32Byte3Offset = 3;
 
-    std::uint32_t bytesPerSample(std::uint8_t bitDepth) noexcept
-    {
-      if (bitDepth == 24U)
-      {
-        return 3U;
-      }
-
-      if (bitDepth == 32U)
-      {
-        return 4U;
-      }
-
-      return (bitDepth > 16U) ? 4U : 2U;
-    }
-
     std::uint32_t readBigEndian32(std::span<std::byte const> bytes, std::size_t offset) noexcept
     {
       return (static_cast<std::uint32_t>(bytes[offset]) << 24U) |
@@ -255,8 +240,8 @@ namespace ao::audio
     auto const targetBps = _implPtr->info.outputFormat.bitDepth;
     auto const channels = _implPtr->info.outputFormat.channels;
 
-    auto const sourceBytesPerFrame = channels * bytesPerSample(sourceBps);
-    auto const targetBytesPerFrame = channels * bytesPerSample(targetBps);
+    auto const sourceBytesPerFrame = channels * bytesPerSample(_implPtr->info.sourceFormat);
+    auto const targetBytesPerFrame = channels * bytesPerSample(_implPtr->info.outputFormat);
 
     if (sourceBytesPerFrame == 0 || targetBytesPerFrame == 0)
     {

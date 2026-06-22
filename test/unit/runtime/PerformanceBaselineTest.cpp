@@ -6,9 +6,9 @@
 #include "TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/TrackStore.h>
-#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
+#include <ao/query/detail/Bytecode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>

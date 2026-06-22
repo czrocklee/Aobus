@@ -12,19 +12,39 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <memory>
 #include <span>
 
 namespace ao::utility
 {
+  struct MappedFile::Impl final
+  {
+    boost::interprocess::file_mapping fileMapping;
+    boost::interprocess::mapped_region mappedRegion;
+    bool isMapped = false;
+  };
+
+  MappedFile::MappedFile()
+    : _implPtr{std::make_unique<Impl>()}
+  {
+  }
+
+  MappedFile::~MappedFile() = default;
+
+  MappedFile::MappedFile(MappedFile&&) noexcept = default;
+
+  MappedFile& MappedFile::operator=(MappedFile&&) noexcept = default;
+
   Result<> MappedFile::map(std::filesystem::path const& filePath)
   {
     unmap();
 
     try
     {
-      _fileMapping = boost::interprocess::file_mapping{filePath.c_str(), boost::interprocess::read_only};
-      _mappedRegion = boost::interprocess::mapped_region{_fileMapping, boost::interprocess::read_only};
-      _isMapped = true;
+      _implPtr->fileMapping = boost::interprocess::file_mapping{filePath.c_str(), boost::interprocess::read_only};
+      _implPtr->mappedRegion =
+        boost::interprocess::mapped_region{_implPtr->fileMapping, boost::interprocess::read_only};
+      _implPtr->isMapped = true;
       return {};
     }
     catch (std::exception const& e)
@@ -36,23 +56,23 @@ namespace ao::utility
 
   void MappedFile::unmap()
   {
-    _isMapped = false;
-    _mappedRegion = boost::interprocess::mapped_region{};
-    _fileMapping = boost::interprocess::file_mapping{};
+    _implPtr->isMapped = false;
+    _implPtr->mappedRegion = boost::interprocess::mapped_region{};
+    _implPtr->fileMapping = boost::interprocess::file_mapping{};
   }
 
   std::span<std::byte const> MappedFile::bytes() const
   {
-    if (!_isMapped)
+    if (!_implPtr->isMapped)
     {
       return {};
     }
 
-    return {static_cast<std::byte const*>(_mappedRegion.get_address()), _mappedRegion.get_size()};
+    return {static_cast<std::byte const*>(_implPtr->mappedRegion.get_address()), _implPtr->mappedRegion.get_size()};
   }
 
   bool MappedFile::isMapped() const
   {
-    return _isMapped;
+    return _implPtr->isMapped;
   }
 } // namespace ao::utility
