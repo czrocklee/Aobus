@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "detail/ResultError.h"
 #include "detail/ThrowError.h"
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
 
@@ -48,9 +51,14 @@ namespace ao::lmdb
     }
   }
 
-  Database::Database(WriteTransaction& txn, std::string const& name, KeyKind kind)
-    : _kind{kind}
+  Database::Database(DbiHandle dbi, KeyKind kind)
+    : _dbi{dbi}, _kind{kind}
   {
+  }
+
+  Result<Database> Database::open(WriteTransaction& txn, std::string const& name, KeyKind kind)
+  {
+    DbiHandle dbi = {};
     unsigned int flags = MDB_CREATE;
 
     if (kind == KeyKind::Integer)
@@ -58,12 +66,18 @@ namespace ao::lmdb
       flags |= MDB_INTEGERKEY;
     }
 
-    throwOnError("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &_dbi));
+    if (auto result = resultFromCode("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &dbi));
+        !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
+
+    return Database{dbi, kind};
   }
 
-  Database::Database(ReadTransaction& txn, std::string const& name, KeyKind kind)
-    : _kind{kind}
+  Result<Database> Database::open(ReadTransaction& txn, std::string const& name, KeyKind kind)
   {
+    DbiHandle dbi = {};
     unsigned int flags = 0;
 
     if (kind == KeyKind::Integer)
@@ -71,7 +85,13 @@ namespace ao::lmdb
       flags |= MDB_INTEGERKEY;
     }
 
-    throwOnError("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &_dbi));
+    if (auto result = resultFromCode("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &dbi));
+        !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
+
+    return Database{dbi, kind};
   }
 
   Database::Reader Database::reader(ReadTransaction const& txn) const
@@ -122,18 +142,13 @@ namespace ao::lmdb
 
     int const rc = ::mdb_cursor_get(cursorPtr.get(), &key, &val, MDB_LAST);
 
-    if (rc == MDB_SUCCESS)
-    {
-      return read<std::uint32_t>(key);
-    }
-
     if (rc == MDB_NOTFOUND)
     {
       return 0;
     }
 
     throwOnError("mdb_cursor_get", rc);
-    return 0;
+    return read<std::uint32_t>(key);
   }
 
   void Database::Reader::MdbCursorDeleter::operator()(MDB_cursor* cur) const noexcept
@@ -265,86 +280,105 @@ namespace ao::lmdb
 
   namespace
   {
-    void put(::MDB_cursor* cursor,
-             std::span<std::byte const> keyView,
-             std::span<std::byte const> data,
-             unsigned int flags)
+    Result<> put(::MDB_cursor* cursor,
+                 std::span<std::byte const> keyView,
+                 std::span<std::byte const> data,
+                 unsigned int flags)
     {
       gsl_Expects(cursor != nullptr);
 
       auto key = makeVal(keyView.data(), keyView.size());
       auto val = makeVal(data.data(), data.size());
       int const rc = ::mdb_cursor_put(cursor, &key, &val, flags);
-      throwOnError("mdb_cursor_put", rc);
+      return resultFromCode("mdb_cursor_put", rc);
     }
 
-    std::span<std::byte> reserve(::MDB_cursor* cursor,
-                                 std::span<std::byte const> keyView,
-                                 std::size_t size,
-                                 std::uint32_t flags)
+    Result<std::span<std::byte>> reserve(::MDB_cursor* cursor,
+                                         std::span<std::byte const> keyView,
+                                         std::size_t size,
+                                         std::uint32_t flags)
     {
       gsl_Expects(cursor != nullptr);
 
       auto key = makeVal(keyView.data(), keyView.size());
       auto val = makeVal(nullptr, size);
-      throwOnError("mdb_cursor_put", ::mdb_cursor_put(cursor, &key, &val, flags | MDB_RESERVE));
+
+      if (auto result = resultFromCode("mdb_cursor_put", ::mdb_cursor_put(cursor, &key, &val, flags | MDB_RESERVE));
+          !result)
+      {
+        return makeError(result.error().code, result.error().message);
+      }
+
       return utility::bytes::view(val.mv_data, val.mv_size);
     }
   }
 
-  void Database::Writer::create(std::uint32_t id, std::span<std::byte const> data)
+  Result<> Database::Writer::create(std::uint32_t id, std::span<std::byte const> data)
   {
-    create(utility::bytes::view(id), data);
+    return create(utility::bytes::view(id), data);
   }
 
-  void Database::Writer::create(std::span<std::byte const> key, std::span<std::byte const> data)
+  Result<> Database::Writer::create(std::span<std::byte const> key, std::span<std::byte const> data)
   {
     ensureActive();
-    put(_cursorPtr.get(), key, data, MDB_NOOVERWRITE);
+    return put(_cursorPtr.get(), key, data, MDB_NOOVERWRITE);
   }
 
-  std::span<std::byte> Database::Writer::create(std::uint32_t id, std::size_t size)
+  Result<std::span<std::byte>> Database::Writer::create(std::uint32_t id, std::size_t size)
   {
     return create(utility::bytes::view(id), size);
   }
 
-  std::span<std::byte> Database::Writer::create(std::span<std::byte const> key, std::size_t size)
+  Result<std::span<std::byte>> Database::Writer::create(std::span<std::byte const> key, std::size_t size)
   {
     ensureActive();
     return reserve(_cursorPtr.get(), key, size, MDB_NOOVERWRITE);
   }
 
-  std::uint32_t Database::Writer::append(std::span<std::byte const> data)
+  Result<std::uint32_t> Database::Writer::append(std::span<std::byte const> data)
   {
     auto id = ++_lastId;
-    create(id, data);
+
+    if (auto result = create(id, data); !result)
+    {
+      --_lastId;
+      return makeError(result.error().code, result.error().message);
+    }
+
     return id;
   }
 
-  std::pair<std::uint32_t, std::span<std::byte>> Database::Writer::append(std::size_t size)
+  Result<std::pair<std::uint32_t, std::span<std::byte>>> Database::Writer::append(std::size_t size)
   {
     auto id = ++_lastId;
     auto data = create(id, size);
-    return {id, data};
+
+    if (!data)
+    {
+      --_lastId;
+      return makeError(data.error().code, data.error().message);
+    }
+
+    return std::pair{id, *data};
   }
 
-  void Database::Writer::update(std::uint32_t id, std::span<std::byte const> data)
+  Result<> Database::Writer::update(std::uint32_t id, std::span<std::byte const> data)
   {
-    update(utility::bytes::view(id), data);
+    return update(utility::bytes::view(id), data);
   }
 
-  void Database::Writer::update(std::span<std::byte const> key, std::span<std::byte const> data)
+  Result<> Database::Writer::update(std::span<std::byte const> key, std::span<std::byte const> data)
   {
     ensureActive();
-    put(_cursorPtr.get(), key, data, 0);
+    return put(_cursorPtr.get(), key, data, 0);
   }
 
-  std::span<std::byte> Database::Writer::update(std::uint32_t id, std::size_t size)
+  Result<std::span<std::byte>> Database::Writer::update(std::uint32_t id, std::size_t size)
   {
     return update(utility::bytes::view(id), size);
   }
 
-  std::span<std::byte> Database::Writer::update(std::span<std::byte const> key, std::size_t size)
+  Result<std::span<std::byte>> Database::Writer::update(std::span<std::byte const> key, std::size_t size)
   {
     ensureActive();
     return reserve(_cursorPtr.get(), key, size, 0);
@@ -392,9 +426,9 @@ namespace ao::lmdb
     return utility::bytes::view(static_cast<void const*>(val.mv_data), val.mv_size);
   }
 
-  void Database::Writer::clear()
+  Result<> Database::Writer::clear()
   {
     ensureActive();
-    throwOnError("mdb_drop", ::mdb_drop(_txn->_txnPtr.get(), _dbi, 0));
+    return resultFromCode("mdb_drop", ::mdb_drop(_txn->_txnPtr.get(), _dbi, 0));
   }
 } // namespace ao::lmdb

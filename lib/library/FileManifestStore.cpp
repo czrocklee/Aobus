@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Exception.h>
+#include <ao/Error.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/FileManifestView.h>
@@ -11,7 +11,7 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <optional>
+#include <format>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -23,12 +23,16 @@ namespace ao::library
     constexpr std::size_t kMaxUriLength = 500;
     constexpr std::size_t kUriPaddingBufferSize = 504;
 
-    void validateUri(std::string_view uri)
+    Result<> validateUri(std::string_view uri)
     {
       if (uri.length() > kMaxUriLength)
       {
-        throwException<Exception>("URI exceeds maximum supported length of {} bytes", kMaxUriLength);
+        return makeError(
+          Error::Code::ValueTooLarge,
+          std::format("URI length {} exceeds maximum supported length of {} bytes", uri.length(), kMaxUriLength));
       }
+
+      return {};
     }
 
     std::span<std::byte const> padUri(std::string_view uri, std::span<std::byte> buffer)
@@ -55,29 +59,34 @@ namespace ao::library
     return Writer{_db.writer(txn)};
   }
 
-  std::optional<FileManifestView> FileManifestStore::Reader::get(std::string_view uri) const
+  Result<FileManifestView> FileManifestStore::Reader::get(std::string_view uri) const
   {
-    validateUri(uri);
+    if (auto result = validateUri(uri); !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
 
     if (uri.empty())
     {
-      return std::nullopt;
+      return makeError(Error::Code::NotFound, "File manifest entry for empty URI was not found");
     }
 
     auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
     auto const key = padUri(uri, buffer);
 
-    if (auto const optData = _reader.get(key); optData)
-    {
-      if (optData->size() < sizeof(FileManifestHeader))
-      {
-        ao::throwException<Exception>("FileManifestStore: Corrupt entry for URI '{}'", uri);
-      }
+    auto optData = _reader.get(key);
 
-      return FileManifestView{*optData};
+    if (!optData)
+    {
+      return makeError(Error::Code::NotFound, std::format("File manifest entry for URI '{}' was not found", uri));
     }
 
-    return std::nullopt;
+    if (optData->size() < sizeof(FileManifestHeader))
+    {
+      return makeError(Error::Code::CorruptData, std::format("File manifest entry for URI '{}' is corrupt", uri));
+    }
+
+    return FileManifestView{*optData};
   }
 
   std::pair<std::string_view, FileManifestView> FileManifestStore::Reader::Iterator::operator*() const
@@ -95,28 +104,36 @@ namespace ao::library
     return Iterator{_reader.begin()};
   }
 
-  void FileManifestStore::Writer::put(std::string_view uri, std::span<std::byte const> payload)
+  Result<> FileManifestStore::Writer::put(std::string_view uri, std::span<std::byte const> payload)
   {
-    validateUri(uri);
+    if (auto result = validateUri(uri); !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
 
     auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
     auto const key = padUri(uri, buffer);
 
-    _writer.update(key, payload);
+    return _writer.update(key, payload);
   }
 
-  bool FileManifestStore::Writer::remove(std::string_view uri)
+  Result<> FileManifestStore::Writer::remove(std::string_view uri)
   {
-    validateUri(uri);
+    if (auto result = validateUri(uri); !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
 
     auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
     auto const key = padUri(uri, buffer);
 
-    return _writer.del(key);
+    // Idempotent: a missing row is success. Storage faults throw (see lmdb).
+    _writer.del(key);
+    return {};
   }
 
-  void FileManifestStore::Writer::clear()
+  Result<> FileManifestStore::Writer::clear()
   {
-    _writer.clear();
+    return _writer.clear();
   }
 } // namespace ao::library

@@ -60,6 +60,7 @@ add_executable(ao_core_test
     unit/lmdb/EnvironmentTest.cpp
     unit/lmdb/TransactionTest.cpp
     unit/lmdb/DatabaseTest.cpp
+    unit/lmdb/ResultErrorTest.cpp
 
     # audio unit tests
     unit/audio/DecoderFactoryTest.cpp
@@ -131,6 +132,7 @@ add_executable(ao_core_test
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp
     unit/runtime/LibraryReaderTest.cpp
+    unit/runtime/StorageResultTest.cpp
     unit/runtime/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/SmartListEvaluatorTest.cpp

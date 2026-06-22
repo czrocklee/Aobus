@@ -55,19 +55,19 @@ namespace ao::library::test
           static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                        std::filesystem::last_write_time(musicRoot / unchangedUri).time_since_epoch())
                                        .count()));
-      manifestWriter.put(unchangedUri, builder1.serialize());
+      REQUIRE(manifestWriter.put(unchangedUri, builder1.serialize()));
 
       // Changed (different size)
       char const* const changedUri = "changed.wav";
       auto builder2 = FileManifestBuilder::createNew();
       builder2.trackId(TrackId{2}).fileSize(99999).mtime(0);
-      manifestWriter.put(changedUri, builder2.serialize());
+      REQUIRE(manifestWriter.put(changedUri, builder2.serialize()));
 
       // Missing (in manifest but not on disk)
       char const* const missingUri = "missing.flac";
       auto builder3 = FileManifestBuilder::createNew();
       builder3.trackId(TrackId{3});
-      manifestWriter.put(missingUri, builder3.serialize());
+      REQUIRE(manifestWriter.put(missingUri, builder3.serialize()));
 
       txn.commit();
     }

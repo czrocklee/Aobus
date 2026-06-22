@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Exception.h>
+#include <ao/Error.h>
+#include <ao/Type.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
 
+#include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 
 namespace ao::query
 {
-  Field resolveVariableField(VariableType type, std::string_view name)
+  Result<Field> resolveVariableField(VariableType type, std::string_view name)
   {
     switch (type)
     {
@@ -23,7 +27,7 @@ namespace ao::query
           return spec->field;
         }
 
-        throwException<Exception>("unknown property field '@{}'", name);
+        return makeError(Error::Code::FormatRejected, std::format("unknown property field '@{}'", name));
       }
       case VariableType::Metadata:
       {
@@ -32,19 +36,44 @@ namespace ao::query
           return spec->field;
         }
 
-        throwException<Exception>("unknown metadata field '${}'", name);
+        return makeError(Error::Code::FormatRejected, std::format("unknown metadata field '${}'", name));
       }
       case VariableType::Tag: return Field::Tag;
       case VariableType::Custom: return Field::Custom;
       default: break;
     }
 
-    throwException<Exception>("unsupported variable type for '{}'", name);
+    return makeError(Error::Code::FormatRejected, std::format("unsupported variable type for '{}'", name));
   }
 
-  Field resolveVariableField(VariableExpression const& variable)
+  Result<Field> resolveVariableField(VariableExpression const& variable)
   {
     return resolveVariableField(variable.type, variable.name);
+  }
+
+  std::optional<Field> tryResolveVariableField(VariableType type, std::string_view name)
+  {
+    switch (type)
+    {
+      case VariableType::Property:
+      case VariableType::Metadata:
+      {
+        if (auto const* spec = findQueryVariableCompletionSpec(type, name); spec != nullptr)
+        {
+          return spec->field;
+        }
+
+        return std::nullopt;
+      }
+      case VariableType::Tag: return Field::Tag;
+      case VariableType::Custom: return Field::Custom;
+      default: return std::nullopt;
+    }
+  }
+
+  std::optional<Field> tryResolveVariableField(VariableExpression const& variable)
+  {
+    return tryResolveVariableField(variable.type, variable.name);
   }
 
   bool isColdField(Field field)
@@ -163,5 +192,30 @@ namespace ao::query
     }
 
     return true;
+  }
+
+  std::string_view dictionaryFieldValue(library::TrackView const& track,
+                                        Field field,
+                                        library::DictionaryStore const& dict)
+  {
+    auto dictionaryId = kInvalidDictionaryId;
+
+    switch (field)
+    {
+      case Field::ArtistId: dictionaryId = track.metadata().artistId(); break;
+      case Field::AlbumId: dictionaryId = track.metadata().albumId(); break;
+      case Field::GenreId: dictionaryId = track.metadata().genreId(); break;
+      case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
+      case Field::ComposerId: dictionaryId = track.metadata().composerId(); break;
+      case Field::WorkId: dictionaryId = track.metadata().workId(); break;
+      default: return {};
+    }
+
+    if (dictionaryId == kInvalidDictionaryId)
+    {
+      return {};
+    }
+
+    return dict.get(dictionaryId);
   }
 } // namespace ao::query

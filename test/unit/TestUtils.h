@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/Exception.h>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
 #include <filesystem>
@@ -13,9 +16,25 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 
 namespace ao::test
 {
+  template<typename T>
+  T requireValue(Result<T>&& result)
+  {
+    REQUIRE(result);
+    auto value = *std::move(result);
+    return value;
+  }
+
+  template<typename T>
+  T const& requireValue(Result<T> const& result)
+  {
+    REQUIRE(result);
+    return *result;
+  }
+
   /**
    * RAII temporary directory for test files.
    */

@@ -10,11 +10,22 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
 namespace ao::query::test
 {
+  namespace
+  {
+    Expression parseOk(std::string_view text)
+    {
+      auto result = ::ao::query::parse(text);
+      REQUIRE(result.has_value());
+      return std::move(*result);
+    }
+  } // namespace
+
   TEST_CASE("Serializer - Serializes System Variable Prefixes", "[query][unit][serializer]")
   {
     CHECK(serialize(VariableExpression{.type = VariableType::Metadata, .name = "artist"}) == "$artist");
@@ -48,7 +59,7 @@ namespace ao::query::test
     SECTION("Quoted names round-trip")
     {
       auto const var = VariableExpression{.type = VariableType::Custom, .name = "Replay Gain"};
-      CHECK(serialize(parse(serialize(var))) == serialize(var));
+      CHECK(serialize(parseOk(serialize(var))) == serialize(var));
     }
   }
 
@@ -84,7 +95,7 @@ namespace ao::query::test
     auto const original = std::string{"quote\"\n\t\r\\slash"};
     auto const expr = ConstantExpression{original};
     auto const serialized = serialize(expr);
-    auto const reparsed = parse(serialized);
+    auto const reparsed = parseOk(serialized);
     CHECK(serialize(reparsed) == serialized);
 
     auto const* constant = std::get_if<ConstantExpression>(&reparsed);
@@ -104,13 +115,13 @@ namespace ao::query::test
 
   TEST_CASE("Serializer - Serializes Existence Tests", "[query][unit][serializer]")
   {
-    CHECK(serialize(parse("$year?")) == "$year?");
-    CHECK(serialize(parse("!$year?")) == "not $year?");
-    CHECK(serialize(parse("not $composer?")) == "not $composer?");
-    CHECK(serialize(parse("!@duration?")) == "not @duration?");
-    CHECK(serialize(parse("!%rating?")) == "not %rating?");
-    CHECK(serialize(parse("#favorite?")) == "#favorite?");
-    CHECK(serialize(parse(R"(%"Replay Gain"?)")) == R"(%"Replay Gain"?)");
+    CHECK(serialize(parseOk("$year?")) == "$year?");
+    CHECK(serialize(parseOk("!$year?")) == "not $year?");
+    CHECK(serialize(parseOk("not $composer?")) == "not $composer?");
+    CHECK(serialize(parseOk("!@duration?")) == "not @duration?");
+    CHECK(serialize(parseOk("!%rating?")) == "not %rating?");
+    CHECK(serialize(parseOk("#favorite?")) == "#favorite?");
+    CHECK(serialize(parseOk(R"(%"Replay Gain"?)")) == R"(%"Replay Gain"?)");
 
     auto binaryPtr = std::make_unique<BinaryExpression>();
     binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "year"};
@@ -214,9 +225,9 @@ namespace ao::query::test
 
     for (auto const& q : queries)
     {
-      auto const expr1 = parse(q);
+      auto const expr1 = parseOk(q);
       auto const s1 = serialize(expr1);
-      auto const expr2 = parse(s1);
+      auto const expr2 = parseOk(s1);
       auto const s2 = serialize(expr2);
 
       CHECK(s1 == s2);

@@ -776,7 +776,7 @@ namespace ao::gtk::layout::test
       CHECK(it->kind == PropertyKind::Enum);
       CHECK(it->enumValues.empty());
       REQUIRE(it->optActionBinding.has_value());
-      CHECK(it->optActionBinding.value().slot == ActionSlot::PrimaryClick);
+      CHECK(it->optActionBinding->slot == ActionSlot::PrimaryClick);
     }
 
     SECTION("custom playback row YAML builds without errors")

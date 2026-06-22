@@ -4,12 +4,15 @@
 #include "flac/File.h"
 #include "mp4/File.h"
 #include "mpeg/File.h"
+#include <ao/Error.h>
 #include <ao/tag/TagFile.h>
 
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <expected>
 #include <filesystem>
+#include <format>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -17,7 +20,7 @@
 namespace ao::tag
 {
   // static
-  std::unique_ptr<TagFile> TagFile::open(std::filesystem::path const& path, TagFile::Mode mode)
+  Result<std::unique_ptr<TagFile>> TagFile::open(std::filesystem::path const& path, TagFile::Mode mode)
   {
     using Creator = std::unique_ptr<TagFile> (*)(std::filesystem::path const&, TagFile::Mode);
 
@@ -40,9 +43,16 @@ namespace ao::tag
           std::ranges::find(kCreatorMap, std::string_view{ext}, &std::pair<std::string_view, Creator>::first);
         it != kCreatorMap.end())
     {
-      return it->second(path, mode);
+      auto filePtr = it->second(path, mode);
+
+      if (auto const result = filePtr->mappedResult(); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      return filePtr;
     }
 
-    return nullptr;
+    return makeError(Error::Code::NotSupported, std::format("Unsupported tag file extension '{}'", ext));
   }
 } // namespace ao::tag

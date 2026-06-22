@@ -8,7 +8,6 @@
 #include <ao/utility/Log.h>
 
 #include <algorithm>
-#include <exception>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -166,20 +165,16 @@ namespace ao::uimodel::track
       return fallbackSpec;
     }
 
-    auto expr = query::Expression{};
+    auto const expr = query::parse(filterExpression);
 
-    try
+    if (!expr)
     {
-      expr = query::parse(filterExpression);
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_DEBUG("TrackPresentationRecommender: parse failed for expression: {}", e.what());
+      APP_LOG_DEBUG("TrackPresentationRecommender: parse failed for expression: {}", expr.error().message);
       return fallbackSpec;
     }
 
     auto visitor = VariableVisitor{};
-    visitor.visit(expr);
+    visitor.visit(*expr);
 
     if (visitor.hasWork())
     {

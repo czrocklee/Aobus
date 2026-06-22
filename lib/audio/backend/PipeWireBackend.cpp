@@ -31,7 +31,6 @@ extern "C"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <format>
 #include <memory>
 
@@ -558,7 +557,7 @@ namespace ao::audio::backend
       return {};
     }
 
-    return std::unexpected(Error{.code = Error::Code::NotSupported});
+    return makeError(Error::Code::NotSupported);
   }
 
   Result<PropertyValue> PipeWireBackend::property(PropertyId id) const
@@ -573,7 +572,7 @@ namespace ao::audio::backend
       return PropertyValue{_implPtr->muted.load(std::memory_order_relaxed)};
     }
 
-    return std::unexpected(Error{.code = Error::Code::NotSupported});
+    return makeError(Error::Code::NotSupported);
   }
 
   PropertyInfo PipeWireBackend::queryProperty(PropertyId id) const noexcept

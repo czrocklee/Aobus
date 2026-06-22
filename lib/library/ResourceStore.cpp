@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Exception.h>
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/lmdb/Transaction.h>
@@ -10,7 +10,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <limits>
+#include <optional>
 #include <span>
 
 namespace ao::library
@@ -22,7 +24,7 @@ namespace ao::library
     return Writer{_database.writer(txn)};
   }
 
-  ResourceId Writer::create(std::span<std::byte const> data)
+  Result<ResourceId> Writer::create(std::span<std::byte const> data)
   {
     // 32-bit FNV-1a: simple, fast, and good distribution for content-addressable storage.
     auto key = ResourceId{utility::fnv1a32(data)};
@@ -36,15 +38,20 @@ namespace ao::library
 
     while (true)
     {
-      auto optValue = _writer.get(key.raw());
+      auto optExisting = _writer.get(key.raw());
 
-      if (!optValue)
+      if (!optExisting)
       {
-        _writer.create(key.raw(), data);
+        // Slot is free: this content has not been stored under this key yet.
+        if (auto createResult = _writer.create(key.raw(), data); !createResult)
+        {
+          return std::unexpected{createResult.error()};
+        }
+
         return key;
       }
 
-      if (std::ranges::equal(*optValue, data)) [[likely]]
+      if (std::ranges::equal(*optExisting, data)) [[likely]]
       {
         return key;
       }
@@ -64,6 +71,6 @@ namespace ao::library
       }
     }
 
-    ao::throwException<Exception>("Hash table full");
+    return makeError(Error::Code::ResourceExhausted, "Resource ID space exhausted");
   }
 }

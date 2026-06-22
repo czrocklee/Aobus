@@ -3,6 +3,7 @@
 
 #include "list/ListTreeModelBuilder.h"
 
+#include "../../TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
@@ -33,14 +34,14 @@ namespace ao::gtk::test
       // List A (Manual)
       auto builderA = library::ListBuilder::createNew();
       builderA.name("Manual List A");
-      auto [id, _] = writer.create(builderA.serialize());
+      auto [id, _] = ao::test::requireValue(writer.create(builderA.serialize()));
       idA = id;
 
       // List B (Smart, child of A)
       auto builderB = library::ListBuilder::createNew();
       builderB.name("Smart Child B").parentId(idA).filter("genre:rock");
       builderB.tracks().isSmart(true);
-      auto [id2, _] = writer.create(builderB.serialize());
+      auto [id2, _] = ao::test::requireValue(writer.create(builderB.serialize()));
       idB = id2;
 
       txn.commit();

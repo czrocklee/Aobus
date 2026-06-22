@@ -59,7 +59,7 @@ namespace ao::audio
 
       if (!blockResult)
       {
-        return std::unexpected(Error{.code = Error::Code::DecodeFailed, .message = blockResult.error().message});
+        return makeError(Error::Code::DecodeFailed, blockResult.error().message);
       }
 
       auto const& block = *blockResult;

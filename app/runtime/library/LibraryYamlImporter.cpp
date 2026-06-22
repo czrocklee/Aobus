@@ -158,30 +158,51 @@ namespace ao::rt
     Result<> validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
     Result<> validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
 
-    void importTracks(std::vector<ValidatedTrack> const& tracks,
-                      lmdb::WriteTransaction& txn,
-                      std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
-                      ImportMode strategy,
-                      ExportMode payloadMode);
-    void importTrackRecord(ValidatedTrack const& validatedTrack,
-                           lmdb::WriteTransaction& txn,
-                           library::TrackStore::Writer& trackWriter,
-                           library::FileManifestStore::Writer& manifestWriter,
-                           library::FileManifestStore::Reader const& manifestReader,
-                           ImportMode strategy,
-                           ExportMode payloadMode,
-                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
-    void loadTrackBaseline(std::string_view uriStr,
-                           std::optional<TrackId> const& optExistingTrackId,
-                           ExportMode payloadMode,
-                           std::optional<library::TrackBuilder>& optBuilder,
-                           std::unique_ptr<tag::TagFile>& keepAliveTagFile,
-                           library::TrackStore::Writer& trackWriter);
+    Result<> importTracks(std::vector<ValidatedTrack> const& tracks,
+                          lmdb::WriteTransaction& txn,
+                          std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
+                          ImportMode strategy,
+                          ExportMode payloadMode);
+    Result<> importTrackRecord(ValidatedTrack const& validatedTrack,
+                               lmdb::WriteTransaction& txn,
+                               library::TrackStore::Writer& trackWriter,
+                               library::FileManifestStore::Writer& manifestWriter,
+                               library::FileManifestStore::Reader const& manifestReader,
+                               ImportMode strategy,
+                               ExportMode payloadMode,
+                               std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
+    Result<> loadTrackBaseline(std::string_view uriStr,
+                               std::optional<TrackId> const& optExistingTrackId,
+                               ExportMode payloadMode,
+                               std::optional<library::TrackBuilder>& optBuilder,
+                               std::unique_ptr<tag::TagFile>& keepAliveTagFile,
+                               library::TrackStore::Writer& trackWriter);
 
-    void importLists(std::vector<ValidatedList> const& lists,
-                     lmdb::WriteTransaction& txn,
-                     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                     ImportMode strategy);
+    Result<> importLists(std::vector<ValidatedList> const& lists,
+                         lmdb::WriteTransaction& txn,
+                         std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
+                         ImportMode strategy);
+
+    Result<std::vector<std::vector<std::byte>>> importCovers(ryml::ConstNodeRef const& trackNode,
+                                                             library::TrackBuilder& builder) const;
+    void applyFileMetadata(ryml::ConstNodeRef const& trackNode,
+                           std::string_view uriStr,
+                           library::FileManifestStore::Reader const& manifestReader,
+                           library::FileManifestBuilder& manifestBuilder) const;
+    Result<TrackId> writeTrackData(library::TrackStore::Writer& trackWriter,
+                                   std::optional<TrackId> const& optExistingTrackId,
+                                   library::TrackBuilder::PreparedHot const& preparedHot,
+                                   library::TrackBuilder::PreparedCold const& preparedCold) const;
+
+    void buildStaticListTracks(library::ListBuilder& builder,
+                               ValidatedList const& importedList,
+                               std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId) const;
+    void buildStaticListUris(library::ListBuilder& builder,
+                             ValidatedList const& importedList,
+                             library::FileManifestStore::Reader const& manifestReader) const;
+    Result<> updateListParent(ValidatedList const& importedList,
+                              std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
+                              library::ListStore::Writer& listWriter) const;
 
     void overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
     void overlayCustomData(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
@@ -239,26 +260,46 @@ namespace ao::rt
     {
       if (validated.payloadMode != ExportMode::ListOnly)
       {
-        ml.tracks().writer(txn).clear();
-        ml.manifest().writer(txn).clear();
+        if (auto result = ml.tracks().writer(txn).clear(); !result)
+        {
+          return std::unexpected{result.error()};
+        }
+
+        if (auto result = ml.manifest().writer(txn).clear(); !result)
+        {
+          return std::unexpected{result.error()};
+        }
       }
 
-      ml.lists().writer(txn).clear();
+      if (auto result = ml.lists().writer(txn).clear(); !result)
+      {
+        return std::unexpected{result.error()};
+      }
     }
 
     auto yamlTrackIdToInternalId = std::unordered_map<std::uint32_t, TrackId>{};
 
     if (!validated.tracks.empty())
     {
-      importTracks(validated.tracks, txn, yamlTrackIdToInternalId, mode, validated.payloadMode);
+      if (auto result = importTracks(validated.tracks, txn, yamlTrackIdToInternalId, mode, validated.payloadMode);
+          !result)
+      {
+        return std::unexpected{result.error()};
+      }
     }
 
     if (!validated.lists.empty())
     {
-      importLists(validated.lists, txn, yamlTrackIdToInternalId, mode);
+      if (auto result = importLists(validated.lists, txn, yamlTrackIdToInternalId, mode); !result)
+      {
+        return std::unexpected{result.error()};
+      }
     }
 
-    txn.commit();
+    if (auto result = txn.commit(); !result)
+    {
+      return std::unexpected{result.error()};
+    }
 
     if (mode == ImportMode::Restore && validated.optLibraryId)
     {
@@ -459,11 +500,11 @@ namespace ao::rt
     return {};
   }
 
-  void LibraryYamlImporter::Impl::importTracks(std::vector<ValidatedTrack> const& tracks,
-                                               lmdb::WriteTransaction& txn,
-                                               std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
-                                               ImportMode strategy,
-                                               ExportMode payloadMode)
+  Result<> LibraryYamlImporter::Impl::importTracks(std::vector<ValidatedTrack> const& tracks,
+                                                   lmdb::WriteTransaction& txn,
+                                                   std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
+                                                   ImportMode strategy,
+                                                   ExportMode payloadMode)
   {
     auto trackWriter = ml.tracks().writer(txn);
     auto manifestWriter = ml.manifest().writer(txn);
@@ -471,25 +512,32 @@ namespace ao::rt
 
     for (auto const& validatedTrack : tracks)
     {
-      importTrackRecord(validatedTrack,
-                        txn,
-                        trackWriter,
-                        manifestWriter,
-                        manifestReader,
-                        strategy,
-                        payloadMode,
-                        yamlTrackIdToInternalId);
+      if (auto result = importTrackRecord(validatedTrack,
+                                          txn,
+                                          trackWriter,
+                                          manifestWriter,
+                                          manifestReader,
+                                          strategy,
+                                          payloadMode,
+                                          yamlTrackIdToInternalId);
+          !result)
+      {
+        return std::unexpected{result.error()};
+      }
     }
+
+    return {};
   }
 
-  void LibraryYamlImporter::Impl::importTrackRecord(ValidatedTrack const& validatedTrack,
-                                                    lmdb::WriteTransaction& txn,
-                                                    library::TrackStore::Writer& trackWriter,
-                                                    library::FileManifestStore::Writer& manifestWriter,
-                                                    library::FileManifestStore::Reader const& manifestReader,
-                                                    ImportMode strategy,
-                                                    ExportMode payloadMode,
-                                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
+  Result<> LibraryYamlImporter::Impl::importTrackRecord(
+    ValidatedTrack const& validatedTrack,
+    lmdb::WriteTransaction& txn,
+    library::TrackStore::Writer& trackWriter,
+    library::FileManifestStore::Writer& manifestWriter,
+    library::FileManifestStore::Reader const& manifestReader,
+    ImportMode strategy,
+    ExportMode payloadMode,
+    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
   {
     auto& dict = ml.dictionary();
     auto& resources = ml.resources();
@@ -501,16 +549,21 @@ namespace ao::rt
 
     if (strategy == ImportMode::Merge)
     {
-      if (auto const optManifestView = manifestReader.get(uriStr); optManifestView)
+      if (auto const manifestResult = manifestReader.get(uriStr); manifestResult)
       {
-        optExistingTrackId = optManifestView->trackId();
+        optExistingTrackId = manifestResult->trackId();
       }
     }
 
     auto optBuilder = std::optional<library::TrackBuilder>{};
     auto keepAliveTagFilePtr = std::unique_ptr<tag::TagFile>{};
 
-    loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, keepAliveTagFilePtr, trackWriter);
+    if (auto result =
+          loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, keepAliveTagFilePtr, trackWriter);
+        !result)
+    {
+      return std::unexpected{result.error()};
+    }
 
     auto builder = optBuilder ? *optBuilder : library::TrackBuilder::createNew();
 
@@ -523,6 +576,54 @@ namespace ao::rt
     overlayCustomData(builder, trackNode);
     overlayTechnicalProperties(builder, trackNode);
 
+    auto decodedCoverBlobsResult = importCovers(trackNode, builder);
+
+    if (!decodedCoverBlobsResult)
+    {
+      return std::unexpected{decodedCoverBlobsResult.error()};
+    }
+
+    auto decodedCoverBlobs = std::move(*decodedCoverBlobsResult);
+
+    auto preparedResult = builder.prepare(txn, dict, resources);
+
+    if (!preparedResult)
+    {
+      return std::unexpected{preparedResult.error()};
+    }
+
+    auto& [preparedHot, preparedCold] = *preparedResult;
+
+    auto targetTrackIdResult = writeTrackData(trackWriter, optExistingTrackId, preparedHot, preparedCold);
+
+    if (!targetTrackIdResult)
+    {
+      return std::unexpected{targetTrackIdResult.error()};
+    }
+
+    auto const targetTrackId = *targetTrackIdResult;
+
+    auto manifestBuilder = library::FileManifestBuilder::createNew();
+    manifestBuilder.trackId(targetTrackId);
+    applyFileMetadata(trackNode, uriStr, manifestReader, manifestBuilder);
+
+    if (auto putResult = manifestWriter.put(uriStr, manifestBuilder.serialize()); !putResult)
+    {
+      return std::unexpected{putResult.error()};
+    }
+
+    if (validatedTrack.yamlId != 0)
+    {
+      yamlTrackIdToInternalId[validatedTrack.yamlId] = targetTrackId;
+    }
+
+    return {};
+  }
+
+  Result<std::vector<std::vector<std::byte>>> LibraryYamlImporter::Impl::importCovers(
+    ryml::ConstNodeRef const& trackNode,
+    library::TrackBuilder& builder) const
+  {
     auto decodedCoverBlobs = std::vector<std::vector<std::byte>>{};
 
     if (auto const coversNode = yaml::findChild(trackNode, "covers"); coversNode.readable() && coversNode.is_seq())
@@ -547,46 +648,29 @@ namespace ao::rt
                                : library::PictureType::Other;
 
         auto const b64 = yaml::scalarView(dataNode);
-        decodedCoverBlobs.push_back(utility::base64Decode(b64));
 
-        if (auto const& blob = decodedCoverBlobs.back(); !blob.empty())
+        // base64Decode returns nullopt on malformed input; skip those, and keep the borrowed blob
+        // alive in decodedCoverBlobs until the builder serializes below.
+        if (auto optDecoded = utility::base64Decode(b64); optDecoded && !optDecoded->empty())
         {
-          builder.coverArt().add(picType, blob);
+          decodedCoverBlobs.push_back(*std::move(optDecoded));
+          builder.coverArt().add(picType, decodedCoverBlobs.back());
         }
       }
     }
 
-    auto [preparedHot, preparedCold] = builder.prepare(txn, dict, resources);
-    auto targetTrackId = TrackId{};
+    return decodedCoverBlobs;
+  }
 
-    if (optExistingTrackId)
+  void LibraryYamlImporter::Impl::applyFileMetadata(ryml::ConstNodeRef const& trackNode,
+                                                    std::string_view uriStr,
+                                                    library::FileManifestStore::Reader const& manifestReader,
+                                                    library::FileManifestBuilder& manifestBuilder) const
+  {
+    if (auto const manifestResult = manifestReader.get(uriStr); manifestResult)
     {
-      targetTrackId = *optExistingTrackId;
-      trackWriter.updateHot(
-        targetTrackId, preparedHot.size(), [&](std::span<std::byte> hot) { preparedHot.writeTo(hot); });
-      trackWriter.updateCold(
-        targetTrackId, preparedCold.size(), [&](std::span<std::byte> cold) { preparedCold.writeTo(cold); });
-    }
-    else
-    {
-      [[maybe_unused]] auto [newTrackId, view] =
-        trackWriter.createHotCold(preparedHot.size(),
-                                  preparedCold.size(),
-                                  [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                  {
-                                    preparedHot.writeTo(hot);
-                                    preparedCold.writeTo(cold);
-                                  });
-      targetTrackId = newTrackId;
-    }
-
-    auto manifestBuilder = library::FileManifestBuilder::createNew();
-    manifestBuilder.trackId(targetTrackId);
-
-    if (auto const optManifestView = manifestReader.get(uriStr); optManifestView)
-    {
-      manifestBuilder.fileSize(optManifestView->fileSize());
-      manifestBuilder.mtime(optManifestView->mtime());
+      manifestBuilder.fileSize(manifestResult->fileSize());
+      manifestBuilder.mtime(manifestResult->mtime());
     }
     else if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
     {
@@ -605,27 +689,63 @@ namespace ao::rt
     {
       manifestBuilder.mtime(yaml::asInt<uint64_t>(mtimeNode));
     }
-
-    manifestWriter.put(uriStr, manifestBuilder.serialize());
-
-    if (validatedTrack.yamlId != 0)
-    {
-      yamlTrackIdToInternalId[validatedTrack.yamlId] = targetTrackId;
-    }
   }
 
-  void LibraryYamlImporter::Impl::loadTrackBaseline(std::string_view uriStr,
-                                                    std::optional<TrackId> const& optExistingTrackId,
-                                                    ExportMode payloadMode,
-                                                    std::optional<library::TrackBuilder>& optBuilder,
-                                                    std::unique_ptr<tag::TagFile>& keepAliveTagFile,
-                                                    library::TrackStore::Writer& trackWriter)
+  Result<TrackId> LibraryYamlImporter::Impl::writeTrackData(
+    library::TrackStore::Writer& trackWriter,
+    std::optional<TrackId> const& optExistingTrackId,
+    library::TrackBuilder::PreparedHot const& preparedHot,
+    library::TrackBuilder::PreparedCold const& preparedCold) const
   {
     if (optExistingTrackId)
     {
-      auto const optView = trackWriter.get(*optExistingTrackId, library::TrackStore::Reader::LoadMode::Both);
+      auto const targetTrackId = *optExistingTrackId;
+      auto hotResult = trackWriter.updateHot(
+        targetTrackId, preparedHot.size(), [&](std::span<std::byte> hot) { preparedHot.writeTo(hot); });
 
-      if (optView)
+      if (!hotResult)
+      {
+        return std::unexpected{hotResult.error()};
+      }
+
+      auto coldResult = trackWriter.updateCold(
+        targetTrackId, preparedCold.size(), [&](std::span<std::byte> cold) { preparedCold.writeTo(cold); });
+
+      if (!coldResult)
+      {
+        return std::unexpected{coldResult.error()};
+      }
+
+      return targetTrackId;
+    }
+
+    auto createResult = trackWriter.createHotCold(preparedHot.size(),
+                                                  preparedCold.size(),
+                                                  [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                                  {
+                                                    preparedHot.writeTo(hot);
+                                                    preparedCold.writeTo(cold);
+                                                  });
+
+    if (!createResult)
+    {
+      return std::unexpected{createResult.error()};
+    }
+
+    auto const [newTrackId, view] = *createResult;
+    return newTrackId;
+  }
+
+  Result<> LibraryYamlImporter::Impl::loadTrackBaseline(std::string_view uriStr,
+                                                        std::optional<TrackId> const& optExistingTrackId,
+                                                        ExportMode payloadMode,
+                                                        std::optional<library::TrackBuilder>& optBuilder,
+                                                        std::unique_ptr<tag::TagFile>& keepAliveTagFile,
+                                                        library::TrackStore::Writer& trackWriter)
+  {
+    if (optExistingTrackId)
+    {
+      if (auto optView = trackWriter.get(*optExistingTrackId, library::TrackStore::Reader::LoadMode::Both); optView)
       {
         optBuilder = library::TrackBuilder::fromView(*optView, ml.dictionary());
       }
@@ -635,6 +755,8 @@ namespace ao::rt
     {
       loadFileBaseline(uriStr, payloadMode, optBuilder, keepAliveTagFile);
     }
+
+    return {};
   }
 
   void LibraryYamlImporter::Impl::loadFileBaseline(std::string_view uriStr,
@@ -644,13 +766,21 @@ namespace ao::rt
   {
     if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
     {
-      keepAliveTagFile = tag::TagFile::open(fullPath);
+      auto tagFileResult = tag::TagFile::open(fullPath);
 
-      if (keepAliveTagFile != nullptr)
+      if (tagFileResult)
       {
-        if (auto fileBuilder = keepAliveTagFile->loadTrack(); !optBuilder)
+        keepAliveTagFile = std::move(*tagFileResult);
+        auto fileBuilderResult = keepAliveTagFile->loadTrack();
+
+        if (!fileBuilderResult)
         {
-          optBuilder = std::move(fileBuilder);
+          return;
+        }
+
+        if (!optBuilder)
+        {
+          optBuilder = std::move(*fileBuilderResult);
 
           if (payloadMode == ExportMode::Metadata)
           {
@@ -676,6 +806,7 @@ namespace ao::rt
         }
         else
         {
+          auto const& fileBuilder = *fileBuilderResult;
           auto const& props = fileBuilder.property();
           optBuilder->property()
             .duration(props.duration())
@@ -832,10 +963,11 @@ namespace ao::rt
     }
   }
 
-  void LibraryYamlImporter::Impl::importLists(std::vector<ValidatedList> const& lists,
-                                              lmdb::WriteTransaction& txn,
-                                              std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                                              ImportMode /*strategy*/)
+  Result<> LibraryYamlImporter::Impl::importLists(
+    std::vector<ValidatedList> const& lists,
+    lmdb::WriteTransaction& txn,
+    std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
+    ImportMode /*strategy*/)
   {
     auto listWriter = ml.lists().writer(txn);
     auto manifestReader = ml.manifest().reader(txn);
@@ -853,51 +985,91 @@ namespace ao::rt
       }
       else
       {
-        for (auto const yamlTrackId : importedList.yamlTrackIds)
-        {
-          if (auto const it = yamlTrackIdToInternalId.find(yamlTrackId); it != yamlTrackIdToInternalId.end())
-          {
-            builder.tracks().add(it->second);
-          }
-        }
-
-        for (auto const& uri : importedList.trackUris)
-        {
-          if (auto const optManifestView = manifestReader.get(uri); optManifestView)
-          {
-            builder.tracks().add(optManifestView->trackId());
-          }
-        }
+        buildStaticListTracks(builder, importedList, yamlTrackIdToInternalId);
+        buildStaticListUris(builder, importedList, manifestReader);
       }
 
-      [[maybe_unused]] auto [newListId, view] = listWriter.create(builder.serialize());
+      auto createResult = listWriter.create(builder.serialize());
+
+      if (!createResult)
+      {
+        return std::unexpected{createResult.error()};
+      }
+
+      auto const [newListId, view] = *createResult;
       yamlListIdToNewListId[importedList.yamlId] = newListId;
     }
 
     for (auto const& importedList : lists)
     {
-      if (importedList.yamlParentId == 0)
+      if (auto result = updateListParent(importedList, yamlListIdToNewListId, listWriter); !result)
       {
-        continue;
+        return std::unexpected{result.error()};
       }
-
-      auto const parentIt = yamlListIdToNewListId.find(importedList.yamlParentId);
-
-      if (parentIt == yamlListIdToNewListId.end())
-      {
-        continue;
-      }
-
-      auto const childId = yamlListIdToNewListId.at(importedList.yamlId);
-      auto const optListView = listWriter.get(childId);
-
-      if (!optListView)
-      {
-        continue;
-      }
-
-      auto builder = library::ListBuilder::fromView(*optListView).parentId(parentIt->second);
-      listWriter.update(childId, builder.serialize());
     }
+
+    return {};
+  }
+
+  void LibraryYamlImporter::Impl::buildStaticListTracks(
+    library::ListBuilder& builder,
+    ValidatedList const& importedList,
+    std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId) const
+  {
+    for (auto const yamlTrackId : importedList.yamlTrackIds)
+    {
+      if (auto const it = yamlTrackIdToInternalId.find(yamlTrackId); it != yamlTrackIdToInternalId.end())
+      {
+        builder.tracks().add(it->second);
+      }
+    }
+  }
+
+  void LibraryYamlImporter::Impl::buildStaticListUris(library::ListBuilder& builder,
+                                                      ValidatedList const& importedList,
+                                                      library::FileManifestStore::Reader const& manifestReader) const
+  {
+    for (auto const& uri : importedList.trackUris)
+    {
+      if (auto const manifestResult = manifestReader.get(uri); manifestResult)
+      {
+        builder.tracks().add(manifestResult->trackId());
+      }
+    }
+  }
+
+  Result<> LibraryYamlImporter::Impl::updateListParent(
+    ValidatedList const& importedList,
+    std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
+    library::ListStore::Writer& listWriter) const
+  {
+    if (importedList.yamlParentId == 0)
+    {
+      return {};
+    }
+
+    auto const parentIt = yamlListIdToNewListId.find(importedList.yamlParentId);
+
+    if (parentIt == yamlListIdToNewListId.end())
+    {
+      return {};
+    }
+
+    auto const childId = yamlListIdToNewListId.at(importedList.yamlId);
+    auto optListView = listWriter.get(childId);
+
+    if (!optListView)
+    {
+      return {};
+    }
+
+    auto builder = library::ListBuilder::fromView(*optListView).parentId(parentIt->second);
+
+    if (auto result = listWriter.update(childId, builder.serialize()); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    return {};
   }
 } // namespace ao::rt

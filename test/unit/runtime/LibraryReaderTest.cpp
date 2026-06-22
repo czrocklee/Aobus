@@ -72,7 +72,9 @@ namespace ao::rt::test
       auto txn = library.writeTransaction();
 
       auto resourceWriter = library.resources().writer(txn);
-      auto const resourceId = resourceWriter.create(kCoverBytes);
+      auto resourceIdResult = resourceWriter.create(kCoverBytes);
+      REQUIRE(resourceIdResult);
+      auto const resourceId = *resourceIdResult;
 
       auto trackBuilder = library::TrackBuilder::createNew();
       trackBuilder.metadata()
@@ -103,15 +105,21 @@ namespace ao::rt::test
       trackBuilder.coverArt().add(library::PictureType::FrontCover, resourceId);
 
       auto hotData = trackBuilder.serializeHot(txn, library.dictionary());
+      REQUIRE(hotData);
       auto coldData = trackBuilder.serializeCold(txn, library.dictionary(), library.resources());
+      REQUIRE(coldData);
       auto trackWriter = library.tracks().writer(txn);
-      [[maybe_unused]] auto [trackId, trackView] = trackWriter.createHotCold(hotData, coldData);
+      [[maybe_unused]] auto [trackId, trackView] =
+        ao::test::requireValue(trackWriter.createHotCold(*hotData, *coldData));
 
       auto otherTrackBuilder = library::TrackBuilder::createNew();
       otherTrackBuilder.metadata().title("Another Song");
       otherTrackBuilder.tags().add("Favorite").add("Jazz");
-      auto const [otherHot, otherCold] = otherTrackBuilder.serialize(txn, library.dictionary(), library.resources());
-      [[maybe_unused]] auto [otherTrackId, otherTrackView] = trackWriter.createHotCold(otherHot, otherCold);
+      auto otherSerializeResult = otherTrackBuilder.serialize(txn, library.dictionary(), library.resources());
+      REQUIRE(otherSerializeResult);
+      auto const [otherHot, otherCold] = *otherSerializeResult;
+      [[maybe_unused]] auto [otherTrackId, otherTrackView] =
+        ao::test::requireValue(trackWriter.createHotCold(otherHot, otherCold));
 
       auto manifestPayload = library::FileManifestBuilder::createNew()
                                .trackId(trackId)
@@ -119,17 +127,17 @@ namespace ao::rt::test
                                .mtime(987654321)
                                .status(library::FileStatus::Missing)
                                .serialize();
-      library.manifest().writer(txn).put(kTrackUri, manifestPayload);
+      REQUIRE(library.manifest().writer(txn).put(kTrackUri, manifestPayload));
 
       auto manualListBuilder = library::ListBuilder::createNew();
       manualListBuilder.name("Manual List").description("Pinned songs").tracks().add(trackId);
       [[maybe_unused]] auto [manualListId, manualListView] =
-        library.lists().writer(txn).create(manualListBuilder.serialize());
+        ao::test::requireValue(library.lists().writer(txn).create(manualListBuilder.serialize()));
 
       auto smartListBuilder = library::ListBuilder::createNew();
       smartListBuilder.name("Smart List").parentId(manualListId).filter("@artist = \"An Artist\"");
       [[maybe_unused]] auto [smartListId, smartListView] =
-        library.lists().writer(txn).create(smartListBuilder.serialize());
+        ao::test::requireValue(library.lists().writer(txn).create(smartListBuilder.serialize()));
 
       auto const artistId = library.dictionary().getId("An Artist");
       auto const albumId = library.dictionary().getId("The Album");

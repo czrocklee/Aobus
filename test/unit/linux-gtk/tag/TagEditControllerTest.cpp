@@ -3,6 +3,7 @@
 
 #include "tag/TagEditController.h"
 
+#include "../../TestUtils.h"
 #include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/Type.h>
@@ -37,8 +38,10 @@ namespace ao::gtk::test
       auto writer = library.tracks().writer(txn);
       auto builder = library::TrackBuilder::createNew();
       builder.metadata().title(title);
-      auto const [hotData, coldData] = builder.serialize(txn, library.dictionary(), library.resources());
-      auto const trackId = writer.createHotCold(hotData, coldData).first;
+      auto serializeResult = builder.serialize(txn, library.dictionary(), library.resources());
+      REQUIRE(serializeResult);
+      auto const [hotData, coldData] = *serializeResult;
+      auto const trackId = ao::test::requireValue(writer.createHotCold(hotData, coldData)).first;
       txn.commit();
       return trackId;
     }

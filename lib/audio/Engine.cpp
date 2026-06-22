@@ -810,25 +810,25 @@ namespace ao::audio
       if (!session)
       {
         auto const lock = std::scoped_lock{stateMutex};
-        status.statusText = session.error.message;
+        status.statusText = session.error().message;
         return false;
       }
 
-      source = std::move(session.sourcePtr);
-      backendFormat = session.backendFormat;
+      source = std::move(session->sourcePtr);
+      backendFormat = session->backendFormat;
 
       // TrackSession::create() ran lock-free above; only the status/routeTracker
       // publication needs the lock, which status() also takes when it reads them
       // concurrently from the UI thread.
       auto const lock = std::scoped_lock{stateMutex};
-      status.duration = session.info.duration;
+      status.duration = session->info.duration;
       status.elapsed = std::chrono::milliseconds{0};
       accumulatedFrames.store(0, std::memory_order_relaxed);
       routeTracker.setDecoder(
-        session.info.sourceFormat, session.info.outputFormat, session.info.isLossy, session.info.codec);
-      routeTracker.setEngineFormat(session.info.outputFormat);
+        session->info.sourceFormat, session->info.outputFormat, session->info.isLossy, session->info.codec);
+      routeTracker.setEngineFormat(session->info.outputFormat);
       status.routeState = routeTracker.state();
-      engineSampleRate.store(session.info.outputFormat.sampleRate, std::memory_order_relaxed);
+      engineSampleRate.store(session->info.outputFormat.sampleRate, std::memory_order_relaxed);
 
       return true;
     }

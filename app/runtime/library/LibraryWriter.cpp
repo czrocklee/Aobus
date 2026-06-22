@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -150,6 +152,20 @@ namespace ao::rt
 
       return result;
     }
+
+    void throwStorageError(char const* action, Error const& error)
+    {
+      throwException<Exception>("{}: {}", action, error.message);
+    }
+
+    template<typename Transaction>
+    void commitOrThrow(Transaction& txn, char const* action)
+    {
+      if (auto result = txn.commit(); !result)
+      {
+        throwStorageError(action, result.error());
+      }
+    }
   }
 
   struct LibraryWriter::Impl final
@@ -190,20 +206,38 @@ namespace ao::rt
 
       if (patchResult.changedHot)
       {
-        auto const hotData = builder.serializeHot(txn, _implPtr->library.dictionary());
-        writer.updateHot(trackId, hotData);
+        auto hotDataResult = builder.serializeHot(txn, _implPtr->library.dictionary());
+
+        if (!hotDataResult)
+        {
+          continue;
+        }
+
+        if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
+        {
+          throwStorageError("Failed to update hot track data", result.error());
+        }
       }
 
       if (patchResult.changedCold)
       {
-        auto const coldData = builder.serializeCold(txn, _implPtr->library.dictionary(), _implPtr->library.resources());
-        writer.updateCold(trackId, coldData);
+        auto coldDataResult = builder.serializeCold(txn, _implPtr->library.dictionary(), _implPtr->library.resources());
+
+        if (!coldDataResult)
+        {
+          continue;
+        }
+
+        if (auto result = writer.updateCold(trackId, *coldDataResult); !result)
+        {
+          throwStorageError("Failed to update cold track data", result.error());
+        }
       }
 
       mutated.push_back(trackId);
     }
 
-    txn.commit();
+    commitOrThrow(txn, "Failed to commit metadata update");
 
     if (!mutated.empty())
     {
@@ -257,12 +291,22 @@ namespace ao::rt
         continue;
       }
 
-      auto const hotData = builder.serializeHot(txn, _implPtr->library.dictionary());
-      writer.updateHot(trackId, hotData);
+      auto hotDataResult = builder.serializeHot(txn, _implPtr->library.dictionary());
+
+      if (!hotDataResult)
+      {
+        continue;
+      }
+
+      if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
+      {
+        throwStorageError("Failed to update hot track data", result.error());
+      }
+
       mutated.push_back(trackId);
     }
 
-    txn.commit();
+    commitOrThrow(txn, "Failed to commit tag update");
 
     if (!mutated.empty())
     {
@@ -293,9 +337,16 @@ namespace ao::rt
 
     auto const payload = builder.serialize();
 
-    auto const [listId, view] = _implPtr->library.lists().writer(txn).create(payload);
+    auto createResult = _implPtr->library.lists().writer(txn).create(payload);
 
-    txn.commit();
+    if (!createResult)
+    {
+      throwStorageError("Failed to create list", createResult.error());
+    }
+
+    auto const [listId, view] = *createResult;
+
+    commitOrThrow(txn, "Failed to commit list creation");
 
     _implPtr->changes.notifyListsMutated({listId}, {});
 
@@ -329,9 +380,12 @@ namespace ao::rt
 
     auto const payload = builder.serialize();
 
-    listWriter.update(draft.listId, payload);
+    if (auto result = listWriter.update(draft.listId, payload); !result)
+    {
+      throwStorageError("Failed to update list", result.error());
+    }
 
-    txn.commit();
+    commitOrThrow(txn, "Failed to commit list update");
 
     _implPtr->changes.notifyListsMutated({draft.listId}, {});
     return true;
@@ -346,7 +400,7 @@ namespace ao::rt
       return false;
     }
 
-    txn.commit();
+    commitOrThrow(txn, "Failed to commit list delete");
 
     _implPtr->changes.notifyListsMutated({}, {listId});
     return true;
@@ -356,34 +410,49 @@ namespace ao::rt
   {
     auto txn = _implPtr->library.writeTransaction();
 
-    if (auto writer = _implPtr->library.tracks().writer(txn); writer.remove(trackId))
+    auto writer = _implPtr->library.tracks().writer(txn);
+
+    if (!writer.remove(trackId))
     {
-      txn.commit();
-      _implPtr->changes.notifyTracksMutated({trackId});
-      return true;
+      return false;
     }
 
-    return false;
+    commitOrThrow(txn, "Failed to commit track delete");
+    _implPtr->changes.notifyTracksMutated({trackId});
+    return true;
   }
 
   std::optional<TrackId> LibraryWriter::createTrackFromFile(std::filesystem::path const& path)
   {
-    auto const tagFilePtr = tag::TagFile::open(path);
+    auto tagFileResult = tag::TagFile::open(path);
 
-    if (!tagFilePtr)
+    if (!tagFileResult)
+    {
+      return std::nullopt;
+    }
+
+    auto trackResult = (*tagFileResult)->loadTrack();
+
+    if (!trackResult)
     {
       return std::nullopt;
     }
 
     auto txn = _implPtr->library.writeTransaction();
     auto writer = _implPtr->library.tracks().writer(txn);
-    auto builder = tagFilePtr->loadTrack();
+    auto builder = *trackResult;
     auto const uriStr = path.string();
     builder.property().uri(uriStr);
 
-    auto const [preparedHot, preparedCold] =
-      builder.prepare(txn, _implPtr->library.dictionary(), _implPtr->library.resources());
-    auto const [id, trackView] =
+    auto preparedResult = builder.prepare(txn, _implPtr->library.dictionary(), _implPtr->library.resources());
+
+    if (!preparedResult)
+    {
+      return std::nullopt;
+    }
+
+    auto& [preparedHot, preparedCold] = *preparedResult;
+    auto createResult =
       writer.createHotCold(preparedHot.size(),
                            preparedCold.size(),
                            [&preparedHot, &preparedCold](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
@@ -392,6 +461,13 @@ namespace ao::rt
                              preparedCold.writeTo(cold);
                            });
 
+    if (!createResult)
+    {
+      return std::nullopt;
+    }
+
+    auto const [id, trackView] = *createResult;
+
     auto manifestWriter = _implPtr->library.manifest().writer(txn);
     auto manifestBuilder = library::FileManifestBuilder::createNew();
     manifestBuilder.trackId(id)
@@ -399,9 +475,13 @@ namespace ao::rt
       .mtime(static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch())
           .count()));
-    manifestWriter.put(path.string(), manifestBuilder.serialize());
 
-    txn.commit();
+    if (auto putResult = manifestWriter.put(path.string(), manifestBuilder.serialize()); !putResult)
+    {
+      return std::nullopt;
+    }
+
+    commitOrThrow(txn, "Failed to commit track creation");
 
     _implPtr->changes.notifyTracksMutated({id});
     return id;

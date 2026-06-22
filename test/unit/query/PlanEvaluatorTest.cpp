@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/TestUtils.h"
 #include "test/unit/library/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/AudioCodec.h>
@@ -14,6 +15,7 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
@@ -32,6 +34,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -43,6 +46,26 @@ namespace ao::query::test
     using namespace ao::library::test;
     using namespace ao::lmdb;
     using namespace ao::lmdb::test;
+
+    Expression parseOk(std::string_view text)
+    {
+      auto result = ::ao::query::parse(text);
+      REQUIRE(result.has_value());
+      return std::move(*result);
+    }
+
+    ExecutionPlan compileOk(QueryCompiler& compiler, Expression const& expr)
+    {
+      auto result = compiler.compile(expr);
+      REQUIRE(result.has_value());
+      return std::move(*result);
+    }
+
+    ExecutionPlan compileOk(QueryCompiler&& compiler, Expression const& expr)
+    {
+      auto local = std::move(compiler);
+      return compileOk(local, expr);
+    }
 
     struct TrackSpec final
     {
@@ -138,16 +161,16 @@ namespace ao::query::test
       {
         auto temp = TempDir{};
         auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
-        _optEnv.emplace(temp.path(), envOpts);
-        auto wtxn = WriteTransaction{*_optEnv};
+        _optEnv.emplace(openEnvironment(temp.path(), envOpts));
+        auto wtxn = beginWriteTransaction(*_optEnv);
 
         if (dict == nullptr)
         {
-          _optDict.emplace(Database{wtxn, "dict"}, wtxn);
+          _optDict.emplace(openDatabase(wtxn, "dict"), wtxn);
           dict = &*_optDict;
         }
 
-        _optResources.emplace(Database{wtxn, "resources"});
+        _optResources.emplace(openDatabase(wtxn, "resources"));
 
         TrackBuilder builder = TrackBuilder::createNew();
         builder.metadata().title(spec.title);
@@ -186,8 +209,12 @@ namespace ao::query::test
           builder.customMetadata().add(k, v);
         }
 
-        _hotData = builder.serializeHot(wtxn, *dict);
-        _coldData = builder.serializeCold(wtxn, *dict, *_optResources);
+        auto hotDataResult = builder.serializeHot(wtxn, *dict);
+        REQUIRE(hotDataResult);
+        auto coldDataResult = builder.serializeCold(wtxn, *dict, *_optResources);
+        REQUIRE(coldDataResult);
+        _hotData = *hotDataResult;
+        _coldData = *coldDataResult;
 
         // Manual ID overrides if specified
         auto* header = utility::layout::asMutablePtr<library::TrackHotHeader>(_hotData);
@@ -266,9 +293,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Simple Equal Match", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$year = 2020");
+    auto expr = parseOk("$year = 2020");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
@@ -282,9 +309,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Greater Than", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("@duration > 179000");
+    auto expr = parseOk("@duration > 179000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
@@ -298,9 +325,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - NotEqual", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$year != 2020");
+    auto expr = parseOk("$year != 2020");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
@@ -318,9 +345,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Greater Than Or Equal", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("@duration >= 180000");
+    auto expr = parseOk("@duration >= 180000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
@@ -334,9 +361,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Less Than", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$year < 2021");
+    auto expr = parseOk("$year < 2021");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
@@ -350,9 +377,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Like Match", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$title ~ Test");
+    auto expr = parseOk("$title ~ Test");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test Title"};
@@ -374,26 +401,26 @@ namespace ao::query::test
 
     SECTION("$work Equality")
     {
-      auto expr = parse("$work = 'Symphony No. 5'");
+      auto expr = parseOk("$work = 'Symphony No. 5'");
       auto compiler = QueryCompiler{&trackWithWork.dictionary()};
-      auto plan = compiler.compile(expr);
+      auto plan = compileOk(compiler, expr);
       CHECK(evaluator.evaluateFull(plan, trackWithWork.view()) == true);
       CHECK(evaluator.evaluateFull(plan, trackWithoutWork.view()) == false);
     }
 
     SECTION("$w Equality (shorthand)")
     {
-      auto expr = parse("$w = 'Symphony No. 5'");
+      auto expr = parseOk("$w = 'Symphony No. 5'");
       auto compiler = QueryCompiler{&trackWithWork.dictionary()};
-      auto plan = compiler.compile(expr);
+      auto plan = compileOk(compiler, expr);
       CHECK(evaluator.evaluateFull(plan, trackWithWork.view()) == true);
     }
 
     SECTION("$work LIKE")
     {
-      auto expr = parse("$work ~ Symphony");
+      auto expr = parseOk("$work ~ Symphony");
       auto compiler = QueryCompiler{&trackWithWork.dictionary()};
-      auto plan = compiler.compile(expr);
+      auto plan = compileOk(compiler, expr);
       CHECK(evaluator.evaluateFull(plan, trackWithWork.view()) == true);
       CHECK(evaluator.evaluateFull(plan, trackWithoutWork.view()) == false);
     }
@@ -407,17 +434,17 @@ namespace ao::query::test
 
     SECTION("$composer Equality")
     {
-      auto expr = parse("$composer = Beethoven");
+      auto expr = parseOk("$composer = Beethoven");
       auto compiler = QueryCompiler{&trackWithComposer.dictionary()};
-      auto plan = compiler.compile(expr);
+      auto plan = compileOk(compiler, expr);
       CHECK(evaluator.evaluateFull(plan, trackWithComposer.view()) == true);
     }
 
     SECTION("$composer LIKE")
     {
-      auto expr = parse("$composer ~ Beet");
+      auto expr = parseOk("$composer ~ Beet");
       auto compiler = QueryCompiler{&trackWithComposer.dictionary()};
-      auto plan = compiler.compile(expr);
+      auto plan = compileOk(compiler, expr);
       CHECK(evaluator.evaluateFull(plan, trackWithComposer.view()) == true);
     }
   }
@@ -425,15 +452,15 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Artist LIKE resolves DictionaryId strings", "[query][unit][plan_evaluator]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
-    auto bachId = dict.put(wtxn, "Johann Sebastian Bach");
-    auto mozartId = dict.put(wtxn, "Wolfgang Amadeus Mozart");
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
+    auto bachId = ao::test::requireValue(dict.put(wtxn, "Johann Sebastian Bach"));
+    auto mozartId = ao::test::requireValue(dict.put(wtxn, "Wolfgang Amadeus Mozart"));
 
-    auto expr = parse(R"($artist ~ "Bach")");
+    auto expr = parseOk(R"($artist ~ "Bach")");
     auto compiler = QueryCompiler{&dict};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto matchingHotData = makeHotOnlyTrack(bachId);
@@ -453,15 +480,15 @@ namespace ao::query::test
             "[query][unit][plan_evaluator]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
-    auto aimerId = dict.put(wtxn, "Aimer");
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
+    auto aimerId = ao::test::requireValue(dict.put(wtxn, "Aimer"));
     wtxn.commit();
 
-    auto expr = parse(R"($artist ~ "Aimer" or #Aimer)");
+    auto expr = parseOk(R"($artist ~ "Aimer" or #Aimer)");
     auto compiler = QueryCompiler{&dict};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     CHECK(plan.tagBloomMask == 0);
@@ -483,9 +510,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Title String Equal", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$title = 'Hello World'");
+    auto expr = parseOk("$title = 'Hello World'");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Hello World"};
@@ -503,9 +530,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Title String Not Equal", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$title != 'Hello'");
+    auto expr = parseOk("$title != 'Hello'");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Hello World"};
@@ -519,9 +546,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Title String Less Than", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$title < 'zoo'");
+    auto expr = parseOk("$title < 'zoo'");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"apple"};
@@ -539,9 +566,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Title String Greater Than", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$title > 'apple'");
+    auto expr = parseOk("$title > 'apple'");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"banana"};
@@ -559,9 +586,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Logical And", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$year = 2020 && @duration > 100000");
+    auto expr = parseOk("$year = 2020 && @duration > 100000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
@@ -579,9 +606,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Logical Or", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$year = 2020 || $year = 2019");
+    auto expr = parseOk("$year = 2020 || $year = 2019");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
@@ -600,9 +627,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Logical Not", "[query][unit][plan_evaluator]")
   {
     // Use "not(" for explicit grouping, or check if parser handles precedence
-    auto expr = parse("!($year = 2020)");
+    auto expr = parseOk("!($year = 2020)");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
@@ -617,9 +644,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Complex Expression", "[query][unit][plan_evaluator]")
   {
     // Note: genre comparison requires dictionary resolution, so we use numeric genreId
-    auto expr = parse("@duration > 180000 && $year >= 2020");
+    auto expr = parseOk("@duration > 180000 && $year >= 2020");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1};
@@ -633,9 +660,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Matches All", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("true");
+    auto expr = parseOk("true");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     CHECK(plan.matchesAll == true);
@@ -685,28 +712,28 @@ namespace ao::query::test
 
     SECTION("Album")
     {
-      auto plan = compiler.compile(parse("$album = 'Test Album'"));
+      auto plan = compileOk(compiler, parseOk("$album = 'Test Album'"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
 
-      auto planLike = compiler.compile(parse("$album ~ 'Test'"));
+      auto planLike = compileOk(compiler, parseOk("$album ~ 'Test'"));
       CHECK(evaluator.evaluateFull(planLike, track.view()) == true);
     }
 
     SECTION("Genre")
     {
-      auto plan = compiler.compile(parse("$genre = 'Test Genre'"));
+      auto plan = compileOk(compiler, parseOk("$genre = 'Test Genre'"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
 
-      auto planLike = compiler.compile(parse("$genre ~ 'Genre'"));
+      auto planLike = compileOk(compiler, parseOk("$genre ~ 'Genre'"));
       CHECK(evaluator.evaluateFull(planLike, track.view()) == true);
     }
 
     SECTION("AlbumArtist")
     {
-      auto plan = compiler.compile(parse("$albumArtist = 'Test Album Artist'"));
+      auto plan = compileOk(compiler, parseOk("$albumArtist = 'Test Album Artist'"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
 
-      auto planLike = compiler.compile(parse("$albumArtist ~ 'Album Artist'"));
+      auto planLike = compileOk(compiler, parseOk("$albumArtist ~ 'Album Artist'"));
       CHECK(evaluator.evaluateFull(planLike, track.view()) == true);
     }
 
@@ -723,28 +750,28 @@ namespace ao::query::test
 
     SECTION("Channels")
     {
-      auto plan = compiler.compile(parse("@channels = 2"));
+      auto plan = compileOk(compiler, parseOk("@channels = 2"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
     SECTION("BitDepth")
     {
-      auto plan = compiler.compile(parse("@bitDepth = 16"));
+      auto plan = compileOk(compiler, parseOk("@bitDepth = 16"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
     SECTION("Codec")
     {
-      auto plan = compiler.compile(parse("@codec = FLAC"));
+      auto plan = compileOk(compiler, parseOk("@codec = FLAC"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
     SECTION("Numeric Metadata Fields")
     {
-      CHECK(evaluator.evaluateFull(compiler.compile(parse("$trackNumber = 3")), track.view()) == true);
-      CHECK(evaluator.evaluateFull(compiler.compile(parse("$trackTotal = 12")), track.view()) == true);
-      CHECK(evaluator.evaluateFull(compiler.compile(parse("$discNumber = 1")), track.view()) == true);
-      CHECK(evaluator.evaluateFull(compiler.compile(parse("$discTotal = 2")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("$trackNumber = 3")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("$trackTotal = 12")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("$discNumber = 1")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("$discTotal = 2")), track.view()) == true);
     }
 
     SECTION("CoverArtId")
@@ -773,7 +800,7 @@ namespace ao::query::test
       spec2.customPairs.emplace_back("customName", "customValue");
       auto track2 = TestTrack{spec2};
 
-      auto plan = QueryCompiler{&track2.dictionary()}.compile(parse("%customName = 'customValue'"));
+      auto plan = compileOk(QueryCompiler{&track2.dictionary()}, parseOk("%customName = 'customValue'"));
       CHECK(PlanEvaluator{}.evaluateFull(plan, track2.view()) == true);
 
       // Hit the fallback return {} for Custom when instruction is invalid
@@ -800,9 +827,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Invalid Track View", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$year = 2020");
+    auto expr = parseOk("$year = 2020");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // Empty hot data creates an invalid TrackView
@@ -813,9 +840,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - ColdOnly plan works with cold-only TrackView", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("@duration >= 180000");
+    auto expr = parseOk("@duration >= 180000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     REQUIRE(plan.accessProfile == AccessProfile::ColdOnly);
@@ -826,9 +853,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Mixed plan still requires both storage tiers", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("$year = 2020 && @duration >= 180000");
+    auto expr = parseOk("$year = 2020 && @duration >= 180000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     REQUIRE(plan.accessProfile == AccessProfile::HotAndCold);
@@ -840,9 +867,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Bitrate Comparison", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("@bitrate >= 320000");
+    auto expr = parseOk("@bitrate >= 320000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000};
@@ -856,9 +883,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - SampleRate Comparison", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("@sampleRate >= 48000");
+    auto expr = parseOk("@sampleRate >= 48000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 48000};
@@ -872,9 +899,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Unit Constants", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("@duration >= 3m && @bitrate >= 256k && @sampleRate >= 44.1k");
+    auto expr = parseOk("@duration >= 3m && @bitrate >= 256k && @sampleRate >= 44.1k");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100};
@@ -893,9 +920,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Year Comparison", "[query][unit][plan_evaluator]")
   {
     // Note: $trackNumber is a cold field, so we use $year instead which is hot
-    auto expr = parse("$year = 2020");
+    auto expr = parseOk("$year = 2020");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5};
@@ -910,9 +937,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Tag Query - No Tags", "[query][unit][plan_evaluator]")
   {
     // Query for tag - with dictionary resolving "rock" -> ID 10
-    auto expr = parse("#rock");
+    auto expr = parseOk("#rock");
     auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // Track with no tags - bloom filter rejects
@@ -925,17 +952,17 @@ namespace ao::query::test
   {
     // Set up DictionaryStore with tag
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
-    dict.put(wtxn, "rock"); // Will get ID 1 (DictionaryId starts from 1)
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
+    REQUIRE(dict.put(wtxn, "rock")); // Will get ID 1 (DictionaryId starts from 1)
     wtxn.commit();
 
     // Query for #rock
-    auto expr = parse("#rock");
+    auto expr = parseOk("#rock");
     auto compiler = QueryCompiler{&dict}; // Pass dictionary for tag resolution
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // Track with tag ID 0 (matches "rock" = 0)
@@ -952,8 +979,8 @@ namespace ao::query::test
     spec.customPairs.emplace_back("Replay Gain", "high");
     auto track = TestTrack{spec};
 
-    auto const expression = parse(R"(#123 and %"Replay Gain" = "high")");
-    auto const plan = QueryCompiler{&track.dictionary()}.compile(expression);
+    auto const expression = parseOk(R"(#123 and %"Replay Gain" = "high")");
+    auto const plan = compileOk(QueryCompiler{&track.dictionary()}, expression);
 
     CHECK(PlanEvaluator{}.evaluateFull(plan, track.view()));
   }
@@ -968,7 +995,7 @@ namespace ao::query::test
       missingSpec.title.clear();
       auto missing = TrackFixture{missingSpec};
       auto present = TrackFixture{TrackSpec{}};
-      auto plan = QueryCompiler{}.compile(parse("$title?"));
+      auto plan = compileOk(QueryCompiler{}, parseOk("$title?"));
 
       CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
       CHECK(evaluator.evaluateFull(plan, present.view()));
@@ -980,7 +1007,7 @@ namespace ao::query::test
       missingSpec.artist.clear();
       auto missing = TrackFixture{missingSpec};
       auto present = TrackFixture{TrackSpec{}};
-      auto plan = QueryCompiler{}.compile(parse("$artist?"));
+      auto plan = compileOk(QueryCompiler{}, parseOk("$artist?"));
 
       CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
       CHECK(evaluator.evaluateFull(plan, present.view()));
@@ -1000,12 +1027,12 @@ namespace ao::query::test
       presentSpec.trackTotal = 12;
       auto present = TrackFixture{presentSpec};
 
-      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$year?")), missing.view()));
-      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$year?")), present.view()));
-      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$trackNumber?")), missing.view()));
-      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$trackNumber?")), present.view()));
-      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$trackTotal?")), missing.view()));
-      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("$trackTotal?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$year?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$year?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$trackNumber?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$trackNumber?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$trackTotal?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("$trackTotal?")), present.view()));
     }
 
     SECTION("PropertiesExistWhenPositiveOrKnown")
@@ -1020,10 +1047,10 @@ namespace ao::query::test
       presentSpec.codec = AudioCodec::Flac;
       auto present = TrackFixture{presentSpec};
 
-      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@duration?")), missing.view()));
-      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@duration?")), present.view()));
-      CHECK_FALSE(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@codec?")), missing.view()));
-      CHECK(evaluator.evaluateFull(QueryCompiler{}.compile(parse("@codec?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("@duration?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("@duration?")), present.view()));
+      CHECK_FALSE(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("@codec?")), missing.view()));
+      CHECK(evaluator.evaluateFull(compileOk(QueryCompiler{}, parseOk("@codec?")), present.view()));
     }
 
     SECTION("CoverArtExistsWhenPrimaryResourceIsValid")
@@ -1032,7 +1059,7 @@ namespace ao::query::test
       auto presentSpec = TrackSpec{};
       presentSpec.coverArtId = ResourceId{42};
       auto present = TrackFixture{presentSpec};
-      auto plan = QueryCompiler{}.compile(parse("$coverArt?"));
+      auto plan = compileOk(QueryCompiler{}, parseOk("$coverArt?"));
 
       CHECK_FALSE(evaluator.evaluateFull(plan, missing.view()));
       CHECK(evaluator.evaluateFull(plan, present.view()));
@@ -1048,7 +1075,7 @@ namespace ao::query::test
       nonEmptyValueSpec.customPairs.emplace_back("rating", "5");
       auto nonEmptyValue = TrackFixture{nonEmptyValueSpec};
 
-      auto plan = QueryCompiler{&emptyValue.dictionary()}.compile(parse("%rating?"));
+      auto plan = compileOk(QueryCompiler{&emptyValue.dictionary()}, parseOk("%rating?"));
 
       CHECK_FALSE(evaluator.evaluateFull(plan, absent.view()));
       CHECK(evaluator.evaluateFull(plan, emptyValue.view()));
@@ -1061,7 +1088,7 @@ namespace ao::query::test
       auto presentSpec = TrackSpec{};
       presentSpec.tags.emplace_back("favorite");
       auto present = TrackFixture{presentSpec};
-      auto plan = QueryCompiler{&present.dictionary()}.compile(parse("#favorite?"));
+      auto plan = compileOk(QueryCompiler{&present.dictionary()}, parseOk("#favorite?"));
 
       CHECK_FALSE(evaluator.evaluateFull(plan, absent.view()));
       CHECK(evaluator.evaluateFull(plan, present.view()));
@@ -1073,7 +1100,7 @@ namespace ao::query::test
       missingSpec.year = 0;
       auto missing = TrackFixture{missingSpec};
       auto present = TrackFixture{TrackSpec{}};
-      auto plan = QueryCompiler{}.compile(parse("!$year?"));
+      auto plan = compileOk(QueryCompiler{}, parseOk("!$year?"));
 
       CHECK(evaluator.evaluateFull(plan, missing.view()));
       CHECK_FALSE(evaluator.evaluateFull(plan, present.view()));
@@ -1094,31 +1121,31 @@ namespace ao::query::test
 
     SECTION("DictionaryBackedStringMatch")
     {
-      auto plan = compiler.compile(parse(R"($artist in ["Bach", "Mozart"])"));
+      auto plan = compileOk(compiler, parseOk(R"($artist in ["Bach", "Mozart"])"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("NumericNonMatch")
     {
-      auto plan = compiler.compile(parse("$year in [1988, 1989]"));
+      auto plan = compileOk(compiler, parseOk("$year in [1988, 1989]"));
       CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("UnitConstantMatch")
     {
-      auto plan = compiler.compile(parse("@duration in [2m, 3m]"));
+      auto plan = compileOk(compiler, parseOk("@duration in [2m, 3m]"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("CustomStringMatch")
     {
-      auto plan = compiler.compile(parse(R"(%mood in ["study", "focus"])"));
+      auto plan = compileOk(compiler, parseOk(R"(%mood in ["study", "focus"])"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("LargeNumericListMatch")
     {
-      auto plan = compiler.compile(parse("$year in [1984, 1985, 1986, 1987, 1988, 1989, 1990, 1991]"));
+      auto plan = compileOk(compiler, parseOk("$year in [1984, 1985, 1986, 1987, 1988, 1989, 1990, 1991]"));
 
       REQUIRE(plan.inSets.size() == 1);
       CHECK(evaluator.evaluateFull(plan, track.view()));
@@ -1126,8 +1153,8 @@ namespace ao::query::test
 
     SECTION("LargeDictionaryBackedStringListMatch")
     {
-      auto plan = compiler.compile(
-        parse(R"($artist in ["Adams", "Bach", "Chopin", "Debussy", "Elgar", "Faure", "Glass", "Haydn"])"));
+      auto plan = compileOk(
+        compiler, parseOk(R"($artist in ["Adams", "Bach", "Chopin", "Debussy", "Elgar", "Faure", "Glass", "Haydn"])"));
 
       REQUIRE(plan.inSets.size() == 1);
       CHECK(evaluator.evaluateFull(plan, track.view()));
@@ -1135,8 +1162,8 @@ namespace ao::query::test
 
     SECTION("LargeCustomStringListMatch")
     {
-      auto plan =
-        compiler.compile(parse(R"(%mood in ["ambient", "deep", "focus", "late", "mix", "quiet", "study", "warm"])"));
+      auto plan = compileOk(
+        compiler, parseOk(R"(%mood in ["ambient", "deep", "focus", "late", "mix", "quiet", "study", "warm"])"));
 
       REQUIRE(plan.inSets.size() == 1);
       CHECK(evaluator.evaluateFull(plan, track.view()));
@@ -1144,7 +1171,7 @@ namespace ao::query::test
 
     SECTION("LargeListNonMatch")
     {
-      auto plan = compiler.compile(parse("$year in [1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987]"));
+      auto plan = compileOk(compiler, parseOk("$year in [1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987]"));
 
       REQUIRE(plan.inSets.size() == 1);
       CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
@@ -1163,19 +1190,19 @@ namespace ao::query::test
 
     SECTION("NumericRangeMatch")
     {
-      auto plan = compiler.compile(parse("$year in 1990..1999"));
+      auto plan = compileOk(compiler, parseOk("$year in 1990..1999"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("UnitRangeMatch")
     {
-      auto plan = compiler.compile(parse("@duration in 2m30s..5m"));
+      auto plan = compileOk(compiler, parseOk("@duration in 2m30s..5m"));
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
     SECTION("OutOfRangeDoesNotMatch")
     {
-      auto plan = compiler.compile(parse("$year in 1980..1989"));
+      auto plan = compileOk(compiler, parseOk("$year in 1980..1989"));
       CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
     }
   }
@@ -1183,16 +1210,16 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Dictionary Field Lexicographic Comparison", "[query][unit][plan_evaluator]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
 
     // Intern in non-alphabetical order so dictionary-ID order differs from text
     // order; a correct comparison must use the resolved text, not the interned ID.
-    auto zappaId = dict.put(wtxn, "Zappa");
-    auto adeleId = dict.put(wtxn, "Adele");
-    auto mozartId = dict.put(wtxn, "Mozart");
-    auto kinksId = dict.put(wtxn, "Kinks"); // sorts strictly between Adele and Mozart
+    auto zappaId = ao::test::requireValue(dict.put(wtxn, "Zappa"));
+    auto adeleId = ao::test::requireValue(dict.put(wtxn, "Adele"));
+    auto mozartId = ao::test::requireValue(dict.put(wtxn, "Mozart"));
+    auto kinksId = ao::test::requireValue(dict.put(wtxn, "Kinks")); // sorts strictly between Adele and Mozart
 
     auto compiler = QueryCompiler{&dict};
     auto evaluator = PlanEvaluator{};
@@ -1208,7 +1235,7 @@ namespace ao::query::test
 
     SECTION("RangeMatchesByText")
     {
-      auto plan = compiler.compile(parse("$artist in Adele..Mozart"));
+      auto plan = compileOk(compiler, parseOk("$artist in Adele..Mozart"));
       CHECK(evaluator.evaluateFull(plan, adele));       // lower bound, inclusive
       CHECK(evaluator.evaluateFull(plan, kinks));       // strictly inside the range
       CHECK(evaluator.evaluateFull(plan, mozart));      // upper bound, inclusive
@@ -1217,7 +1244,7 @@ namespace ao::query::test
 
     SECTION("GreaterThanComparesByText")
     {
-      auto plan = compiler.compile(parse("$artist > Mozart"));
+      auto plan = compileOk(compiler, parseOk("$artist > Mozart"));
       CHECK(evaluator.evaluateFull(plan, zappa));
       CHECK_FALSE(evaluator.evaluateFull(plan, adele));
       CHECK_FALSE(evaluator.evaluateFull(plan, mozart)); // strictly greater
@@ -1225,7 +1252,7 @@ namespace ao::query::test
 
     SECTION("LessThanComparesByText")
     {
-      auto plan = compiler.compile(parse("$artist < Mozart"));
+      auto plan = compileOk(compiler, parseOk("$artist < Mozart"));
       CHECK(evaluator.evaluateFull(plan, adele));
       CHECK(evaluator.evaluateFull(plan, kinks));
       CHECK_FALSE(evaluator.evaluateFull(plan, mozart)); // strictly less
@@ -1234,7 +1261,7 @@ namespace ao::query::test
 
     SECTION("LessOrEqualComparesByText")
     {
-      auto plan = compiler.compile(parse("$artist <= Mozart"));
+      auto plan = compileOk(compiler, parseOk("$artist <= Mozart"));
       CHECK(evaluator.evaluateFull(plan, adele));
       CHECK(evaluator.evaluateFull(plan, mozart)); // inclusive
       CHECK_FALSE(evaluator.evaluateFull(plan, zappa));
@@ -1242,7 +1269,7 @@ namespace ao::query::test
 
     SECTION("GreaterOrEqualComparesByText")
     {
-      auto plan = compiler.compile(parse("$artist >= Mozart"));
+      auto plan = compileOk(compiler, parseOk("$artist >= Mozart"));
       CHECK(evaluator.evaluateFull(plan, mozart)); // inclusive
       CHECK(evaluator.evaluateFull(plan, zappa));
       CHECK_FALSE(evaluator.evaluateFull(plan, adele));
@@ -1252,7 +1279,7 @@ namespace ao::query::test
     {
       // '!=' is not an ordered comparison, so it keeps the cheap interned-ID
       // path; this guards the branch executeComparison routes around.
-      auto plan = compiler.compile(parse("$artist != Mozart"));
+      auto plan = compileOk(compiler, parseOk("$artist != Mozart"));
       CHECK(evaluator.evaluateFull(plan, adele));
       CHECK(evaluator.evaluateFull(plan, zappa));
       CHECK_FALSE(evaluator.evaluateFull(plan, mozart));
@@ -1267,7 +1294,7 @@ namespace ao::query::test
       auto jazzData = makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, adeleId);
       auto jazz = library::TrackView{jazzData, std::span<std::byte const>{}};
 
-      auto plan = compiler.compile(parse("$genre > Mozart"));
+      auto plan = compileOk(compiler, parseOk("$genre > Mozart"));
       CHECK(evaluator.evaluateFull(plan, rock));       // "Zappa" > "Mozart"
       CHECK_FALSE(evaluator.evaluateFull(plan, jazz)); // "Adele" < "Mozart"
     }
@@ -1276,9 +1303,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Tag Query - With Non-Matching Tag", "[query][unit][plan_evaluator]")
   {
     // Dictionary: "rock" -> ID 10, but track has tag ID 20
-    auto expr = parse("#rock");
+    auto expr = parseOk("#rock");
     auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // Track with tag ID 20 (doesn't match "rock" = 10)
@@ -1291,9 +1318,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Tag Field Compilation", "[query][unit][plan_evaluator]")
   {
     // Test that tag field compiles to Field::Tag
-    auto expr = parse("#tagname");
+    auto expr = parseOk("#tagname");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
 
     // Check that instructions contain LoadField with Field::Tag (16)
     CHECK(!plan.instructions.empty());
@@ -1303,9 +1330,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Tag Bloom Filter - Without Dictionary", "[query][unit][plan_evaluator]")
   {
     // Without a dictionary, tag bloom mask cannot be set (no way to resolve tag name to ID)
-    auto expr = parse("#mytag");
+    auto expr = parseOk("#mytag");
     auto compiler = QueryCompiler{}; // No dictionary provided
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
 
     // Without dictionary, tagBloomMask stays 0
     CHECK(plan.tagBloomMask == 0);
@@ -1314,9 +1341,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Tag Bloom Filter - Dictionary Miss", "[query][unit][plan_evaluator]")
   {
     // Dictionary has "rock" -> ID 10, but query is for "jazz" which is not in dict
-    auto expr = parse("#jazz");
+    auto expr = parseOk("#jazz");
     auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
 
     // "jazz" not in dictionary, tagBloomMask stays 0
     CHECK(plan.tagBloomMask == 0);
@@ -1325,9 +1352,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Tag Bloom Filter - Dictionary Hit", "[query][unit][plan_evaluator]")
   {
     // Dictionary has "rock" -> ID 10 (10 & 31 = 10)
-    auto expr = parse("#rock");
+    auto expr = parseOk("#rock");
     auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
 
     // Without dictionary, tag resolution doesn't happen, bloom mask stays 0
     CHECK(plan.tagBloomMask == 0);
@@ -1336,9 +1363,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Tag Bloom Filter - Multiple Tags Hit", "[query][unit][plan_evaluator]")
   {
     // Dictionary: "rock" -> ID 10, "jazz" -> ID 20
-    auto expr = parse("#rock && #jazz");
+    auto expr = parseOk("#rock && #jazz");
     auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
 
     // Without dictionary, tag resolution doesn't happen, bloom mask stays 0
     CHECK(plan.tagBloomMask == 0);
@@ -1382,9 +1409,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("#mytag");
+    auto expr = parseOk("#mytag");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // Create a track with tag bloom bit 0 set (simulating tag ID 32)
@@ -1406,9 +1433,9 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match", "[query][unit][plan_evaluator]")
   {
-    auto expr = parse("#mytag");
+    auto expr = parseOk("#mytag");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // Create a track with tag bloom that has some bits set
@@ -1433,9 +1460,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Title LIKE with quoted string evaluates correctly", "[query][unit][plan_evaluator]")
   {
     // Simple title LIKE test with quoted string
-    auto expr = parse(R"($title ~ "Bach")");
+    auto expr = parseOk(R"($title ~ "Bach")");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // Track with title containing "Bach"
@@ -1457,9 +1484,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Title LIKE with multi-arg Track", "[query][unit][plan_evaluator]")
   {
     // Test LIKE with a Track that has multiple fields set
-    auto expr = parse(R"($title ~ "Bach")");
+    auto expr = parseOk(R"($title ~ "Bach")");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track = TestTrack{"Bach Greatest Hits", "Artist", "Album", "/path", 2021};
@@ -1470,9 +1497,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - OR expression with LIKE evaluates correctly", "[query][unit][plan_evaluator]")
   {
     // Test that $title ~ "Bach" or $year > 2021 evaluates correctly
-    auto expr = parse(R"($title ~ "Bach" or $year > 2021)");
+    auto expr = parseOk(R"($title ~ "Bach" or $year > 2021)");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // Track with title containing "Bach"
@@ -1494,9 +1521,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - OR with simple expressions", "[query][unit][plan_evaluator]")
   {
     // Test $year > 2000 or $year > 1990 to verify OR works with two numeric comparisons
-    auto expr = parse("$year > 2000 or $year > 1990");
+    auto expr = parseOk("$year > 2000 or $year > 1990");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     // year 2021: 2021 > 2000 is true, so OR should be true
@@ -1518,9 +1545,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Greater alone for year 1980", "[query][unit][plan_evaluator]")
   {
     // Verify $year > 2000 returns false for year 1980
-    auto expr = parse("$year > 2000");
+    auto expr = parseOk("$year > 2000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track = TestTrack{"Title", "Artist", "Album", "/path", 1980};
@@ -1531,9 +1558,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Year Greater Alone Works", "[query][unit][plan_evaluator]")
   {
     // Simple year > test to verify year comparison works
-    auto expr = parse("$year > 2000");
+    auto expr = parseOk("$year > 2000");
     auto compiler = QueryCompiler{};
-    auto plan = compiler.compile(expr);
+    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Title", "Artist", "Album", "/path", 2021};
@@ -1555,25 +1582,25 @@ namespace ao::query::test
 
     SECTION("Custom Field Equality Match")
     {
-      auto plan = compiler.compile(parse("%isrc = 'US-RC1-12-00001'"));
+      auto plan = compileOk(compiler, parseOk("%isrc = 'US-RC1-12-00001'"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
     SECTION("Custom Field Equality NonMatch")
     {
-      auto plan = compiler.compile(parse("%isrc = 'UK-XYZ'"));
+      auto plan = compileOk(compiler, parseOk("%isrc = 'UK-XYZ'"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == false);
     }
 
     SECTION("Custom Field Like Match")
     {
-      auto plan = compiler.compile(parse("%label ~ 'Grammophon'"));
+      auto plan = compileOk(compiler, parseOk("%label ~ 'Grammophon'"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
     SECTION("Custom Field Missing")
     {
-      auto plan = compiler.compile(parse("%nonexistent = 'val'"));
+      auto plan = compileOk(compiler, parseOk("%nonexistent = 'val'"));
       CHECK(evaluator.evaluateFull(plan, track.view()) == false);
     }
   }
@@ -1587,7 +1614,7 @@ namespace ao::query::test
     // LIKE should work even if we provide a dictionary, but it shouldn't
     // resolve "Bach" to a numeric ID because LIKE requires string scanning.
     auto compiler = QueryCompiler{&track.dictionary()};
-    auto plan = compiler.compile(parse("$artist ~ 'Bach'"));
+    auto plan = compileOk(compiler, parseOk("$artist ~ 'Bach'"));
 
     CHECK(evaluator.evaluateFull(plan, track.view()) == true);
   }
@@ -1603,9 +1630,9 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
     auto compiler = QueryCompiler{};
 
-    CHECK(evaluator.evaluateFull(compiler.compile(parse("@duration > 3m")), track.view()) == true);
-    CHECK(evaluator.evaluateFull(compiler.compile(parse("@duration > 4m")), track.view()) == false);
-    CHECK(evaluator.evaluateFull(compiler.compile(parse("@bitrate = 320k")), track.view()) == true);
+    CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("@duration > 3m")), track.view()) == true);
+    CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("@duration > 4m")), track.view()) == false);
+    CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("@bitrate = 320k")), track.view()) == true);
   }
 
   TEST_CASE("PlanEvaluator - Bloom Filter Advanced Scenarios", "[query][unit][plan_evaluator]")
@@ -1620,7 +1647,7 @@ namespace ao::query::test
     SECTION("Multi-Tag AND Requires All Bits")
     {
       // #rock and #jazz -> mask should have bits for both
-      auto const plan = compiler.compile(parse("#rock and #jazz"));
+      auto const plan = compileOk(compiler, parseOk("#rock and #jazz"));
       CHECK(plan.tagBloomMask != 0);
 
       // Should match track with both tags
@@ -1665,7 +1692,7 @@ namespace ao::query::test
       auto trackA = TrackFixture{spec, &dict};
 
       // 4. Query for tagB
-      auto planB = compiler.compile(parse("#" + tagB));
+      auto planB = compileOk(compiler, parseOk("#" + tagB));
 
       // VERIFICATION:
       // The bloom mask for tagB will match tagA's bits (due to collision).
@@ -1682,7 +1709,7 @@ namespace ao::query::test
 
     auto compiler = QueryCompiler{&track.dictionary()};
     auto evaluator = PlanEvaluator{};
-    auto plan = compiler.compile(parse("@codec = AAC"));
+    auto plan = compileOk(compiler, parseOk("@codec = AAC"));
 
     CHECK(evaluator.evaluateFull(plan, track.view()) == true);
   }

@@ -17,7 +17,9 @@ namespace ao::uimodel::input::test
   {
     KeyChord chord(std::string const& text)
     {
-      return KeyChord::parse(text).value();
+      auto const optChord = KeyChord::parse(text);
+      REQUIRE(optChord.has_value());
+      return *optChord;
     }
 
     KeymapBindings sampleDefaults()

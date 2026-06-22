@@ -3,6 +3,7 @@
 
 #include "list/ListNavigationController.h"
 
+#include "../../TestUtils.h"
 #include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
@@ -35,7 +36,7 @@ namespace ao::gtk::test
       auto writer = library.lists().writer(txn);
       auto builder = library::ListBuilder::createNew();
       builder.name(name).parentId(parentId);
-      auto const listId = writer.create(builder.serialize()).first;
+      auto const listId = ao::test::requireValue(writer.create(builder.serialize())).first;
       txn.commit();
       return listId;
     }

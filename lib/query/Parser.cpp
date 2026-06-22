@@ -8,7 +8,7 @@
 #endif
 
 #include "detail/Lexical.h"
-#include <ao/Exception.h>
+#include <ao/Error.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 
@@ -26,7 +26,6 @@
 #include <lexy/dsl/eof.hpp>
 #include <lexy/dsl/error.hpp>
 #include <lexy/dsl/expression.hpp>
-#include <lexy/dsl/identifier.hpp>
 #include <lexy/dsl/list.hpp>
 #include <lexy/dsl/literal.hpp>
 #include <lexy/dsl/operator.hpp>
@@ -38,6 +37,7 @@
 #include <lexy/encoding.hpp>
 #include <lexy/input/string_input.hpp>
 
+#include <format>
 #include <memory>
 #include <ranges>
 #include <string_view>
@@ -194,7 +194,7 @@ namespace ao::query
     return lexy::match<Stmt>(input);
   }
 
-  Expression parse(std::string_view expr)
+  Result<Expression> parse(std::string_view expr)
   {
     auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
 
@@ -207,7 +207,7 @@ namespace ao::query
       return root;
     }
 
-    throwException<Exception>("failed to parse query expression '{}'", expr);
+    return makeError(Error::Code::FormatRejected, std::format("failed to parse query expression '{}'", expr));
   }
 }
 

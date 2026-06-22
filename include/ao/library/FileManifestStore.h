@@ -3,13 +3,13 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/lmdb/Database.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
-#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -45,7 +45,7 @@ namespace ao::library
     {
     }
 
-    std::optional<FileManifestView> get(std::string_view uri) const;
+    Result<FileManifestView> get(std::string_view uri) const;
 
     lmdb::Database::Reader const& databaseReader() const noexcept { return _reader; }
 
@@ -98,9 +98,9 @@ namespace ao::library
     {
     }
 
-    void put(std::string_view uri, std::span<std::byte const> payload);
-    bool remove(std::string_view uri);
-    void clear();
+    Result<> put(std::string_view uri, std::span<std::byte const> payload);
+    Result<> remove(std::string_view uri);
+    Result<> clear();
 
   private:
     lmdb::Database::Writer _writer;

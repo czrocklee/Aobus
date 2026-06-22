@@ -4,16 +4,15 @@
 #include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
-#include <ao/query/detail/Bytecode.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/utility/Log.h>
 
 #include <cstddef>
-#include <exception>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -76,24 +75,34 @@ namespace ao::rt
   void SmartListSource::stageExpression(std::string expr)
   {
     _staged.expression = std::move(expr);
-
-    try
-    {
-      auto parsed = _staged.expression.empty() ? query::parse("true") : query::parse(_staged.expression);
-      auto compiler = query::QueryCompiler{&_ml.dictionary()};
-
-      _staged.planPtr = std::make_unique<query::ExecutionPlan>(compiler.compile(parsed));
-      _staged.optError.reset();
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("Smart list expression error for '{}': {}", _staged.expression, e.what());
-
-      _staged.optError = Error{.code = Error::Code::FormatRejected, .message = e.what()};
-      _staged.planPtr.reset();
-    }
-
     _dirty = true;
+
+    auto const stageError = [this](Error error)
+    {
+      APP_LOG_ERROR("Smart list expression error for '{}': {}", _staged.expression, error.message);
+
+      _staged.optError = std::move(error);
+      _staged.planPtr.reset();
+    };
+
+    auto parsed = query::parse(_staged.expression.empty() ? "true" : _staged.expression);
+
+    if (!parsed)
+    {
+      stageError(std::move(parsed).error());
+      return;
+    }
+
+    auto plan = query::compileQuery(*parsed, &_ml.dictionary());
+
+    if (!plan)
+    {
+      stageError(std::move(plan).error());
+      return;
+    }
+
+    _staged.planPtr = std::make_unique<query::ExecutionPlan>(*std::move(plan));
+    _staged.optError.reset();
   }
 
   void SmartListSource::applyStagedState()

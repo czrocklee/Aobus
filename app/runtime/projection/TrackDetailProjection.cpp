@@ -9,6 +9,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/ViewService.h>
@@ -296,7 +297,8 @@ namespace ao::rt
 
     for (auto const trackId : ids)
     {
-      auto const optView = trackReader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      auto const optView = storageValueOrNullopt(
+        trackReader.get(trackId, library::TrackStore::Reader::LoadMode::Both), "Failed to build track detail snapshot");
 
       if (!optView)
       {

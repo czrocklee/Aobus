@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
 
@@ -13,6 +14,7 @@ namespace ao::tag::mp4
   public:
     using TagFile::TagFile;
 
-    library::TrackBuilder loadTrack() const override;
+  private:
+    Result<library::TrackBuilder> loadTrackImpl() const override;
   };
 }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/lmdb/TestUtils.h"
 #include <ao/library/CoverArt.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -13,6 +13,8 @@
 #include <lmdb.h>
 
 #include <filesystem>
+#include <memory>
+#include <utility>
 
 namespace fs = std::filesystem;
 
@@ -21,6 +23,23 @@ namespace ao::tag::test
   namespace
   {
     fs::path const kTestDataDir = fs::path{TAG_TEST_DATA_DIR};
+
+    struct LoadedTrack final
+    {
+      std::unique_ptr<TagFile> filePtr;
+      library::TrackBuilder builder;
+    };
+
+    LoadedTrack loadTrack(fs::path const& path)
+    {
+      auto fileResult = TagFile::open(path);
+      REQUIRE(fileResult);
+      REQUIRE(*fileResult != nullptr);
+
+      auto trackResult = (*fileResult)->loadTrack();
+      REQUIRE(trackResult);
+      return {.filePtr = std::move(*fileResult), .builder = *trackResult};
+    }
   }
 
   TEST_CASE("Tag reading - basic metadata", "[tag][integration]")
@@ -28,10 +47,8 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-    auto const filePtr = TagFile::open(path);
-    REQUIRE(filePtr != nullptr);
-
-    auto builder = filePtr->loadTrack();
+    auto loaded = loadTrack(path);
+    auto& builder = loaded.builder;
     auto& meta = builder.metadata();
 
     CHECK(meta.title() == "Test Title");
@@ -52,10 +69,8 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("hires." + std::string{format});
 
-    auto const filePtr = TagFile::open(path);
-    REQUIRE(filePtr != nullptr);
-
-    auto builder = filePtr->loadTrack();
+    auto loaded = loadTrack(path);
+    auto& builder = loaded.builder;
     auto& meta = builder.metadata();
 
     CHECK(meta.title() == "HiRes Title");
@@ -76,8 +91,8 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-    auto const filePtr = TagFile::open(path);
-    auto builder = filePtr->loadTrack();
+    auto loaded = loadTrack(path);
+    auto& builder = loaded.builder;
     auto& prop = builder.property();
 
     // Duration ~1 second sine wave (allow some tolerance for encoding)
@@ -102,8 +117,8 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("hires." + std::string{format});
 
-    auto const filePtr = TagFile::open(path);
-    auto builder = filePtr->loadTrack();
+    auto loaded = loadTrack(path);
+    auto& builder = loaded.builder;
     auto& prop = builder.property();
 
     // Duration ~1 second sine wave (allow some tolerance for encoding)
@@ -150,20 +165,20 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("with_cover." + std::string{format});
 
-    auto const filePtr = TagFile::open(path);
-    REQUIRE(filePtr != nullptr);
-
-    auto builder = filePtr->loadTrack();
+    auto loaded = loadTrack(path);
+    auto& builder = loaded.builder;
 
     // Create temp LMDB environment to test cover art serialization
     auto const tempDir = fs::temp_directory_path() / "rs_tag_test_XXXXXX";
     fs::create_directories(tempDir);
-    auto env = lmdb::Environment{tempDir, {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = lmdb::WriteTransaction{env};
-    auto dict = library::DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = library::ResourceStore{lmdb::Database{wtxn, "resources"}};
+    auto env = lmdb::test::openEnvironment(tempDir, {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = lmdb::test::beginWriteTransaction(env);
+    auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = library::ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
 
-    auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+    auto serializeResult = builder.serialize(wtxn, dict, resources);
+    REQUIRE(serializeResult);
+    auto const [hotData, coldData] = *serializeResult;
 
     CHECK(!hotData.empty());
     CHECK(!coldData.empty());
@@ -188,10 +203,8 @@ namespace ao::tag::test
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("empty." + std::string{format});
 
-    auto const filePtr = TagFile::open(path);
-    REQUIRE(filePtr != nullptr);
-
-    auto builder = filePtr->loadTrack();
+    auto loaded = loadTrack(path);
+    auto& builder = loaded.builder;
     auto& meta = builder.metadata();
     auto& prop = builder.property();
 

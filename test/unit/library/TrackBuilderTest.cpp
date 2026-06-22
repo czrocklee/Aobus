@@ -3,7 +3,7 @@
 
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/AudioCodec.h>
-#include <ao/Exception.h>
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
@@ -38,21 +38,30 @@ namespace ao::library::test
     {
     public:
       TrackSerializationContext()
-        : _env{_temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}}
-        , _txn{_env}
-        , _dict{lmdb::Database{_txn, "dict"}, _txn}
-        , _resources{lmdb::Database{_txn, "resources"}}
+        : _env{openEnvironment(_temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20})}
+        , _txn{beginWriteTransaction(_env)}
+        , _dict{lmdb::test::openDatabase(_txn, "dict"), _txn}
+        , _resources{lmdb::test::openDatabase(_txn, "resources")}
       {
       }
 
       std::pair<std::vector<std::byte>, std::vector<std::byte>> serialize(TrackBuilder& builder)
       {
-        return builder.serialize(_txn, _dict, _resources);
+        auto result = builder.serialize(_txn, _dict, _resources);
+        REQUIRE(result);
+        return *result;
+      }
+
+      Result<std::vector<std::byte>> trySerializeCold(TrackBuilder& builder)
+      {
+        return builder.serializeCold(_txn, _dict, _resources);
       }
 
       std::vector<std::byte> serializeCold(TrackBuilder& builder)
       {
-        return builder.serializeCold(_txn, _dict, _resources);
+        auto result = trySerializeCold(builder);
+        REQUIRE(result);
+        return *result;
       }
 
     private:
@@ -279,12 +288,14 @@ namespace ao::library::test
     builder.property().bitDepth(BitDepth{24});
 
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
 
-    auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+    auto serializeResult = builder.serialize(wtxn, dict, resources);
+    REQUIRE(serializeResult);
+    auto const [hotData, coldData] = *serializeResult;
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
 
     CHECK(header->year == 1999);
@@ -338,11 +349,13 @@ namespace ao::library::test
     builder.tags().add("tag1").add("tag2").add("tag3");
 
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-    auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+    auto serializeResult = builder.serialize(wtxn, dict, resources);
+    REQUIRE(serializeResult);
+    auto const [hotData, coldData] = *serializeResult;
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->tagLength == 12); // 3 tags * 4 bytes each
@@ -357,11 +370,13 @@ namespace ao::library::test
     builder.tags().add("tag42");
 
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-    auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+    auto serializeResult = builder.serialize(wtxn, dict, resources);
+    REQUIRE(serializeResult);
+    auto const [hotData, coldData] = *serializeResult;
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->tagLength == 4); // 1 tag * 4 bytes
@@ -375,11 +390,13 @@ namespace ao::library::test
     builder.tags().add("tag1").add("tag2").add("tag3").add("tag4").add("tag5");
 
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-    auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+    auto serializeResult = builder.serialize(wtxn, dict, resources);
+    REQUIRE(serializeResult);
+    auto const [hotData, coldData] = *serializeResult;
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->tagLength == 20); // 5 tags * 4 bytes each
@@ -393,11 +410,13 @@ namespace ao::library::test
     builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{3});
 
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-    auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+    auto serializeResult = builder.serialize(wtxn, dict, resources);
+    REQUIRE(serializeResult);
+    auto const [hotData, coldData] = *serializeResult;
 
     auto const* header = reinterpret_cast<TrackColdHeader const*>(coldData.data());
     CHECK(header->duration == std::chrono::minutes{3});
@@ -415,10 +434,12 @@ namespace ao::library::test
     builder.tags().add("tag10").add("tag20");
 
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto const hotData = builder.serializeHot(wtxn, dict);
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto hotDataResult = builder.serializeHot(wtxn, dict);
+    REQUIRE(hotDataResult);
+    auto const& hotData = *hotDataResult;
 
     // Verify hot header
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
@@ -436,11 +457,13 @@ namespace ao::library::test
     builder.customMetadata().add("key1", "value1").add("key2", "value2");
 
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-    auto const coldData = builder.serializeCold(wtxn, dict, resources);
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+    auto coldDataResult = builder.serializeCold(wtxn, dict, resources);
+    REQUIRE(coldDataResult);
+    auto const& coldData = *coldDataResult;
 
     // Verify cold view can parse it
     auto view = TrackView{std::span<std::byte const>{}, coldData};
@@ -457,11 +480,13 @@ namespace ao::library::test
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
 
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-    auto const coldData = builder.serializeCold(wtxn, dict, resources);
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+    auto coldDataResult = builder.serializeCold(wtxn, dict, resources);
+    REQUIRE(coldDataResult);
+    auto const& coldData = *coldDataResult;
 
     auto const view = TrackView{std::span<std::byte const>{}, coldData};
     REQUIRE(view.coverArt().count() == 2);
@@ -485,16 +510,18 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - fromTrackView", "[library][unit][track]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
 
     auto original = TrackBuilder::createNew();
     original.metadata().title("Title").albumArtist("Test Album Artist").composer("Test Composer");
     original.property().uri("/path.flac");
 
-    auto const [hotData, coldData] = original.serialize(wtxn, dict, resources);
+    auto originalSerializeResult = original.serialize(wtxn, dict, resources);
+    REQUIRE(originalSerializeResult);
+    auto const [hotData, coldData] = *originalSerializeResult;
     auto view = TrackView{hotData, coldData};
 
     auto reconstructed = TrackBuilder::fromView(view, dict);
@@ -512,10 +539,10 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - TrackView property and metadata getters", "[library][unit][track]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
 
     auto builder = TrackBuilder::createNew();
     builder.metadata()
@@ -529,7 +556,9 @@ namespace ao::library::test
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
     builder.tags().add("tag1").add("tag2");
 
-    auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+    auto serializeResult = builder.serialize(wtxn, dict, resources);
+    REQUIRE(serializeResult);
+    auto const [hotData, coldData] = *serializeResult;
     auto view = TrackView{hotData, coldData};
 
     CHECK(view.metadata().trackNumber() == 1);
@@ -556,7 +585,9 @@ namespace ao::library::test
       auto const uri = std::string(kUint16Overflow, 'u');
       builder.property().uri(uri);
 
-      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Custom metadata value length")
@@ -565,7 +596,9 @@ namespace ao::library::test
       auto const value = std::string(kUint16Overflow, 'v');
       builder.customMetadata().add("key", value);
 
-      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Cover art count")
@@ -577,7 +610,9 @@ namespace ao::library::test
         builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
       }
 
-      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Custom metadata count")
@@ -589,7 +624,9 @@ namespace ao::library::test
         builder.customMetadata().add("key", {});
       }
 
-      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Custom metadata table offset")
@@ -603,7 +640,9 @@ namespace ao::library::test
         builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
       }
 
-      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("URI offset after accumulated custom metadata values")
@@ -617,7 +656,9 @@ namespace ao::library::test
 
       builder.customMetadata().add("first", value).add("second", value);
 
-      REQUIRE_THROWS_AS(context.serializeCold(builder), Exception);
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
   }
 } // namespace ao::library::test

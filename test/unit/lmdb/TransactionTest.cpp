@@ -9,46 +9,55 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
-#include <optional>
 #include <string_view>
 #include <utility>
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("ReadTransaction - constructor starts transaction", "[lmdb][unit][transaction]")
+  TEST_CASE("ReadTransaction - helper starts transaction", "[lmdb][unit][transaction]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // First create database with write transaction
-    auto wtxn = WriteTransaction{env};
-    auto db = Database{wtxn, "test"};
-    wtxn.commit();
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "test");
+    REQUIRE(wtxn.commit());
 
     // Then use read transaction
-    auto txn = ReadTransaction{env};
+    auto txn = beginReadTransaction(env);
     auto reader = db.reader(txn);
     REQUIRE(reader.begin() == reader.end()); // Empty DB
+  }
+
+  TEST_CASE("ReadTransaction - begin returns transaction", "[lmdb][unit][transaction]")
+  {
+    auto temp = TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    auto txn = ReadTransaction::begin(env);
+
+    REQUIRE(txn);
   }
 
   TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][unit][transaction]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create database with write transaction
-    auto wtxn = WriteTransaction{env};
-    auto db = Database{wtxn, "test"};
-    wtxn.commit();
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "test");
+    REQUIRE(wtxn.commit());
 
     // Read transaction - destructor should abort
     {
-      auto txn = ReadTransaction{env};
+      auto txn = beginReadTransaction(env);
       // Destructor should abort
     }
 
     // Should be able to start new transaction
-    auto txn2 = ReadTransaction{env};
+    auto txn2 = beginReadTransaction(env);
     auto reader = db.reader(txn2);
     REQUIRE(reader.begin() == reader.end());
   }
@@ -56,14 +65,14 @@ namespace ao::lmdb::test
   TEST_CASE("ReadTransaction - move", "[lmdb][unit][transaction]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create database first with write transaction
-    auto wtxn = WriteTransaction{env};
-    auto db = Database{wtxn, "test"};
-    wtxn.commit();
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "test");
+    REQUIRE(wtxn.commit());
 
-    auto txn1 = ReadTransaction{env};
+    auto txn1 = beginReadTransaction(env);
     auto txn2 = ReadTransaction{std::move(txn1)};
     // Verify moved transaction is valid by using it
     auto reader = db.reader(txn2);
@@ -73,33 +82,43 @@ namespace ao::lmdb::test
   // ============================================================================
   // WriteTransaction Tests
   // ============================================================================
-  TEST_CASE("WriteTransaction - constructor starts transaction", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - helper starts transaction", "[lmdb][unit][transaction]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto txn = WriteTransaction{env};
+    auto txn = beginWriteTransaction(env);
     // Verify transaction is valid by using it to create a database
-    auto db = Database{txn, "test"};
+    auto db = openDatabase(txn, "test");
     [[maybe_unused]] auto writer = db.writer(txn);
+  }
+
+  TEST_CASE("WriteTransaction - begin returns transaction", "[lmdb][unit][transaction]")
+  {
+    auto temp = TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    auto txn = WriteTransaction::begin(env);
+
+    REQUIRE(txn);
   }
 
   TEST_CASE("WriteTransaction - commit", "[lmdb][unit][transaction]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create database, write data, commit
-    auto wtxn = WriteTransaction{env};
-    auto db = Database{wtxn, "test"};
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
-    writer.create(1, createStringData("test data"));
+    REQUIRE(writer.create(1, createStringData("test data")));
     CHECK(wtxn.committed() == false);
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
     CHECK(wtxn.committed() == true);
 
     // Start a new transaction - should work now
-    auto wtxn2 = WriteTransaction{env};
+    auto wtxn2 = beginWriteTransaction(env);
     auto reader = db.reader(wtxn2);
     auto it = reader.begin();
     REQUIRE(it != reader.end());
@@ -109,44 +128,43 @@ namespace ao::lmdb::test
   TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][unit][transaction]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create database
-    auto dbTxn = WriteTransaction{env};
-    auto db = Database{dbTxn, "test"};
-    dbTxn.commit();
+    auto dbTxn = beginWriteTransaction(env);
+    auto db = openDatabase(dbTxn, "test");
+    REQUIRE(dbTxn.commit());
 
     // Write data without committing - transaction should abort on destruction
     {
-      auto txn = WriteTransaction{env};
+      auto txn = beginWriteTransaction(env);
       auto writer = db.writer(txn);
-      writer.create(1, createStringData("uncommitted"));
+      REQUIRE(writer.create(1, createStringData("uncommitted")));
       // Without commit, transaction aborts on destruction
     }
 
     // Data should not be visible
-    auto txn = ReadTransaction{env};
+    auto txn = beginReadTransaction(env);
     auto reader = db.reader(txn);
-    auto optData = reader.get(1);
-    REQUIRE(optData == std::nullopt);
+    REQUIRE_FALSE(reader.get(1).has_value());
   }
 
   TEST_CASE("WriteTransaction - move", "[lmdb][unit][transaction]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // First create the database
-    auto wtxn = WriteTransaction{env};
-    auto db = Database{wtxn, "test"};
-    wtxn.commit();
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "test");
+    REQUIRE(wtxn.commit());
 
     // Now test move
-    auto txn1 = WriteTransaction{env};
+    auto txn1 = beginWriteTransaction(env);
     auto txn2 = WriteTransaction{std::move(txn1)};
     // Verify moved transaction is valid by using it
     [[maybe_unused]] auto writer = db.writer(txn2);
-    txn2.commit();
+    REQUIRE(txn2.commit());
   }
 
   // ============================================================================
@@ -155,24 +173,24 @@ namespace ao::lmdb::test
   TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][unit][nested]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create parent write transaction and open database
-    auto parentTxn = WriteTransaction{env};
-    auto db = Database{parentTxn, "test"};
+    auto parentTxn = beginWriteTransaction(env);
+    auto db = openDatabase(parentTxn, "test");
 
     // Create nested write transaction
-    auto childTxn = WriteTransaction{parentTxn};
+    auto childTxn = beginWriteTransaction(parentTxn);
     auto writer = db.writer(childTxn);
-    writer.create(1, createStringData("nested data"));
+    REQUIRE(writer.create(1, createStringData("nested data")));
 
     // Commit child - merges to parent
-    childTxn.commit();
+    REQUIRE(childTxn.commit());
     // Parent should still be valid
-    parentTxn.commit();
+    REQUIRE(parentTxn.commit());
 
     // Verify data is visible
-    auto rtxn = ReadTransaction{env};
+    auto rtxn = beginReadTransaction(env);
     auto reader = db.reader(rtxn);
     auto it = reader.begin();
     REQUIRE(it != reader.end());
@@ -182,27 +200,26 @@ namespace ao::lmdb::test
   TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][unit][nested]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create parent transaction and open database
-    auto parentTxn = WriteTransaction{env};
-    auto db = Database{parentTxn, "test"};
+    auto parentTxn = beginWriteTransaction(env);
+    auto db = openDatabase(parentTxn, "test");
 
     // Create child transaction and write data
     {
-      auto childTxn = WriteTransaction{parentTxn};
+      auto childTxn = beginWriteTransaction(parentTxn);
       auto writer = db.writer(childTxn);
-      writer.create(1, createStringData("child data"));
+      REQUIRE(writer.create(1, createStringData("child data")));
       // Child transaction aborts on destruction without commit
     }
 
     // Parent commits - child data should NOT be included
-    parentTxn.commit();
+    REQUIRE(parentTxn.commit());
 
     // Verify data is NOT visible
-    auto rtxn = ReadTransaction{env};
+    auto rtxn = beginReadTransaction(env);
     auto reader = db.reader(rtxn);
-    auto optData = reader.get(1);
-    REQUIRE(optData == std::nullopt);
+    REQUIRE_FALSE(reader.get(1).has_value());
   }
 } // namespace ao::lmdb::test

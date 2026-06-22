@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
@@ -44,7 +45,9 @@ namespace ao::library
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
+    // Absence is the only recoverable miss; storage faults throw (see lmdb).
     std::optional<std::span<std::byte const>> get(ResourceId id) const { return _reader.get(id.raw()); }
+
     ResourceId maxKey() const { return ResourceId{_reader.maxKey()}; }
 
   private:
@@ -112,9 +115,11 @@ namespace ao::library
   class ResourceStore::Writer
   {
   public:
-    ResourceId create(std::span<std::byte const> data);
+    Result<ResourceId> create(std::span<std::byte const> data);
+    // Returns true if a row was removed, false if the id was absent.
     bool del(ResourceId id) { return _writer.del(id.raw()); }
-    void clear() { _writer.clear(); }
+
+    Result<> clear() { return _writer.clear(); }
 
   private:
     explicit Writer(lmdb::Database::Writer writer)

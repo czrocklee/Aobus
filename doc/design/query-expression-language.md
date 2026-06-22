@@ -344,6 +344,45 @@ Multiple plain terms are combined with `and`.
 | `$albumArtist = "Various Artists" and $year < 1990` | Older compilation albums. |
 | `%"Mood" ~ "night" and !#skip` | Custom mood contains `night` and track is not skipped. |
 
+## Error Reporting
+
+The public query entry points are non-throwing. They return `ao::Result<T>`
+(`std::expected<T, ao::Error>`) and report failure as an engaged
+`Error{Code::FormatRejected, message}` rather than throwing:
+
+| Function | Header | Result |
+| --- | --- | --- |
+| `parse(expr)` | `ao/query/Parser.h` | `Result<Expression>` — `FormatRejected` on a syntax error. |
+| `compileQuery(expr, dict)` | `ao/query/QueryCompiler.h` | `Result<ExecutionPlan>` — `FormatRejected` when `expr` is not a valid boolean predicate. |
+| `compileFormat(expr, dict)` | `ao/query/FormatExpression.h` | `Result<FormatPlan>` — `FormatRejected` when `expr` is not a valid format expression. |
+
+`QueryCompiler::compile()` and `FormatCompiler::compile()` follow the same
+`Result` contract as the free-function entry points. `resolveVariableField()`
+returns `Result<Field>` when callers need a diagnostic for an unknown field;
+`Error::message` carries a human-readable explanation suitable for surfacing to
+the user. Completion and other presence-only probes use
+`tryResolveVariableField()`, which returns `std::optional<Field>` and treats an
+unknown field as `std::nullopt`. Callers chain the stages and propagate the
+first `Error`:
+
+- The smart-list source (`app/runtime/source/SmartListSource.cpp`) stages the
+  message into the list's error state so the UI can show why a filter was
+  rejected.
+- The CLI `track` command prints `filter error: <message>` to stderr.
+
+`parse` discards lexer position (the parser uses `lexy::noop`), so a syntax
+error yields a single `FormatRejected` describing the whole expression rather
+than an offset. The compile stages produce the more specific messages — the
+rows in the table below correspond to those errors. Completion treats a failed
+`parse` as "not yet a complete predicate" (`Completion.cpp`) instead of
+catching an exception, and field resolution uses the non-throwing
+`tryResolveVariableField` (`ao/query/Field.h`), which returns `std::nullopt`
+for unknown fields.
+
+Internally the recursive compilers still signal semantic errors with
+exceptions; `compileQuery`/`compileFormat` are thin boundaries that translate
+those into `Error` so no exception escapes the public API.
+
 ## Invalid Or Unsupported Examples
 
 | Expression | Why it fails |

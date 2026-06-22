@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Database.h>
@@ -13,6 +14,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <iterator>
 #include <optional>
@@ -74,7 +76,8 @@ namespace ao::library
 
     /**
      * Get a track by ID.
-     * @return TrackView or std::nullopt if not found
+     * @return TrackView, or std::nullopt if the track is missing. Storage
+     *         faults throw (see lmdb).
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
@@ -149,6 +152,7 @@ namespace ao::library
   public:
     /**
      * Get track by ID with specified load mode.
+     * @return TrackView, or std::nullopt if the track is missing.
      */
     std::optional<TrackView> get(TrackId id, Reader::LoadMode mode) const;
 
@@ -158,8 +162,8 @@ namespace ao::library
      * @param coldData TrackColdHeader + custom KV + uri
      * @return Pair of (track ID, TrackView)
      */
-    std::pair<TrackId, TrackView> createHotCold(std::span<std::byte const> hotData,
-                                                std::span<std::byte const> coldData);
+    Result<std::pair<TrackId, TrackView>> createHotCold(std::span<std::byte const> hotData,
+                                                        std::span<std::byte const> coldData);
 
     /**
      * Zero-copy create: reserves space and calls fill callback to populate spans.
@@ -170,12 +174,12 @@ namespace ao::library
      */
     template<typename F>
       requires std::invocable<F, TrackId, std::span<std::byte>, std::span<std::byte>>
-    std::pair<TrackId, TrackView> createHotCold(std::size_t hotSize, std::size_t coldSize, F&& fill);
+    Result<std::pair<TrackId, TrackView>> createHotCold(std::size_t hotSize, std::size_t coldSize, F&& fill);
 
     /**
      * Update hot track data.
      */
-    void updateHot(TrackId id, std::span<std::byte const> hotData);
+    Result<> updateHot(TrackId id, std::span<std::byte const> hotData);
 
     /**
      * Zero-copy updateHot: reserves space and calls fill callback to populate span.
@@ -185,17 +189,17 @@ namespace ao::library
      */
     template<typename F>
       requires std::invocable<F, std::span<std::byte>>
-    void updateHot(TrackId id, std::size_t size, F&& fill);
+    Result<> updateHot(TrackId id, std::size_t size, F&& fill);
 
     /**
      * Update cold track data.
      */
-    void updateCold(TrackId id, std::span<std::byte const> coldData);
+    Result<> updateCold(TrackId id, std::span<std::byte const> coldData);
 
     /**
      * Update cold track data (direct span access).
      */
-    std::span<std::byte> updateCold(TrackId id, std::size_t size);
+    Result<std::span<std::byte>> updateCold(TrackId id, std::size_t size);
 
     /**
      * Zero-copy updateCold: reserves space and calls fill callback to populate span.
@@ -205,17 +209,18 @@ namespace ao::library
      */
     template<typename F>
       requires std::invocable<F, std::span<std::byte>>
-    void updateCold(TrackId id, std::size_t size, F&& fill);
+    Result<> updateCold(TrackId id, std::size_t size, F&& fill);
 
     /**
      * Delete both hot and cold track data.
+     * @return true if a row was removed, false if the id was absent.
      */
     bool remove(TrackId id);
 
     /**
      * Clear all tracks.
      */
-    void clear();
+    Result<> clear();
 
     lmdb::Database::Writer& hotWriter() noexcept { return _hotWriter; }
     lmdb::Database::Writer& coldWriter() noexcept { return _coldWriter; }
@@ -232,40 +237,72 @@ namespace ao::library
 
   template<typename F>
     requires std::invocable<F, TrackId, std::span<std::byte>, std::span<std::byte>>
-  std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(std::size_t hotSize, std::size_t coldSize, F&& fill)
+  Result<std::pair<TrackId, TrackView>> TrackStore::Writer::createHotCold(std::size_t hotSize,
+                                                                          std::size_t coldSize,
+                                                                          F&& fill)
   {
     gsl_Expects((hotSize % 4) == 0);
     gsl_Expects((coldSize % 4) == 0);
 
     // Reserve hot span and get auto-increment ID
-    auto [id, hotSpan] = _hotWriter.append(hotSize);
+    auto hotResult = _hotWriter.append(hotSize);
+
+    if (!hotResult)
+    {
+      return std::unexpected{hotResult.error()};
+    }
+
+    auto [id, hotSpan] = *hotResult;
 
     // Reserve cold at the SAME explicit ID (not append)
-    auto coldSpan = _coldWriter.create(id, coldSize);
+    auto coldResult = _coldWriter.create(id, coldSize);
+
+    if (!coldResult)
+    {
+      return std::unexpected{coldResult.error()};
+    }
+
+    auto coldSpan = *coldResult;
 
     // Populate both spans via callback
     std::invoke(std::forward<F>(fill), TrackId{id}, hotSpan, coldSpan);
 
-    return {TrackId{id}, TrackView{hotSpan, coldSpan}};
+    return std::pair{TrackId{id}, TrackView{hotSpan, coldSpan}};
   }
 
   template<typename F>
     requires std::invocable<F, std::span<std::byte>>
-  void TrackStore::Writer::updateHot(TrackId id, std::size_t size, F&& fill)
+  Result<> TrackStore::Writer::updateHot(TrackId id, std::size_t size, F&& fill)
   {
     gsl_Expects((size % 4) == 0);
 
-    auto span = _hotWriter.update(id.raw(), size);
+    auto spanResult = _hotWriter.update(id.raw(), size);
+
+    if (!spanResult)
+    {
+      return std::unexpected{spanResult.error()};
+    }
+
+    auto span = *spanResult;
     std::invoke(std::forward<F>(fill), span);
+    return {};
   }
 
   template<typename F>
     requires std::invocable<F, std::span<std::byte>>
-  void TrackStore::Writer::updateCold(TrackId id, std::size_t size, F&& fill)
+  Result<> TrackStore::Writer::updateCold(TrackId id, std::size_t size, F&& fill)
   {
     gsl_Expects((size % 4) == 0);
 
-    auto span = _coldWriter.update(id.raw(), size);
+    auto spanResult = _coldWriter.update(id.raw(), size);
+
+    if (!spanResult)
+    {
+      return std::unexpected{spanResult.error()};
+    }
+
+    auto span = *spanResult;
     std::invoke(std::forward<F>(fill), span);
+    return {};
   }
 } // namespace ao::library

@@ -3,6 +3,7 @@
 
 #include "tag/TagEditor.h"
 
+#include "../../TestUtils.h"
 #include "gtkmm/button.h"
 #include "gtkmm/entry.h"
 #include "gtkmm/enums.h"
@@ -103,19 +104,25 @@ namespace ao::gtk::test
       builder.tags().add("90s");
       builder.tags().add(kLongTag);
 
-      auto const [hot, cold] = builder.serialize(txn, library.dictionary(), library.resources());
-      auto [id, _] = writer.createHotCold(hot, cold);
+      auto serializeResult = builder.serialize(txn, library.dictionary(), library.resources());
+      REQUIRE(serializeResult);
+      auto const [hot, cold] = *serializeResult;
+      auto [id, _] = ao::test::requireValue(writer.createHotCold(hot, cold));
       trackId = id;
 
       auto builder2 = library::TrackBuilder::createNew();
       builder2.tags().add("Jazz");
-      auto const [hot2, cold2] = builder2.serialize(txn, library.dictionary(), library.resources());
-      writer.createHotCold(hot2, cold2);
+      auto serializeResult2 = builder2.serialize(txn, library.dictionary(), library.resources());
+      REQUIRE(serializeResult2);
+      auto const [hot2, cold2] = *serializeResult2;
+      REQUIRE(writer.createHotCold(hot2, cold2));
 
       // A track with no tags: selecting it makes every library tag render as a suggestion.
       auto builder3 = library::TrackBuilder::createNew();
-      auto const [hot3, cold3] = builder3.serialize(txn, library.dictionary(), library.resources());
-      auto [emptyId, _2] = writer.createHotCold(hot3, cold3);
+      auto serializeResult3 = builder3.serialize(txn, library.dictionary(), library.resources());
+      REQUIRE(serializeResult3);
+      auto const [hot3, cold3] = *serializeResult3;
+      auto [emptyId, _2] = ao::test::requireValue(writer.createHotCold(hot3, cold3));
       emptyTrackId = emptyId;
 
       txn.commit();

@@ -91,11 +91,24 @@ namespace ao::library
           item.classification = ScanClassification::Error;
           item.errorMessage = entryEc.message();
         }
-        else if (auto const optView = manifestReader.get(uri); optView)
+        else if (auto manifestResult = manifestReader.get(uri); !manifestResult)
         {
-          item.trackId = optView->trackId();
+          if (manifestResult.error().code == Error::Code::NotFound)
+          {
+            item.classification = ScanClassification::New;
+          }
+          else
+          {
+            item.classification = ScanClassification::Error;
+            item.errorMessage = manifestResult.error().message;
+          }
+        }
+        else
+        {
+          auto const& view = *manifestResult;
+          item.trackId = view.trackId();
 
-          if (optView->fileSize() == item.fileSize && optView->mtime() == item.mtime)
+          if (view.fileSize() == item.fileSize && view.mtime() == item.mtime)
           {
             item.classification = ScanClassification::Unchanged;
           }
@@ -103,10 +116,6 @@ namespace ao::library
           {
             item.classification = ScanClassification::Changed;
           }
-        }
-        else
-        {
-          item.classification = ScanClassification::New;
         }
       }
       catch (std::exception const& e)

@@ -60,25 +60,7 @@ namespace ao::query
         return {};
       }
 
-      auto dictionaryId = kInvalidDictionaryId;
-
-      switch (field)
-      {
-        case Field::ArtistId: dictionaryId = track.metadata().artistId(); break;
-        case Field::AlbumId: dictionaryId = track.metadata().albumId(); break;
-        case Field::GenreId: dictionaryId = track.metadata().genreId(); break;
-        case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
-        case Field::ComposerId: dictionaryId = track.metadata().composerId(); break;
-        case Field::WorkId: dictionaryId = track.metadata().workId(); break;
-        default: return {};
-      }
-
-      if (dictionaryId == kInvalidDictionaryId)
-      {
-        return {};
-      }
-
-      return plan->dictionary->get(dictionaryId);
+      return dictionaryFieldValue(track, field, *plan->dictionary);
     }
 
     std::string_view loadStringFieldValue(library::TrackView const& track, Field field, Instruction const* instr)

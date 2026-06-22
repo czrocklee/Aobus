@@ -1,25 +1,49 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Error.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
 
-#include <boost/interprocess/detail/os_file_functions.hpp>
-#include <boost/interprocess/file_mapping.hpp>
-
+#include <expected>
 #include <filesystem>
+#include <format>
 
 namespace ao::tag
 {
-  namespace
+  // The mapping is always read-only: there is no write path through TagFile, so
+  // Mode is accepted for source compatibility but does not affect the mapping.
+  TagFile::TagFile(std::filesystem::path const& path, Mode /*mode*/)
   {
-    boost::interprocess::mode_t fromMode(TagFile::Mode mode)
+    if (auto const result = _mappedFile.map(path); !result)
     {
-      return mode == TagFile::Mode::ReadOnly ? boost::interprocess::read_only : boost::interprocess::read_write;
+      _optOpenError = result.error();
+      _optOpenError->message = std::format("Failed to open tag file '{}': {}", path.string(), _optOpenError->message);
+      return;
     }
+
+    auto const bytes = _mappedFile.bytes();
+    _address = bytes.data();
+    _size = bytes.size();
   }
 
-  TagFile::TagFile(std::filesystem::path const& path, Mode mode)
-    : _fileMapping{path.c_str(), fromMode(mode)}, _mappedRegion{_fileMapping, fromMode(mode)}
+  Result<library::TrackBuilder> TagFile::loadTrack() const
   {
+    if (auto const result = mappedResult(); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    return loadTrackImpl();
+  }
+
+  Result<> TagFile::mappedResult() const
+  {
+    if (_optOpenError)
+    {
+      return std::unexpected{*_optOpenError};
+    }
+
+    return {};
   }
 }

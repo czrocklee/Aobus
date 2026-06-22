@@ -6,6 +6,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
@@ -309,7 +310,7 @@ namespace ao::rt
     for (auto const idx : std::views::iota(0UZ, source.size()))
     {
       auto const id = source.trackIdAt(idx);
-      auto const optView = reader.get(id, storeMode);
+      auto const optView = storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate smart list track");
 
       if (!optView)
       {
@@ -362,7 +363,8 @@ namespace ao::rt
     auto const reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
-    auto const optView = reader.get(id, storeMode);
+    auto const optView =
+      storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate inserted smart list track");
 
     if (!optView)
     {
@@ -407,7 +409,8 @@ namespace ao::rt
     auto const reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
-    auto const optView = reader.get(id, storeMode);
+    auto const optView =
+      storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate updated smart list track");
 
     for (auto* const list : evaluatableLists)
     {
@@ -486,7 +489,8 @@ namespace ao::rt
 
     for (auto const id : ids)
     {
-      auto const optView = reader.get(id, storeMode);
+      auto const optView =
+        storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate inserted smart list tracks");
 
       if (!optView)
       {
@@ -558,7 +562,8 @@ namespace ao::rt
 
     for (auto const id : ids)
     {
-      auto const optView = reader.get(id, storeMode);
+      auto const optView =
+        storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate updated smart list tracks");
 
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {

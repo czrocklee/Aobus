@@ -3,14 +3,13 @@
 
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/AudioCodec.h>
-#include <ao/Exception.h>
+#include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
+#include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
@@ -25,6 +24,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -35,6 +35,28 @@ namespace ao::query::test
     using namespace ao::library;
     using namespace ao::lmdb;
     using namespace ao::lmdb::test;
+
+    Expression parseOk(std::string_view text)
+    {
+      auto result = ::ao::query::parse(text);
+      REQUIRE(result.has_value());
+      return std::move(*result);
+    }
+
+    FormatPlan compileOk(FormatCompiler& compiler, Expression const& expr)
+    {
+      auto result = compiler.compile(expr);
+      REQUIRE(result.has_value());
+      return std::move(*result);
+    }
+
+    Error compileError(FormatCompiler& compiler, Expression const& expr)
+    {
+      auto result = compiler.compile(expr);
+      REQUIRE_FALSE(result.has_value());
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      return result.error();
+    }
 
     struct FormatTrackSpec final
     {
@@ -65,10 +87,10 @@ namespace ao::query::test
       explicit FormatTrackFixture(FormatTrackSpec const& spec = {})
       {
         auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
-        _optEnv.emplace(_temp.path(), envOpts);
-        auto wtxn = WriteTransaction{*_optEnv};
-        _optDict.emplace(Database{wtxn, "dict"}, wtxn);
-        _optResources.emplace(Database{wtxn, "resources"});
+        _optEnv.emplace(openEnvironment(_temp.path(), envOpts));
+        auto wtxn = beginWriteTransaction(*_optEnv);
+        _optDict.emplace(openDatabase(wtxn, "dict"), wtxn);
+        _optResources.emplace(openDatabase(wtxn, "resources"));
 
         auto builder = TrackBuilder::createNew();
         builder.metadata()
@@ -97,8 +119,12 @@ namespace ao::query::test
           builder.customMetadata().add(key, value);
         }
 
-        _hotData = builder.serializeHot(wtxn, *_optDict);
-        _coldData = builder.serializeCold(wtxn, *_optDict, *_optResources);
+        auto hotDataResult = builder.serializeHot(wtxn, *_optDict);
+        REQUIRE(hotDataResult);
+        auto coldDataResult = builder.serializeCold(wtxn, *_optDict, *_optResources);
+        REQUIRE(coldDataResult);
+        _hotData = *hotDataResult;
+        _coldData = *coldDataResult;
       }
 
       TrackView view() const { return TrackView{_hotData, _coldData}; }
@@ -117,9 +143,9 @@ namespace ao::query::test
 
     std::string evaluate(std::string_view expression, FormatTrackFixture& fixture)
     {
-      auto ast = parse(expression);
+      auto ast = parseOk(expression);
       auto compiler = FormatCompiler{&fixture.dictionary()};
-      auto plan = compiler.compile(ast);
+      auto plan = compileOk(compiler, ast);
       auto evaluator = FormatEvaluator{};
       return evaluator.evaluate(plan, fixture.view());
     }
@@ -163,7 +189,7 @@ namespace ao::query::test
 
     CHECK(evaluate(R"(TRUE + " " + False)", fixture) == "true false");
     CHECK(evaluate(R"('AND' + " " + "Or")", fixture) == "AND Or");
-    CHECK_THROWS_AS(evaluate("AND", fixture), Exception);
+    CHECK_FALSE(::ao::query::parse("AND").has_value());
   }
 
   TEST_CASE("FormatExpression - Missing values format as empty strings", "[query][unit][format_expression]")
@@ -184,42 +210,42 @@ namespace ao::query::test
 
     SECTION("HotOnly")
     {
-      auto ast = parse(R"($artist + " - " + $title)");
+      auto ast = parseOk(R"($artist + " - " + $title)");
       auto compiler = FormatCompiler{&fixture.dictionary()};
-      auto plan = compiler.compile(ast);
+      auto plan = compileOk(compiler, ast);
       CHECK(plan.accessProfile == AccessProfile::HotOnly);
     }
 
     SECTION("ColdOnly")
     {
-      auto ast = parse(R"($trackNumber + %catalog)");
+      auto ast = parseOk(R"($trackNumber + %catalog)");
       auto compiler = FormatCompiler{&fixture.dictionary()};
-      auto plan = compiler.compile(ast);
+      auto plan = compileOk(compiler, ast);
       CHECK(plan.accessProfile == AccessProfile::ColdOnly);
     }
 
     SECTION("HotAndCold")
     {
-      auto ast = parse(R"($artist + " - " + $trackNumber)");
+      auto ast = parseOk(R"($artist + " - " + $trackNumber)");
       auto compiler = FormatCompiler{&fixture.dictionary()};
-      auto plan = compiler.compile(ast);
+      auto plan = compileOk(compiler, ast);
       CHECK(plan.accessProfile == AccessProfile::HotAndCold);
     }
 
     SECTION("NoTrackData")
     {
-      auto ast = parse(R"("literal")");
+      auto ast = parseOk(R"("literal")");
       auto compiler = FormatCompiler{};
-      auto plan = compiler.compile(ast);
+      auto plan = compileOk(compiler, ast);
       CHECK(plan.accessProfile == AccessProfile::NoTrackData);
     }
   }
 
   TEST_CASE("FormatExpression - Literal-only plans do not require track data", "[query][unit][format_expression]")
   {
-    auto ast = parse(R"("literal")");
+    auto ast = parseOk(R"("literal")");
     auto compiler = FormatCompiler{};
-    auto plan = compiler.compile(ast);
+    auto plan = compileOk(compiler, ast);
     auto evaluator = FormatEvaluator{};
     auto emptyTrack = TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
 
@@ -233,17 +259,17 @@ namespace ao::query::test
 
     SECTION("Hot plan with cold-only track")
     {
-      auto ast = parse("$artist");
+      auto ast = parseOk("$artist");
       auto compiler = FormatCompiler{&fixture.dictionary()};
-      auto plan = compiler.compile(ast);
+      auto plan = compileOk(compiler, ast);
       CHECK(evaluator.evaluate(plan, fixture.coldOnlyView()).empty());
     }
 
     SECTION("Cold plan with hot-only track")
     {
-      auto ast = parse("$trackNumber");
+      auto ast = parseOk("$trackNumber");
       auto compiler = FormatCompiler{&fixture.dictionary()};
-      auto plan = compiler.compile(ast);
+      auto plan = compileOk(compiler, ast);
       CHECK(evaluator.evaluate(plan, fixture.hotOnlyView()).empty());
     }
   }
@@ -253,10 +279,10 @@ namespace ao::query::test
     auto fixture = FormatTrackFixture{};
     auto compiler = FormatCompiler{&fixture.dictionary()};
 
-    CHECK_THROWS_AS(compiler.compile(parse("$artist = Bach")), Exception);
-    CHECK_THROWS_AS(compiler.compile(parse("$year?")), Exception);
-    CHECK_THROWS_AS(compiler.compile(parse("not $title")), Exception);
-    CHECK_THROWS_AS(compiler.compile(parse("$year in 1720..1730")), Exception);
+    std::ignore = compileError(compiler, parseOk("$artist = Bach"));
+    std::ignore = compileError(compiler, parseOk("$year?"));
+    std::ignore = compileError(compiler, parseOk("not $title"));
+    std::ignore = compileError(compiler, parseOk("$year in 1720..1730"));
   }
 
   TEST_CASE("FormatExpression - Rejects non-scalar fields", "[query][unit][format_expression]")
@@ -264,16 +290,35 @@ namespace ao::query::test
     auto fixture = FormatTrackFixture{};
     auto compiler = FormatCompiler{&fixture.dictionary()};
 
-    CHECK_THROWS_AS(compiler.compile(parse("#favorite")), Exception);
-    CHECK_THROWS_AS(compiler.compile(parse("$coverArt")), Exception);
+    std::ignore = compileError(compiler, parseOk("#favorite"));
+    std::ignore = compileError(compiler, parseOk("$coverArt"));
   }
 
   TEST_CASE("FormatExpression - Requires dictionary for dictionary backed fields", "[query][unit][format_expression]")
   {
     auto compiler = FormatCompiler{};
 
-    CHECK_THROWS_AS(compiler.compile(parse("$artist")), Exception);
-    CHECK_THROWS_AS(compiler.compile(parse("%catalog")), Exception);
-    CHECK_NOTHROW(compiler.compile(parse(R"($title + " " + $year)")));
+    std::ignore = compileError(compiler, parseOk("$artist"));
+    std::ignore = compileError(compiler, parseOk("%catalog"));
+    std::ignore = compileOk(compiler, parseOk(R"($title + " " + $year)"));
+  }
+
+  TEST_CASE("compileFormat - Returns Result Without Throwing", "[query][unit][format_expression]")
+  {
+    auto fixture = FormatTrackFixture{};
+
+    SECTION("Valid format expression yields a plan")
+    {
+      auto const plan = compileFormat(parseOk(R"($title + " " + $year)"), &fixture.dictionary());
+      CHECK(plan.has_value());
+    }
+
+    SECTION("Non-formattable expression yields an Error")
+    {
+      auto const plan = compileFormat(parseOk("#favorite"), &fixture.dictionary());
+      REQUIRE_FALSE(plan.has_value());
+      CHECK(plan.error().code == Error::Code::FormatRejected);
+      CHECK_FALSE(plan.error().message.empty());
+    }
   }
 } // namespace ao::query::test

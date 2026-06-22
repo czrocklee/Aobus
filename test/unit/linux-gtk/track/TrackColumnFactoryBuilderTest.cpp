@@ -3,6 +3,7 @@
 
 #include "track/TrackColumnFactoryBuilder.h"
 
+#include "../../TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
@@ -100,8 +101,10 @@ namespace ao::gtk::test
         auto builder = library::TrackBuilder::createNew();
         builder.metadata().title("Test Title").artist("Test Artist");
         builder.property().duration(std::chrono::minutes{2});
-        auto const [hot, cold] = builder.serialize(txn, library.dictionary(), library.resources());
-        trackId = writer.createHotCold(hot, cold).first;
+        auto serializeResult = builder.serialize(txn, library.dictionary(), library.resources());
+        REQUIRE(serializeResult);
+        auto const [hot, cold] = *serializeResult;
+        trackId = ao::test::requireValue(writer.createHotCold(hot, cold)).first;
         txn.commit();
       }
 

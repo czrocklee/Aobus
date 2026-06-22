@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "../../../TestUtils.h"
 #include "../../GtkTestSupport.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -110,9 +111,11 @@ namespace ao::gtk::layout::test
       builder.metadata().title(title);
       builder.metadata().trackNumber(trackNumber);
       builder.metadata().trackTotal(12);
-      auto const [hot, cold] =
+      auto serializeResult =
         builder.serialize(txn, runtime.musicLibrary().dictionary(), runtime.musicLibrary().resources());
-      auto const trackId = writer.createHotCold(hot, cold).first;
+      REQUIRE(serializeResult);
+      auto const [hot, cold] = *serializeResult;
+      auto const trackId = ao::test::requireValue(writer.createHotCold(hot, cold)).first;
 
       txn.commit();
       return trackId;
@@ -772,15 +775,19 @@ namespace ao::gtk::layout::test
         auto builder1 = library::TrackBuilder::createNew();
         builder1.metadata().title("Track With Partial Custom");
         builder1.customMetadata().add("partial", "value");
-        auto const [hot1, cold1] =
+        auto serializeResult1 =
           builder1.serialize(txn, runtime.musicLibrary().dictionary(), runtime.musicLibrary().resources());
-        trackId1 = writer.createHotCold(hot1, cold1).first;
+        REQUIRE(serializeResult1);
+        auto const [hot1, cold1] = *serializeResult1;
+        trackId1 = ao::test::requireValue(writer.createHotCold(hot1, cold1)).first;
 
         auto builder2 = library::TrackBuilder::createNew();
         builder2.metadata().title("Track Without Partial Custom");
-        auto const [hot2, cold2] =
+        auto serializeResult2 =
           builder2.serialize(txn, runtime.musicLibrary().dictionary(), runtime.musicLibrary().resources());
-        trackId2 = writer.createHotCold(hot2, cold2).first;
+        REQUIRE(serializeResult2);
+        auto const [hot2, cold2] = *serializeResult2;
+        trackId2 = ao::test::requireValue(writer.createHotCold(hot2, cold2)).first;
 
         txn.commit();
       }

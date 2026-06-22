@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/Error.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -38,8 +40,8 @@ namespace ao::lmdb
       std::size_t mapSize = 0;
     };
 
-    explicit Environment(std::string const& path);
-    explicit Environment(std::string const& path, Options const& options);
+    static Result<Environment> open(std::string const& path);
+    static Result<Environment> open(std::string const& path, Options const& options);
 
     Environment(Environment const&) = delete;
     Environment& operator=(Environment const&) = delete;
@@ -57,7 +59,11 @@ namespace ao::lmdb
       void operator()(MDB_env* env) const noexcept;
     };
 
-    std::unique_ptr<MDB_env, MdbEnvDeleter> _envPtr;
+    using EnvPtr = std::unique_ptr<MDB_env, MdbEnvDeleter>;
+
+    explicit Environment(EnvPtr envPtr);
+
+    EnvPtr _envPtr;
 
     friend class Database;
     friend class ReadTransaction;

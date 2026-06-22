@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -18,7 +19,8 @@ namespace ao::utility
 
   /**
    * Decodes a Base64 string to binary data.
-   * Returns an empty vector on invalid input.
+   * Returns std::nullopt on invalid input (an invalid character or malformed trailing bits);
+   * a successfully decoded empty input yields an engaged optional holding an empty vector.
    */
-  std::vector<std::byte> base64Decode(std::string_view base64);
+  std::optional<std::vector<std::byte>> base64Decode(std::string_view base64);
 } // namespace ao::utility

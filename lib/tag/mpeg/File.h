@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
 
@@ -17,9 +18,9 @@ namespace ao::tag::mpeg
   public:
     using TagFile::TagFile;
 
-    library::TrackBuilder loadTrack() const override;
-
   private:
+    Result<library::TrackBuilder> loadTrackImpl() const override;
+
     std::chrono::milliseconds calculateDuration(FrameView const& frame, bool hasId3v1) const;
   };
 }

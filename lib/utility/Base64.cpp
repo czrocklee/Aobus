@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -73,7 +74,7 @@ namespace ao::utility
     return result;
   }
 
-  std::vector<std::byte> base64Decode(std::string_view base64)
+  std::optional<std::vector<std::byte>> base64Decode(std::string_view base64)
   {
     auto result = std::vector<std::byte>{};
     result.reserve((base64.size() / kBase64EncodedChunkSize) * kBase64ChunkSize);
@@ -97,7 +98,7 @@ namespace ao::utility
 
       if (decodedValue == -1)
       {
-        return {}; // Invalid character
+        return std::nullopt; // Invalid character
       }
 
       buffer = (buffer << kBase64BitsPerChar) | static_cast<std::uint32_t>(decodedValue);
@@ -113,7 +114,7 @@ namespace ao::utility
 
     if (bits >= kBase64BitsPerChar || (bits > 0 && buffer != 0))
     {
-      return {};
+      return std::nullopt;
     }
 
     return result;

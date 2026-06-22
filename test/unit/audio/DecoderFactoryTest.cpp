@@ -3,6 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/media/mp4/TestAtoms.h"
+#include <ao/Error.h>
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/Format.h>
 
@@ -20,8 +21,9 @@ namespace ao::audio::test
 
     SECTION("Creates FLAC runtime for .flac")
     {
-      auto runtimePtr = createDecoderSession("song.flac", format);
-      REQUIRE(runtimePtr != nullptr);
+      auto runtime = createDecoderSession("song.flac", format);
+      REQUIRE(runtime);
+      REQUIRE(*runtime != nullptr);
     }
 
     SECTION("Creates ALAC runtime for MP4 containers with alac sample entries")
@@ -29,11 +31,13 @@ namespace ao::audio::test
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".m4a"};
       auto const mp4 = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".mp4"};
 
-      auto session1Ptr = createDecoderSession(m4a.path, format);
-      REQUIRE(session1Ptr != nullptr);
+      auto session1 = createDecoderSession(m4a.path, format);
+      REQUIRE(session1);
+      REQUIRE(*session1 != nullptr);
 
-      auto session2Ptr = createDecoderSession(mp4.path, format);
-      REQUIRE(session2Ptr != nullptr);
+      auto session2 = createDecoderSession(mp4.path, format);
+      REQUIRE(session2);
+      REQUIRE(*session2 != nullptr);
     }
 
     SECTION("Creates ALAC runtime when a video track appears before the audio track")
@@ -48,34 +52,58 @@ namespace ao::audio::test
       ao::test::mp4::addAtom(data, "moov", moovBody);
       auto const m4a = ao::test::TempFile{data, ".m4a"};
 
-      REQUIRE(createDecoderSession(m4a.path, format) != nullptr);
+      auto session = createDecoderSession(m4a.path, format);
+      REQUIRE(session);
+      REQUIRE(*session != nullptr);
     }
 
     SECTION("Creates AAC runtime for MP4 containers with AAC sample entries")
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("mp4a"), ".m4a"};
 
-      REQUIRE(createDecoderSession(m4a.path, format) != nullptr);
+      auto session = createDecoderSession(m4a.path, format);
+      REQUIRE(session);
+      REQUIRE(*session != nullptr);
     }
 
     SECTION("Creates MP3 runtime for .mp3")
     {
-      auto sessionPtr = createDecoderSession("song.mp3", format);
-      REQUIRE(sessionPtr != nullptr);
+      auto session = createDecoderSession("song.mp3", format);
+      REQUIRE(session);
+      REQUIRE(*session != nullptr);
     }
 
-    SECTION("Returns null for unsupported extensions")
+    SECTION("Reports NotSupported for unsupported extensions")
     {
-      REQUIRE(createDecoderSession("song.wav", format) == nullptr);
-      REQUIRE(createDecoderSession("song.ogg", format) == nullptr);
-      REQUIRE(createDecoderSession("missing.m4a", format) == nullptr);
+      for (auto const* path : {"song.wav", "song.ogg"})
+      {
+        auto const result = createDecoderSession(path, format);
+        REQUIRE_FALSE(result);
+        CHECK(result.error().code == Error::Code::NotSupported);
+      }
+    }
+
+    SECTION("Reports NotSupported for unrecognized MP4 audio codecs")
+    {
+      auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("ec-3"), ".m4a"};
+
+      auto const result = createDecoderSession(m4a.path, format);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("Reports IoError when an MP4 container cannot be read")
+    {
+      auto const result = createDecoderSession("missing.m4a", format);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::IoError);
     }
 
     SECTION("Case-sensitive extension behavior (Current)")
     {
       // The current implementation is case-sensitive on Linux.
-      REQUIRE(createDecoderSession("song.FLAC", format) == nullptr);
-      REQUIRE(createDecoderSession("song.M4A", format) == nullptr);
+      CHECK_FALSE(createDecoderSession("song.FLAC", format));
+      CHECK_FALSE(createDecoderSession("song.M4A", format));
     }
   }
 } // namespace ao::audio::test

@@ -12,12 +12,25 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace ao::query::test
 {
   namespace
   {
+    Expression parseOk(std::string_view text)
+    {
+      auto result = ::ao::query::parse(text);
+      REQUIRE(result.has_value());
+      return std::move(*result);
+    }
+
+    bool parseFails(std::string_view text)
+    {
+      return !::ao::query::parse(text).has_value();
+    }
+
     char const* toString(Operator op)
     {
       switch (op)
@@ -128,157 +141,157 @@ namespace ao::query::test
 
   TEST_CASE("Parser - String Literal", "[query][unit][parser]")
   {
-    CHECK("[c{s}Artist]" == canonicalize(parse("Artist")));
-    CHECK("[c{s}Artist]" == canonicalize(parse("\"Artist\"")));
-    CHECK("[c{s}Artist]" == canonicalize(parse("'Artist'")));
-    CHECK("[c{s}A \"quote\"]" == canonicalize(parse(R"("A \"quote\"")")));
-    CHECK("[c{s}A 'quote']" == canonicalize(parse(R"('A \'quote\'')")));
+    CHECK("[c{s}Artist]" == canonicalize(parseOk("Artist")));
+    CHECK("[c{s}Artist]" == canonicalize(parseOk("\"Artist\"")));
+    CHECK("[c{s}Artist]" == canonicalize(parseOk("'Artist'")));
+    CHECK("[c{s}A \"quote\"]" == canonicalize(parseOk(R"("A \"quote\"")")));
+    CHECK("[c{s}A 'quote']" == canonicalize(parseOk(R"('A \'quote\'')")));
   }
 
   TEST_CASE("Parser - String Escape Sequences", "[query][unit][parser]")
   {
-    CHECK("[c{s}quote\"and\\slash]" == canonicalize(parse(R"("quote\"and\\slash")")));
-    CHECK("[c{s}quote\"and\\slash]" == canonicalize(parse(R"('quote\"and\\slash')")));
-    CHECK("[c{s}line1\nline2]" == canonicalize(parse(R"("line1\nline2")")));
-    CHECK("[c{s}line1\nline2]" == canonicalize(parse(R"('line1\nline2')")));
-    CHECK("[c{s}col1\tcol2]" == canonicalize(parse(R"("col1\tcol2")")));
-    CHECK("[c{s}cr\rlf]" == canonicalize(parse(R"("cr\rlf")")));
+    CHECK("[c{s}quote\"and\\slash]" == canonicalize(parseOk(R"("quote\"and\\slash")")));
+    CHECK("[c{s}quote\"and\\slash]" == canonicalize(parseOk(R"('quote\"and\\slash')")));
+    CHECK("[c{s}line1\nline2]" == canonicalize(parseOk(R"("line1\nline2")")));
+    CHECK("[c{s}line1\nline2]" == canonicalize(parseOk(R"('line1\nline2')")));
+    CHECK("[c{s}col1\tcol2]" == canonicalize(parseOk(R"("col1\tcol2")")));
+    CHECK("[c{s}cr\rlf]" == canonicalize(parseOk(R"("cr\rlf")")));
   }
 
   TEST_CASE("Parser - System Variable", "[query][unit][parser]")
   {
-    CHECK("[v{m}title]" == canonicalize(parse("$title")));
-    CHECK("[v{m}artist]" == canonicalize(parse("$artist")));
-    CHECK("[v{m}composer]" == canonicalize(parse("$composer")));
-    CHECK("[v{m}work]" == canonicalize(parse("$work")));
-    CHECK("[v{m}w]" == canonicalize(parse("$w")));
-    CHECK("[v{p}duration]" == canonicalize(parse("@duration")));
+    CHECK("[v{m}title]" == canonicalize(parseOk("$title")));
+    CHECK("[v{m}artist]" == canonicalize(parseOk("$artist")));
+    CHECK("[v{m}composer]" == canonicalize(parseOk("$composer")));
+    CHECK("[v{m}work]" == canonicalize(parseOk("$work")));
+    CHECK("[v{m}w]" == canonicalize(parseOk("$w")));
+    CHECK("[v{p}duration]" == canonicalize(parseOk("@duration")));
   }
 
   TEST_CASE("Parser - User Variable Name", "[query][unit][parser]")
   {
     SECTION("Bare tag and custom names allow numeric starts")
     {
-      CHECK("[v{t}Tag]" == canonicalize(parse("#Tag")));
-      CHECK("[v{t}123]" == canonicalize(parse("#123")));
-      CHECK("[v{c}isrc]" == canonicalize(parse("%isrc")));
-      CHECK("[v{c}123]" == canonicalize(parse("%123")));
-      CHECK("[v{c}replaygaintrackgaindb]" == canonicalize(parse("%replaygaintrackgaindb")));
+      CHECK("[v{t}Tag]" == canonicalize(parseOk("#Tag")));
+      CHECK("[v{t}123]" == canonicalize(parseOk("#123")));
+      CHECK("[v{c}isrc]" == canonicalize(parseOk("%isrc")));
+      CHECK("[v{c}123]" == canonicalize(parseOk("%123")));
+      CHECK("[v{c}replaygaintrackgaindb]" == canonicalize(parseOk("%replaygaintrackgaindb")));
     }
 
     SECTION("Quoted names support spaces, Unicode, and escapes")
     {
-      CHECK("[v{t}90s Rock]" == canonicalize(parse(R"(#"90s Rock")")));
-      CHECK("[v{t}你说得对]" == canonicalize(parse(R"(#"你说得对")")));
-      CHECK("[v{c}Replay Gain]" == canonicalize(parse(R"(%"Replay Gain")")));
-      CHECK("[v{c}quote\"and\\slash]" == canonicalize(parse(R"(%"quote\"and\\slash")")));
-      CHECK("[v{c}quote'and\nnewline]" == canonicalize(parse(R"(%"quote\'and\nnewline")")));
+      CHECK("[v{t}90s Rock]" == canonicalize(parseOk(R"(#"90s Rock")")));
+      CHECK("[v{t}你说得对]" == canonicalize(parseOk(R"(#"你说得对")")));
+      CHECK("[v{c}Replay Gain]" == canonicalize(parseOk(R"(%"Replay Gain")")));
+      CHECK("[v{c}quote\"and\\slash]" == canonicalize(parseOk(R"(%"quote\"and\\slash")")));
+      CHECK("[v{c}quote'and\nnewline]" == canonicalize(parseOk(R"(%"quote\'and\nnewline")")));
     }
 
     SECTION("Bracketed quoted accepted as well")
     {
-      CHECK("[v{t}90s Rock]" == canonicalize(parse(R"(#["90s Rock"])")));
-      CHECK("[v{c}Replay Gain]" == canonicalize(parse(R"(%["Replay Gain"])")));
+      CHECK("[v{t}90s Rock]" == canonicalize(parseOk(R"(#["90s Rock"])")));
+      CHECK("[v{c}Replay Gain]" == canonicalize(parseOk(R"(%["Replay Gain"])")));
     }
   }
 
   TEST_CASE("Parser - Invalid Variable Name", "[query][unit][parser]")
   {
-    CHECK_THROWS(parse(R"(#"")"));
-    CHECK_THROWS(parse(R"(%"")"));
-    CHECK_THROWS(parse(R"(#[""])"));
-    CHECK_THROWS(parse(R"(%[""])"));
-    CHECK_THROWS(parse("$123"));
-    CHECK_THROWS(parse("@123"));
+    CHECK(parseFails(R"(#"")"));
+    CHECK(parseFails(R"(%"")"));
+    CHECK(parseFails(R"(#[""])"));
+    CHECK(parseFails(R"(%[""])"));
+    CHECK(parseFails("$123"));
+    CHECK(parseFails("@123"));
   }
 
   TEST_CASE("Parser - Variable Shortcuts", "[query][unit][parser]")
   {
-    CHECK("[v{m}t]" == canonicalize(parse("$t")));
-    CHECK("[v{m}a]" == canonicalize(parse("$a")));
-    CHECK("[v{m}al]" == canonicalize(parse("$al")));
-    CHECK("[v{m}g]" == canonicalize(parse("$g")));
-    CHECK("[v{m}c]" == canonicalize(parse("$c")));
-    CHECK("[v{m}y]" == canonicalize(parse("$y")));
-    CHECK("[v{m}tn]" == canonicalize(parse("$tn")));
-    CHECK("[v{p}l]" == canonicalize(parse("@l")));
-    CHECK("[v{p}br]" == canonicalize(parse("@br")));
-    CHECK("[v{p}sr]" == canonicalize(parse("@sr")));
-    CHECK("[v{p}bd]" == canonicalize(parse("@bd")));
+    CHECK("[v{m}t]" == canonicalize(parseOk("$t")));
+    CHECK("[v{m}a]" == canonicalize(parseOk("$a")));
+    CHECK("[v{m}al]" == canonicalize(parseOk("$al")));
+    CHECK("[v{m}g]" == canonicalize(parseOk("$g")));
+    CHECK("[v{m}c]" == canonicalize(parseOk("$c")));
+    CHECK("[v{m}y]" == canonicalize(parseOk("$y")));
+    CHECK("[v{m}tn]" == canonicalize(parseOk("$tn")));
+    CHECK("[v{p}l]" == canonicalize(parseOk("@l")));
+    CHECK("[v{p}br]" == canonicalize(parseOk("@br")));
+    CHECK("[v{p}sr]" == canonicalize(parseOk("@sr")));
+    CHECK("[v{p}bd]" == canonicalize(parseOk("@bd")));
   }
 
   TEST_CASE("Parser - String Cat", "[query][unit][parser]")
   {
-    CHECK("[b{add}[c{s}Artist],[c{s}Album]]" == canonicalize(parse("Artist + Album")));
-    CHECK("[b{add}[c{s}Artist],[v{m}Album]]" == canonicalize(parse("Artist + $Album")));
-    CHECK("[b{add}[c{s}Artist],[v{m}Album]]" == canonicalize(parse("Artist$Album")));
+    CHECK("[b{add}[c{s}Artist],[c{s}Album]]" == canonicalize(parseOk("Artist + Album")));
+    CHECK("[b{add}[c{s}Artist],[v{m}Album]]" == canonicalize(parseOk("Artist + $Album")));
+    CHECK("[b{add}[c{s}Artist],[v{m}Album]]" == canonicalize(parseOk("Artist$Album")));
   }
 
   TEST_CASE("Parser - Equal", "[query][unit][parser]")
   {
-    CHECK("[b{eq}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist=Bach")));
-    CHECK("[b{eq}[v{m}trackNumber],[c{i}12]]" == canonicalize(parse("$trackNumber=12")));
-    CHECK("[b{eq}[v{m}year],[c{i}2020]]" == canonicalize(parse("$year=2020")));
+    CHECK("[b{eq}[v{m}artist],[c{s}Bach]]" == canonicalize(parseOk("$artist=Bach")));
+    CHECK("[b{eq}[v{m}trackNumber],[c{i}12]]" == canonicalize(parseOk("$trackNumber=12")));
+    CHECK("[b{eq}[v{m}year],[c{i}2020]]" == canonicalize(parseOk("$year=2020")));
   }
 
   TEST_CASE("Parser - NotEqual", "[query][unit][parser]")
   {
-    CHECK("[b{ne}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist!=Bach")));
-    CHECK("[b{ne}[v{m}year],[c{i}2020]]" == canonicalize(parse("$year!=2020")));
+    CHECK("[b{ne}[v{m}artist],[c{s}Bach]]" == canonicalize(parseOk("$artist!=Bach")));
+    CHECK("[b{ne}[v{m}year],[c{i}2020]]" == canonicalize(parseOk("$year!=2020")));
   }
 
   TEST_CASE("Parser - Relational", "[query][unit][parser]")
   {
-    CHECK("[b{lt}[v{m}year],[c{i}2000]]" == canonicalize(parse("$year<2000")));
-    CHECK("[b{le}[v{m}year],[c{i}2000]]" == canonicalize(parse("$year<=2000")));
-    CHECK("[b{gt}[v{p}duration],[c{i}180000]]" == canonicalize(parse("@duration>180000")));
-    CHECK("[b{ge}[v{p}bitrate],[c{i}320]]" == canonicalize(parse("@bitrate>=320")));
+    CHECK("[b{lt}[v{m}year],[c{i}2000]]" == canonicalize(parseOk("$year<2000")));
+    CHECK("[b{le}[v{m}year],[c{i}2000]]" == canonicalize(parseOk("$year<=2000")));
+    CHECK("[b{gt}[v{p}duration],[c{i}180000]]" == canonicalize(parseOk("@duration>180000")));
+    CHECK("[b{ge}[v{p}bitrate],[c{i}320]]" == canonicalize(parseOk("@bitrate>=320")));
   }
 
   TEST_CASE("Parser - Like", "[query][unit][parser]")
   {
-    CHECK("[b{like}[v{m}title],[c{s}Love]]" == canonicalize(parse("$title~Love")));
-    CHECK("[b{like}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist~Bach")));
+    CHECK("[b{like}[v{m}title],[c{s}Love]]" == canonicalize(parseOk("$title~Love")));
+    CHECK("[b{like}[v{m}artist],[c{s}Bach]]" == canonicalize(parseOk("$artist~Bach")));
   }
 
   TEST_CASE("Parser - In List", "[query][unit][parser]")
   {
-    CHECK("[b{in}[v{m}artist],[l[c{s}Bach][c{s}Mozart]]]" == canonicalize(parse(R"($artist in ["Bach", "Mozart"])")));
-    CHECK("[b{in}[v{m}year],[l[c{i}1990][c{i}1991]]]" == canonicalize(parse("$year in [1990, 1991]")));
-    CHECK("[b{in}[v{p}duration],[l[c{u}3m][c{u}4m]]]" == canonicalize(parse("@duration in [3m, 4m]")));
+    CHECK("[b{in}[v{m}artist],[l[c{s}Bach][c{s}Mozart]]]" == canonicalize(parseOk(R"($artist in ["Bach", "Mozart"])")));
+    CHECK("[b{in}[v{m}year],[l[c{i}1990][c{i}1991]]]" == canonicalize(parseOk("$year in [1990, 1991]")));
+    CHECK("[b{in}[v{p}duration],[l[c{u}3m][c{u}4m]]]" == canonicalize(parseOk("@duration in [3m, 4m]")));
   }
 
   TEST_CASE("Parser - In Range", "[query][unit][parser]")
   {
-    CHECK("[b{in}[v{m}year],[r[c{i}1990],[c{i}1999]]]" == canonicalize(parse("$year in 1990..1999")));
-    CHECK("[b{in}[v{p}duration],[r[c{u}2m30s],[c{u}5m]]]" == canonicalize(parse("@duration in 2m30s..5m")));
-    CHECK("[b{in}[v{p}sampleRate],[r[c{u}44.1k],[c{u}48k]]]" == canonicalize(parse("@sampleRate in 44.1k..48k")));
+    CHECK("[b{in}[v{m}year],[r[c{i}1990],[c{i}1999]]]" == canonicalize(parseOk("$year in 1990..1999")));
+    CHECK("[b{in}[v{p}duration],[r[c{u}2m30s],[c{u}5m]]]" == canonicalize(parseOk("@duration in 2m30s..5m")));
+    CHECK("[b{in}[v{p}sampleRate],[r[c{u}44.1k],[c{u}48k]]]" == canonicalize(parseOk("@sampleRate in 44.1k..48k")));
   }
 
   TEST_CASE("Parser - Logical Operators", "[query][unit][parser]")
   {
-    CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach && true")));
-    CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach and true")));
-    CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach || true")));
-    CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach or true")));
-    CHECK("[u{not}[v{m}artist]]" == canonicalize(parse("not $artist")));
-    CHECK("[u{not}[v{m}artist]]" == canonicalize(parse("!$artist")));
+    CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parseOk("$artist=Bach && true")));
+    CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parseOk("$artist=Bach and true")));
+    CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parseOk("$artist=Bach || true")));
+    CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parseOk("$artist=Bach or true")));
+    CHECK("[u{not}[v{m}artist]]" == canonicalize(parseOk("not $artist")));
+    CHECK("[u{not}[v{m}artist]]" == canonicalize(parseOk("!$artist")));
   }
 
   TEST_CASE("Parser - Existence Tests", "[query][unit][parser]")
   {
-    CHECK("[u{exists}[v{m}year]]" == canonicalize(parse("$year?")));
-    CHECK("[u{exists}[v{p}duration]]" == canonicalize(parse("@duration?")));
-    CHECK("[u{exists}[v{c}rating]]" == canonicalize(parse("%rating?")));
-    CHECK("[u{exists}[v{c}Replay Gain]]" == canonicalize(parse(R"(%"Replay Gain"?)")));
-    CHECK("[u{exists}[v{c}Replay Gain]]" == canonicalize(parse(R"(%["Replay Gain"]?)")));
-    CHECK("[u{exists}[v{t}favorite]]" == canonicalize(parse("#favorite?")));
-    CHECK("[u{not}[u{exists}[v{m}year]]]" == canonicalize(parse("!$year?")));
-    CHECK("[u{not}[u{exists}[v{m}year]]]" == canonicalize(parse("not $year?")));
+    CHECK("[u{exists}[v{m}year]]" == canonicalize(parseOk("$year?")));
+    CHECK("[u{exists}[v{p}duration]]" == canonicalize(parseOk("@duration?")));
+    CHECK("[u{exists}[v{c}rating]]" == canonicalize(parseOk("%rating?")));
+    CHECK("[u{exists}[v{c}Replay Gain]]" == canonicalize(parseOk(R"(%"Replay Gain"?)")));
+    CHECK("[u{exists}[v{c}Replay Gain]]" == canonicalize(parseOk(R"(%["Replay Gain"]?)")));
+    CHECK("[u{exists}[v{t}favorite]]" == canonicalize(parseOk("#favorite?")));
+    CHECK("[u{not}[u{exists}[v{m}year]]]" == canonicalize(parseOk("!$year?")));
+    CHECK("[u{not}[u{exists}[v{m}year]]]" == canonicalize(parseOk("not $year?")));
 
-    CHECK("[u{exists}[b{eq}[v{m}year],[c{i}1990]]]" == canonicalize(parse("($year = 1990)?")));
-    CHECK("[u{exists}[c{i}1990]]" == canonicalize(parse("1990?")));
-    CHECK("[u{exists}[c{s}Bach]]" == canonicalize(parse(R"("Bach"?)")));
+    CHECK("[u{exists}[b{eq}[v{m}year],[c{i}1990]]]" == canonicalize(parseOk("($year = 1990)?")));
+    CHECK("[u{exists}[c{i}1990]]" == canonicalize(parseOk("1990?")));
+    CHECK("[u{exists}[c{s}Bach]]" == canonicalize(parseOk(R"("Bach"?)")));
   }
 
   TEST_CASE("Parser - Precedence And Grouping", "[query][unit][parser]")
@@ -286,23 +299,23 @@ namespace ao::query::test
     SECTION("And Binds Tighter Than Or")
     {
       CHECK("[b{or}[b{eq}[v{m}a],[c{s}x]],[b{and}[b{eq}[v{m}b],[c{s}y]],[b{eq}[v{m}c],[c{s}z]]]]" ==
-            canonicalize(parse("$a = x or $b = y and $c = z")));
+            canonicalize(parseOk("$a = x or $b = y and $c = z")));
     }
 
     SECTION("Parentheses Override Precedence")
     {
       CHECK("[b{and}[b{or}[b{eq}[v{m}a],[c{s}x]],[b{eq}[v{m}b],[c{s}y]]],[b{eq}[v{m}c],[c{s}z]]]" ==
-            canonicalize(parse("($a = x or $b = y) and $c = z")));
+            canonicalize(parseOk("($a = x or $b = y) and $c = z")));
     }
 
     SECTION("Add Binds Tighter Than Relational")
     {
-      CHECK("[b{eq}[b{add}[v{m}trackNumber],[c{i}1]],[c{i}12]]" == canonicalize(parse("$trackNumber + 1 = 12")));
+      CHECK("[b{eq}[b{add}[v{m}trackNumber],[c{i}1]],[c{i}12]]" == canonicalize(parseOk("$trackNumber + 1 = 12")));
     }
 
     SECTION("Nested Parentheses Parse Correctly")
     {
-      CHECK("[b{eq}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("(($artist = Bach))")));
+      CHECK("[b{eq}[v{m}artist],[c{s}Bach]]" == canonicalize(parseOk("(($artist = Bach))")));
     }
   }
 
@@ -310,141 +323,141 @@ namespace ao::query::test
   {
     SECTION("Bareword CanContainKeywordSubstring")
     {
-      CHECK("[c{s}Bandroid]" == canonicalize(parse("Bandroid")));
-      CHECK("[c{s}oratorio]" == canonicalize(parse("oratorio")));
-      CHECK("[c{s}notation]" == canonicalize(parse("notation")));
-      CHECK("[c{s}in9]" == canonicalize(parse("in9")));
-      CHECK("[c{s}in_value]" == canonicalize(parse("in_value")));
+      CHECK("[c{s}Bandroid]" == canonicalize(parseOk("Bandroid")));
+      CHECK("[c{s}oratorio]" == canonicalize(parseOk("oratorio")));
+      CHECK("[c{s}notation]" == canonicalize(parseOk("notation")));
+      CHECK("[c{s}in9]" == canonicalize(parseOk("in9")));
+      CHECK("[c{s}in_value]" == canonicalize(parseOk("in_value")));
     }
 
     SECTION("Keyword Operators Honor Bareword Boundary")
     {
       // and/or/not must only act as operators when standing as a complete token, exactly like in.
       // A trailing digit or underscore keeps them part of a bareword rather than splitting off.
-      CHECK("[c{s}and9]" == canonicalize(parse("and9")));
-      CHECK("[c{s}or9]" == canonicalize(parse("or9")));
-      CHECK("[c{s}not9]" == canonicalize(parse("not9")));
-      CHECK("[c{s}and_x]" == canonicalize(parse("and_x")));
-      CHECK("[c{s}or_x]" == canonicalize(parse("or_x")));
-      CHECK("[c{s}not_x]" == canonicalize(parse("not_x")));
+      CHECK("[c{s}and9]" == canonicalize(parseOk("and9")));
+      CHECK("[c{s}or9]" == canonicalize(parseOk("or9")));
+      CHECK("[c{s}not9]" == canonicalize(parseOk("not9")));
+      CHECK("[c{s}and_x]" == canonicalize(parseOk("and_x")));
+      CHECK("[c{s}or_x]" == canonicalize(parseOk("or_x")));
+      CHECK("[c{s}not_x]" == canonicalize(parseOk("not_x")));
 
       // In operator position, a near-keyword token must stay a single bareword (here concatenated
       // onto the preceding operand) rather than being mis-split into an operator plus a residual.
-      CHECK("[b{add}[v{m}a],[c{s}and_b]]" == canonicalize(parse("$a and_b")));
-      CHECK("[b{add}[v{m}a],[c{s}or_b]]" == canonicalize(parse("$a or_b")));
+      CHECK("[b{add}[v{m}a],[c{s}and_b]]" == canonicalize(parseOk("$a and_b")));
+      CHECK("[b{add}[v{m}a],[c{s}or_b]]" == canonicalize(parseOk("$a or_b")));
     }
 
     SECTION("Logical Keywords Are Case Insensitive")
     {
       // Any casing of and/or/not/in folds to the same operator (identical AST to the lowercase form).
-      CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach AND true")));
-      CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach And true")));
-      CHECK("[u{not}[v{m}artist]]" == canonicalize(parse("NOT $artist")));
-      CHECK("[u{not}[v{m}artist]]" == canonicalize(parse("Not $artist")));
-      CHECK("[b{in}[v{m}year],[l[c{i}1990][c{i}1991]]]" == canonicalize(parse("$year IN [1990, 1991]")));
+      CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parseOk("$artist=Bach AND true")));
+      CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parseOk("$artist=Bach And true")));
+      CHECK("[u{not}[v{m}artist]]" == canonicalize(parseOk("NOT $artist")));
+      CHECK("[u{not}[v{m}artist]]" == canonicalize(parseOk("Not $artist")));
+      CHECK("[b{in}[v{m}year],[l[c{i}1990][c{i}1991]]]" == canonicalize(parseOk("$year IN [1990, 1991]")));
 
       // Boolean constants fold across casing too.
-      CHECK("[c{b}true]" == canonicalize(parse("TRUE")));
-      CHECK("[c{b}true]" == canonicalize(parse("True")));
-      CHECK("[c{b}false]" == canonicalize(parse("FALSE")));
+      CHECK("[c{b}true]" == canonicalize(parseOk("TRUE")));
+      CHECK("[c{b}true]" == canonicalize(parseOk("True")));
+      CHECK("[c{b}false]" == canonicalize(parseOk("FALSE")));
 
       // Reserved in any case: an unquoted bareword equal to a keyword (any casing) is rejected,
       // so it must be quoted; a longer bareword merely containing it stays a plain string.
-      CHECK("[b{eq}[v{m}a],[c{s}AND]]" == canonicalize(parse("$a = 'AND'")));
-      CHECK("[c{s}ANDROID]" == canonicalize(parse("ANDROID")));
+      CHECK("[b{eq}[v{m}a],[c{s}AND]]" == canonicalize(parseOk("$a = 'AND'")));
+      CHECK("[c{s}ANDROID]" == canonicalize(parseOk("ANDROID")));
     }
 
     SECTION("Custom Identifier Allows Underscore And Digits")
     {
-      CHECK("[v{c}replaygain_track_gain_db]" == canonicalize(parse("%replaygain_track_gain_db")));
+      CHECK("[v{c}replaygain_track_gain_db]" == canonicalize(parseOk("%replaygain_track_gain_db")));
     }
   }
 
   TEST_CASE("Parser - Arithmetic", "[query][unit][parser]")
   {
-    CHECK("[b{add}[c{s}hello],[v{m}artist]]" == canonicalize(parse("hello + $artist")));
-    CHECK("[b{add}[v{m}trackNumber],[c{i}12]]" == canonicalize(parse("$trackNumber + 12")));
-    CHECK("[b{add}[v{p}duration],[c{i}1000]]" == canonicalize(parse("@duration+1000")));
+    CHECK("[b{add}[c{s}hello],[v{m}artist]]" == canonicalize(parseOk("hello + $artist")));
+    CHECK("[b{add}[v{m}trackNumber],[c{i}12]]" == canonicalize(parseOk("$trackNumber + 12")));
+    CHECK("[b{add}[v{p}duration],[c{i}1000]]" == canonicalize(parseOk("@duration+1000")));
   }
 
   TEST_CASE("Parser - Boolean Constants", "[query][unit][parser]")
   {
-    CHECK("[c{b}true]" == canonicalize(parse("true")));
-    CHECK("[c{b}false]" == canonicalize(parse("false")));
+    CHECK("[c{b}true]" == canonicalize(parseOk("true")));
+    CHECK("[c{b}false]" == canonicalize(parseOk("false")));
   }
 
   TEST_CASE("Parser - Integer Constants", "[query][unit][parser]")
   {
-    CHECK("[c{i}0]" == canonicalize(parse("0")));
-    CHECK("[c{i}123]" == canonicalize(parse("123")));
-    CHECK("[c{i}-456]" == canonicalize(parse("-456")));
+    CHECK("[c{i}0]" == canonicalize(parseOk("0")));
+    CHECK("[c{i}123]" == canonicalize(parseOk("123")));
+    CHECK("[c{i}-456]" == canonicalize(parseOk("-456")));
   }
 
   TEST_CASE("Parser - Unit Constants", "[query][unit][parser]")
   {
-    CHECK("[c{u}3m]" == canonicalize(parse("3m")));
-    CHECK("[c{u}2m30s]" == canonicalize(parse("2m30s")));
-    CHECK("[b{ge}[v{p}duration],[c{u}120s]]" == canonicalize(parse("@duration>=120s")));
-    CHECK("[b{ge}[v{p}bitrate],[c{u}100k]]" == canonicalize(parse("@bitrate>=100k")));
-    CHECK("[b{eq}[v{p}sampleRate],[c{u}44.1k]]" == canonicalize(parse("@sampleRate=44.1k")));
+    CHECK("[c{u}3m]" == canonicalize(parseOk("3m")));
+    CHECK("[c{u}2m30s]" == canonicalize(parseOk("2m30s")));
+    CHECK("[b{ge}[v{p}duration],[c{u}120s]]" == canonicalize(parseOk("@duration>=120s")));
+    CHECK("[b{ge}[v{p}bitrate],[c{u}100k]]" == canonicalize(parseOk("@bitrate>=100k")));
+    CHECK("[b{eq}[v{p}sampleRate],[c{u}44.1k]]" == canonicalize(parseOk("@sampleRate=44.1k")));
   }
 
   TEST_CASE("Parser - Empty String", "[query][unit][parser]")
   {
-    CHECK("[c{s}]" == canonicalize(parse("''")));
-    CHECK("[c{s}]" == canonicalize(parse("\"\"")));
+    CHECK("[c{s}]" == canonicalize(parseOk("''")));
+    CHECK("[c{s}]" == canonicalize(parseOk("\"\"")));
   }
 
   TEST_CASE("Parser - Invalid Input Matrix", "[query][unit][parser]")
   {
     SECTION("Empty and Whitespace")
     {
-      REQUIRE_THROWS(parse(""));
-      REQUIRE_THROWS(parse("   "));
+      REQUIRE(parseFails(""));
+      REQUIRE(parseFails("   "));
     }
 
     SECTION("Variable Token Rules")
     {
-      REQUIRE_THROWS(parse("$1bad"));
-      REQUIRE_THROWS(parse("$"));
-      REQUIRE_THROWS(parse("@"));
-      REQUIRE_THROWS(parse("#"));
-      REQUIRE_THROWS(parse("%"));
+      REQUIRE(parseFails("$1bad"));
+      REQUIRE(parseFails("$"));
+      REQUIRE(parseFails("@"));
+      REQUIRE(parseFails("#"));
+      REQUIRE(parseFails("%"));
     }
 
     SECTION("Unterminated Quotes")
     {
-      REQUIRE_THROWS(parse("'Bach"));
-      REQUIRE_THROWS(parse("\"Bach"));
+      REQUIRE(parseFails("'Bach"));
+      REQUIRE(parseFails("\"Bach"));
     }
 
     SECTION("Malformed Parentheses")
     {
-      REQUIRE_THROWS(parse("()"));
-      REQUIRE_THROWS(parse("($artist = Bach"));
+      REQUIRE(parseFails("()"));
+      REQUIRE(parseFails("($artist = Bach"));
     }
 
     SECTION("Malformed Lists")
     {
-      REQUIRE_THROWS(parse("$artist in []"));
-      REQUIRE_THROWS(parse("$artist in [Bach,]"));
-      REQUIRE_THROWS(parse("$artist in [Bach Mozart]"));
+      REQUIRE(parseFails("$artist in []"));
+      REQUIRE(parseFails("$artist in [Bach,]"));
+      REQUIRE(parseFails("$artist in [Bach Mozart]"));
     }
 
     SECTION("Malformed Ranges")
     {
-      REQUIRE_THROWS(parse("$year in 1990.."));
-      REQUIRE_THROWS(parse("$year in ..1999"));
-      REQUIRE_THROWS(parse("$year in 1990...1999"));
+      REQUIRE(parseFails("$year in 1990.."));
+      REQUIRE(parseFails("$year in ..1999"));
+      REQUIRE(parseFails("$year in 1990...1999"));
     }
 
     SECTION("Invalid Escape Sequences")
     {
-      REQUIRE_THROWS(parse(R"($title = "a \x")"));
-      REQUIRE_THROWS(parse(R"($title = 'a \x')"));
-      REQUIRE_THROWS(parse(R"($title = "a \u")"));
-      REQUIRE_THROWS(parse(R"(%"bad\")"));
-      REQUIRE_THROWS(parse(R"xy(%"trailing\)xy"));
+      REQUIRE(parseFails(R"($title = "a \x")"));
+      REQUIRE(parseFails(R"($title = 'a \x')"));
+      REQUIRE(parseFails(R"($title = "a \u")"));
+      REQUIRE(parseFails(R"(%"bad\")"));
+      REQUIRE(parseFails(R"xy(%"trailing\)xy"));
     }
   }
 
@@ -465,5 +478,16 @@ namespace ao::query::test
       CHECK_FALSE(matchesExpressionSyntax(R"($artist in ["Miles",)"));
       CHECK_FALSE(matchesExpressionSyntax(R"(#"unterminated)"));
     }
+  }
+
+  TEST_CASE("Parser - Reports Syntax Errors As Result Errors", "[query][unit][parser]")
+  {
+    auto const ok = ::ao::query::parse("$artist = Bach");
+    CHECK(ok.has_value());
+
+    auto const bad = ::ao::query::parse("$artist =");
+    REQUIRE_FALSE(bad.has_value());
+    CHECK(bad.error().code == Error::Code::FormatRejected);
+    CHECK_FALSE(bad.error().message.empty());
   }
 } // namespace ao::query::test

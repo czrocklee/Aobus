@@ -8,6 +8,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -29,7 +30,8 @@ namespace ao::cli
     {
       auto const txn = ml.readTransaction();
       auto const reader = ml.tracks().reader(txn);
-      auto const optTrackView = reader.get(trackId, TrackStore::Reader::LoadMode::Hot);
+      auto const optTrackView =
+        rt::storageValueOrNullopt(reader.get(trackId, TrackStore::Reader::LoadMode::Hot), "Failed to show track tags");
 
       if (!optTrackView)
       {

@@ -7,6 +7,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 
+#include <catch2/catch_test_macros.hpp>
 #include <gdkmm/pixbuf.h>
 #include <glib.h>
 #include <glibmm/main.h>
@@ -35,7 +36,9 @@ namespace ao::gtk::test
   inline ResourceId writeRawResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
   {
     auto txn = library.writeTransaction();
-    auto const id = library.resources().writer(txn).create(bytes);
+    auto idResult = library.resources().writer(txn).create(bytes);
+    REQUIRE(idResult);
+    auto const id = *idResult;
     txn.commit();
     return id;
   }

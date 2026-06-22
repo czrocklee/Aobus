@@ -3,16 +3,16 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
-
-#include <boost/interprocess/file_mapping.hpp>
-#include <boost/interprocess/mapped_region.hpp>
+#include <ao/utility/MappedFile.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -57,24 +57,31 @@ namespace ao::tag
      *
      * IMPORTANT: The builder must have serialize() called before this TagFile is destroyed
      * or before loadTrack() is called again on this TagFile instance.
+     *
+     * Error model: external failures are returned as Result errors. Malformed
+     * tag/container bytes return Error::Code::CorruptData; mapping failures return
+     * Error::Code::IoError. See doc/design/error-model.md.
      */
-    virtual library::TrackBuilder loadTrack() const = 0;
+    Result<library::TrackBuilder> loadTrack() const;
 
     /**
      * Open a tag file by path, auto-detecting format from extension.
-     * Returns nullptr for unsupported extensions.
+     * Unsupported extensions return Error::Code::NotSupported.
      */
-    static std::unique_ptr<TagFile> open(std::filesystem::path const& path, Mode mode = Mode::ReadOnly);
+    static Result<std::unique_ptr<TagFile>> open(std::filesystem::path const& path, Mode mode = Mode::ReadOnly);
 
   protected:
     void clearOwnedStrings() const { _ownedStrings.clear(); }
 
-    boost::interprocess::mapped_region const& region() const noexcept { return _mappedRegion; }
-    void* address() const noexcept { return _mappedRegion.get_address(); }
-    std::size_t size() const noexcept { return _mappedRegion.get_size(); }
+    void const* address() const noexcept { return _address; }
+    std::size_t size() const noexcept { return _size; }
+
+    virtual Result<library::TrackBuilder> loadTrackImpl() const = 0;
 
   private:
     friend std::string_view detail::stashOwnedString(TagFile const& owner, std::string value);
+
+    Result<> mappedResult() const;
 
     std::string_view stashOwnedString(std::string value) const
     {
@@ -84,8 +91,14 @@ namespace ao::tag
 
     mutable std::deque<std::string> _ownedStrings;
 
-    boost::interprocess::file_mapping _fileMapping;
-    boost::interprocess::mapped_region _mappedRegion;
+    // The file is memory-mapped through utility::MappedFile, which keeps
+    // <boost/interprocess/*> out of this public header. The mapped address/size
+    // are cached here (TagFile is non-movable, so they stay valid for this
+    // instance's lifetime) to keep the accessors inline.
+    utility::MappedFile _mappedFile;
+    std::optional<Error> _optOpenError;
+    void const* _address = nullptr;
+    std::size_t _size = 0;
   };
 
   namespace detail

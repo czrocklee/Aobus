@@ -3,6 +3,7 @@
 
 #include "track/TrackSelectionController.h"
 
+#include "../../TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
@@ -75,14 +76,18 @@ namespace ao::gtk::test
       auto builder1 = library::TrackBuilder::createNew();
       builder1.metadata().title("Track 1");
       builder1.property().duration(std::chrono::minutes{2});
-      auto const [hot1, cold1] = builder1.serialize(txn, library.dictionary(), library.resources());
-      trackId1 = writer.createHotCold(hot1, cold1).first;
+      auto serializeResult1 = builder1.serialize(txn, library.dictionary(), library.resources());
+      REQUIRE(serializeResult1);
+      auto const [hot1, cold1] = *serializeResult1;
+      trackId1 = ao::test::requireValue(writer.createHotCold(hot1, cold1)).first;
 
       auto builder2 = library::TrackBuilder::createNew();
       builder2.metadata().title("Track 2");
       builder2.property().duration(std::chrono::minutes{3});
-      auto const [hot2, cold2] = builder2.serialize(txn, library.dictionary(), library.resources());
-      trackId2 = writer.createHotCold(hot2, cold2).first;
+      auto serializeResult2 = builder2.serialize(txn, library.dictionary(), library.resources());
+      REQUIRE(serializeResult2);
+      auto const [hot2, cold2] = *serializeResult2;
+      trackId2 = ao::test::requireValue(writer.createHotCold(hot2, cold2)).first;
 
       txn.commit();
     }

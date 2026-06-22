@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/Exception.h>
+#include <ao/Error.h>
 #include <ao/library/Meta.h>
 #include <ao/library/MetaStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -24,24 +24,28 @@ namespace ao::library::test
   {
     auto const temp = TempDir{};
 
-    auto const first = MusicLibrary{temp.path(), temp.path()};
+    auto firstResult = MusicLibrary::open(temp.path(), temp.path());
+    REQUIRE(firstResult);
+    auto const& first = *firstResult;
     auto const firstHeader = MetaHeader{first.metaHeader()};
 
     REQUIRE(firstHeader.magic == kLibraryMetaMagic);
     REQUIRE(firstHeader.libraryVersion == kLibraryVersion);
 
-    auto const reopened = MusicLibrary{temp.path(), temp.path()};
+    auto reopenedResult = MusicLibrary::open(temp.path(), temp.path());
+    REQUIRE(reopenedResult);
+    auto const& reopened = *reopenedResult;
     REQUIRE(reopened.metaHeader().libraryId == firstHeader.libraryId);
     REQUIRE(reopened.metaHeader().createdTime == firstHeader.createdTime);
   }
 
-  TEST_CASE("MusicLibrary rejects unsupported library versions", "[library][unit]")
+  TEST_CASE("MusicLibrary reports unsupported library versions as CorruptData", "[library][unit]")
   {
     auto const temp = TempDir{};
-    auto env = lmdb::Environment{temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8}};
+    auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
 
-    auto txn = lmdb::WriteTransaction{env};
-    auto metaStore = MetaStore{lmdb::Database{txn, "meta"}};
+    auto txn = lmdb::test::beginWriteTransaction(env);
+    auto metaStore = MetaStore{lmdb::test::openDatabase(txn, "meta")};
     auto header = MetaHeader{.magic = kLibraryMetaMagic,
                              .libraryVersion = kLibraryVersion + 1,
                              .flags = 0,
@@ -50,7 +54,9 @@ namespace ao::library::test
     metaStore.create(txn, header);
     txn.commit();
 
-    REQUIRE_THROWS_AS((MusicLibrary{temp.path(), temp.path()}), Exception);
+    auto const result = MusicLibrary::open(temp.path(), temp.path());
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("MusicLibrary - accessors return valid references", "[library][unit]")

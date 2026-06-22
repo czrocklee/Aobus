@@ -28,7 +28,6 @@ extern "C"
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <format>
 #include <memory>
 #include <mutex>
@@ -1042,7 +1041,7 @@ namespace ao::audio::backend
       return _implPtr->setMutedProperty(value);
     }
 
-    return std::unexpected(Error{.code = Error::Code::NotSupported});
+    return makeError(Error::Code::NotSupported);
   }
 
   Result<PropertyValue> AlsaExclusiveBackend::property(PropertyId id) const
@@ -1067,7 +1066,7 @@ namespace ao::audio::backend
       return _implPtr->mixer.softwareMuted();
     }
 
-    return std::unexpected(Error{.code = Error::Code::NotSupported});
+    return makeError(Error::Code::NotSupported);
   }
 
   PropertyInfo AlsaExclusiveBackend::queryProperty(PropertyId id) const noexcept

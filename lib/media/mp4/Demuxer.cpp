@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/media/mp4/Demuxer.h>
@@ -19,6 +20,7 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -581,101 +583,117 @@ namespace ao::media::mp4
     _timescale = 0;
     _duration = 0;
 
-    RootAtom const root = fromBuffer(_fileData);
-    auto chunkOffsets = std::vector<std::uint64_t>{};
-    auto sampleToChunk = std::vector<SampleToChunkEntry>{};
-    auto timeToSample = std::vector<TimeToSampleEntry>{};
-
-    auto const optTrack = findAudioTrack(root, targetFormat);
-
-    if (!optTrack || optTrack->track == nullptr)
+    auto parse = [&] -> Result<>
     {
-      return makeError(Error::Code::FormatRejected, "Missing target audio track");
-    }
+      RootAtom const root = fromBuffer(_fileData);
+      auto chunkOffsets = std::vector<std::uint64_t>{};
+      auto sampleToChunk = std::vector<SampleToChunkEntry>{};
+      auto timeToSample = std::vector<TimeToSampleEntry>{};
 
-    auto const& track = *optTrack->track;
+      auto const optTrack = findAudioTrack(root, targetFormat);
 
-    if (auto const timing = parseTrackTiming(track); timing)
-    {
-      _timescale = timing->timescale;
-      _duration = timing->duration;
-    }
-    else
-    {
-      return std::unexpected{timing.error()};
-    }
+      if (!optTrack || optTrack->track == nullptr)
+      {
+        return makeError(Error::Code::FormatRejected, "Missing target audio track");
+      }
 
-    auto const kCookiePath = std::to_array<std::string_view>({
-      "trak",
-      "mdia",
-      "minf",
-      "stbl",
-      "stsd",
-      targetFormat,
-      targetFormat,
-    });
+      auto const& track = *optTrack->track;
 
-    if (auto const* node = track.find(kCookiePath); node != nullptr)
-    {
-      auto const& view = utility::unsafeDowncast<AtomView const>(*node);
-      auto const bytes = view.bytes();
-      _magicCookie.assign(bytes.begin(), bytes.end());
-    }
+      if (auto const timing = parseTrackTiming(track); timing)
+      {
+        _timescale = timing->timescale;
+        _duration = timing->duration;
+      }
+      else
+      {
+        return std::unexpected{timing.error()};
+      }
 
-    if (targetFormat == "mp4a")
-    {
-      static constexpr auto kEsdsPath = std::to_array<std::string_view>({
+      auto const kCookiePath = std::to_array<std::string_view>({
         "trak",
         "mdia",
         "minf",
         "stbl",
         "stsd",
-        "mp4a",
-        "esds",
+        targetFormat,
+        targetFormat,
       });
 
-      if (auto const* node = track.find(kEsdsPath); node != nullptr)
+      if (auto const* node = track.find(kCookiePath); node != nullptr)
       {
         auto const& view = utility::unsafeDowncast<AtomView const>(*node);
-        _magicCookie = extractAacMagicCookie(view);
+        auto const bytes = view.bytes();
+        _magicCookie.assign(bytes.begin(), bytes.end());
       }
-    }
 
-    static constexpr auto kStblPath = std::to_array<std::string_view>({
-      "trak",
-      "mdia",
-      "minf",
-      "stbl",
-    });
+      if (targetFormat == "mp4a")
+      {
+        static constexpr auto kEsdsPath = std::to_array<std::string_view>({
+          "trak",
+          "mdia",
+          "minf",
+          "stbl",
+          "stsd",
+          "mp4a",
+          "esds",
+        });
 
-    auto const* stblNode = track.find(kStblPath);
+        if (auto const* node = track.find(kEsdsPath); node != nullptr)
+        {
+          auto const& view = utility::unsafeDowncast<AtomView const>(*node);
+          _magicCookie = extractAacMagicCookie(view);
+        }
+      }
 
-    if (stblNode == nullptr)
+      static constexpr auto kStblPath = std::to_array<std::string_view>({
+        "trak",
+        "mdia",
+        "minf",
+        "stbl",
+      });
+
+      auto const* stblNode = track.find(kStblPath);
+
+      if (stblNode == nullptr)
+      {
+        return makeError(Error::Code::FormatRejected, "Missing stbl atom");
+      }
+
+      if (!parseSampleTable(*stblNode, chunkOffsets, sampleToChunk, timeToSample))
+      {
+        return makeError(Error::Code::FormatRejected, "Malformed MP4 sample table");
+      }
+
+      if (_magicCookie.empty() || _samples.empty())
+      {
+        return makeError(Error::Code::FormatRejected, "Failed to extract track extradata or sample table");
+      }
+
+      if (!buildSampleOffsets(_samples, chunkOffsets, sampleToChunk))
+      {
+        return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample offsets");
+      }
+
+      if (!timeToSample.empty() && !applySampleTiming(_samples, timeToSample))
+      {
+        return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample timing");
+      }
+
+      return {};
+    };
+
+    try
     {
-      return makeError(Error::Code::FormatRejected, "Missing stbl atom");
+      return parse();
     }
-
-    if (!parseSampleTable(*stblNode, chunkOffsets, sampleToChunk, timeToSample))
+    catch (Exception const& e)
     {
-      return makeError(Error::Code::FormatRejected, "Malformed MP4 sample table");
+      return makeError(Error::Code::CorruptData, e.what());
     }
-
-    if (_magicCookie.empty() || _samples.empty())
+    catch (std::out_of_range const& e)
     {
-      return makeError(Error::Code::FormatRejected, "Failed to extract track extradata or sample table");
+      return makeError(Error::Code::CorruptData, e.what());
     }
-
-    if (!buildSampleOffsets(_samples, chunkOffsets, sampleToChunk))
-    {
-      return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample offsets");
-    }
-
-    if (!timeToSample.empty() && !applySampleTiming(_samples, timeToSample))
-    {
-      return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample timing");
-    }
-
-    return {};
   }
 
   std::span<std::byte const> Demuxer::magicCookie() const

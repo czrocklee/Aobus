@@ -224,7 +224,9 @@ namespace ao::query::test
           auto const* found = findQueryVariableCompletionSpec(spec.type, spec.canonicalName);
           REQUIRE(found != nullptr);
           CHECK(found->field == spec.field);
-          CHECK(resolveVariableField(spec.type, spec.canonicalName) == spec.field);
+          auto const field = resolveVariableField(spec.type, spec.canonicalName);
+          REQUIRE(field.has_value());
+          CHECK(*field == spec.field);
 
           auto const matches = completeQueryVariable(spec.type, spec.canonicalName);
           CHECK(containsMatch(matches, spec, QueryVariableCompletionMatchKind::CanonicalPrefix));
@@ -237,7 +239,9 @@ namespace ao::query::test
             auto const* found = findQueryVariableCompletionSpec(spec.type, alias);
             REQUIRE(found != nullptr);
             CHECK(found->field == spec.field);
-            CHECK(resolveVariableField(spec.type, alias) == spec.field);
+            auto const field = resolveVariableField(spec.type, alias);
+            REQUIRE(field.has_value());
+            CHECK(*field == spec.field);
 
             auto const matches = completeQueryVariable(spec.type, alias);
             CHECK(containsMatch(matches, spec, QueryVariableCompletionMatchKind::ExactAlias));
@@ -245,6 +249,21 @@ namespace ao::query::test
         }
       }
     }
+  }
+
+  TEST_CASE("Completion - tryResolveVariableField Returns nullopt For Unknown Fields", "[query][unit][completion]")
+  {
+    // Known fields resolve identically to the diagnostic resolveVariableField().
+    CHECK(tryResolveVariableField(VariableType::Metadata, "artist") == Field::ArtistId);
+    CHECK(tryResolveVariableField(VariableType::Property, "duration") == Field::Duration);
+
+    // Tag and Custom variables always resolve to their fixed fields.
+    CHECK(tryResolveVariableField(VariableType::Tag, "anything") == Field::Tag);
+    CHECK(tryResolveVariableField(VariableType::Custom, "anything") == Field::Custom);
+
+    // Unknown property/metadata names degrade to nullopt instead of throwing.
+    CHECK_FALSE(tryResolveVariableField(VariableType::Metadata, "not_a_field").has_value());
+    CHECK_FALSE(tryResolveVariableField(VariableType::Property, "not_a_field").has_value());
   }
 
   TEST_CASE("Completion - Query Variable Alias Set Documents Catalog Surface", "[query][unit][completion]")
@@ -558,7 +577,7 @@ namespace ao::query::test
   {
     auto const assertCompletePredicateBoundary = [](std::string_view expression)
     {
-      REQUIRE_NOTHROW(parse(expression));
+      REQUIRE(parse(expression).has_value());
 
       auto const text = std::string{expression} + " ";
       auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
@@ -622,7 +641,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Expression: " << expression)
       {
-        REQUIRE_THROWS(parse(expression));
+        REQUIRE_FALSE(parse(expression).has_value());
 
         auto const text = std::string{expression} + " ";
         CHECK_FALSE(isLogicalOperatorContext(analyzeCompletionContext(text, text.size())));
@@ -646,7 +665,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Expression: " << expression)
       {
-        REQUIRE_NOTHROW(parse(expression));
+        REQUIRE(parse(expression).has_value());
 
         auto const text = std::string{expression} + " ";
         CHECK_FALSE(isLogicalOperatorContext(analyzeCompletionContext(text, text.size())));
@@ -667,7 +686,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Expression: " << expression)
       {
-        REQUIRE_THROWS(parse(expression));
+        REQUIRE_FALSE(parse(expression).has_value());
 
         auto const text = std::string{expression} + " ";
         CHECK_FALSE(analyzeCompletionContext(text, text.size()));

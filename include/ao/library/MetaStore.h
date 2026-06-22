@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 
-#include <optional>
 #include <utility>
 
 namespace ao::library
@@ -21,7 +21,7 @@ namespace ao::library
     {
     }
 
-    std::optional<MetaHeader> load(lmdb::ReadTransaction const& txn) const;
+    Result<MetaHeader> load(lmdb::ReadTransaction const& txn) const;
     void create(lmdb::WriteTransaction& txn, MetaHeader const& header);
     void update(lmdb::WriteTransaction& txn, MetaHeader const& header);
 

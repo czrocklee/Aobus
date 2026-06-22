@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/Exception.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/ActionCatalog.h>
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <string>
@@ -18,7 +20,7 @@ namespace ao::uimodel::input
   {
     bool containsChord(std::vector<KeyChord> const& chords, KeyChord const& chord)
     {
-      return std::ranges::find(chords, chord) != chords.end();
+      return std::ranges::contains(chords, chord);
     }
   }
 
@@ -212,7 +214,15 @@ namespace ao::uimodel::input
 
   KeymapBindings defaultKeymap()
   {
-    auto const chord = [](std::string text) { return KeyChord::parse(text).value(); };
+    auto const chord = [](std::string text)
+    {
+      if (auto optChord = KeyChord::parse(text); optChord)
+      {
+        return *optChord;
+      }
+
+      throwException<Exception>("Invalid default key chord: {}", text);
+    };
 
     return KeymapBindings{
       {"playback.playPause", {chord("Ctrl+P"), chord("Media:Play"), chord("Media:Pause")}},

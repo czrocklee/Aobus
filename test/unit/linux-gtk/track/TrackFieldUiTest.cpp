@@ -480,7 +480,7 @@ namespace ao::gtk::test
       {
         auto const result = def->parseInlineEdit("123");
         REQUIRE(result.has_value());
-        auto const* val = std::get_if<std::uint16_t>(&result.value());
+        auto const* val = std::get_if<std::uint16_t>(&*result);
         REQUIRE(val != nullptr);
         CHECK(*val == 123);
       }
@@ -489,7 +489,7 @@ namespace ao::gtk::test
       {
         auto const result = def->parseInlineEdit("");
         REQUIRE(result.has_value());
-        auto const* val = std::get_if<std::uint16_t>(&result.value());
+        auto const* val = std::get_if<std::uint16_t>(&*result);
         REQUIRE(val != nullptr);
         CHECK(*val == 0);
       }

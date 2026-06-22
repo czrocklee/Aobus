@@ -43,6 +43,10 @@ namespace ao::media::mp4
     /**
      * @brief Parses the MP4 atoms, looking for an audio track matching the given format (e.g. "alac").
      * @return Result of the operation.
+     *
+     * Error model: the media decode entry returns Result (it sits on the audio open/seek path);
+     * lower-level byte-view parser exceptions are translated to Error::Code::CorruptData here.
+     * See doc/design/error-model.md.
      */
     Result<> parseTrack(std::string_view targetFormat);
 

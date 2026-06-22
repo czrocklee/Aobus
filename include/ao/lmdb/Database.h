@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -15,7 +17,7 @@
 #include <string>
 #include <utility>
 
-// LMDB native handle, kept opaque (see Environment.h).
+// LMDB native handles, kept opaque (see Environment.h).
 struct MDB_cursor;
 struct MDB_txn;
 
@@ -39,8 +41,8 @@ namespace ao::lmdb
     class Reader;
     class Writer;
 
-    explicit Database(WriteTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
-    explicit Database(ReadTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
+    static Result<Database> open(WriteTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
+    static Result<Database> open(ReadTransaction& txn, std::string const& name, KeyKind kind = KeyKind::Integer);
 
     Reader reader(ReadTransaction const& txn) const;
     Writer writer(WriteTransaction& txn) const;
@@ -48,6 +50,8 @@ namespace ao::lmdb
     KeyKind kind() const noexcept { return _kind; }
 
   private:
+    Database(DbiHandle dbi, KeyKind kind);
+
     DbiHandle _dbi = std::numeric_limits<DbiHandle>::max();
     KeyKind _kind = KeyKind::Integer;
   };
@@ -79,9 +83,13 @@ namespace ao::lmdb
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
+    // Point lookups. A missing key is the only recoverable outcome and is
+    // reported as std::nullopt; non-NotFound storage faults throw (see the
+    // Iterator note below for why corruption is fatal at this layer).
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
     std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
 
+    // Largest integer key, or 0 when the database is empty. Throws on fault.
     std::uint32_t maxKey() const;
 
     ~Reader() = default;
@@ -114,7 +122,17 @@ namespace ao::lmdb
   };
 
   /**
-   * Database::Reader::Iterator - Bidirectional iterator over database entries.
+   * Database::Reader::Iterator - Input iterator over database entries.
+   *
+   * Cursor EOF (MDB_NOTFOUND) is normal and compares equal to EndSentinel.
+   * Any other cursor failure throws. These are either programmer errors
+   * (EINVAL) or unrecoverable storage faults (MDB_PANIC, MDB_CORRUPTED): the
+   * same on-disk corruption that yields MDB_CORRUPTED here equally surfaces as
+   * SIGBUS through the mmap, which no Result can intercept, so a recoverable
+   * channel at this layer would be a false promise. We therefore treat every
+   * non-EOF cursor failure as fatal, consistent with the error model's
+   * invariant/fatal rule. The same reasoning is why point lookups (get/maxKey)
+   * report only the recoverable miss and throw on everything else.
    */
   class Database::Reader::Iterator final
   {
@@ -169,29 +187,31 @@ namespace ao::lmdb
     Writer(Writer&&) noexcept = default;
     Writer& operator=(Writer&&) noexcept = default;
 
-    void create(std::uint32_t id, std::span<std::byte const> data);
-    void create(std::span<std::byte const> key, std::span<std::byte const> data);
+    Result<> create(std::uint32_t id, std::span<std::byte const> data);
+    Result<> create(std::span<std::byte const> key, std::span<std::byte const> data);
 
-    std::span<std::byte> create(std::uint32_t id, std::size_t size);
-    std::span<std::byte> create(std::span<std::byte const> key, std::size_t size);
+    Result<std::span<std::byte>> create(std::uint32_t id, std::size_t size);
+    Result<std::span<std::byte>> create(std::span<std::byte const> key, std::size_t size);
 
     std::uint32_t maxKey() const noexcept { return _lastId; }
-    std::uint32_t append(std::span<std::byte const> data);
-    std::pair<std::uint32_t, std::span<std::byte>> append(std::size_t size);
+    Result<std::uint32_t> append(std::span<std::byte const> data);
+    Result<std::pair<std::uint32_t, std::span<std::byte>>> append(std::size_t size);
 
-    void update(std::uint32_t id, std::span<std::byte const> data);
-    void update(std::span<std::byte const> key, std::span<std::byte const> data);
+    Result<> update(std::uint32_t id, std::span<std::byte const> data);
+    Result<> update(std::span<std::byte const> key, std::span<std::byte const> data);
 
-    std::span<std::byte> update(std::uint32_t id, std::size_t size);
-    std::span<std::byte> update(std::span<std::byte const> key, std::size_t size);
+    Result<std::span<std::byte>> update(std::uint32_t id, std::size_t size);
+    Result<std::span<std::byte>> update(std::span<std::byte const> key, std::size_t size);
 
+    // Delete a key. Returns true if a row was removed, false if the key was
+    // absent (idempotent callers can ignore the result). Throws on fault.
     bool del(std::uint32_t id);
     bool del(std::span<std::byte const> key);
 
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
     std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
 
-    void clear();
+    Result<> clear();
 
     KeyKind kind() const noexcept { return _kind; }
 

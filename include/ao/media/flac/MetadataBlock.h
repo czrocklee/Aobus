@@ -22,6 +22,9 @@
 
 namespace ao::media::flac
 {
+  // Migration note: these low-level byte-view parsers still throw on structurally-invalid input.
+  // Format parser boundaries translate those exceptions to Result errors. See
+  // doc/design/error-model.md.
   namespace detail
   {
     template<typename LengthType, boost::endian::order Order = boost::endian::order::big>

@@ -7,6 +7,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -410,7 +411,9 @@ namespace ao::rt
 
     for (auto const trackId : it->second.state.selection)
     {
-      if (auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Cold); optView)
+      if (auto const optView = storageValueOrNullopt(
+            reader.get(trackId, library::TrackStore::Reader::LoadMode::Cold), "Failed to calculate selection duration");
+          optView)
       {
         totalDuration += optView->property().duration();
       }

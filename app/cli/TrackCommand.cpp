@@ -13,6 +13,7 @@
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -52,13 +53,26 @@ namespace ao::cli
       }
 
       auto const expr = query::parse(filter);
-      auto compiler = query::QueryCompiler{&ml.dictionary()};
-      auto const plan = compiler.compile(expr);
+
+      if (!expr)
+      {
+        std::cerr << "filter error: " << expr.error().message << '\n';
+        return matches;
+      }
+
+      auto const plan = query::compileQuery(*expr, &ml.dictionary());
+
+      if (!plan)
+      {
+        std::cerr << "filter error: " << plan.error().message << '\n';
+        return matches;
+      }
+
       auto evaluator = query::PlanEvaluator{};
 
       for (auto const& [id, view] : reader)
       {
-        if (evaluator.matches(plan, view))
+        if (evaluator.matches(*plan, view))
         {
           matches.emplace_back(id, view);
         }
@@ -246,7 +260,9 @@ namespace ao::cli
       {
         auto const id = TrackId{targetId};
 
-        if (auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both); optView)
+        if (auto const optView = rt::storageValueOrNullopt(
+              reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to dump track");
+            optView)
         {
           processTrackDump(id, *optView, dict, raw, yaml, os);
         }

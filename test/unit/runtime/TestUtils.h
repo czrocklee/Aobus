@@ -12,6 +12,8 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 
+#include <catch2/catch_test_macros.hpp>
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -87,9 +89,13 @@ namespace ao::rt::test
         .channels(Channels{2})
         .bitDepth(BitDepth{16});
       auto hotData = builder.serializeHot(txn, _library.dictionary());
+      REQUIRE(hotData);
       auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
-      auto [id, _] = writer.createHotCold(hotData, coldData);
-      txn.commit();
+      REQUIRE(coldData);
+      auto createResult = writer.createHotCold(*hotData, *coldData);
+      REQUIRE(createResult);
+      auto const [id, _] = *createResult;
+      REQUIRE(txn.commit());
       return id;
     }
 
@@ -99,18 +105,19 @@ namespace ao::rt::test
       auto reader = _library.tracks().reader(txn);
       auto writer = _library.tracks().writer(txn);
 
-      auto optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+      auto optViewResult = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
-      if (!optView)
+      if (!optViewResult)
       {
         return;
       }
 
-      auto spec = TrackSpec{.title = std::string{optView->metadata().title()},
-                            .artist = std::string{_library.dictionary().getOrDefault(optView->metadata().artistId())},
-                            .album = std::string{_library.dictionary().getOrDefault(optView->metadata().albumId())},
-                            .work = std::string{_library.dictionary().getOrDefault(optView->metadata().workId())},
-                            .year = optView->metadata().year()};
+      auto spec =
+        TrackSpec{.title = std::string{optViewResult->metadata().title()},
+                  .artist = std::string{_library.dictionary().getOrDefault(optViewResult->metadata().artistId())},
+                  .album = std::string{_library.dictionary().getOrDefault(optViewResult->metadata().albumId())},
+                  .work = std::string{_library.dictionary().getOrDefault(optViewResult->metadata().workId())},
+                  .year = optViewResult->metadata().year()};
 
       updater(spec);
 
@@ -118,11 +125,13 @@ namespace ao::rt::test
       builder.metadata().title(spec.title).artist(spec.artist).album(spec.album).work(spec.work).year(spec.year);
 
       auto hotData = builder.serializeHot(txn, _library.dictionary());
+      REQUIRE(hotData);
       auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
+      REQUIRE(coldData);
 
-      writer.updateHot(id, hotData);
-      writer.updateCold(id, coldData);
-      txn.commit();
+      REQUIRE(writer.updateHot(id, *hotData));
+      REQUIRE(writer.updateCold(id, *coldData));
+      REQUIRE(txn.commit());
     }
 
     TrackId addTrack(std::string_view title) { return addTrack(TrackSpec{.title = std::string{title}}); }

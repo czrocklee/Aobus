@@ -9,20 +9,23 @@
 
 namespace ao::tag::test
 {
+  using namespace std::chrono_literals;
+
+  // NOLINTBEGIN(misc-include-cleaner) — <chrono> provides std::operator""ms
   TEST_CASE("Decoder - bitrateFromBytes computes average bitrate", "[tag][unit][decoder]")
   {
     // 4,320,000 bytes over 180 s == 192 kbps.
-    CHECK(bitrateFromBytes(4'320'000, std::chrono::milliseconds{180'000}) == 192'000U);
+    CHECK(bitrateFromBytes(4'320'000, 180'000ms) == 192'000U);
     // 1,411,200 bytes/s (CD) over exactly one second.
-    CHECK(bitrateFromBytes(1'411'200, std::chrono::milliseconds{1'000}) == 1'411'200U * 8U);
+    CHECK(bitrateFromBytes(1'411'200, 1'000ms) == 1'411'200U * 8U);
   }
 
   TEST_CASE("Decoder - bitrateFromBytes guards non-positive duration", "[tag][unit][decoder]")
   {
-    CHECK(bitrateFromBytes(1'000'000, std::chrono::milliseconds{0}) == 0U);
-    CHECK(bitrateFromBytes(1'000'000, std::chrono::milliseconds{-5}) == 0U);
+    CHECK(bitrateFromBytes(1'000'000, 0ms) == 0U);
+    CHECK(bitrateFromBytes(1'000'000, -5ms) == 0U);
   }
-
+  // NOLINTEND(misc-include-cleaner)
   TEST_CASE("Decoder - parseSlashPair splits primary/secondary", "[tag][unit][decoder]")
   {
     auto const both = parseSlashPair("3/12");

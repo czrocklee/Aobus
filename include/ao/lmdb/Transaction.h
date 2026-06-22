@@ -3,24 +3,27 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/lmdb/Environment.h>
+
 #include <cstdint>
 #include <memory>
 #include <utility>
 
-// LMDB native handle, kept opaque (see Environment.h).
+// LMDB native handles, kept opaque (see Environment.h).
 struct MDB_env;
 struct MDB_txn;
 
 namespace ao::lmdb
 {
-  class Environment;
   class WriteTransaction; // Forward declaration
 
   // Read-only transaction
   class ReadTransaction
   {
   public:
-    ReadTransaction(Environment const& env);
+    static Result<ReadTransaction> begin(Environment const& env);
+
     ~ReadTransaction() = default;
 
     ReadTransaction(ReadTransaction const&) = delete;
@@ -42,7 +45,7 @@ namespace ao::lmdb
     {
     }
 
-    static TxnPtr create(MDB_env* env, MDB_txn* parent, std::uint32_t flags);
+    static Result<TxnPtr> create(MDB_env* env, MDB_txn* parent, std::uint32_t flags);
 
     MDB_txn* handle() const noexcept { return _txnPtr.get(); }
     MDB_txn* releaseHandle() noexcept { return _txnPtr.release(); }
@@ -56,9 +59,8 @@ namespace ao::lmdb
   class WriteTransaction final : public ReadTransaction
   {
   public:
-    WriteTransaction(Environment& env);
-    // Nested transaction - child of parent write transaction
-    explicit WriteTransaction(WriteTransaction& parent);
+    static Result<WriteTransaction> begin(Environment& env);
+    static Result<WriteTransaction> begin(WriteTransaction& parent);
 
     WriteTransaction(WriteTransaction const&) = delete;
     WriteTransaction& operator=(WriteTransaction const&) = delete;
@@ -66,12 +68,17 @@ namespace ao::lmdb
     WriteTransaction& operator=(WriteTransaction&&) = default;
     ~WriteTransaction() = default;
 
-    void commit();
+    Result<> commit();
 
     // Check if transaction was committed (cursors are now invalid)
     bool committed() const { return _cursorClosed; }
 
   private:
+    explicit WriteTransaction(TxnPtr txnPtr)
+      : ReadTransaction{std::move(txnPtr)}
+    {
+    }
+
     bool _cursorClosed = false;
     friend class Database;
   };

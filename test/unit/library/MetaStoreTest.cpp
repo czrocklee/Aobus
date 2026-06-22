@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/Exception.h>
+#include <ao/Error.h>
 #include <ao/library/Meta.h>
 #include <ao/library/MetaStore.h>
 #include <ao/lmdb/Database.h>
@@ -23,12 +23,12 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("MetaStore - Invalid metadata header size throws", "[library][unit][meta_store]")
+  TEST_CASE("MetaStore - Invalid metadata header size returns CorruptData", "[library][unit][meta_store]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto db = Database{wtxn, "meta"};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "meta");
     auto store = MetaStore{db};
 
     // Write an invalid sized struct (e.g. 1 byte) directly to the DB to simulate corruption or older version
@@ -37,16 +37,18 @@ namespace ao::library::test
     writer.create(static_cast<std::uint32_t>(MetaRecordId::Header), std::span<std::byte const>{invalidData});
     wtxn.commit();
 
-    auto rtxn = ReadTransaction{env};
-    REQUIRE_THROWS_AS(store.load(rtxn), ao::Exception);
+    auto rtxn = beginReadTransaction(env);
+    auto const result = store.load(rtxn);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("MetaStore - Create and load header", "[library][unit][meta_store]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto db = Database{wtxn, "meta"};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "meta");
     auto store = MetaStore{db};
 
     auto header = MetaHeader{.magic = 0xDEADBEEF,
@@ -57,20 +59,35 @@ namespace ao::library::test
     store.create(wtxn, header);
     wtxn.commit();
 
-    auto rtxn = ReadTransaction{env};
-    auto const optLoaded = store.load(rtxn);
-    REQUIRE(optLoaded.has_value());
-    CHECK(optLoaded->magic == 0xDEADBEEF);
-    CHECK(optLoaded->libraryVersion == 42);
-    CHECK(optLoaded->createdTime.time_since_epoch().count() == 1234567890);
+    auto rtxn = beginReadTransaction(env);
+    auto const loadedResult = store.load(rtxn);
+    REQUIRE(loadedResult);
+    CHECK(loadedResult->magic == 0xDEADBEEF);
+    CHECK(loadedResult->libraryVersion == 42);
+    CHECK(loadedResult->createdTime.time_since_epoch().count() == 1234567890);
+  }
+
+  TEST_CASE("MetaStore - Missing header returns NotFound", "[library][unit][meta_store]")
+  {
+    auto temp = TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "meta");
+    auto store = MetaStore{db};
+    wtxn.commit();
+
+    auto rtxn = beginReadTransaction(env);
+    auto const result = store.load(rtxn);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("MetaStore - Update header overwrites previous values", "[library][unit][meta_store]")
   {
     auto temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = WriteTransaction{env};
-    auto db = Database{wtxn, "meta"};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "meta");
     auto store = MetaStore{db};
 
     auto header = MetaHeader{.magic = 0xAAAAAAAA,
@@ -81,14 +98,14 @@ namespace ao::library::test
     store.create(wtxn, header);
     wtxn.commit();
 
-    auto wtxn2 = WriteTransaction{env};
+    auto wtxn2 = beginWriteTransaction(env);
     header.libraryVersion = 2;
     store.update(wtxn2, header);
     wtxn2.commit();
 
-    auto rtxn = ReadTransaction{env};
-    auto const optLoaded = store.load(rtxn);
-    REQUIRE(optLoaded.has_value());
-    CHECK(optLoaded->libraryVersion == 2);
+    auto rtxn = beginReadTransaction(env);
+    auto const loadedResult = store.load(rtxn);
+    REQUIRE(loadedResult);
+    CHECK(loadedResult->libraryVersion == 2);
   }
 } // namespace ao::library::test

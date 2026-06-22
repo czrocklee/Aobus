@@ -10,8 +10,6 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -107,11 +105,13 @@ namespace ao::library::test
       }
 
       auto temp = TempDir{};
-      auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-      auto wtxn = lmdb::WriteTransaction{env};
-      auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-      auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-      return builder.serializeCold(wtxn, dict, resources);
+      auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+      auto wtxn = lmdb::test::beginWriteTransaction(env);
+      auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+      auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+      auto result = builder.serializeCold(wtxn, dict, resources);
+      REQUIRE(result);
+      return *result;
     }
 
     TrackView makeColdView(std::vector<std::byte> const& data)
@@ -181,11 +181,13 @@ namespace ao::library::test
       .movementTotal(4);
 
     auto temp = TempDir{};
-    auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = lmdb::WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-    auto const coldData = builder.serializeCold(wtxn, dict, resources);
+    auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = lmdb::test::beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+    auto coldDataResult = builder.serializeCold(wtxn, dict, resources);
+    REQUIRE(coldDataResult);
+    auto const& coldData = *coldDataResult;
     auto const view = makeColdView(coldData);
 
     CHECK(view.metadata().workId().raw() > 0);
@@ -202,11 +204,13 @@ namespace ao::library::test
     builder.coverArt().add(PictureType::BackCover, ResourceId{42});
 
     auto temp = TempDir{};
-    auto env = lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = lmdb::WriteTransaction{env};
-    auto dict = DictionaryStore{lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = ResourceStore{lmdb::Database{wtxn, "resources"}};
-    auto const coldData = builder.serializeCold(wtxn, dict, resources);
+    auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = lmdb::test::beginWriteTransaction(env);
+    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
+    auto coldDataResult = builder.serializeCold(wtxn, dict, resources);
+    REQUIRE(coldDataResult);
+    auto const& coldData = *coldDataResult;
 
     auto const view = makeColdView(coldData);
     REQUIRE(view.coverArt().count() == 1);
@@ -611,12 +615,17 @@ namespace ao::library::test
     auto const data = createColdData({}, pairs, "");
     auto const view = makeColdView(data);
 
-    // First entry (dictId=1)
-    CHECK(view.customMetadata().get(DictionaryId{1}).value() == "value0");
-    // Middle entry (dictId=50)
-    CHECK(view.customMetadata().get(DictionaryId{50}).value() == "value49");
-    // Last entry (dictId=100)
-    CHECK(view.customMetadata().get(DictionaryId{100}).value() == "value99");
+    auto const optFirst = view.customMetadata().get(DictionaryId{1});
+    REQUIRE(optFirst.has_value());
+    CHECK(*optFirst == "value0");
+
+    auto const optMiddle = view.customMetadata().get(DictionaryId{50});
+    REQUIRE(optMiddle.has_value());
+    CHECK(*optMiddle == "value49");
+
+    auto const optLast = view.customMetadata().get(DictionaryId{100});
+    REQUIRE(optLast.has_value());
+    CHECK(*optLast == "value99");
     // Not found
     CHECK(view.customMetadata().get(DictionaryId{199}).has_value() == false);
     // Before first (0 = null, should throw)

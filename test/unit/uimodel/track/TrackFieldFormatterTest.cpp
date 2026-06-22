@@ -102,7 +102,7 @@ namespace ao::uimodel::track::test
     {
       auto const res = parseUint16EditValue("  42  ");
       REQUIRE(res.has_value());
-      auto const* val = std::get_if<std::uint16_t>(&res.value());
+      auto const* val = std::get_if<std::uint16_t>(&*res);
       REQUIRE(val != nullptr);
       REQUIRE(*val == 42);
     }
@@ -111,7 +111,7 @@ namespace ao::uimodel::track::test
     {
       auto const res = parseUint16EditValue("    ");
       REQUIRE(res.has_value());
-      auto const* val = std::get_if<std::uint16_t>(&res.value());
+      auto const* val = std::get_if<std::uint16_t>(&*res);
       REQUIRE(val != nullptr);
       REQUIRE(*val == 0);
     }

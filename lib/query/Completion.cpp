@@ -14,7 +14,6 @@
 #include <array>
 #include <cctype>
 #include <cstddef>
-#include <exception>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -276,14 +275,7 @@ namespace ao::query
 
     std::optional<Field> resolveVariable(VariableType type, std::string_view name)
     {
-      try
-      {
-        return resolveVariableField(type, name);
-      }
-      catch (std::exception const&)
-      {
-        return std::nullopt;
-      }
+      return tryResolveVariableField(type, name);
     }
 
     std::optional<ParsedVariable> parseVariableEndingAt(std::string_view text,
@@ -423,17 +415,11 @@ namespace ao::query
       }
 
       // matchesExpressionSyntax() and parse() share the same grammar, so a syntactic match implies
-      // parse() succeeds for today's productions. Guard defensively anyway: this runs on the
-      // per-keystroke completion path, and a future value callback that throws after a successful
-      // grammar match must degrade to "not a completed expression" rather than escape to the caller.
-      try
-      {
-        return isPredicateExpression(parse(expression));
-      }
-      catch (std::exception const&)
-      {
-        return false;
-      }
+      // parse() succeeds for today's productions. Guard defensively anyway: a future value callback
+      // that fails after a successful grammar match must degrade to "not a completed expression".
+      auto const parsed = parse(expression);
+
+      return parsed.has_value() && isPredicateExpression(*parsed);
     }
 
     bool isOperatorCompletionPrefixToken(std::string_view text, detail::CompletionToken token)

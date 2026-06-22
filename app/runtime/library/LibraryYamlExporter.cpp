@@ -4,6 +4,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/Type.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
@@ -25,6 +26,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -34,6 +36,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 
 namespace ao::rt
@@ -242,9 +245,9 @@ namespace ao::rt
       {.field = TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth().raw(); }},
     });
 
-    void emitTrackProperties(ryml::NodeRef& node,
-                             library::TrackView::PropertyProxy const& property,
-                             library::FileManifestStore::Reader const& manifestReader)
+    Result<> emitTrackProperties(ryml::NodeRef& node,
+                                 library::TrackView::PropertyProxy const& property,
+                                 library::FileManifestStore::Reader const& manifestReader)
     {
       for (auto const& map : kPropertyDispatch)
       {
@@ -273,14 +276,105 @@ namespace ao::rt
       std::uint64_t fileSize = 0;
       std::uint64_t mtime = 0;
 
-      if (auto const optManifestView = manifestReader.get(property.uri()); optManifestView)
+      auto const manifestResult = manifestReader.get(property.uri());
+
+      if (manifestResult)
       {
-        fileSize = optManifestView->fileSize();
-        mtime = optManifestView->mtime();
+        fileSize = manifestResult->fileSize();
+        mtime = manifestResult->mtime();
+      }
+      else if (manifestResult.error().code != Error::Code::NotFound)
+      {
+        return std::unexpected{manifestResult.error()};
       }
 
       node.append_child() << ryml::key("fileSize") << fileSize;
       node.append_child() << ryml::key("mtime") << mtime;
+      return {};
+    }
+
+    bool coverMatchesBaseline(library::CoverArt const& cover,
+                              library::TrackBuilder::CoverArtBuilder::PendingCoverArt const& baseline,
+                              library::ResourceStore::Reader const& resReader)
+    {
+      auto const optDbData = resReader.get(cover.resourceId);
+
+      auto const* baselineResourceId = std::get_if<ResourceId>(&baseline.source);
+      auto const* baselineData = std::get_if<std::span<std::byte const>>(&baseline.source);
+
+      return baseline.type == cover.type &&
+             (baselineResourceId == nullptr || *baselineResourceId == cover.resourceId) &&
+             (baselineData == nullptr || (optDbData && std::ranges::equal(*optDbData, *baselineData)));
+    }
+
+    bool shouldExportCovers(library::TrackView const& view,
+                            std::optional<library::TrackBuilder> const& optBaseline,
+                            ExportMode mode,
+                            library::ResourceStore::Reader const& resReader)
+    {
+      if (mode == ExportMode::Metadata || mode == ExportMode::Full)
+      {
+        return true;
+      }
+
+      if (mode != ExportMode::Delta)
+      {
+        return false;
+      }
+
+      if (!optBaseline)
+      {
+        return true;
+      }
+
+      auto const covers = view.coverArt();
+      auto const coverCount = covers.count();
+      auto const& baseCovers = optBaseline->coverArt().entries();
+
+      if (coverCount != baseCovers.size())
+      {
+        return true;
+      }
+
+      for (std::uint16_t i = 0; i < coverCount; ++i)
+      {
+        auto const cover = covers.at(i);
+
+        if (auto const& baseline = baseCovers[i]; !coverMatchesBaseline(cover, baseline, resReader))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    void emitSingleCover(ryml::NodeRef& coverNode,
+                         ResourceId resId,
+                         std::uint8_t typeValue,
+                         std::unordered_map<ResourceId, std::string>& exportedCovers,
+                         library::ResourceStore::Reader const& resReader)
+    {
+      coverNode.append_child() << ryml::key("type") << static_cast<std::uint32_t>(typeValue);
+
+      if (auto const it = exportedCovers.find(resId); it != exportedCovers.end())
+      {
+        auto dataNode = coverNode.append_child();
+        dataNode << ryml::key("data");
+        dataNode.set_val_ref(yaml::copyToArena(dataNode, it->second));
+        return;
+      }
+
+      if (auto const optDbData = resReader.get(resId); optDbData && !optDbData->empty())
+      {
+        auto const b64 = utility::base64Encode(*optDbData);
+        auto const anchorName = "cover_" + std::to_string(resId.raw());
+
+        auto dataNode = coverNode.append_child();
+        dataNode << ryml::key("data") << b64;
+        dataNode.set_val_anchor(yaml::copyToArena(dataNode, anchorName));
+        exportedCovers[resId] = anchorName;
+      }
     }
 
     void emitTrackCover(ryml::NodeRef& node,
@@ -291,41 +385,9 @@ namespace ao::rt
                         std::unordered_map<ResourceId, std::string>& exportedCovers,
                         library::ResourceStore& resources)
     {
-      auto const covers = view.coverArt();
-      auto const coverCount = covers.count();
-      bool shouldExportCovers = (mode == ExportMode::Metadata || mode == ExportMode::Full);
       auto const resReader = resources.reader(txn);
 
-      if (mode == ExportMode::Delta)
-      {
-        if (!optBaseline)
-        {
-          shouldExportCovers = true;
-        }
-        else
-        {
-          auto const& baseCovers = optBaseline->coverArt().entries();
-          shouldExportCovers = coverCount != baseCovers.size();
-
-          for (std::uint16_t i = 0; !shouldExportCovers && i < coverCount; ++i)
-          {
-            auto const cover = covers.at(i);
-            auto const& pending = baseCovers[i];
-            auto const optDbData = resReader.get(cover.resourceId);
-            auto const* baselineResourceId = std::get_if<ResourceId>(&pending.source);
-            auto const* baselineData = std::get_if<std::span<std::byte const>>(&pending.source);
-
-            if (pending.type != cover.type ||
-                (baselineResourceId != nullptr && *baselineResourceId != cover.resourceId) ||
-                (baselineData != nullptr && (!optDbData || !std::ranges::equal(*optDbData, *baselineData))))
-            {
-              shouldExportCovers = true;
-            }
-          }
-        }
-      }
-
-      if (!shouldExportCovers)
+      if (!shouldExportCovers(view, optBaseline, mode, resReader))
       {
         return;
       }
@@ -334,36 +396,15 @@ namespace ao::rt
       yaml::setKey(coversNode, "covers");
       coversNode |= ryml::SEQ;
 
-      for (std::uint16_t i = 0; i < coverCount; ++i)
+      auto const covers = view.coverArt();
+
+      for (std::uint16_t i = 0; i < covers.count(); ++i)
       {
         auto const cover = covers.at(i);
-        auto const resId = cover.resourceId;
-        auto const typeValue = static_cast<std::uint8_t>(cover.type);
-
         auto coverNode = coversNode.append_child();
         coverNode |= ryml::MAP;
 
-        coverNode.append_child() << ryml::key("type") << static_cast<std::uint32_t>(typeValue);
-
-        if (auto const it = exportedCovers.find(resId); it != exportedCovers.end())
-        {
-          auto dataNode = coverNode.append_child();
-          dataNode << ryml::key("data");
-          dataNode.set_val_ref(yaml::copyToArena(dataNode, it->second));
-        }
-        else
-        {
-          if (auto const optData = resReader.get(resId); optData && !optData->empty())
-          {
-            auto const b64 = utility::base64Encode(*optData);
-            auto const anchorName = "cover_" + std::to_string(resId.raw());
-
-            auto dataNode = coverNode.append_child();
-            dataNode << ryml::key("data") << b64;
-            dataNode.set_val_anchor(yaml::copyToArena(dataNode, anchorName));
-            exportedCovers[resId] = anchorName;
-          }
-        }
+        emitSingleCover(coverNode, cover.resourceId, static_cast<std::uint8_t>(cover.type), exportedCovers, resReader);
       }
     }
 
@@ -391,17 +432,17 @@ namespace ao::rt
     }
 
     Result<> exportToYaml(std::filesystem::path const& path, ExportMode mode) const;
-    void exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
-    void exportTrack(ryml::NodeRef& node,
-                     lmdb::ReadTransaction const& txn,
-                     TrackId id,
-                     library::TrackView const& view,
-                     ExportMode mode,
-                     std::unordered_map<ResourceId, std::string>& exportedCovers,
-                     library::ResourceStore& resources,
-                     library::DictionaryStore& dict,
-                     library::FileManifestStore::Reader const& manifestReader) const;
-    void exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
+    Result<> exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
+    Result<> exportTrack(ryml::NodeRef& node,
+                         lmdb::ReadTransaction const& txn,
+                         TrackId id,
+                         library::TrackView const& view,
+                         ExportMode mode,
+                         std::unordered_map<ResourceId, std::string>& exportedCovers,
+                         library::ResourceStore& resources,
+                         library::DictionaryStore& dict,
+                         library::FileManifestStore::Reader const& manifestReader) const;
+    Result<> exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
 
     library::MusicLibrary& ml;
   };
@@ -435,10 +476,16 @@ namespace ao::rt
 
     if (mode != ExportMode::ListOnly)
     {
-      exportTracks(library, txn, mode);
+      if (auto result = exportTracks(library, txn, mode); !result)
+      {
+        return result;
+      }
     }
 
-    exportLists(library, txn, mode);
+    if (auto result = exportLists(library, txn, mode); !result)
+    {
+      return result;
+    }
 
     auto ofs = std::ofstream{path};
 
@@ -458,9 +505,9 @@ namespace ao::rt
     return {};
   }
 
-  void LibraryYamlExporter::Impl::exportTracks(ryml::NodeRef& node,
-                                               lmdb::ReadTransaction const& txn,
-                                               ExportMode mode) const
+  Result<> LibraryYamlExporter::Impl::exportTracks(ryml::NodeRef& node,
+                                                   lmdb::ReadTransaction const& txn,
+                                                   ExportMode mode) const
   {
     auto const trackReader = ml.tracks().reader(txn);
     auto const manifestReader = ml.manifest().reader(txn);
@@ -474,19 +521,26 @@ namespace ao::rt
 
     for (auto const& [trackId, view] : trackReader)
     {
-      exportTrack(tracksNode, txn, trackId, view, mode, exportedCovers, resources, dict, manifestReader);
+      if (auto result =
+            exportTrack(tracksNode, txn, trackId, view, mode, exportedCovers, resources, dict, manifestReader);
+          !result)
+      {
+        return result;
+      }
     }
+
+    return {};
   }
 
-  void LibraryYamlExporter::Impl::exportTrack(ryml::NodeRef& node,
-                                              lmdb::ReadTransaction const& txn,
-                                              TrackId id,
-                                              library::TrackView const& view,
-                                              ExportMode mode,
-                                              std::unordered_map<ResourceId, std::string>& exportedCovers,
-                                              library::ResourceStore& resources,
-                                              library::DictionaryStore& dict,
-                                              library::FileManifestStore::Reader const& manifestReader) const
+  Result<> LibraryYamlExporter::Impl::exportTrack(ryml::NodeRef& node,
+                                                  lmdb::ReadTransaction const& txn,
+                                                  TrackId id,
+                                                  library::TrackView const& view,
+                                                  ExportMode mode,
+                                                  std::unordered_map<ResourceId, std::string>& exportedCovers,
+                                                  library::ResourceStore& resources,
+                                                  library::DictionaryStore& dict,
+                                                  library::FileManifestStore::Reader const& manifestReader) const
   {
     auto trackNode = node.append_child();
     trackNode |= ryml::MAP;
@@ -503,11 +557,16 @@ namespace ao::rt
     {
       if (auto const fullPath = ml.rootPath() / property.uri(); std::filesystem::exists(fullPath))
       {
-        tagFilePtr = tag::TagFile::open(fullPath);
+        auto tagFileResult = tag::TagFile::open(fullPath);
 
-        if (tagFilePtr)
+        if (tagFileResult)
         {
-          optBaseline = tagFilePtr->loadTrack();
+          tagFilePtr = std::move(*tagFileResult);
+
+          if (auto baselineResult = tagFilePtr->loadTrack(); baselineResult)
+          {
+            optBaseline = *baselineResult;
+          }
         }
       }
     }
@@ -519,16 +578,21 @@ namespace ao::rt
 
     if (mode == ExportMode::Full)
     {
-      emitTrackProperties(trackNode, property, manifestReader);
+      if (auto result = emitTrackProperties(trackNode, property, manifestReader); !result)
+      {
+        return result;
+      }
     }
 
     emitTrackCover(trackNode, txn, view, optBaseline, mode, exportedCovers, resources);
+
     emitTrackCommon(trackNode, view.tags(), dict);
+    return {};
   }
 
-  void LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,
-                                              lmdb::ReadTransaction const& txn,
-                                              ExportMode mode) const
+  Result<> LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,
+                                                  lmdb::ReadTransaction const& txn,
+                                                  ExportMode mode) const
   {
     auto listsNode = node.append_child();
     yaml::setKey(listsNode, "lists");
@@ -582,5 +646,7 @@ namespace ao::rt
         }
       }
     }
+
+    return {};
   }
 } // namespace ao::rt

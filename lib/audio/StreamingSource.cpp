@@ -212,7 +212,7 @@ namespace ao::audio
         break;
       }
 
-      if (!*result)
+      if (*result == StreamingSource::DecodeBlockStatus::Stopped)
       {
         break;
       }
@@ -245,7 +245,7 @@ namespace ao::audio
         return std::unexpected{result.error()};
       }
 
-      if (!*result)
+      if (*result == StreamingSource::DecodeBlockStatus::Stopped)
       {
         break;
       }
@@ -261,12 +261,12 @@ namespace ao::audio
     return {};
   }
 
-  Result<bool> StreamingSource::decodeNextBlock(std::stop_token const& seekToken,
-                                                std::stop_token const* threadStopToken)
+  Result<StreamingSource::DecodeBlockStatus> StreamingSource::decodeNextBlock(std::stop_token const& seekToken,
+                                                                              std::stop_token const* threadStopToken)
   {
     if (seekToken.stop_requested())
     {
-      return false;
+      return DecodeBlockStatus::Stopped;
     }
 
     auto block = PcmBlock{};
@@ -276,7 +276,7 @@ namespace ao::audio
 
       if (seekToken.stop_requested())
       {
-        return false;
+        return DecodeBlockStatus::Stopped;
       }
 
       auto const blockResult = _decoderPtr->readNextBlock();
@@ -292,10 +292,15 @@ namespace ao::audio
     if (block.endOfStream)
     {
       _decoderReachedEof = true;
-      return false;
+      return DecodeBlockStatus::Stopped;
     }
 
-    return writeBlock(std::span<std::byte const>{block.bytes.data(), block.bytes.size()}, seekToken, threadStopToken);
+    if (!writeBlock(std::span<std::byte const>{block.bytes.data(), block.bytes.size()}, seekToken, threadStopToken))
+    {
+      return DecodeBlockStatus::Stopped;
+    }
+
+    return DecodeBlockStatus::Decoded;
   }
 
   bool StreamingSource::writeBlock(std::span<std::byte const> bytes,

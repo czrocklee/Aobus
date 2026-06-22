@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "detail/ThrowError.h"
+#include "detail/ResultError.h"
+#include <ao/Error.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 
 #include <lmdb.h>
 
 #include <cstdint>
-#include <tuple>
+#include <utility>
 
 namespace ao::lmdb
 {
@@ -17,33 +18,58 @@ namespace ao::lmdb
     ::mdb_txn_abort(txn);
   }
 
-  ReadTransaction::TxnPtr ReadTransaction::create(::MDB_env* env, ::MDB_txn* parent, std::uint32_t flags)
+  Result<ReadTransaction::TxnPtr> ReadTransaction::create(::MDB_env* env, ::MDB_txn* parent, std::uint32_t flags)
   {
     ::MDB_txn* handle = nullptr;
-    throwOnError("mdb_txn_begin", ::mdb_txn_begin(env, parent, flags, &handle));
+
+    if (auto result = resultFromCode("mdb_txn_begin", ::mdb_txn_begin(env, parent, flags, &handle)); !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
+
     return TxnPtr{handle};
   }
 
-  ReadTransaction::ReadTransaction(Environment const& env)
-    : ReadTransaction{create(env.handle(), nullptr, MDB_RDONLY)}
+  Result<ReadTransaction> ReadTransaction::begin(Environment const& env)
   {
+    auto txnPtr = create(env.handle(), nullptr, MDB_RDONLY);
+
+    if (!txnPtr)
+    {
+      return makeError(txnPtr.error().code, txnPtr.error().message);
+    }
+
+    return ReadTransaction{std::move(*txnPtr)};
   }
 
-  WriteTransaction::WriteTransaction(Environment& env)
-    : ReadTransaction{ReadTransaction::create(env.handle(), nullptr, 0)}
+  Result<WriteTransaction> WriteTransaction::begin(Environment& env)
   {
+    auto txnPtr = create(env.handle(), nullptr, 0);
+
+    if (!txnPtr)
+    {
+      return makeError(txnPtr.error().code, txnPtr.error().message);
+    }
+
+    return WriteTransaction{std::move(*txnPtr)};
   }
 
-  // Nested write transaction - child of parent write transaction
-  WriteTransaction::WriteTransaction(WriteTransaction& parent)
-    : ReadTransaction{ReadTransaction::create(::mdb_txn_env(parent.handle()), parent.handle(), 0)}
+  Result<WriteTransaction> WriteTransaction::begin(WriteTransaction& parent)
   {
+    auto txnPtr = create(::mdb_txn_env(parent.handle()), parent.handle(), 0);
+
+    if (!txnPtr)
+    {
+      return makeError(txnPtr.error().code, txnPtr.error().message);
+    }
+
+    return WriteTransaction{std::move(*txnPtr)};
   }
 
-  void WriteTransaction::commit()
+  Result<> WriteTransaction::commit()
   {
-    throwOnError("mdb_txn_commit", ::mdb_txn_commit(handle()));
-    std::ignore = releaseHandle(); // Prevent destructor from committing/aborting
+    int const rc = ::mdb_txn_commit(releaseHandle());
     _cursorClosed = true;
+    return resultFromCode("mdb_txn_commit", rc);
   }
 }

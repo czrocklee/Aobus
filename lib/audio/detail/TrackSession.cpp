@@ -3,6 +3,7 @@
 
 #include "TrackSession.h"
 
+#include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/Format.h>
@@ -16,10 +17,10 @@
 
 #include <chrono>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
-#include <string>
 #include <utility>
 
 namespace ao::audio::detail
@@ -33,66 +34,92 @@ namespace ao::audio::detail
     // blocking the GTK main thread. All tracks now use StreamingSource, which
     // decodes on a background thread.
     constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 0;
+
+    // Obtains a decoder from the injected factory when present, otherwise from the
+    // production factory. The injected seam returns a plain pointer (a test that
+    // returns null is a deliberate "no decoder", with no IO to diagnose), so its
+    // null result becomes NotSupported; the production factory already carries a
+    // precise IoError/NotSupported code, which is propagated unchanged.
+    Result<std::unique_ptr<IDecoderSession>> makeDecoder(TrackSession::DecoderFactoryFn const& decoderFactory,
+                                                         std::filesystem::path const& path,
+                                                         Format const& outputFormat)
+    {
+      if (decoderFactory)
+      {
+        auto decoderPtr = decoderFactory(path, outputFormat);
+
+        if (!decoderPtr)
+        {
+          return makeError(
+            Error::Code::NotSupported, std::format("No audio decoder available for '{}'", path.string()));
+        }
+
+        return decoderPtr;
+      }
+
+      return createDecoderSession(path, outputFormat);
+    }
   }
 
-  TrackSession::Result TrackSession::create(PlaybackInput const& input,
-                                            Device const& device,
-                                            BackendId const& backendId,
-                                            ProfileId const& profileId,
-                                            DecoderFactoryFn const& decoderFactory,
-                                            OnSourceErrorFn onSourceError)
+  Result<TrackSession::OpenedTrack> TrackSession::create(PlaybackInput const& input,
+                                                         Device const& device,
+                                                         BackendId const& backendId,
+                                                         ProfileId const& profileId,
+                                                         DecoderFactoryFn const& decoderFactory,
+                                                         OnSourceErrorFn onSourceError)
   {
     auto const outputFormat = [] { return Format{.isInterleaved = true}; }();
 
-    auto decoderPtr = decoderFactory ? decoderFactory(input.filePath, outputFormat)
-                                     : createDecoderSession(input.filePath, outputFormat);
+    auto decoderResult = makeDecoder(decoderFactory, input.filePath, outputFormat);
 
-    if (decoderPtr == nullptr)
+    if (!decoderResult)
     {
-      return {.error = {.message = "No audio decoder backend is available"}};
+      return std::unexpected{decoderResult.error()};
     }
+
+    auto decoderPtr = std::move(*decoderResult);
 
     if (auto const openResult = decoderPtr->open(input.filePath); !openResult)
     {
-      return {.error = openResult.error()};
+      return std::unexpected{openResult.error()};
     }
 
     auto info = decoderPtr->streamInfo();
 
     if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
     {
-      return {.error = {.message = "Decoder did not return a valid output format"}};
+      return std::unexpected{
+        Error{.code = Error::Code::InitFailed, .message = "Decoder did not return a valid output format"}};
     }
 
     auto backendFormat = Format{};
-    auto errorMsg = std::string{};
 
-    if (!negotiateFormat(
-          input.filePath, info, decoderPtr, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))
+    if (auto const negotiateResult = negotiateFormat(
+          input.filePath, info, decoderPtr, backendFormat, device, backendId, profileId, decoderFactory);
+        !negotiateResult)
     {
-      return {.error = {.message = errorMsg}};
+      return std::unexpected{negotiateResult.error()};
     }
 
     info = decoderPtr->streamInfo();
-    auto sourcePtr = createPcmSource(std::move(decoderPtr), info, std::move(onSourceError), errorMsg);
+    auto sourceResult = createPcmSource(std::move(decoderPtr), info, std::move(onSourceError));
 
-    if (!sourcePtr)
+    if (!sourceResult)
     {
-      return {.error = {.message = errorMsg}};
+      return std::unexpected{sourceResult.error()};
     }
 
-    return {.sourcePtr = std::move(sourcePtr), .backendFormat = backendFormat, .info = info};
+    return OpenedTrack{.sourcePtr = std::move(*sourceResult), .backendFormat = backendFormat, .info = info};
   }
 
-  bool TrackSession::negotiateFormat(std::filesystem::path const& path,
-                                     DecodedStreamInfo& info,
-                                     std::unique_ptr<IDecoderSession>& decoder,
-                                     Format& backendFormat,
-                                     Device const& device,
-                                     BackendId const& backendId,
-                                     ProfileId const& profileId,
-                                     DecoderFactoryFn const& decoderFactory,
-                                     std::string& errorMsg)
+  Result<> TrackSession::negotiateFormat(std::filesystem::path const& path,
+                                         DecodedStreamInfo& info,
+                                         std::unique_ptr<IDecoderSession>& decoder,
+                                         Format& backendFormat,
+                                         Device const& device,
+                                         BackendId const& backendId,
+                                         ProfileId const& profileId,
+                                         DecoderFactoryFn const& decoderFactory)
   {
     if (backendId == kBackendPipeWire && profileId == kProfileShared)
     {
@@ -101,24 +128,25 @@ namespace ao::audio::detail
                      backendFormat.sampleRate,
                      static_cast<int>(backendFormat.bitDepth),
                      static_cast<int>(backendFormat.channels));
-      return true;
+      return {};
     }
 
     auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, device.capabilities);
 
     if (plan.requiresResample)
     {
-      errorMsg = std::format(
-        "{} does not support {} Hz and Aobus has no resampler yet", backendId, info.sourceFormat.sampleRate);
-      return false;
+      return makeError(
+        Error::Code::NotSupported,
+        std::format(
+          "{} does not support {} Hz and Aobus has no resampler yet", backendId, info.sourceFormat.sampleRate));
     }
 
     if (plan.requiresChannelRemap)
     {
-      errorMsg = std::format("{} does not support {} channels and Aobus has no channel remapper yet",
-                             backendId,
-                             static_cast<std::int32_t>(info.sourceFormat.channels));
-      return false;
+      return makeError(Error::Code::NotSupported,
+                       std::format("{} does not support {} channels and Aobus has no channel remapper yet",
+                                   backendId,
+                                   static_cast<std::int32_t>(info.sourceFormat.channels)));
     }
 
     AUDIO_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
@@ -131,51 +159,47 @@ namespace ao::audio::detail
     if (!(plan.decoderOutputFormat == info.sourceFormat))
     {
       decoder->close();
-      decoder = decoderFactory ? decoderFactory(path, plan.decoderOutputFormat)
-                               : createDecoderSession(path, plan.decoderOutputFormat);
+      auto decoderResult = makeDecoder(decoderFactory, path, plan.decoderOutputFormat);
 
-      if (!decoder)
+      if (!decoderResult)
       {
-        errorMsg = "Failed to re-open decoder with negotiated format";
-        return false;
+        return std::unexpected{decoderResult.error()};
       }
+
+      decoder = std::move(*decoderResult);
 
       if (auto const reOpenResult = decoder->open(path); !reOpenResult)
       {
-        errorMsg = reOpenResult.error().message;
-        return false;
+        return std::unexpected{reOpenResult.error()};
       }
     }
 
     backendFormat = plan.deviceFormat;
-    return true;
+    return {};
   }
 
-  std::shared_ptr<ISource> TrackSession::createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
-                                                         DecodedStreamInfo const& info,
-                                                         OnSourceErrorFn onSourceError,
-                                                         std::string& errorMsg)
+  Result<std::shared_ptr<ISource>> TrackSession::createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
+                                                                 DecodedStreamInfo const& info,
+                                                                 OnSourceErrorFn onSourceError)
   {
     if (shouldUseMemoryPcmSource(info))
     {
-      auto const memorySourcePtr = std::make_shared<MemorySource>(std::move(decoderPtr), info);
+      auto memorySourcePtr = std::make_shared<MemorySource>(std::move(decoderPtr), info);
 
       if (auto const initResult = memorySourcePtr->initialize(); !initResult)
       {
-        errorMsg = initResult.error().message;
-        return nullptr;
+        return std::unexpected{initResult.error()};
       }
 
       return memorySourcePtr;
     }
 
-    auto const streamingSourcePtr = std::make_shared<StreamingSource>(
+    auto streamingSourcePtr = std::make_shared<StreamingSource>(
       std::move(decoderPtr), info, std::move(onSourceError), kPrerollDuration, kDecodeHighWatermarkThreshold);
 
     if (auto const initResult = streamingSourcePtr->initialize(); !initResult)
     {
-      errorMsg = initResult.error().message;
-      return nullptr;
+      return std::unexpected{initResult.error()};
     }
 
     return streamingSourcePtr;

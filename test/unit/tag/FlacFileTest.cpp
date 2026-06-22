@@ -4,7 +4,7 @@
 #include "lib/tag/flac/File.h"
 #include "test/unit/TestUtils.h"
 #include <ao/AudioCodec.h>
-#include <ao/Exception.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/tag/TagFile.h>
 
@@ -86,6 +86,13 @@ namespace ao::tag::flac::test
 
       return data;
     }
+
+    library::TrackBuilder loadTrack(File const& file)
+    {
+      auto result = file.loadTrack();
+      REQUIRE(result);
+      return *result;
+    }
   }
 
   TEST_CASE("FLAC File - parses metadata and audio properties", "[tag][unit][flac][file]")
@@ -94,7 +101,7 @@ namespace ao::tag::flac::test
     auto const temp = TempFile{data};
 
     auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
+    auto builder = loadTrack(file);
 
     auto const meta = builder.metadata();
     CHECK(meta.title() == "Title");
@@ -131,7 +138,9 @@ namespace ao::tag::flac::test
 
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
+      auto result = file.loadTrack();
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Block size exceeds file boundary")
@@ -150,7 +159,9 @@ namespace ao::tag::flac::test
 
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
+      auto result = file.loadTrack();
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Trailing bytes too small for the next block header")
@@ -169,7 +180,9 @@ namespace ao::tag::flac::test
 
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
+      auto result = file.loadTrack();
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Picture block is truncated after picture type")
@@ -186,7 +199,9 @@ namespace ao::tag::flac::test
 
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
+      auto result = file.loadTrack();
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Invalid FLAC magic signature")
@@ -194,7 +209,9 @@ namespace ao::tag::flac::test
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'K'};
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
+      auto result = file.loadTrack();
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
   }
 } // namespace ao::tag::flac::test

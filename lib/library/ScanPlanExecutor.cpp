@@ -18,8 +18,10 @@
 #include <exception>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stop_token>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -66,7 +68,11 @@ namespace ao::library
       processItem(i, txn, trackWriter, manifestWriter, dict);
     }
 
-    txn.commit();
+    if (auto result = txn.commit(); !result)
+    {
+      APP_LOG_ERROR("Failed to commit scan results: {}", result.error().message);
+      ++_result.failureCount;
+    }
 
     if (_finishedCallback)
     {
@@ -89,97 +95,290 @@ namespace ao::library
         _progressCallback(item.fullPath, static_cast<std::int32_t>(itemIndex));
       }
 
-      if (item.classification == ScanClassification::Unchanged)
+      if (processSkips(item))
       {
-        ++_result.skippedCount;
-        return;
-      }
-
-      if (item.classification == ScanClassification::Unsupported || item.classification == ScanClassification::Error)
-      {
-        ++_result.failureCount;
         return;
       }
 
       if (item.classification == ScanClassification::Missing)
       {
-        // Update manifest status to Missing
-        if (auto const optView = _ml.manifest().reader(txn).get(item.uri); optView)
-        {
-          auto builder = FileManifestBuilder::fromView(*optView);
-          builder.status(FileStatus::Missing);
-          manifestWriter.put(item.uri, builder.serialize());
-        }
-
+        processMissing(item, txn, manifestWriter);
         return;
       }
 
-      // Handle NEW or CHANGED
-      auto const tagFilePtr = tag::TagFile::open(item.fullPath);
+      auto optLoad = loadTrackBuilder(item);
 
-      if (!tagFilePtr)
+      if (!optLoad)
       {
-        APP_LOG_WARN("Skipping unsupported file: {}", item.fullPath.string());
-        ++_result.skippedCount;
         return;
       }
 
-      auto builder = tagFilePtr->loadTrack();
+      auto& [tagFilePtr, builder] = *optLoad;
+      std::ignore = tagFilePtr;
+
       builder.property().uri(item.uri);
 
       if (item.classification == ScanClassification::Changed && item.trackId != kInvalidTrackId)
       {
-        auto optExisting = trackWriter.get(item.trackId, TrackStore::Reader::LoadMode::Both);
-
-        if (optExisting)
+        if (processChanged(item, txn, trackWriter, manifestWriter, dict, builder))
         {
-          auto merged = TrackBuilder::fromView(*optExisting, dict);
-          merged.property()
-            .duration(builder.property().duration())
-            .bitrate(builder.property().bitrate())
-            .sampleRate(builder.property().sampleRate())
-            .channels(builder.property().channels())
-            .codec(builder.property().codec())
-            .bitDepth(builder.property().bitDepth());
-
-          auto const [preparedHot, preparedCold] = merged.prepare(txn, dict, _ml.resources());
-          trackWriter.updateHot(
-            item.trackId, preparedHot.size(), [&](std::span<std::byte> hot) { preparedHot.writeTo(hot); });
-          trackWriter.updateCold(
-            item.trackId, preparedCold.size(), [&](std::span<std::byte> cold) { preparedCold.writeTo(cold); });
-
-          // Update manifest
-          auto manifestBuilder = FileManifestBuilder::createNew();
-          manifestBuilder.trackId(item.trackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
-          manifestWriter.put(item.uri, manifestBuilder.serialize());
-
-          _result.processedIds.push_back(item.trackId);
           return;
         }
       }
 
-      // New track
-      auto [preparedHot, preparedCold] = builder.prepare(txn, dict, _ml.resources());
-      [[maybe_unused]] auto [newTrackId, view] = trackWriter.createHotCold(
-        preparedHot.size(),
-        preparedCold.size(),
-        [&preparedHot, &preparedCold](TrackId /*id*/, std::span<std::byte> hot, std::span<std::byte> cold)
-        {
-          preparedHot.writeTo(hot);
-          preparedCold.writeTo(cold);
-        });
-
-      auto manifestBuilder = FileManifestBuilder::createNew();
-      manifestBuilder.trackId(newTrackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
-      manifestWriter.put(item.uri, manifestBuilder.serialize());
-
-      _result.processedIds.push_back(newTrackId);
+      processNew(item, txn, trackWriter, manifestWriter, dict, builder);
     }
     catch (std::exception const& e)
     {
       APP_LOG_ERROR("Failed to process {}: {}", item.uri, e.what());
       ++_result.failureCount;
     }
+  }
+
+  bool ScanPlanExecutor::processSkips(ScanItem const& item)
+  {
+    if (item.classification == ScanClassification::Unchanged)
+    {
+      ++_result.skippedCount;
+      return true;
+    }
+
+    if (item.classification == ScanClassification::Unsupported || item.classification == ScanClassification::Error)
+    {
+      ++_result.failureCount;
+      return true;
+    }
+
+    return false;
+  }
+
+  void ScanPlanExecutor::processMissing(ScanItem const& item,
+                                        ao::lmdb::WriteTransaction& txn,
+                                        FileManifestStore::Writer& manifestWriter)
+  {
+    auto manifestResult = _ml.manifest().reader(txn).get(item.uri);
+
+    if (!manifestResult)
+    {
+      if (manifestResult.error().code == Error::Code::NotFound)
+      {
+        return;
+      }
+
+      APP_LOG_ERROR("Failed to read manifest for {}: {}", item.uri, manifestResult.error().message);
+      ++_result.failureCount;
+      return;
+    }
+
+    auto builder = FileManifestBuilder::fromView(*manifestResult);
+    builder.status(FileStatus::Missing);
+
+    writeManifest(manifestWriter, item.uri, builder);
+  }
+
+  std::optional<std::pair<std::unique_ptr<tag::TagFile>, TrackBuilder>> ScanPlanExecutor::loadTrackBuilder(
+    ScanItem const& item)
+  {
+    auto tagFileResult = tag::TagFile::open(item.fullPath);
+
+    if (!tagFileResult)
+    {
+      if (tagFileResult.error().code == Error::Code::NotSupported)
+      {
+        APP_LOG_WARN("Skipping unsupported file: {}", item.fullPath.string());
+        ++_result.skippedCount;
+      }
+      else
+      {
+        APP_LOG_ERROR("Failed to open {}: {}", item.uri, tagFileResult.error().message);
+        ++_result.failureCount;
+      }
+
+      return std::nullopt;
+    }
+
+    auto tagFilePtr = std::move(*tagFileResult);
+    auto builderResult = tagFilePtr->loadTrack();
+
+    if (!builderResult)
+    {
+      APP_LOG_ERROR("Failed to read tags from {}: {}", item.uri, builderResult.error().message);
+      ++_result.failureCount;
+      return std::nullopt;
+    }
+
+    return std::make_pair(std::move(tagFilePtr), *builderResult);
+  }
+
+  bool ScanPlanExecutor::processChanged(ScanItem const& item,
+                                        ao::lmdb::WriteTransaction& txn,
+                                        TrackStore::Writer& trackWriter,
+                                        FileManifestStore::Writer& manifestWriter,
+                                        DictionaryStore& dict,
+                                        TrackBuilder& builder)
+  {
+    auto optExisting = trackWriter.get(item.trackId, TrackStore::Reader::LoadMode::Both);
+
+    if (!optExisting)
+    {
+      return false;
+    }
+
+    auto merged = TrackBuilder::fromView(*optExisting, dict);
+    merged.property()
+      .duration(builder.property().duration())
+      .bitrate(builder.property().bitrate())
+      .sampleRate(builder.property().sampleRate())
+      .channels(builder.property().channels())
+      .codec(builder.property().codec())
+      .bitDepth(builder.property().bitDepth());
+
+    auto optPrepared = prepareTrack(merged, txn, dict, item.uri);
+
+    if (!optPrepared)
+    {
+      return true;
+    }
+
+    auto const& [preparedHot, preparedCold] = *optPrepared;
+
+    if (!updateTrack(trackWriter, item.trackId, item.uri, preparedHot, preparedCold))
+    {
+      return true;
+    }
+
+    auto manifestBuilder = FileManifestBuilder::createNew();
+    manifestBuilder.trackId(item.trackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
+
+    if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
+    {
+      return true;
+    }
+
+    _result.processedIds.push_back(item.trackId);
+    return true;
+  }
+
+  void ScanPlanExecutor::processNew(ScanItem const& item,
+                                    ao::lmdb::WriteTransaction& txn,
+                                    TrackStore::Writer& trackWriter,
+                                    FileManifestStore::Writer& manifestWriter,
+                                    DictionaryStore& dict,
+                                    TrackBuilder& builder)
+  {
+    auto optPrepared = prepareTrack(builder, txn, dict, item.uri);
+
+    if (!optPrepared)
+    {
+      return;
+    }
+
+    auto const& [preparedHot, preparedCold] = *optPrepared;
+
+    auto optNewTrackId = createTrack(trackWriter, item.uri, preparedHot, preparedCold);
+
+    if (!optNewTrackId)
+    {
+      return;
+    }
+
+    auto manifestBuilder = FileManifestBuilder::createNew();
+    manifestBuilder.trackId(*optNewTrackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
+
+    if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
+    {
+      return;
+    }
+
+    _result.processedIds.push_back(*optNewTrackId);
+  }
+
+  std::optional<std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold>> ScanPlanExecutor::prepareTrack(
+    TrackBuilder const& builder,
+    ao::lmdb::WriteTransaction& txn,
+    DictionaryStore& dict,
+    std::string const& uri)
+  {
+    auto preparedResult = builder.prepare(txn, dict, _ml.resources());
+
+    if (!preparedResult)
+    {
+      APP_LOG_ERROR("Failed to serialize {}: {}", uri, preparedResult.error().message);
+      ++_result.failureCount;
+      return std::nullopt;
+    }
+
+    return *preparedResult;
+  }
+
+  bool ScanPlanExecutor::updateTrack(TrackStore::Writer& trackWriter,
+                                     TrackId trackId,
+                                     std::string const& uri,
+                                     TrackBuilder::PreparedHot const& hot,
+                                     TrackBuilder::PreparedCold const& cold)
+  {
+    auto hotResult =
+      trackWriter.updateHot(trackId, hot.size(), [&](std::span<std::byte> hotBuffer) { hot.writeTo(hotBuffer); });
+
+    if (!hotResult)
+    {
+      APP_LOG_ERROR("Failed to update hot track data for {}: {}", uri, hotResult.error().message);
+      ++_result.failureCount;
+      return false;
+    }
+
+    auto coldResult =
+      trackWriter.updateCold(trackId, cold.size(), [&](std::span<std::byte> coldBuffer) { cold.writeTo(coldBuffer); });
+
+    if (!coldResult)
+    {
+      APP_LOG_ERROR("Failed to update cold track data for {}: {}", uri, coldResult.error().message);
+      ++_result.failureCount;
+      return false;
+    }
+
+    return true;
+  }
+
+  std::optional<TrackId> ScanPlanExecutor::createTrack(TrackStore::Writer& trackWriter,
+                                                       std::string const& uri,
+                                                       TrackBuilder::PreparedHot const& hot,
+                                                       TrackBuilder::PreparedCold const& cold)
+  {
+    auto createResult = trackWriter.createHotCold(
+      hot.size(),
+      cold.size(),
+      [&hot, &cold](TrackId /*id*/, std::span<std::byte> hotBuffer, std::span<std::byte> coldBuffer)
+      {
+        hot.writeTo(hotBuffer);
+        cold.writeTo(coldBuffer);
+      });
+
+    if (!createResult)
+    {
+      APP_LOG_ERROR("Failed to create track data for {}: {}", uri, createResult.error().message);
+      ++_result.failureCount;
+      return std::nullopt;
+    }
+
+    auto const [newTrackId, trackView] = *createResult;
+    std::ignore = trackView;
+
+    return newTrackId;
+  }
+
+  bool ScanPlanExecutor::writeManifest(FileManifestStore::Writer& writer,
+                                       std::string const& uri,
+                                       FileManifestBuilder& builder)
+  {
+    if (auto putResult = writer.put(uri, builder.serialize()); !putResult)
+    {
+      APP_LOG_ERROR("Failed to update manifest for {}: {}", uri, putResult.error().message);
+      ++_result.failureCount;
+      return false;
+    }
+
+    return true;
   }
 
   void ScanPlanExecutor::join()

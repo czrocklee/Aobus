@@ -77,8 +77,21 @@ namespace ao::cli
 
       auto const data = builder.serialize();
 
-      auto const [id, view] = ml.lists().writer(txn).create(data);
-      txn.commit();
+      auto createResult = ml.lists().writer(txn).create(data);
+
+      if (!createResult)
+      {
+        os << "failed to create list: " << createResult.error().message << "\n";
+        return;
+      }
+
+      auto const [id, view] = *createResult;
+
+      if (auto result = txn.commit(); !result)
+      {
+        os << "failed to commit list: " << result.error().message << "\n";
+        return;
+      }
 
       os << "add list: " << id << " " << name << "\n";
     }
@@ -183,14 +196,19 @@ namespace ao::cli
         auto txn = ml.writeTransaction();
         auto writer = ml.lists().writer(txn);
 
-        if (auto const listId = ListId{id->as<std::uint32_t>()}; writer.del(listId))
-        {
-          std::cout << "deleted list: " << listId << "\n";
-          txn.commit();
-        }
-        else
+        auto const listId = ListId{id->as<std::uint32_t>()};
+
+        if (!writer.del(listId))
         {
           std::cout << "list not found: " << listId << "\n";
+          return;
+        }
+
+        std::cout << "deleted list: " << listId << "\n";
+
+        if (auto result = txn.commit(); !result)
+        {
+          std::cout << "failed to commit list delete: " << result.error().message << "\n";
         }
       });
 

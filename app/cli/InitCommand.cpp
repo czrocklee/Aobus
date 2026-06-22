@@ -38,20 +38,45 @@ namespace ao::cli
       {
         try
         {
-          auto const tagFilePtr = tag::TagFile::open(path);
+          auto tagFileResult = tag::TagFile::open(path);
 
-          if (!tagFilePtr)
+          if (!tagFileResult)
           {
+            if (tagFileResult.error().code == Error::Code::NotSupported)
+            {
+              continue;
+            }
+
+            std::cerr << "failed to open metadata for " << path.filename() << ": " << tagFileResult.error().message
+                      << '\n';
             continue;
           }
 
-          auto builder = tagFilePtr->loadTrack();
+          auto builderResult = (*tagFileResult)->loadTrack();
+
+          if (!builderResult)
+          {
+            std::cerr << "failed to parse metadata for " << path.filename() << ": " << builderResult.error().message
+                      << '\n';
+            continue;
+          }
+
+          auto builder = *builderResult;
           // NOTE: pathStr must outlive builder because PropertyBuilder stores string_view
           auto const pathStr = path.string();
           builder.property().uri(pathStr);
 
-          auto const [preparedHot, preparedCold] = builder.prepare(txn, dict, ml.resources());
-          auto const [id, trackView] = writer.createHotCold(
+          auto preparedResult = builder.prepare(txn, dict, ml.resources());
+
+          if (!preparedResult)
+          {
+            std::cerr << "failed to serialize metadata for " << path.filename() << ": "
+                      << preparedResult.error().message << '\n';
+            continue;
+          }
+
+          auto const& [preparedHot, preparedCold] = *preparedResult;
+          auto createResult = writer.createHotCold(
             preparedHot.size(),
             preparedCold.size(),
             [&preparedHot, &preparedCold](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
@@ -60,6 +85,15 @@ namespace ao::cli
               preparedCold.writeTo(cold);
             });
 
+          if (!createResult)
+          {
+            std::cerr << "failed to create track for " << path.filename() << ": " << createResult.error().message
+                      << '\n';
+            continue;
+          }
+
+          auto const [id, trackView] = *createResult;
+
           // Populate Manifest
           auto manifestBuilder = library::FileManifestBuilder::createNew();
           manifestBuilder.trackId(id)
@@ -67,7 +101,13 @@ namespace ao::cli
             .mtime(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                                 std::filesystem::last_write_time(path).time_since_epoch())
                                                 .count()));
-          manifestWriter.put(pathStr, manifestBuilder.serialize());
+
+          if (auto putResult = manifestWriter.put(pathStr, manifestBuilder.serialize()); !putResult)
+          {
+            std::cerr << "failed to update manifest for " << path.filename() << ": " << putResult.error().message
+                      << '\n';
+            continue;
+          }
 
           os << "add track: " << id << " " << trackView.metadata().title() << '\n';
         }
@@ -77,7 +117,10 @@ namespace ao::cli
         }
       }
 
-      txn.commit();
+      if (auto result = txn.commit(); !result)
+      {
+        std::cerr << "failed to commit imported tracks: " << result.error().message << '\n';
+      }
     }
   }
 

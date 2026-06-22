@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
@@ -10,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <expected>
 #include <mutex>
 #include <shared_mutex>
 #include <span>
@@ -49,7 +51,7 @@ namespace ao::library
     }
   }
 
-  DictionaryId DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
+  Result<DictionaryId> DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
     auto const lock = std::scoped_lock{_mutex};
 
@@ -60,7 +62,12 @@ namespace ao::library
       {
         auto writer = _database.writer(txn);
         auto data = utility::bytes::view(value);
-        writer.create(it->raw(), data);
+
+        if (auto result = writer.create(it->raw(), data); !result)
+        {
+          return std::unexpected{result.error()};
+        }
+
         _reservedStrings.erase(resIt);
       }
 
@@ -70,19 +77,28 @@ namespace ao::library
     // Not found in memory - write with ID that avoids getOrIntern collisions
     auto writer = _database.writer(txn);
     auto data = utility::bytes::view(value);
-    auto id = popFreeId();
+    auto id = _freeIds.empty() ? kInvalidDictionaryId : _freeIds.back();
 
     if (id == kInvalidDictionaryId)
     {
       id = DictionaryId{std::max(writer.maxKey(), static_cast<std::uint32_t>(_idToStringStorage.size())) + 1};
-
-      if (id.raw() > _idToStringStorage.size())
-      {
-        _idToStringStorage.resize(id.raw());
-      }
     }
 
-    writer.create(id.raw(), data);
+    if (auto result = writer.create(id.raw(), data); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    if (!_freeIds.empty() && _freeIds.back() == id)
+    {
+      _freeIds.pop_back();
+    }
+
+    if (id.raw() > _idToStringStorage.size())
+    {
+      _idToStringStorage.resize(id.raw());
+    }
+
     _idToStringStorage[id.raw() - 1] = std::string{utility::bytes::stringView(data)};
     _stringToId.insert(id);
     return id;

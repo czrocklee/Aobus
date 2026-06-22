@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
@@ -48,6 +49,7 @@ namespace ao::library
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
+    // Absence is the only recoverable miss; storage faults throw (see lmdb).
     std::optional<ListView> get(ListId id) const;
 
   private:
@@ -93,10 +95,11 @@ namespace ao::library
   class ListStore::Writer final
   {
   public:
-    std::pair<ListId, ListView> create(std::span<std::byte const> data);
-    void update(ListId id, std::span<std::byte const> data);
+    Result<std::pair<ListId, ListView>> create(std::span<std::byte const> data);
+    Result<> update(ListId id, std::span<std::byte const> data);
+    // Returns true if a row was removed, false if the id was absent.
     bool del(ListId id);
-    void clear();
+    Result<> clear();
 
     std::optional<ListView> get(ListId id) const;
 

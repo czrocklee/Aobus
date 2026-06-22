@@ -5,6 +5,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/ManualListSource.h>
@@ -88,7 +89,8 @@ namespace ao::rt
     }
 
     auto const txn = _library.readTransaction();
-    auto const optView = _library.lists().reader(txn).get(listId);
+    auto const optView =
+      storageValueOrNullopt(_library.lists().reader(txn).get(listId), "Failed to refresh list source");
 
     if (!optView)
     {
@@ -181,7 +183,7 @@ namespace ao::rt
     }
 
     auto const txn = _library.readTransaction();
-    auto const optView = _library.lists().reader(txn).get(listId);
+    auto const optView = storageValueOrNullopt(_library.lists().reader(txn).get(listId), "Failed to build list source");
 
     if (!optView)
     {

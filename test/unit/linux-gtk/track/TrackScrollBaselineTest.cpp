@@ -10,6 +10,7 @@
 // layout is version-dependent and flaky headless — so the numbers isolate the
 // app-owned bind cost we can actually optimize, not the toolkit's.
 
+#include "../../TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
@@ -79,8 +80,10 @@ namespace ao::gtk::test
           .channels(Channels{2})
           .bitDepth(BitDepth{16});
 
-        auto const [hot, cold] = builder.serialize(txn, library.dictionary(), library.resources());
-        ids.push_back(writer.createHotCold(hot, cold).first);
+        auto serializeResult = builder.serialize(txn, library.dictionary(), library.resources());
+        REQUIRE(serializeResult);
+        auto const [hot, cold] = *serializeResult;
+        ids.push_back(ao::test::requireValue(writer.createHotCold(hot, cold)).first);
       }
 
       txn.commit();

@@ -3,6 +3,7 @@
 
 #include "track/TrackListModel.h"
 
+#include "../../TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
@@ -92,9 +93,11 @@ namespace ao::gtk::test
           .channels(Channels{2})
           .bitDepth(BitDepth{16});
 
-        auto const hotData = builder.serializeHot(txn, lib.dictionary());
-        auto const coldData = builder.serializeCold(txn, lib.dictionary(), lib.resources());
-        auto [id, _] = writer.createHotCold(hotData, coldData);
+        auto hotData = builder.serializeHot(txn, lib.dictionary());
+        REQUIRE(hotData);
+        auto coldData = builder.serializeCold(txn, lib.dictionary(), lib.resources());
+        REQUIRE(coldData);
+        auto [id, _] = ao::test::requireValue(writer.createHotCold(*hotData, *coldData));
         txn.commit();
         return id;
       }

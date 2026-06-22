@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/lmdb/Transaction.h>
 
 #include <filesystem>
@@ -27,10 +28,12 @@ namespace ao::library
     explicit MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath);
     ~MusicLibrary();
 
+    static Result<MusicLibrary> open(std::filesystem::path musicRoot, std::filesystem::path databasePath);
+
     MusicLibrary(MusicLibrary const&) = delete;
     MusicLibrary& operator=(MusicLibrary const&) = delete;
-    MusicLibrary(MusicLibrary&&) = delete;
-    MusicLibrary& operator=(MusicLibrary&&) = delete;
+    MusicLibrary(MusicLibrary&&) noexcept;
+    MusicLibrary& operator=(MusicLibrary&&) noexcept;
 
     lmdb::ReadTransaction readTransaction() const;
     lmdb::WriteTransaction writeTransaction();
@@ -56,6 +59,10 @@ namespace ao::library
     std::filesystem::path const& rootPath() const;
 
   private:
+    MusicLibrary() = default;
+
+    Result<> initialize(std::filesystem::path musicRoot, std::filesystem::path databasePath);
+
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

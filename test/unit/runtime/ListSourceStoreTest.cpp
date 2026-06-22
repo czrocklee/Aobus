@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -39,7 +40,7 @@ namespace ao::rt::test
         auto txn = testLib.library().writeTransaction();
         auto builder = ListBuilder::createNew();
         builder.name("ManualList");
-        listId = testLib.library().lists().writer(txn).create(builder.serialize()).first;
+        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
         txn.commit();
       }
 
@@ -59,7 +60,7 @@ namespace ao::rt::test
         auto builder = ListBuilder::createNew();
         builder.name("SmartList");
         builder.filter("title == \"foo\"");
-        listId = testLib.library().lists().writer(txn).create(builder.serialize()).first;
+        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
         txn.commit();
       }
 
@@ -89,7 +90,7 @@ namespace ao::rt::test
         auto txn = testLib.library().writeTransaction();
         auto builder = ListBuilder::createNew();
         builder.name("Manual");
-        listId = testLib.library().lists().writer(txn).create(builder.serialize()).first;
+        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
         txn.commit();
       }
 
@@ -121,7 +122,7 @@ namespace ao::rt::test
         auto builder = ListBuilder::createNew();
         builder.name("Smart");
         builder.filter("$year >= 2020");
-        listId = testLib.library().lists().writer(txn).create(builder.serialize()).first;
+        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
         txn.commit();
       }
 
@@ -150,7 +151,7 @@ namespace ao::rt::test
         auto txn = testLib.library().writeTransaction();
         auto builder = ListBuilder::createNew();
         builder.name("DeleteMe");
-        listId = testLib.library().lists().writer(txn).create(builder.serialize()).first;
+        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
         txn.commit();
       }
 
@@ -182,17 +183,17 @@ namespace ao::rt::test
 
         auto parentBuilder = ListBuilder::createNew();
         parentBuilder.name("Parent");
-        parentId = writer.create(parentBuilder.serialize()).first;
+        parentId = ao::test::requireValue(writer.create(parentBuilder.serialize())).first;
 
         auto childBuilder = ListBuilder::createNew();
         childBuilder.name("Child");
         childBuilder.parentId(parentId);
-        childId = writer.create(childBuilder.serialize()).first;
+        childId = ao::test::requireValue(writer.create(childBuilder.serialize())).first;
 
         auto grandchildBuilder = ListBuilder::createNew();
         grandchildBuilder.name("Grandchild");
         grandchildBuilder.parentId(childId);
-        grandchildId = writer.create(grandchildBuilder.serialize()).first;
+        grandchildId = ao::test::requireValue(writer.create(grandchildBuilder.serialize())).first;
 
         txn.commit();
       }
@@ -225,7 +226,7 @@ namespace ao::rt::test
         auto txn = testLib.library().writeTransaction();
         auto builder = ListBuilder::createNew();
         builder.name("ToErase");
-        listId = testLib.library().lists().writer(txn).create(builder.serialize()).first;
+        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
         txn.commit();
       }
 

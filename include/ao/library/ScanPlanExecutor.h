@@ -4,7 +4,9 @@
 #pragma once
 
 #include <ao/Type.h>
+#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
 
@@ -13,14 +15,23 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <stop_token>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
+
+namespace ao::tag
+{
+  class TagFile;
+}
 
 namespace ao::library
 {
   class MusicLibrary;
   struct ScanPlan;
+  struct ScanItem;
   class DictionaryStore;
 
   /**
@@ -77,6 +88,45 @@ namespace ao::library
                      TrackStore::Writer& trackWriter,
                      FileManifestStore::Writer& manifestWriter,
                      DictionaryStore& dict);
+
+    bool processSkips(ScanItem const& item);
+
+    void processMissing(ScanItem const& item, lmdb::WriteTransaction& txn, FileManifestStore::Writer& manifestWriter);
+
+    bool processChanged(ScanItem const& item,
+                        lmdb::WriteTransaction& txn,
+                        TrackStore::Writer& trackWriter,
+                        FileManifestStore::Writer& manifestWriter,
+                        DictionaryStore& dict,
+                        TrackBuilder& builder);
+
+    void processNew(ScanItem const& item,
+                    lmdb::WriteTransaction& txn,
+                    TrackStore::Writer& trackWriter,
+                    FileManifestStore::Writer& manifestWriter,
+                    DictionaryStore& dict,
+                    TrackBuilder& builder);
+
+    std::optional<std::pair<std::unique_ptr<tag::TagFile>, TrackBuilder>> loadTrackBuilder(ScanItem const& item);
+
+    std::optional<std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold>> prepareTrack(
+      TrackBuilder const& builder,
+      lmdb::WriteTransaction& txn,
+      DictionaryStore& dict,
+      std::string const& uri);
+
+    bool writeManifest(FileManifestStore::Writer& writer, std::string const& uri, FileManifestBuilder& builder);
+
+    bool updateTrack(TrackStore::Writer& trackWriter,
+                     TrackId trackId,
+                     std::string const& uri,
+                     TrackBuilder::PreparedHot const& hot,
+                     TrackBuilder::PreparedCold const& cold);
+
+    std::optional<TrackId> createTrack(TrackStore::Writer& trackWriter,
+                                       std::string const& uri,
+                                       TrackBuilder::PreparedHot const& hot,
+                                       TrackBuilder::PreparedCold const& cold);
 
     MusicLibrary& _ml;
     std::unique_ptr<ScanPlan> _planPtr;

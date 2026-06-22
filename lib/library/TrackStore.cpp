@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
@@ -10,6 +11,7 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
+#include <expected>
 #include <optional>
 #include <span>
 #include <utility>
@@ -45,31 +47,29 @@ namespace ao::library
 
     if (mode == LoadMode::Hot || mode == LoadMode::Both)
     {
-      auto optHotBuffer = _hotReader.get(id.raw());
+      auto optHotBytes = _hotReader.get(id.raw());
 
-      if (!optHotBuffer)
+      if (!optHotBytes)
       {
         return std::nullopt;
       }
 
-      hotBuffer = *optHotBuffer;
+      hotBuffer = *optHotBytes;
     }
 
     if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
     {
-      auto optColdBuffer = _coldReader.get(id.raw());
+      auto optColdBytes = _coldReader.get(id.raw());
 
-      if (!optColdBuffer)
+      if (!optColdBytes)
       {
         return std::nullopt;
       }
 
-      coldBuffer = *optColdBuffer;
+      coldBuffer = *optColdBytes;
     }
 
-    auto view = TrackView{hotBuffer, coldBuffer};
-
-    return view;
+    return TrackView{hotBuffer, coldBuffer};
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin(LoadMode mode) const
@@ -172,58 +172,70 @@ namespace ao::library
 
     if (mode == Reader::LoadMode::Hot || mode == Reader::LoadMode::Both)
     {
-      auto optHotBuffer = _hotWriter.get(id.raw());
+      auto optHotBytes = _hotWriter.get(id.raw());
 
-      if (!optHotBuffer)
+      if (!optHotBytes)
       {
         return std::nullopt;
       }
 
-      hotBuffer = *optHotBuffer;
+      hotBuffer = *optHotBytes;
     }
 
     if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
     {
-      auto optColdBuffer = _coldWriter.get(id.raw());
+      auto optColdBytes = _coldWriter.get(id.raw());
 
-      if (!optColdBuffer)
+      if (!optColdBytes)
       {
         return std::nullopt;
       }
 
-      coldBuffer = *optColdBuffer;
+      coldBuffer = *optColdBytes;
     }
 
     return TrackView{hotBuffer, coldBuffer};
   }
 
   // Hot/Cold split methods
-  std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(std::span<std::byte const> hotData,
-                                                                  std::span<std::byte const> coldData)
+  Result<std::pair<TrackId, TrackView>> TrackStore::Writer::createHotCold(std::span<std::byte const> hotData,
+                                                                          std::span<std::byte const> coldData)
   {
     gsl_Expects((hotData.size() % 4) == 0);
     gsl_Expects((coldData.size() % 4) == 0);
 
-    auto id = _hotWriter.append(hotData);
-    _coldWriter.create(id, coldData);
-    return {TrackId{id}, TrackView{hotData, coldData}};
+    auto idResult = _hotWriter.append(hotData);
+
+    if (!idResult)
+    {
+      return std::unexpected{idResult.error()};
+    }
+
+    auto id = *idResult;
+
+    if (auto result = _coldWriter.create(id, coldData); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    return std::pair{TrackId{id}, TrackView{hotData, coldData}};
   }
 
-  void TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
+  Result<> TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
   {
     gsl_Expects((hotData.size() % 4) == 0);
 
-    _hotWriter.update(id.raw(), hotData);
+    return _hotWriter.update(id.raw(), hotData);
   }
 
-  void TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
+  Result<> TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
   {
     gsl_Expects((coldData.size() % 4) == 0);
 
-    _coldWriter.update(id.raw(), coldData);
+    return _coldWriter.update(id.raw(), coldData);
   }
 
-  std::span<std::byte> TrackStore::Writer::updateCold(TrackId id, std::size_t size)
+  Result<std::span<std::byte>> TrackStore::Writer::updateCold(TrackId id, std::size_t size)
   {
     gsl_Expects((size % 4) == 0);
     return _coldWriter.update(id.raw(), size);
@@ -231,14 +243,19 @@ namespace ao::library
 
   bool TrackStore::Writer::remove(TrackId id)
   {
-    bool const hotDeleted = _hotWriter.del(id.raw());
-    bool const coldDeleted = _coldWriter.del(id.raw());
-    return hotDeleted && coldDeleted;
+    bool const hotRemoved = _hotWriter.del(id.raw());
+    bool const coldRemoved = _coldWriter.del(id.raw());
+
+    return hotRemoved || coldRemoved;
   }
 
-  void TrackStore::Writer::clear()
+  Result<> TrackStore::Writer::clear()
   {
-    _hotWriter.clear();
-    _coldWriter.clear();
+    if (auto result = _hotWriter.clear(); !result)
+    {
+      return result;
+    }
+
+    return _coldWriter.clear();
   }
 } // namespace ao::library

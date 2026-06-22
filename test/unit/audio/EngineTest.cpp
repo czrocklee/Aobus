@@ -355,7 +355,7 @@ namespace ao::audio::test
       engine.play(desc);
 
       REQUIRE(engine.status().transport == Transport::Error);
-      REQUIRE(engine.status().statusText.find("decoder") != std::string::npos);
+      REQUIRE(engine.status().statusText.find("Unsupported audio file extension") != std::string::npos);
     }
 
     SECTION("Decoder open failure")

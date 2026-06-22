@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -71,8 +72,10 @@ namespace ao::rt::test
       }
 
       auto hotData = builder.serializeHot(txn, testLib.library().dictionary());
+      REQUIRE(hotData);
       auto coldData = builder.serializeCold(txn, testLib.library().dictionary(), testLib.library().resources());
-      auto [id, _] = writer.createHotCold(hotData, coldData);
+      REQUIRE(coldData);
+      auto [id, _] = ao::test::requireValue(writer.createHotCold(*hotData, *coldData));
       txn.commit();
       return id;
     }

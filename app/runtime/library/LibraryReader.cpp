@@ -15,6 +15,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackRow.h>
@@ -107,11 +108,13 @@ namespace ao::rt
       {
         auto const manifestReader = library.manifest().reader(txn);
 
-        if (auto const optManifestView = manifestReader.get(uri); optManifestView)
+        auto const optManifest = storageValueOrNullopt(manifestReader.get(uri), "Failed to load file manifest entry");
+
+        if (optManifest)
         {
-          fileSize = optManifestView->fileSize();
-          modifiedTime = optManifestView->mtime();
-          status = optManifestView->status();
+          fileSize = optManifest->fileSize();
+          modifiedTime = optManifest->mtime();
+          status = optManifest->status();
         }
       }
 
@@ -193,7 +196,8 @@ namespace ao::rt
     auto& library = _implPtr->library;
     auto const& txn = _implPtr->transaction;
     auto const reader = library.tracks().reader(txn);
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+    auto const optView =
+      storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track row");
 
     if (!optView)
     {
@@ -206,7 +210,8 @@ namespace ao::rt
   ResourceId LibraryReader::trackCoverArtId(TrackId id) const
   {
     auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = storageValueOrNullopt(
+      reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track cover art");
 
     if (!optView)
     {
@@ -223,7 +228,8 @@ namespace ao::rt
   {
     auto& library = _implPtr->library;
     auto const reader = library.tracks().reader(_implPtr->transaction);
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+    auto const optView =
+      storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track URI");
 
     if (!optView)
     {
@@ -238,7 +244,8 @@ namespace ao::rt
     auto& library = _implPtr->library;
     auto const& txn = _implPtr->transaction;
     auto const reader = library.tracks().reader(txn);
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+    auto const optView =
+      storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track field");
 
     if (!optView)
     {
@@ -284,7 +291,7 @@ namespace ao::rt
   std::optional<ListNode> LibraryReader::listNode(ListId id) const
   {
     auto const reader = _implPtr->library.lists().reader(_implPtr->transaction);
-    auto const optView = reader.get(id);
+    auto const optView = storageValueOrNullopt(reader.get(id), "Failed to load list node");
 
     if (!optView)
     {
@@ -297,7 +304,7 @@ namespace ao::rt
   std::optional<std::vector<std::byte>> LibraryReader::loadResource(ResourceId id) const
   {
     auto const reader = _implPtr->library.resources().reader(_implPtr->transaction);
-    auto const optBytes = reader.get(id);
+    auto const optBytes = storageValueOrNullopt(reader.get(id), "Failed to load resource");
 
     if (!optBytes)
     {
@@ -327,7 +334,8 @@ namespace ao::rt
 
     for (auto const trackId : trackIds)
     {
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+      auto const optView = storageValueOrNullopt(
+        reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot), "Failed to load track tags");
 
       if (!optView)
       {

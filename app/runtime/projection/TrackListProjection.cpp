@@ -7,6 +7,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/ProjectionTypes.h>
@@ -687,7 +688,9 @@ namespace ao::rt
 
       for (auto& entry : orderIndex)
       {
-        if (auto const optView = reader.get(entry.trackId, loadMode); optView)
+        if (auto const optView =
+              storageValueOrNullopt(reader.get(entry.trackId, loadMode), "Failed to rebuild track groups");
+            optView)
         {
           ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache, stringArena, normScratch);
           fillGroupMetadata(entry, *optView, dict, groupBy, stringArena, normScratch);
@@ -776,7 +779,8 @@ namespace ao::rt
       {
         auto const trackId = source.trackIdAt(idx);
 
-        if (auto const optView = reader.get(trackId, loadMode); optView)
+        if (auto const optView = storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to rebuild track order");
+            optView)
         {
           orderIndex.push_back(buildOrderEntry(trackId, *optView, dict));
         }
@@ -1065,7 +1069,7 @@ namespace ao::rt
       auto const reader = library.tracks().reader(txn);
       auto& dict = library.dictionary();
 
-      auto const optView = reader.get(trackId, loadMode);
+      auto const optView = storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to insert projected track");
 
       if (!optView)
       {
@@ -1116,7 +1120,8 @@ namespace ao::rt
 
       for (auto const id : ids)
       {
-        if (auto const optView = reader.get(id, loadMode); optView)
+        if (auto const optView = storageValueOrNullopt(reader.get(id, loadMode), "Failed to insert projected tracks");
+            optView)
         {
           sortedNew.push_back(buildOrderEntry(id, *optView, dict));
         }
@@ -1254,7 +1259,7 @@ namespace ao::rt
       auto const reader = library.tracks().reader(txn);
       auto& dict = library.dictionary();
 
-      auto const optView = reader.get(trackId, loadMode);
+      auto const optView = storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to update projected track");
 
       if (!optView)
       {
@@ -1362,7 +1367,8 @@ namespace ao::rt
           continue;
         }
 
-        auto const optView = reader.get(id, loadMode);
+        auto const optView =
+          storageValueOrNullopt(reader.get(id, loadMode), "Failed to update grouped projected tracks");
 
         if (!optView)
         {
@@ -1520,7 +1526,7 @@ namespace ao::rt
           continue;
         }
 
-        auto const optView = reader.get(id, loadMode);
+        auto const optView = storageValueOrNullopt(reader.get(id, loadMode), "Failed to update projected tracks");
 
         if (!optView)
         {

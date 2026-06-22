@@ -17,6 +17,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/yaml/Utils.h>
@@ -56,6 +57,40 @@ namespace ao::rt::test
       ryml::parse_in_place(ryml::to_substr(buffer), &tree);
       return tree;
     }
+
+    std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> prepareTrack(TrackBuilder& builder,
+                                                                                  lmdb::WriteTransaction& txn,
+                                                                                  DictionaryStore& dict,
+                                                                                  ResourceStore& resources)
+    {
+      auto result = builder.prepare(txn, dict, resources);
+      REQUIRE(result);
+      return *result;
+    }
+
+    template<typename Writer>
+    std::pair<TrackId, TrackView> createPreparedTrack(Writer&& writer,
+                                                      TrackBuilder::PreparedHot const& preparedHot,
+                                                      TrackBuilder::PreparedCold const& preparedCold)
+    {
+      auto result =
+        std::forward<Writer>(writer).createHotCold(preparedHot.size(),
+                                                   preparedCold.size(),
+                                                   [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                                   {
+                                                     preparedHot.writeTo(hot);
+                                                     preparedCold.writeTo(cold);
+                                                   });
+      REQUIRE(result);
+      return *result;
+    }
+
+    ListId createList(ListStore::Writer writer, std::span<std::byte const> payload)
+    {
+      auto result = writer.create(payload);
+      REQUIRE(result);
+      return result->first;
+    }
   }
 
   TEST_CASE("Library Export/Import Cycle", "[app][unit][core][yaml]")
@@ -73,8 +108,10 @@ namespace ao::rt::test
       auto& dict = ml1.dictionary();
 
       auto resWriter = ml1.resources().writer(txn);
-      auto const resId = resWriter.create(createTestData(100));
-      std::ignore = resWriter.create(createTestData(64));
+      auto resIdResult = resWriter.create(createTestData(100));
+      REQUIRE(resIdResult);
+      auto const resId = *resIdResult;
+      REQUIRE(resWriter.create(createTestData(64)));
 
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property()
@@ -88,23 +125,16 @@ namespace ao::rt::test
       trackBuilder.tags().add("rock").add("favorite");
       trackBuilder.customMetadata().add("mood", "happy");
 
-      auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
+      auto const [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml1.resources());
       auto trackWriter = ml1.tracks().writer(txn);
-      auto const [trackId, view] =
-        trackWriter.createHotCold(preparedHot.size(),
-                                  preparedCold.size(),
-                                  [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                  {
-                                    preparedHot.writeTo(hot);
-                                    preparedCold.writeTo(cold);
-                                  });
+      auto const [trackId, view] = createPreparedTrack(trackWriter, preparedHot, preparedCold);
 
       auto smartListBuilder = ListBuilder::createNew().name(smartListName).filter(smartFilter);
-      ml1.lists().writer(txn).create(smartListBuilder.serialize());
+      createList(ml1.lists().writer(txn), smartListBuilder.serialize());
 
       auto manualListBuilder = ListBuilder::createNew().name(manualListName).description(manualListDescription);
       manualListBuilder.tracks().add(trackId);
-      ml1.lists().writer(txn).create(manualListBuilder.serialize());
+      createList(ml1.lists().writer(txn), manualListBuilder.serialize());
 
       txn.commit();
     }
@@ -132,14 +162,8 @@ namespace ao::rt::test
       auto& dict = ml2.dictionary();
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property().uri("song.flac"); // technical properties are missing initially
-      auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml2.resources());
-      ml2.tracks().writer(txn).createHotCold(preparedHot.size(),
-                                             preparedCold.size(),
-                                             [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                             {
-                                               preparedHot.writeTo(hot);
-                                               preparedCold.writeTo(cold);
-                                             });
+      auto const [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml2.resources());
+      createPreparedTrack(ml2.tracks().writer(txn), preparedHot, preparedCold);
       txn.commit();
     }
 
@@ -245,15 +269,8 @@ namespace ao::rt::test
         .movementNumber(2)
         .movementTotal(4);
 
-      auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
-      auto const [trackId, view] =
-        ml1.tracks().writer(txn).createHotCold(preparedHot.size(),
-                                               preparedCold.size(),
-                                               [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                               {
-                                                 preparedHot.writeTo(hot);
-                                                 preparedCold.writeTo(cold);
-                                               });
+      auto const [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml1.resources());
+      auto const [trackId, view] = createPreparedTrack(ml1.tracks().writer(txn), preparedHot, preparedCold);
 
       auto manifestWriter = ml1.manifest().writer(txn);
       auto builder = FileManifestBuilder::createNew();
@@ -322,8 +339,12 @@ namespace ao::rt::test
       auto txn = ml1.writeTransaction();
       auto& dict = ml1.dictionary();
 
-      resId = ml1.resources().writer(txn).create(coverData);
-      backResId = ml1.resources().writer(txn).create(backCoverData);
+      auto resIdResult = ml1.resources().writer(txn).create(coverData);
+      REQUIRE(resIdResult);
+      resId = *resIdResult;
+      auto backResIdResult = ml1.resources().writer(txn).create(backCoverData);
+      REQUIRE(backResIdResult);
+      backResId = *backResIdResult;
 
       auto trackBuilder1 = TrackBuilder::createNew();
       trackBuilder1.property().uri("song1.flac");
@@ -338,23 +359,11 @@ namespace ao::rt::test
 
       auto trackWriter = ml1.tracks().writer(txn);
 
-      auto const [p1h, p1c] = trackBuilder1.prepare(txn, dict, ml1.resources());
-      trackWriter.createHotCold(p1h.size(),
-                                p1c.size(),
-                                [&](TrackId, auto h, auto c)
-                                {
-                                  p1h.writeTo(h);
-                                  p1c.writeTo(c);
-                                });
+      auto const [p1h, p1c] = prepareTrack(trackBuilder1, txn, dict, ml1.resources());
+      createPreparedTrack(trackWriter, p1h, p1c);
 
-      auto const [p2h, p2c] = trackBuilder2.prepare(txn, dict, ml1.resources());
-      trackWriter.createHotCold(p2h.size(),
-                                p2c.size(),
-                                [&](TrackId, auto h, auto c)
-                                {
-                                  p2h.writeTo(h);
-                                  p2c.writeTo(c);
-                                });
+      auto const [p2h, p2c] = prepareTrack(trackBuilder2, txn, dict, ml1.resources());
+      createPreparedTrack(trackWriter, p2h, p2c);
 
       txn.commit();
     }
@@ -426,23 +435,19 @@ namespace ao::rt::test
       auto txn = ml.writeTransaction();
       auto& dict = ml.dictionary();
       auto resWriter = ml.resources().writer(txn);
-      auto const frontId = resWriter.create(createTestData(8));
-      auto const backId = resWriter.create(createTestData(9));
+      auto frontIdResult = resWriter.create(createTestData(8));
+      REQUIRE(frontIdResult);
+      auto const frontId = *frontIdResult;
+      auto backIdResult = resWriter.create(createTestData(9));
+      REQUIRE(backIdResult);
+      auto const backId = *backIdResult;
 
       auto builder = TrackBuilder::createNew();
       builder.property().uri(uri);
       builder.coverArt().add(PictureType::FrontCover, frontId);
       builder.coverArt().add(PictureType::BackCover, backId);
-      auto const [hot, cold] = builder.prepare(txn, dict, ml.resources());
-      auto const createResult =
-        ml.tracks().writer(txn).createHotCold(hot.size(),
-                                              cold.size(),
-                                              [&](TrackId, std::span<std::byte> hotOut, std::span<std::byte> coldOut)
-                                              {
-                                                hot.writeTo(hotOut);
-                                                cold.writeTo(coldOut);
-                                              });
-      auto const trackId = createResult.first;
+      auto const [hot, cold] = prepareTrack(builder, txn, dict, ml.resources());
+      auto const trackId = createPreparedTrack(ml.tracks().writer(txn), hot, cold).first;
 
       auto manifest = FileManifestBuilder::createNew();
       manifest.trackId(trackId);
@@ -470,9 +475,9 @@ library:
 
     {
       auto txn = ml.readTransaction();
-      auto const optManifest = ml.manifest().reader(txn).get(uri);
-      REQUIRE(optManifest);
-      auto const optView = ml.tracks().reader(txn).get(optManifest->trackId(), TrackStore::Reader::LoadMode::Both);
+      auto const manifestResult = ml.manifest().reader(txn).get(uri);
+      REQUIRE(manifestResult);
+      auto const optView = ml.tracks().reader(txn).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       REQUIRE(optView->coverArt().count() == 1);
       CHECK(optView->coverArt().at(0).type == PictureType::BackCover);
@@ -501,9 +506,9 @@ library:
 
     {
       auto txn = ml.readTransaction();
-      auto const optManifest = ml.manifest().reader(txn).get(uri);
-      REQUIRE(optManifest);
-      auto const optView = ml.tracks().reader(txn).get(optManifest->trackId(), TrackStore::Reader::LoadMode::Both);
+      auto const manifestResult = ml.manifest().reader(txn).get(uri);
+      REQUIRE(manifestResult);
+      auto const optView = ml.tracks().reader(txn).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       CHECK(optView->coverArt().count() == 0);
     }
@@ -524,14 +529,8 @@ library:
 
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property().uri(uri);
-      auto const [p1h, p1c] = trackBuilder.prepare(txn, dict, ml1.resources());
-      std::tie(trackId, std::ignore) = ml1.tracks().writer(txn).createHotCold(p1h.size(),
-                                                                              p1c.size(),
-                                                                              [&](TrackId, auto h, auto c)
-                                                                              {
-                                                                                p1h.writeTo(h);
-                                                                                p1c.writeTo(c);
-                                                                              });
+      auto const [p1h, p1c] = prepareTrack(trackBuilder, txn, dict, ml1.resources());
+      std::tie(trackId, std::ignore) = createPreparedTrack(ml1.tracks().writer(txn), p1h, p1c);
 
       auto manifestWriter = ml1.manifest().writer(txn);
       auto builder = FileManifestBuilder::createNew();
@@ -540,7 +539,7 @@ library:
 
       auto listBuilder = ListBuilder::createNew().name("My URI List");
       listBuilder.tracks().add(trackId);
-      ml1.lists().writer(txn).create(listBuilder.serialize());
+      createList(ml1.lists().writer(txn), listBuilder.serialize());
 
       txn.commit();
     }
@@ -569,18 +568,12 @@ library:
       auto& dict = ml2.dictionary();
 
       // Create junk track first to ensure IDs don't match
-      std::ignore = ml2.tracks().writer(txn).createHotCold(0, 0, [](auto, auto, auto) {});
+      REQUIRE(ml2.tracks().writer(txn).createHotCold(0, 0, [](auto, auto, auto) {}));
 
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property().uri(uri);
-      auto const [p1h, p1c] = trackBuilder.prepare(txn, dict, ml2.resources());
-      std::tie(targetTrackId, std::ignore) = ml2.tracks().writer(txn).createHotCold(p1h.size(),
-                                                                                    p1c.size(),
-                                                                                    [&](TrackId, auto h, auto c)
-                                                                                    {
-                                                                                      p1h.writeTo(h);
-                                                                                      p1c.writeTo(c);
-                                                                                    });
+      auto const [p1h, p1c] = prepareTrack(trackBuilder, txn, dict, ml2.resources());
+      std::tie(targetTrackId, std::ignore) = createPreparedTrack(ml2.tracks().writer(txn), p1h, p1c);
 
       auto manifestWriter = ml2.manifest().writer(txn);
       auto builder = FileManifestBuilder::createNew();
@@ -630,14 +623,8 @@ library:
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property().uri(uri1);
       trackBuilder.metadata().title("Original Title");
-      auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml.resources());
-      auto [tid, view] = ml.tracks().writer(txn).createHotCold(preparedHot.size(),
-                                                               preparedCold.size(),
-                                                               [&](auto, auto h, auto c)
-                                                               {
-                                                                 preparedHot.writeTo(h);
-                                                                 preparedCold.writeTo(c);
-                                                               });
+      auto [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml.resources());
+      auto [tid, view] = createPreparedTrack(ml.tracks().writer(txn), preparedHot, preparedCold);
       auto builder = FileManifestBuilder::createNew();
       builder.trackId(tid);
       ml.manifest().writer(txn).put(uri1, builder.serialize());
@@ -699,15 +686,8 @@ library:
       auto& dict = ml.dictionary();
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property().uri("song.flac");
-      auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml.resources());
-      std::tie(trackId, std::ignore) =
-        ml.tracks().writer(txn).createHotCold(preparedHot.size(),
-                                              preparedCold.size(),
-                                              [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                              {
-                                                preparedHot.writeTo(hot);
-                                                preparedCold.writeTo(cold);
-                                              });
+      auto [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml.resources());
+      std::tie(trackId, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), preparedHot, preparedCold);
       txn.commit();
     }
 
@@ -968,51 +948,27 @@ library:
       auto trackBuilder1 = TrackBuilder::createNew();
       trackBuilder1.property().uri("no-file.flac");
       trackBuilder1.metadata().title("Should Export Fully");
-      auto const [p1h, p1c] = trackBuilder1.prepare(txn, dict, ml.resources());
-      std::tie(trackId1, std::ignore) = ml.tracks().writer(txn).createHotCold(p1h.size(),
-                                                                              p1c.size(),
-                                                                              [&](TrackId, auto h, auto c)
-                                                                              {
-                                                                                p1h.writeTo(h);
-                                                                                p1c.writeTo(c);
-                                                                              });
+      auto const [p1h, p1c] = prepareTrack(trackBuilder1, txn, dict, ml.resources());
+      std::tie(trackId1, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p1h, p1c);
 
       auto trackBuilder2 = TrackBuilder::createNew();
       trackBuilder2.property().uri("dummy.flac");
       trackBuilder2.metadata().title("Will fallback to full export because TagFile fails");
-      auto const [p2h, p2c] = trackBuilder2.prepare(txn, dict, ml.resources());
-      std::tie(trackId2, std::ignore) = ml.tracks().writer(txn).createHotCold(p2h.size(),
-                                                                              p2c.size(),
-                                                                              [&](TrackId, auto h, auto c)
-                                                                              {
-                                                                                p2h.writeTo(h);
-                                                                                p2c.writeTo(c);
-                                                                              });
+      auto const [p2h, p2c] = prepareTrack(trackBuilder2, txn, dict, ml.resources());
+      std::tie(trackId2, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p2h, p2c);
 
       auto trackBuilder3 = TrackBuilder::createNew();
       trackBuilder3.property().uri("cover.flac");
       trackBuilder3.metadata().title("Different Title");
       auto coverData = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
       trackBuilder3.coverArt().add(PictureType::FrontCover, coverData);
-      auto const [p3h, p3c] = trackBuilder3.prepare(txn, dict, ml.resources());
-      std::tie(trackId3, std::ignore) = ml.tracks().writer(txn).createHotCold(p3h.size(),
-                                                                              p3c.size(),
-                                                                              [&](TrackId, auto h, auto c)
-                                                                              {
-                                                                                p3h.writeTo(h);
-                                                                                p3c.writeTo(c);
-                                                                              });
+      auto const [p3h, p3c] = prepareTrack(trackBuilder3, txn, dict, ml.resources());
+      std::tie(trackId3, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p3h, p3c);
 
       auto trackBuilder4 = TrackBuilder::createNew();
       trackBuilder4.property().uri("cover-removed.flac");
-      auto const [p4h, p4c] = trackBuilder4.prepare(txn, dict, ml.resources());
-      std::tie(trackId4, std::ignore) = ml.tracks().writer(txn).createHotCold(p4h.size(),
-                                                                              p4c.size(),
-                                                                              [&](TrackId, auto h, auto c)
-                                                                              {
-                                                                                p4h.writeTo(h);
-                                                                                p4c.writeTo(c);
-                                                                              });
+      auto const [p4h, p4c] = prepareTrack(trackBuilder4, txn, dict, ml.resources());
+      std::tie(trackId4, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p4h, p4c);
 
       txn.commit();
     }
@@ -1152,18 +1108,18 @@ library:
 
     CHECK(count == 3);
 
-    auto optManifest = manifestReader.get("song.flac");
-    REQUIRE(optManifest);
-    CHECK(optManifest->fileSize() == 13);
-    CHECK(optManifest->mtime() > 0);
+    auto manifestResult = manifestReader.get("song.flac");
+    REQUIRE(manifestResult);
+    CHECK(manifestResult->fileSize() == 13);
+    CHECK(manifestResult->mtime() > 0);
 
-    auto optManifest2 = manifestReader.get("song2.flac");
-    REQUIRE(optManifest2);
-    CHECK(optManifest2->fileSize() == 0);
+    auto manifestResult2 = manifestReader.get("song2.flac");
+    REQUIRE(manifestResult2);
+    CHECK(manifestResult2->fileSize() == 0);
 
-    auto optManifest3 = manifestReader.get("song3.flac");
-    REQUIRE(optManifest3);
-    CHECK(optManifest3->fileSize() == 0);
+    auto manifestResult3 = manifestReader.get("song3.flac");
+    REQUIRE(manifestResult3);
+    CHECK(manifestResult3->fileSize() == 0);
 
     auto const listReader = ml.lists().reader(txn);
     auto optList = listReader.get(ListId{1});

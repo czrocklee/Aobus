@@ -6,8 +6,8 @@
 #include "lib/tag/mpeg/id3v2/Layout.h"
 #include "test/unit/TestUtils.h"
 #include <ao/AudioCodec.h>
-#include <ao/Exception.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -181,6 +181,13 @@ namespace ao::tag::mpeg::test
 
       return data;
     }
+
+    library::TrackBuilder loadTrack(File const& file)
+    {
+      auto result = file.loadTrack();
+      REQUIRE(result);
+      return *result;
+    }
   }
 
   TEST_CASE("MPEG File - parses metadata and cover art", "[tag][unit][mpeg][file]")
@@ -189,7 +196,7 @@ namespace ao::tag::mpeg::test
     auto const temp = TempFile{data};
 
     auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
+    auto builder = loadTrack(file);
 
     auto const meta = builder.metadata();
     CHECK(meta.title() == "Title");
@@ -231,7 +238,7 @@ namespace ao::tag::mpeg::test
 
     auto const temp = TempFile{data};
     auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto builder = file.loadTrack();
+    auto builder = loadTrack(file);
 
     REQUIRE(builder.property().duration() >= std::chrono::seconds{1});
     CHECK(builder.property().duration() <= std::chrono::milliseconds{1010});
@@ -253,7 +260,7 @@ namespace ao::tag::mpeg::test
     auto const data = wrapId3v2(4, body);
     auto const temp = TempFile{data};
     auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-    auto const builder = file.loadTrack();
+    auto const builder = loadTrack(file);
     auto const meta = builder.metadata();
 
     CHECK(meta.title() == longTitle);
@@ -271,7 +278,7 @@ namespace ao::tag::mpeg::test
       auto const data = wrapId3v2(4, body);
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      auto const builder = file.loadTrack();
+      auto const builder = loadTrack(file);
       CHECK(builder.metadata().title() == "\xC3\xA9x");
     }
 
@@ -284,7 +291,7 @@ namespace ao::tag::mpeg::test
       auto const data = wrapId3v2(4, body);
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      auto const builder = file.loadTrack();
+      auto const builder = loadTrack(file);
       CHECK(builder.metadata().title() == "Hi");
     }
   }
@@ -303,7 +310,7 @@ namespace ao::tag::mpeg::test
 
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      auto builder = file.loadTrack();
+      auto builder = loadTrack(file);
       CHECK(builder.metadata().title().empty());
     }
 
@@ -321,7 +328,7 @@ namespace ao::tag::mpeg::test
 
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      auto builder = file.loadTrack();
+      auto builder = loadTrack(file);
       CHECK(builder.metadata().title().empty());
     }
 
@@ -345,7 +352,9 @@ namespace ao::tag::mpeg::test
 
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      REQUIRE_THROWS_AS(file.loadTrack(), ao::Exception);
+      auto result = file.loadTrack();
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Missing MPEG frame sync")
@@ -353,7 +362,7 @@ namespace ao::tag::mpeg::test
       auto data = std::vector<std::uint8_t>(1000, 0x42); // Just 1000 bytes of garbage, no 0xFF 0xFB sync
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      auto builder = file.loadTrack();
+      auto builder = loadTrack(file);
       CHECK(builder.property().duration() == std::chrono::milliseconds{0});
     }
 
@@ -375,7 +384,7 @@ namespace ao::tag::mpeg::test
       auto const data = wrapId3v2(3, body);
       auto const temp = TempFile{data};
       auto const file = File{temp.path, TagFile::Mode::ReadOnly};
-      auto const builder = file.loadTrack();
+      auto const builder = loadTrack(file);
       CHECK(builder.coverArt().entries().empty());
     }
   }

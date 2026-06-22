@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
@@ -8,6 +9,7 @@
 #include <ao/lmdb/Transaction.h>
 
 #include <cstddef>
+#include <expected>
 #include <optional>
 #include <span>
 #include <utility>
@@ -47,7 +49,14 @@ namespace ao::library
 
   std::optional<ListView> ListStore::Reader::get(ListId id) const
   {
-    return _reader.get(id.raw()).transform([](auto const& buffer) { return ListView{buffer}; });
+    auto optBytes = _reader.get(id.raw());
+
+    if (!optBytes)
+    {
+      return std::nullopt;
+    }
+
+    return ListView{*optBytes};
   }
 
   // Iterator implementation
@@ -79,15 +88,22 @@ namespace ao::library
   {
   }
 
-  std::pair<ListId, ListView> ListStore::Writer::create(std::span<std::byte const> data)
+  Result<std::pair<ListId, ListView>> ListStore::Writer::create(std::span<std::byte const> data)
   {
-    auto id = _writer.append(data);
-    return {ListId{id}, ListView{data}};
+    auto idResult = _writer.append(data);
+
+    if (!idResult)
+    {
+      return std::unexpected{idResult.error()};
+    }
+
+    auto id = *idResult;
+    return std::pair{ListId{id}, ListView{data}};
   }
 
-  void ListStore::Writer::update(ListId id, std::span<std::byte const> data)
+  Result<> ListStore::Writer::update(ListId id, std::span<std::byte const> data)
   {
-    _writer.update(id.raw(), data);
+    return _writer.update(id.raw(), data);
   }
 
   bool ListStore::Writer::del(ListId id)
@@ -95,13 +111,20 @@ namespace ao::library
     return _writer.del(id.raw());
   }
 
-  void ListStore::Writer::clear()
+  Result<> ListStore::Writer::clear()
   {
-    _writer.clear();
+    return _writer.clear();
   }
 
   std::optional<ListView> ListStore::Writer::get(ListId id) const
   {
-    return _writer.get(id.raw()).transform([](auto const& buffer) { return ListView{buffer}; });
+    auto optBytes = _writer.get(id.raw());
+
+    if (!optBytes)
+    {
+      return std::nullopt;
+    }
+
+    return ListView{*optBytes};
   }
 } // namespace ao::library

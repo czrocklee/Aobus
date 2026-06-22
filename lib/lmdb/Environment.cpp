@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "detail/ThrowError.h"
+#include "detail/ResultError.h"
+#include <ao/Error.h>
 #include <ao/lmdb/Environment.h>
 
 #include <lmdb.h>
 
 #include <string>
 #include <type_traits>
+#include <utility>
 
 namespace ao::lmdb
 {
@@ -22,33 +24,63 @@ namespace ao::lmdb
     ::mdb_env_close(env);
   }
 
-  Environment::Environment(std::string const& path)
-    : Environment{path, Options{}}
+  Result<Environment> Environment::open(std::string const& path)
   {
+    return open(path, Options{});
   }
 
-  Environment::Environment(std::string const& path, Environment::Options const& options)
+  Result<Environment> Environment::open(std::string const& path, Environment::Options const& options)
   {
     ::MDB_env* handle = nullptr;
-    throwOnError("mdb_env_create", ::mdb_env_create(&handle));
-    _envPtr.reset(handle);
+
+    if (auto result = resultFromCode("mdb_env_create", ::mdb_env_create(&handle)); !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
+
+    auto envPtr = EnvPtr{handle};
 
     if (options.mapSize > 0)
     {
-      throwOnError("mdb_env_set_mapsize", ::mdb_env_set_mapsize(_envPtr.get(), options.mapSize));
+      if (auto result = resultFromCode("mdb_env_set_mapsize", ::mdb_env_set_mapsize(envPtr.get(), options.mapSize));
+          !result)
+      {
+        return makeError(result.error().code, result.error().message);
+      }
     }
 
     if (options.maxDatabases > 0)
     {
-      throwOnError("mdb_env_set_maxdbs", ::mdb_env_set_maxdbs(_envPtr.get(), options.maxDatabases));
+      if (auto result = resultFromCode("mdb_env_set_maxdbs", ::mdb_env_set_maxdbs(envPtr.get(), options.maxDatabases));
+          !result)
+      {
+        return makeError(result.error().code, result.error().message);
+      }
     }
 
     if (options.maxReaders > 0)
     {
-      throwOnError("mdb_env_set_maxreaders", ::mdb_env_set_maxreaders(_envPtr.get(), options.maxReaders));
+      if (auto result =
+            resultFromCode("mdb_env_set_maxreaders", ::mdb_env_set_maxreaders(envPtr.get(), options.maxReaders));
+          !result)
+      {
+        return makeError(result.error().code, result.error().message);
+      }
     }
 
-    throwOnError("mdb_env_open", ::mdb_env_open(_envPtr.get(), path.c_str(), options.flags, options.mode));
+    if (auto result =
+          resultFromCode("mdb_env_open", ::mdb_env_open(envPtr.get(), path.c_str(), options.flags, options.mode));
+        !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
+
+    return Environment{std::move(envPtr)};
+  }
+
+  Environment::Environment(EnvPtr envPtr)
+    : _envPtr{std::move(envPtr)}
+  {
   }
 
   Environment::Environment(Environment&& other) noexcept = default;

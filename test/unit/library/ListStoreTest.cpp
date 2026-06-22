@@ -5,6 +5,7 @@
 #include <ao/Type.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
@@ -14,6 +15,8 @@
 
 #include <cstddef>
 #include <cstring>
+#include <span>
+#include <utility>
 #include <vector>
 
 namespace ao::library::test
@@ -21,13 +24,23 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
+  namespace
+  {
+    std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, std::span<std::byte const> data)
+    {
+      auto result = writer.create(data);
+      REQUIRE(result);
+      return *result;
+    }
+  } // namespace
+
   TEST_CASE("ListStore - create and read", "[library][unit][list]")
   {
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto wtxn = WriteTransaction{env};
-    auto store = ListStore{Database{wtxn, "lists"}};
+    auto wtxn = beginWriteTransaction(env);
+    auto store = ListStore{openDatabase(wtxn, "lists")};
     wtxn.commit();
 
     // Create a list
@@ -36,13 +49,12 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader));
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = WriteTransaction{env};
-    auto const [id, view] = store.writer(wtxn2).create(data);
-    // If create() failed, it would throw
+    auto wtxn2 = beginWriteTransaction(env);
+    auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     wtxn2.commit();
 
     // Read the list
-    auto rtxn = ReadTransaction{env};
+    auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
     REQUIRE(it != reader.end());
@@ -52,10 +64,10 @@ namespace ao::library::test
   TEST_CASE("ListStore - read by id", "[library][unit][list]")
   {
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto wtxn = WriteTransaction{env};
-    auto store = ListStore{Database{wtxn, "lists"}};
+    auto wtxn = beginWriteTransaction(env);
+    auto store = ListStore{openDatabase(wtxn, "lists")};
     wtxn.commit();
 
     // Create a list
@@ -65,25 +77,24 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader) + trackIdsSize);
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = WriteTransaction{env};
-    auto const [id, view] = store.writer(wtxn2).create(data);
+    auto wtxn2 = beginWriteTransaction(env);
+    auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     wtxn2.commit();
 
     // Read by ID
-    auto rtxn = ReadTransaction{env};
+    auto rtxn = beginReadTransaction(env);
     auto const optFound = store.reader(rtxn).get(id);
     REQUIRE(optFound.has_value());
-    auto const& found = *optFound;
-    REQUIRE(found.tracks().size() == 10);
+    REQUIRE(optFound->tracks().size() == 10);
   }
 
   TEST_CASE("ListStore - delete", "[library][unit][list]")
   {
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto wtxn = WriteTransaction{env};
-    auto store = ListStore{Database{wtxn, "lists"}};
+    auto wtxn = beginWriteTransaction(env);
+    auto store = ListStore{openDatabase(wtxn, "lists")};
     wtxn.commit();
 
     // Create a list
@@ -92,18 +103,17 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader));
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = WriteTransaction{env};
-    auto const [id, view] = store.writer(wtxn2).create(data);
+    auto wtxn2 = beginWriteTransaction(env);
+    auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     wtxn2.commit();
 
     // Delete it
-    auto wtxn3 = WriteTransaction{env};
-    auto const deleted = store.writer(wtxn3).del(id);
-    REQUIRE(deleted);
+    auto wtxn3 = beginWriteTransaction(env);
+    REQUIRE(store.writer(wtxn3).del(id));
     wtxn3.commit();
 
     // Verify it's gone
-    auto rtxn = ReadTransaction{env};
+    auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
     REQUIRE(it == reader.end());

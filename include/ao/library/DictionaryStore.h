@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
@@ -46,9 +47,9 @@ namespace ao::library
      * Store a string and auto-generate a unique ID.
      * @param txn Write transaction that must remain alive
      * @param value The string to store
-     * @return The generated ID.
+     * @return The generated ID, or a storage error if the LMDB write fails.
      */
-    DictionaryId put(lmdb::WriteTransaction& txn, std::string_view value);
+    Result<DictionaryId> put(lmdb::WriteTransaction& txn, std::string_view value);
 
     /**
      * Look up a string by its ID using in-memory index.

@@ -12,6 +12,7 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/ViewService.h>
 #include <ao/utility/Log.h>
 
@@ -112,7 +113,8 @@ namespace ao::rt
     {
       auto const txn = library.readTransaction();
       auto reader = library.tracks().reader(txn);
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      auto const optView = storageValueOrNullopt(
+        reader.get(trackId, library::TrackStore::Reader::LoadMode::Both), "Failed to build playback request");
 
       if (!optView)
       {

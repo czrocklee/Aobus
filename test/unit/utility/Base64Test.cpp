@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 namespace ao::utility::test
@@ -18,8 +19,11 @@ namespace ao::utility::test
       auto const encoded = base64Encode(data);
       CHECK(encoded.empty());
 
-      auto const decoded = base64Decode(encoded);
-      CHECK(decoded.empty());
+      // Decoding a valid (empty) input yields an engaged optional holding an empty vector,
+      // distinct from the nullopt returned on malformed input.
+      auto const optDecoded = base64Decode(encoded);
+      REQUIRE(optDecoded.has_value());
+      CHECK(optDecoded->empty());
     }
 
     SECTION("Small string round-trip")
@@ -30,8 +34,9 @@ namespace ao::utility::test
       auto const encoded = base64Encode(data);
       CHECK(encoded == "SGVsbG8gQW9idXMh");
 
-      auto const decoded = base64Decode(encoded);
-      auto const result = std::string_view{reinterpret_cast<char const*>(decoded.data()), decoded.size()};
+      auto const optDecoded = base64Decode(encoded);
+      REQUIRE(optDecoded.has_value());
+      auto const result = std::string_view{reinterpret_cast<char const*>(optDecoded->data()), optDecoded->size()};
       CHECK(result == input);
     }
 
@@ -41,9 +46,9 @@ namespace ao::utility::test
         std::vector{std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}, std::byte{0x42}};
 
       auto const encoded = base64Encode(data);
-      auto const decoded = base64Decode(encoded);
-      CHECK(decoded == data);
-    }
+      auto const optDecoded = base64Decode(encoded);
+      CHECK(optDecoded == data);
+    } // std::optional<vector> == vector compares the engaged value
 
     SECTION("Large binary data round-trip")
     {
@@ -55,22 +60,24 @@ namespace ao::utility::test
       }
 
       auto const encoded = base64Encode(data);
-      auto const decoded = base64Decode(encoded);
-      REQUIRE(decoded.size() == data.size());
-      CHECK(decoded == data);
+      auto const optDecoded = base64Decode(encoded);
+      REQUIRE(optDecoded.has_value());
+      REQUIRE(optDecoded->size() == data.size());
+      CHECK(optDecoded == data);
     }
 
     SECTION("Invalid characters in decode")
     {
-      auto const invalid = base64Decode("SGVsbG8h@#$");
-      CHECK(invalid.empty());
+      auto const optInvalid = base64Decode("SGVsbG8h@#$");
+      CHECK_FALSE(optInvalid.has_value());
     }
 
     SECTION("Ignore whitespace in decode")
     {
       auto const* const input = "SGVsbG8g\nQW9idXMh"; // Hello Aobus!
-      auto const decoded = base64Decode(input);
-      auto const result = std::string_view{reinterpret_cast<char const*>(decoded.data()), decoded.size()};
+      auto const optDecoded = base64Decode(input);
+      REQUIRE(optDecoded.has_value());
+      auto const result = std::string_view{reinterpret_cast<char const*>(optDecoded->data()), optDecoded->size()};
       CHECK(result == "Hello Aobus!");
     }
 
@@ -90,12 +97,12 @@ namespace ao::utility::test
     SECTION("Truncation and invalid padding bits")
     {
       // Invalid length (1 mod 4)
-      CHECK(base64Decode("Q").empty());
+      CHECK_FALSE(base64Decode("Q").has_value());
 
       // Valid length but non-zero padding bits
       // 'A' encodes to "QQ==", where the second 'Q' uses 2 bits and 4 bits are zero padding.
       // If we change the second char to 'R' (which has non-zero in the bottom 4 bits):
-      CHECK(base64Decode("QR==").empty());
+      CHECK_FALSE(base64Decode("QR==").has_value());
 
       // Unpadded base64 should still work if valid
       auto const d1 = std::vector{std::byte{'A'}};

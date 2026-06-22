@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/AudioCodec.h>
-#include <ao/Exception.h>
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
@@ -15,11 +15,13 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <expected>
 #include <format>
 #include <iterator>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace ao::query
@@ -40,25 +42,7 @@ namespace ao::query
         return {};
       }
 
-      auto dictionaryId = kInvalidDictionaryId;
-
-      switch (field)
-      {
-        case Field::ArtistId: dictionaryId = track.metadata().artistId(); break;
-        case Field::AlbumId: dictionaryId = track.metadata().albumId(); break;
-        case Field::GenreId: dictionaryId = track.metadata().genreId(); break;
-        case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
-        case Field::ComposerId: dictionaryId = track.metadata().composerId(); break;
-        case Field::WorkId: dictionaryId = track.metadata().workId(); break;
-        default: return {};
-      }
-
-      if (dictionaryId == kInvalidDictionaryId)
-      {
-        return {};
-      }
-
-      return dict->get(dictionaryId);
+      return dictionaryFieldValue(track, field, *dict);
     }
 
     template<typename T>
@@ -114,6 +98,21 @@ namespace ao::query
         default: return {};
       }
     }
+
+    std::unexpected<Error> rejectFormat(std::string_view message)
+    {
+      return makeError(Error::Code::FormatRejected, std::string{message});
+    }
+
+    // Formatting overload mirroring throwException so call sites pass the format
+    // string and arguments inline. The sizeof...(Args) > 0 constraint keeps plain
+    // no-argument messages on the cheaper string_view overload above.
+    template<typename... Args>
+      requires(sizeof...(Args) > 0)
+    std::unexpected<Error> rejectFormat(std::format_string<Args...> fmt, Args&&... args)
+    {
+      return makeError(Error::Code::FormatRejected, std::format(fmt, std::forward<Args>(args)...));
+    }
   } // namespace
 
   FormatCompiler::FormatCompiler(library::DictionaryStore* dict)
@@ -133,52 +132,67 @@ namespace ao::query
     return static_cast<std::uint32_t>(_plan.literals.size() - 1);
   }
 
-  void FormatCompiler::compileExpression(Expression const& expr)
+  Result<> FormatCompiler::compileExpression(Expression const& expr)
   {
-    std::visit(utility::makeVisitor(
-                 [this](std::unique_ptr<BinaryExpression> const& binary)
-                 {
-                   gsl_Expects(binary != nullptr);
-                   compileBinary(*binary);
-                 },
-                 [](std::unique_ptr<UnaryExpression> const&)
-                 { throwException<Exception>("format expressions do not support unary operators"); },
-                 [this](VariableExpression const& variable) { compileVariable(variable); },
-                 [this](ConstantExpression const& constant) { compileConstant(constant); },
-                 [](ListExpression const&) { throwException<Exception>("format expressions do not support lists"); },
-                 [](RangeExpression const&) { throwException<Exception>("format expressions do not support ranges"); }),
-               expr);
+    return std::visit(
+      utility::makeVisitor(
+        [this](std::unique_ptr<BinaryExpression> const& binary) -> Result<>
+        {
+          gsl_Expects(binary != nullptr);
+          return compileBinary(*binary);
+        },
+        [](std::unique_ptr<UnaryExpression> const&) -> Result<>
+        { return rejectFormat("format expressions do not support unary operators"); },
+        [this](VariableExpression const& variable) -> Result<> { return compileVariable(variable); },
+        [this](ConstantExpression const& constant) -> Result<>
+        {
+          compileConstant(constant);
+          return {};
+        },
+        [](ListExpression const&) -> Result<> { return rejectFormat("format expressions do not support lists"); },
+        [](RangeExpression const&) -> Result<> { return rejectFormat("format expressions do not support ranges"); }),
+      expr);
   }
 
-  void FormatCompiler::compileBinary(BinaryExpression const& binary)
+  Result<> FormatCompiler::compileBinary(BinaryExpression const& binary)
   {
     if (!binary.optOperation)
     {
-      compileExpression(binary.operand);
-      return;
+      return compileExpression(binary.operand);
     }
 
     if (binary.optOperation->op != Operator::Add)
     {
-      throwException<Exception>("format expressions only support '+' concatenation");
+      return rejectFormat("format expressions only support '+' concatenation");
     }
 
-    compileExpression(binary.operand);
-    compileExpression(binary.optOperation->operand);
+    if (auto result = compileExpression(binary.operand); !result)
+    {
+      return result;
+    }
+
+    return compileExpression(binary.optOperation->operand);
   }
 
-  void FormatCompiler::compileVariable(VariableExpression const& variable)
+  Result<> FormatCompiler::compileVariable(VariableExpression const& variable)
   {
-    auto const field = resolveVariableField(variable);
+    auto const fieldResult = resolveVariableField(variable);
+
+    if (!fieldResult)
+    {
+      return std::unexpected{fieldResult.error()};
+    }
+
+    auto const field = *fieldResult;
 
     if (isUnsupportedScalarField(field))
     {
-      throwException<Exception>("field '{}' cannot be formatted as a scalar string", variable.name);
+      return rejectFormat("field '{}' cannot be formatted as a scalar string", variable.name);
     }
 
     if (_dict == nullptr && (isDictionaryField(field) || variable.type == VariableType::Custom))
     {
-      throwException<Exception>("format field '{}' requires a DictionaryStore", variableDisplayName(variable));
+      return rejectFormat("format field '{}' requires a DictionaryStore", variableDisplayName(variable));
     }
 
     if (isColdField(field))
@@ -204,6 +218,8 @@ namespace ao::query
       .constValue = constValue,
       .literalIndex = 0,
     });
+
+    return {};
   }
 
   void FormatCompiler::compileConstant(ConstantExpression const& constant)
@@ -223,14 +239,17 @@ namespace ao::query
     });
   }
 
-  FormatPlan FormatCompiler::compile(Expression const& expr)
+  Result<FormatPlan> FormatCompiler::compile(Expression const& expr)
   {
     _plan = FormatPlan{};
     _plan.dictionary = _dict;
     _hasHotAccess = false;
     _hasColdAccess = false;
 
-    compileExpression(expr);
+    if (auto result = compileExpression(expr); !result)
+    {
+      return std::unexpected{result.error()};
+    }
 
     if (_hasHotAccess && _hasColdAccess)
     {
@@ -250,6 +269,12 @@ namespace ao::query
     }
 
     return _plan;
+  }
+
+  Result<FormatPlan> compileFormat(Expression const& expr, library::DictionaryStore* dict)
+  {
+    auto compiler = dict != nullptr ? FormatCompiler{dict} : FormatCompiler{};
+    return compiler.compile(expr);
   }
 
   std::string FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track) const

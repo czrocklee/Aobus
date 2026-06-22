@@ -3,15 +3,18 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/query/Expression.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
 namespace ao::library
 {
   class TrackView;
+  class DictionaryStore;
 } // namespace ao::library
 
 namespace ao::query
@@ -71,13 +74,32 @@ namespace ao::query
     HotAndCold   // Mixed access
   };
 
-  Field resolveVariableField(VariableType type, std::string_view name);
-  Field resolveVariableField(VariableExpression const& variable);
+  Result<Field> resolveVariableField(VariableType type, std::string_view name);
+  Result<Field> resolveVariableField(VariableExpression const& variable);
+
+  /**
+   * Predicate-style variants of resolveVariableField(). Return std::nullopt for
+   * an unknown property/metadata field or an unsupported variable type. Intended
+   * for hot paths (e.g. completion) that only need presence/absence and can
+   * degrade gracefully on partial input.
+   */
+  std::optional<Field> tryResolveVariableField(VariableType type, std::string_view name);
+  std::optional<Field> tryResolveVariableField(VariableExpression const& variable);
 
   bool isColdField(Field field);
   bool isDictionaryField(Field field);
   bool isStringField(Field field);
   bool isTagField(Field field);
+
+  /**
+   * Resolves a dictionary-backed metadata field (ArtistId, AlbumId, ...) to its
+   * interned string. Returns an empty view for non-dictionary fields or an
+   * invalid/unset id. The returned view borrows from @p dict and is valid for as
+   * long as the dictionary entry lives.
+   */
+  std::string_view dictionaryFieldValue(library::TrackView const& track,
+                                        Field field,
+                                        library::DictionaryStore const& dict);
 
   std::string_view fieldDisplayName(Field field);
   char variablePrefix(VariableType type);

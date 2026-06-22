@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Predicate.h>
 
@@ -8,9 +9,20 @@
 
 #include <array>
 #include <string_view>
+#include <utility>
 
 namespace ao::query::test
 {
+  namespace
+  {
+    Expression parseOk(std::string_view text)
+    {
+      auto result = ::ao::query::parse(text);
+      REQUIRE(result.has_value());
+      return std::move(*result);
+    }
+  } // namespace
+
   TEST_CASE("Predicate - Identifies Boolean Query Predicates", "[query][unit][predicate]")
   {
     auto const predicates = std::array{
@@ -28,7 +40,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Expression: " << expression)
       {
-        CHECK(isPredicateExpression(parse(expression)));
+        CHECK(isPredicateExpression(parseOk(expression)));
       }
     }
   }
@@ -50,7 +62,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Expression: " << expression)
       {
-        CHECK_FALSE(isPredicateExpression(parse(expression)));
+        CHECK_FALSE(isPredicateExpression(parseOk(expression)));
       }
     }
   }

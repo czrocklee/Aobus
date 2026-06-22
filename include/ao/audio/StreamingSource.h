@@ -26,6 +26,12 @@ namespace ao::audio
   class StreamingSource final : public ISource
   {
   public:
+    enum class DecodeBlockStatus : std::uint8_t
+    {
+      Decoded,
+      Stopped
+    };
+
     StreamingSource(std::unique_ptr<IDecoderSession> decoderPtr,
                     DecodedStreamInfo streamInfo,
                     std::function<void(Error const&)> onError,
@@ -50,7 +56,7 @@ namespace ao::audio
     void stopDecodeThread();
     void decodeLoop(std::stop_token const& threadStopToken);
     Result<> fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken);
-    Result<bool> decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
+    Result<DecodeBlockStatus> decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
     bool writeBlock(std::span<std::byte const> bytes,
                     std::stop_token const& seekToken,
                     std::stop_token const* threadStopToken);

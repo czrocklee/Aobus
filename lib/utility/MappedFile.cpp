@@ -9,7 +9,6 @@
 
 #include <cstddef>
 #include <exception>
-#include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -49,8 +48,7 @@ namespace ao::utility
     }
     catch (std::exception const& e)
     {
-      return std::unexpected(
-        Error{.code = Error::Code::IoError, .message = std::format("Failed to mmap file: {}", e.what())});
+      return makeError(Error::Code::IoError, std::format("Failed to mmap file: {}", e.what()));
     }
   }
 

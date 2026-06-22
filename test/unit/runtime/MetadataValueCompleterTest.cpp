@@ -39,8 +39,10 @@ namespace ao::rt::test
         .bitDepth(BitDepth{16});
 
       auto hotData = builder.serializeHot(txn, testLib.library().dictionary());
+      REQUIRE(hotData);
       auto coldData = builder.serializeCold(txn, testLib.library().dictionary(), testLib.library().resources());
-      writer.createHotCold(hotData, coldData);
+      REQUIRE(coldData);
+      REQUIRE(writer.createHotCold(*hotData, *coldData));
       txn.commit();
     }
 

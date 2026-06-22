@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
@@ -217,8 +218,10 @@ namespace ao::rt::test
         }
 
         auto hotData = builder.serializeHot(txn, _library.dictionary());
+        REQUIRE(hotData);
         auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
-        auto [id, _] = writer.createHotCold(hotData, coldData);
+        REQUIRE(coldData);
+        auto [id, _] = ao::test::requireValue(writer.createHotCold(*hotData, *coldData));
         txn.commit();
         return id;
       }
@@ -234,9 +237,11 @@ namespace ao::rt::test
         mutate(builder);
 
         auto hotData = builder.serializeHot(txn, _library.dictionary());
+        REQUIRE(hotData);
         auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
-        writer.updateHot(id, hotData);
-        writer.updateCold(id, coldData);
+        REQUIRE(coldData);
+        writer.updateHot(id, *hotData);
+        writer.updateCold(id, *coldData);
         txn.commit();
       }
 

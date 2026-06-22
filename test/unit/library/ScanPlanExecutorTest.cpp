@@ -130,13 +130,13 @@ namespace ao::library::test
     CHECK(result.failureCount == 0);
 
     auto txn = ml.readTransaction();
-    auto const optManifest = ml.manifest().reader(txn).get("song.flac");
-    REQUIRE(optManifest);
+    auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+    REQUIRE(manifestResult);
     auto const actualMtime =
       static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    std::filesystem::last_write_time(targetFile).time_since_epoch())
                                    .count());
-    CHECK(optManifest->mtime() == actualMtime);
+    CHECK(manifestResult->mtime() == actualMtime);
   }
 
   TEST_CASE("ScanPlanExecutor - Missing files update manifest status", "[library][unit][scan]")
@@ -171,9 +171,9 @@ namespace ao::library::test
     executor.run();
 
     auto txn = ml.readTransaction();
-    auto const optManifest = ml.manifest().reader(txn).get("song.flac");
-    REQUIRE(optManifest);
-    CHECK(optManifest->status() == FileStatus::Missing);
+    auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+    REQUIRE(manifestResult);
+    CHECK(manifestResult->status() == FileStatus::Missing);
   }
 
   TEST_CASE("ScanPlanExecutor - Error handling for corrupted files", "[library][unit][scan]")
@@ -197,9 +197,8 @@ namespace ao::library::test
     executor.run();
 
     auto const result = executor.result();
-    // It should either be skipped (if open returns null) or failure (if loadTrack throws)
-    // Currently TagFile::open for garbage flac returns null, so it increments skippedCount.
-    CHECK(result.skippedCount + result.failureCount == 1);
+    CHECK(result.failureCount == 1);
+    CHECK(result.skippedCount == 0);
     CHECK(result.processedIds.empty());
   }
 } // namespace ao::library::test

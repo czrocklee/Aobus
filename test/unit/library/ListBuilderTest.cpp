@@ -5,6 +5,7 @@
 #include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
@@ -12,10 +13,24 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <cstddef>
+#include <span>
+#include <utility>
+
 namespace ao::library::test
 {
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
+
+  namespace
+  {
+    std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, std::span<std::byte const> data)
+    {
+      auto result = writer.create(data);
+      REQUIRE(result);
+      return *result;
+    }
+  } // namespace
 
   TEST_CASE("ListBuilder - smart list", "[library][unit][list]")
   {
@@ -83,10 +98,10 @@ namespace ao::library::test
   TEST_CASE("ListBuilder - manual list round-trip through ListStore", "[library][unit][list]")
   {
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto wtxn = WriteTransaction{env};
-    auto store = ListStore{Database{wtxn, "lists"}};
+    auto wtxn = beginWriteTransaction(env);
+    auto store = ListStore{openDatabase(wtxn, "lists")};
     wtxn.commit();
 
     auto builder = ListBuilder::createNew().name("RoundTrip Test").description("Testing round-trip");
@@ -94,15 +109,15 @@ namespace ao::library::test
     builder.tracks().add(TrackId{99});
     auto const payload = builder.serialize();
 
-    auto wtxn2 = WriteTransaction{env};
-    auto const [id, createdView] = store.writer(wtxn2).create(payload);
+    auto wtxn2 = beginWriteTransaction(env);
+    auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
     wtxn2.commit();
 
-    auto rtxn = ReadTransaction{env};
-    auto const optFound = store.reader(rtxn).get(id);
-    REQUIRE(optFound.has_value());
+    auto rtxn = beginReadTransaction(env);
+    auto const optFoundResult = store.reader(rtxn).get(id);
+    REQUIRE(optFoundResult);
 
-    auto const& found = *optFound;
+    auto const& found = *optFoundResult;
     CHECK(found.isSmart() == false);
     CHECK(found.name() == "RoundTrip Test");
     CHECK(found.tracks().size() == 2);
@@ -113,10 +128,10 @@ namespace ao::library::test
   TEST_CASE("ListBuilder - smart list round-trip through ListStore", "[library][unit][list]")
   {
     auto const temp = TempDir{};
-    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto wtxn = WriteTransaction{env};
-    auto store = ListStore{Database{wtxn, "lists"}};
+    auto wtxn = beginWriteTransaction(env);
+    auto store = ListStore{openDatabase(wtxn, "lists")};
     wtxn.commit();
 
     auto const payload = ListBuilder::createNew()
@@ -125,15 +140,15 @@ namespace ao::library::test
                            .filter("@year > 2020")
                            .serialize();
 
-    auto wtxn2 = WriteTransaction{env};
-    auto const [id, createdView] = store.writer(wtxn2).create(payload);
+    auto wtxn2 = beginWriteTransaction(env);
+    auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
     wtxn2.commit();
 
-    auto rtxn = ReadTransaction{env};
-    auto const optFound = store.reader(rtxn).get(id);
-    REQUIRE(optFound.has_value());
+    auto rtxn = beginReadTransaction(env);
+    auto const optFoundResult = store.reader(rtxn).get(id);
+    REQUIRE(optFoundResult);
 
-    auto const& found = *optFound;
+    auto const& found = *optFoundResult;
     CHECK(found.isSmart() == true);
     CHECK(found.name() == "Smart RoundTrip");
     CHECK(found.filter() == "@year > 2020");

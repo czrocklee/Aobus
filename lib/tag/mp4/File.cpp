@@ -5,6 +5,8 @@
 
 #include "../detail/Decoder.h"
 #include <ao/AudioCodec.h>
+#include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/Atom.h>
@@ -19,6 +21,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string_view>
 
 namespace ao::tag::mp4
@@ -317,16 +320,12 @@ namespace ao::tag::mp4
 
           if (auto const duration = layout.duration.value(); duration > 0)
           {
-            constexpr std::uint32_t kBitsPerByte = 8;
             auto const trackDuration = std::chrono::milliseconds{
               (static_cast<std::uint64_t>(duration) * std::chrono::milliseconds::period::den) / timescale};
 
             if (trackDuration > std::chrono::milliseconds{0})
             {
-              builder.property()
-                .duration(trackDuration)
-                .bitrate(Bitrate{static_cast<std::uint32_t>(
-                  (fileSize * std::chrono::milliseconds::period::den * kBitsPerByte) / trackDuration.count())});
+              builder.property().duration(trackDuration).bitrate(Bitrate{bitrateFromBytes(fileSize, trackDuration)});
             }
           }
         }
@@ -367,34 +366,45 @@ namespace ao::tag::mp4
     }
   } // namespace
 
-  library::TrackBuilder File::loadTrack() const
+  Result<library::TrackBuilder> File::loadTrackImpl() const
   {
-    RootAtom const root = media::mp4::fromBuffer(utility::bytes::view(address(), size()));
-    Atom const* const ilstNode = root.find(kIlstPath);
-
-    clearOwnedStrings();
-    auto builder = library::TrackBuilder::createNew();
-
-    if (ilstNode != nullptr)
+    try
     {
-      ilstNode->visitChildren(
-        [&](Atom const& atom)
-        {
-          auto const& view = utility::unsafeDowncast<AtomView const>(atom);
-          std::string_view const type = atom.type();
+      RootAtom const root = media::mp4::fromBuffer(utility::bytes::view(address(), size()));
+      Atom const* const ilstNode = root.find(kIlstPath);
 
-          if (auto const* const entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size());
-              entry != nullptr)
+      clearOwnedStrings();
+      auto builder = library::TrackBuilder::createNew();
+
+      if (ilstNode != nullptr)
+      {
+        ilstNode->visitChildren(
+          [&](Atom const& atom)
           {
-            entry->handler(builder, view);
-          }
+            auto const& view = utility::unsafeDowncast<AtomView const>(atom);
+            std::string_view const type = atom.type();
 
-          return true;
-        });
+            if (auto const* const entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size());
+                entry != nullptr)
+            {
+              entry->handler(builder, view);
+            }
+
+            return true;
+          });
+      }
+
+      extractAudioProperties(builder, root, size());
+
+      return builder;
     }
-
-    extractAudioProperties(builder, root, size());
-
-    return builder;
+    catch (Exception const& e)
+    {
+      return makeError(Error::Code::CorruptData, e.what());
+    }
+    catch (std::out_of_range const& e)
+    {
+      return makeError(Error::Code::CorruptData, e.what());
+    }
   }
 } // namespace ao::tag::mp4
