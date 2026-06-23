@@ -55,6 +55,5 @@ namespace ao::async
   private:
     IExecutor& _callbackExecutor;
     boost::asio::thread_pool _workerPool;
-    bool _stopRequested{false};
   };
 } // namespace ao::async

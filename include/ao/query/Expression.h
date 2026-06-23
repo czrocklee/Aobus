@@ -88,6 +88,4 @@ namespace ao::query
     Operator op = Operator::Not;
     Expression operand;
   };
-
-  void normalize(Expression& expr);
 }

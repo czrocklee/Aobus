@@ -8,6 +8,7 @@
 #include <ao/Type.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/utility/String.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -25,7 +26,6 @@
 #include <sigc++/signal.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -52,12 +52,6 @@ namespace ao::gtk
       std::int32_t naturalBaseline = -1;
       widget.measure(orientation, forSize, result.minimum, result.natural, minimumBaseline, naturalBaseline);
       return result;
-    }
-
-    std::string toLower(std::string value)
-    {
-      std::ranges::transform(value, value.begin(), [](unsigned char ch) { return std::tolower(ch); });
-      return value;
     }
 
     struct FlowSize final
@@ -607,7 +601,7 @@ namespace ao::gtk
   void TagEditor::applyFilter()
   {
     auto const open = (_addTrigger != nullptr) && _addTrigger->isEntryOpen();
-    auto const search = open ? toLower(_addTrigger->entryText()) : std::string{};
+    auto const search = open ? ao::utility::toLower(_addTrigger->entryText()) : std::string{};
 
     for (auto* child = get_first_child(); child != nullptr; child = child->get_next_sibling())
     {
@@ -620,7 +614,7 @@ namespace ao::gtk
       {
         // Suggested chips live-filter by a case-insensitive substring of the entry text; with no
         // query (entry closed or empty) every suggestion is shown.
-        child->set_visible(search.empty() || toLower(avail->getTag()).find(search) != std::string::npos);
+        child->set_visible(search.empty() || ao::utility::toLower(avail->getTag()).find(search) != std::string::npos);
       }
       else
       {

@@ -241,7 +241,8 @@ namespace ao::rt::test
         auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
         REQUIRE(coldData);
         writer.updateHot(id, *hotData);
-        writer.updateCold(id, *coldData);
+        writer.updateCold(
+          id, coldData->size(), [&](std::span<std::byte> buf) { std::ranges::copy(*coldData, buf.begin()); });
         txn.commit();
       }
 

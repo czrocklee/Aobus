@@ -562,21 +562,6 @@ namespace ao::audio::backend
     return _implPtr->enumerateSinks();
   }
 
-  std::optional<std::uint32_t> PipeWireMonitor::findSinkIdByName(std::string_view name) const
-  {
-    auto const lock = std::scoped_lock{_implPtr->mutex};
-
-    for (auto const& [id, node] : _implPtr->nodes)
-    {
-      if (isSinkMediaClass(node.mediaClass) && node.nodeName == name)
-      {
-        return id;
-      }
-    }
-
-    return std::nullopt;
-  }
-
   Subscription PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
                                                std::function<void(flow::Graph const&)> callback)
   {

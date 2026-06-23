@@ -74,7 +74,6 @@ namespace ao::async
 
   void Runtime::requestStop() noexcept
   {
-    _stopRequested = true;
     _workerPool.stop();
   }
 

@@ -8,7 +8,6 @@
 #include <ao/utility/MappedFile.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <memory>
@@ -32,13 +31,7 @@ namespace ao::tag
   class TagFile
   {
   public:
-    enum class Mode : std::uint8_t
-    {
-      ReadOnly,
-      ReadWrite
-    };
-
-    TagFile(std::filesystem::path const& path, Mode mode);
+    TagFile(std::filesystem::path const& path);
 
     virtual ~TagFile() = default;
 
@@ -68,7 +61,7 @@ namespace ao::tag
      * Open a tag file by path, auto-detecting format from extension.
      * Unsupported extensions return Error::Code::NotSupported.
      */
-    static Result<std::unique_ptr<TagFile>> open(std::filesystem::path const& path, Mode mode = Mode::ReadOnly);
+    static Result<std::unique_ptr<TagFile>> open(std::filesystem::path const& path);
 
   protected:
     void clearOwnedStrings() const { _ownedStrings.clear(); }

@@ -8,7 +8,6 @@
 #include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -195,7 +194,7 @@ namespace ao::tag::mpeg::test
     auto const data = createMp3WithTags();
     auto const temp = TempFile{data};
 
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
     auto const meta = builder.metadata();
@@ -237,7 +236,7 @@ namespace ao::tag::mpeg::test
     data.resize(data.size() + 16000, 0);
 
     auto const temp = TempFile{data};
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
     REQUIRE(builder.property().duration() >= std::chrono::seconds{1});
@@ -259,7 +258,7 @@ namespace ao::tag::mpeg::test
 
     auto const data = wrapId3v2(4, body);
     auto const temp = TempFile{data};
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto const file = File{temp.path};
     auto const builder = loadTrack(file);
     auto const meta = builder.metadata();
 
@@ -277,7 +276,7 @@ namespace ao::tag::mpeg::test
 
       auto const data = wrapId3v2(4, body);
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto const builder = loadTrack(file);
       CHECK(builder.metadata().title() == "\xC3\xA9x");
     }
@@ -290,7 +289,7 @@ namespace ao::tag::mpeg::test
 
       auto const data = wrapId3v2(4, body);
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto const builder = loadTrack(file);
       CHECK(builder.metadata().title() == "Hi");
     }
@@ -309,7 +308,7 @@ namespace ao::tag::mpeg::test
       data.resize(data.size() + 100, 0);
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
       CHECK(builder.metadata().title().empty());
     }
@@ -327,7 +326,7 @@ namespace ao::tag::mpeg::test
       data.resize(data.size() + 10, 0);
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
       CHECK(builder.metadata().title().empty());
     }
@@ -351,7 +350,7 @@ namespace ao::tag::mpeg::test
       data.resize(sizeof(header) + 20, 0); // Fill to exactly 20 bytes body
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto result = file.loadTrack();
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
@@ -361,7 +360,7 @@ namespace ao::tag::mpeg::test
     {
       auto data = std::vector<std::uint8_t>(1000, 0x42); // Just 1000 bytes of garbage, no 0xFF 0xFB sync
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
       CHECK(builder.property().duration() == std::chrono::milliseconds{0});
     }
@@ -383,7 +382,7 @@ namespace ao::tag::mpeg::test
 
       auto const data = wrapId3v2(3, body);
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto const builder = loadTrack(file);
       CHECK(builder.coverArt().entries().empty());
     }

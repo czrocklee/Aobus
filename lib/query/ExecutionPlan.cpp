@@ -4,11 +4,13 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/Predicate.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/query/detail/Bytecode.h>
+#include <ao/utility/String.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -238,12 +240,6 @@ namespace ao::query
         expr);
     }
 
-    std::string toLower(std::string_view value)
-    {
-      return value | std::views::transform([](unsigned char ch) { return static_cast<char>(std::tolower(ch)); }) |
-             std::ranges::to<std::string>();
-    }
-
     bool isStringConstant(ConstantExpression const& constant)
     {
       return std::holds_alternative<std::string>(constant);
@@ -316,7 +312,7 @@ namespace ao::query
 
     Result<std::uint64_t> unitMultiplier(Field field, std::string_view unit)
     {
-      auto const normalized = toLower(unit);
+      auto const normalized = utility::toLower(unit);
 
       switch (field)
       {

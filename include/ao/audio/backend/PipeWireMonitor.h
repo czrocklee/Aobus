@@ -6,10 +6,8 @@
 #include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
 
-#include <cstdint>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -34,7 +32,6 @@ namespace ao::audio::backend
     Subscription subscribeDevices(DeviceCallback callback);
 
     std::vector<Device> enumerateSinks() const;
-    std::optional<std::uint32_t> findSinkIdByName(std::string_view name) const;
 
     Subscription subscribeGraph(std::string_view routeAnchor, std::function<void(flow::Graph const&)> callback);
 

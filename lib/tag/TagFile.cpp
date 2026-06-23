@@ -12,8 +12,7 @@
 namespace ao::tag
 {
   // The mapping is always read-only: there is no write path through TagFile, so
-  // Mode is accepted for source compatibility but does not affect the mapping.
-  TagFile::TagFile(std::filesystem::path const& path, Mode /*mode*/)
+  TagFile::TagFile(std::filesystem::path const& path)
   {
     if (auto const result = _mappedFile.map(path); !result)
     {

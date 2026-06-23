@@ -10,7 +10,6 @@
 #include <ao/audio/FormatNegotiator.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/ISource.h>
-#include <ao/audio/MemorySource.h>
 #include <ao/audio/StreamingSource.h>
 #include <ao/audio/Types.h>
 #include <ao/utility/Log.h>
@@ -29,11 +28,6 @@ namespace ao::audio::detail
   {
     constexpr auto kPrerollDuration = std::chrono::milliseconds{500};
     constexpr auto kDecodeHighWatermarkThreshold = std::chrono::milliseconds{1500};
-    // MemorySource synchronously decodes the entire track on the caller's thread
-    // during initialization. We disable it by setting the budget to 0 to avoid
-    // blocking the GTK main thread. All tracks now use StreamingSource, which
-    // decodes on a background thread.
-    constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 0;
 
     // Obtains a decoder from the injected factory when present, otherwise from the
     // production factory. The injected seam returns a plain pointer (a test that
@@ -182,18 +176,6 @@ namespace ao::audio::detail
                                                                  DecodedStreamInfo const& info,
                                                                  OnSourceErrorFn onSourceError)
   {
-    if (shouldUseMemoryPcmSource(info))
-    {
-      auto memorySourcePtr = std::make_shared<MemorySource>(std::move(decoderPtr), info);
-
-      if (auto const initResult = memorySourcePtr->initialize(); !initResult)
-      {
-        return std::unexpected{initResult.error()};
-      }
-
-      return memorySourcePtr;
-    }
-
     auto streamingSourcePtr = std::make_shared<StreamingSource>(
       std::move(decoderPtr), info, std::move(onSourceError), kPrerollDuration, kDecodeHighWatermarkThreshold);
 
@@ -203,17 +185,5 @@ namespace ao::audio::detail
     }
 
     return streamingSourcePtr;
-  }
-
-  bool TrackSession::shouldUseMemoryPcmSource(DecodedStreamInfo const& info)
-  {
-    if (info.outputFormat.sampleRate == 0)
-    {
-      return false;
-    }
-
-    auto const estimatedBytes = static_cast<double>(durationToSamples(info.duration, info.outputFormat.sampleRate)) *
-                                (static_cast<double>(bytesPerSecond(info.outputFormat)) / info.outputFormat.sampleRate);
-    return estimatedBytes > 0 && estimatedBytes <= kMemoryPcmSourceBudgetBytes;
   }
 } // namespace ao::audio::detail

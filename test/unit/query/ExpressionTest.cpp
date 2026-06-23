@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "../../../lib/query/detail/Normalize.h"
 #include <ao/query/Expression.h>
 #include <ao/utility/VariantVisitor.h>
 

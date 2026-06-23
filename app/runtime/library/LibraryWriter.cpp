@@ -228,7 +228,11 @@ namespace ao::rt
           continue;
         }
 
-        if (auto result = writer.updateCold(trackId, *coldDataResult); !result)
+        if (auto result =
+              writer.updateCold(trackId,
+                                coldDataResult->size(),
+                                [&](std::span<std::byte> buf) { std::ranges::copy(*coldDataResult, buf.begin()); });
+            !result)
         {
           throwStorageError("Failed to update cold track data", result.error());
         }

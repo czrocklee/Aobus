@@ -18,7 +18,6 @@
 #include <optional>
 #include <stop_token>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -63,7 +62,7 @@ namespace ao::library
                      ProgressCallback progressCallback,
                      FinishedCallback finishedCallback);
 
-    ~ScanPlanExecutor();
+    ~ScanPlanExecutor() = default;
 
     ScanPlanExecutor(ScanPlanExecutor const&) = delete;
     ScanPlanExecutor& operator=(ScanPlanExecutor const&) = delete;
@@ -76,9 +75,6 @@ namespace ao::library
 
     // Get the result after run() completes
     ScanApplyResult const& result() const { return _result; }
-
-    // Join the worker thread (call from main thread after finished callback)
-    void join();
 
     std::size_t fileCount() const;
 
@@ -134,6 +130,5 @@ namespace ao::library
     FinishedCallback _finishedCallback;
 
     ScanApplyResult _result;
-    std::jthread _workerThread;
   };
 } // namespace ao::library

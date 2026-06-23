@@ -8,7 +8,6 @@
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/AtomLayout.h>
-#include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -273,7 +272,7 @@ namespace ao::tag::mp4::test
 
       auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto const metadata = loadTrack(file).metadata();
       return field == MovementField::Number ? metadata.movementNumber() : metadata.movementTotal();
     }
@@ -298,7 +297,7 @@ namespace ao::tag::mp4::test
     auto const data = createMinimalM4a();
     auto const temp = TempFile{data};
 
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
     auto const meta = builder.metadata();
@@ -385,7 +384,7 @@ namespace ao::tag::mp4::test
     ao::test::mp4::addAtom(data, "moov", moovBody);
 
     auto const temp = TempFile{data};
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
     auto const& covers = builder.coverArt().entries();
@@ -488,7 +487,7 @@ namespace ao::tag::mp4::test
       auto const data = createMinimalM4aWithRawDiskAtom();
       auto const temp = TempFile{data};
 
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
 
       CHECK(builder.metadata().discNumber() == 2);
@@ -500,7 +499,7 @@ namespace ao::tag::mp4::test
       auto const data = createMinimalM4aWithRawTrackAtom();
       auto const temp = TempFile{data};
 
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
 
       CHECK(builder.metadata().trackNumber() == 2);
@@ -515,7 +514,7 @@ namespace ao::tag::mp4::test
       auto const data = createMinimalM4a("alac");
       auto const temp = TempFile{data};
 
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
 
       CHECK(builder.property().codec() == AudioCodec::Alac);
@@ -527,7 +526,7 @@ namespace ao::tag::mp4::test
       auto const data = createMinimalM4a("mp4a", esdsAtom);
       auto const temp = TempFile{data};
 
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
 
       CHECK(builder.property().codec() == AudioCodec::Aac);
@@ -541,7 +540,7 @@ namespace ao::tag::mp4::test
       auto const data = createMinimalM4aWithLeadingVideoTrack();
       auto const temp = TempFile{data};
 
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
 
       CHECK(builder.property().codec() == AudioCodec::Aac);
@@ -569,7 +568,7 @@ namespace ao::tag::mp4::test
       data.push_back('v');
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       // The parseAtoms loop checks (data.size() < kAtomHeaderSize) and (length > data.size()),
       // so it should just gracefully skip the rest or stop parsing without crashing.
       auto builder = loadTrack(file);
@@ -591,7 +590,7 @@ namespace ao::tag::mp4::test
       data.push_back('v');
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
       CHECK(builder.metadata().title().empty());
     }
@@ -610,7 +609,7 @@ namespace ao::tag::mp4::test
       data.push_back('v');
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto builder = loadTrack(file);
       CHECK(builder.metadata().title().empty());
     }
@@ -630,7 +629,7 @@ namespace ao::tag::mp4::test
 
       auto const data = createMinimalM4aWithRawIlstAtom(child);
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto const builder = loadTrack(file);
       CHECK(builder.metadata().title().empty());
     }

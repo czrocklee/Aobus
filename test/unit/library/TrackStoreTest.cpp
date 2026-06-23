@@ -13,6 +13,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -273,7 +274,8 @@ namespace ao::library::test
     std::memcpy(coldData2.data(), &coldHeader2, sizeof(TrackColdHeader));
 
     auto wtxn4 = beginWriteTransaction(env);
-    REQUIRE(store.writer(wtxn4).updateCold(id, coldData2));
+    REQUIRE(store.writer(wtxn4).updateCold(
+      id, coldData2.size(), [&](std::span<std::byte> buf) { std::ranges::copy(coldData2, buf.begin()); }));
     wtxn4.commit();
 
     // Verify both persisted

@@ -192,8 +192,7 @@ namespace ao::query
 
       void serializeConstant(ConstantExpression const& constant)
       {
-        std::visit(utility::makeVisitor([](std::monostate) {},
-                                        [this](bool val) { oss << (val ? "true" : "false"); },
+        std::visit(utility::makeVisitor([this](bool val) { oss << (val ? "true" : "false"); },
                                         [this](std::int64_t val) { oss << val; },
                                         [this](UnitConstantExpression const& val) { oss << val.lexeme; },
                                         [this](std::string_view val)

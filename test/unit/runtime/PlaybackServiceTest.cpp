@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TestUtils.h"
+#include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/audio/TestUtility.h"
 #include <ao/Error.h>
 #include <ao/Type.h>

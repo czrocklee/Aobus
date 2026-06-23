@@ -22,7 +22,6 @@
 #include <span>
 #include <stop_token>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -37,11 +36,6 @@ namespace ao::library
     , _progressCallback{std::move(progress)}
     , _finishedCallback{std::move(finished)}
   {
-  }
-
-  ScanPlanExecutor::~ScanPlanExecutor()
-  {
-    join();
   }
 
   void ScanPlanExecutor::run(std::stop_token stopToken)
@@ -379,14 +373,6 @@ namespace ao::library
     }
 
     return true;
-  }
-
-  void ScanPlanExecutor::join()
-  {
-    if (_workerThread.joinable())
-    {
-      _workerThread.join();
-    }
   }
 
   std::size_t ScanPlanExecutor::fileCount() const

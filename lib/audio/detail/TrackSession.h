@@ -61,7 +61,5 @@ namespace ao::audio::detail
     static Result<std::shared_ptr<ISource>> createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
                                                             DecodedStreamInfo const& info,
                                                             OnSourceErrorFn onSourceError);
-
-    static bool shouldUseMemoryPcmSource(DecodedStreamInfo const& info);
   };
 } // namespace ao::audio::detail

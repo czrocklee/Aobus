@@ -79,7 +79,6 @@ add_executable(ao_core_test
     unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatNegotiatorTest.cpp
     unit/audio/FormatTest.cpp
-    unit/audio/MemorySourceTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/PcmRingBufferTest.cpp
     unit/audio/backend/detail/PipeWireSharedTest.cpp

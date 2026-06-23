@@ -8,7 +8,6 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/Types.h>
 
-#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -22,8 +21,6 @@ namespace ao::audio::detail
   class RouteTracker final
   {
   public:
-    using OnChanged = std::function<void(RouteState const&)>;
-
     void setDecoder(Format sourceFormat, Format outputFormat, bool isLossy, AudioCodec codec);
     void setEngineFormat(Format format);
     void setAnchor(BackendId backend, std::string id);
@@ -32,13 +29,9 @@ namespace ao::audio::detail
     RouteState state() const;
     std::optional<RouteAnchor> anchor() const;
 
-    void setOnChanged(OnChanged cb);
-    OnChanged onChanged() const;
-
   private:
     mutable std::mutex _mutex;
     RouteState _state;
     std::optional<RouteAnchor> _optAnchor;
-    OnChanged _onChanged;
   };
 } // namespace ao::audio::detail

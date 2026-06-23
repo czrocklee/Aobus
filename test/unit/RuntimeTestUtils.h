@@ -14,13 +14,16 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -130,7 +133,8 @@ namespace ao::rt::test
       REQUIRE(coldData);
 
       REQUIRE(writer.updateHot(id, *hotData));
-      REQUIRE(writer.updateCold(id, *coldData));
+      REQUIRE(writer.updateCold(
+        id, coldData->size(), [&](std::span<std::byte> buf) { std::ranges::copy(*coldData, buf.begin()); }));
       REQUIRE(txn.commit());
     }
 

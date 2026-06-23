@@ -228,13 +228,6 @@ namespace ao::library
     return _hotWriter.update(id.raw(), hotData);
   }
 
-  Result<> TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
-  {
-    gsl_Expects((coldData.size() % 4) == 0);
-
-    return _coldWriter.update(id.raw(), coldData);
-  }
-
   Result<std::span<std::byte>> TrackStore::Writer::updateCold(TrackId id, std::size_t size)
   {
     gsl_Expects((size % 4) == 0);

@@ -52,16 +52,4 @@ namespace ao::audio::detail
     auto const lock = std::scoped_lock{_mutex};
     return _optAnchor;
   }
-
-  void RouteTracker::setOnChanged(OnChanged cb)
-  {
-    auto const lock = std::scoped_lock{_mutex};
-    _onChanged = std::move(cb);
-  }
-
-  RouteTracker::OnChanged RouteTracker::onChanged() const
-  {
-    auto const lock = std::scoped_lock{_mutex};
-    return _onChanged;
-  }
 } // namespace ao::audio::detail

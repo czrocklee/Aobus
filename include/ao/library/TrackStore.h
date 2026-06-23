@@ -192,11 +192,6 @@ namespace ao::library
     Result<> updateHot(TrackId id, std::size_t size, F&& fill);
 
     /**
-     * Update cold track data.
-     */
-    Result<> updateCold(TrackId id, std::span<std::byte const> coldData);
-
-    /**
      * Update cold track data (direct span access).
      */
     Result<std::span<std::byte>> updateCold(TrackId id, std::size_t size);

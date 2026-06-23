@@ -6,7 +6,6 @@
 #include <ao/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
-#include <ao/tag/TagFile.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -100,7 +99,7 @@ namespace ao::tag::flac::test
     auto const data = createMinimalFlac();
     auto const temp = TempFile{data};
 
-    auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+    auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
     auto const meta = builder.metadata();
@@ -137,7 +136,7 @@ namespace ao::tag::flac::test
       data.insert(data.end(), 10, 0);
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto result = file.loadTrack();
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
@@ -158,7 +157,7 @@ namespace ao::tag::flac::test
       data.insert(data.end(), 34, 0); // Only provide 34 bytes
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto result = file.loadTrack();
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
@@ -179,7 +178,7 @@ namespace ao::tag::flac::test
       data.push_back(0);
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto result = file.loadTrack();
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
@@ -198,7 +197,7 @@ namespace ao::tag::flac::test
       data.insert(data.end(), 4, 0);
 
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto result = file.loadTrack();
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
@@ -208,7 +207,7 @@ namespace ao::tag::flac::test
     {
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'K'};
       auto const temp = TempFile{data};
-      auto const file = File{temp.path, TagFile::Mode::ReadOnly};
+      auto const file = File{temp.path};
       auto result = file.loadTrack();
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);

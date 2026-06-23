@@ -8,6 +8,7 @@
 #endif
 
 #include "detail/Lexical.h"
+#include "detail/Normalize.h"
 #include <ao/Error.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
