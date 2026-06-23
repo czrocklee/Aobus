@@ -98,6 +98,7 @@ namespace ao::library
     {
     }
 
+    Result<FileManifestView> get(std::string_view uri) const;
     Result<> put(std::string_view uri, std::span<std::byte const> payload);
     Result<> remove(std::string_view uri);
     Result<> clear();

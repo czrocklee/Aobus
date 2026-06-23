@@ -112,16 +112,8 @@ namespace ao::audio
 
   AlacDecoderSession::~AlacDecoderSession() = default;
 
-  Result<> AlacDecoderSession::open(std::filesystem::path const& filePath)
+  Result<> AlacDecoderSession::openCodec(std::filesystem::path const& filePath)
   {
-    close();
-
-    auto failOpen = [this](Error error) -> Result<>
-    {
-      close();
-      return std::unexpected{std::move(error)};
-    };
-
     if (auto const result = _implPtr->packetSource.open(filePath, "alac"); !result)
     {
       auto error = result.error();
@@ -131,14 +123,14 @@ namespace ao::audio
         error.code = Error::Code::InitFailed;
       }
 
-      return failOpen(std::move(error));
+      return std::unexpected{std::move(error)};
     }
 
     auto const cookie = _implPtr->packetSource.magicCookie();
 
     if (auto const result = validateAlacCookie(cookie); !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     auto const initStatus =
@@ -146,14 +138,14 @@ namespace ao::audio
 
     if (initStatus != ALAC_noErr)
     {
-      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Failed to initialize ALAC decoder"});
+      return std::unexpected{Error{.code = Error::Code::InitFailed, .message = "Failed to initialize ALAC decoder"}};
     }
 
     auto const& config = _implPtr->decoderPtr->mConfig;
 
     if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
     {
-      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Invalid ALAC stream configuration"});
+      return std::unexpected{Error{.code = Error::Code::InitFailed, .message = "Invalid ALAC stream configuration"}};
     }
 
     _implPtr->info.duration = _implPtr->packetSource.duration(config.sampleRate);
@@ -179,7 +171,7 @@ namespace ao::audio
           detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "ALAC");
         !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     auto const sourceBitDepth = _implPtr->info.sourceFormat.bitDepth;
@@ -191,9 +183,9 @@ namespace ao::audio
     if (_implPtr->requestedOutput.isFloat || !supportedConversion ||
         _implPtr->info.outputFormat.validBits != sourceBitDepth)
     {
-      return failOpen(
+      return std::unexpected{
         Error{.code = Error::Code::NotSupported,
-              .message = std::format("Unsupported ALAC conversion: {} -> {}", sourceBitDepth, outputBitDepth)});
+              .message = std::format("Unsupported ALAC conversion: {} -> {}", sourceBitDepth, outputBitDepth)}};
     }
 
     return {};

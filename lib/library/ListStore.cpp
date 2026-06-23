@@ -106,7 +106,7 @@ namespace ao::library
     return _writer.update(id.raw(), data);
   }
 
-  bool ListStore::Writer::del(ListId id)
+  bool ListStore::Writer::remove(ListId id)
   {
     return _writer.del(id.raw());
   }

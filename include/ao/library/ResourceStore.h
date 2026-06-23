@@ -115,9 +115,10 @@ namespace ao::library
   class ResourceStore::Writer
   {
   public:
+    std::optional<std::span<std::byte const>> get(ResourceId id) const { return _writer.get(id.raw()); }
     Result<ResourceId> create(std::span<std::byte const> data);
     // Returns true if a row was removed, false if the id was absent.
-    bool del(ResourceId id) { return _writer.del(id.raw()); }
+    bool remove(ResourceId id) { return _writer.del(id.raw()); }
 
     Result<> clear() { return _writer.clear(); }
 

@@ -198,7 +198,7 @@ namespace ao::cli
 
         auto const listId = ListId{id->as<std::uint32_t>()};
 
-        if (!writer.del(listId))
+        if (!writer.remove(listId))
         {
           std::cout << "list not found: " << listId << "\n";
           return;

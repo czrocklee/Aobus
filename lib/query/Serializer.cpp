@@ -3,6 +3,7 @@
 
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
+#include <ao/query/detail/OperatorTable.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <algorithm>
@@ -171,22 +172,9 @@ namespace ao::query
 
       void serializeBinary(Operator op, Expression const& rhs)
       {
-        switch (op)
-        {
-          case Operator::And: oss << " and "; break;
-          case Operator::Or: oss << " or "; break;
-          case Operator::Less: oss << " < "; break;
-          case Operator::LessEqual: oss << " <= "; break;
-          case Operator::Greater: oss << " > "; break;
-          case Operator::GreaterEqual: oss << " >= "; break;
-          case Operator::Equal: oss << " = "; break;
-          case Operator::NotEqual: oss << " != "; break;
-          case Operator::Like: oss << " ~ "; break;
-          case Operator::In: oss << " in "; break;
-          case Operator::Add: oss << " + "; break;
-          default: break;
-        }
-
+        // serializeBinary only ever receives binary (infix) operators, so the
+        // canonical token from the table reproduces the original spacing exactly.
+        oss << ' ' << detail::operatorInfo(op).spelling << ' ';
         std::visit(*this, rhs);
       }
 

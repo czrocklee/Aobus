@@ -399,7 +399,7 @@ namespace ao::rt
   {
     auto txn = _implPtr->library.writeTransaction();
 
-    if (!_implPtr->library.lists().writer(txn).del(listId))
+    if (!_implPtr->library.lists().writer(txn).remove(listId))
     {
       return false;
     }

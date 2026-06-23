@@ -159,7 +159,7 @@ namespace ao::rt::test
 
       {
         auto txn = testLib.library().writeTransaction();
-        testLib.library().lists().writer(txn).del(listId);
+        testLib.library().lists().writer(txn).remove(listId);
         txn.commit();
       }
 
@@ -205,9 +205,9 @@ namespace ao::rt::test
 
       {
         auto txn = testLib.library().writeTransaction();
-        testLib.library().lists().writer(txn).del(grandchildId);
-        testLib.library().lists().writer(txn).del(childId);
-        testLib.library().lists().writer(txn).del(parentId);
+        testLib.library().lists().writer(txn).remove(grandchildId);
+        testLib.library().lists().writer(txn).remove(childId);
+        testLib.library().lists().writer(txn).remove(parentId);
         txn.commit();
       }
 

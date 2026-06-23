@@ -3,6 +3,7 @@
 
 #include <ao/query/Expression.h>
 #include <ao/query/Predicate.h>
+#include <ao/query/detail/OperatorTable.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <memory>
@@ -19,24 +20,15 @@ namespace ao::query
         return isPredicateExpression(binary.operand);
       }
 
-      switch (binary.optOperation->op)
+      switch (detail::operatorInfo(binary.optOperation->op).cls)
       {
-        case Operator::And:
-        case Operator::Or:
+        case detail::OperatorClass::Logical:
           return isPredicateExpression(binary.operand) && isPredicateExpression(binary.optOperation->operand);
 
-        case Operator::Equal:
-        case Operator::NotEqual:
-        case Operator::Like:
-        case Operator::Less:
-        case Operator::LessEqual:
-        case Operator::Greater:
-        case Operator::GreaterEqual:
-        case Operator::In: return true;
+        case detail::OperatorClass::Boolean: return true;
 
-        case Operator::Add:
-        case Operator::Not:
-        case Operator::Exists: return false;
+        case detail::OperatorClass::Arithmetic:
+        case detail::OperatorClass::Unary: return false;
       }
 
       return false;

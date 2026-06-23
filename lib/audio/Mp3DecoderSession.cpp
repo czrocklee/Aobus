@@ -233,24 +233,16 @@ namespace ao::audio
 
   Mp3DecoderSession::~Mp3DecoderSession() = default;
 
-  Result<> Mp3DecoderSession::open(std::filesystem::path const& filePath)
+  Result<> Mp3DecoderSession::openCodec(std::filesystem::path const& filePath)
   {
-    close();
-
-    auto failOpen = [this](Error error) -> Result<>
-    {
-      close();
-      return std::unexpected{std::move(error)};
-    };
-
     if (auto const configureResult = _implPtr->configureOutputFormat(); !configureResult)
     {
-      return failOpen(configureResult.error());
+      return std::unexpected{configureResult.error()};
     }
 
     if (auto const result = _implPtr->fileCursor.open(filePath); !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     _implPtr->eof = false;
@@ -259,15 +251,15 @@ namespace ao::audio
     if (int const err = ::mpg123_replace_reader_handle(_implPtr->mh, Impl::readCb, Impl::lseekCb, nullptr);
         err != MPG123_OK)
     {
-      return failOpen(
+      return std::unexpected{
         Error{.code = Error::Code::InitFailed,
-              .message = "Failed to configure MP3 input callbacks: " + mpg123ErrorMessage(_implPtr->mh, err)});
+              .message = "Failed to configure MP3 input callbacks: " + mpg123ErrorMessage(_implPtr->mh, err)}};
     }
 
     if (int const err = ::mpg123_open_handle(_implPtr->mh, _implPtr.get()); err != MPG123_OK)
     {
-      return failOpen(Error{.code = Error::Code::InitFailed,
-                            .message = "Failed to open MP3 handle: " + mpg123ErrorMessage(_implPtr->mh, err)});
+      return std::unexpected{Error{.code = Error::Code::InitFailed,
+                                   .message = "Failed to open MP3 handle: " + mpg123ErrorMessage(_implPtr->mh, err)}};
     }
 
     // Scan for accurate length (especially for VBR)
@@ -275,20 +267,20 @@ namespace ao::audio
 
     if (auto const formatResult = _implPtr->refreshStreamInfo(); !formatResult)
     {
-      return failOpen(formatResult.error());
+      return std::unexpected{formatResult.error()};
     }
 
     if (auto const result =
           detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "MP3");
         !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     if (_implPtr->requestedOutput.validBits != 0 &&
         _implPtr->requestedOutput.validBits != _implPtr->info.outputFormat.validBits)
     {
-      return failOpen(Error{.code = Error::Code::NotSupported, .message = "Unsupported MP3 output valid bits"});
+      return std::unexpected{Error{.code = Error::Code::NotSupported, .message = "Unsupported MP3 output valid bits"}};
     }
 
     // Estimate duration
@@ -302,7 +294,8 @@ namespace ao::audio
 
     if (outputBlockSize == 0)
     {
-      return failOpen(Error{.code = Error::Code::InitFailed, .message = "MP3 decoder reported an empty output buffer"});
+      return std::unexpected{
+        Error{.code = Error::Code::InitFailed, .message = "MP3 decoder reported an empty output buffer"}};
     }
 
     _implPtr->decodeBuffer.resize(outputBlockSize);

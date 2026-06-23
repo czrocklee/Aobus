@@ -27,11 +27,6 @@ namespace ao::query
 
   namespace
   {
-    bool isOrderedComparison(OpCode op)
-    {
-      return op == OpCode::Lt || op == OpCode::Le || op == OpCode::Gt || op == OpCode::Ge;
-    }
-
     // Get string constant from plan's string constants table
     std::string_view getStringConstant(ExecutionPlan const* plan, std::int64_t stringIdx)
     {

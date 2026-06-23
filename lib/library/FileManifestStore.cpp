@@ -104,6 +104,36 @@ namespace ao::library
     return Iterator{_reader.begin()};
   }
 
+  Result<FileManifestView> FileManifestStore::Writer::get(std::string_view uri) const
+  {
+    if (auto result = validateUri(uri); !result)
+    {
+      return makeError(result.error().code, result.error().message);
+    }
+
+    if (uri.empty())
+    {
+      return makeError(Error::Code::NotFound, "File manifest entry for empty URI was not found");
+    }
+
+    auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
+    auto const key = padUri(uri, buffer);
+
+    auto optData = _writer.get(key);
+
+    if (!optData)
+    {
+      return makeError(Error::Code::NotFound, std::format("File manifest entry for URI '{}' was not found", uri));
+    }
+
+    if (optData->size() < sizeof(FileManifestHeader))
+    {
+      return makeError(Error::Code::CorruptData, std::format("File manifest entry for URI '{}' is corrupt", uri));
+    }
+
+    return FileManifestView{*optData};
+  }
+
   Result<> FileManifestStore::Writer::put(std::string_view uri, std::span<std::byte const> payload)
   {
     if (auto result = validateUri(uri); !result)

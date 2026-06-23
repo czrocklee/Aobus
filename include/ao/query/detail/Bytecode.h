@@ -42,6 +42,14 @@ namespace ao::query
     InSet,
   };
 
+  // An ordered comparison resolves dictionary IDs back to text before comparing;
+  // both the compiler and the evaluator need this classification, so it lives here
+  // beside the OpCode definition rather than being duplicated in each.
+  constexpr bool isOrderedComparison(OpCode op)
+  {
+    return op == OpCode::Lt || op == OpCode::Le || op == OpCode::Gt || op == OpCode::Ge;
+  }
+
   struct InSet final
   {
     bool stringValues = false;

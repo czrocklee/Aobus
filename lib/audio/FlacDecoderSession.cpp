@@ -29,7 +29,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace ao::audio
@@ -159,19 +158,11 @@ namespace ao::audio
 
   FlacDecoderSession::~FlacDecoderSession() = default;
 
-  Result<> FlacDecoderSession::open(std::filesystem::path const& filePath)
+  Result<> FlacDecoderSession::openCodec(std::filesystem::path const& filePath)
   {
-    close();
-
-    auto failOpen = [this](Error error) -> Result<>
-    {
-      close();
-      return std::unexpected{std::move(error)};
-    };
-
     if (auto const result = _implPtr->fileCursor.open(filePath); !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     _implPtr->eof = false;
@@ -190,25 +181,25 @@ namespace ao::audio
 
     if (initStatus != ::FLAC__STREAM_DECODER_INIT_STATUS_OK)
     {
-      return failOpen(Error{.code = Error::Code::InitFailed, .message = "Failed to initialize FLAC decoder"});
+      return std::unexpected{Error{.code = Error::Code::InitFailed, .message = "Failed to initialize FLAC decoder"}};
     }
 
     // Process until metadata is read
     if (::FLAC__stream_decoder_process_until_end_of_metadata(_implPtr->decoder) == 0)
     {
-      return failOpen(Error{.code = Error::Code::DecodeFailed, .message = "Failed to read FLAC metadata"});
+      return std::unexpected{Error{.code = Error::Code::DecodeFailed, .message = "Failed to read FLAC metadata"}};
     }
 
     if (auto const result = _implPtr->checkDecodeError(); !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     if (auto const result =
           detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "FLAC");
         !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
@@ -217,7 +208,8 @@ namespace ao::audio
     if (_implPtr->requestedOutput.isFloat || (outputBitDepth != 16 && outputBitDepth != 24 && outputBitDepth != 32) ||
         _implPtr->info.outputFormat.validBits != expectedValidBits)
     {
-      return failOpen(Error{.code = Error::Code::NotSupported, .message = "Unsupported FLAC output sample format"});
+      return std::unexpected{
+        Error{.code = Error::Code::NotSupported, .message = "Unsupported FLAC output sample format"}};
     }
 
     return {};

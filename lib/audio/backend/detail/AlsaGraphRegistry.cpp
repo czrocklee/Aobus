@@ -3,6 +3,7 @@
 
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <algorithm>
@@ -20,8 +21,6 @@ namespace ao::audio::backend::detail
 {
   namespace
   {
-    constexpr float kVolumeEpsilon = 1e-4F;
-
     bool isUnity(float volume) noexcept
     {
       return std::abs(volume - 1.0F) < kVolumeEpsilon;

@@ -98,7 +98,7 @@ namespace ao::library
     Result<std::pair<ListId, ListView>> create(std::span<std::byte const> data);
     Result<> update(ListId id, std::span<std::byte const> data);
     // Returns true if a row was removed, false if the id was absent.
-    bool del(ListId id);
+    bool remove(ListId id);
     Result<> clear();
 
     std::optional<ListView> get(ListId id) const;

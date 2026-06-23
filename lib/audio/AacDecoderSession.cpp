@@ -210,19 +210,11 @@ namespace ao::audio
 
   AacDecoderSession::~AacDecoderSession() = default;
 
-  Result<> AacDecoderSession::open(std::filesystem::path const& filePath)
+  Result<> AacDecoderSession::openCodec(std::filesystem::path const& filePath)
   {
-    close();
-
-    auto failOpen = [this](Error error) -> Result<>
-    {
-      close();
-      return std::unexpected{std::move(error)};
-    };
-
     if (auto const result = _implPtr->openDecoder(); !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     if (auto const result = _implPtr->packetSource.open(filePath, "mp4a"); !result)
@@ -234,19 +226,19 @@ namespace ao::audio
         error.code = Error::Code::InitFailed;
       }
 
-      return failOpen(std::move(error));
+      return std::unexpected{std::move(error)};
     }
 
     if (auto const result = _implPtr->configureDecoder(_implPtr->packetSource.magicCookie()); !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     _implPtr->info.duration = _implPtr->packetSource.duration();
 
     if (auto const result = _implPtr->validateRequestedOutput(); !result)
     {
-      return failOpen(result.error());
+      return std::unexpected{result.error()};
     }
 
     return {};

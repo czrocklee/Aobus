@@ -103,13 +103,19 @@ namespace ao::audio
     void seek(std::chrono::milliseconds offset);
 
     void setVolume(float volume);
+    /// @brief Returns a possibly-torn live read of the volume.
     float volume() const;
     void setMuted(bool muted);
+    /// @brief Returns a possibly-torn live read of the mute state.
     bool isMuted() const;
+    /// @brief Returns a possibly-torn live read of volume availability.
     bool isVolumeAvailable() const;
 
+    /// @brief Returns an atomic consistent snapshot of the engine state.
     Status status() const;
+    /// @brief Returns a possibly-torn live read of the transport state.
     Transport transport() const;
+    /// @brief Returns a possibly-torn live read of the backend ID.
     BackendId backendId() const;
 
   private:

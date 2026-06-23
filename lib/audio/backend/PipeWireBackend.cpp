@@ -7,6 +7,7 @@
 #include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/backend/PipeWireBackend.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/Raii.h>
@@ -40,7 +41,6 @@ namespace ao::audio::backend
 
   namespace
   {
-    constexpr float kVolumeEpsilon = 0.0001F;
     constexpr std::size_t kPodBufferSize = 1024;
   }
 
@@ -254,7 +254,7 @@ namespace ao::audio::backend
     {
       if (float volFloat = 0.0F; ::spa_pod_get_float(&prop->value, &volFloat) == 0)
       {
-        if (std::abs(volFloat - volume.exchange(volFloat)) > kVolumeEpsilon)
+        if (std::abs(volFloat - volume.exchange(volFloat)) > detail::kVolumeEpsilon)
         {
           renderTarget->onPropertyChanged(PropertyId::Volume);
         }

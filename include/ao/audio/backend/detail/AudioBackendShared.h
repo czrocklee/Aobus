@@ -9,6 +9,8 @@
 
 namespace ao::audio::backend::detail
 {
+  constexpr float kVolumeEpsilon = 1e-4F;
+
   /**
    * @brief Shared helper to add a sample format capability to DeviceCapabilities.
    */

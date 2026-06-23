@@ -6,7 +6,7 @@
 #include <ao/Error.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IDecoderSession.h>
+#include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>
 #include <filesystem>
@@ -14,7 +14,7 @@
 
 namespace ao::audio
 {
-  class [[nodiscard]] AacDecoderSession final : public IDecoderSession
+  class [[nodiscard]] AacDecoderSession final : public detail::DecoderSessionBase<AacDecoderSession>
   {
   public:
     explicit AacDecoderSession(Format outputFormat);
@@ -25,7 +25,7 @@ namespace ao::audio
     AacDecoderSession(AacDecoderSession&&) = delete;
     AacDecoderSession& operator=(AacDecoderSession&&) = delete;
 
-    Result<> open(std::filesystem::path const& filePath) override;
+    Result<> openCodec(std::filesystem::path const& filePath);
     void close() override;
     Result<> seek(std::chrono::milliseconds offset) override;
     void flush() override;

@@ -79,7 +79,7 @@ namespace ao::library::test
 
     // Delete it
     auto wtxn3 = beginWriteTransaction(env);
-    REQUIRE(store.writer(wtxn3).del(id));
+    REQUIRE(store.writer(wtxn3).remove(id));
     wtxn3.commit();
 
     // Verify it's gone

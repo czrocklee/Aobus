@@ -88,11 +88,6 @@ namespace ao::query
       }
     }
 
-    bool isOrderedComparison(OpCode op)
-    {
-      return op == OpCode::Lt || op == OpCode::Le || op == OpCode::Gt || op == OpCode::Ge;
-    }
-
     bool isUnsupportedLikeField(Field field)
     {
       return field == Field::CoverArtId || field == Field::Tag;

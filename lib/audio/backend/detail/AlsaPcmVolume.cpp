@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/utility/ByteView.h>
 
 #include <algorithm>
@@ -16,7 +17,6 @@ namespace ao::audio::backend::detail
 {
   namespace
   {
-    constexpr float kVolumeEpsilon = 1e-4F;
     constexpr std::int32_t kS24Min = -8388608;
     constexpr std::int32_t kS24Max = 8388607;
 
