@@ -7,10 +7,10 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/StatefulComponentState.h"
+#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/layout/StatefulLayoutComponentType.h>
-#include <ao/utility/Log.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/box.h>

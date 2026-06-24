@@ -7,7 +7,7 @@
 #include <ao/query/Parser.h>
 #include <ao/query/detail/FieldCatalog.h>
 #include <ao/query/detail/FieldResolver.h>
-#include <ao/utility/Log.h>
+#include <ao/rt/Log.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -773,7 +773,7 @@ namespace ao::query::test
   // suggestions). Log-only baseline — no fixed threshold (machine dependent).
   TEST_CASE("Completion - Latency baseline", "[query][unit][completion][baseline]")
   {
-    log::Log::init(log::LogLevel::Info);
+    rt::Log::init(rt::LogLevel::Info);
 
     auto const inputs = std::array<std::string_view, 4>{
       R"($artist = "Miles Davis" )",   // completed predicate → logical-operator suggestion path

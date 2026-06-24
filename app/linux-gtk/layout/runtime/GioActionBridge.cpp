@@ -4,8 +4,8 @@
 #include "GioActionBridge.h"
 
 #include "ActionRegistry.h"
+#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/utility/Log.h>
 
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>

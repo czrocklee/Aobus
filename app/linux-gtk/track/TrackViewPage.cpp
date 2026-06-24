@@ -18,6 +18,7 @@
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -28,7 +29,6 @@
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 #include <ao/uimodel/track/TrackInlineEditWorkflow.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
-#include <ao/utility/Log.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>

@@ -3,9 +3,9 @@
 
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/track/TrackPresentationRecommender.h>
-#include <ao/utility/Log.h>
 
 #include <algorithm>
 #include <memory>

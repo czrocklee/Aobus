@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/AudioCodec.h>
+#include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
@@ -12,7 +13,6 @@
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
-#include <ao/utility/Log.h>
 
 #include <algorithm>
 #include <atomic>
@@ -218,15 +218,7 @@ namespace ao::audio
     {
       // Try to apply pending output
       auto const pending = PendingOutput{*optPendingOutput};
-      owner->setOutput(pending.backend, pending.deviceId, pending.profile);
-
-      if (!optPendingOutput)
-      {
-        AUDIO_LOG_INFO("Player: Pending output {}:{} ({}) successfully restored",
-                       pending.backend,
-                       pending.deviceId,
-                       pending.profile);
-      }
+      std::ignore = owner->setOutput(pending.backend, pending.deviceId, pending.profile);
     }
 
     auto snapshot = std::vector<IBackendProvider::Status>{};
@@ -403,12 +395,14 @@ namespace ao::audio
       });
   }
 
-  void Player::play(PlaybackInput const& input)
+  Result<> Player::play(PlaybackInput const& input)
   {
     if (!isReady())
     {
-      AUDIO_LOG_WARN("Player: Playback ignored because audio backend is not ready (pending discovery)");
-      return;
+      // Not an internal fault: device discovery simply has not finished. Hand
+      // the condition back so the caller can decide whether to report or retry.
+      return makeError(
+        Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
     }
 
     _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
@@ -421,16 +415,25 @@ namespace ao::audio
     }
     _implPtr->graphSubscription.reset();
     _implPtr->enginePtr->play(input);
+    return {};
   }
 
-  void Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
+  Result<> Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
     if (auto const currentSnap = _implPtr->enginePtr->status();
         backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
     {
       _implPtr->optPendingOutput.reset();
       _implPtr->dispatchOutward(&Impl::onStateChanged);
-      return;
+      return {};
+    }
+
+    auto const recordIt = std::ranges::find_if(
+      _implPtr->providers, [&](auto const& record) { return record->providerPtr->status().metadata.id == backend; });
+
+    if (recordIt == _implPtr->providers.end())
+    {
+      return makeError(Error::Code::NotFound, "No provider registered for backend " + backend.raw());
     }
 
     // 2. Find the Device matching the kind and id from our cache
@@ -447,24 +450,12 @@ namespace ao::audio
     {
       // If we don't have it yet, store it as pending.
       _implPtr->optPendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
-      AUDIO_LOG_DEBUG("Player: Requested output {}:{} not yet available, pending discovery", backend, deviceId);
       _implPtr->dispatchOutward(&Impl::onStateChanged);
-      return;
+      return {};
     }
 
     // Found it! Clear any pending output.
     _implPtr->optPendingOutput.reset();
-
-    // 3. Find the provider object that can handle this BackendId
-    auto const recordIt = std::ranges::find_if(
-      _implPtr->providers, [&](auto const& record) { return record->providerPtr->status().metadata.id == backend; });
-
-    if (recordIt == _implPtr->providers.end())
-    {
-      AUDIO_LOG_ERROR("Player: No provider found for backend {}", backend);
-      _implPtr->dispatchOutward(&Impl::onStateChanged);
-      return;
-    }
 
     // 4. Create the backend and swap it in the engine
     auto const& device = *it;
@@ -472,6 +463,7 @@ namespace ao::audio
     _implPtr->activeManager = (*recordIt)->providerPtr.get();
     _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
     _implPtr->enginePtr->setBackend(std::move(newBackendPtr), device);
+    return {};
   }
 
   void Player::pause()
@@ -503,20 +495,20 @@ namespace ao::audio
     _implPtr->enginePtr->seek(offset);
   }
 
-  void Player::setVolume(float vol)
+  Result<> Player::setVolume(float vol)
   {
-    _implPtr->enginePtr->setVolume(vol);
+    return _implPtr->enginePtr->setVolume(vol);
   }
 
-  void Player::setMuted(bool muted)
+  Result<> Player::setMuted(bool muted)
   {
-    _implPtr->enginePtr->setMuted(muted);
+    return _implPtr->enginePtr->setMuted(muted);
   }
 
-  void Player::toggleMute()
+  Result<> Player::toggleMute()
   {
     auto const engineStatus = _implPtr->enginePtr->status();
-    setMuted(!engineStatus.muted);
+    return setMuted(!engineStatus.muted);
   }
 
   Player::Status Player::status() const

@@ -6,6 +6,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ScopedTimer.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackPresentation.h>
@@ -18,7 +19,6 @@
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/utility/ScopedTimer.h>
 
 #include <chrono>
 #include <cstdint>
@@ -215,7 +215,7 @@ namespace ao::rt
 
   void ViewService::setFilter(ViewId viewId, std::string filterExpression)
   {
-    auto const timer = utility::ScopedTimer{"ViewService::setFilter"};
+    auto const timer = rt::ScopedTimer{"ViewService::setFilter"};
     auto it = _implPtr->views.find(viewId);
 
     if (it == _implPtr->views.end())

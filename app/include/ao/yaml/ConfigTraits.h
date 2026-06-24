@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/utility/Log.h>
+#include <ao/rt/Log.h>
 #include <ao/yaml/Utils.h>
 
 #include <boost/pfr/core.hpp>

@@ -10,7 +10,6 @@
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/audio/backend/detail/AlsaPcmError.h>
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
-#include <ao/utility/Log.h>
 #include <ao/utility/ThreadUtils.h>
 
 #include <poll.h>
@@ -190,7 +189,6 @@ namespace ao::audio::backend
 
       if (!setPlaybackVolumeAll(candidate.elem, *optOriginal))
       {
-        AUDIO_LOG_WARN("AlsaExclusiveBackend: Mixer restore failed for '{}'", candidate.name);
         return false;
       }
 
@@ -216,13 +214,11 @@ namespace ao::audio::backend
         {
           if (tryUseMixerCandidate(candidate))
           {
-            AUDIO_LOG_INFO("AlsaExclusiveBackend: Hardware mixer '{}' selected and verified", _mixerElemName);
             return true;
           }
         }
 
         _volumeMode = detail::AlsaVolumeControlMode::SoftwareGain;
-        AUDIO_LOG_INFO("AlsaExclusiveBackend: No functional hardware mixer found, using software fallback");
         return false;
       }
 
@@ -242,7 +238,6 @@ namespace ao::audio::backend
 
         if (_volumeMode.load() == detail::AlsaVolumeControlMode::HardwareMixer && !applyHardwareVolume(clamped))
         {
-          AUDIO_LOG_WARN("AlsaExclusiveBackend: Hardware volume write failed, falling back to software gain");
           _volumeMode = detail::AlsaVolumeControlMode::SoftwareGain;
           return false;
         }
@@ -257,7 +252,6 @@ namespace ao::audio::backend
 
         if (_volumeMode.load() == detail::AlsaVolumeControlMode::HardwareMixer && !applyHardwareMute(mute))
         {
-          AUDIO_LOG_WARN("AlsaExclusiveBackend: Hardware mute write failed, falling back to software gain");
           _volumeMode = detail::AlsaVolumeControlMode::SoftwareGain;
           return false;
         }
@@ -695,7 +689,6 @@ namespace ao::audio::backend
     else if (detail::isUnrecoverableAlsaPcmError(err))
     {
       auto const errorMsg = std::string{"ALSA: Unrecoverable stream state"};
-      AUDIO_LOG_ERROR("{}", errorMsg);
       fatalStreamError.store(true, std::memory_order_relaxed);
       renderTarget->onBackendError(errorMsg);
     }
@@ -794,10 +787,15 @@ namespace ao::audio::backend
 
     if (rate != format.sampleRate)
     {
-      AUDIO_LOG_INFO("AlsaExclusiveBackend: Rate mismatch! Requested: {}Hz, Got: {}Hz. Pitch shift expected if engine "
-                     "is not notified.",
-                     format.sampleRate,
-                     rate);
+      // Aobus has no resampler (FormatNegotiator/TrackSession reject any format that
+      // would need one), so accepting a substituted rate would play pitch-shifted
+      // audio. Negotiation already vetted this rate against the device capabilities,
+      // so a mismatch here is the rare "capabilities lied" case: fail honestly rather
+      // than degrade silently.
+      return makeError(
+        Error::Code::FormatRejected,
+        std::format(
+          "Device substituted {}Hz for the requested {}Hz and Aobus has no resampler", rate, format.sampleRate));
     }
 
     if (::snd_pcm_hw_params_set_channels(pcm, params, format.channels) < 0)
@@ -845,7 +843,6 @@ namespace ao::audio::backend
   AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device, ProfileId const& /*profile*/)
     : _implPtr{std::make_unique<Impl>(device.id.raw(), nullptr)}
   {
-    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _implPtr->deviceName);
   }
 
   AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device,
@@ -853,12 +850,10 @@ namespace ao::audio::backend
                                              detail::AlsaGraphRegistry& graphRegistry)
     : _implPtr{std::make_unique<Impl>(device.id.raw(), &graphRegistry)}
   {
-    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _implPtr->deviceName);
   }
 
   AlsaExclusiveBackend::~AlsaExclusiveBackend()
   {
-    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Destroying backend instance");
     stop();
     close();
   }
@@ -867,11 +862,6 @@ namespace ao::audio::backend
   {
     _implPtr->format = format;
     _implPtr->renderTarget = target;
-    AUDIO_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
-                   _implPtr->deviceName,
-                   format.sampleRate,
-                   static_cast<int>(format.bitDepth),
-                   static_cast<int>(format.channels));
 
     close();
     _implPtr->fatalStreamError.store(false, std::memory_order_relaxed);
@@ -903,10 +893,6 @@ namespace ao::audio::backend
     _implPtr->alsaFormat = alsaFormat;
     _implPtr->is3Byte24Bit = (alsaFormat == SND_PCM_FORMAT_S24_3LE);
 
-    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Device pause support: {}, Negotiated Rate: {}Hz",
-                    _implPtr->canPause,
-                    _implPtr->format.sampleRate);
-
     // When the ALSA hardware forces a wider sample container (e.g. S16_LE
     // rejected in favour of S32_LE), the Engine must be told so its PCM
     // converter produces data that matches the MMAP buffer layout.
@@ -937,11 +923,7 @@ namespace ao::audio::backend
 
     _implPtr->pcmPtr = std::move(safePcmPtr);
 
-    if (!_implPtr->mixer.init(_implPtr->pcmPtr.get()))
-    {
-      AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Hardware mixer probe failed for device '{}', using software fallback",
-                      _implPtr->deviceName);
-    }
+    _implPtr->mixer.init(_implPtr->pcmPtr.get());
 
     _implPtr->publishGraphState();
 

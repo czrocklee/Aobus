@@ -4,8 +4,8 @@
 #include "app/KeymapApplicator.h"
 
 #include "app/GtkAccelTranslator.h"
+#include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/utility/Log.h>
 
 #include <glibmm/ustring.h>
 #include <gtkmm/application.h>

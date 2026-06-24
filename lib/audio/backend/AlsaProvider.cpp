@@ -11,7 +11,6 @@
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
 #include <ao/audio/backend/AlsaProvider.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
-#include <ao/utility/Log.h>
 #include <ao/utility/Raii.h>
 #include <ao/utility/ThreadUtils.h>
 
@@ -65,11 +64,6 @@ namespace ao::audio::backend
     Impl()
     {
       cachedDevices = doAlsaEnumerate();
-
-      if (cachedDevices.empty())
-      {
-        AUDIO_LOG_WARN("ALSA device enumeration returned no devices - ALSA may not be available");
-      }
 
       monitorThread = std::jthread{[this](std::stop_token const& st)
                                    {

@@ -13,9 +13,9 @@
 #include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/utility/Log.h>
 
 #include <CLI/CLI.hpp>
 #include <giomm/simpleaction.h>
@@ -107,7 +107,7 @@ namespace
 
   struct CliOptions final
   {
-    log::LogLevel logLevel = log::LogLevel::Info;
+    rt::LogLevel logLevel = rt::LogLevel::Info;
     std::int32_t exitCode = 0;
     bool shouldExit = false;
   };
@@ -120,13 +120,13 @@ namespace
     auto options = CliOptions{};
 
     // Map strings to LogLevel enum for CLI11
-    auto const logMapping = std::map<std::string, log::LogLevel>{{"trace", log::LogLevel::Trace},
-                                                                 {"debug", log::LogLevel::Debug},
-                                                                 {"info", log::LogLevel::Info},
-                                                                 {"warn", log::LogLevel::Warn},
-                                                                 {"error", log::LogLevel::Error},
-                                                                 {"critical", log::LogLevel::Critical},
-                                                                 {"off", log::LogLevel::Off}};
+    auto const logMapping = std::map<std::string, rt::LogLevel>{{"trace", rt::LogLevel::Trace},
+                                                                {"debug", rt::LogLevel::Debug},
+                                                                {"info", rt::LogLevel::Info},
+                                                                {"warn", rt::LogLevel::Warn},
+                                                                {"error", rt::LogLevel::Error},
+                                                                {"critical", rt::LogLevel::Critical},
+                                                                {"off", rt::LogLevel::Off}};
 
     std::int32_t verbosity = 0;
     cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
@@ -159,11 +159,11 @@ namespace
     {
       if (verbosity == 1)
       {
-        options.logLevel = log::LogLevel::Debug;
+        options.logLevel = rt::LogLevel::Debug;
       }
       else if (verbosity >= 2)
       {
-        options.logLevel = log::LogLevel::Trace;
+        options.logLevel = rt::LogLevel::Trace;
       }
     }
 
@@ -344,7 +344,7 @@ namespace
     }
 
     auto const logDir = std::filesystem::path{Glib::get_user_cache_dir()} / "aobus" / "logs";
-    log::Log::init(options.logLevel, logDir);
+    rt::Log::init(options.logLevel, logDir);
 
     APP_LOG_INFO("Aobus {} starting...", kAppVersion);
 
@@ -407,6 +407,6 @@ int main(int argc, char* argv[])
     exitCode = 1;
   }
 
-  log::Log::shutdown();
+  rt::Log::shutdown();
   return exitCode;
 }

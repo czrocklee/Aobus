@@ -9,13 +9,13 @@
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/utility/Log.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -1207,7 +1207,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — 10k Baseline", "[baseline][unit]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr int kN = 10000;
     APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
 
@@ -1240,7 +1240,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — Query IN threshold sweep", "[baseline][unit][query]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr int kN = 10000;
     constexpr auto kListSizes = std::array<std::size_t, 8>{1, 2, 3, 4, 6, 8, 12, 16};
     APP_LOG_INFO("=== Phase 0 Query IN threshold sweep: {} tracks ===", kN);
@@ -1272,7 +1272,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — OrderEntry direct entry sort cache pressure", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry direct entry sort cache pressure ===");
@@ -1302,7 +1302,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — OrderEntry comparator dispatch cost", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry comparator dispatch cost ===");
@@ -1332,7 +1332,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — OrderEntry ranked integer key sort", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry ranked integer key sort ===");
@@ -1366,7 +1366,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — OrderEntry compact active key sort", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry compact active key sort ===");
@@ -1398,7 +1398,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — OrderEntry index sort cache pressure", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry index sort cache pressure ===");
@@ -1433,7 +1433,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — OrderEntry index materialize cache pressure", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry index materialize cache pressure ===");
@@ -1468,7 +1468,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — Projection rebuild stage timing", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 Projection rebuild stage timing ===");
@@ -1503,7 +1503,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — Projection sort field timing", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr int kN = 1000000;
 
     APP_LOG_INFO("=== Phase 0 Projection sort field timing: {} tracks ===", kN);
@@ -1537,7 +1537,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — Projection preset timing", "[baseline][unit][projection]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr int kN = 1000000;
 
     APP_LOG_INFO("=== Phase 0 Projection preset timing: {} tracks ===", kN);
@@ -1560,7 +1560,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — 100k Baseline", "[baseline][unit]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr int kN = 100000;
     APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
 
@@ -1593,7 +1593,7 @@ namespace ao::rt::test
 
   TEST_CASE("Phase 0 — 1M Baseline", "[baseline][unit]")
   {
-    log::Log::init(log::LogLevel::Info);
+    Log::init(LogLevel::Info);
     constexpr int kN = 1000000;
     APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
 

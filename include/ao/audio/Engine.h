@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Types.h>
@@ -102,10 +103,13 @@ namespace ao::audio
     void stop();
     void seek(std::chrono::milliseconds offset);
 
-    void setVolume(float volume);
+    /// @brief Applies the volume to the backend, returning any device failure.
+    /// The cached state always reflects the requested value regardless.
+    Result<> setVolume(float volume);
     /// @brief Returns a possibly-torn live read of the volume.
     float volume() const;
-    void setMuted(bool muted);
+    /// @brief Applies the mute state to the backend, returning any device failure.
+    Result<> setMuted(bool muted);
     /// @brief Returns a possibly-torn live read of the mute state.
     bool isMuted() const;
     /// @brief Returns a possibly-torn live read of volume availability.

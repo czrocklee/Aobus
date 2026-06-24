@@ -45,6 +45,7 @@ namespace ao::uimodel::playback::test
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
+    addReadyAudioProvider(playback);
 
     auto log = RenderLog<NowPlayingViewState>{};
     auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};

@@ -3,7 +3,6 @@
 
 #include <ao/Error.h>
 #include <ao/utility/AtomicFile.h>
-#include <ao/utility/Log.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -19,6 +18,7 @@
 #include <string_view>
 #include <sys/stat.h>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace ao::utility
@@ -139,21 +139,19 @@ namespace ao::utility
       // Best-effort, unlike the temp-file fsync above: this runs after the rename
       // has already made the new contents visible, so a failure here only means the
       // rename may not survive a crash. Reporting it as an error would falsely
-      // signal that the write did not apply, so log and continue instead.
+      // signal that the write did not apply, so attempt the barrier and continue
+      // regardless of the outcome. The realistic failures are environmental anyway
+      // (a filesystem that does not support directory fsync, e.g. some network or
+      // FUSE mounts), where the barrier is unavailable rather than broken.
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
       int const parentFd = ::open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
 
       if (parentFd < 0)
       {
-        APP_LOG_WARN("Failed to open parent directory {} for fsync: {}", parentPath.string(), std::strerror(errno));
         return;
       }
 
-      if (::fsync(parentFd) != 0)
-      {
-        APP_LOG_WARN("Failed to fsync parent directory {}: {}", parentPath.string(), std::strerror(errno));
-      }
-
+      std::ignore = ::fsync(parentFd);
       ::close(parentFd);
     }
     struct [[nodiscard]] FdGuard final

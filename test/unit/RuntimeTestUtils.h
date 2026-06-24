@@ -3,14 +3,20 @@
 
 #pragma once
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/async/Executor.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/IBackend.h>
+#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/NullBackend.h>
+#include <ao/audio/Subscription.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -27,10 +33,76 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
 {
+  namespace detail
+  {
+    struct ReadyAudioBackend final : audio::NullBackend
+    {
+      audio::BackendId backendIdValue;
+      audio::ProfileId profileIdValue;
+
+      ReadyAudioBackend(audio::BackendId backendId, audio::ProfileId profileId)
+        : backendIdValue{std::move(backendId)}, profileIdValue{std::move(profileId)}
+      {
+      }
+
+      audio::BackendId backendId() const noexcept override { return backendIdValue; }
+      audio::ProfileId profileId() const noexcept override { return profileIdValue; }
+    };
+
+    struct ReadyAudioProvider final : audio::IBackendProvider
+    {
+      Status provStatus;
+
+      ReadyAudioProvider()
+      {
+        provStatus.metadata.id = audio::BackendId{"test_backend"};
+        provStatus.metadata.name = "Test Backend";
+        provStatus.metadata.supportedProfiles.push_back(
+          {.id = audio::kProfileShared, .name = "Shared", .description = "Shared profile"});
+        provStatus.devices.push_back(audio::Device{.id = audio::DeviceId{"test_device"},
+                                                   .displayName = "Test Device",
+                                                   .description = "Ready test output",
+                                                   .isDefault = true,
+                                                   .backendId = audio::BackendId{"test_backend"}});
+      }
+
+      void shutdown() noexcept override {}
+
+      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        if (callback)
+        {
+          callback(provStatus.devices);
+        }
+
+        return audio::Subscription{};
+      }
+
+      Status status() const override { return provStatus; }
+
+      std::unique_ptr<audio::IBackend> createBackend(audio::Device const& device,
+                                                     audio::ProfileId const& profile) override
+      {
+        return std::make_unique<ReadyAudioBackend>(device.backendId, profile);
+      }
+
+      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      {
+        return audio::Subscription{};
+      }
+    };
+  } // namespace detail
+
+  inline void addReadyAudioProvider(PlaybackService& playback)
+  {
+    playback.addProvider(std::make_unique<detail::ReadyAudioProvider>());
+  }
+
   struct TrackSpec final
   {
     std::string title = "Track";

@@ -4,10 +4,10 @@
 #include "layout/document/GtkLayoutPresets.h"
 
 #include <ao/Exception.h>
+#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
-#include <ao/utility/Log.h>
 #include <ao/yaml/Utils.h>
 
 #include <giomm/resource.h>

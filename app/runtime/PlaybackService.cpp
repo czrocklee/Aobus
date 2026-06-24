@@ -3,6 +3,7 @@
 
 #include <ao/Type.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
@@ -10,11 +11,11 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/ViewService.h>
-#include <ao/utility/Log.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -25,6 +26,7 @@
 #include <optional>
 #include <source_location>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -73,10 +75,8 @@ namespace ao::rt
                                    .devices = std::move(devices)};
     }
 
-    PlaybackState buildPlaybackState(audio::Player const& player)
+    PlaybackState buildPlaybackState(audio::Player::Status const& status)
     {
-      auto const status = player.status();
-
       auto outputs = std::vector<OutputBackendSnapshot>{};
       outputs.reserve(status.availableBackends.size());
 
@@ -106,6 +106,64 @@ namespace ao::rt
         .quality = status.quality,
         .qualityAssessments = status.qualityAssessments,
       };
+    }
+
+    bool hasOutput(OutputSelection const& output)
+    {
+      return !output.backendId.empty();
+    }
+
+    bool sameOutput(OutputSelection const& lhs, OutputSelection const& rhs)
+    {
+      return lhs.backendId == rhs.backendId && lhs.deviceId == rhs.deviceId && lhs.profileId == rhs.profileId;
+    }
+
+    std::string_view playbackErrorMessage(audio::Engine::Status const& status)
+    {
+      return status.statusText.empty() ? std::string_view{"Audio playback failed"}
+                                       : std::string_view{status.statusText};
+    }
+
+    void logOutputSelected(OutputSelection const& output)
+    {
+      APP_LOG_INFO(
+        "Audio output selected: backend={} device={} profile={}", output.backendId, output.deviceId, output.profileId);
+    }
+
+    void logOutputCleared(OutputSelection const& output)
+    {
+      APP_LOG_INFO(
+        "Audio output cleared: backend={} device={} profile={}", output.backendId, output.deviceId, output.profileId);
+    }
+
+    void logOutputSwitched(OutputSelection const& previous, OutputSelection const& current)
+    {
+      APP_LOG_INFO("Audio output switched: previous_backend={} previous_device={} previous_profile={} backend={} "
+                   "device={} profile={}",
+                   previous.backendId,
+                   previous.deviceId,
+                   previous.profileId,
+                   current.backendId,
+                   current.deviceId,
+                   current.profileId);
+    }
+
+    void logOutputTransition(OutputSelection const& previous, OutputSelection const& current)
+    {
+      auto const previousHas = hasOutput(previous);
+
+      if (auto const currentHas = hasOutput(current); previousHas && currentHas)
+      {
+        logOutputSwitched(previous, current);
+      }
+      else if (currentHas)
+      {
+        logOutputSelected(current);
+      }
+      else if (previousHas)
+      {
+        logOutputCleared(previous);
+      }
     }
 
     std::optional<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary& library,
@@ -158,7 +216,7 @@ namespace ao::rt
                        loc.file_name(),
                        loc.line());
 
-      if (auto const& logger = log::Log::appLogger(); logger)
+      if (auto const& logger = Log::appLogger(); logger)
       {
         logger->flush();
       }
@@ -186,6 +244,7 @@ namespace ao::rt
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
     std::chrono::milliseconds currentTrackDuration{0};
+    std::string lastPlaybackError{};
     Signal<> preparingSignal;
     Signal<> startedSignal;
     Signal<> pausedSignal;
@@ -250,28 +309,63 @@ namespace ao::rt
         profileId = backend.metadata.supportedProfiles.front().id;
       }
 
-      playerPtr->setOutput(backend.metadata.id, device.id, profileId);
+      if (auto const result = playerPtr->setOutput(backend.metadata.id, device.id, profileId); !result)
+      {
+        APP_LOG_ERROR("Failed to select audio output: {}", result.error().message);
+      }
     }
 
-    PlaybackState buildState(audio::Player const& targetPlayer) const
+    void refreshState()
     {
-      auto snapshot = buildPlaybackState(targetPlayer);
-      snapshot.trackId = currentTrackId;
-      snapshot.sourceListId = currentSourceListId;
-      snapshot.trackTitle = currentTrackTitle;
-      snapshot.trackArtist = currentTrackArtist;
-      snapshot.shuffleMode = shuffleMode;
-      snapshot.repeatMode = repeatMode;
+      auto const previousState = state;
+      auto const status = playerPtr->status();
 
-      if (snapshot.duration == std::chrono::milliseconds{0})
+      state = buildPlaybackState(status);
+      state.trackId = currentTrackId;
+      state.sourceListId = currentSourceListId;
+      state.trackTitle = currentTrackTitle;
+      state.trackArtist = currentTrackArtist;
+      state.shuffleMode = shuffleMode;
+      state.repeatMode = repeatMode;
+
+      if (state.duration == std::chrono::milliseconds{0})
       {
-        snapshot.duration = currentTrackDuration;
+        state.duration = currentTrackDuration;
       }
 
-      return snapshot;
+      if (!sameOutput(previousState.selectedOutput, state.selectedOutput))
+      {
+        logOutputTransition(previousState.selectedOutput, state.selectedOutput);
+      }
+
+      if (state.transport == audio::Transport::Error)
+      {
+        recordPlaybackError(previousState.transport, status.engine, state.selectedOutput);
+      }
+      else
+      {
+        lastPlaybackError.clear();
+      }
     }
 
-    void refreshState() { state = buildState(*playerPtr); }
+    void recordPlaybackError(audio::Transport previousTransport,
+                             audio::Engine::Status const& engineStatus,
+                             OutputSelection const& currentOutput)
+    {
+      auto const message = std::string{playbackErrorMessage(engineStatus)};
+
+      if (previousTransport == audio::Transport::Error && message == lastPlaybackError)
+      {
+        return;
+      }
+
+      lastPlaybackError = message;
+      APP_LOG_ERROR("Playback error on backend={} device={} profile={}: {}",
+                    currentOutput.backendId,
+                    currentOutput.deviceId,
+                    currentOutput.profileId,
+                    lastPlaybackError);
+    }
 
     explicit Impl(async::IExecutor& callbackExecutor, ViewService& viewService, library::MusicLibrary& musicLibrary)
       : executor{callbackExecutor}
@@ -319,7 +413,11 @@ namespace ao::rt
             profileId = backend.supportedProfiles.front().id;
           }
 
-          playerPtr->setOutput(backend.id, device.id, profileId);
+          if (auto const result = playerPtr->setOutput(backend.id, device.id, profileId); !result)
+          {
+            APP_LOG_ERROR("Failed to select audio output: {}", result.error().message);
+          }
+
           refreshState();
           outputChangedSignal.emit(state.selectedOutput);
         });
@@ -334,6 +432,14 @@ namespace ao::rt
 
     ~Impl()
     {
+      if (hasOutput(state.selectedOutput))
+      {
+        APP_LOG_INFO("Audio output released: backend={} device={} profile={}",
+                     state.selectedOutput.backendId,
+                     state.selectedOutput.deviceId,
+                     state.selectedOutput.profileId);
+      }
+
       // Tear the player down first: Player::~Impl drains its own callback gate
       // (joining the Engine worker and neutralizing any executor-deferred outward
       // callback), so no backend/source event can re-enter the service after this.
@@ -445,7 +551,7 @@ namespace ao::rt
     return _implPtr->state;
   }
 
-  void PlaybackService::play(PlaybackRequest const& request, ListId const sourceListId)
+  bool PlaybackService::play(PlaybackRequest const& request, ListId const sourceListId)
   {
     auto& impl = *_implPtr;
     impl.ensureOnExecutor();
@@ -455,18 +561,25 @@ namespace ao::rt
     // blocking Engine::play call freezes the main thread.
     impl.preparingSignal.emit();
 
+    if (auto const result = impl.playerPtr->play(request.input); !result)
+    {
+      APP_LOG_WARN("Playback not started: {}", result.error().message);
+      impl.refreshState();
+      return false;
+    }
+
     impl.currentTrackId = request.trackId;
     impl.currentSourceListId = sourceListId;
     impl.currentTrackTitle = request.title;
     impl.currentTrackArtist = request.artist;
     impl.currentTrackDuration = request.input.duration;
-    impl.playerPtr->play(request.input);
     impl.refreshState();
     impl.startedSignal.emit();
     impl.nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
       .trackId = request.trackId,
       .sourceListId = sourceListId,
     });
+    return true;
   }
 
   bool PlaybackService::playTrack(TrackId const trackId, ListId const sourceListId)
@@ -480,8 +593,7 @@ namespace ao::rt
         return false;
       }
 
-      play(*optRequest, sourceListId);
-      return true;
+      return play(*optRequest, sourceListId);
     }
     catch (std::exception const&)
     {
@@ -581,7 +693,12 @@ namespace ao::rt
                                   audio::ProfileId const& profileId)
   {
     _implPtr->ensureOnExecutor();
-    _implPtr->playerPtr->setOutput(backendId, deviceId, profileId);
+
+    if (auto const result = _implPtr->playerPtr->setOutput(backendId, deviceId, profileId); !result)
+    {
+      APP_LOG_ERROR("Failed to set audio output: {}", result.error().message);
+    }
+
     _implPtr->refreshState();
     // Publish the engine-confirmed selection from the refreshed state, not the
     // raw request. This keeps the signal consistent with the auto-select path in
@@ -594,7 +711,12 @@ namespace ao::rt
   void PlaybackService::setVolume(float const volume)
   {
     _implPtr->ensureOnExecutor();
-    _implPtr->playerPtr->setVolume(volume);
+
+    if (auto const result = _implPtr->playerPtr->setVolume(volume); !result)
+    {
+      APP_LOG_ERROR("Failed to set volume: {}", result.error().message);
+    }
+
     _implPtr->refreshState();
     _implPtr->volumeChangedSignal.emit(volume);
   }
@@ -602,7 +724,12 @@ namespace ao::rt
   void PlaybackService::setMuted(bool const muted)
   {
     _implPtr->ensureOnExecutor();
-    _implPtr->playerPtr->setMuted(muted);
+
+    if (auto const result = _implPtr->playerPtr->setMuted(muted); !result)
+    {
+      APP_LOG_ERROR("Failed to set muted state: {}", result.error().message);
+    }
+
     _implPtr->refreshState();
     _implPtr->mutedChangedSignal.emit(_implPtr->state.muted);
   }
@@ -622,6 +749,16 @@ namespace ao::rt
   void PlaybackService::addProvider(std::unique_ptr<audio::IBackendProvider> providerPtr)
   {
     _implPtr->ensureOnExecutor();
+
+    if (providerPtr != nullptr)
+    {
+      auto const status = providerPtr->status();
+      APP_LOG_INFO("Audio backend provider registered: backend={} name='{}' devices={}",
+                   status.metadata.id,
+                   status.metadata.name,
+                   status.devices.size());
+    }
+
     _implPtr->playerPtr->addProvider(std::move(providerPtr));
   }
 } // namespace ao::rt

@@ -322,6 +322,26 @@ namespace ao::audio::test
     // This should hit line 126 in Player.cpp
   }
 
+  TEST_CASE("Player - setOutput rejects unknown backend", "[playback][unit][player][output]")
+  {
+    auto mockProvider = Mock<IBackendProvider>{};
+    Fake(Method(mockProvider, shutdown));
+
+    When(Method(mockProvider, subscribeDevices))
+      .AlwaysDo([](IBackendProvider::OnDevicesChangedCallback const&) { return Subscription{}; });
+    When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
+
+    auto executor = async::ImmediateExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
+
+    auto const result = player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileShared);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotFound);
+    CHECK(player.status().engine.currentDeviceId == "null");
+  }
+
   TEST_CASE("Player - provider callbacks are marshalled onto the executor", "[playback][unit][player][executor]")
   {
     auto mockProvider = Mock<IBackendProvider>{};

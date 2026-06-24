@@ -24,6 +24,7 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
@@ -35,7 +36,6 @@
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
-#include <ao/utility/Log.h>
 
 #include <gtkmm/stack.h>
 

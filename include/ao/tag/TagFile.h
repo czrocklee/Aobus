@@ -63,6 +63,14 @@ namespace ao::tag
      */
     static Result<std::unique_ptr<TagFile>> open(std::filesystem::path const& path);
 
+    /**
+     * Returns true if `path`'s extension is one this library can open. The set
+     * is exactly the extensions `open()` dispatches on, so this is the single
+     * source of truth for "is this an audio file we support" - callers such as
+     * the library scanner consult it instead of keeping a parallel list.
+     */
+    static bool isSupported(std::filesystem::path const& path);
+
   protected:
     void clearOwnedStrings() const { _ownedStrings.clear(); }
 

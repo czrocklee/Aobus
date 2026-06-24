@@ -9,7 +9,6 @@
 #include <ao/audio/backend/PipeWireBackend.h>
 #include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
-#include <ao/utility/Log.h>
 #include <ao/utility/Raii.h>
 
 extern "C"
@@ -240,9 +239,6 @@ namespace ao::audio::backend
     if (auto optNegotiated = parseRawStreamFormat(param); optNegotiated)
     {
       format = *optNegotiated;
-      AUDIO_LOG_INFO(
-        "Negotiated PipeWire format: {}Hz, {}b, {} channels", format.sampleRate, format.bitDepth, format.channels);
-
       renderTarget->onFormatChanged(format);
     }
   }

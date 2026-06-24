@@ -4,10 +4,10 @@
 #include "ShellLayoutComponentStateStore.h"
 
 #include <ao/Exception.h>
+#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/LayoutComponentState.h>
 #include <ao/uimodel/layout/LayoutComponentStateYaml.h>
 #include <ao/utility/AtomicFile.h>
-#include <ao/utility/Log.h>
 #include <ao/yaml/Utils.h>
 
 #include <exception>

@@ -148,8 +148,8 @@ namespace ao::gtk::test
 
     SECTION("library progress renders the progress bar")
     {
-      auto const path = runtime.musicRoot() / "status-slot.txt";
-      std::ofstream{path} << "unsupported audio fixture";
+      auto const path = runtime.musicRoot() / "status-slot.flac";
+      std::ofstream{path} << "audio fixture";
 
       auto future = runtime.async().spawn(runtime.library().tasks().buildScanPlanAsync());
       REQUIRE(waitUntilProgressVisible(widgets, future));
@@ -157,12 +157,12 @@ namespace ao::gtk::test
       CHECK_FALSE(widgets.selection->get_visible());
       CHECK(widgets.message->get_visible());
       CHECK(widgets.progress->get_visible());
-      CHECK(widgets.message->get_text() == "Scanning: status-slot.txt");
+      CHECK(widgets.message->get_text() == "Scanning: status-slot.flac");
       CHECK(widgets.progress->get_fraction() == 0.0);
 
       auto const plan = waitForFuture(future);
       REQUIRE(plan.items.size() == 1);
-      CHECK(plan.items[0].classification == library::ScanClassification::Unsupported);
+      CHECK(plan.items[0].classification == library::ScanClassification::New);
     }
 
     SECTION("library completion renders the completion message")

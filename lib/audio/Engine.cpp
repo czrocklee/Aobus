@@ -12,7 +12,6 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/detail/RouteTracker.h>
-#include <ao/utility/Log.h>
 
 #include <atomic>
 #include <chrono>
@@ -555,7 +554,6 @@ namespace ao::audio
 
     Notifications handleBackendError(std::uint64_t generation, std::string_view message)
     {
-      AUDIO_LOG_ERROR("Backend error: {}", message);
       auto stateChanged = std::function<void()>{};
       bool shouldQuiesce = false;
       {
@@ -590,7 +588,6 @@ namespace ao::audio
     Notifications handleSourceError(std::uint64_t sourceGeneration, Error const& error)
     {
       auto const message = error.message.empty() ? std::string{"PCM source failed"} : error.message;
-      AUDIO_LOG_ERROR("Source error: {}", message);
       auto endedCallback = std::function<void()>{};
       auto stateChanged = std::function<void()>{};
 
@@ -840,8 +837,8 @@ namespace ao::audio
     void resumeUnlocked();
     void stopUnlocked();
     void seekUnlocked(std::chrono::milliseconds offset);
-    void setVolumeUnlocked(float volume);
-    void setMutedUnlocked(bool muted);
+    Result<> setVolumeUnlocked(float volume);
+    Result<> setMutedUnlocked(bool muted);
   };
 
   void Engine::Impl::setBackendUnlocked(std::unique_ptr<IBackend> nextBackendPtr, Device const& device)
@@ -881,7 +878,6 @@ namespace ao::audio
 
     if (state.optTrack)
     {
-      AUDIO_LOG_INFO("Resuming {} after backend switch", state.optTrack->filePath.string());
       playUnlocked(*state.optTrack);
       seekUnlocked(state.elapsed);
 
@@ -899,8 +895,6 @@ namespace ao::audio
 
   void Engine::Impl::playUnlocked(PlaybackInput const& input)
   {
-    AUDIO_LOG_INFO("Play requested: {}", input.filePath.string());
-
     {
       auto const lock = std::scoped_lock{stateMutex};
       retireRenderSession();
@@ -931,7 +925,6 @@ namespace ao::audio
     if (!openTrack(input, sourcePtr, backendFormat, sourceGeneration))
     {
       auto const lock = std::scoped_lock{stateMutex};
-      AUDIO_LOG_ERROR("Failed to open track '{}': {}", input.filePath.string(), status.statusText);
       status.transport = Transport::Error;
       sourceSlot.retireGeneration();
       optCurrentTrack.reset();
@@ -951,7 +944,6 @@ namespace ao::audio
       retireRenderSession();
       backendPtr->close();
       resetRenderSession();
-      AUDIO_LOG_ERROR("Failed to open backend for '{}': {}", input.filePath.string(), openResult.error().message);
       {
         auto const lock = std::scoped_lock{stateMutex};
         optCurrentTrack.reset();
@@ -1010,7 +1002,6 @@ namespace ao::audio
 
       if (status.transport == Transport::Playing || status.transport == Transport::Buffering)
       {
-        AUDIO_LOG_INFO("Playback paused");
         status.transport = Transport::Paused;
         shouldPause = backendStarted.load();
       }
@@ -1031,8 +1022,6 @@ namespace ao::audio
     {
       return;
     }
-
-    AUDIO_LOG_INFO("Playback resumed");
 
     if (backendStarted)
     {
@@ -1060,8 +1049,6 @@ namespace ao::audio
 
   void Engine::Impl::stopUnlocked()
   {
-    AUDIO_LOG_INFO("Playback stopped");
-
     {
       auto const lock = std::scoped_lock{stateMutex};
       retireRenderSession();
@@ -1082,7 +1069,6 @@ namespace ao::audio
 
   void Engine::Impl::seekUnlocked(std::chrono::milliseconds offset)
   {
-    AUDIO_LOG_INFO("Seek requested: {} ms", offset.count());
     auto const sourcePtr = currentSource();
 
     if (!sourcePtr)
@@ -1108,7 +1094,6 @@ namespace ao::audio
 
     if (auto const seekResult = sourcePtr->seek(offset); !seekResult)
     {
-      AUDIO_LOG_ERROR("Seek failed at {} ms: {}", offset.count(), seekResult.error().message);
       auto const lock = std::scoped_lock{stateMutex};
       status.transport = Transport::Error;
       status.statusText = seekResult.error().message;
@@ -1154,26 +1139,25 @@ namespace ao::audio
     backendPtr->start();
   }
 
-  void Engine::Impl::setVolumeUnlocked(float volume)
+  Result<> Engine::Impl::setVolumeUnlocked(float volume)
   {
-    if (auto const result = backendPtr->set(props::kVolume, volume); !result)
-    {
-      AUDIO_LOG_ERROR("Failed to set volume: {}", result.error().message);
-    }
+    // The requested value is the engine's intent regardless of whether the
+    // backend accepted it, so cache it either way and hand the backend failure
+    // back to the caller to report.
+    auto result = backendPtr->set(props::kVolume, volume);
 
     auto const lock = std::scoped_lock{stateMutex};
     status.volume = volume;
+    return result;
   }
 
-  void Engine::Impl::setMutedUnlocked(bool muted)
+  Result<> Engine::Impl::setMutedUnlocked(bool muted)
   {
-    if (auto const result = backendPtr->set(props::kMuted, muted); !result)
-    {
-      AUDIO_LOG_ERROR("Failed to set muted state: {}", result.error().message);
-    }
+    auto result = backendPtr->set(props::kMuted, muted);
 
     auto const lock = std::scoped_lock{stateMutex};
     status.muted = muted;
+    return result;
   }
 
   // ── Engine ──────────────────────────────────────────────────────
@@ -1278,10 +1262,10 @@ namespace ao::audio
     _implPtr->seekUnlocked(offset);
   }
 
-  void Engine::setVolume(float volume)
+  Result<> Engine::setVolume(float volume)
   {
     auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
-    _implPtr->setVolumeUnlocked(volume);
+    return _implPtr->setVolumeUnlocked(volume);
   }
 
   float Engine::volume() const
@@ -1290,10 +1274,10 @@ namespace ao::audio
     return _implPtr->status.volume;
   }
 
-  void Engine::setMuted(bool muted)
+  Result<> Engine::setMuted(bool muted)
   {
     auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
-    _implPtr->setMutedUnlocked(muted);
+    return _implPtr->setMutedUnlocked(muted);
   }
 
   bool Engine::isMuted() const

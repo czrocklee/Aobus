@@ -7,13 +7,13 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ScopedTimer.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/utility/ScopedTimer.h>
 #include <ao/utility/StringArena.h>
 
 #include <boost/container/small_vector.hpp>
@@ -755,7 +755,7 @@ namespace ao::rt
 
     void rebuildOrderIndex()
     {
-      auto const timer = utility::ScopedTimer{"TrackListProjection::rebuildOrderIndex"};
+      auto const timer = rt::ScopedTimer{"TrackListProjection::rebuildOrderIndex"};
       orderIndex.clear();
       positionIndex.clear();
       sections.clear();

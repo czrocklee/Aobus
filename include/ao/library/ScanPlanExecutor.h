@@ -18,6 +18,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -34,6 +35,21 @@ namespace ao::library
   class DictionaryStore;
 
   /**
+   * ScanFailure - A single failure surfaced while applying a scan plan.
+   *
+   * Only failures are reported; the happy path (inserted/updated/unchanged/
+   * missing) is not, and processed TrackIds are returned in bulk via
+   * ScanApplyResult::processedIds. Every field is a view valid only for the
+   * duration of the callback invocation; copy out anything that must outlive it.
+   */
+  struct ScanFailure final
+  {
+    std::string_view uri;     // item being processed (empty when not item-scoped)
+    std::string_view stage;   // operation that failed, e.g. "open"
+    std::string_view message; // raw error detail
+  };
+
+  /**
    * ScanPlanExecutor - Applies a ScanPlan to the MusicLibrary database.
    *
    * This class focus exclusively on reconciling the filesystem scan results
@@ -43,24 +59,25 @@ namespace ao::library
   {
   public:
     using ProgressCallback = std::move_only_function<void(std::filesystem::path const& path, std::int32_t itemIndex)>;
-    using FinishedCallback = std::move_only_function<void()>;
+    using FailureCallback = std::move_only_function<void(ScanFailure const& failure)>;
     using TrackIdList = std::vector<TrackId>;
 
     /**
      * ScanApplyResult - Result of applying a scan plan.
+     *
+     * Carries only bulk/aggregate state. Per-item failures are pushed live
+     * through the FailureCallback, not accumulated here.
      */
     struct ScanApplyResult
     {
       TrackIdList processedIds; // TrackIds that were newly inserted or updated
-      std::size_t failureCount = 0;
-      std::size_t skippedCount = 0;
       bool cancelled = false;
     };
 
     ScanPlanExecutor(MusicLibrary& ml,
                      ScanPlan plan,
                      ProgressCallback progressCallback,
-                     FinishedCallback finishedCallback);
+                     FailureCallback failureCallback);
 
     ~ScanPlanExecutor() = default;
 
@@ -86,6 +103,8 @@ namespace ao::library
                      DictionaryStore& dict);
 
     bool processSkips(ScanItem const& item);
+
+    void reportFailure(std::string_view uri, std::string_view stage, std::string_view message);
 
     void processMissing(ScanItem const& item, lmdb::WriteTransaction& txn, FileManifestStore::Writer& manifestWriter);
 
@@ -127,7 +146,7 @@ namespace ao::library
     MusicLibrary& _ml;
     std::unique_ptr<ScanPlan> _planPtr;
     ProgressCallback _progressCallback;
-    FinishedCallback _finishedCallback;
+    FailureCallback _failureCallback;
 
     ScanApplyResult _result;
   };

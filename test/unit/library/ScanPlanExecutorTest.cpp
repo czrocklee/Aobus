@@ -24,6 +24,18 @@ namespace ao::library::test
 {
   using namespace ao::lmdb::test;
 
+  // Counts the failures the executor pushes through its FailureCallback,
+  // replacing the failureCount field the result used to carry.
+  struct FailureCounts final
+  {
+    std::int32_t failed = 0;
+
+    ScanPlanExecutor::FailureCallback callback()
+    {
+      return [this](ScanFailure const&) { ++failed; };
+    }
+  };
+
   TEST_CASE("ScanPlanExecutor - Initial scan processes new files", "[library][unit][scan]")
   {
     auto const temp = TempDir{};
@@ -37,17 +49,17 @@ namespace ao::library::test
     auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
 
     auto scanner = LibraryScanner{ml};
-    auto plan = scanner.buildPlan();
+    auto plan = scanner.buildPlan().value();
     REQUIRE(plan.items.size() == 1);
     CHECK(plan.items[0].classification == ScanClassification::New);
 
-    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
+    auto counts = FailureCounts{};
+    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
     executor.run();
 
     auto const result = executor.result();
     CHECK(result.processedIds.size() == 1);
-    CHECK(result.failureCount == 0);
-    CHECK(result.skippedCount == 0);
+    CHECK(counts.failed == 0);
 
     auto txn = ml.readTransaction();
     auto const optView = ml.tracks().reader(txn).get(result.processedIds[0]);
@@ -70,23 +82,25 @@ namespace ao::library::test
     // First scan to populate the manifest
     {
       auto scanner = LibraryScanner{ml};
-      auto plan = scanner.buildPlan();
+      auto plan = scanner.buildPlan().value();
       auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
       executor.run();
     }
 
     // Second scan should find unchanged file
     auto scanner = LibraryScanner{ml};
-    auto plan = scanner.buildPlan();
+    auto plan = scanner.buildPlan().value();
     REQUIRE(plan.items.size() == 1);
     CHECK(plan.items[0].classification == ScanClassification::Unchanged);
 
-    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
+    auto counts = FailureCounts{};
+    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
     executor.run();
 
     auto const result = executor.result();
+    // An unchanged file is skipped silently: nothing processed, nothing reported.
     CHECK(result.processedIds.empty());
-    CHECK(result.skippedCount == 1);
+    CHECK(counts.failed == 0);
   }
 
   TEST_CASE("ScanPlanExecutor - Changed files trigger hot update", "[library][unit][scan]")
@@ -104,7 +118,7 @@ namespace ao::library::test
     // First scan to populate the manifest
     {
       auto scanner = LibraryScanner{ml};
-      auto plan = scanner.buildPlan();
+      auto plan = scanner.buildPlan().value();
       auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
       executor.run();
     }
@@ -118,16 +132,17 @@ namespace ao::library::test
     std::filesystem::last_write_time(targetFile, oldMTime + std::chrono::seconds{10});
 
     auto scanner = LibraryScanner{ml};
-    auto plan = scanner.buildPlan();
+    auto plan = scanner.buildPlan().value();
     REQUIRE(plan.items.size() == 1);
     CHECK(plan.items[0].classification == ScanClassification::Changed);
 
-    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
+    auto counts = FailureCounts{};
+    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
     executor.run();
 
     auto const result = executor.result();
     CHECK(result.processedIds.size() == 1);
-    CHECK(result.failureCount == 0);
+    CHECK(counts.failed == 0);
 
     auto txn = ml.readTransaction();
     auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
@@ -154,7 +169,7 @@ namespace ao::library::test
     // First scan to populate the manifest
     {
       auto scanner = LibraryScanner{ml};
-      auto plan = scanner.buildPlan();
+      auto plan = scanner.buildPlan().value();
       auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
       executor.run();
     }
@@ -163,7 +178,7 @@ namespace ao::library::test
     std::filesystem::remove(targetFile);
 
     auto scanner = LibraryScanner{ml};
-    auto plan = scanner.buildPlan();
+    auto plan = scanner.buildPlan().value();
     REQUIRE(plan.items.size() == 1);
     CHECK(plan.items[0].classification == ScanClassification::Missing);
 
@@ -174,6 +189,7 @@ namespace ao::library::test
     auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->status() == FileStatus::Missing);
+    CHECK(executor.result().processedIds.empty());
   }
 
   TEST_CASE("ScanPlanExecutor - Error handling for corrupted files", "[library][unit][scan]")
@@ -191,14 +207,42 @@ namespace ao::library::test
     auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
 
     auto scanner = LibraryScanner{ml};
-    auto plan = scanner.buildPlan();
+    auto plan = scanner.buildPlan().value();
 
-    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
+    auto counts = FailureCounts{};
+    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
     executor.run();
 
     auto const result = executor.result();
-    CHECK(result.failureCount == 1);
-    CHECK(result.skippedCount == 0);
+    CHECK(counts.failed == 1);
     CHECK(result.processedIds.empty());
+  }
+
+  TEST_CASE("ScanPlanExecutor - Non-decodable files are absent from the plan", "[library][unit][scan]")
+  {
+    auto const temp = TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    // A text file, plus audio formats we have no reader for. The scanner only
+    // admits decodable extensions, so none of these reach the executor.
+    for (auto const* const name : {"notes.txt", "cover.jpg", "song.wav", "song.ogg", "song.alac"})
+    {
+      auto out = std::ofstream{musicRoot / name, std::ios::binary};
+      out << "not a supported audio file";
+    }
+
+    auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+
+    auto scanner = LibraryScanner{ml};
+    auto plan = scanner.buildPlan().value();
+    CHECK(plan.items.empty());
+
+    auto counts = FailureCounts{};
+    auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
+    executor.run();
+
+    CHECK(executor.result().processedIds.empty());
+    CHECK(counts.failed == 0);
   }
 } // namespace ao::library::test

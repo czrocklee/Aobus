@@ -9,11 +9,11 @@
 #include "layout/runtime/DecoratedLayoutComponent.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
+#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/ActionTypes.h>
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/utility/Log.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>

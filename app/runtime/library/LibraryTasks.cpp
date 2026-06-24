@@ -8,6 +8,7 @@
 #include <ao/library/LibraryScanner.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ScanPlanExecutor.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTasks.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
@@ -71,7 +72,7 @@ namespace ao::rt
     setCurrentThreadName("LibraryScanner");
 
     auto scanner = library::LibraryScanner{_implPtr->library};
-    auto plan = scanner.buildPlan(
+    auto planResult = scanner.buildPlan(
       [this](std::filesystem::path const& path)
       {
         _implPtr->asyncRuntime.callbackExecutor().dispatch(
@@ -86,12 +87,20 @@ namespace ao::rt
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 
-    if (plan.items.empty())
+    if (!planResult)
+    {
+      // A scan that could not even begin (missing root, failed walk) is fatal to
+      // the whole task. Clear any in-flight progress and report it as a failure.
+      _implPtr->changes.notifyLibraryTaskCompleted(0);
+      throwException<Exception>("Library scan failed: {}", planResult.error().message);
+    }
+
+    if (planResult->items.empty())
     {
       _implPtr->changes.notifyLibraryTaskCompleted(0);
     }
 
-    co_return plan;
+    co_return std::move(*planResult);
   }
 
   async::Task<void> LibraryTasks::applyScanPlanAsync(library::ScanPlan plan)
@@ -118,7 +127,19 @@ namespace ao::rt
             });
           });
       },
-      [] {}};
+      // Diagnostics run on the worker thread; spdlog is thread-safe and the
+      // failure's string views are only valid for the duration of this call.
+      [](library::ScanFailure const& failure)
+      {
+        if (failure.uri.empty())
+        {
+          APP_LOG_ERROR("Failed to {}: {}", failure.stage, failure.message);
+        }
+        else
+        {
+          APP_LOG_ERROR("Failed to {} {}: {}", failure.stage, failure.uri, failure.message);
+        }
+      }};
 
     auto exceptionPtr = std::exception_ptr{};
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/utility/Log.h>
+#include <ao/rt/Log.h>
 
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-namespace ao::log
+namespace ao::rt
 {
   namespace
   {
@@ -135,4 +135,4 @@ namespace ao::log
     auto const lock = std::scoped_lock{_lifecycleMutex};
     return _initialized;
   }
-} // namespace ao::log
+} // namespace ao::rt

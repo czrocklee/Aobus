@@ -14,13 +14,13 @@
 #include <ao/async/Task.h>
 #include <ao/library/LibraryScanner.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTasks.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/utility/Log.h>
 
 #include <giomm/asyncresult.h>
 #include <giomm/liststore.h>
@@ -42,6 +42,7 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -94,55 +95,101 @@ namespace ao::gtk::portal
   {
     APP_LOG_INFO("Starting library scan...");
 
-    _runtime.async().spawnWithLifetime(
-      &_tasks,
-      [](ImportExportCoordinator* self) -> async::Task<void>
+    _runtime.async().spawnWithLifetime(&_tasks,
+                                       [](ImportExportCoordinator* self) -> async::Task<void>
+                                       {
+                                         auto optPlan = co_await self->buildScanPlanOrReportFailure();
+
+                                         if (!optPlan)
+                                         {
+                                           co_return;
+                                         }
+
+                                         if (self->reportIfNoActionableWork(*optPlan))
+                                         {
+                                           co_return;
+                                         }
+
+                                         APP_LOG_INFO("Scan plan: {} new, {} changed, {} missing, {} errors",
+                                                      optPlan->count(library::ScanClassification::New),
+                                                      optPlan->count(library::ScanClassification::Changed),
+                                                      optPlan->count(library::ScanClassification::Missing),
+                                                      optPlan->count(library::ScanClassification::Error));
+
+                                         co_await self->applyScanPlanWithProgress(std::move(*optPlan));
+                                       }(this));
+  }
+
+  async::Task<std::optional<library::ScanPlan>> ImportExportCoordinator::buildScanPlanOrReportFailure()
+  {
+    try
+    {
+      co_return co_await _runtime.library().tasks().buildScanPlanAsync();
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Scan failed: {}", e.what());
+      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+      co_return std::nullopt;
+    }
+  }
+
+  bool ImportExportCoordinator::reportIfNoActionableWork(library::ScanPlan const& plan)
+  {
+    if (plan.count(library::ScanClassification::New) != 0 || plan.count(library::ScanClassification::Changed) != 0 ||
+        plan.count(library::ScanClassification::Missing) != 0)
+    {
+      return false;
+    }
+
+    if (plan.count(library::ScanClassification::Error) == 0)
+    {
+      _runtime.notifications().post(rt::NotificationSeverity::Info, "Library is up to date");
+      return true;
+    }
+
+    for (auto const& item : plan.items)
+    {
+      if (item.classification == library::ScanClassification::Error)
       {
-        // 1. Build Plan
-        auto plan = co_await self->_runtime.library().tasks().buildScanPlanAsync();
+        APP_LOG_ERROR("Failed to scan {}: {}", item.uri, item.errorMessage);
+      }
+    }
 
-        auto const newCount = plan.count(library::ScanClassification::New);
-        auto const changedCount = plan.count(library::ScanClassification::Changed);
-        auto const missingCount = plan.count(library::ScanClassification::Missing);
+    _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+    return true;
+  }
 
-        if (newCount == 0 && changedCount == 0 && missingCount == 0)
-        {
-          self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library is up to date");
-          co_return;
-        }
+  async::Task<void> ImportExportCoordinator::applyScanPlanWithProgress(library::ScanPlan plan)
+  {
+    if (_libraryTaskDialogPtr == nullptr)
+    {
+      _libraryTaskDialogPtr =
+        std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), _parent);
+      _optLibraryTaskThemeToken = _themeController.registerToplevel(*_libraryTaskDialogPtr);
+    }
 
-        APP_LOG_INFO("Scan plan: {} new, {} changed, {} missing", newCount, changedCount, missingCount);
+    auto* const dialog = _libraryTaskDialogPtr.get();
+    _libraryTaskDialogPtr->signal_response().connect([dialog](std::int32_t /*responseId*/) { dialog->close(); });
 
-        if (self->_libraryTaskDialogPtr == nullptr)
-        {
-          self->_libraryTaskDialogPtr =
-            std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), self->_parent);
-          self->_optLibraryTaskThemeToken = self->_themeController.registerToplevel(*self->_libraryTaskDialogPtr);
-        }
+    _libraryTaskProgressSub = _runtime.library().changes().onLibraryTaskProgress(
+      [dialog](auto const& ev) { dialog->updateProgress(ev.message, ev.fraction); });
 
-        auto* const dialog = self->_libraryTaskDialogPtr.get();
-        self->_libraryTaskDialogPtr->signal_response().connect([dialog](std::int32_t /*responseId*/)
-                                                               { dialog->close(); });
+    _libraryTaskDialogPtr->show();
 
-        self->_libraryTaskProgressSub = self->_runtime.library().changes().onLibraryTaskProgress(
-          [dialog](auto const& ev) { dialog->updateProgress(ev.message, ev.fraction); });
+    try
+    {
+      co_await _runtime.library().tasks().applyScanPlanAsync(std::move(plan));
+      dialog->ready();
+      onImportFinished();
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Scan failed: {}", e.what());
+      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+    }
 
-        self->_libraryTaskDialogPtr->show();
-
-        try
-        {
-          co_await self->_runtime.library().tasks().applyScanPlanAsync(std::move(plan));
-          dialog->ready();
-          self->onImportFinished();
-        }
-        catch (std::exception const& e)
-        {
-          APP_LOG_ERROR("Scan failed: {}", e.what());
-          self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
-        }
-
-        self->_libraryTaskProgressSub.reset();
-      }(this));
+    _libraryTaskProgressSub.reset();
   }
 
   void ImportExportCoordinator::onImportFinished() const

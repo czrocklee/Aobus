@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/utility/Log.h>
+#include <ao/rt/Log.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -11,12 +11,17 @@
 #include <source_location>
 #include <string>
 
-namespace ao::log::test
+namespace ao::rt::test
 {
   TEST_CASE("Log - initialization and shutdown", "[utility][unit][log]")
   {
     auto const tempDir = std::filesystem::temp_directory_path() / "ao_log_test";
     std::filesystem::remove_all(tempDir);
+
+    // Log is a process-global singleton and Log::init() is a no-op while already
+    // initialized. Other test cases init logging without shutting it down, so we
+    // must clear any leaked state to guarantee init() actually targets tempDir.
+    Log::shutdown();
 
     SECTION("Initialize with specific directory and log level")
     {
@@ -80,4 +85,4 @@ namespace ao::log::test
 
     std::filesystem::remove_all(tempDir);
   }
-} // namespace ao::log::test
+} // namespace ao::rt::test

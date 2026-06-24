@@ -4,8 +4,8 @@
 #include "GtkLayoutConfig.h"
 
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/Log.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
-#include <ao/utility/Log.h>
 
 #include <filesystem>
 #include <memory>

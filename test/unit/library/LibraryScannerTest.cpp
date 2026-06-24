@@ -36,7 +36,7 @@ namespace ao::library::test
 
     createFile(musicRoot / "new.flac");
     createFile(musicRoot / "unchanged.mp3");
-    createFile(musicRoot / "changed.wav");
+    createFile(musicRoot / "changed.m4a");
     createFile(musicRoot / "unsupported.txt");
 
     auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
@@ -58,7 +58,7 @@ namespace ao::library::test
       REQUIRE(manifestWriter.put(unchangedUri, builder1.serialize()));
 
       // Changed (different size)
-      char const* const changedUri = "changed.wav";
+      char const* const changedUri = "changed.m4a";
       auto builder2 = FileManifestBuilder::createNew();
       builder2.trackId(TrackId{2}).fileSize(99999).mtime(0);
       REQUIRE(manifestWriter.put(changedUri, builder2.serialize()));
@@ -73,19 +73,23 @@ namespace ao::library::test
     }
 
     auto scanner = LibraryScanner{ml};
-    auto const plan = scanner.buildPlan();
+    auto const plan = scanner.buildPlan().value();
 
     CHECK(plan.count(ScanClassification::New) == 1);
     CHECK(plan.count(ScanClassification::Unchanged) == 1);
     CHECK(plan.count(ScanClassification::Changed) == 1);
     CHECK(plan.count(ScanClassification::Missing) == 1);
-    CHECK(plan.count(ScanClassification::Unsupported) == 1);
+
+    // The non-audio file is filtered at the walk: it never enters the plan.
+    CHECK(plan.items.size() == 4);
 
     // Verify specific items
     bool foundMissing = false;
 
     for (auto const& item : plan.items)
     {
+      CHECK(item.uri != "unsupported.txt");
+
       if (item.uri == "missing.flac")
       {
         CHECK(item.classification == ScanClassification::Missing);
@@ -119,7 +123,7 @@ namespace ao::library::test
 
     auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     auto scanner = LibraryScanner{ml};
-    auto const plan = scanner.buildPlan();
+    auto const plan = scanner.buildPlan().value();
 
     // Reset permissions so TempDir can clean up
     std::filesystem::permissions(musicRoot / "restricted_dir", std::filesystem::perms::owner_all);
@@ -165,9 +169,25 @@ namespace ao::library::test
 
     auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
     auto scanner = LibraryScanner{ml};
-    auto const plan = scanner.buildPlan();
+    auto const plan = scanner.buildPlan().value();
 
     CHECK(plan.items.empty());
+  }
+
+  TEST_CASE("LibraryScanner Missing Root Is Fatal", "[library][unit][scan][error]")
+  {
+    auto const temp = TempDir{};
+    // Point the library at a music root that does not exist. The database still
+    // lives under a real directory, so the library itself opens cleanly and only
+    // the scan fails - distinguishing "cannot scan" from "scanned an empty root".
+    auto const musicRoot = std::filesystem::path{temp.path()} / "does_not_exist";
+
+    auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto scanner = LibraryScanner{ml};
+    auto const result = scanner.buildPlan();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("LibraryScanner URI Canonization Edge Cases", "[library][unit][scan][uri]")
@@ -181,7 +201,7 @@ namespace ao::library::test
 
     auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     auto scanner = LibraryScanner{ml};
-    auto const plan = scanner.buildPlan();
+    auto const plan = scanner.buildPlan().value();
 
     REQUIRE(plan.items.size() == 1);
 

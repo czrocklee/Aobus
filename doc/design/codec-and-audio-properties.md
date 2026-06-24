@@ -60,6 +60,16 @@ extension-only routing. When an MP4 has non-audio tracks before the audio track,
 tag parsing, and demuxing select the matching audio `trak` and read its `mdhd`, `stsd`, and sample table
 together.
 
+## Supported File Extensions
+
+The library scanner imports only files whose extension `ao::tag::TagFile` can open: `.flac`, `.mp3`, and
+`.m4a`. `TagFile::isSupported()` is the single source of truth, derived from the same extension-to-reader
+map that `TagFile::open()` dispatches on, so "what the scanner walks" can never drift from "what we can
+parse". Files with any other extension are skipped silently at the walk and never enter the scan plan -
+this includes cover art and playlists as well as audio formats we have no reader for, such as `.wav`,
+`.ogg`, or a literal `.alac` extension. ALAC is supported only as a codec inside an `.m4a` container, not
+as a standalone `.alac` file, so a real ALAC library is imported through `.m4a` and is unaffected.
+
 Aobus currently supports MP4 audio tracks with a single `stsd` sample-description entry. The demuxer
 rejects tracks with multiple sample descriptions or `stsc` mappings that reference anything other than
 that first entry, instead of silently binding packets to the wrong decoder configuration.

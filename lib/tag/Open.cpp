@@ -14,17 +14,20 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <utility>
 
 namespace ao::tag
 {
-  // static
-  Result<std::unique_ptr<TagFile>> TagFile::open(std::filesystem::path const& path)
+  namespace
   {
     using Creator = std::unique_ptr<TagFile> (*)(std::filesystem::path const&);
 
-    static constexpr auto kCreatorMap = std::to_array<std::pair<std::string_view, Creator>>({
+    // The one and only mapping from file extension to tag reader. Both open()
+    // and isSupported() derive from this, so the supported-format set can never
+    // drift between "what we scan" and "what we can actually parse".
+    constexpr auto kCreatorMap = std::to_array<std::pair<std::string_view, Creator>>({
       {".mp3",
        [](std::filesystem::path const& filePath) -> std::unique_ptr<TagFile>
        { return std::make_unique<mpeg::File>(filePath); }},
@@ -36,14 +39,34 @@ namespace ao::tag
        { return std::make_unique<flac::File>(filePath); }},
     });
 
-    auto ext = path.extension().string();
-    std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
-
-    if (auto const* const it =
-          std::ranges::find(kCreatorMap, std::string_view{ext}, &std::pair<std::string_view, Creator>::first);
-        it != kCreatorMap.end())
+    std::string normalizedExtension(std::filesystem::path const& path)
     {
-      auto filePtr = it->second(path);
+      auto ext = path.extension().string();
+      std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+      return ext;
+    }
+
+    Creator const* findCreator(std::string_view ext)
+    {
+      auto const* const it = std::ranges::find(kCreatorMap, ext, &std::pair<std::string_view, Creator>::first);
+      return it != kCreatorMap.end() ? &it->second : nullptr;
+    }
+  } // namespace
+
+  // static
+  bool TagFile::isSupported(std::filesystem::path const& path)
+  {
+    return findCreator(normalizedExtension(path)) != nullptr;
+  }
+
+  // static
+  Result<std::unique_ptr<TagFile>> TagFile::open(std::filesystem::path const& path)
+  {
+    auto const ext = normalizedExtension(path);
+
+    if (auto const* const creator = findCreator(ext); creator != nullptr)
+    {
+      auto filePtr = (*creator)(path);
 
       if (auto const result = filePtr->mappedResult(); !result)
       {

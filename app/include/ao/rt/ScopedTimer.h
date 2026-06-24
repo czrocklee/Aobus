@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <ao/utility/Log.h>
+#include <ao/rt/Log.h>
 
 #include <chrono>
 #include <string_view>
 
-namespace ao::utility
+namespace ao::rt
 {
   class [[nodiscard]] ScopedTimer final
   {
@@ -39,4 +39,4 @@ namespace ao::utility
     std::string_view _label;
     Clock::time_point _start;
   };
-} // namespace ao::utility
+} // namespace ao::rt

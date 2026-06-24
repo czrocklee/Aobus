@@ -12,7 +12,7 @@
 #include <mutex>
 #include <source_location>
 
-namespace ao::log
+namespace ao::rt
 {
   enum class LogLevel : std::uint8_t
   {
@@ -51,7 +51,7 @@ namespace ao::log
   {
     return {loc.file_name(), static_cast<std::int32_t>(loc.line()), loc.function_name()};
   }
-} // namespace ao::log
+} // namespace ao::rt
 
 // Core log macros
 #define AO_LOG_CALL(loggerExpr, level, loc, ...)                                                                       \
@@ -60,33 +60,33 @@ namespace ao::log
     auto const& logger = (loggerExpr);                                                                                 \
     if (logger != nullptr && logger->should_log(level))                                                                \
     {                                                                                                                  \
-      logger->log(ao::log::toSpdlog(loc), level, __VA_ARGS__);                                                         \
+      logger->log(ao::rt::toSpdlog(loc), level, __VA_ARGS__);                                                          \
     }                                                                                                                  \
   }                                                                                                                    \
   while (false)
 
 #define APP_LOG_TRACE(...)                                                                                             \
-  AO_LOG_CALL(ao::log::Log::appLogger(), spdlog::level::trace, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::appLogger(), spdlog::level::trace, std::source_location::current(), __VA_ARGS__)
 #define APP_LOG_DEBUG(...)                                                                                             \
-  AO_LOG_CALL(ao::log::Log::appLogger(), spdlog::level::debug, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::appLogger(), spdlog::level::debug, std::source_location::current(), __VA_ARGS__)
 #define APP_LOG_INFO(...)                                                                                              \
-  AO_LOG_CALL(ao::log::Log::appLogger(), spdlog::level::info, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::appLogger(), spdlog::level::info, std::source_location::current(), __VA_ARGS__)
 #define APP_LOG_WARN(...)                                                                                              \
-  AO_LOG_CALL(ao::log::Log::appLogger(), spdlog::level::warn, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::appLogger(), spdlog::level::warn, std::source_location::current(), __VA_ARGS__)
 #define APP_LOG_ERROR(...)                                                                                             \
-  AO_LOG_CALL(ao::log::Log::appLogger(), spdlog::level::err, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::appLogger(), spdlog::level::err, std::source_location::current(), __VA_ARGS__)
 #define APP_LOG_CRITICAL(...)                                                                                          \
-  AO_LOG_CALL(ao::log::Log::appLogger(), spdlog::level::critical, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::appLogger(), spdlog::level::critical, std::source_location::current(), __VA_ARGS__)
 
 #define AUDIO_LOG_TRACE(...)                                                                                           \
-  AO_LOG_CALL(ao::log::Log::audioLogger(), spdlog::level::trace, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::audioLogger(), spdlog::level::trace, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_DEBUG(...)                                                                                           \
-  AO_LOG_CALL(ao::log::Log::audioLogger(), spdlog::level::debug, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::audioLogger(), spdlog::level::debug, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_INFO(...)                                                                                            \
-  AO_LOG_CALL(ao::log::Log::audioLogger(), spdlog::level::info, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::audioLogger(), spdlog::level::info, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_WARN(...)                                                                                            \
-  AO_LOG_CALL(ao::log::Log::audioLogger(), spdlog::level::warn, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::audioLogger(), spdlog::level::warn, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_ERROR(...)                                                                                           \
-  AO_LOG_CALL(ao::log::Log::audioLogger(), spdlog::level::err, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::audioLogger(), spdlog::level::err, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_CRITICAL(...)                                                                                        \
-  AO_LOG_CALL(ao::log::Log::audioLogger(), spdlog::level::critical, std::source_location::current(), __VA_ARGS__)
+  AO_LOG_CALL(ao::rt::Log::audioLogger(), spdlog::level::critical, std::source_location::current(), __VA_ARGS__)

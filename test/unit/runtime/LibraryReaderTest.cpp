@@ -40,7 +40,7 @@
 
 namespace ao::rt::test
 {
-  using namespace ao::lmdb::test;
+  using namespace ao::test;
   using namespace std::chrono_literals;
 
   namespace
@@ -59,7 +59,6 @@ namespace ao::rt::test
       ListId smartListId{};
     };
 
-    // NOLINTNEXTLINE(misc-include-cleaner)  // TempDir from test/unit/TestUtils.h transitively
     CoreRuntime makeCoreRuntime(TempDir const& tempDir)
     {
       return CoreRuntime{

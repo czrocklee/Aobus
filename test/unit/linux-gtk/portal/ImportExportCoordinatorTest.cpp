@@ -14,6 +14,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <chrono>
@@ -104,6 +105,27 @@ namespace ao::gtk::test
       REQUIRE(feed.entries.size() == 1);
       CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
       CHECK(feed.entries.back().message == "Library is up to date");
+    }
+
+    SECTION("scanLibrary reports an error-only plan instead of up to date")
+    {
+      auto const restrictedDir = fixture.runtime().musicRoot() / "restricted_dir";
+      std::filesystem::create_directories(restrictedDir);
+      std::filesystem::permissions(restrictedDir, std::filesystem::perms::none);
+
+      if (::geteuid() == 0)
+      {
+        SKIP("permissions test is meaningless when running as root");
+      }
+
+      coordinator.scanLibrary();
+
+      REQUIRE(drainGtkEventsUntil(
+        [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Error, "Scan failed"); }));
+
+      std::filesystem::permissions(restrictedDir, std::filesystem::perms::owner_all);
+
+      CHECK_FALSE(hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date"));
     }
 
     SECTION("exportLibraryTo writes the YAML backup and reports success")

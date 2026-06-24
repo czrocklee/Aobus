@@ -14,7 +14,6 @@
 #include <ao/audio/StreamingSource.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/detail/DecoderError.h>
-#include <ao/utility/Log.h>
 
 #include <chrono>
 #include <cstdint>
@@ -116,10 +115,6 @@ namespace ao::audio::detail
     if (backendId == kBackendPipeWire && profileId == kProfileShared)
     {
       backendFormat = info.outputFormat;
-      AUDIO_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
-                     backendFormat.sampleRate,
-                     static_cast<int>(backendFormat.bitDepth),
-                     static_cast<int>(backendFormat.channels));
       return;
     }
 
@@ -140,13 +135,6 @@ namespace ao::audio::detail
                                     backendId,
                                     static_cast<std::int32_t>(info.sourceFormat.channels)));
     }
-
-    AUDIO_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
-                   static_cast<int>(plan.decoderOutputFormat.bitDepth),
-                   static_cast<int>(plan.decoderOutputFormat.validBits),
-                   plan.deviceFormat.sampleRate,
-                   static_cast<int>(plan.deviceFormat.bitDepth),
-                   plan.reason);
 
     if (!(plan.decoderOutputFormat == info.sourceFormat))
     {

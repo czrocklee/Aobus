@@ -3,9 +3,9 @@
 
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
-#include <ao/utility/Log.h>
 
 #include <utility>
 

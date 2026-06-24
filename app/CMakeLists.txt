@@ -29,10 +29,11 @@ add_library(ao_app_runtime STATIC
     runtime/projection/TrackDetailProjection.cpp
     runtime/source/TrackSource.cpp
     runtime/ViewService.cpp
+    runtime/Log.cpp
 )
 target_include_directories(ao_app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_app_runtime PUBLIC ao ao_async PkgRapidYaml)
+target_link_libraries(ao_app_runtime PUBLIC ao ao_async PkgRapidYaml spdlog::spdlog)
 target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
 
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)

@@ -30,6 +30,7 @@ namespace ao::uimodel::playback::test
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
 
     auto playbackService = PlaybackService{executor, viewService, testLib.library()};
+    addReadyAudioProvider(playbackService);
 
     auto const track1 = testLib.addTrack({.title = "Track 1"});
     auto const track2 = testLib.addTrack({.title = "Track 2"});

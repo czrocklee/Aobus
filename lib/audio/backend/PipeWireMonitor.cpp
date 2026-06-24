@@ -4,7 +4,6 @@
 #include <ao/audio/backend/PipeWireMonitor.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
 #include <ao/utility/ByteView.h>
-#include <ao/utility/Log.h>
 
 extern "C"
 {
@@ -128,7 +127,9 @@ namespace ao::audio::backend
 
       if (::pw_thread_loop_start(threadLoopPtr.get()) < 0)
       {
-        AUDIO_LOG_ERROR("Failed to start PipeWire thread loop");
+        // Match the two init failures above: leave the monitor a no-op dud (null
+        // core -> empty enumeration) and let the provider degrade to ALSA. Like a
+        // missing daemon, this is reported by the absence of devices, not a log.
         return;
       }
 
@@ -502,7 +503,9 @@ namespace ao::audio::backend
 
     if (event == nullptr)
     {
-      AUDIO_LOG_ERROR("Failed to add PipeWire refresh event - periodic refresh disabled");
+      // Initial enumeration and registry-driven hotplug updates still work; only
+      // the periodic refresh timer is lost. Degrade quietly like the other PipeWire
+      // init paths rather than reporting a partial degradation with no consumer.
       return;
     }
 

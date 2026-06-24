@@ -4,8 +4,8 @@
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/Log.h>
 #include <ao/utility/AtomicFile.h>
-#include <ao/utility/Log.h>
 #include <ao/yaml/Utils.h>
 
 #include <exception>

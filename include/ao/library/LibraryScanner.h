@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 
 #include <cstddef>
@@ -22,7 +23,6 @@ namespace ao::library
     Changed,
     Missing,
     Unchanged,
-    Unsupported,
     Error
   };
 
@@ -66,8 +66,15 @@ namespace ao::library
 
     /**
      * Scans the music root recursively and compares with the manifest.
+     *
+     * Per-file problems (an unreadable entry, a directory we cannot enter) are
+     * carried in-band as `ScanClassification::Error` items so the rest of the
+     * plan still applies. The `Result` error channel is reserved for failures
+     * that prevent any plan from being built at all: a music root that does not
+     * exist (`NotFound`) or a filesystem walk that cannot even start
+     * (`IoError`). An empty plan is a valid success (an empty library).
      */
-    ScanPlan buildPlan(ProgressCallback progress = nullptr);
+    Result<ScanPlan> buildPlan(ProgressCallback progress = nullptr);
 
   private:
     MusicLibrary& _ml;

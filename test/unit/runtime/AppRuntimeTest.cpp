@@ -22,7 +22,7 @@
 
 namespace ao::rt::test
 {
-  using namespace ao::lmdb::test;
+  using namespace ao::test;
 
   namespace
   {

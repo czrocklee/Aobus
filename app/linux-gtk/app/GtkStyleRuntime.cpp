@@ -3,7 +3,7 @@
 
 #include "app/GtkStyleRuntime.h"
 
-#include <ao/utility/Log.h>
+#include <ao/rt/Log.h>
 
 #include <gdkmm/display.h>
 #include <gio/gsettingsschema.h>

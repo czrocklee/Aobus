@@ -203,6 +203,26 @@ namespace ao::tag::flac::test
       CHECK(result.error().code == Error::Code::CorruptData);
     }
 
+    SECTION("Current last block size is validated before the last-block marker is honored")
+    {
+      // A single StreamInfo reaches the iterator as the current block and is marked
+      // last, but its declared size runs past the file. The current block's size must
+      // be validated before the last-block marker is honored; otherwise the iterator
+      // would terminate cleanly and silently accept the truncated block.
+      auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
+
+      addBlockHeader(data, MetadataBlockType::StreamInfo, true, 1000);
+      auto si = StreamInfoLayout{};
+      auto const* siAddr = reinterpret_cast<std::uint8_t const*>(&si);
+      data.insert(data.end(), siAddr, siAddr + 34);
+
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path};
+      auto result = file.loadTrack();
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
+
     SECTION("Picture block is truncated after picture type")
     {
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};

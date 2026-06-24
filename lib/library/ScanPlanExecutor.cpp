@@ -11,17 +11,16 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/tag/TagFile.h>
-#include <ao/utility/Log.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,19 +29,26 @@ namespace ao::library
   ScanPlanExecutor::ScanPlanExecutor(MusicLibrary& ml,
                                      ScanPlan plan,
                                      ProgressCallback progress,
-                                     FinishedCallback finished)
+                                     FailureCallback failure)
     : _ml{ml}
     , _planPtr{std::make_unique<ScanPlan>(std::move(plan))}
     , _progressCallback{std::move(progress)}
-    , _finishedCallback{std::move(finished)}
+    , _failureCallback{std::move(failure)}
   {
+  }
+
+  void ScanPlanExecutor::reportFailure(std::string_view uri, std::string_view stage, std::string_view message)
+  {
+    if (_failureCallback)
+    {
+      _failureCallback(ScanFailure{.uri = uri, .stage = stage, .message = message});
+    }
   }
 
   void ScanPlanExecutor::run(std::stop_token stopToken)
   {
     if (!_planPtr)
     {
-      APP_LOG_ERROR("ScanPlanExecutor: No plan provided");
       return;
     }
 
@@ -64,13 +70,9 @@ namespace ao::library
 
     if (auto result = txn.commit(); !result)
     {
-      APP_LOG_ERROR("Failed to commit scan results: {}", result.error().message);
-      ++_result.failureCount;
-    }
-
-    if (_finishedCallback)
-    {
-      _finishedCallback();
+      // The transaction did not persist, so nothing was actually processed.
+      _result.processedIds.clear();
+      reportFailure({}, "commit scan results", result.error().message);
     }
   }
 
@@ -124,8 +126,7 @@ namespace ao::library
     }
     catch (std::exception const& e)
     {
-      APP_LOG_ERROR("Failed to process {}: {}", item.uri, e.what());
-      ++_result.failureCount;
+      reportFailure(item.uri, "process", e.what());
     }
   }
 
@@ -133,13 +134,13 @@ namespace ao::library
   {
     if (item.classification == ScanClassification::Unchanged)
     {
-      ++_result.skippedCount;
+      // Benign: the file is already imported and has not changed.
       return true;
     }
 
-    if (item.classification == ScanClassification::Unsupported || item.classification == ScanClassification::Error)
+    if (item.classification == ScanClassification::Error)
     {
-      ++_result.failureCount;
+      reportFailure(item.uri, "scan", item.errorMessage);
       return true;
     }
 
@@ -159,8 +160,7 @@ namespace ao::library
         return;
       }
 
-      APP_LOG_ERROR("Failed to read manifest for {}: {}", item.uri, manifestResult.error().message);
-      ++_result.failureCount;
+      reportFailure(item.uri, "read manifest for", manifestResult.error().message);
       return;
     }
 
@@ -177,17 +177,9 @@ namespace ao::library
 
     if (!tagFileResult)
     {
-      if (tagFileResult.error().code == Error::Code::NotSupported)
-      {
-        APP_LOG_WARN("Skipping unsupported file: {}", item.fullPath.string());
-        ++_result.skippedCount;
-      }
-      else
-      {
-        APP_LOG_ERROR("Failed to open {}: {}", item.uri, tagFileResult.error().message);
-        ++_result.failureCount;
-      }
-
+      // The scanner only admits decodable extensions, so open() should not see
+      // an unsupported format here; a failure is a genuine I/O or parse fault.
+      reportFailure(item.uri, "open", tagFileResult.error().message);
       return std::nullopt;
     }
 
@@ -196,8 +188,7 @@ namespace ao::library
 
     if (!builderResult)
     {
-      APP_LOG_ERROR("Failed to read tags from {}: {}", item.uri, builderResult.error().message);
-      ++_result.failureCount;
+      reportFailure(item.uri, "read tags from", builderResult.error().message);
       return std::nullopt;
     }
 
@@ -297,8 +288,7 @@ namespace ao::library
 
     if (!preparedResult)
     {
-      APP_LOG_ERROR("Failed to serialize {}: {}", uri, preparedResult.error().message);
-      ++_result.failureCount;
+      reportFailure(uri, "serialize", preparedResult.error().message);
       return std::nullopt;
     }
 
@@ -316,8 +306,7 @@ namespace ao::library
 
     if (!hotResult)
     {
-      APP_LOG_ERROR("Failed to update hot track data for {}: {}", uri, hotResult.error().message);
-      ++_result.failureCount;
+      reportFailure(uri, "update hot track data for", hotResult.error().message);
       return false;
     }
 
@@ -326,8 +315,7 @@ namespace ao::library
 
     if (!coldResult)
     {
-      APP_LOG_ERROR("Failed to update cold track data for {}: {}", uri, coldResult.error().message);
-      ++_result.failureCount;
+      reportFailure(uri, "update cold track data for", coldResult.error().message);
       return false;
     }
 
@@ -350,8 +338,7 @@ namespace ao::library
 
     if (!createResult)
     {
-      APP_LOG_ERROR("Failed to create track data for {}: {}", uri, createResult.error().message);
-      ++_result.failureCount;
+      reportFailure(uri, "create track data for", createResult.error().message);
       return std::nullopt;
     }
 
@@ -367,8 +354,7 @@ namespace ao::library
   {
     if (auto putResult = writer.put(uri, builder.serialize()); !putResult)
     {
-      APP_LOG_ERROR("Failed to update manifest for {}: {}", uri, putResult.error().message);
-      ++_result.failureCount;
+      reportFailure(uri, "update manifest for", putResult.error().message);
       return false;
     }
 

@@ -128,7 +128,8 @@ namespace ao::rt
 
     // Lower-level playback entry point: start a fully-resolved request.
     // playTrack() resolves a TrackId via the library and forwards here.
-    void play(PlaybackRequest const& request, ListId sourceListId);
+    // Returns false when playback is rejected before the engine starts.
+    bool play(PlaybackRequest const& request, ListId sourceListId);
 
     // Register an audio backend provider. Called by the composition root
     // (via AppRuntime::addAudioProvider) during bootstrap.

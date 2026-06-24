@@ -12,6 +12,7 @@
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackFieldUi.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -21,7 +22,6 @@
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/utility/Log.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>

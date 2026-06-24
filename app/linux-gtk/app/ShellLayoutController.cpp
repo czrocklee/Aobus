@@ -25,6 +25,7 @@
 #include <ao/async/Task.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -36,7 +37,6 @@
 #include <ao/uimodel/layout/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/ShellLayoutSessionModel.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
-#include <ao/utility/Log.h>
 
 #include <gtkmm/dialog.h>
 #include <gtkmm/object.h>

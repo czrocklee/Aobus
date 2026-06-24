@@ -6,6 +6,7 @@
 #include "app/ThemeCoordinator.h"
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Task.h>
+#include <ao/library/LibraryScanner.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 
@@ -89,6 +90,14 @@ namespace ao::gtk::portal
 
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
     async::Task<void> importLibraryTask(std::filesystem::path importPath);
+
+    // Scan-library pipeline split into coroutine + sync helpers so that
+    // scanLibrary() itself stays a flat orchestrator.
+    async::Task<std::optional<library::ScanPlan>> buildScanPlanOrReportFailure();
+    async::Task<void> applyScanPlanWithProgress(library::ScanPlan plan);
+    // Returns true when the plan has no New/Changed/Missing items; in that case
+    // the appropriate notification is posted and the caller should return.
+    bool reportIfNoActionableWork(library::ScanPlan const& plan);
 
     void onExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, AppDialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,

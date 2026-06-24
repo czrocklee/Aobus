@@ -6,8 +6,8 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
+#include <ao/rt/ScopedTimer.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/utility/ScopedTimer.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <giomm/listmodel.h>
@@ -181,7 +181,7 @@ namespace ao::gtk
 
   void TrackListModel::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch)
   {
-    auto const timer = utility::ScopedTimer{"TrackListModel::applyDeltas"};
+    auto const timer = rt::ScopedTimer{"TrackListModel::applyDeltas"};
 
     for (auto const& delta : batch.deltas)
     {

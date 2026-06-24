@@ -6,12 +6,12 @@
 #include <ao/library/TrackStore.h>
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
+#include <ao/rt/ScopedTimer.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/utility/ByteView.h>
-#include <ao/utility/ScopedTimer.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -294,7 +294,7 @@ namespace ao::rt
                                            std::span<SmartListSource*> const lists,
                                            TrackLoadMode const mode)
   {
-    auto const timer = utility::ScopedTimer{"SmartListEvaluator::evaluateMembers"};
+    auto const timer = rt::ScopedTimer{"SmartListEvaluator::evaluateMembers"};
 
     if (lists.empty())
     {

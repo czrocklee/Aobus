@@ -3,13 +3,9 @@
 
 #include "playback/NowPlayingFieldLabel.h"
 
+#include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/Type.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IBackendProvider.h>
-#include <ao/audio/NullBackend.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
@@ -25,33 +21,14 @@
 #include <gtkmm/label.h>
 
 #include <chrono>
-#include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 
 namespace ao::gtk::test
 {
   namespace
   {
-    class DummyAudioProvider final : public audio::IBackendProvider
-    {
-    public:
-      void shutdown() noexcept override {}
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback /*callback*/) override { return {}; }
-      std::unique_ptr<audio::IBackend> createBackend(audio::Device const& /*device*/,
-                                                     audio::ProfileId const& /*profileId*/) override
-      {
-        return std::make_unique<audio::NullBackend>();
-      }
-      Status status() const override { return Status{.metadata = {.id = audio::kBackendPipeWire}}; }
-      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
-      {
-        return {};
-      }
-    };
-
     rt::PlaybackService::PlaybackRequest playbackRequest(TrackId trackId, std::string title, std::string artist = {})
     {
       return rt::PlaybackService::PlaybackRequest{
@@ -68,7 +45,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    runtime.addAudioProvider(std::make_unique<DummyAudioProvider>());
+    rt::test::addReadyAudioProvider(runtime.playback());
+    drainGtkEvents();
     auto& playback = runtime.playback();
 
     SECTION("title label renders idle and playing title text")
@@ -128,7 +106,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    runtime.addAudioProvider(std::make_unique<DummyAudioProvider>());
+    rt::test::addReadyAudioProvider(runtime.playback());
+    drainGtkEvents();
 
     SECTION("filter action navigates to the now playing field query")
     {

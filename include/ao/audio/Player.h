@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
@@ -70,16 +71,21 @@ namespace ao::audio
 
     void addProvider(std::unique_ptr<IBackendProvider> providerPtr);
 
-    void play(PlaybackInput const& input);
-    void setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
+    /// @brief Starts playback. Returns `InvalidState` when the backend is not
+    /// yet ready (device discovery pending); the request is dropped in that case.
+    Result<> play(PlaybackInput const& input);
+    /// @brief Selects the output device. Returns `NotFound` when no provider is
+    /// registered for `backend`. A not-yet-discovered device is stored as pending
+    /// and reported as success.
+    Result<> setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
     void pause();
     void resume();
     void stop();
     void seek(std::chrono::milliseconds offset);
 
-    void setVolume(float vol);
-    void setMuted(bool muted);
-    void toggleMute();
+    Result<> setVolume(float vol);
+    Result<> setMuted(bool muted);
+    Result<> toggleMute();
 
     Status status() const;
     Transport transport() const;

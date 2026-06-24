@@ -11,13 +11,13 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/list/ListActionPolicy.h>
-#include <ao/utility/Log.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>

@@ -6,11 +6,11 @@
 #include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/playback/NowPlayingViewModel.h>
-#include <ao/utility/Log.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/eventcontroller.h>

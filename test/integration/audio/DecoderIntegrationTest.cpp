@@ -7,7 +7,6 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/Mp3DecoderSession.h>
-#include <ao/utility/Log.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -88,8 +87,6 @@ namespace ao::audio::test
 
   TEST_CASE("Decoder Bit-Perfect Conversions", "[playback][integration][codec]")
   {
-    log::Log::init(log::LogLevel::Warn);
-
     SECTION("FLAC: 16-bit to 32-bit padding alignment")
     {
       auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";

@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutContext.h"
 #include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -16,7 +17,6 @@
 #include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/utility/Log.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/button.h>

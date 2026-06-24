@@ -14,9 +14,9 @@
 #include "app/UIState.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/utility/Log.h>
 
 #include <gdkmm/enums.h>
 #include <gtkmm/applicationwindow.h>

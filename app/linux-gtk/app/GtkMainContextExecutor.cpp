@@ -4,7 +4,7 @@
 #include "app/GtkMainContextExecutor.h"
 
 #include <ao/Exception.h>
-#include <ao/utility/Log.h>
+#include <ao/rt/Log.h>
 
 #include <glibmm/main.h>
 #include <sigc++/functors/mem_fun.h>

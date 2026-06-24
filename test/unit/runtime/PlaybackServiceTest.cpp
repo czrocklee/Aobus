@@ -478,17 +478,17 @@ namespace ao::rt::test
       CHECK(playbackService.state().duration == std::chrono::minutes{3});
     }
 
-    SECTION("ensureReady auto-configures output on first play")
+    SECTION("device notification auto-configures output before first play")
     {
-      // A second harness whose device list is never primed: the player is not
-      // ready, so play() must run ensureReady() and auto-configure the first
-      // available output before starting.
+      // A second harness receives its first device notification just before the
+      // play request; the notification auto-selects the first available output.
       auto fresh = PlaybackHarness<MockExecutor>{};
+      fresh.onDevicesChangedCb(fresh.status.devices);
 
       auto const desc =
         playbackRequest(TrackId{1}, "/fake/path.flac", "Fake Track", "Fake Artist", std::chrono::minutes{2});
 
-      fresh.playbackService.play(desc, ListId{1});
+      CHECK(fresh.playbackService.play(desc, ListId{1}));
       CHECK(fresh.playbackService.state().trackId == TrackId{1});
     }
 
@@ -531,5 +531,37 @@ namespace ao::rt::test
 
     CHECK(h.playbackService.state().trackId == TrackId{77});
     CHECK(h.playbackService.state().sourceListId == ListId{9});
+  }
+
+  TEST_CASE("PlaybackService - rejected play does not emit success", "[app][unit][runtime][playback]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto executor = MockExecutor{};
+    auto changes = LibraryChanges{};
+    auto listSourceStore = ListSourceStore{testLib.library(), changes};
+    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto playbackService = PlaybackService{executor, viewService, testLib.library()};
+
+    bool preparingFired = false;
+    auto subPreparing = playbackService.onPreparing([&] { preparingFired = true; });
+
+    bool startedFired = false;
+    auto subStarted = playbackService.onStarted([&] { startedFired = true; });
+
+    bool nowPlayingFired = false;
+    auto subNowPlaying =
+      playbackService.onNowPlayingChanged([&](PlaybackService::NowPlayingChanged const&) { nowPlayingFired = true; });
+
+    auto const desc =
+      playbackRequest(TrackId{12}, "/not/started.flac", "Rejected Track", "Rejected Artist", std::chrono::minutes{5});
+
+    CHECK_FALSE(playbackService.play(desc, ListId{3}));
+
+    CHECK(preparingFired);
+    CHECK_FALSE(startedFired);
+    CHECK_FALSE(nowPlayingFired);
+    CHECK(playbackService.state().trackId == kInvalidTrackId);
+    CHECK(playbackService.state().sourceListId == kInvalidListId);
+    CHECK(playbackService.state().trackTitle.empty());
   }
 } // namespace ao::rt::test

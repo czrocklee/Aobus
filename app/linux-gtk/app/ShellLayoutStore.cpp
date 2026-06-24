@@ -5,9 +5,9 @@
 
 #include <ao/Exception.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
-#include <ao/utility/Log.h>
 
 #include <filesystem>
 #include <format>

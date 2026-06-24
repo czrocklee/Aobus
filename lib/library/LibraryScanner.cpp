@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/Error.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryScanner.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/utility/Log.h>
+#include <ao/tag/TagFile.h>
 
-#include <algorithm>
-#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -21,12 +20,6 @@ namespace ao::library
 {
   namespace
   {
-    bool isSupportedExtension(std::string const& ext)
-    {
-      static std::unordered_set<std::string> const supported = {".flac", ".mp3", ".m4a", ".wav", ".alac", ".ogg"};
-      return supported.contains(ext);
-    }
-
     void processEntry(std::filesystem::directory_entry const& entry,
                       std::filesystem::path const& root,
                       FileManifestStore::Reader const& manifestReader,
@@ -63,21 +56,19 @@ namespace ao::library
       }
 
       auto const& path = entry.path();
-      auto ext = path.extension().string();
-      std::ranges::transform(
-        ext, ext.begin(), [](unsigned char ch) { return static_cast<unsigned char>(std::tolower(ch)); });
+
+      // Only files we can actually decode belong in the plan. Everything else -
+      // cover art, playlists, logs, or formats we have no reader for (.wav,
+      // .ogg, a literal .alac) - is not music we support and is ignored here.
+      if (!tag::TagFile::isSupported(path))
+      {
+        return;
+      }
 
       auto const uri = std::filesystem::relative(path, root, entryEc).generic_string();
       seenUris.insert(uri);
 
       auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
-
-      if (!isSupportedExtension(ext))
-      {
-        item.classification = ScanClassification::Unsupported;
-        plan.items.push_back(std::move(item));
-        return;
-      }
 
       try
       {
@@ -152,15 +143,20 @@ namespace ao::library
   {
   }
 
-  ScanPlan LibraryScanner::buildPlan(ProgressCallback progress)
+  Result<ScanPlan> LibraryScanner::buildPlan(ProgressCallback progress)
   {
     auto plan = ScanPlan{};
     auto const root = _ml.rootPath();
 
-    if (!std::filesystem::exists(root))
+    if (auto rootEc = std::error_code{}; !std::filesystem::exists(root, rootEc))
     {
-      APP_LOG_ERROR("LibraryScanner: Root path does not exist: {}", root.string());
-      return plan;
+      if (rootEc)
+      {
+        return makeError(
+          Error::Code::IoError, "Failed to inspect library root path " + root.string() + ": " + rootEc.message());
+      }
+
+      return makeError(Error::Code::NotFound, "Library root path does not exist: " + root.string());
     }
 
     auto txn = _ml.readTransaction();
@@ -175,8 +171,8 @@ namespace ao::library
 
     if (ec)
     {
-      APP_LOG_ERROR("LibraryScanner: Fatal error starting FS walk: {}", ec.message());
-      return plan;
+      return makeError(
+        Error::Code::IoError, "Failed to start filesystem walk of " + root.string() + ": " + ec.message());
     }
 
     while (it != std::filesystem::recursive_directory_iterator{})
