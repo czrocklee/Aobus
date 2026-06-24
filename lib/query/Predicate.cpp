@@ -6,6 +6,7 @@
 #include <ao/query/detail/OperatorTable.h>
 #include <ao/utility/VariantVisitor.h>
 
+#include <cstddef>
 #include <memory>
 #include <variant>
 
@@ -18,6 +19,13 @@ namespace ao::query
       if (!binary.optOperation)
       {
         return isPredicateExpression(binary.operand);
+      }
+
+      // Synthetic/out-of-range operators (e.g. from hand-built ASTs) are not predicates;
+      // guard before the table lookup, which would otherwise throw on an unknown index.
+      if (static_cast<std::size_t>(binary.optOperation->op) >= detail::kOperatorTable.size())
+      {
+        return false;
       }
 
       switch (detail::operatorInfo(binary.optOperation->op).cls)

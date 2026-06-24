@@ -409,14 +409,10 @@ namespace ao::query
 
       auto const expression = text.substr(0, end);
 
-      if (!matchesExpressionSyntax(expression))
-      {
-        return false;
-      }
-
-      // matchesExpressionSyntax() and parse() share the same grammar, so a syntactic match implies
-      // parse() succeeds for today's productions. Guard defensively anyway: a future value callback
-      // that fails after a successful grammar match must degrade to "not a completed expression".
+      // parse() validates the same grammar as matchesExpressionSyntax() and additionally builds the
+      // AST, returning no value on a grammar mismatch. A single parse() therefore subsumes the
+      // syntactic check: a grammar failure (or a future value callback that fails after a syntactic
+      // match) leaves parsed empty and degrades to "not a completed expression".
       auto const parsed = parse(expression);
 
       return parsed.has_value() && isPredicateExpression(*parsed);

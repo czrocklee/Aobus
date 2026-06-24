@@ -8,9 +8,11 @@
 
 #include <cassert>
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace ao::media::mp4
 {
@@ -42,13 +44,16 @@ namespace ao::media::mp4
     constexpr std::size_t kAudioSampleEntryHeaderSkip = 28;
     constexpr std::size_t kAtomHeaderSize = 8;
 
-    template<typename ContainerAtom>
-    void parseAtoms(ContainerAtom& parent, std::span<std::byte const> data)
+    // Parse one level of children out of a container's payload. Child containers
+    // are created without recursing into them — each ContainerAtomView retains its
+    // own payload and parses its children on first access (see Atom.h). This keeps
+    // the walk lazy: only the subtrees a consumer actually visits get materialized.
+    void parseChildren(Atom const& parent, std::span<std::byte const> data, std::vector<std::unique_ptr<Atom>>& out)
     {
       while (data.size() >= kAtomHeaderSize)
       {
         auto const* layout = utility::layout::view<AtomLayout>(data);
-        auto length = layout->length.value();
+        auto const length = layout->length.value();
 
         if (length < kAtomHeaderSize || length > data.size())
         {
@@ -68,23 +73,16 @@ namespace ao::media::mp4
           optSkip = kAudioSampleEntryHeaderSkip;
         }
 
-        if (optSkip)
+        if (auto const atomBytes = data.subspan(0, length); optSkip && length >= kAtomHeaderSize + *optSkip)
         {
-          if (length < kAtomHeaderSize + *optSkip)
-          {
-            parent.add(std::make_unique<LeafAtomView>(data.subspan(0, length), parent));
-            data = data.subspan(length);
-            continue;
-          }
-
-          // Atom header is already defined as kAtomHeaderSize
-          auto childPtr = std::make_unique<ContainerAtomView>(data.subspan(0, length), parent);
-          parseAtoms(*childPtr, data.subspan(kAtomHeaderSize + *optSkip, length - kAtomHeaderSize - *optSkip));
-          parent.add(std::move(childPtr));
+          auto const payload = data.subspan(kAtomHeaderSize + *optSkip, length - kAtomHeaderSize - *optSkip);
+          out.push_back(std::make_unique<ContainerAtomView>(atomBytes, payload, parent));
         }
         else
         {
-          parent.add(std::make_unique<LeafAtomView>(data.subspan(0, length), parent));
+          // Not a known container, or too short to hold the declared skip header:
+          // treat it as an opaque leaf, matching the original eager behavior.
+          out.push_back(std::make_unique<LeafAtomView>(atomBytes, parent));
         }
 
         data = data.subspan(length);
@@ -92,10 +90,30 @@ namespace ao::media::mp4
     }
   }
 
+  void ContainerAtomView::ensureParsed() const
+  {
+    if (_parsed)
+    {
+      return;
+    }
+
+    _parsed = true;
+    parseChildren(*this, _payload, _children);
+  }
+
+  void RootAtom::ensureParsed() const
+  {
+    if (_parsed)
+    {
+      return;
+    }
+
+    _parsed = true;
+    parseChildren(*this, _data, _children);
+  }
+
   RootAtom fromBuffer(std::span<std::byte const> data)
   {
-    auto root = RootAtom{};
-    parseAtoms(root, data);
-    return root;
+    return RootAtom{data};
   }
 } // namespace ao::media::mp4

@@ -4,6 +4,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/Type.h>
 #include <ao/library/TrackView.h>
+#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
@@ -14,7 +15,6 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -58,7 +58,7 @@ namespace ao::query
       return dictionaryFieldValue(track, field, *plan->dictionary);
     }
 
-    std::string_view loadStringFieldValue(library::TrackView const& track, Field field, Instruction const* instr)
+    std::string_view loadStringFieldValue(library::TrackView const& track, Field field, std::int64_t customDictId)
     {
       switch (field)
       {
@@ -66,9 +66,9 @@ namespace ao::query
         case Field::Uri: return track.property().uri();
         case Field::Custom:
 
-          if (instr != nullptr && instr->constValue > 0)
+          if (customDictId > 0)
           {
-            auto dictId = DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
+            auto dictId = DictionaryId{static_cast<std::uint32_t>(customDictId)};
             return track.customMetadata().get(dictId).value_or("");
           }
 
@@ -131,23 +131,20 @@ namespace ao::query
                            library::TrackView const& track,
                            ExecutionPlan const* plan,
                            Instruction const& instr,
-                           Instruction const* prevLoadField,
                            Op&& op)
     {
-      if (auto const stringIdx = reg(registers, instr.operand);
-          prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
+      auto const field = static_cast<Field>(instr.field);
+
+      if (auto const stringIdx = reg(registers, instr.operand); isStringField(field))
       {
-        auto field = static_cast<Field>(prevLoadField->field);
-        auto const fieldStr = loadStringFieldValue(track, field, prevLoadField);
+        auto const fieldStr = loadStringFieldValue(track, field, instr.constValue);
         auto const constantStr = getStringConstant(plan, stringIdx);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
-      else if (prevLoadField != nullptr && isDictionaryField(static_cast<Field>(prevLoadField->field)) &&
-               isOrderedComparison(instr.op))
+      else if (isDictionaryField(field) && isOrderedComparison(instr.op))
       {
         // Dictionary fields hold interned IDs whose order is arbitrary, so an
         // ordered comparison resolves the ID back to text and compares that.
-        auto field = static_cast<Field>(prevLoadField->field);
         auto const fieldStr = loadDictionaryFieldValue(track, field, plan);
         auto const constantStr = getStringConstant(plan, stringIdx);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
@@ -165,10 +162,9 @@ namespace ao::query
     void executeEq(std::vector<std::int64_t>& registers,
                    library::TrackView const& track,
                    ExecutionPlan const* plan,
-                   Instruction const& instr,
-                   Instruction const* prevLoadField)
+                   Instruction const& instr)
     {
-      if (prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag)
+      if (auto const field = static_cast<Field>(instr.field); field == Field::Tag)
       {
         auto tagIdToMatch = DictionaryId{static_cast<std::uint32_t>(reg(registers, instr.operand))};
         auto matches = track.tags().has(tagIdToMatch);
@@ -176,11 +172,9 @@ namespace ao::query
       }
       else
       {
-        if (auto stringIdx = reg(registers, instr.operand);
-            prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
+        if (auto stringIdx = reg(registers, instr.operand); isStringField(field))
         {
-          auto field = static_cast<Field>(prevLoadField->field);
-          auto const fieldStr = loadStringFieldValue(track, field, prevLoadField);
+          auto const fieldStr = loadStringFieldValue(track, field, instr.constValue);
           auto const constantStr = getStringConstant(plan, stringIdx);
           reg(registers, instr.operand - 1) = (fieldStr == constantStr) ? 1 : 0;
         }
@@ -197,10 +191,9 @@ namespace ao::query
     void executeLike(std::vector<std::int64_t>& registers,
                      library::TrackView const& track,
                      ExecutionPlan const* plan,
-                     Instruction const& instr,
-                     Instruction const* prevLoadField)
+                     Instruction const& instr)
     {
-      // instr.field contains the left field from the LoadField instruction
+      // instr.field carries the left field; instr.constValue its Custom dictId (if any).
       auto field = static_cast<Field>(instr.field);
       auto rhs = reg(registers, instr.operand);
 
@@ -208,7 +201,7 @@ namespace ao::query
 
       if (isStringField(field))
       {
-        fieldStr = loadStringFieldValue(track, field, prevLoadField);
+        fieldStr = loadStringFieldValue(track, field, instr.constValue);
       }
       else if (isDictionaryField(field))
       {
@@ -275,8 +268,7 @@ namespace ao::query
     void executeInSet(std::vector<std::int64_t>& registers,
                       library::TrackView const& track,
                       ExecutionPlan const* plan,
-                      Instruction const& instr,
-                      Instruction const* prevLoadField)
+                      Instruction const& instr)
     {
       if (plan == nullptr || instr.constValue < 0)
       {
@@ -296,18 +288,13 @@ namespace ao::query
 
       if (set.stringValues)
       {
-        if (prevLoadField == nullptr)
-        {
-          reg(registers, instr.operand) = 0;
-          return;
-        }
-
-        auto const field = static_cast<Field>(prevLoadField->field);
+        // instr.field is the left field; instr.size carries its Custom dictId (if any).
+        auto const field = static_cast<Field>(instr.field);
         auto fieldValue = std::string_view{};
 
         if (isStringField(field) || field == Field::Custom)
         {
-          fieldValue = loadStringFieldValue(track, field, prevLoadField);
+          fieldValue = loadStringFieldValue(track, field, instr.size);
         }
         else if (isDictionaryField(field) && plan->dictionary != nullptr)
         {
@@ -362,38 +349,8 @@ namespace ao::query
 
     _registers.assign(plan.instructions.size() + kReservedRegisters, 0);
 
-    // The nearest-preceding-LoadField mapping is a static property of the plan, so
-    // comparison ops can resolve their field operand in O(1). Compiled plans carry it
-    // precomputed (zero per-track cost); for plans assembled without it (e.g. by hand
-    // in tests) we derive it once here into a scratch member instead of per comparison.
-    auto const& fieldLoadIndex = [&] -> std::vector<std::int32_t> const&
+    for (auto const& instr : plan.instructions)
     {
-      if (plan.fieldLoadIndex.size() == plan.instructions.size())
-      {
-        return plan.fieldLoadIndex;
-      }
-
-      _fieldLoadIndex.assign(plan.instructions.size(), -1);
-
-      for (std::int32_t lastLoadField = -1; auto const idx : std::views::iota(0UZ, plan.instructions.size()))
-      {
-        _fieldLoadIndex[idx] = lastLoadField;
-
-        if (plan.instructions[idx].op == OpCode::LoadField)
-        {
-          lastLoadField = static_cast<std::int32_t>(idx);
-        }
-      }
-
-      return _fieldLoadIndex;
-    }();
-
-    for (auto const idx : std::views::iota(0UZ, plan.instructions.size()))
-    {
-      auto const& instr = plan.instructions[idx];
-      auto const* const prevLoadField =
-        fieldLoadIndex[idx] >= 0 ? &plan.instructions[static_cast<std::size_t>(fieldLoadIndex[idx])] : nullptr;
-
       switch (instr.op)
       {
         case OpCode::LoadField:
@@ -402,31 +359,26 @@ namespace ao::query
 
         case OpCode::LoadConstant: reg(_registers, instr.operand) = instr.constValue; break;
 
-        case OpCode::Eq: executeEq(_registers, track, &plan, instr, prevLoadField); break;
+        case OpCode::Eq: executeEq(_registers, track, &plan, instr); break;
 
         case OpCode::Ne:
-          executeComparison(
-            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs != rhs; });
+          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs != rhs; });
           break;
 
         case OpCode::Lt:
-          executeComparison(
-            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs < rhs; });
+          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs < rhs; });
           break;
 
         case OpCode::Le:
-          executeComparison(
-            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs <= rhs; });
+          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs <= rhs; });
           break;
 
         case OpCode::Gt:
-          executeComparison(
-            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs > rhs; });
+          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs > rhs; });
           break;
 
         case OpCode::Ge:
-          executeComparison(
-            _registers, track, &plan, instr, prevLoadField, [](auto lhs, auto rhs) { return lhs >= rhs; });
+          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs >= rhs; });
           break;
 
         case OpCode::And:
@@ -452,11 +404,11 @@ namespace ao::query
           break;
         }
 
-        case OpCode::Like: executeLike(_registers, track, &plan, instr, prevLoadField); break;
+        case OpCode::Like: executeLike(_registers, track, &plan, instr); break;
 
         case OpCode::Exists: reg(_registers, instr.operand) = executeExists(track, instr) ? 1 : 0; break;
 
-        case OpCode::InSet: executeInSet(_registers, track, &plan, instr, prevLoadField); break;
+        case OpCode::InSet: executeInSet(_registers, track, &plan, instr); break;
 
         case OpCode::Nop:
         default: break;

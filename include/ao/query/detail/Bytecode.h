@@ -59,18 +59,31 @@ namespace ao::query
 
   /**
    * Instruction - A single operation in the execution plan.
+   *
+   * Field-bearing ops (LoadField, the comparisons, Like, Exists, InSet) carry their
+   * left Field directly in `field`, so the evaluator never has to scan back for the
+   * nearest LoadField to recover an operand's type.
    */
   struct Instruction final
   {
     OpCode op = OpCode::Nop;
-    std::uint8_t field = 0;   // Field index (for LoadField)
-    std::int32_t operand = 0; // For binary ops: register of left operand. For load: target register
 
-    // For constants: stores the constant value directly
+    // Left field for field-bearing ops; 0/unused for logical ops (And/Or/Not) and
+    // LoadConstant.
+    std::uint8_t field = 0;
+
+    // Binary/compare ops: register of the right operand (the result is written to
+    // operand - 1). Load/Exists/InSet: target register.
+    std::int32_t operand = 0;
+
+    // LoadConstant: the constant value (or the string-constant index). Exists:
+    // the custom/tag dictId. InSet: the index into ExecutionPlan::inSets.
+    // Comparisons/Like: the left field's interned dictId when it is Field::Custom
+    // (0 otherwise).
     std::int64_t constValue = 0;
 
-    // For string constants, we store the length and a pointer to the data
-    // The actual string data will be stored separately in the plan
+    // InSet only: the left field's interned dictId when it is Field::Custom. InSet
+    // spends constValue on the set index, so the Custom id rides here instead.
     std::uint32_t size = 0;
     char const* data = nullptr;
   };
@@ -87,12 +100,6 @@ namespace ao::query
     std::vector<std::string> stringConstants;
     std::vector<InSet> inSets;
 
-    // For each instruction, the index of the nearest preceding LoadField (or -1).
-    // This is a static property of the instruction stream, so it is computed once
-    // here (via indexFieldLoads) rather than rescanned per track at evaluation time.
-    // Empty when not yet populated; the evaluator derives it on the fly in that case.
-    std::vector<std::int32_t> fieldLoadIndex;
-
     // Dictionary used to resolve DictionaryId-backed metadata during evaluation.
     library::DictionaryStore const* dictionary = nullptr;
 
@@ -104,10 +111,5 @@ namespace ao::query
 
     // Access profile for the query
     AccessProfile accessProfile = AccessProfile::HotOnly;
-
-    // Populate fieldLoadIndex from the current instruction stream. Idempotent;
-    // call after instructions are finalized so evaluation can resolve a comparison's
-    // field operand in O(1) without rescanning.
-    void indexFieldLoads();
   };
 } // namespace ao::query

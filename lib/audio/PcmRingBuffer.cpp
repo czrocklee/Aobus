@@ -3,9 +3,7 @@
 
 #include <ao/audio/PcmRingBuffer.h>
 
-#include <atomic>
 #include <cstddef>
-#include <cstring>
 #include <span>
 
 namespace ao::audio
@@ -19,9 +17,7 @@ namespace ao::audio
       return 0;
     }
 
-    auto const written = _queue.push(input.data(), input.size());
-    _writeCount.fetch_add(written, std::memory_order_release);
-    return written;
+    return _queue.push(input.data(), input.size());
   }
 
   std::size_t PcmRingBuffer::read(std::span<std::byte> output) noexcept
@@ -31,9 +27,7 @@ namespace ao::audio
       return 0;
     }
 
-    auto const read = _queue.pop(output.data(), output.size());
-    _readCount.fetch_add(read, std::memory_order_release);
-    return read;
+    return _queue.pop(output.data(), output.size());
   }
 
   void PcmRingBuffer::clear() noexcept
@@ -43,8 +37,5 @@ namespace ao::audio
     while (_queue.pop(dummy))
     {
     }
-
-    _writeCount.store(0, std::memory_order_relaxed);
-    _readCount.store(0, std::memory_order_relaxed);
   }
 } // namespace ao::audio

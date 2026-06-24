@@ -72,6 +72,9 @@ namespace ao::audio
 
     // Buffer for decoded samples
     std::vector<std::byte> pcmBuffer;
+    // Reused per-channel span scratch for interleaving (avoids a per-block heap
+    // allocation in the write callback). Capacity persists across blocks.
+    std::vector<std::span<std::int32_t const>> channelSpans;
     std::uint32_t bufferedFrames = 0;
     std::uint64_t nextFrameIndex = 0;
     std::uint64_t totalFrames = 0;
@@ -463,15 +466,15 @@ namespace ao::audio
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
       auto const dst = utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
 
-      auto channelSpans = std::vector<std::span<std::int32_t const>>{channels};
+      impl->channelSpans.resize(channels);
 
       for (std::uint32_t ch = 0; ch < channels; ++ch)
       {
-        channelSpans[ch] = {buffer[ch], blockSize};
+        impl->channelSpans[ch] = {buffer[ch], blockSize};
       }
 
       PcmConverter::interleaveAndPad<std::int32_t, std::int32_t>(
-        channelSpans, dst, static_cast<std::uint8_t>(32 - bps));
+        impl->channelSpans, dst, static_cast<std::uint8_t>(32 - bps));
     }
     else
     {

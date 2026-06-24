@@ -932,7 +932,7 @@ namespace ao::rt::test
 
         plan.instructions.push_back(query::Instruction{
           .op = query::OpCode::Eq,
-          .field = 0,
+          .field = static_cast<std::uint8_t>(query::Field::Year),
           .operand = nextReg - 1,
           .constValue = 0,
           .size = 0,
@@ -957,7 +957,6 @@ namespace ao::rt::test
         --nextReg;
       }
 
-      plan.indexFieldLoads();
       return plan;
     }
 
@@ -982,14 +981,13 @@ namespace ao::rt::test
       });
       plan.instructions.push_back(query::Instruction{
         .op = query::OpCode::InSet,
-        .field = 0,
+        .field = static_cast<std::uint8_t>(query::Field::Year),
         .operand = 0,
         .constValue = 0,
         .size = 0,
         .data = nullptr,
       });
 
-      plan.indexFieldLoads();
       return plan;
     }
 

@@ -9,6 +9,7 @@
 #include <ao/query/detail/Bytecode.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -46,32 +47,38 @@ namespace ao::query
     Result<ExecutionPlan> compile(Expression const& expr);
 
   private:
-    enum class InSetCompileStatus : std::uint8_t
-    {
-      NotApplicable,
-      Compiled,
-    };
-
     enum class InSetValueStatus : std::uint8_t
     {
       NotCompatible,
       Appended,
     };
 
-    // Compile helper functions
+    // Register-stack helpers. Each value-producing op claims the next register up and
+    // each consumed (right) operand is always the current top, so the evaluator can
+    // read a binary op's left operand from (operand - 1). These two helpers keep that
+    // stack discipline in one place instead of open-coding _nextReg arithmetic.
+    std::uint32_t pushReg();
+    void popReg(std::uint32_t top);
+
+    // Compile helper functions. Each returns the register holding its result (with
+    // _nextReg left incremented by exactly one net), so callers thread registers
+    // explicitly rather than re-deriving them from _nextReg. compileInSetList returns
+    // nullopt when the list is not eligible for set compilation.
     std::uint32_t addStringConstant(std::string_view str);
     std::uint32_t addInSet(InSet set);
-    Result<> compileExpression(Expression const& expr);
-    Result<> compilePredicate(Expression const& expr);
-    Result<> compileBinary(BinaryExpression const& binary);
-    Result<> compileUnary(UnaryExpression const& unary);
-    Result<> compileExists(Expression const& operand);
-    Result<> compileVariable(VariableExpression const& var);
-    Result<> compileConstant(ConstantExpression const& constant);
-    Result<> compileList(ListExpression const& list);
-    Result<> compileRange(RangeExpression const& range);
-    Result<> compileIn(Expression const& lhs, Expression const& rhs);
-    Result<InSetCompileStatus> compileInSetList(Expression const& lhs, ListExpression const& list);
+    Result<std::uint32_t> compileExpression(Expression const& expr);
+    Result<std::uint32_t> compilePredicate(Expression const& expr);
+    Result<std::uint32_t> compileBinary(BinaryExpression const& binary);
+    Result<std::uint32_t> compileUnary(UnaryExpression const& unary);
+    Result<std::uint32_t> compileExists(Expression const& operand);
+    Result<std::uint32_t> compileVariable(VariableExpression const& var);
+    Result<std::uint32_t> compileConstant(ConstantExpression const& constant);
+    Result<std::uint32_t> compileList(ListExpression const& list);
+    Result<std::uint32_t> compileRange(RangeExpression const& range);
+    Result<std::uint32_t> compileIn(Expression const& lhs, Expression const& rhs);
+    Result<std::uint32_t> compileInWithList(Expression const& lhs, ListExpression const& list);
+    Result<std::uint32_t> compileInRange(Expression const& lhs, RangeExpression const& range);
+    Result<std::optional<std::uint32_t>> compileInSetList(Expression const& lhs, ListExpression const& list);
 
     // Resolve string to ID using dictionary (if available)
     std::int64_t resolveStringConstant(std::string const& str, Field field);
@@ -82,8 +89,12 @@ namespace ao::query
     std::uint32_t _nextReg = 0;
     library::DictionaryStore* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
-    bool _hasHotAccess = false;         // Track if expression uses hot (metadata/property/tag) variables
-    bool _hasColdAccess = false;        // Track if expression uses cold (custom) variables
+    // Interned dictId of the last field when it is Field::Custom (0 otherwise). The
+    // comparison/membership instruction carries this so the evaluator can resolve the
+    // custom key without a separate LoadField lookup.
+    std::int64_t _lastFieldCustomId = 0;
+    bool _hasHotAccess = false;  // Track if expression uses hot (metadata/property/tag) variables
+    bool _hasColdAccess = false; // Track if expression uses cold (custom) variables
     bool _resolveStringConstantsToIds = true;
   };
 

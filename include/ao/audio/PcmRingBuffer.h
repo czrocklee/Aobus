@@ -6,7 +6,6 @@
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
 
-#include <atomic>
 #include <cstddef>
 #include <span>
 
@@ -29,15 +28,13 @@ namespace ao::audio
 
     void clear() noexcept;
 
-    std::size_t size() const noexcept
-    {
-      return _writeCount.load(std::memory_order_acquire) - _readCount.load(std::memory_order_acquire);
-    }
+    // Bytes currently buffered (available to read). The queue tracks this
+    // internally, so no separate accounting is kept.
+    std::size_t size() const noexcept { return _queue.read_available(); }
+
     std::size_t capacity() const noexcept { return kRingBufferCapacity; }
 
   private:
     boost::lockfree::spsc_queue<std::byte, boost::lockfree::capacity<kRingBufferCapacity>> _queue;
-    std::atomic<std::size_t> _writeCount{0};
-    std::atomic<std::size_t> _readCount{0};
   };
 } // namespace ao::audio

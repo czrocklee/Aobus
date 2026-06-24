@@ -15,7 +15,6 @@
 #include <memory>
 #include <span>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::media::mp4
@@ -55,7 +54,7 @@ namespace ao::media::mp4
   class AtomView : public Atom
   {
   public:
-    AtomView(std::span<std::byte const> data, Atom& parent)
+    AtomView(std::span<std::byte const> data, Atom const& parent)
       : _data{data}, _parent{parent}
     {
     }
@@ -88,7 +87,7 @@ namespace ao::media::mp4
 
   private:
     std::span<std::byte const> _data;
-    Atom& _parent;
+    Atom const& _parent;
   };
 
   class LeafAtomView : public AtomView
@@ -102,16 +101,28 @@ namespace ao::media::mp4
     void visitChildren(Visitor /*visitor*/) const override {}
   };
 
+  // Container atoms parse their children lazily: the child layer is materialized
+  // on the first visitChildren()/find() and cached, so subtrees that a given
+  // consumer never walks (e.g. udta/meta/ilst metadata during demuxing) are never
+  // parsed. The cache is filled in a const method via mutable members; this is
+  // safe because an atom tree is owned and accessed by a single thread (each
+  // fromBuffer() result is a function-local value), never shared concurrently.
   class ContainerAtomView : public AtomView
   {
   public:
-    using AtomView::AtomView;
+    ContainerAtomView(std::span<std::byte const> data, std::span<std::byte const> payload, Atom const& parent)
+      : AtomView{data, parent}, _payload{payload}
+    {
+    }
+
     using Visitor = Atom::Visitor;
 
     bool isLeaf() const override { return false; };
 
     void visitChildren(Visitor visitor) const override
     {
+      ensureParsed();
+
       for (auto const& child : _children)
       {
         if (!std::invoke(visitor, *child))
@@ -121,17 +132,25 @@ namespace ao::media::mp4
       }
     }
 
-    void add(std::unique_ptr<Atom> childPtr) { _children.push_back(std::move(childPtr)); }
-
   private:
-    std::vector<std::unique_ptr<Atom>> _children;
+    void ensureParsed() const;
+
+    std::span<std::byte const> _payload;
+    mutable std::vector<std::unique_ptr<Atom>> _children;
+    mutable bool _parsed = false;
   };
 
   class RootAtom : public Atom
   {
   public:
+    explicit RootAtom(std::span<std::byte const> data)
+      : _data{data}
+    {
+    }
+
     std::uint32_t length() const override
     {
+      ensureParsed();
       return std::ranges::fold_left(_children, 0U, [](auto size, auto const& ptr) { return size + ptr->length(); });
     }
 
@@ -143,6 +162,8 @@ namespace ao::media::mp4
 
     void visitChildren(Visitor visitor) const override
     {
+      ensureParsed();
+
       for (auto const& child : _children)
       {
         if (!std::invoke(visitor, *child))
@@ -152,10 +173,12 @@ namespace ao::media::mp4
       }
     }
 
-    void add(std::unique_ptr<Atom> atomPtr) { _children.push_back(std::move(atomPtr)); }
-
   private:
-    std::vector<std::unique_ptr<Atom>> _children;
+    void ensureParsed() const;
+
+    std::span<std::byte const> _data;
+    mutable std::vector<std::unique_ptr<Atom>> _children;
+    mutable bool _parsed = false;
   };
 
   RootAtom fromBuffer(std::span<std::byte const> data);

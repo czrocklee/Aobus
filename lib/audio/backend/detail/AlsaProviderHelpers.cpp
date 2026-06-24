@@ -18,6 +18,7 @@ extern "C"
 #include <format>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::backend::detail
@@ -117,19 +118,23 @@ namespace ao::audio::backend::detail
               auto const hwId = std::format("hw:{},{}", card, device);
               auto const plughwId = std::format("plughw:{},{}", card, device);
 
+              // The plughw and hw entries describe the same underlying PCM, so probe
+              // its capabilities once and share them across both entries.
+              auto caps = queryAlsaDeviceCapabilities(hwId);
+
               devices.push_back({.id = DeviceId{plughwId},
                                  .displayName = std::string{safeCardNamePtr.get()},
                                  .description = plughwId,
                                  .isDefault = false,
                                  .backendId = kBackendAlsa,
-                                 .capabilities = queryAlsaDeviceCapabilities(hwId)});
+                                 .capabilities = caps});
 
               devices.push_back({.id = DeviceId{hwId},
                                  .displayName = std::format("{} (Raw)", safeCardNamePtr.get()),
                                  .description = hwId,
                                  .isDefault = false,
                                  .backendId = kBackendAlsa,
-                                 .capabilities = queryAlsaDeviceCapabilities(hwId)});
+                                 .capabilities = std::move(caps)});
             }
           }
         }

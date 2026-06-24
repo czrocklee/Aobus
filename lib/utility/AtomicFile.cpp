@@ -59,6 +59,9 @@ namespace ao::utility
     {
       if (permissions == AtomicFilePermissions::Default)
       {
+        // Default leaves the mode mkstemp() created the file with (0600: owner
+        // read/write only). Callers that need group/other access pass an explicit
+        // permission value.
         return {};
       }
 
@@ -97,9 +100,17 @@ namespace ao::utility
 
     Result<> closeTempFile(int fd, std::vector<char> const& tempPath)
     {
+      // fsync here is the durability barrier before the rename: if it fails the
+      // temp file's bytes are not guaranteed on disk, so renaming it over the
+      // target could expose a truncated/corrupt file after a crash. Treat it as a
+      // hard error and let the caller discard the temp file. Capture the message
+      // before close(), which may clobber errno.
       if (::fsync(fd) != 0)
       {
-        APP_LOG_WARN("Failed to fsync temp file {}: {}", tempPath.data(), std::strerror(errno));
+        auto error = makeError(
+          Error::Code::IoError, std::format("Failed to fsync temp file {}: {}", tempPath.data(), std::strerror(errno)));
+        ::close(fd);
+        return error;
       }
 
       if (::close(fd) != 0)
@@ -125,6 +136,10 @@ namespace ao::utility
 
     void syncParentDirectory(std::filesystem::path const& parentPath)
     {
+      // Best-effort, unlike the temp-file fsync above: this runs after the rename
+      // has already made the new contents visible, so a failure here only means the
+      // rename may not survive a crash. Reporting it as an error would falsely
+      // signal that the write did not apply, so log and continue instead.
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
       int const parentFd = ::open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
 

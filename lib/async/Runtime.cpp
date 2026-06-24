@@ -89,18 +89,15 @@ namespace ao::async
 
   Task<void> Runtime::resumeOnCallbackExecutor()
   {
-    auto state = co_await boost::asio::this_coro::cancellation_state;
-
-    if (state.cancelled() != boost::asio::cancellation_type::none)
-    {
-      throw boost::system::system_error{boost::asio::error::operation_aborted};
-    }
-
     co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
       [this](auto handler) { callbackExecutor().dispatch([cb = std::move(handler)] mutable { cb(); }); },
       boost::asio::use_awaitable);
 
-    state = co_await boost::asio::this_coro::cancellation_state;
+    // Single cancellation checkpoint, after the executor hop. cancellation_state
+    // is monotonic (a latched terminal signal never clears), so this post-resume
+    // check subsumes a pre-resume one and additionally catches cancellation that
+    // was signalled while the coroutine was in flight to the callback executor.
+    auto const state = co_await boost::asio::this_coro::cancellation_state;
 
     if (state.cancelled() != boost::asio::cancellation_type::none)
     {
@@ -110,16 +107,10 @@ namespace ao::async
 
   Task<void> Runtime::resumeOnWorker()
   {
-    auto state = co_await boost::asio::this_coro::cancellation_state;
-
-    if (state.cancelled() != boost::asio::cancellation_type::none)
-    {
-      throw boost::system::system_error{boost::asio::error::operation_aborted};
-    }
-
     co_await boost::asio::post(workerPool(), boost::asio::use_awaitable);
 
-    state = co_await boost::asio::this_coro::cancellation_state;
+    // See resumeOnCallbackExecutor: one checkpoint after the hop is sufficient.
+    auto const state = co_await boost::asio::this_coro::cancellation_state;
 
     if (state.cancelled() != boost::asio::cancellation_type::none)
     {

@@ -744,7 +744,7 @@ namespace ao::query::test
       plan.instructions.push_back(
         {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 0});
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
-      plan.instructions.push_back({.op = OpCode::Eq, .operand = 1});
+      plan.instructions.push_back({.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 1});
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
@@ -780,7 +780,8 @@ namespace ao::query::test
       plan.instructions.push_back(
         {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::CoverArtId), .operand = 0});
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 99});
-      plan.instructions.push_back({.op = OpCode::Eq, .operand = 1});
+      plan.instructions.push_back(
+        {.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::CoverArtId), .operand = 1});
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
@@ -790,7 +791,8 @@ namespace ao::query::test
       plan.instructions.push_back(
         {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::TagCount), .operand = 0});
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
-      plan.instructions.push_back({.op = OpCode::Eq, .operand = 1});
+      plan.instructions.push_back(
+        {.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::TagCount), .operand = 1});
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
@@ -809,7 +811,8 @@ namespace ao::query::test
         {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Custom), .operand = 0, .constValue = 0});
       planManual.stringConstants.emplace_back("");
       planManual.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
-      planManual.instructions.push_back({.op = OpCode::Eq, .operand = 1});
+      planManual.instructions.push_back(
+        {.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::Custom), .operand = 1, .constValue = 0});
       CHECK(PlanEvaluator{}.evaluateFull(planManual, track2.view()) == true);
     }
 

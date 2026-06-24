@@ -15,11 +15,11 @@
 #include <fdk-aac/aacdecoder_lib.h>
 #include <fdk-aac/machine_type.h>
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <expected>
 #include <filesystem>
 #include <memory>
@@ -92,8 +92,9 @@ namespace ao::audio
         return makeError(Error::Code::FormatRejected, "Missing AAC AudioSpecificConfig");
       }
 
+      // UCHAR and std::byte are both byte-sized, so this is a straight copy.
       inputBuffer.resize(magicCookie.size());
-      std::ranges::transform(magicCookie, inputBuffer.begin(), [](std::byte byte) { return static_cast<UCHAR>(byte); });
+      std::memcpy(inputBuffer.data(), magicCookie.data(), magicCookie.size());
 
       auto const configResult = [&]
       {
@@ -288,8 +289,7 @@ namespace ao::audio
     }
 
     _implPtr->inputBuffer.resize(packet.size());
-    std::ranges::transform(
-      packet, _implPtr->inputBuffer.begin(), [](std::byte byte) { return static_cast<UCHAR>(byte); });
+    std::memcpy(_implPtr->inputBuffer.data(), packet.data(), packet.size());
 
     auto bytesValid = static_cast<UINT>(_implPtr->inputBuffer.size());
     auto const fillResult = [&]

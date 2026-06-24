@@ -516,27 +516,41 @@ namespace ao::query
     return static_cast<std::uint32_t>(_plan.inSets.size() - 1);
   }
 
-  Result<> QueryCompiler::compileExpression(Expression const& expr)
+  std::uint32_t QueryCompiler::pushReg()
   {
-    return std::visit(utility::makeVisitor(
-                        [this](std::unique_ptr<BinaryExpression> const& binary) -> Result<>
-                        {
-                          gsl_Expects(binary != nullptr);
-                          return compileBinary(*binary);
-                        },
-                        [this](std::unique_ptr<UnaryExpression> const& unary) -> Result<>
-                        {
-                          gsl_Expects(unary != nullptr);
-                          return compileUnary(*unary);
-                        },
-                        [this](VariableExpression const& var) -> Result<> { return compileVariable(var); },
-                        [this](ConstantExpression const& constant) -> Result<> { return compileConstant(constant); },
-                        [this](ListExpression const& list) -> Result<> { return compileList(list); },
-                        [this](RangeExpression const& range) -> Result<> { return compileRange(range); }),
-                      expr);
+    return _nextReg++;
   }
 
-  Result<> QueryCompiler::compilePredicate(Expression const& expr)
+  void QueryCompiler::popReg(std::uint32_t top)
+  {
+    // Only the current top register may be freed; this enforces the stack discipline the
+    // evaluator relies on (a binary op's left operand sits immediately below its right).
+    gsl_Expects(top + 1 == _nextReg);
+    --_nextReg;
+  }
+
+  Result<std::uint32_t> QueryCompiler::compileExpression(Expression const& expr)
+  {
+    return std::visit(
+      utility::makeVisitor(
+        [this](std::unique_ptr<BinaryExpression> const& binary) -> Result<std::uint32_t>
+        {
+          gsl_Expects(binary != nullptr);
+          return compileBinary(*binary);
+        },
+        [this](std::unique_ptr<UnaryExpression> const& unary) -> Result<std::uint32_t>
+        {
+          gsl_Expects(unary != nullptr);
+          return compileUnary(*unary);
+        },
+        [this](VariableExpression const& var) -> Result<std::uint32_t> { return compileVariable(var); },
+        [this](ConstantExpression const& constant) -> Result<std::uint32_t> { return compileConstant(constant); },
+        [this](ListExpression const& list) -> Result<std::uint32_t> { return compileList(list); },
+        [this](RangeExpression const& range) -> Result<std::uint32_t> { return compileRange(range); }),
+      expr);
+  }
+
+  Result<std::uint32_t> QueryCompiler::compilePredicate(Expression const& expr)
   {
     if (auto const* var = bareNonTagVariableInPredicatePosition(expr); var != nullptr)
     {
@@ -557,7 +571,7 @@ namespace ao::query
     return compileExpression(expr);
   }
 
-  Result<> QueryCompiler::compileBinary(BinaryExpression const& binary)
+  Result<std::uint32_t> QueryCompiler::compileBinary(BinaryExpression const& binary)
   {
     if (!binary.optOperation)
     {
@@ -571,14 +585,18 @@ namespace ao::query
 
     if (binary.optOperation->op == Operator::And || binary.optOperation->op == Operator::Or)
     {
-      if (auto result = compilePredicate(binary.operand); !result)
+      auto const leftReg = compilePredicate(binary.operand);
+
+      if (!leftReg)
       {
-        return result;
+        return std::unexpected{leftReg.error()};
       }
 
-      if (auto result = compilePredicate(binary.optOperation->operand); !result)
+      auto const rightReg = compilePredicate(binary.optOperation->operand);
+
+      if (!rightReg)
       {
-        return result;
+        return std::unexpected{rightReg.error()};
       }
 
       auto const opcode = toOpCode(binary.optOperation->op);
@@ -588,93 +606,89 @@ namespace ao::query
         return std::unexpected{opcode.error()};
       }
 
-      auto const rightReg = _nextReg - 1;
+      // And/Or consume the top two results (left immediately below right) and write the
+      // result back into the left register.
+      gsl_Expects(*rightReg == *leftReg + 1);
       _plan.instructions.push_back(Instruction{
         .op = *opcode,
         .field = 0,
-        .operand = static_cast<std::int32_t>(rightReg),
+        .operand = static_cast<std::int32_t>(*rightReg),
         .constValue = 0,
         .size = 0,
         .data = nullptr,
       });
-      _nextReg--;
-      return {};
+      popReg(*rightReg);
+      return *leftReg;
     }
 
-    // Compile left operand
-    if (auto result = compileExpression(binary.operand); !result)
+    // Comparison (Eq/Ne/Lt/Le/Gt/Ge/Like). Compile the left operand first.
+    auto const leftReg = compileExpression(binary.operand);
+
+    if (!leftReg)
     {
-      return result;
+      return std::unexpected{leftReg.error()};
     }
 
-    // Save left field before compiling right operand (which will overwrite _lastField)
-    if (auto const leftField = _lastField; binary.optOperation)
+    // Save the left field (and its Custom dictId) before compiling the right operand,
+    // which overwrites _lastField.
+    auto const leftField = _lastField;
+    auto const leftCustomId = _lastFieldCustomId;
+    auto const opcode = toOpCode(binary.optOperation->op);
+
+    if (!opcode)
     {
-      auto const opcode = toOpCode(binary.optOperation->op);
-
-      if (!opcode)
-      {
-        return std::unexpected{opcode.error()};
-      }
-
-      if (*opcode == OpCode::Like && isUnsupportedLikeField(leftField))
-      {
-        return rejectQuery("LIKE operator not supported for coverArt or tags");
-      }
-
-      // Dictionary fields store interned IDs, so an ordered comparison (<, <=, >, >=)
-      // must compare the resolved text rather than the ID. Require a string operand
-      // and keep it as a string constant (like LIKE) so the evaluator resolves the
-      // field's ID back to text at compare time.
-      if (isOrderedComparison(*opcode) && isDictionaryField(leftField) &&
-          !isStringConstantOperand(binary.optOperation->operand))
-      {
-        return rejectQuery(
-          "ordered comparison on the '{}' field requires a string operand", fieldDisplayName(leftField));
-      }
-
-      auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
-      auto restoreResolveMode =
-        gsl_lite::finally([this, previousResolveStringConstantsToIds]
-                          { _resolveStringConstantsToIds = previousResolveStringConstantsToIds; });
-
-      if (isDictionaryField(leftField) && (*opcode == OpCode::Like || isOrderedComparison(*opcode)))
-      {
-        _resolveStringConstantsToIds = false;
-      }
-
-      // Compile right operand
-      if (auto result = compileExpression(binary.optOperation->operand); !result)
-      {
-        return result;
-      }
-
-      // Right operand result is in _nextReg - 1
-      // Binary op will store result in operand - 1 = (_nextReg - 1) - 1 = _nextReg - 2
-      auto const rightReg = _nextReg - 1;
-
-      // Store leftField in field for LIKE instructions so executeLike can use it directly
-      std::uint8_t const instrField =
-        (*opcode == OpCode::Like) ? static_cast<std::uint8_t>(leftField) : std::uint8_t{0};
-
-      _plan.instructions.push_back(Instruction{
-        .op = *opcode,
-        .field = instrField,
-        .operand = static_cast<std::int32_t>(rightReg),
-        .constValue = 0,
-        .size = 0,
-        .data = nullptr,
-      });
-
-      // After binary op, the result is stored in the left register (rightReg - 1)
-      // The right register is now free, so decrement _nextReg
-      _nextReg--;
+      return std::unexpected{opcode.error()};
     }
 
-    return {};
+    if (*opcode == OpCode::Like && isUnsupportedLikeField(leftField))
+    {
+      return rejectQuery("LIKE operator not supported for coverArt or tags");
+    }
+
+    // Dictionary fields store interned IDs, so an ordered comparison (<, <=, >, >=)
+    // must compare the resolved text rather than the ID. Require a string operand
+    // and keep it as a string constant (like LIKE) so the evaluator resolves the
+    // field's ID back to text at compare time.
+    if (isOrderedComparison(*opcode) && isDictionaryField(leftField) &&
+        !isStringConstantOperand(binary.optOperation->operand))
+    {
+      return rejectQuery("ordered comparison on the '{}' field requires a string operand", fieldDisplayName(leftField));
+    }
+
+    auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
+    auto restoreResolveMode =
+      gsl_lite::finally([this, previousResolveStringConstantsToIds]
+                        { _resolveStringConstantsToIds = previousResolveStringConstantsToIds; });
+
+    if (isDictionaryField(leftField) && (*opcode == OpCode::Like || isOrderedComparison(*opcode)))
+    {
+      _resolveStringConstantsToIds = false;
+    }
+
+    auto const rightReg = compileExpression(binary.optOperation->operand);
+
+    if (!rightReg)
+    {
+      return std::unexpected{rightReg.error()};
+    }
+
+    // Carry the left field (and its Custom dictId) directly on the comparison so the
+    // evaluator resolves the operand's type without scanning back for the LoadField. The
+    // comparison consumes the top two results and writes the result into the left register.
+    gsl_Expects(*rightReg == *leftReg + 1);
+    _plan.instructions.push_back(Instruction{
+      .op = *opcode,
+      .field = static_cast<std::uint8_t>(leftField),
+      .operand = static_cast<std::int32_t>(*rightReg),
+      .constValue = leftCustomId,
+      .size = 0,
+      .data = nullptr,
+    });
+    popReg(*rightReg);
+    return *leftReg;
   }
 
-  Result<> QueryCompiler::compileUnary(UnaryExpression const& unary)
+  Result<std::uint32_t> QueryCompiler::compileUnary(UnaryExpression const& unary)
   {
     if (unary.op == Operator::Exists)
     {
@@ -683,26 +697,29 @@ namespace ao::query
 
     if (unary.op == Operator::Not)
     {
-      if (auto result = compilePredicate(unary.operand); !result)
+      auto const reg = compilePredicate(unary.operand);
+
+      if (!reg)
       {
-        return result;
+        return std::unexpected{reg.error()};
       }
 
+      // Not rewrites its operand in place; the result stays in the same register.
       _plan.instructions.push_back(Instruction{
         .op = OpCode::Not,
         .field = 0,
-        .operand = static_cast<std::int32_t>(_nextReg - 1),
+        .operand = static_cast<std::int32_t>(*reg),
         .constValue = 0,
         .size = 0,
         .data = nullptr,
       });
-      return {};
+      return *reg;
     }
 
     return rejectQuery("unsupported unary operator");
   }
 
-  Result<> QueryCompiler::compileExists(Expression const& operand)
+  Result<std::uint32_t> QueryCompiler::compileExists(Expression const& operand)
   {
     auto const* var = std::get_if<VariableExpression>(&operand);
 
@@ -738,19 +755,22 @@ namespace ao::query
       constValue = static_cast<std::int64_t>(dictId.raw());
     }
 
+    _lastFieldCustomId = (var->type == VariableType::Custom) ? constValue : 0;
+
+    auto const reg = pushReg();
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Exists,
       .field = static_cast<std::uint8_t>(field),
-      .operand = static_cast<std::int32_t>(_nextReg++),
+      .operand = static_cast<std::int32_t>(reg),
       .constValue = constValue,
       .size = 0,
       .data = nullptr,
     });
 
-    return {};
+    return reg;
   }
 
-  Result<> QueryCompiler::compileVariable(VariableExpression const& var)
+  Result<std::uint32_t> QueryCompiler::compileVariable(VariableExpression const& var)
   {
     // Tags are hot data
     if (var.type == VariableType::Tag)
@@ -765,37 +785,40 @@ namespace ao::query
         // Generate implicit tag comparison: track.tags().has(tagId)
         // This handles standalone "#tagname" queries like "#rock"
         // First, load the tag field (for the Eq instruction to detect it's a tag comparison)
+        auto const fieldReg = pushReg();
         _plan.instructions.push_back(Instruction{
           .op = OpCode::LoadField,
           .field = static_cast<std::uint8_t>(Field::Tag),
-          .operand = static_cast<std::int32_t>(_nextReg++),
+          .operand = static_cast<std::int32_t>(fieldReg),
           .constValue = 0,
           .size = 0,
           .data = nullptr,
         });
 
         // Then load the tag ID as constant
+        auto const constReg = pushReg();
         _plan.instructions.push_back(Instruction{
           .op = OpCode::LoadConstant,
           .field = 0,
-          .operand = static_cast<std::int32_t>(_nextReg++),
+          .operand = static_cast<std::int32_t>(constReg),
           .constValue = static_cast<std::int64_t>(tagId.raw()),
           .size = 0,
           .data = nullptr,
         });
 
-        // Eq instruction - PlanEvaluator will detect Tag field and use tags.has()
+        // Eq instruction - the Tag field is encoded directly so PlanEvaluator uses tags.has().
+        // It consumes the loaded id and writes the result into the tag-field register.
         _plan.instructions.push_back(Instruction{
           .op = OpCode::Eq,
-          .field = 0,
-          .operand = static_cast<std::int32_t>(_nextReg - 1), // Right operand
+          .field = static_cast<std::uint8_t>(Field::Tag),
+          .operand = static_cast<std::int32_t>(constReg),
           .constValue = 0,
           .size = 0,
           .data = nullptr,
         });
 
-        _nextReg--; // Eq result is in the left register
-        return {};
+        popReg(constReg);
+        return fieldReg;
       }
     }
 
@@ -836,46 +859,52 @@ namespace ao::query
       }
     }
 
+    // Remember the Custom key id (0 for non-Custom) so a following comparison carries it.
+    _lastFieldCustomId = constValue;
+
+    auto const reg = pushReg();
     _plan.instructions.push_back(Instruction{
       .op = OpCode::LoadField,
       .field = static_cast<std::uint8_t>(field),
-      .operand = static_cast<std::int32_t>(_nextReg++),
+      .operand = static_cast<std::int32_t>(reg),
       .constValue = constValue,
       .size = 0,
       .data = nullptr,
     });
 
-    return {};
+    return reg;
   }
 
-  Result<> QueryCompiler::compileConstant(ConstantExpression const& constant)
+  Result<std::uint32_t> QueryCompiler::compileConstant(ConstantExpression const& constant)
   {
     return std::visit(utility::makeVisitor(
-                        [this](bool val) -> Result<>
+                        [this](bool val) -> Result<std::uint32_t>
                         {
+                          auto const reg = pushReg();
                           _plan.instructions.push_back(Instruction{
                             .op = OpCode::LoadConstant,
                             .field = 0,
-                            .operand = static_cast<std::int32_t>(_nextReg++),
+                            .operand = static_cast<std::int32_t>(reg),
                             .constValue = val ? 1 : 0,
                             .size = 0,
                             .data = nullptr,
                           });
-                          return {};
+                          return reg;
                         },
-                        [this](std::int64_t val) -> Result<>
+                        [this](std::int64_t val) -> Result<std::uint32_t>
                         {
+                          auto const reg = pushReg();
                           _plan.instructions.push_back(Instruction{
                             .op = OpCode::LoadConstant,
                             .field = 0,
-                            .operand = static_cast<std::int32_t>(_nextReg++),
+                            .operand = static_cast<std::int32_t>(reg),
                             .constValue = val,
                             .size = 0,
                             .data = nullptr,
                           });
-                          return {};
+                          return reg;
                         },
-                        [this](UnitConstantExpression const& val) -> Result<>
+                        [this](UnitConstantExpression const& val) -> Result<std::uint32_t>
                         {
                           auto const scaled = scaleUnitConstant(val, _lastField);
 
@@ -884,31 +913,33 @@ namespace ao::query
                             return std::unexpected{scaled.error()};
                           }
 
+                          auto const reg = pushReg();
                           _plan.instructions.push_back(Instruction{
                             .op = OpCode::LoadConstant,
                             .field = 0,
-                            .operand = static_cast<std::int32_t>(_nextReg++),
+                            .operand = static_cast<std::int32_t>(reg),
                             .constValue = *scaled,
                             .size = 0,
                             .data = nullptr,
                           });
-                          return {};
+                          return reg;
                         },
-                        [this](std::string const& val) -> Result<>
+                        [this](std::string const& val) -> Result<std::uint32_t>
                         {
                           if (_lastField == Field::Codec)
                           {
                             if (auto const optCodec = parseAudioCodecName(val); optCodec)
                             {
+                              auto const reg = pushReg();
                               _plan.instructions.push_back(Instruction{
                                 .op = OpCode::LoadConstant,
                                 .field = 0,
-                                .operand = static_cast<std::int32_t>(_nextReg++),
+                                .operand = static_cast<std::int32_t>(reg),
                                 .constValue = audioCodecStorageValue(*optCodec),
                                 .size = 0,
                                 .data = nullptr,
                               });
-                              return {};
+                              return reg;
                             }
 
                             return rejectQuery("unknown audio codec '{}'", val);
@@ -918,114 +949,40 @@ namespace ao::query
                           // For metadata ID fields (artist, album, genre), resolve to numeric ID
                           auto const resolvedId = resolveStringConstant(val, _lastField);
 
-                          if (resolvedId >= 0)
-                          {
-                            // Successfully resolved to ID - store as numeric constant
-                            _plan.instructions.push_back(Instruction{
-                              .op = OpCode::LoadConstant,
-                              .field = 0,
-                              .operand = static_cast<std::int32_t>(_nextReg++),
-                              .constValue = resolvedId,
-                              .size = 0,
-                              .data = nullptr,
-                            });
-                          }
-                          else
-                          {
-                            // Not resolved (no dictionary or not a metadata ID field) - store as string constant
-                            auto const idx = addStringConstant(val);
-                            _plan.instructions.push_back(Instruction{
-                              .op = OpCode::LoadConstant,
-                              .field = 0,
-                              .operand = static_cast<std::int32_t>(_nextReg++),
-                              .constValue = static_cast<std::int64_t>(idx),
-                              .size = static_cast<std::uint32_t>(val.size()),
-                              .data = nullptr,
-                            });
-                          }
+                          // Resolved (metadata ID field) stores the numeric ID; otherwise the
+                          // string is interned and the constant holds its index.
+                          auto const constValue =
+                            resolvedId >= 0 ? resolvedId : static_cast<std::int64_t>(addStringConstant(val));
 
-                          return {};
+                          auto const reg = pushReg();
+                          _plan.instructions.push_back(Instruction{
+                            .op = OpCode::LoadConstant,
+                            .field = 0,
+                            .operand = static_cast<std::int32_t>(reg),
+                            .constValue = constValue,
+                            .size = 0,
+                            .data = nullptr,
+                          });
+                          return reg;
                         }),
                       constant);
   }
 
-  Result<> QueryCompiler::compileList(ListExpression const& /*list*/)
+  Result<std::uint32_t> QueryCompiler::compileList(ListExpression const& /*list*/)
   {
     return rejectQuery("list expressions are only supported as the right operand of 'in'");
   }
 
-  Result<> QueryCompiler::compileRange(RangeExpression const& /*range*/)
+  Result<std::uint32_t> QueryCompiler::compileRange(RangeExpression const& /*range*/)
   {
     return rejectQuery("range expressions are only supported as the right operand of 'in'");
   }
 
-  Result<> QueryCompiler::compileIn(Expression const& lhs, Expression const& rhs)
+  Result<std::uint32_t> QueryCompiler::compileIn(Expression const& lhs, Expression const& rhs)
   {
     if (auto const* list = std::get_if<ListExpression>(&rhs); list != nullptr)
     {
-      if (list->values.empty())
-      {
-        return rejectQuery("operator 'in' expects a non-empty list");
-      }
-
-      auto const inSetResult = list->values.size() >= kInSetCompilationThreshold
-                                 ? compileInSetList(lhs, *list)
-                                 : Result<InSetCompileStatus>{InSetCompileStatus::NotApplicable};
-
-      if (!inSetResult)
-      {
-        return std::unexpected{inSetResult.error()};
-      }
-
-      if (*inSetResult == InSetCompileStatus::Compiled)
-      {
-        return {};
-      }
-
-      bool first = true;
-
-      for (auto const& value : list->values)
-      {
-        if (auto result = compileExpression(lhs); !result)
-        {
-          return result;
-        }
-
-        if (auto result = compileConstant(value); !result)
-        {
-          return result;
-        }
-
-        auto const rightReg = _nextReg - 1;
-        _plan.instructions.push_back(Instruction{
-          .op = OpCode::Eq,
-          .field = 0,
-          .operand = static_cast<std::int32_t>(rightReg),
-          .constValue = 0,
-          .size = 0,
-          .data = nullptr,
-        });
-        _nextReg--;
-
-        if (first)
-        {
-          first = false;
-          continue;
-        }
-
-        auto const rhsReg = _nextReg - 1;
-        _plan.instructions.push_back(Instruction{
-          .op = OpCode::Or,
-          .field = 0,
-          .operand = static_cast<std::int32_t>(rhsReg),
-          .constValue = 0,
-          .size = 0,
-          .data = nullptr,
-        });
-        _nextReg--;
-      }
-
-      return {};
+      return compileInWithList(lhs, *list);
     }
 
     auto const* range = std::get_if<RangeExpression>(&rhs);
@@ -1035,19 +992,107 @@ namespace ao::query
       return rejectQuery("operator 'in' expects a list or range right operand");
     }
 
-    if (auto result = compileExpression(lhs); !result)
+    return compileInRange(lhs, *range);
+  }
+
+  Result<std::uint32_t> QueryCompiler::compileInWithList(Expression const& lhs, ListExpression const& list)
+  {
+    if (list.values.empty())
     {
-      return result;
+      return rejectQuery("operator 'in' expects a non-empty list");
+    }
+
+    if (list.values.size() >= kInSetCompilationThreshold)
+    {
+      auto const compiled = compileInSetList(lhs, list);
+
+      if (!compiled)
+      {
+        return std::unexpected{compiled.error()};
+      }
+
+      if (compiled->has_value())
+      {
+        return **compiled;
+      }
+    }
+
+    // Not eligible for set compilation: expand into a chain of OR-ed equalities,
+    // accumulating the running result in the register of the first comparison.
+    auto optAccumReg = std::optional<std::uint32_t>{};
+
+    for (auto const& value : list.values)
+    {
+      auto const leftReg = compileExpression(lhs);
+
+      if (!leftReg)
+      {
+        return std::unexpected{leftReg.error()};
+      }
+
+      auto const leftField = _lastField;
+      auto const leftCustomId = _lastFieldCustomId;
+
+      auto const rightReg = compileConstant(value);
+
+      if (!rightReg)
+      {
+        return std::unexpected{rightReg.error()};
+      }
+
+      gsl_Expects(*rightReg == *leftReg + 1);
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::Eq,
+        .field = static_cast<std::uint8_t>(leftField),
+        .operand = static_cast<std::int32_t>(*rightReg),
+        .constValue = leftCustomId,
+        .size = 0,
+        .data = nullptr,
+      });
+      popReg(*rightReg); // Eq result is now in *leftReg
+
+      if (!optAccumReg)
+      {
+        optAccumReg = *leftReg;
+        continue;
+      }
+
+      // OR the new comparison (the top register) into the accumulator just below it.
+      gsl_Expects(*leftReg == *optAccumReg + 1);
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::Or,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(*leftReg),
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
+      popReg(*leftReg); // Or result is now in *optAccumReg
+    }
+
+    gsl_Expects(optAccumReg.has_value()); // non-empty list guarantees at least one comparison
+    return *optAccumReg;
+  }
+
+  Result<std::uint32_t> QueryCompiler::compileInRange(Expression const& lhs, RangeExpression const& range)
+  {
+    auto const lhsLowerReg = compileExpression(lhs);
+
+    if (!lhsLowerReg)
+    {
+      return std::unexpected{lhsLowerReg.error()};
     }
 
     // A range compiles to Ge/Le bounds, i.e. ordered comparisons. For dictionary
     // fields those must compare resolved text, so require string bounds and keep
     // them as string constants (see compileBinary / executeComparison).
-    auto const dictionaryBounds = isDictionaryField(_lastField);
+    auto const leftField = _lastField;
+    auto const leftCustomId = _lastFieldCustomId;
+    auto const dictionaryBounds = isDictionaryField(leftField);
 
-    if (dictionaryBounds && (!isStringConstant(range->lower) || !isStringConstant(range->upper)))
+    if (dictionaryBounds && (!isStringConstant(range.lower) || !isStringConstant(range.upper)))
     {
-      return rejectQuery("range over the '{}' field requires string bounds", fieldDisplayName(_lastField));
+      return rejectQuery("range over the '{}' field requires string bounds", fieldDisplayName(leftField));
     }
 
     auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
@@ -1060,65 +1105,74 @@ namespace ao::query
       _resolveStringConstantsToIds = false;
     }
 
-    if (auto result = compileConstant(range->lower); !result)
+    auto const lowerReg = compileConstant(range.lower);
+
+    if (!lowerReg)
     {
-      return result;
+      return std::unexpected{lowerReg.error()};
     }
 
-    auto const lowerReg = _nextReg - 1;
+    gsl_Expects(*lowerReg == *lhsLowerReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Ge,
-      .field = 0,
-      .operand = static_cast<std::int32_t>(lowerReg),
-      .constValue = 0,
+      .field = static_cast<std::uint8_t>(leftField),
+      .operand = static_cast<std::int32_t>(*lowerReg),
+      .constValue = leftCustomId,
       .size = 0,
       .data = nullptr,
     });
-    _nextReg--;
+    popReg(*lowerReg); // Ge result is now in *lhsLowerReg
+    auto const geReg = *lhsLowerReg;
 
-    if (auto result = compileExpression(lhs); !result)
+    auto const lhsUpperReg = compileExpression(lhs);
+
+    if (!lhsUpperReg)
     {
-      return result;
+      return std::unexpected{lhsUpperReg.error()};
     }
 
-    if (auto result = compileConstant(range->upper); !result)
+    auto const upperReg = compileConstant(range.upper);
+
+    if (!upperReg)
     {
-      return result;
+      return std::unexpected{upperReg.error()};
     }
 
-    auto const upperReg = _nextReg - 1;
+    gsl_Expects(*upperReg == *lhsUpperReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Le,
-      .field = 0,
-      .operand = static_cast<std::int32_t>(upperReg),
-      .constValue = 0,
+      .field = static_cast<std::uint8_t>(leftField),
+      .operand = static_cast<std::int32_t>(*upperReg),
+      .constValue = leftCustomId,
       .size = 0,
       .data = nullptr,
     });
-    _nextReg--;
+    popReg(*upperReg); // Le result is now in *lhsUpperReg
+    auto const leReg = *lhsUpperReg;
 
-    auto const rhsReg = _nextReg - 1;
+    // AND the two bounds together; the result lands in the Ge register.
+    gsl_Expects(leReg == geReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::And,
       .field = 0,
-      .operand = static_cast<std::int32_t>(rhsReg),
+      .operand = static_cast<std::int32_t>(leReg),
       .constValue = 0,
       .size = 0,
       .data = nullptr,
     });
-    _nextReg--;
+    popReg(leReg); // And result is now in geReg
 
-    return {};
+    return geReg;
   }
 
-  Result<QueryCompiler::InSetCompileStatus> QueryCompiler::compileInSetList(Expression const& lhs,
-                                                                            ListExpression const& list)
+  Result<std::optional<std::uint32_t>> QueryCompiler::compileInSetList(Expression const& lhs,
+                                                                       ListExpression const& list)
   {
     auto const* variable = std::get_if<VariableExpression>(&lhs);
 
     if (variable == nullptr)
     {
-      return InSetCompileStatus::NotApplicable;
+      return std::optional<std::uint32_t>{};
     }
 
     auto const fieldResult = resolveVariableField(*variable);
@@ -1132,7 +1186,7 @@ namespace ao::query
 
     if (isTagField(field))
     {
-      return InSetCompileStatus::NotApplicable;
+      return std::optional<std::uint32_t>{};
     }
 
     auto set = InSet{};
@@ -1149,27 +1203,31 @@ namespace ao::query
 
       if (*valueResult == InSetValueStatus::NotCompatible)
       {
-        return InSetCompileStatus::NotApplicable;
+        return std::optional<std::uint32_t>{};
       }
     }
 
-    if (auto compileResult = compileExpression(lhs); !compileResult)
+    auto const leftReg = compileExpression(lhs);
+
+    if (!leftReg)
     {
-      return std::unexpected{compileResult.error()};
+      return std::unexpected{leftReg.error()};
     }
 
+    auto const leftCustomId = _lastFieldCustomId;
     auto const setIndex = addInSet(std::move(set));
-    auto const leftReg = _nextReg - 1;
+    // InSet rewrites its operand in place, so the result stays in the loaded register.
+    // It spends constValue on the set index, so the Custom key id rides in size.
     _plan.instructions.push_back(Instruction{
       .op = OpCode::InSet,
-      .field = 0,
-      .operand = static_cast<std::int32_t>(leftReg),
+      .field = static_cast<std::uint8_t>(field),
+      .operand = static_cast<std::int32_t>(*leftReg),
       .constValue = static_cast<std::int64_t>(setIndex),
-      .size = 0,
+      .size = static_cast<std::uint32_t>(leftCustomId),
       .data = nullptr,
     });
 
-    return InSetCompileStatus::Compiled;
+    return std::optional<std::uint32_t>{*leftReg};
   }
 
   std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)
@@ -1263,27 +1321,13 @@ namespace ao::query
                       constant);
   }
 
-  void ExecutionPlan::indexFieldLoads()
-  {
-    fieldLoadIndex.assign(instructions.size(), -1);
-
-    for (std::int32_t lastLoadField = -1; auto const idx : std::views::iota(0UZ, instructions.size()))
-    {
-      fieldLoadIndex[idx] = lastLoadField;
-
-      if (instructions[idx].op == OpCode::LoadField)
-      {
-        lastLoadField = static_cast<std::int32_t>(idx);
-      }
-    }
-  }
-
   Result<ExecutionPlan> QueryCompiler::compile(Expression const& expr)
   {
     _plan = ExecutionPlan{};
     _plan.dictionary = _dict;
     _plan.tagBloomMask = computeRequiredTagBloomMask(expr, _dict);
     _nextReg = 0;
+    _lastFieldCustomId = 0;
     _hasHotAccess = false;
     _hasColdAccess = false;
     _resolveStringConstantsToIds = true;
@@ -1304,8 +1348,6 @@ namespace ao::query
     {
       return std::unexpected{compileResult.error()};
     }
-
-    _plan.indexFieldLoads();
 
     // Set access profile based on what data was accessed
     if (_hasHotAccess && _hasColdAccess)

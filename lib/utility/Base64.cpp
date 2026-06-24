@@ -94,7 +94,10 @@ namespace ao::utility
         break;
       }
 
-      auto const decodedValue = kDecodingTable.at(static_cast<std::uint8_t>(charVal));
+      // The index is a uint8_t (0-255) and the table has 256 entries, so the
+      // lookup is always in bounds; operator[] avoids a redundant bounds check.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+      auto const decodedValue = kDecodingTable[static_cast<std::uint8_t>(charVal)];
 
       if (decodedValue == -1)
       {

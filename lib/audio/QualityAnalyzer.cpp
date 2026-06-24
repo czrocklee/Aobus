@@ -6,6 +6,8 @@
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
 
+#include <boost/unordered/unordered_flat_map.hpp>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -13,7 +15,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -87,7 +88,7 @@ namespace ao::audio
 
     void processInputSources(flow::Node const& node,
                              std::span<flow::Node const* const> path,
-                             std::unordered_map<std::string, std::set<std::string>> const& inputSources,
+                             boost::unordered_flat_map<std::string, std::set<std::string>> const& inputSources,
                              flow::Graph const& graph,
                              NodeQualityAssessment& targetAssessment)
     {
@@ -225,7 +226,7 @@ namespace ao::audio
       return result;
     }
 
-    auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
+    auto inputSources = boost::unordered_flat_map<std::string, std::set<std::string>>{};
 
     for (auto const& link : graph.connections)
     {
