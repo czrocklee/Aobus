@@ -43,6 +43,15 @@ namespace ao::gtk
       sigc::scoped_connection playingChangedConnection; // now-playing highlight
     };
 
+    void configureTrackCellLabel(Gtk::Label& label)
+    {
+      label.set_halign(Gtk::Align::START);
+      label.set_ellipsize(Pango::EllipsizeMode::END);
+      label.set_single_line_mode(true);
+      label.set_lines(1);
+      label.set_xalign(0);
+    }
+
     void updatePlayingStyles(Gtk::ListItem& listItem, rt::TrackField field, bool playing)
     {
       if (auto* const child = listItem.get_child(); child != nullptr)
@@ -123,10 +132,8 @@ namespace ao::gtk
         // displayText() hands back a cached string by pointer for both text-backed
         // and computed fields, so this bind copies straight into the label with no
         // intermediate ustring materialization.
-        if (auto const* const text = row->displayText(field); text != nullptr)
-        {
-          label->set_text(*text);
-        }
+        auto const* const text = row->displayText(field);
+        label->set_text(text != nullptr ? *text : Glib::ustring{});
       }
     }
 
@@ -181,11 +188,10 @@ namespace ao::gtk
           {
             // The commit handler is wired once at setup, so a (re)bind only
             // refreshes the displayed text.
-            if (auto const* const text = rowPtr->displayText(field); text != nullptr)
-            {
-              label->set_text(*text);
-              entry->set_text(*text);
-            }
+            auto const* const text = rowPtr->displayText(field);
+            auto const& displayText = text != nullptr ? *text : Glib::ustring{};
+            label->set_text(displayText);
+            entry->set_text(displayText);
           }
         }
       }
@@ -225,9 +231,7 @@ namespace ao::gtk
         if (!editable)
         {
           auto* const label = Gtk::make_managed<Gtk::Label>("");
-          label->set_halign(Gtk::Align::START);
-          label->set_ellipsize(Pango::EllipsizeMode::END);
-          label->set_xalign(0);
+          configureTrackCellLabel(*label);
 
           if (field == rt::TrackField::Duration || field == rt::TrackField::Year)
           {
@@ -251,8 +255,7 @@ namespace ao::gtk
 
           auto* const label = Gtk::make_managed<Gtk::Label>("");
           label->add_css_class("ao-inline-editor-label");
-          label->set_halign(Gtk::Align::START);
-          label->set_ellipsize(Pango::EllipsizeMode::END);
+          configureTrackCellLabel(*label);
           stack->add(*label, "display");
 
           auto* const entry = Gtk::make_managed<Gtk::Entry>();

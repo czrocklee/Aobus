@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "ContainerTestHelpers.h"
+#include "app/linux-gtk/app/GtkStyleRuntime.h"
 #include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -15,8 +17,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
+#include <gtkmm/menubutton.h>
 #include <gtkmm/window.h>
 
 #include <memory>
@@ -156,6 +160,57 @@ namespace ao::gtk::layout::test
       auto* const rightChild = leftChild->get_next_sibling()->get_next_sibling();
       REQUIRE(rightChild != nullptr);
       CHECK(rightChild->has_css_class("ao-grouping-region"));
+    }
+
+    SECTION("LayoutHost expands the active root to fill the shell")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
+
+      auto host = LayoutHost{registry};
+      host.setLayout(ctx, doc);
+
+      auto* const activeRoot = host.get_first_child();
+      REQUIRE(activeRoot != nullptr);
+      CHECK(activeRoot->get_hexpand());
+      CHECK(activeRoot->get_vexpand());
+
+      auto allocationHost = AllocationHost{host};
+      allocationHost.allocateChild(320, 240);
+
+      CHECK(activeRoot->get_width() == 320);
+      CHECK(activeRoot->get_height() == 240);
+    }
+
+    SECTION("Modern controls bar reserves enough height for padded controls")
+    {
+      GtkStyleRuntime::instance().initialize();
+
+      auto const doc = createBuiltInLayout(LayoutPresetId::Modern);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
+      REQUIRE(rootComponentPtr != nullptr);
+
+      window.add_css_class("ao-theme-modern");
+      window.set_child(rootComponentPtr->widget());
+
+      auto* const controlsBar = ao::gtk::test::findWidgetByClass<Gtk::Widget>(window, "ao-track-controls-bar-modern");
+      REQUIRE(controlsBar != nullptr);
+      auto* const quickFilterEntry = ao::gtk::test::findWidgetByClass<Gtk::Entry>(window, "ao-quick-filter-entry");
+      REQUIRE(quickFilterEntry != nullptr);
+      auto* const presentationButton = ao::gtk::test::findWidget<Gtk::MenuButton>(window);
+      REQUIRE(presentationButton != nullptr);
+
+      auto const verticalMeasure = measureWidget(*controlsBar, Gtk::Orientation::VERTICAL);
+      CHECK(verticalMeasure.minimum >= 58);
+      CHECK(verticalMeasure.natural >= 58);
+
+      controlsBar->size_allocate(Gtk::Allocation{0, 0, 2036, 58}, -1);
+      CHECK(quickFilterEntry->get_height() >= 36);
+      CHECK(presentationButton->get_height() >= 24);
+
+      window.unset_child();
+      window.remove_css_class("ao-theme-modern");
     }
   }
 } // namespace ao::gtk::layout::test

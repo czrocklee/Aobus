@@ -81,6 +81,6 @@ namespace ao::gtk
     mutable boost::unordered_flat_map<TrackId, Glib::RefPtr<TrackRowObject>, std::hash<TrackId>> _rowCache;
     mutable std::unordered_map<DictionaryId, Glib::ustring> _stringCache;
 
-    Glib::RefPtr<TrackRowObject> createRowFromData(rt::TrackRow const& data) const;
+    Glib::RefPtr<TrackRowObject> createRowFromData(rt::TrackRow data) const;
   };
 } // namespace ao::gtk

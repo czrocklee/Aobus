@@ -27,7 +27,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.add_argument("app", choices=["cli", "gtk"], help="the application to run (cli or gtk)")
     build.add_build_arguments(parser)
     parser.add_argument("-n", "--no-build", action="store_true", help="skip building the target")
-    parser.add_argument("app_args", nargs=argparse.REMAINDER, help="arguments forwarded to the application")
+    parser.add_argument("app_args", nargs="*", help="non-option arguments forwarded to the application")
     parser.set_defaults(func=run_command)
 
 

@@ -274,6 +274,12 @@ class CliParseTest(unittest.TestCase):
         self.assertTrue(args.clang)
         self.assertEqual(args.app_args, ["arg1", "arg2"])
 
+    def test_run_no_build_after_app_name(self):
+        args = self.parse(["run", "gtk", "-n"])
+        self.assertEqual(args.app, "gtk")
+        self.assertTrue(args.no_build)
+        self.assertEqual(args.app_args, [])
+
     def test_run_command_builds_and_execs(self):
         args = self.parse(["run", "cli"])
         with mock.patch.object(run_command_mod.build, "do_build") as do_build:

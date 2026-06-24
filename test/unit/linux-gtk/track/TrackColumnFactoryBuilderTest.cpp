@@ -23,6 +23,7 @@
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/label.h>
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/singleselection.h>
 #include <gtkmm/stack.h>
@@ -123,7 +124,12 @@ namespace ao::gtk::test
         auto columnPtr = Gtk::ColumnViewColumn::create("Duration", factoryPtr);
         columnView.append_column(columnPtr);
 
-        drainGtkEvents();
+        realizeColumnView(window, columnView);
+
+        auto* const label = findLabelByText(columnView, "2:00");
+        REQUIRE(label != nullptr);
+        CHECK(label->get_single_line_mode());
+        CHECK(label->get_lines() == 1);
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
         drainGtkEvents();
@@ -147,6 +153,11 @@ namespace ao::gtk::test
         // the currently-bound row from the ListItem and invoke commitFn with the
         // typed value, then collapse the editor back to its display child.
         realizeColumnView(window, columnView);
+
+        auto* const label = findLabelByText(columnView, "Test Title");
+        REQUIRE(label != nullptr);
+        CHECK(label->get_single_line_mode());
+        CHECK(label->get_lines() == 1);
 
         // Drive the now-playing highlight through the model signal (the path used
         // in production); the per-cell subscription must restyle the realized row.

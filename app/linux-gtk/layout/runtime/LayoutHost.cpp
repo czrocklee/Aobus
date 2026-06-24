@@ -33,7 +33,10 @@ namespace ao::gtk::layout
 
     if (_activeComponentPtr)
     {
-      append(_activeComponentPtr->widget());
+      auto& activeWidget = _activeComponentPtr->widget();
+      activeWidget.set_hexpand(true);
+      activeWidget.set_vexpand(true);
+      append(activeWidget);
     }
   }
 } // namespace ao::gtk::layout

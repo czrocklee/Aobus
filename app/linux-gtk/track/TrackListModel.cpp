@@ -101,6 +101,13 @@ namespace ao::gtk
       return _cachedItemType;
     }
 
+    _cachedItemType = ::g_type_from_name("gtkmm__CustomObject_TrackRowObject");
+
+    if (_cachedItemType != G_TYPE_INVALID)
+    {
+      return _cachedItemType;
+    }
+
     _cachedItemType = ::g_type_from_name("TrackRowObject");
 
     if (_cachedItemType != G_TYPE_INVALID)

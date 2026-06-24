@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -33,6 +34,11 @@ namespace ao::gtk::test
       std::string album = "Album";
       std::string albumArtist = "AlbumArtist";
       std::string genre = "Genre";
+      std::string composer = "Composer";
+      std::string work = "Work";
+      std::string movement = "Movement";
+      std::string uri = "/tmp/test.flac";
+      std::vector<std::string> tags{};
       std::uint16_t year = 2020;
       std::uint16_t trackNumber = 1;
       std::uint16_t discNumber = 1;
@@ -58,16 +64,24 @@ namespace ao::gtk::test
           .album(spec.album)
           .albumArtist(spec.albumArtist)
           .genre(spec.genre)
+          .composer(spec.composer)
+          .work(spec.work)
+          .movement(spec.movement)
           .year(spec.year)
           .trackNumber(spec.trackNumber)
           .discNumber(spec.discNumber);
         builder.property()
-          .uri("/tmp/test.flac")
+          .uri(spec.uri)
           .duration(spec.duration)
           .bitrate(Bitrate{320000})
           .sampleRate(SampleRate{44100})
           .channels(Channels{2})
           .bitDepth(BitDepth{16});
+
+        for (auto const& tag : spec.tags)
+        {
+          builder.tags().add(tag);
+        }
 
         auto serializeResult = builder.serialize(txn, lib.dictionary(), lib.resources());
         REQUIRE(serializeResult);
@@ -166,6 +180,36 @@ namespace ao::gtk::test
       CHECK(row1Ptr->displayText(rt::TrackField::Artist) == row1Ptr->stringField(rt::TrackField::Artist));
       CHECK(*row1Ptr->displayText(rt::TrackField::Artist) == "New Artist");
       CHECK(row1Ptr->displayText(static_cast<rt::TrackField>(255)) == nullptr);
+    }
+
+    SECTION("UTF-8 metadata survives row materialization")
+    {
+      auto spec = TrackSpec{};
+      spec.title = "東京の歌";
+      spec.artist = "Björk";
+      spec.album = "Álbum del Niño";
+      spec.albumArtist = "Sigur Rós";
+      spec.genre = "Électronique";
+      spec.composer = "久石譲";
+      spec.work = "作品一";
+      spec.movement = "第一楽章";
+      spec.tags = {"夜", "ライブ"};
+
+      auto const id = testLibrary.addTrack(spec);
+      auto provider = TrackRowCache{testLibrary.runtime().library()};
+
+      auto const rowPtr = provider.trackRow(id);
+      REQUIRE(rowPtr);
+
+      CHECK(rowPtr->fieldText(rt::TrackField::Title) == "東京の歌");
+      CHECK(rowPtr->fieldText(rt::TrackField::Artist) == "Björk");
+      CHECK(rowPtr->fieldText(rt::TrackField::Album) == "Álbum del Niño");
+      CHECK(rowPtr->fieldText(rt::TrackField::AlbumArtist) == "Sigur Rós");
+      CHECK(rowPtr->fieldText(rt::TrackField::Genre) == "Électronique");
+      CHECK(rowPtr->fieldText(rt::TrackField::Composer) == "久石譲");
+      CHECK(rowPtr->fieldText(rt::TrackField::Work) == "作品一");
+      CHECK(rowPtr->fieldText(rt::TrackField::Movement) == "第一楽章");
+      CHECK(rowPtr->tags() == "夜, ライブ");
     }
 
     SECTION("Cache helper methods")

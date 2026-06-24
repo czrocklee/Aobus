@@ -21,9 +21,9 @@ namespace ao::gtk
 {
   namespace
   {
-    Glib::ustring toUString(std::string const& value)
+    Glib::ustring toUString(std::string&& value)
     {
-      return Glib::ustring{value.begin(), value.end()};
+      return Glib::ustring{std::move(value)};
     }
   }
 
@@ -32,19 +32,19 @@ namespace ao::gtk
   {
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromData(rt::TrackRow const& data) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromData(rt::TrackRow data) const
   {
     auto const rowPtr = TrackRowObject::create(data.id, *this);
 
-    rowPtr->populate(toUString(data.title),
-                     toUString(data.artist),
-                     toUString(data.album),
-                     toUString(data.albumArtist),
-                     toUString(data.genre),
-                     toUString(data.composer),
-                     toUString(data.work),
-                     toUString(data.movement),
-                     toUString(data.tags),
+    rowPtr->populate(toUString(std::move(data.title)),
+                     toUString(std::move(data.artist)),
+                     toUString(std::move(data.album)),
+                     toUString(std::move(data.albumArtist)),
+                     toUString(std::move(data.genre)),
+                     toUString(std::move(data.composer)),
+                     toUString(std::move(data.work)),
+                     toUString(std::move(data.movement)),
+                     toUString(std::move(data.tags)),
                      data.duration,
                      data.year,
                      data.discNumber,
@@ -74,15 +74,15 @@ namespace ao::gtk
     }
 
     auto scope = _reads.reader();
-    auto const optData = scope.trackRow(id);
+    auto optData = scope.trackRow(id);
 
     if (!optData)
     {
       return nullptr;
     }
 
-    auto const rowPtr = createRowFromData(*optData);
-    _rowCache[id] = rowPtr;
+    auto const rowPtr = createRowFromData(std::move(*optData));
+    _rowCache.emplace(id, rowPtr);
     return rowPtr;
   }
 

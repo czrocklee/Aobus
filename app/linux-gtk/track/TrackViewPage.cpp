@@ -50,6 +50,8 @@
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/sorter.h>
 #include <gtkmm/sortlistmodel.h>
+#include <gtkmm/widget.h>
+#include <pangomm/layout.h>
 
 #include <algorithm>
 #include <array>
@@ -120,39 +122,115 @@ namespace ao::gtk
       Glib::RefPtr<TrackListModel> _modelPtr;
     };
 
+    void configureSectionLabel(Gtk::Label& label)
+    {
+      label.set_halign(Gtk::Align::START);
+      label.set_ellipsize(Pango::EllipsizeMode::END);
+      label.set_single_line_mode(true);
+      label.set_lines(1);
+      label.set_xalign(0.0F);
+    }
+
+    class TrackSectionCoverSlot final : public Gtk::Widget
+    {
+    public:
+      TrackSectionCoverSlot(ImageWidget& imageWidget, std::int32_t size)
+        : _imageWidget{imageWidget}, _size{std::max(0, size)}
+      {
+        set_overflow(Gtk::Overflow::HIDDEN);
+        _imageWidget.setTargetSize(_size);
+        _imageWidget.setMaxRenderSize(_size, _size);
+        _imageWidget.setForceSquareTarget(true);
+        _imageWidget.set_halign(Gtk::Align::CENTER);
+        _imageWidget.set_valign(Gtk::Align::CENTER);
+        _imageWidget.set_expand(false);
+        _imageWidget.set_overflow(Gtk::Overflow::HIDDEN);
+        _imageWidget.set_parent(*this);
+      }
+
+      ~TrackSectionCoverSlot() override { _imageWidget.unparent(); }
+
+      TrackSectionCoverSlot(TrackSectionCoverSlot const&) = delete;
+      TrackSectionCoverSlot& operator=(TrackSectionCoverSlot const&) = delete;
+      TrackSectionCoverSlot(TrackSectionCoverSlot&&) = delete;
+      TrackSectionCoverSlot& operator=(TrackSectionCoverSlot&&) = delete;
+
+    protected:
+      Gtk::SizeRequestMode get_request_mode_vfunc() const override { return Gtk::SizeRequestMode::CONSTANT_SIZE; }
+
+      void measure_vfunc(Gtk::Orientation /*orientation*/,
+                         int /*forSize*/,
+                         int& minimum,
+                         int& natural,
+                         int& minimumBaseline,
+                         int& naturalBaseline) const override
+      {
+        minimum = _size;
+        natural = minimum;
+        minimumBaseline = -1;
+        naturalBaseline = -1;
+      }
+
+      void size_allocate_vfunc(int width, int height, int baseline) override
+      {
+        auto const side = std::min({width, height, _size});
+        auto const childX = std::max(0, (width - side) / 2);
+        auto const childY = std::max(0, (height - side) / 2);
+
+        measureImageForAllocation(side);
+        _imageWidget.size_allocate(Gtk::Allocation{childX, childY, side, side}, baseline);
+      }
+
+    private:
+      void measureImageForAllocation(std::int32_t side) const
+      {
+        std::int32_t minimum = 0;
+        std::int32_t natural = 0;
+        std::int32_t minimumBaseline = -1;
+        std::int32_t naturalBaseline = -1;
+        _imageWidget.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
+        _imageWidget.measure(Gtk::Orientation::VERTICAL, side, minimum, natural, minimumBaseline, naturalBaseline);
+      }
+
+      ImageWidget& _imageWidget;
+      std::int32_t _size = 0;
+    };
+
     class TrackSectionHeaderWidget final : public Gtk::Box
     {
     public:
       TrackSectionHeaderWidget(rt::Library const& reads, ThumbnailLoader& thumbnailLoader)
-        : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _coverArtController{_coverArt, reads, thumbnailLoader.cache()}
+        : Gtk::Box{Gtk::Orientation::HORIZONTAL}
+        , _coverArtSlot{_coverArt, layout::kSectionCoverLogicalSize}
+        , _coverArtController{_coverArt, reads, thumbnailLoader.cache()}
       {
         set_spacing(layout::kSpacingXLarge);
         add_css_class("ao-track-section-box");
 
         _coverArtController.enableThumbnailMode(thumbnailLoader, layout::kSectionCoverLogicalSize);
-        _coverArt.add_css_class("ao-track-section-cover");
-        _coverArt.set_valign(Gtk::Align::CENTER);
-        append(_coverArt);
+        _coverArtSlot.add_css_class("ao-track-section-cover");
+        _coverArtSlot.set_valign(Gtk::Align::CENTER);
+        append(_coverArtSlot);
 
         auto* const vbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+        vbox->set_hexpand(true);
         vbox->set_valign(Gtk::Align::CENTER);
         vbox->set_spacing(layout::kSpacingSmall);
         append(*vbox);
 
-        _primaryLabel.set_halign(Gtk::Align::START);
+        configureSectionLabel(_primaryLabel);
         _primaryLabel.add_css_class("ao-track-section-title");
         _primaryLabel.add_css_class("title-3");
-        _primaryLabel.set_xalign(0.0F);
         vbox->append(_primaryLabel);
 
         auto* const subtitleBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+        subtitleBox->set_hexpand(true);
         subtitleBox->set_spacing(layout::kSpacingMedium);
         subtitleBox->add_css_class("ao-track-section-subtitle");
         vbox->append(*subtitleBox);
 
-        _secondaryLabel.set_halign(Gtk::Align::START);
+        configureSectionLabel(_secondaryLabel);
         _secondaryLabel.add_css_class("dim-label");
-        _secondaryLabel.set_xalign(0.0F);
         subtitleBox->append(_secondaryLabel);
 
         _separatorLabel.set_text("•");
@@ -160,18 +238,16 @@ namespace ao::gtk
         _separatorLabel.set_halign(Gtk::Align::CENTER);
         subtitleBox->append(_separatorLabel);
 
-        _tertiaryLabel.set_halign(Gtk::Align::START);
+        configureSectionLabel(_tertiaryLabel);
         _tertiaryLabel.add_css_class("dim-label");
-        _tertiaryLabel.set_xalign(0.0F);
         subtitleBox->append(_tertiaryLabel);
 
-        _countLabel.set_halign(Gtk::Align::START);
+        configureSectionLabel(_countLabel);
         _countLabel.add_css_class("dim-label");
-        _countLabel.set_xalign(0.0F);
         subtitleBox->append(_countLabel);
       }
 
-      void bind(rt::TrackGroupSectionSnapshot const& snap, ::guint count)
+      void bind(rt::TrackGroupSectionSnapshot const& snap, ::guint count, bool reserveCoverSlot)
       {
         _primaryLabel.set_text(snap.primaryText);
         _secondaryLabel.set_text(snap.secondaryText);
@@ -190,21 +266,21 @@ namespace ao::gtk
         _secondaryLabel.set_visible(!snap.secondaryText.empty());
         _tertiaryLabel.set_visible(!snap.tertiaryText.empty());
         _separatorLabel.set_visible(!snap.secondaryText.empty() && !snap.tertiaryText.empty());
+        _coverArtSlot.set_visible(reserveCoverSlot);
 
-        if (snap.imageId != kInvalidResourceId)
+        if (reserveCoverSlot && snap.imageId != kInvalidResourceId)
         {
           _coverArtController.load(snap.imageId);
-          _coverArt.set_visible(true);
         }
         else
         {
           _coverArtController.clear();
-          _coverArt.set_visible(false);
         }
       }
 
     private:
       ImageWidget _coverArt;
+      TrackSectionCoverSlot _coverArtSlot;
       ResourceImageController _coverArtController;
       Gtk::Label _primaryLabel;
       Gtk::Label _secondaryLabel;
@@ -318,9 +394,11 @@ namespace ao::gtk
         }
 
         auto snap = rt::TrackGroupSectionSnapshot{};
+        bool reserveCoverSlot = false;
 
         if (auto* const proj = _modelPtr->projection(); proj != nullptr)
         {
+          reserveCoverSlot = proj->presentation().groupBy == rt::TrackGroupKey::Album;
           auto const start = headerPtr->get_start();
 
           if (auto const optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
@@ -338,7 +416,7 @@ namespace ao::gtk
           }
         }
 
-        widget->bind(snap, headerPtr->get_n_items());
+        widget->bind(snap, headerPtr->get_n_items(), reserveCoverSlot);
       });
 
     _groupModelPtr->set_section_sorter(ProjectionGroupSectionSorter::create(_modelPtr));

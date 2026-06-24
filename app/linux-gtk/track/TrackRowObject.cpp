@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -78,15 +79,15 @@ namespace ao::gtk
     return true;
   }
 
-  void TrackRowObject::populate(Glib::ustring const& title,
-                                Glib::ustring const& artist,
-                                Glib::ustring const& album,
-                                Glib::ustring const& albumArtist,
-                                Glib::ustring const& genre,
-                                Glib::ustring const& composer,
-                                Glib::ustring const& work,
-                                Glib::ustring const& movement,
-                                Glib::ustring const& tags,
+  void TrackRowObject::populate(Glib::ustring title,
+                                Glib::ustring artist,
+                                Glib::ustring album,
+                                Glib::ustring albumArtist,
+                                Glib::ustring genre,
+                                Glib::ustring composer,
+                                Glib::ustring work,
+                                Glib::ustring movement,
+                                Glib::ustring tags,
                                 std::chrono::milliseconds duration,
                                 std::uint16_t year,
                                 std::uint16_t discNumber,
@@ -105,16 +106,16 @@ namespace ao::gtk
                                 std::uint64_t modifiedTime,
                                 library::FileStatus status)
   {
-    _text[static_cast<std::size_t>(rt::TrackField::Title)] = title;
-    _text[static_cast<std::size_t>(rt::TrackField::Artist)] = artist;
-    _text[static_cast<std::size_t>(rt::TrackField::Album)] = album;
-    _text[static_cast<std::size_t>(rt::TrackField::AlbumArtist)] = albumArtist;
-    _text[static_cast<std::size_t>(rt::TrackField::Genre)] = genre;
-    _text[static_cast<std::size_t>(rt::TrackField::Composer)] = composer;
-    _text[static_cast<std::size_t>(rt::TrackField::Work)] = work;
-    _text[static_cast<std::size_t>(rt::TrackField::Movement)] = movement;
+    _text[static_cast<std::size_t>(rt::TrackField::Title)] = std::move(title);
+    _text[static_cast<std::size_t>(rt::TrackField::Artist)] = std::move(artist);
+    _text[static_cast<std::size_t>(rt::TrackField::Album)] = std::move(album);
+    _text[static_cast<std::size_t>(rt::TrackField::AlbumArtist)] = std::move(albumArtist);
+    _text[static_cast<std::size_t>(rt::TrackField::Genre)] = std::move(genre);
+    _text[static_cast<std::size_t>(rt::TrackField::Composer)] = std::move(composer);
+    _text[static_cast<std::size_t>(rt::TrackField::Work)] = std::move(work);
+    _text[static_cast<std::size_t>(rt::TrackField::Movement)] = std::move(movement);
 
-    _tags = tags;
+    _tags = std::move(tags);
     _duration = duration;
     _year = year;
     _discNumber = discNumber;

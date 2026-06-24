@@ -251,7 +251,7 @@
 
 /* Modern Track Controls Bar (The Header Island) */
 .ao-theme-modern .ao-track-controls-bar-modern {
-  padding: 24px 20px 12px 20px;
+  padding: 12px 20px 8px 20px;
   border-bottom: none;
 }
 
@@ -456,8 +456,9 @@
 }
 
 /* Modern Table row polish */
-.ao-theme-modern columnview {
-  background: transparent;
+.ao-theme-modern columnview,
+.ao-theme-modern columnview>listview {
+  background: @view_bg_color;
 }
 
 .ao-theme-modern columnview row {
