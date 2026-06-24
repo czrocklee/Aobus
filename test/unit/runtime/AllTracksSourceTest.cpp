@@ -113,4 +113,4 @@ namespace ao::rt::test
       REQUIRE(source.indexOf(TrackId{10}) == std::nullopt);
     }
   }
-}
+} // namespace ao::rt::test

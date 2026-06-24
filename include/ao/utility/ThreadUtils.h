@@ -23,4 +23,4 @@ namespace ao
     ::pthread_setname_np(::pthread_self(), buf.data());
 #endif
   }
-}
+} // namespace ao

@@ -160,4 +160,4 @@ namespace ao::rt
 
     return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
   }
-}
+} // namespace ao::rt

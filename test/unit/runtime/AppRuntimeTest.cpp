@@ -42,7 +42,7 @@ namespace ao::rt::test
         return {};
       }
     };
-  }
+  } // namespace
 
   TEST_CASE("AppRuntime - Coverage", "[runtime][unit]")
   {

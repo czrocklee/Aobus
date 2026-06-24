@@ -88,4 +88,4 @@ namespace ao::rt
   {
     return _optCurrentIndex;
   }
-}
+} // namespace ao::rt

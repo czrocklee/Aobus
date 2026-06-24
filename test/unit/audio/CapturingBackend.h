@@ -171,7 +171,7 @@ namespace ao::audio::test
     // Trigger callbacks
     void fireRouteReady(std::string_view anchor)
     {
-      auto* t = (IRenderTarget*)nullptr;
+      IRenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         t = _target;
@@ -185,7 +185,7 @@ namespace ao::audio::test
 
     void fireFormatChanged(Format const& fmt)
     {
-      auto* t = (IRenderTarget*)nullptr;
+      IRenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         _format = fmt;
@@ -200,7 +200,7 @@ namespace ao::audio::test
 
     void fireBackendError(std::string_view msg)
     {
-      auto* t = (IRenderTarget*)nullptr;
+      IRenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         t = _target;
@@ -214,7 +214,7 @@ namespace ao::audio::test
 
     void fireDrainComplete()
     {
-      auto* t = (IRenderTarget*)nullptr;
+      IRenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         t = _target;
@@ -228,7 +228,7 @@ namespace ao::audio::test
 
     void firePropertyChanged(PropertyId id)
     {
-      auto* t = (IRenderTarget*)nullptr;
+      IRenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         t = _target;

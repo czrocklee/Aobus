@@ -45,4 +45,4 @@ namespace ao::tag
 
     return {};
   }
-}
+} // namespace ao::tag

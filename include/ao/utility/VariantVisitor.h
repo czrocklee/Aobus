@@ -18,7 +18,7 @@ namespace ao::utility
 
     template<typename... Ts>
     Overload(Ts...) -> Overload<Ts...>;
-  }
+  } // namespace detail
 
   template<typename... Ts>
     requires(std::is_class_v<std::remove_cvref_t<Ts>> && ...)
@@ -26,4 +26,4 @@ namespace ao::utility
   {
     return detail::Overload{std::forward<Ts>(ts)...};
   }
-}
+} // namespace ao::utility

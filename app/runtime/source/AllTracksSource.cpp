@@ -75,4 +75,4 @@ namespace ao::rt
 
     return std::nullopt;
   }
-}
+} // namespace ao::rt

@@ -19,11 +19,8 @@
 
 namespace ao::fleet
 {
-  namespace
-  {
-    constexpr auto kDefaultAgentTimeout = std::chrono::minutes{20};
-    constexpr auto kDefaultChurnLines = std::size_t{2'000};
-  } // namespace
+  inline constexpr auto kDefaultAgentTimeout = std::chrono::minutes{20};
+  inline constexpr auto kDefaultChurnLines = std::size_t{2'000};
 
   // Every enum below pairs with a kXxxNames table: the single source of truth shared by
   // toString and the YAML parsers, so a new enumerator is wired up in exactly one place.

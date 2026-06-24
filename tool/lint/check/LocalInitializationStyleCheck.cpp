@@ -354,7 +354,7 @@ namespace clang::tidy::readability
 
       return info;
     }
-  }
+  } // namespace
 
   void LocalInitializationStyleCheck::check(MatchFinder::MatchResult const& result)
   {

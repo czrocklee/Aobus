@@ -109,7 +109,7 @@ namespace ao::audio::backend::test
 
       bool isValid() const { return proxyPtr != nullptr; }
     };
-  }
+  } // namespace
 
   TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integration][pipewire]")
   {

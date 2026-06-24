@@ -187,7 +187,7 @@ namespace ao::tag::mpeg::test
       REQUIRE(result);
       return *result;
     }
-  }
+  } // namespace
 
   TEST_CASE("MPEG File - parses metadata and cover art", "[tag][unit][mpeg][file]")
   {

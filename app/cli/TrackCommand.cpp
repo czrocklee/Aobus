@@ -282,7 +282,7 @@ namespace ao::cli
         }
       }
     }
-  }
+  } // namespace
 
   void setupTrackCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
@@ -349,4 +349,4 @@ namespace ao::cli
                    std::cout);
       });
   }
-}
+} // namespace ao::cli

@@ -6,6 +6,10 @@
 #include "TrackSource.h"
 #include <ao/Type.h>
 
+#include <cstddef>
+#include <flat_set>
+#include <optional>
+
 namespace ao::library
 {
   class TrackStore;
@@ -15,10 +19,6 @@ namespace ao::lmdb
 {
   class ReadTransaction;
 }
-
-#include <cstddef>
-#include <flat_set>
-#include <optional>
 
 namespace ao::rt
 {
@@ -54,4 +54,4 @@ namespace ao::rt
     library::TrackStore& _store;
     std::flat_set<TrackId> _trackIds;
   };
-}
+} // namespace ao::rt

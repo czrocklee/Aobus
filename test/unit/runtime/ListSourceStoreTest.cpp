@@ -237,4 +237,4 @@ namespace ao::rt::test
       REQUIRE(&store.sourceFor(listId) == &store.allTracks());
     }
   }
-}
+} // namespace ao::rt::test

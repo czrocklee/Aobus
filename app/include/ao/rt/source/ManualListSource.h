@@ -70,4 +70,4 @@ namespace ao::rt
     std::vector<TrackId> _trackIds;
     TrackSource* _source = nullptr;
   };
-}
+} // namespace ao::rt

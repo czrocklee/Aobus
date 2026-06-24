@@ -40,4 +40,4 @@ namespace ao::gtk::layout
   private:
     ComponentRegistry const& _registry;
   };
-}
+} // namespace ao::gtk::layout

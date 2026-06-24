@@ -106,4 +106,4 @@ namespace ao::uimodel::input
      */
     std::string toString() const;
   };
-}
+} // namespace ao::uimodel::input

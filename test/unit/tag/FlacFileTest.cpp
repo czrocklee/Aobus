@@ -92,7 +92,7 @@ namespace ao::tag::flac::test
       REQUIRE(result);
       return *result;
     }
-  }
+  } // namespace
 
   TEST_CASE("FLAC File - parses metadata and audio properties", "[tag][unit][flac][file]")
   {

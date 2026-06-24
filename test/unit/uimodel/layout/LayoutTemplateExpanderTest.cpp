@@ -189,4 +189,4 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.type.find("[TemplateError]") != std::string::npos);
     CHECK(expanded.type.find("Recursive template loop") != std::string::npos);
   }
-}
+} // namespace ao::uimodel::layout::test

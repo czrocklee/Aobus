@@ -49,7 +49,7 @@ namespace ao::rt
       bool& _replaying;
       bool _previous;
     };
-  }
+  } // namespace
 
   struct WorkspaceService::Impl final
   {

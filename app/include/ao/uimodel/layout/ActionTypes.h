@@ -112,4 +112,4 @@ namespace ao::uimodel::layout
     ActionActivationResult result = ActionActivationResult::UnknownAction;
     ActionState state = {};
   };
-}
+} // namespace ao::uimodel::layout

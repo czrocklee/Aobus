@@ -209,4 +209,4 @@ namespace ao::gtk::layout::test
     REQUIRE(stateDoc.components.size() == 1);
     CHECK(stateDoc.components.contains("live-split"));
   }
-}
+} // namespace ao::gtk::layout::test

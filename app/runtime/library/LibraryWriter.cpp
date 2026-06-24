@@ -166,7 +166,7 @@ namespace ao::rt
         throwStorageError(action, result.error());
       }
     }
-  }
+  } // namespace
 
   struct LibraryWriter::Impl final
   {

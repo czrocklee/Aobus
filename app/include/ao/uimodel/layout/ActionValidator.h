@@ -32,4 +32,4 @@ namespace ao::uimodel::layout
                                                 ComponentCatalog const& components,
                                                 ActionCatalog const& actions,
                                                 ActionBindingContextResolver const& resolveBindingContext);
-}
+} // namespace ao::uimodel::layout

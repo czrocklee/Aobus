@@ -156,4 +156,4 @@ namespace ao::uimodel::layout::test
       CHECK(nudgeAbsoluteCanvasRect(start, AbsoluteCanvasNudgeDirection::Down, true, 16).y == 66);
     }
   }
-}
+} // namespace ao::uimodel::layout::test

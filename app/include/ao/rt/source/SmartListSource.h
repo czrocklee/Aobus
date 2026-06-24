@@ -6,7 +6,6 @@
 #include "TrackSource.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/query/ExecutionPlan.h>
 #include <ao/query/PlanEvaluator.h>
 
 #include <cstddef>
@@ -18,6 +17,11 @@
 namespace ao::library
 {
   class MusicLibrary;
+}
+
+namespace ao::query
+{
+  struct ExecutionPlan;
 }
 
 namespace ao::rt
@@ -85,4 +89,4 @@ namespace ao::rt
     QueryState _staged;
     bool _dirty = true;
   };
-}
+} // namespace ao::rt

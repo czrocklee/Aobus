@@ -806,8 +806,11 @@ namespace ao::audio::backend
     {
       if (isSinkMediaClass(node.mediaClass) && !sinkNodeBindings.contains(id))
       {
-        auto* proxy = ::pw_registry_bind(
-          registryPtr.get(), id, PW_TYPE_INTERFACE_Node, std::min(node.version, (std::uint32_t)PW_VERSION_NODE), 0);
+        auto* proxy = ::pw_registry_bind(registryPtr.get(),
+                                         id,
+                                         PW_TYPE_INTERFACE_Node,
+                                         std::min(node.version, static_cast<std::uint32_t>(PW_VERSION_NODE)),
+                                         0);
 
         if (proxy != nullptr)
         {

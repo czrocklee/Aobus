@@ -56,7 +56,7 @@ namespace ao::uimodel::input
 
       return std::string{trimmed};
     }
-  }
+  } // namespace
 
   std::optional<KeyChord> KeyChord::parse(std::string_view text)
   {
@@ -148,4 +148,4 @@ namespace ao::uimodel::input
     result.append(key);
     return result;
   }
-}
+} // namespace ao::uimodel::input

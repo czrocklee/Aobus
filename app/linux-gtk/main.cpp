@@ -378,7 +378,7 @@ namespace
     releaseWindows(*appPtr, windows);
     return exitCode;
   }
-}
+} // namespace
 
 int main(int argc, char* argv[])
 {

@@ -5,16 +5,13 @@
 
 #include <ao/library/TrackView.h>
 
-namespace ao::query
-{
-  struct ExecutionPlan;
-}
-
 #include <cstdint>
 #include <vector>
 
 namespace ao::query
 {
+  struct ExecutionPlan;
+
   /**
    * PlanEvaluator - Fast execution engine for compiled queries.
    *

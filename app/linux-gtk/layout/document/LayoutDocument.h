@@ -29,4 +29,4 @@ namespace ao::gtk::layout
   {
     return getBuiltInGtkTemplates();
   }
-}
+} // namespace ao::gtk::layout

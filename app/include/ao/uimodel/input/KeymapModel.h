@@ -95,4 +95,4 @@ namespace ao::uimodel::input
 
   /// Canonical application default keymap (neutral tokens).
   KeymapBindings defaultKeymap();
-}
+} // namespace ao::uimodel::input

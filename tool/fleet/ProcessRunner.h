@@ -14,11 +14,8 @@
 
 namespace ao::fleet
 {
-  namespace
-  {
-    constexpr auto kDefaultProcessTimeout = std::chrono::minutes{20};
-    constexpr auto kDefaultTerminationGracePeriod = std::chrono::seconds{2};
-  } // namespace
+  inline constexpr auto kDefaultProcessTimeout = std::chrono::minutes{20};
+  inline constexpr auto kDefaultTerminationGracePeriod = std::chrono::seconds{2};
 
   struct ProcessRequest
   {

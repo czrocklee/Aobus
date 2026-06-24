@@ -35,7 +35,7 @@ namespace ao::gtk
       bool isSmart = false;
       std::string localExpression;
     };
-  }
+  } // namespace
 
   ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::Library const& reads)
   {

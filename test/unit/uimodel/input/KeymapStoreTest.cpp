@@ -31,7 +31,7 @@ namespace ao::uimodel::input::test
         {"playback.next", {chord("Ctrl+Right")}},
       };
     }
-  }
+  } // namespace
 
   TEST_CASE("loadKeymap returns defaults when the config group is absent", "[input][unit][keymapstore]")
   {
@@ -78,4 +78,4 @@ namespace ao::uimodel::input::test
     auto const reloaded = loadKeymap(store, newDefaults);
     CHECK(reloaded.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+Shift+P")});
   }
-}
+} // namespace ao::uimodel::input::test

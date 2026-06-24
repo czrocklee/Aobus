@@ -483,7 +483,7 @@ namespace ao::query
 
       return -static_cast<std::int64_t>(total);
     }
-  }
+  } // namespace
 
   QueryCompiler::QueryCompiler(library::DictionaryStore* dict)
     : _dict{dict}

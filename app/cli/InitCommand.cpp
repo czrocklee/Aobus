@@ -122,11 +122,11 @@ namespace ao::cli
         std::cerr << "failed to commit imported tracks: " << result.error().message << '\n';
       }
     }
-  }
+  } // namespace
 
   void setupInitCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
     auto* const cmd = app.add_subcommand("init", "Scan current directory and initialize library");
     cmd->callback([&runtime] { scanAndImport(runtime.musicLibrary(), std::cout); });
   }
-}
+} // namespace ao::cli

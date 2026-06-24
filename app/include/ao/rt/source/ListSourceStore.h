@@ -54,4 +54,4 @@ namespace ao::rt
 
     boost::unordered_flat_map<ListId, std::unique_ptr<TrackSource>, std::hash<ListId>> _sources;
   };
-}
+} // namespace ao::rt

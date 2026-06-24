@@ -131,4 +131,4 @@ namespace ao::library
     lmdb::Database::Writer _writer;
     friend class ResourceStore;
   };
-}
+} // namespace ao::library

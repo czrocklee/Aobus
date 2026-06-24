@@ -78,4 +78,4 @@ namespace ao::gtk::layout::test
       CHECK(diagnostics.empty());
     }
   }
-}
+} // namespace ao::gtk::layout::test

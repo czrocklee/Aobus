@@ -137,7 +137,7 @@ namespace ao::query::test
       std::visit(canonicalizer, expr);
       return canonicalizer.oss.str();
     }
-  }
+  } // namespace
 
   TEST_CASE("Parser - String Literal", "[query][unit][parser]")
   {

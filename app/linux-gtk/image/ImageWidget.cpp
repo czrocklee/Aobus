@@ -60,7 +60,7 @@ namespace ao::gtk
 
       return Gdk::Pixbuf::create_subpixbuf(pixbufPtr, cropX, cropY, cropWidth, cropHeight);
     }
-  }
+  } // namespace
 
   RenderTarget fitSourceIntoTarget(RenderTarget const source, RenderTarget const target)
   {

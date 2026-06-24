@@ -179,4 +179,4 @@ namespace ao::uimodel::layout::test
       CHECK(diagnostics[0].message == "Action slot is not supported by this component policy");
     }
   }
-}
+} // namespace ao::uimodel::layout::test

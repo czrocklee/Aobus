@@ -34,7 +34,7 @@ namespace ao::log
       loggerPtr->set_level(spdlog::level::off);
       return loggerPtr;
     }
-  }
+  } // namespace
 
   std::shared_ptr<spdlog::logger> Log::_appLoggerPtr = makeNullLogger("app");
   std::shared_ptr<spdlog::logger> Log::_audioLoggerPtr = makeNullLogger("audio");

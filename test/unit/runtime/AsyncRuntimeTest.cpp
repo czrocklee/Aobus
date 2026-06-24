@@ -72,7 +72,7 @@ namespace ao::rt::test
     private:
       int _savedFd{-1};
     };
-  }
+  } // namespace
 
   TEST_CASE("Async runtime - Basic spawn and wait", "[async][unit][runtime]")
   {

@@ -370,4 +370,4 @@ namespace ao::tag::mpeg::id3v2
     ViewT _view;
     std::size_t _sizeLeft;
   };
-}
+} // namespace ao::tag::mpeg::id3v2

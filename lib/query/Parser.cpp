@@ -185,7 +185,7 @@ namespace
     static constexpr auto rule = dsl::p<Expr> + dsl::eof;
     static constexpr auto value = lexy::forward<Expression>;
   };
-}
+} // namespace
 
 namespace ao::query
 {
@@ -210,7 +210,7 @@ namespace ao::query
 
     return makeError(Error::Code::FormatRejected, std::format("failed to parse query expression '{}'", expr));
   }
-}
+} // namespace ao::query
 
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop

@@ -38,4 +38,4 @@ namespace ao::gtk
    * modifier bits (Ctrl/Shift/Alt/Super) are retained from @p state.
    */
   std::optional<uimodel::input::KeyChord> fromGtkKeyval(guint keyval, Gdk::ModifierType state);
-}
+} // namespace ao::gtk

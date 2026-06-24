@@ -91,4 +91,4 @@ namespace ao::rt
 
     friend class SmartListEvaluator;
   };
-}
+} // namespace ao::rt

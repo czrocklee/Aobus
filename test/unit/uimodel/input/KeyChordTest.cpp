@@ -129,4 +129,4 @@ namespace ao::uimodel::input::test
     CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Shift+P"));
     CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Q"));
   }
-}
+} // namespace ao::uimodel::input::test

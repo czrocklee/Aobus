@@ -22,4 +22,4 @@ namespace ao::yaml
 
   void write(ryml::NodeRef node, uimodel::layout::LayoutDocument const& value);
   bool read(ryml::ConstNodeRef node, uimodel::layout::LayoutDocument& value);
-}
+} // namespace ao::yaml

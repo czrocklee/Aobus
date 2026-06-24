@@ -59,7 +59,7 @@ namespace ao::audio
 
       return sample;
     }
-  }
+  } // namespace
 
   struct FlacDecoderSession::Impl final
   {

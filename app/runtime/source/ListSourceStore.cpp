@@ -208,4 +208,4 @@ namespace ao::rt
     _sources.emplace(listId, std::move(manualSourcePtr));
     return ref;
   }
-}
+} // namespace ao::rt

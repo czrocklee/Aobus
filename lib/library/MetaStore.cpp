@@ -51,4 +51,4 @@ namespace ao::library
   {
     std::ignore = _database.writer(txn).update(kHeaderRecordId, utility::bytes::view(header));
   }
-}
+} // namespace ao::library

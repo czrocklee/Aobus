@@ -37,7 +37,7 @@ namespace ao::utility::test
     {
       std::int32_t x = 0;
     };
-  }
+  } // namespace
 
   TEST_CASE("ByteView - View creation and layout casts", "[utility][unit][byte_view]")
   {

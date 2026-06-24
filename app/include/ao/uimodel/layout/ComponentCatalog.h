@@ -120,4 +120,4 @@ namespace ao::uimodel::layout
     boost::unordered_flat_map<std::string, std::size_t, utility::TransparentStringHash, utility::TransparentStringEqual>
       _descriptorIndexMap = {};
   };
-}
+} // namespace ao::uimodel::layout

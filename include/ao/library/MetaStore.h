@@ -28,4 +28,4 @@ namespace ao::library
   private:
     lmdb::Database _database;
   };
-}
+} // namespace ao::library

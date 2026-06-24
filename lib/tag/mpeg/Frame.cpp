@@ -90,7 +90,7 @@ namespace ao::tag::mpeg
 
       return nullptr;
     }
-  }
+  } // namespace
 
   bool FrameView::isValid() const
   {

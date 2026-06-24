@@ -205,7 +205,7 @@ namespace ao::audio::backend::detail
         }
       }
     }
-  }
+  } // namespace
 
   void parseEnumFormat(::spa_pod const* param, DeviceCapabilities& caps)
   {
@@ -273,7 +273,7 @@ namespace ao::audio::backend::detail
       output.assign_range(values | std::views::take(count));
       return true;
     }
-  }
+  } // namespace
 
   void mergeSinkProps(SinkProps& sinkProps, ::spa_pod const* param)
   {

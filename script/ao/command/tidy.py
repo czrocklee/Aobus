@@ -49,6 +49,9 @@ STRICT_CHECKS = ",".join(
         "modernize-*",  # modern C++ usage
         "readability-*",  # readability improvements
         "portability-*",  # portability concerns
+        "google-build-namespaces",
+        "google-readability-casting",
+        "google-readability-namespace-comments",
         # === disabled: false positives or project preference ===
         "-bugprone-easily-swappable-parameters",  # frequent false positives
         "-cppcoreguidelines-avoid-magic-numbers",  # handled by aobus readability check
@@ -236,7 +239,118 @@ def filter_fixes_yaml(text: str) -> str:
     return "".join(output)
 
 
+def parse_diagnostics_from_yaml(text: str) -> list[str]:
+    blocks: list[str] = []
+    current_block: list[str] = []
+    in_diagnostics = False
+
+    for line in text.splitlines(keepends=True):
+        if line.startswith("Diagnostics:"):
+            in_diagnostics = True
+            continue
+        if not in_diagnostics:
+            continue
+
+        if line.startswith("  - DiagnosticName:"):
+            if current_block:
+                blocks.append("".join(current_block))
+            current_block = [line]
+        elif line.startswith("    ") or line.strip() == "":
+            if current_block:
+                current_block.append(line)
+        else:
+            if current_block:
+                blocks.append("".join(current_block))
+                current_block = []
+            in_diagnostics = False
+
+    if current_block:
+        blocks.append("".join(current_block))
+
+    return blocks
+
+
+def normalize_block_paths(block: str) -> str:
+    lines = []
+    for line in block.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("FilePath:"):
+            indent_len = line.find("FilePath:")
+            indent = line[:indent_len]
+            path_str = stripped.split(":", 1)[1].strip().strip("'\"")
+            canonical_path = Path(path_str).resolve().as_posix()
+            lines.append(f"{indent}FilePath:        '{canonical_path}'\n")
+        else:
+            lines.append(line)
+    return "".join(lines)
+
+
+def extract_replacement_key(block: str) -> str:
+    key_parts = []
+    for line in block.splitlines():
+        line_stripped = line.strip()
+        if (
+            line_stripped.startswith("FilePath:")
+            or line_stripped.startswith("Offset:")
+            or line_stripped.startswith("Length:")
+            or line_stripped.startswith("ReplacementText:")
+        ):
+            key_parts.append(line_stripped)
+    return "\n".join(key_parts)
+
+
+def deduplicate_fixes(tmpdir: Path) -> None:
+    yaml_files = list(tmpdir.glob("*.yaml"))
+    if not yaml_files:
+        return
+
+    unique_diagnostics: list[str] = []
+    seen: set[str] = set()
+
+    for yaml_file in yaml_files:
+        content = yaml_file.read_text(encoding="utf-8")
+        blocks = parse_diagnostics_from_yaml(content)
+        for block in blocks:
+            normalized_block = normalize_block_paths(block)
+            rep_key = extract_replacement_key(normalized_block)
+            key = rep_key if rep_key else normalized_block.strip()
+            if key not in seen:
+                seen.add(key)
+                unique_diagnostics.append(normalized_block)
+
+    # Use MainSourceFile from the first file found
+    main_source = "PROJECT_ROOT"
+    for yaml_file in yaml_files:
+        content = yaml_file.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            if line.startswith("MainSourceFile:"):
+                main_source = line.split(":", 1)[1].strip().strip("'\"")
+                break
+        if main_source != "PROJECT_ROOT":
+            break
+
+    # Unlink all original yaml files
+    for yaml_file in yaml_files:
+        yaml_file.unlink()
+
+    # Write a single consolidated fixes file
+    consolidated_file = tmpdir / "consolidated_fixes.yaml"
+    output = []
+    output.append("---")
+    output.append(f"MainSourceFile:  '{main_source}'")
+    if unique_diagnostics:
+        output.append("Diagnostics:")
+        for diag in unique_diagnostics:
+            output.append(diag.rstrip("\n"))
+    else:
+        output.append("Diagnostics:     []")
+    output.append("...")
+
+    consolidated_file.write_text("\n".join(output) + "\n", encoding="utf-8")
+
+
 def apply_fixes(tmpdir: Path) -> bool:
+    deduplicate_fixes(tmpdir)
     yaml_files = sorted(tmpdir.glob("*.yaml"))
     for yaml_file in yaml_files:
         yaml_file.write_text(filter_fixes_yaml(yaml_file.read_text(encoding="utf-8")), encoding="utf-8")

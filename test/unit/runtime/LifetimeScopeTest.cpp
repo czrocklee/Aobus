@@ -115,7 +115,7 @@ namespace ao::rt::test
       co_await runtime->resumeOnCallbackExecutor();
       completed.set(true);
     }
-  }
+  } // namespace
 
   TEST_CASE("LifetimeScope - Completion without cancellation", "[async][unit][runtime]")
   {

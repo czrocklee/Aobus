@@ -1623,4 +1623,4 @@ namespace ao::rt::test
     CHECK(t.largeInEvalDuration < std::chrono::minutes{10});
     CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
-}
+} // namespace ao::rt::test

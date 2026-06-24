@@ -17,4 +17,4 @@ namespace ao::tag::flac
   private:
     Result<library::TrackBuilder> loadTrackImpl() const override;
   };
-}
+} // namespace ao::tag::flac

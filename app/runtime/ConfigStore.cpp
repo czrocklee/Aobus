@@ -69,4 +69,4 @@ namespace ao::rt
 
     return {};
   }
-}
+} // namespace ao::rt

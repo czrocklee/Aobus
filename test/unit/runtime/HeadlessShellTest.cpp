@@ -154,4 +154,4 @@ namespace ao::rt::test
       CHECK(restoredState.groupBy == TrackGroupKey::None);
     }
   }
-}
+} // namespace ao::rt::test

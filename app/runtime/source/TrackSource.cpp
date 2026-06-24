@@ -90,4 +90,4 @@ namespace ao::rt
       obs->onRemoved(id, index);
     }
   }
-}
+} // namespace ao::rt

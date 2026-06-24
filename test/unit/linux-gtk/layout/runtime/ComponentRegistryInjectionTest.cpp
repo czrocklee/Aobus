@@ -93,4 +93,4 @@ namespace ao::gtk::layout::test
       CHECK(it->kind == PropertyKind::String);
     }
   }
-}
+} // namespace ao::gtk::layout::test

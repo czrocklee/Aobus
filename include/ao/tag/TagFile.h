@@ -101,4 +101,4 @@ namespace ao::tag
       return owner.stashOwnedString(std::move(value));
     }
   } // namespace detail
-}
+} // namespace ao::tag

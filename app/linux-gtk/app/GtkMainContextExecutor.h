@@ -39,4 +39,4 @@ namespace ao::gtk
     std::vector<std::move_only_function<void()>> _tasks;
     std::thread::id _ownerThread;
   };
-}
+} // namespace ao::gtk

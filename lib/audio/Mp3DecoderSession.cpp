@@ -62,7 +62,7 @@ namespace ao::audio
       char const* const detail = error == MPG123_ERR ? ::mpg123_strerror(handle) : ::mpg123_plain_strerror(error);
       return detail != nullptr ? std::string{detail} : std::string{"Unknown mpg123 error"};
     }
-  }
+  } // namespace
 
   struct Mp3DecoderSession::Impl final
   {

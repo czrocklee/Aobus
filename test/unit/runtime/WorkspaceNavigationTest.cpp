@@ -671,4 +671,4 @@ namespace ao::rt::test
     CHECK(layout.openViews.size() == 1);
     CHECK(layout.activeViewId == layout.openViews.front());
   }
-}
+} // namespace ao::rt::test

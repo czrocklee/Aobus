@@ -193,4 +193,4 @@ namespace ao::uimodel::layout
 
     return rect;
   }
-}
+} // namespace ao::uimodel::layout

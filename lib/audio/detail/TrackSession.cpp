@@ -53,7 +53,7 @@ namespace ao::audio::detail
 
       return createDecoderSession(path, outputFormat);
     }
-  }
+  } // namespace
 
   Result<TrackSession::OpenedTrack> TrackSession::create(PlaybackInput const& input,
                                                          Device const& device,

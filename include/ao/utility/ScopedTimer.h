@@ -39,4 +39,4 @@ namespace ao::utility
     std::string_view _label;
     Clock::time_point _start;
   };
-}
+} // namespace ao::utility

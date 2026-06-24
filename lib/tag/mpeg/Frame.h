@@ -45,4 +45,4 @@ namespace ao::tag::mpeg
   };
 
   std::optional<FrameView> locate(void const* buffer, std::size_t size);
-}
+} // namespace ao::tag::mpeg

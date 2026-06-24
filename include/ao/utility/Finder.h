@@ -32,4 +32,4 @@ namespace ao::utility
     std::string _rootPath;
     std::set<std::string> _extensions;
   };
-}
+} // namespace ao::utility

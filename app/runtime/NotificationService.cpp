@@ -154,4 +154,4 @@ namespace ao::rt
       _implPtr->changedSignal.emit();
     }
   }
-}
+} // namespace ao::rt

@@ -4,6 +4,8 @@
 #include "app/KeyboardShortcutsWindow.h"
 
 #include "app/GtkAccelTranslator.h"
+#include <ao/uimodel/input/KeyChord.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/ActionCatalog.h>
 #include <ao/uimodel/layout/ActionTypes.h>
 
@@ -53,7 +55,7 @@ namespace ao::gtk
       return state & (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::ALT_MASK |
                       Gdk::ModifierType::SUPER_MASK);
     }
-  }
+  } // namespace
 
   KeyboardShortcutsWindow::KeyboardShortcutsWindow(uimodel::layout::ActionCatalog const& catalog,
                                                    uimodel::input::KeymapModel keymap,

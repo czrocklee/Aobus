@@ -77,4 +77,4 @@ namespace ao
   {
     throw ExceptionType{std::string{what}, loc.file_name(), static_cast<std::int32_t>(loc.line())};
   }
-}
+} // namespace ao

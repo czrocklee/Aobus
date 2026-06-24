@@ -70,4 +70,4 @@ namespace ao::rt
   private:
     std::deque<std::move_only_function<void(Args...)>> _handlers;
   };
-}
+} // namespace ao::rt

@@ -62,4 +62,4 @@ namespace ao::gtk
     sigc::connection _reloadDebounceConnection;
     sigc::signal<void()> _refreshedSignal;
   };
-}
+} // namespace ao::gtk

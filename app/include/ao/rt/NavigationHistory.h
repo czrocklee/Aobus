@@ -44,4 +44,4 @@ namespace ao::rt
     std::optional<std::size_t> _optCurrentIndex;
     std::size_t _maxSize;
   };
-}
+} // namespace ao::rt

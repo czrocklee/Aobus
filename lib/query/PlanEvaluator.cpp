@@ -307,7 +307,7 @@ namespace ao::query
 
       reg(registers, instr.operand) = set.numericValues.contains(reg(registers, instr.operand)) ? 1 : 0;
     }
-  }
+  } // namespace
 
   bool PlanEvaluator::matches(ExecutionPlan const& plan, library::TrackView const& track) const
   {

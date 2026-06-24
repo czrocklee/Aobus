@@ -23,4 +23,4 @@ namespace ao::gtk::layout
     return uimodel::layout::ActionBindingContext{
       .slot = property.optActionBinding->slot, .hasAnchor = true, .hasFocusedView = true, .componentType = node.type};
   }
-}
+} // namespace ao::gtk::layout

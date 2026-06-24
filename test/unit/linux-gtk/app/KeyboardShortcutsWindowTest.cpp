@@ -58,7 +58,7 @@ namespace ao::gtk::test
     {
       return std::ranges::contains(chords, c);
     }
-  }
+  } // namespace
 
   TEST_CASE("KeyboardShortcutsWindow lists only shortcut-eligible actions", "[gtk][app][shortcuts]")
   {

@@ -57,7 +57,7 @@ namespace ao::cli
 
       os << '\n';
     }
-  }
+  } // namespace
 
   void setupTagCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
@@ -110,4 +110,4 @@ namespace ao::cli
     show->callback([&runtime, showId]
                    { showTags(runtime.musicLibrary(), TrackId{showId->as<std::uint32_t>()}, std::cout); });
   }
-}
+} // namespace ao::cli

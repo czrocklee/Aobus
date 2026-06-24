@@ -111,4 +111,4 @@ namespace ao::rt
     std::vector<char> _inputBuffer;
     bool _loaded = false;
   };
-}
+} // namespace ao::rt

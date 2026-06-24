@@ -29,4 +29,4 @@ namespace ao::uimodel::layout
   Result<> loadLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument& doc);
 
   void saveLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument const& doc);
-}
+} // namespace ao::uimodel::layout

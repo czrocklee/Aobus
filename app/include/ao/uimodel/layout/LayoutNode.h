@@ -204,4 +204,4 @@ namespace ao::uimodel::layout
     std::vector<LayoutNode> children{};
     std::optional<BoxedLayoutNode> optTooltip{};
   };
-}
+} // namespace ao::uimodel::layout

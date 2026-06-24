@@ -25,4 +25,4 @@ namespace ao::gtk
    * so it is safe to re-run after the user edits their shortcuts.
    */
   void applyKeymapAccelerators(Gtk::Application& app, uimodel::input::KeymapModel const& keymap);
-}
+} // namespace ao::gtk

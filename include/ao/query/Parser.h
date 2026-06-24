@@ -23,4 +23,4 @@ namespace ao::query
    *         built); used by the per-keystroke completion path.
    */
   bool matchesExpressionSyntax(std::string_view expr);
-}
+} // namespace ao::query

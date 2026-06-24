@@ -84,11 +84,11 @@ namespace ao::query
 
       Expression& root;
     };
-  }
+  } // namespace
 
   void normalize(Expression& expr)
   {
     auto normalizer = Normalizer{expr};
     std::visit(normalizer, expr);
   }
-}
+} // namespace ao::query

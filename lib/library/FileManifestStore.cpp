@@ -47,7 +47,7 @@ namespace ao::library
       std::memset(buffer.data() + uri.size(), 0, paddedSize - uri.size());
       return buffer.subspan(0, paddedSize);
     }
-  }
+  } // namespace
 
   FileManifestStore::Reader FileManifestStore::reader(lmdb::ReadTransaction const& txn) const
   {

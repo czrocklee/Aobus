@@ -123,7 +123,7 @@ namespace ao::rt
         }
       }
     }
-  }
+  } // namespace
 
   struct TrackDetailProjection::Impl final
   {
@@ -349,4 +349,4 @@ namespace ao::rt
 
     return snap;
   }
-}
+} // namespace ao::rt

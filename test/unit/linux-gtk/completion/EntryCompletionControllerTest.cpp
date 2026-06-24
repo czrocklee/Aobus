@@ -52,7 +52,7 @@ namespace ao::gtk::test
 
       return nullptr;
     }
-  }
+  } // namespace
 
   TEST_CASE("EntryCompletionController - uses UTF-8 byte spans with GTK character cursors", "[gtk][completion]")
   {

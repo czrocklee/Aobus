@@ -4,14 +4,15 @@
 #pragma once
 
 #include <ao/Error.h>
-namespace ao::library
-{
-  class MusicLibrary;
-}
 
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
 
 namespace ao::rt
 {

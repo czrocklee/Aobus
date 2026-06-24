@@ -129,7 +129,7 @@ namespace ao::rt::test
         filteredPtr->reload();
       }
     };
-  }
+  } // namespace
 
   TEST_CASE("TrackListProjection - basic lifecycle with data", "[app][unit][runtime][projection]")
   {

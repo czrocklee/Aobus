@@ -205,7 +205,7 @@ namespace ao::gtk
 
       return std::nullopt;
     }
-  }
+  } // namespace
 
   std::optional<std::string> toGtkAccel(KeyChord const& chord)
   {
@@ -260,4 +260,4 @@ namespace ao::gtk
 
     return KeyChord{.modifiers = fromGdkModifiers(state), .key = std::move(*optToken)};
   }
-}
+} // namespace ao::gtk

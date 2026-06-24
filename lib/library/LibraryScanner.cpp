@@ -145,7 +145,7 @@ namespace ao::library
         }
       }
     }
-  }
+  } // namespace
 
   LibraryScanner::LibraryScanner(MusicLibrary& ml)
     : _ml{ml}

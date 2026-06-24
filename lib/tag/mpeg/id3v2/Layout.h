@@ -211,4 +211,4 @@ namespace ao::tag::mpeg::id3v2
   static_assert(sizeof(V24TextFrameLayout) == V24TextFrameLayout::kSize);
   static_assert(alignof(V24TextFrameLayout) == 1);
   static_assert(utility::layout::kIsBinaryLayoutType<V24TextFrameLayout>);
-}
+} // namespace ao::tag::mpeg::id3v2

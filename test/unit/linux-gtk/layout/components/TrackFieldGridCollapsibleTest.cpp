@@ -50,7 +50,7 @@ namespace ao::gtk::layout::test
       rt::TrackDetailSnapshot _snapshot;
       sigc::signal<void(rt::TrackDetailSnapshot const&)> _signal;
     };
-  }
+  } // namespace
 
   TEST_CASE("TrackFieldGrid collapsible sections", "[layout][unit][components][track][geometry]")
   {
@@ -437,4 +437,4 @@ namespace ao::gtk::layout::test
       CHECK(titleValueSlot->get_width() == valueWidthBeforeCollapse);
     }
   }
-}
+} // namespace ao::gtk::layout::test

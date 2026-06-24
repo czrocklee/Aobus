@@ -28,4 +28,4 @@ namespace ao::uimodel::input
    * @brief Persists the keymap's delta-from-defaults into the "shortcuts" group and flushes.
    */
   void saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap);
-}
+} // namespace ao::uimodel::input

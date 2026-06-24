@@ -66,4 +66,4 @@ namespace ao::library
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };
-}
+} // namespace ao::library

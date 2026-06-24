@@ -113,7 +113,7 @@ namespace ao::audio
       plan.decoderOutputFormat.bitDepth = bitDepth;
       plan.decoderOutputFormat.validBits = validBits;
     }
-  }
+  } // namespace
 
   RenderPlan FormatNegotiator::buildPlan(Format sourceFormat, DeviceCapabilities const& caps)
   {

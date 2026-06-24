@@ -88,4 +88,4 @@ namespace ao::lmdb
   Environment& Environment::operator=(Environment&& other) noexcept = default;
 
   Environment::~Environment() noexcept = default;
-}
+} // namespace ao::lmdb

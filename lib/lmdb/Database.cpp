@@ -49,7 +49,7 @@ namespace ao::lmdb
       std::memcpy(&value, val.mv_data, sizeof(T));
       return value;
     }
-  }
+  } // namespace
 
   Database::Database(DbiHandle dbi, KeyKind kind)
     : _dbi{dbi}, _kind{kind}
@@ -311,7 +311,7 @@ namespace ao::lmdb
 
       return utility::bytes::view(val.mv_data, val.mv_size);
     }
-  }
+  } // namespace
 
   Result<> Database::Writer::create(std::uint32_t id, std::span<std::byte const> data)
   {

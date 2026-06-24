@@ -47,7 +47,7 @@ namespace ao::rt::test
 
       ViewService makeService() { return ViewService{executor, library.library(), *storePtr}; }
     };
-  }
+  } // namespace
 
   TEST_CASE("ViewService - listViews starts empty", "[app][unit][runtime][view]")
   {

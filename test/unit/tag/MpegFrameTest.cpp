@@ -38,7 +38,7 @@ namespace ao::tag::mpeg::test
 
       return data;
     }
-  }
+  } // namespace
 
   TEST_CASE("MPEG Frame - validates headers", "[tag][unit][mpeg][frame]")
   {

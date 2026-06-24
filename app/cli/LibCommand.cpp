@@ -332,7 +332,7 @@ namespace ao::cli
         dumpResources(ml, raw, yaml, os);
       }
     }
-  }
+  } // namespace
 
   void setupLibCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {

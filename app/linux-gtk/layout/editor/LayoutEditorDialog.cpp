@@ -381,7 +381,7 @@ namespace ao::gtk::layout::editor
 
       return nullptr;
     }
-  }
+  } // namespace
 
   void LayoutEditorDialog::updateNodePosition(std::string_view nodeId, std::int32_t posX, std::int32_t posY)
   {
@@ -772,7 +772,7 @@ namespace ao::gtk::layout::editor
       hbox->append(editor);
       return hbox;
     }
-  }
+  } // namespace
 
   void LayoutEditorDialog::addSectionTitle(std::string_view text)
   {

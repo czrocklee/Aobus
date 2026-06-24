@@ -163,7 +163,7 @@ namespace ao::cli
         }
       }
     }
-  }
+  } // namespace
 
   void setupListCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
@@ -219,4 +219,4 @@ namespace ao::cli
     dumpCmd->callback([&ml, dumpRaw, dumpYaml]
                       { dumpLists(ml, dumpRaw->count() > 0, dumpYaml->count() > 0, std::cout); });
   }
-}
+} // namespace ao::cli

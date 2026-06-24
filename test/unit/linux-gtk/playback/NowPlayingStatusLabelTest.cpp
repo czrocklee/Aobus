@@ -38,7 +38,7 @@ namespace ao::gtk::test
         return {};
       }
     };
-  }
+  } // namespace
 
   TEST_CASE("NowPlayingStatusLabel - smoke test", "[gtk][playback][viewmodel]")
   {

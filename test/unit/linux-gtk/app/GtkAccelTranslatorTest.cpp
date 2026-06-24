@@ -117,4 +117,4 @@ namespace ao::gtk::test
       }
     }
   }
-}
+} // namespace ao::gtk::test

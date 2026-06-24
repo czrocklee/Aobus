@@ -85,7 +85,7 @@ namespace ao::gtk
 
       return modelPtr;
     }
-  }
+  } // namespace
 
   TrackCustomViewDialog::TrackCustomViewDialog(Gtk::Window& parent,
                                                rt::TrackPresentationSpec const& initialSpec,

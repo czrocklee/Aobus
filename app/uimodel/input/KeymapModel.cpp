@@ -234,4 +234,4 @@ namespace ao::uimodel::input
       {"workspace.revealCurrentTrack", {chord("Ctrl+L")}},
     };
   }
-}
+} // namespace ao::uimodel::input

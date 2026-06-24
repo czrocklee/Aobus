@@ -143,7 +143,7 @@ namespace ao::rt
 
       return result;
     }
-  }
+  } // namespace
 
   struct LibraryYamlImporter::Impl final
   {

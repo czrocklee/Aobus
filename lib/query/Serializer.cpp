@@ -195,7 +195,7 @@ namespace ao::query
       std::ostringstream oss;
       std::size_t counter = 0;
     };
-  }
+  } // namespace
 
   std::string serialize(Expression const& expr)
   {
@@ -203,4 +203,4 @@ namespace ao::query
     std::visit(serializer, expr);
     return serializer.oss.str();
   }
-}
+} // namespace ao::query

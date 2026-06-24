@@ -29,7 +29,7 @@ namespace ao::uimodel::input::test
         {"playback.next", {chord("Ctrl+Right")}},
       };
     }
-  }
+  } // namespace
 
   TEST_CASE("KeymapModel exposes defaults when no overrides applied", "[input][unit][keymap]")
   {
@@ -161,4 +161,4 @@ namespace ao::uimodel::input::test
     CHECK(defaults.at("playback.playPause").front() == chord("Ctrl+P"));
     CHECK(defaults.count("workspace.revealCurrentTrack") == 1);
   }
-}
+} // namespace ao::uimodel::input::test

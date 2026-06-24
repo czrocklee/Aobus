@@ -336,4 +336,4 @@ namespace ao::uimodel::layout::test
       CHECK(node.getLayout<std::int64_t>("spacing", 10) == 10);
     }
   }
-}
+} // namespace ao::uimodel::layout::test

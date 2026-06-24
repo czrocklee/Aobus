@@ -115,4 +115,4 @@ namespace ao::rt
     _current = std::move(_staged);
     _dirty = false;
   }
-}
+} // namespace ao::rt

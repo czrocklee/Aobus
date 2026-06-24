@@ -290,7 +290,7 @@ namespace ao::tag::mp4::test
       ao::test::mp4::addAtom(data, "moov", moovBody);
       return data;
     }
-  }
+  } // namespace
 
   TEST_CASE("MP4 File - parses a complete tagged file", "[tag][unit][mp4][file]")
   {

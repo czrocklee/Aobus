@@ -40,7 +40,7 @@ namespace ao::tag::test
       REQUIRE(trackResult);
       return {.filePtr = std::move(*fileResult), .builder = *trackResult};
     }
-  }
+  } // namespace
 
   TEST_CASE("Tag reading - basic metadata", "[tag][integration]")
   {

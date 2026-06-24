@@ -198,7 +198,7 @@ namespace ao::gtk
       updateStatusStyles(listItem, rowPtr);
       updatePlayingStyles(*listItem, field, isRowPlaying(*rowPtr, playingModel));
     }
-  }
+  } // namespace
 
   Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
                                                               MetadataCommitFn const& commitFn,

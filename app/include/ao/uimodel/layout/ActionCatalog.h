@@ -27,4 +27,4 @@ namespace ao::uimodel::layout
   private:
     std::vector<ActionDescriptor> _descriptors = {};
   };
-}
+} // namespace ao::uimodel::layout

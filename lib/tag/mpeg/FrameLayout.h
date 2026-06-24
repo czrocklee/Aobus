@@ -138,4 +138,4 @@ namespace ao::tag::mpeg
   static_assert(sizeof(XingLayout) == 8);
   static_assert(alignof(XingLayout) == 1);
   static_assert(utility::layout::kIsBinaryLayoutType<XingLayout>);
-}
+} // namespace ao::tag::mpeg

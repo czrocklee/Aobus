@@ -87,4 +87,4 @@ namespace ao::uimodel::layout
                                              AbsoluteCanvasNudgeDirection direction,
                                              bool snapToGrid,
                                              std::int32_t gridSize);
-}
+} // namespace ao::uimodel::layout

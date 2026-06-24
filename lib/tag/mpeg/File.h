@@ -23,4 +23,4 @@ namespace ao::tag::mpeg
 
     std::chrono::milliseconds calculateDuration(FrameView const& frame, bool hasId3v1) const;
   };
-}
+} // namespace ao::tag::mpeg

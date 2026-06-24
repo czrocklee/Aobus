@@ -123,7 +123,7 @@ namespace ao::query::test
       std::visit(c, expr);
       return c.oss.str();
     }
-  }
+  } // namespace
 
   TEST_CASE("Expression - Normalize Collapses Binary Node Without Operation", "[query][unit][expression]")
   {

@@ -56,4 +56,4 @@ namespace ao::uimodel::layout::test
       CHECK(all[1].type == "b");
     }
   }
-}
+} // namespace ao::uimodel::layout::test

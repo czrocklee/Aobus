@@ -83,4 +83,4 @@ namespace ao::uimodel::layout
   BoxedLayoutNode& BoxedLayoutNode::operator=(BoxedLayoutNode&&) noexcept = default;
 
   BoxedLayoutNode::~BoxedLayoutNode() = default;
-}
+} // namespace ao::uimodel::layout

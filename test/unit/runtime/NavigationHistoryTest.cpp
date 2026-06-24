@@ -32,7 +32,7 @@ namespace ao::rt::test
       return NavigationPoint{
         .listId = listId, .filterExpression = std::move(filterExpression), .presentation = std::move(presentation)};
     }
-  }
+  } // namespace
 
   TEST_CASE("NavigationHistory - empty on construct", "[navigation][unit]")
   {
@@ -367,4 +367,4 @@ namespace ao::rt::test
     CHECK(h.size() == 2);            // A, C
     CHECK_FALSE(h.canGoForward());
   }
-}
+} // namespace ao::rt::test

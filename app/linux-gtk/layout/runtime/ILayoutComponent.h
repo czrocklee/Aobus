@@ -27,4 +27,4 @@ namespace ao::gtk::layout
      */
     virtual Gtk::Widget& widget() = 0;
   };
-}
+} // namespace ao::gtk::layout

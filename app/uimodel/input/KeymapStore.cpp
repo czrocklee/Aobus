@@ -46,4 +46,4 @@ namespace ao::uimodel::input
       APP_LOG_ERROR("KeymapStore: failed to flush keymap overrides: {}", res.error().message);
     }
   }
-}
+} // namespace ao::uimodel::input

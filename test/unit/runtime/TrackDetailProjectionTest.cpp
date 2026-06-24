@@ -69,7 +69,7 @@ namespace ao::rt::test
       {
       }
     };
-  }
+  } // namespace
 
   TEST_CASE("TrackDetailProjection refreshes on TracksMutated", "[projection][unit]")
   {

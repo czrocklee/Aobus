@@ -72,4 +72,4 @@ namespace ao::lmdb
     _cursorClosed = true;
     return resultFromCode("mdb_txn_commit", rc);
   }
-}
+} // namespace ao::lmdb

@@ -81,7 +81,7 @@ namespace ao::library
 
       return {};
     }
-  }
+  } // namespace
 
   struct MusicLibrary::Impl final
   {
@@ -380,4 +380,4 @@ namespace ao::library
   {
     return _implPtr->musicRoot;
   }
-}
+} // namespace ao::library

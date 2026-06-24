@@ -32,4 +32,4 @@ namespace ao::library
   static_assert(sizeof(MetaHeader) == kMetaHeaderByteCount, "MetaHeader must be exactly 40 bytes");
   static_assert(std::is_trivially_copyable_v<MetaHeader>, "MetaHeader must be trivially copyable");
   static_assert(std::is_standard_layout_v<MetaHeader>, "MetaHeader must have standard layout");
-}
+} // namespace ao::library

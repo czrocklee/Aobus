@@ -43,7 +43,7 @@ namespace ao::gtk::layout
 
       return std::nullopt;
     }
-  }
+  } // namespace
 
   void applyCommonProps(Gtk::Widget& widget, LayoutNode const& node)
   {

@@ -42,4 +42,4 @@ namespace ao::gtk::layout
       unordered_flat_map<std::string, ComponentFactory, utility::TransparentStringHash, utility::TransparentStringEqual>
         _factories;
   };
-}
+} // namespace ao::gtk::layout

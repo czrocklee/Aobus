@@ -49,4 +49,4 @@ namespace ao::gtk
       app.set_accels_for_action("win." + actionId, accels);
     }
   }
-}
+} // namespace ao::gtk

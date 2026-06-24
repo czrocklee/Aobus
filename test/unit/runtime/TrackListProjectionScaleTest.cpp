@@ -54,7 +54,7 @@ namespace ao::rt::test
     private:
       std::vector<TrackId> _ids;
     };
-  }
+  } // namespace
 
   TEST_CASE("TrackListProjection - 10k Scale Performance", "[app][unit][runtime][projection][scale]")
   {
@@ -184,4 +184,4 @@ namespace ao::rt::test
       CHECK(resetDuration < std::chrono::seconds{2});
     }
   }
-}
+} // namespace ao::rt::test

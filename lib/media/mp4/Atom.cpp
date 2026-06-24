@@ -88,7 +88,7 @@ namespace ao::media::mp4
         data = data.subspan(length);
       }
     }
-  }
+  } // namespace
 
   void ContainerAtomView::ensureParsed() const
   {

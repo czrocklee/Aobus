@@ -221,4 +221,4 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries[0].content.title == "new");
   }
-}
+} // namespace ao::rt::test

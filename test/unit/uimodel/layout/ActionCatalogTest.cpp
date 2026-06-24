@@ -130,4 +130,4 @@ namespace ao::uimodel::layout::test
       CHECK(catalog.tryBind("valid", {}) == true);
     }
   }
-}
+} // namespace ao::uimodel::layout::test

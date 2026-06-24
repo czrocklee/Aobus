@@ -27,4 +27,4 @@ namespace ao::gtk::layout
   uimodel::layout::LayoutDocument createBuiltInGtkLayout(GtkLayoutPresetId presetId);
 
   std::map<std::string, uimodel::layout::LayoutNode, std::less<>> getBuiltInGtkTemplates();
-}
+} // namespace ao::gtk::layout

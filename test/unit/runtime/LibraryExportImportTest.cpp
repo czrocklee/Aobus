@@ -91,7 +91,7 @@ namespace ao::rt::test
       REQUIRE(result);
       return result->first;
     }
-  }
+  } // namespace
 
   TEST_CASE("Library Export/Import Cycle", "[app][unit][core][yaml]")
   {

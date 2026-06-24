@@ -84,4 +84,4 @@ namespace ao::rt
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };
-}
+} // namespace ao::rt

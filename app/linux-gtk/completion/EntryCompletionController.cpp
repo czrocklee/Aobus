@@ -88,7 +88,7 @@ namespace ao::gtk
       auto const maxOffset = static_cast<glong>(std::numeric_limits<std::int32_t>::max());
       return static_cast<std::int32_t>(std::min(charOffset, maxOffset));
     }
-  }
+  } // namespace
 
   EntryCompletionController::EntryCompletionController(Gtk::Entry& entry,
                                                        rt::CompletionProvider provider,

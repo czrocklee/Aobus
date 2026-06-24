@@ -97,4 +97,4 @@ namespace ao::gtk
       }
     }
   }
-}
+} // namespace ao::gtk

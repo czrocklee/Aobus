@@ -165,7 +165,7 @@ namespace ao::rt
 
       std::abort();
     }
-  }
+  } // namespace
 
   struct PlaybackService::Impl final
   {

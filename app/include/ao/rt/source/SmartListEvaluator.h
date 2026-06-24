@@ -117,4 +117,4 @@ namespace ao::rt
     friend class SourceObserver;
     friend class SmartListSource;
   };
-}
+} // namespace ao::rt

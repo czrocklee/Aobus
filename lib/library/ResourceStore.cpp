@@ -73,4 +73,4 @@ namespace ao::library
 
     return makeError(Error::Code::ResourceExhausted, "Resource ID space exhausted");
   }
-}
+} // namespace ao::library

@@ -31,7 +31,7 @@ namespace ao::utility
     {
       return ptr == nullptr || reinterpret_cast<std::uintptr_t>(ptr) % alignment == 0;
     }
-  }
+  } // namespace detail
 
   namespace bytes
   {
@@ -126,7 +126,7 @@ namespace ao::utility
       // NOLINTNEXTLINE(aobus-readability-forbid-raw-throw)
       throw std::out_of_range{"ByteView requireLayout: span too small or misaligned for target type"};
     }
-  }
+  } // namespace bytes
 
   namespace layout
   {
@@ -223,7 +223,7 @@ namespace ao::utility
       gsl_Expects(detail::isAligned(data, alignof(T)));
       return reinterpret_cast<T const*>(data);
     }
-  }
+  } // namespace layout
   // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
 
   /**
@@ -246,7 +246,7 @@ namespace ao::utility
     {
       return (static_cast<std::uint64_t>(hi) << 32) | lo;
     }
-  }
+  } // namespace uint64Parts
 
   /**
    * Explicitly unchecked downcast. Use when the derived type is guaranteed
@@ -266,4 +266,4 @@ namespace ao::utility
     static_assert(std::is_base_of_v<U, T>, "T must be derived from U for unsafeDowncast");
     return static_cast<T&>(ref); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
   }
-}
+} // namespace ao::utility
