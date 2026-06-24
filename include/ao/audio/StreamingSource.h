@@ -45,7 +45,7 @@ namespace ao::audio
     ~StreamingSource() override;
 
     Result<> initialize();
-    Result<> seek(std::chrono::milliseconds offset) override;
+    Result<> seek(std::chrono::milliseconds offset) noexcept override;
 
     std::size_t read(std::span<std::byte> output) noexcept override;
     bool isDrained() const noexcept override;
@@ -55,8 +55,8 @@ namespace ao::audio
     void startDecodeThread();
     void stopDecodeThread();
     void decodeLoop(std::stop_token const& threadStopToken);
-    Result<> fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken);
-    Result<DecodeBlockStatus> decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
+    void fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken);
+    DecodeBlockStatus decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
     bool writeBlock(std::span<std::byte const> bytes,
                     std::stop_token const& seekToken,
                     std::stop_token const* threadStopToken);

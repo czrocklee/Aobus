@@ -11,6 +11,7 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/Types.h>
+#include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
 
 #include <FLAC/format.h>
@@ -132,25 +133,22 @@ namespace ao::audio
                               ::FLAC__StreamDecoderErrorStatus status,
                               void* clientData);
 
-    Result<> checkDecodeError() const
+    void checkDecodeError() const
     {
-      if (!optDecodeError)
+      if (optDecodeError)
       {
-        return {};
+        detail::throwDecoderError(
+          Error::Code::DecodeFailed,
+          std::string{"FLAC decode error: "} + ::FLAC__StreamDecoderErrorStatusString[*optDecodeError]);
       }
-
-      return makeError(Error::Code::DecodeFailed,
-                       std::string{"FLAC decode error: "} + ::FLAC__StreamDecoderErrorStatusString[*optDecodeError]);
     }
 
-    Result<> checkEndOfStream() const
+    void checkEndOfStream() const
     {
       if (totalFrames != 0 && nextFrameIndex + bufferedFrames < totalFrames)
       {
-        return makeError(Error::Code::DecodeFailed, "FLAC stream ended before the declared sample count");
+        detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC stream ended before the declared sample count");
       }
-
-      return {};
     }
   };
 
@@ -163,62 +161,65 @@ namespace ao::audio
 
   Result<> FlacDecoderSession::openCodec(std::filesystem::path const& filePath)
   {
-    if (auto const result = _implPtr->fileCursor.open(filePath); !result)
+    try
     {
-      return std::unexpected{result.error()};
+      if (auto const result = _implPtr->fileCursor.open(filePath); !result)
+      {
+        detail::throwDecoderError(result.error());
+      }
+
+      _implPtr->eof = false;
+      _implPtr->nextFrameIndex = 0;
+
+      auto const initStatus = ::FLAC__stream_decoder_init_stream(_implPtr->decoder,
+                                                                 Impl::readCallback,
+                                                                 Impl::seekCallback,
+                                                                 Impl::tellCallback,
+                                                                 Impl::lengthCallback,
+                                                                 Impl::eofCallback,
+                                                                 Impl::writeCallback,
+                                                                 Impl::metadataCallback,
+                                                                 Impl::errorCallback,
+                                                                 _implPtr.get());
+
+      if (initStatus != ::FLAC__STREAM_DECODER_INIT_STATUS_OK)
+      {
+        detail::throwDecoderError(Error::Code::InitFailed, "Failed to initialize FLAC decoder");
+      }
+
+      // Process until metadata is read
+      if (::FLAC__stream_decoder_process_until_end_of_metadata(_implPtr->decoder) == 0)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Failed to read FLAC metadata");
+      }
+
+      _implPtr->checkDecodeError();
+
+      if (auto const result =
+            detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "FLAC");
+          !result)
+      {
+        detail::throwDecoderError(result.error());
+      }
+
+      auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
+      auto const expectedValidBits = std::min(_implPtr->info.sourceFormat.validBits, outputBitDepth);
+
+      if (_implPtr->requestedOutput.isFloat || (outputBitDepth != 16 && outputBitDepth != 24 && outputBitDepth != 32) ||
+          _implPtr->info.outputFormat.validBits != expectedValidBits)
+      {
+        detail::throwDecoderError(Error::Code::NotSupported, "Unsupported FLAC output sample format");
+      }
+
+      return {};
     }
-
-    _implPtr->eof = false;
-    _implPtr->nextFrameIndex = 0;
-
-    auto const initStatus = ::FLAC__stream_decoder_init_stream(_implPtr->decoder,
-                                                               Impl::readCallback,
-                                                               Impl::seekCallback,
-                                                               Impl::tellCallback,
-                                                               Impl::lengthCallback,
-                                                               Impl::eofCallback,
-                                                               Impl::writeCallback,
-                                                               Impl::metadataCallback,
-                                                               Impl::errorCallback,
-                                                               _implPtr.get());
-
-    if (initStatus != ::FLAC__STREAM_DECODER_INIT_STATUS_OK)
+    catch (detail::DecoderException const& ex)
     {
-      return std::unexpected{Error{.code = Error::Code::InitFailed, .message = "Failed to initialize FLAC decoder"}};
+      return std::unexpected{ex.error()};
     }
-
-    // Process until metadata is read
-    if (::FLAC__stream_decoder_process_until_end_of_metadata(_implPtr->decoder) == 0)
-    {
-      return std::unexpected{Error{.code = Error::Code::DecodeFailed, .message = "Failed to read FLAC metadata"}};
-    }
-
-    if (auto const result = _implPtr->checkDecodeError(); !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    if (auto const result =
-          detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "FLAC");
-        !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
-    auto const expectedValidBits = std::min(_implPtr->info.sourceFormat.validBits, outputBitDepth);
-
-    if (_implPtr->requestedOutput.isFloat || (outputBitDepth != 16 && outputBitDepth != 24 && outputBitDepth != 32) ||
-        _implPtr->info.outputFormat.validBits != expectedValidBits)
-    {
-      return std::unexpected{
-        Error{.code = Error::Code::NotSupported, .message = "Unsupported FLAC output sample format"}};
-    }
-
-    return {};
   }
 
-  void FlacDecoderSession::close()
+  void FlacDecoderSession::close() noexcept
   {
     if (_implPtr->decoder != nullptr)
     {
@@ -235,38 +236,42 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
-  Result<> FlacDecoderSession::seek(std::chrono::milliseconds offset)
+  Result<> FlacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
-    _implPtr->pcmBuffer.clear();
-    _implPtr->bufferedFrames = 0;
-    _implPtr->optDecodeError.reset();
-    _implPtr->eof = false;
-
-    auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
-
-    if (sampleRate == 0)
+    try
     {
-      return makeError(Error::Code::SeekFailed, "Sample rate is 0");
+      _implPtr->pcmBuffer.clear();
+      _implPtr->bufferedFrames = 0;
+      _implPtr->optDecodeError.reset();
+      _implPtr->eof = false;
+
+      auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
+
+      if (sampleRate == 0)
+      {
+        detail::throwDecoderError(Error::Code::SeekFailed, "Sample rate is 0");
+      }
+
+      auto const targetSample = static_cast<::FLAC__uint64>(durationToSamples(offset, sampleRate));
+
+      if (::FLAC__stream_decoder_seek_absolute(_implPtr->decoder, targetSample) == 0)
+      {
+        detail::throwDecoderError(Error::Code::SeekFailed, "FLAC seek failed");
+      }
+
+      _implPtr->checkDecodeError();
+
+      _implPtr->nextFrameIndex = targetSample;
+
+      return {};
     }
-
-    auto const targetSample = static_cast<::FLAC__uint64>(durationToSamples(offset, sampleRate));
-
-    if (::FLAC__stream_decoder_seek_absolute(_implPtr->decoder, targetSample) == 0)
+    catch (detail::DecoderException const& ex)
     {
-      return makeError(Error::Code::SeekFailed, "FLAC seek failed");
+      return std::unexpected{ex.error()};
     }
-
-    if (auto const result = _implPtr->checkDecodeError(); !result)
-    {
-      return result;
-    }
-
-    _implPtr->nextFrameIndex = targetSample;
-
-    return {};
   }
 
-  void FlacDecoderSession::flush()
+  void FlacDecoderSession::flush() noexcept
   {
     if (_implPtr->fileCursor.isOpen())
     {
@@ -277,80 +282,75 @@ namespace ao::audio
     _implPtr->bufferedFrames = 0;
   }
 
-  Result<PcmBlock> FlacDecoderSession::readNextBlock()
+  Result<PcmBlock> FlacDecoderSession::readNextBlock() noexcept
   {
-    if (!_implPtr->fileCursor.isOpen())
+    try
     {
-      return PcmBlock{.bytes = {}, .endOfStream = true};
-    }
-
-    if (auto const result = _implPtr->checkDecodeError(); !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    if (_implPtr->eof && _implPtr->bufferedFrames == 0)
-    {
-      return PcmBlock{.bytes = {}, .endOfStream = true};
-    }
-
-    // If buffer is empty, process a single frame
-    while (_implPtr->bufferedFrames == 0 && !_implPtr->eof)
-    {
-      if (::FLAC__stream_decoder_process_single(_implPtr->decoder) == 0)
+      if (!_implPtr->fileCursor.isOpen())
       {
+        return PcmBlock{.bytes = {}, .endOfStream = true};
+      }
+
+      _implPtr->checkDecodeError();
+
+      if (_implPtr->eof && _implPtr->bufferedFrames == 0)
+      {
+        return PcmBlock{.bytes = {}, .endOfStream = true};
+      }
+
+      // If buffer is empty, process a single frame
+      while (_implPtr->bufferedFrames == 0 && !_implPtr->eof)
+      {
+        if (::FLAC__stream_decoder_process_single(_implPtr->decoder) == 0)
+        {
+          if (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
+          {
+            _implPtr->checkEndOfStream();
+
+            _implPtr->eof = true;
+            break;
+          }
+
+          detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC process single failed");
+        }
+
+        _implPtr->checkDecodeError();
+
         if (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
         {
-          if (auto const result = _implPtr->checkEndOfStream(); !result)
-          {
-            return std::unexpected{result.error()};
-          }
+          _implPtr->checkEndOfStream();
 
           _implPtr->eof = true;
           break;
         }
-
-        return makeError(Error::Code::DecodeFailed, "FLAC process single failed");
       }
 
-      if (auto const result = _implPtr->checkDecodeError(); !result)
+      if (_implPtr->bufferedFrames == 0 && _implPtr->eof)
       {
-        return std::unexpected{result.error()};
+        return PcmBlock{.bytes = {}, .endOfStream = true};
       }
 
-      if (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
-      {
-        if (auto const result = _implPtr->checkEndOfStream(); !result)
-        {
-          return std::unexpected{result.error()};
-        }
+      auto block = PcmBlock{
+        .bytes = _implPtr->pcmBuffer,
+        .bitDepth = _implPtr->info.outputFormat.bitDepth,
+        .frames = _implPtr->bufferedFrames,
+        .firstFrameIndex = _implPtr->nextFrameIndex,
+        .endOfStream = _implPtr->eof &&
+                       (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM),
+      };
 
-        _implPtr->eof = true;
-        break;
-      }
+      _implPtr->nextFrameIndex += _implPtr->bufferedFrames;
+      _implPtr->bufferedFrames = 0;
+
+      return block;
     }
-
-    if (_implPtr->bufferedFrames == 0 && _implPtr->eof)
+    catch (detail::DecoderException const& ex)
     {
-      return PcmBlock{.bytes = {}, .endOfStream = true};
+      return std::unexpected{ex.error()};
     }
-
-    auto block = PcmBlock{
-      .bytes = _implPtr->pcmBuffer,
-      .bitDepth = _implPtr->info.outputFormat.bitDepth,
-      .frames = _implPtr->bufferedFrames,
-      .firstFrameIndex = _implPtr->nextFrameIndex,
-      .endOfStream =
-        _implPtr->eof && (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM),
-    };
-
-    _implPtr->nextFrameIndex += _implPtr->bufferedFrames;
-    _implPtr->bufferedFrames = 0;
-
-    return block;
   }
 
-  DecodedStreamInfo FlacDecoderSession::streamInfo() const
+  DecodedStreamInfo FlacDecoderSession::streamInfo() const noexcept
   {
     return _implPtr->info;
   }

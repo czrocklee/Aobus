@@ -34,24 +34,24 @@ namespace ao::audio::test
 
     void setReadScript(std::vector<ReadScriptEntry> script) { _script = std::move(script); }
 
-    Result<> open(std::filesystem::path const& path) override
+    Result<> open(std::filesystem::path const& path) noexcept override
     {
       _opened = true;
       _lastOpenedPath = path;
       return _openResult;
     }
 
-    void close() override { _closed = true; }
-    void flush() override { _flushed = true; }
+    void close() noexcept override { _closed = true; }
+    void flush() noexcept override { _flushed = true; }
 
-    Result<> seek(std::chrono::milliseconds offset) override
+    Result<> seek(std::chrono::milliseconds offset) noexcept override
     {
       _lastSeekOffset = offset;
       _scriptIdx = 0;
       return _seekResult;
     }
 
-    Result<PcmBlock> readNextBlock() override
+    Result<PcmBlock> readNextBlock() noexcept override
     {
       _readCount++;
 
@@ -74,7 +74,7 @@ namespace ao::audio::test
                       .endOfStream = entry.endOfStream};
     }
 
-    DecodedStreamInfo streamInfo() const override { return _info; }
+    DecodedStreamInfo streamInfo() const noexcept override { return _info; }
 
     // Inspection
     bool isOpened() const { return _opened; }

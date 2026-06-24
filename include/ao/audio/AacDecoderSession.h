@@ -26,12 +26,12 @@ namespace ao::audio
     AacDecoderSession& operator=(AacDecoderSession&&) = delete;
 
     Result<> openCodec(std::filesystem::path const& filePath);
-    void close() override;
-    Result<> seek(std::chrono::milliseconds offset) override;
-    void flush() override;
+    void close() noexcept override;
+    Result<> seek(std::chrono::milliseconds offset) noexcept override;
+    void flush() noexcept override;
 
-    Result<PcmBlock> readNextBlock() override;
-    DecodedStreamInfo streamInfo() const override;
+    Result<PcmBlock> readNextBlock() noexcept override;
+    DecodedStreamInfo streamInfo() const noexcept override;
 
   private:
     struct Impl;

@@ -21,21 +21,22 @@ namespace ao
   class Exception : public std::exception
   {
   public:
-    Exception(std::string what, char const* file, std::int32_t line)
-      : _what{std::move(what)}, _file{file}, _line{line}
+    explicit Exception(std::string what, std::source_location loc = std::source_location::current())
+      : _what{std::move(what)}, _location{loc}
     {
     }
 
-    char const* file() const { return _file; }
+    char const* file() const noexcept { return _location.file_name(); }
 
-    std::int32_t line() const { return _line; }
+    std::int32_t line() const noexcept { return static_cast<std::int32_t>(_location.line()); }
 
     char const* what() const noexcept override { return _what.c_str(); }
 
+    std::source_location const& location() const noexcept { return _location; }
+
   private:
     std::string _what;
-    char const* _file;
-    std::int32_t _line;
+    std::source_location _location;
   };
 
   /**
@@ -62,9 +63,7 @@ namespace ao
     requires(sizeof...(Args) > 0 && std::derived_from<ExceptionType, std::exception>)
   [[noreturn]] void throwException(FormatWithLocation<std::type_identity_t<Args>...> fmt, Args&&... args)
   {
-    throw ExceptionType{std::format(fmt.fmt, std::forward<Args>(args)...),
-                        fmt.loc.file_name(),
-                        static_cast<std::int32_t>(fmt.loc.line())};
+    throw ExceptionType{std::format(fmt.fmt, std::forward<Args>(args)...), fmt.loc};
   }
 
   /**
@@ -75,6 +74,6 @@ namespace ao
     requires std::derived_from<ExceptionType, std::exception>
   [[noreturn]] void throwException(std::string_view what, std::source_location loc = std::source_location::current())
   {
-    throw ExceptionType{std::string{what}, loc.file_name(), static_cast<std::int32_t>(loc.line())};
+    throw ExceptionType{std::string{what}, loc};
   }
 } // namespace ao

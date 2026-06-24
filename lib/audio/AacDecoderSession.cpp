@@ -10,6 +10,7 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/detail/AacConfigParser.h>
+#include <ao/audio/detail/DecoderError.h>
 
 #include <fdk-aac/FDK_audio.h>
 #include <fdk-aac/aacdecoder_lib.h>
@@ -67,29 +68,27 @@ namespace ao::audio
       }
     }
 
-    Result<> openDecoder()
+    void openDecoder()
     {
       closeDecoder();
       decoder = ::aacDecoder_Open(TT_MP4_RAW, 1);
 
       if (decoder == nullptr)
       {
-        return makeError(Error::Code::InitFailed, "Failed to create AAC decoder");
+        detail::throwDecoderError(Error::Code::InitFailed, "Failed to create AAC decoder");
       }
 
       if (::aacDecoder_SetParam(decoder, AAC_PCM_OUTPUT_CHANNEL_MAPPING, 1) != AAC_DEC_OK)
       {
-        return makeError(Error::Code::InitFailed, "Failed to configure AAC channel mapping");
+        detail::throwDecoderError(Error::Code::InitFailed, "Failed to configure AAC channel mapping");
       }
-
-      return {};
     }
 
-    Result<> configureDecoder(std::span<std::byte const> magicCookie)
+    void configureDecoder(std::span<std::byte const> magicCookie)
     {
       if (magicCookie.empty())
       {
-        return makeError(Error::Code::FormatRejected, "Missing AAC AudioSpecificConfig");
+        detail::throwDecoderError(Error::Code::FormatRejected, "Missing AAC AudioSpecificConfig");
       }
 
       // UCHAR and std::byte are both byte-sized, so this is a straight copy.
@@ -105,14 +104,14 @@ namespace ao::audio
 
       if (configResult != AAC_DEC_OK)
       {
-        return makeError(Error::Code::InitFailed, "Failed to configure AAC decoder");
+        detail::throwDecoderError(Error::Code::InitFailed, "Failed to configure AAC decoder");
       }
 
       if (auto const* streamInfo = ::aacDecoder_GetStreamInfo(decoder);
           streamInfo != nullptr && (std::cmp_greater(streamInfo->numChannels, kFallbackMaxChannels) ||
                                     std::cmp_greater(streamInfo->frameSize, kFallbackFrameSize)))
       {
-        return makeError(Error::Code::InitFailed, "Unsupported AAC stream dimensions");
+        detail::throwDecoderError(Error::Code::InitFailed, "Unsupported AAC stream dimensions");
       }
 
       refreshStreamInfo();
@@ -133,36 +132,33 @@ namespace ao::audio
 
       if (info.sourceFormat.sampleRate == 0 || info.sourceFormat.channels == 0)
       {
-        return makeError(Error::Code::InitFailed, "Invalid AAC stream configuration");
+        detail::throwDecoderError(Error::Code::InitFailed, "Invalid AAC stream configuration");
       }
-
-      return {};
     }
 
-    Result<> validateRequestedOutput() const
+    void validateRequestedOutput() const
     {
       if (auto const result = detail::validateFixedOutputRequest(requestedOutput, info.outputFormat, "AAC"); !result)
       {
-        return std::unexpected{result.error()};
+        detail::throwDecoderError(result.error());
       }
 
       if (requestedOutput.isFloat)
       {
-        return makeError(Error::Code::NotSupported, "AAC float output is not supported");
+        detail::throwDecoderError(Error::Code::NotSupported, "AAC float output is not supported");
       }
 
       if (requestedOutput.bitDepth != 0 && requestedOutput.bitDepth != kAacPcmBitDepth &&
           requestedOutput.bitDepth != 32)
       {
-        return makeError(Error::Code::NotSupported, "AAC output is limited to 16-bit PCM or 32-bit padded PCM");
+        detail::throwDecoderError(
+          Error::Code::NotSupported, "AAC output is limited to 16-bit PCM or 32-bit padded PCM");
       }
 
       if (requestedOutput.validBits != 0 && requestedOutput.validBits != kAacPcmBitDepth)
       {
-        return makeError(Error::Code::NotSupported, "AAC output valid bits must be 16");
+        detail::throwDecoderError(Error::Code::NotSupported, "AAC output valid bits must be 16");
       }
-
-      return {};
     }
 
     void applyOutputFormat()
@@ -213,39 +209,37 @@ namespace ao::audio
 
   Result<> AacDecoderSession::openCodec(std::filesystem::path const& filePath)
   {
-    if (auto const result = _implPtr->openDecoder(); !result)
+    try
     {
-      return std::unexpected{result.error()};
-    }
+      _implPtr->openDecoder();
 
-    if (auto const result = _implPtr->packetSource.open(filePath, "mp4a"); !result)
-    {
-      auto error = result.error();
-
-      if (error.code == Error::Code::FormatRejected)
+      if (auto const result = _implPtr->packetSource.open(filePath, "mp4a"); !result)
       {
-        error.code = Error::Code::InitFailed;
+        auto error = result.error();
+
+        if (error.code == Error::Code::FormatRejected)
+        {
+          error.code = Error::Code::InitFailed;
+        }
+
+        detail::throwDecoderError(std::move(error));
       }
 
-      return std::unexpected{std::move(error)};
-    }
+      _implPtr->configureDecoder(_implPtr->packetSource.magicCookie());
 
-    if (auto const result = _implPtr->configureDecoder(_implPtr->packetSource.magicCookie()); !result)
+      _implPtr->info.duration = _implPtr->packetSource.duration();
+
+      _implPtr->validateRequestedOutput();
+
+      return {};
+    }
+    catch (detail::DecoderException const& ex)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{ex.error()};
     }
-
-    _implPtr->info.duration = _implPtr->packetSource.duration();
-
-    if (auto const result = _implPtr->validateRequestedOutput(); !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    return {};
   }
 
-  void AacDecoderSession::close()
+  void AacDecoderSession::close() noexcept
   {
     _implPtr->packetSource.close();
     _implPtr->closeDecoder();
@@ -255,7 +249,7 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
-  Result<> AacDecoderSession::seek(std::chrono::milliseconds offset)
+  Result<> AacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
     if (auto const result = _implPtr->packetSource.seek(offset); !result)
     {
@@ -266,7 +260,7 @@ namespace ao::audio
     return {};
   }
 
-  void AacDecoderSession::flush()
+  void AacDecoderSession::flush() noexcept
   {
     if (_implPtr->decoder != nullptr)
     {
@@ -274,108 +268,119 @@ namespace ao::audio
     }
   }
 
-  Result<PcmBlock> AacDecoderSession::readNextBlock()
+  Result<PcmBlock> AacDecoderSession::readNextBlock() noexcept
   {
-    if (_implPtr->packetSource.atEnd())
+    try
     {
-      return PcmBlock{.bytes = {}, .endOfStream = true};
-    }
+      if (_implPtr->packetSource.atEnd())
+      {
+        return PcmBlock{.bytes = {}, .endOfStream = true};
+      }
 
-    auto const packet = _implPtr->packetSource.packet();
+      auto const packet = _implPtr->packetSource.packet();
 
-    if (packet.empty())
-    {
-      return makeError(Error::Code::DecodeFailed, "Failed to read AAC sample payload");
-    }
+      if (packet.empty())
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Failed to read AAC sample payload");
+      }
 
-    _implPtr->inputBuffer.resize(packet.size());
-    std::memcpy(_implPtr->inputBuffer.data(), packet.data(), packet.size());
+      _implPtr->inputBuffer.resize(packet.size());
+      std::memcpy(_implPtr->inputBuffer.data(), packet.data(), packet.size());
 
-    auto bytesValid = static_cast<UINT>(_implPtr->inputBuffer.size());
-    auto const fillResult = [&]
-    {
-      auto inputData = std::array{_implPtr->inputBuffer.data()};
-      auto inputSize = std::array{static_cast<UINT>(_implPtr->inputBuffer.size())};
-      return ::aacDecoder_Fill(_implPtr->decoder, inputData.data(), inputSize.data(), &bytesValid);
-    }();
+      auto bytesValid = static_cast<UINT>(_implPtr->inputBuffer.size());
+      auto const fillResult = [&]
+      {
+        auto inputData = std::array{_implPtr->inputBuffer.data()};
+        auto inputSize = std::array{static_cast<UINT>(_implPtr->inputBuffer.size())};
+        return ::aacDecoder_Fill(_implPtr->decoder, inputData.data(), inputSize.data(), &bytesValid);
+      }();
 
-    if (fillResult != AAC_DEC_OK)
-    {
-      return makeError(Error::Code::DecodeFailed, "Failed to fill AAC decoder input");
-    }
+      if (fillResult != AAC_DEC_OK)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Failed to fill AAC decoder input");
+      }
 
-    if (bytesValid != 0)
-    {
-      return makeError(Error::Code::DecodeFailed, "AAC decoder did not consume the complete sample");
-    }
+      if (bytesValid != 0)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "AAC decoder did not consume the complete sample");
+      }
 
-    auto const* streamInfoBefore = ::aacDecoder_GetStreamInfo(_implPtr->decoder);
+      auto const* streamInfoBefore = ::aacDecoder_GetStreamInfo(_implPtr->decoder);
 
-    if (streamInfoBefore != nullptr && (std::cmp_greater(streamInfoBefore->numChannels, kFallbackMaxChannels) ||
-                                        std::cmp_greater(streamInfoBefore->frameSize, kFallbackFrameSize)))
-    {
-      return makeError(Error::Code::DecodeFailed, "Unsupported AAC stream dimensions");
-    }
+      if (streamInfoBefore != nullptr && (std::cmp_greater(streamInfoBefore->numChannels, kFallbackMaxChannels) ||
+                                          std::cmp_greater(streamInfoBefore->frameSize, kFallbackFrameSize)))
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Unsupported AAC stream dimensions");
+      }
 
-    auto const frameSizeBefore = (streamInfoBefore != nullptr && streamInfoBefore->frameSize > 0)
-                                   ? static_cast<std::uint32_t>(streamInfoBefore->frameSize)
-                                   : kFallbackFrameSize;
-    auto const channelsBefore = (streamInfoBefore != nullptr && streamInfoBefore->numChannels > 0)
-                                  ? static_cast<std::uint8_t>(streamInfoBefore->numChannels)
-                                  : kFallbackMaxChannels;
+      auto const frameSizeBefore = (streamInfoBefore != nullptr && streamInfoBefore->frameSize > 0)
+                                     ? static_cast<std::uint32_t>(streamInfoBefore->frameSize)
+                                     : kFallbackFrameSize;
+      auto const channelsBefore = (streamInfoBefore != nullptr && streamInfoBefore->numChannels > 0)
+                                    ? static_cast<std::uint8_t>(streamInfoBefore->numChannels)
+                                    : kFallbackMaxChannels;
 
-    _implPtr->pcmBuffer.resize(static_cast<std::size_t>(frameSizeBefore) * channelsBefore);
+      _implPtr->pcmBuffer.resize(static_cast<std::size_t>(frameSizeBefore) * channelsBefore);
 
-    auto const decodeResult = ::aacDecoder_DecodeFrame(
-      _implPtr->decoder, _implPtr->pcmBuffer.data(), static_cast<INT>(_implPtr->pcmBuffer.size()), 0);
+      auto const decodeResult = ::aacDecoder_DecodeFrame(
+        _implPtr->decoder, _implPtr->pcmBuffer.data(), static_cast<INT>(_implPtr->pcmBuffer.size()), 0);
 
-    if (decodeResult != AAC_DEC_OK)
-    {
-      return makeError(Error::Code::DecodeFailed, "AAC decode failed");
-    }
+      if (decodeResult != AAC_DEC_OK)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "AAC decode failed");
+      }
 
-    auto const previousInfo = _implPtr->info;
-    _implPtr->refreshStreamInfo();
+      auto const previousInfo = _implPtr->info;
+      _implPtr->refreshStreamInfo();
 
-    if (!(_implPtr->info.outputFormat == previousInfo.outputFormat))
-    {
-      _implPtr->info = previousInfo;
-      return makeError(Error::Code::NotSupported, "AAC stream changed output format during playback");
-    }
+      if (!(_implPtr->info.outputFormat == previousInfo.outputFormat))
+      {
+        _implPtr->info = previousInfo;
+        detail::throwDecoderError(Error::Code::NotSupported, "AAC stream changed output format during playback");
+      }
 
-    if (auto const result = _implPtr->validateRequestedOutput(); !result)
-    {
-      return std::unexpected{result.error()};
-    }
+      _implPtr->validateRequestedOutput();
 
-    auto const* streamInfo = ::aacDecoder_GetStreamInfo(_implPtr->decoder);
+      auto const* streamInfo = ::aacDecoder_GetStreamInfo(_implPtr->decoder);
 
-    if (streamInfo == nullptr || streamInfo->frameSize <= 0 || streamInfo->numChannels <= 0 ||
-        std::cmp_greater(streamInfo->frameSize, kFallbackFrameSize) ||
-        std::cmp_greater(streamInfo->numChannels, kFallbackMaxChannels))
-    {
-      return makeError(Error::Code::DecodeFailed, "Invalid AAC stream information");
-    }
+      if (streamInfo == nullptr || streamInfo->frameSize <= 0 || streamInfo->numChannels <= 0 ||
+          std::cmp_greater(streamInfo->frameSize, kFallbackFrameSize) ||
+          std::cmp_greater(streamInfo->numChannels, kFallbackMaxChannels))
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Invalid AAC stream information");
+      }
 
-    auto const frames = static_cast<std::uint32_t>(streamInfo->frameSize);
-    auto const channels = static_cast<std::uint8_t>(streamInfo->numChannels);
-    auto const samples = static_cast<std::size_t>(frames) * channels;
-    auto const firstFrameIndex = _implPtr->packetSource.firstFrameIndex(_implPtr->info.sourceFormat.sampleRate, frames);
+      auto const frames = static_cast<std::uint32_t>(streamInfo->frameSize);
+      auto const channels = static_cast<std::uint8_t>(streamInfo->numChannels);
+      auto const samples = static_cast<std::size_t>(frames) * channels;
+      auto const firstFrameIndex =
+        _implPtr->packetSource.firstFrameIndex(_implPtr->info.sourceFormat.sampleRate, frames);
 
-    if (samples > _implPtr->pcmBuffer.size())
-    {
-      return makeError(Error::Code::DecodeFailed, "AAC output exceeded the decode buffer");
-    }
+      if (samples > _implPtr->pcmBuffer.size())
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "AAC output exceeded the decode buffer");
+      }
 
-    _implPtr->pcmBuffer.resize(samples);
-    _implPtr->packetSource.advance();
+      _implPtr->pcmBuffer.resize(samples);
+      _implPtr->packetSource.advance();
 
-    if (_implPtr->info.outputFormat.bitDepth == 32)
-    {
-      _implPtr->targetPcmBuffer.resize(samples);
-      PcmConverter::pad<INT_PCM, std::int32_t>(_implPtr->pcmBuffer, _implPtr->targetPcmBuffer, 16);
+      if (_implPtr->info.outputFormat.bitDepth == 32)
+      {
+        _implPtr->targetPcmBuffer.resize(samples);
+        PcmConverter::pad<INT_PCM, std::int32_t>(_implPtr->pcmBuffer, _implPtr->targetPcmBuffer, 16);
 
-      auto const bytes = std::as_bytes(std::span{_implPtr->targetPcmBuffer});
+        auto const bytes = std::as_bytes(std::span{_implPtr->targetPcmBuffer});
+
+        return PcmBlock{
+          .bytes = bytes,
+          .bitDepth = _implPtr->info.outputFormat.bitDepth,
+          .frames = frames,
+          .firstFrameIndex = firstFrameIndex,
+          .endOfStream = _implPtr->packetSource.atEnd(),
+        };
+      }
+
+      auto const bytes = std::as_bytes(std::span{_implPtr->pcmBuffer});
 
       return PcmBlock{
         .bytes = bytes,
@@ -385,19 +390,13 @@ namespace ao::audio
         .endOfStream = _implPtr->packetSource.atEnd(),
       };
     }
-
-    auto const bytes = std::as_bytes(std::span{_implPtr->pcmBuffer});
-
-    return PcmBlock{
-      .bytes = bytes,
-      .bitDepth = _implPtr->info.outputFormat.bitDepth,
-      .frames = frames,
-      .firstFrameIndex = firstFrameIndex,
-      .endOfStream = _implPtr->packetSource.atEnd(),
-    };
+    catch (detail::DecoderException const& ex)
+    {
+      return std::unexpected{ex.error()};
+    }
   }
 
-  DecodedStreamInfo AacDecoderSession::streamInfo() const
+  DecodedStreamInfo AacDecoderSession::streamInfo() const noexcept
   {
     return _implPtr->info;
   }

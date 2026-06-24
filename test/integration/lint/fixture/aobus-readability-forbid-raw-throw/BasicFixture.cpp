@@ -27,6 +27,40 @@ void testGoodThrow()
   ao::throwException<std::runtime_error>("this is good");
 }
 
+// A subsystem throw<Domain>Error helper inside the ao namespace may raise a raw
+// throw directly: its name begins with "throw" followed by an upper-case letter,
+// so it is a sanctioned throwing helper just like ao::throwException.
+namespace ao::audio::detail
+{
+  [[noreturn]] void throwDecoderError(std::string_view message)
+  {
+    // NEGATIVE
+    throw std::runtime_error{std::string{message}};
+  }
+}
+
+// The exemption is limited to the ao namespace tree: a throw<Domain>Error-shaped
+// helper outside ao is still held to the rule.
+namespace other
+{
+  [[noreturn]] void throwOutsideAo(std::string_view message)
+  {
+    // POSITIVE
+    throw std::runtime_error{std::string{message}};
+  }
+}
+
+// A function in ao whose name merely starts with the letters "throw" but lacks the
+// upper-case word boundary of a helper ("throwaway") is still held to the rule.
+namespace ao
+{
+  void throwaway()
+  {
+    // POSITIVE
+    throw std::runtime_error{"this should fail"};
+  }
+}
+
 #include <exception>
 #include <system_error>
 

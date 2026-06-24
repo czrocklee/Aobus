@@ -21,7 +21,7 @@ namespace ao::audio
     ISource(ISource&&) = delete;
     ISource& operator=(ISource&&) = delete;
 
-    virtual Result<> seek(std::chrono::milliseconds offset) = 0;
+    virtual Result<> seek(std::chrono::milliseconds offset) noexcept = 0;
     virtual std::size_t read(std::span<std::byte> output) noexcept = 0;
     virtual bool isDrained() const noexcept = 0;
     virtual std::chrono::milliseconds bufferedDuration() const noexcept = 0;

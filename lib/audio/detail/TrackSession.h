@@ -49,17 +49,17 @@ namespace ao::audio::detail
                                       OnSourceErrorFn onSourceError);
 
   private:
-    static Result<> negotiateFormat(std::filesystem::path const& path,
-                                    DecodedStreamInfo& info,
-                                    std::unique_ptr<IDecoderSession>& decoder,
-                                    Format& backendFormat,
-                                    Device const& device,
-                                    BackendId const& backendId,
-                                    ProfileId const& profileId,
-                                    DecoderFactoryFn const& decoderFactory);
+    static void negotiateFormat(std::filesystem::path const& path,
+                                DecodedStreamInfo& info,
+                                std::unique_ptr<IDecoderSession>& decoder,
+                                Format& backendFormat,
+                                Device const& device,
+                                BackendId const& backendId,
+                                ProfileId const& profileId,
+                                DecoderFactoryFn const& decoderFactory);
 
-    static Result<std::shared_ptr<ISource>> createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
-                                                            DecodedStreamInfo const& info,
-                                                            OnSourceErrorFn onSourceError);
+    static std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
+                                                    DecodedStreamInfo const& info,
+                                                    OnSourceErrorFn onSourceError);
   };
 } // namespace ao::audio::detail

@@ -68,6 +68,7 @@ add_executable(ao_core_test
     unit/audio/detail/MappedFileCursorTest.cpp
     unit/audio/detail/Mp4PacketSourceTest.cpp
     unit/audio/detail/TimeConversionTest.cpp
+    unit/audio/DecoderErrorTest.cpp
     unit/audio/AacDecoderSessionTest.cpp
     unit/audio/AacDecoderMalformedMp4Test.cpp
     unit/audio/FlacDecoderSessionTest.cpp

@@ -6,6 +6,7 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/StreamingSource.h>
+#include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ThreadUtils.h>
 
 #include <atomic>
@@ -62,24 +63,40 @@ namespace ao::audio
   {
     auto const seekToken = _seekStopSource.get_token();
 
-    if (auto const fillResult = fillUntil(_prerollDuration, seekToken); !fillResult)
+    try
     {
-      return fillResult;
-    }
+      fillUntil(_prerollDuration, seekToken);
 
-    if (!_decoderReachedEof.load(std::memory_order_relaxed))
+      if (!_decoderReachedEof.load(std::memory_order_relaxed))
+      {
+        startDecodeThread();
+      }
+
+      if (_failed.load(std::memory_order_relaxed))
+      {
+        auto const lock = std::scoped_lock{_errorMutex};
+        return std::unexpected(_optLastError.value_or(
+          Error{.code = Error::Code::Generic, .message = "Streaming source failed during initialization"}));
+      }
+
+      return {};
+    }
+    catch (detail::DecoderException const& ex)
     {
-      startDecodeThread();
-    }
+      bool const failedExchanged = !_failed.exchange(true, std::memory_order_relaxed);
 
-    if (_failed.load(std::memory_order_relaxed))
-    {
-      auto const lock = std::scoped_lock{_errorMutex};
-      return std::unexpected(_optLastError.value_or(
-        Error{.code = Error::Code::Generic, .message = "Streaming source failed during initialization"}));
-    }
+      {
+        auto const lock = std::scoped_lock{_errorMutex};
+        _optLastError = ex.error();
+      }
 
-    return {};
+      if (failedExchanged && _onError)
+      {
+        _onError(ex.error());
+      }
+
+      return std::unexpected{ex.error()};
+    }
   }
 
   std::size_t StreamingSource::read(std::span<std::byte> output) noexcept
@@ -97,7 +114,7 @@ namespace ao::audio
     return calculateBufferedDuration(_ringBuffer.size(), _bytesPerSecond);
   }
 
-  Result<> StreamingSource::seek(std::chrono::milliseconds offset)
+  Result<> StreamingSource::seek(std::chrono::milliseconds offset) noexcept
   {
     stopDecodeThread();
 
@@ -113,50 +130,49 @@ namespace ao::audio
     _decoderReachedEof = false;
     _ringBuffer.clear();
 
-    auto seekResult = Result<>{};
-    bool failedExchanged = false;
+    try
     {
-      auto lock = std::scoped_lock{_decoderMutex};
-
-      if (auto const res = _decoderPtr->seek(offset); !res)
       {
-        {
-          auto const lock = std::scoped_lock{_errorMutex};
-          _optLastError = res.error();
-        }
-        failedExchanged = !_failed.exchange(true, std::memory_order_relaxed);
-        seekResult = std::unexpected{res.error()};
-      }
-    }
+        auto lock = std::scoped_lock{_decoderMutex};
 
-    if (!seekResult)
+        if (auto const res = _decoderPtr->seek(offset); !res)
+        {
+          detail::throwDecoderError(res.error());
+        }
+      }
+
+      fillUntil(_prerollDuration, seekToken);
+
+      if (!_decoderReachedEof.load(std::memory_order_relaxed))
+      {
+        startDecodeThread();
+      }
+
+      if (_failed.load(std::memory_order_relaxed))
+      {
+        auto const lock = std::scoped_lock{_errorMutex};
+        return std::unexpected(_optLastError.value_or(
+          Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"}));
+      }
+
+      return {};
+    }
+    catch (detail::DecoderException const& ex)
     {
+      bool const failedExchanged = !_failed.exchange(true, std::memory_order_relaxed);
+
+      {
+        auto const lock = std::scoped_lock{_errorMutex};
+        _optLastError = ex.error();
+      }
+
       if (failedExchanged && _onError)
       {
-        _onError(seekResult.error());
+        _onError(ex.error());
       }
 
-      return seekResult;
+      return std::unexpected{ex.error()};
     }
-
-    if (auto const fillResult = fillUntil(_prerollDuration, seekToken); !fillResult)
-    {
-      return fillResult;
-    }
-
-    if (!_decoderReachedEof.load(std::memory_order_relaxed))
-    {
-      startDecodeThread();
-    }
-
-    if (_failed.load(std::memory_order_relaxed))
-    {
-      auto const lock = std::scoped_lock{_errorMutex};
-      return std::unexpected(
-        _optLastError.value_or(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"}));
-    }
-
-    return {};
   }
 
   void StreamingSource::startDecodeThread()
@@ -183,69 +199,49 @@ namespace ao::audio
   {
     auto const seekToken = _seekStopSource.get_token();
 
-    while (!threadStopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
-           !_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested())
+    try
     {
-      if (bufferedDuration() >= _decodeHighWatermarkThreshold)
+      while (!threadStopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
+             !_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested())
       {
-        std::this_thread::sleep_for(kDecodeBackoffInterval);
-        continue;
-      }
-
-      auto const result = decodeNextBlock(seekToken, &threadStopToken);
-
-      if (!result)
-      {
+        if (bufferedDuration() >= _decodeHighWatermarkThreshold)
         {
-          auto const lock = std::scoped_lock{_errorMutex};
-          _optLastError = result.error();
+          std::this_thread::sleep_for(kDecodeBackoffInterval);
+          continue;
         }
 
-        if (!_failed.exchange(true, std::memory_order_relaxed))
-        {
-          if (_onError)
-          {
-            _onError(result.error());
-          }
-        }
+        auto const status = decodeNextBlock(seekToken, &threadStopToken);
 
-        break;
+        if (status == StreamingSource::DecodeBlockStatus::Stopped)
+        {
+          break;
+        }
+      }
+    }
+    catch (detail::DecoderException const& ex)
+    {
+      {
+        auto const lock = std::scoped_lock{_errorMutex};
+        _optLastError = ex.error();
       }
 
-      if (*result == StreamingSource::DecodeBlockStatus::Stopped)
+      if (!_failed.exchange(true, std::memory_order_relaxed))
       {
-        break;
+        if (_onError)
+        {
+          _onError(ex.error());
+        }
       }
     }
   }
 
-  Result<> StreamingSource::fillUntil(std::chrono::milliseconds targetBufferedThreshold,
-                                      std::stop_token const& seekToken)
+  void StreamingSource::fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken)
   {
     while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
            !seekToken.stop_requested() && bufferedDuration() < targetBufferedThreshold)
     {
-      auto const result = decodeNextBlock(seekToken, nullptr);
-
-      if (!result)
-      {
-        {
-          auto const lock = std::scoped_lock{_errorMutex};
-          _optLastError = result.error();
-        }
-
-        if (!_failed.exchange(true, std::memory_order_relaxed))
-        {
-          if (_onError)
-          {
-            _onError(result.error());
-          }
-        }
-
-        return std::unexpected{result.error()};
-      }
-
-      if (*result == StreamingSource::DecodeBlockStatus::Stopped)
+      if (auto const status = decodeNextBlock(seekToken, nullptr);
+          status == StreamingSource::DecodeBlockStatus::Stopped)
       {
         break;
       }
@@ -254,15 +250,14 @@ namespace ao::audio
     if (_failed.load(std::memory_order_relaxed))
     {
       auto const lock = std::scoped_lock{_errorMutex};
-      return std::unexpected(
-        _optLastError.value_or(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"}));
+      auto const err =
+        _optLastError.value_or(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"});
+      detail::throwDecoderError(err);
     }
-
-    return {};
   }
 
-  Result<StreamingSource::DecodeBlockStatus> StreamingSource::decodeNextBlock(std::stop_token const& seekToken,
-                                                                              std::stop_token const* threadStopToken)
+  StreamingSource::DecodeBlockStatus StreamingSource::decodeNextBlock(std::stop_token const& seekToken,
+                                                                      std::stop_token const* threadStopToken)
   {
     if (seekToken.stop_requested())
     {
@@ -283,7 +278,7 @@ namespace ao::audio
 
       if (!blockResult)
       {
-        return std::unexpected{blockResult.error()};
+        detail::throwDecoderError(blockResult.error());
       }
 
       block = *blockResult;

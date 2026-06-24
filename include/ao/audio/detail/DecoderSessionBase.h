@@ -15,7 +15,7 @@ namespace ao::audio::detail
   class DecoderSessionBase : public IDecoderSession
   {
   public:
-    Result<> open(std::filesystem::path const& filePath) override
+    Result<> open(std::filesystem::path const& filePath) noexcept override
     {
       auto* derived = static_cast<Derived*>(this);
       derived->close();

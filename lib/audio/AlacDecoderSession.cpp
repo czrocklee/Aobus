@@ -9,6 +9,7 @@
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
+#include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
 
 #include <alac/ALACAudioTypes.h>
@@ -55,12 +56,12 @@ namespace ao::audio
              static_cast<std::uint32_t>(bytes[offset + kBigEndian32Byte3Offset]);
     }
 
-    Result<> validateAlacCookie(std::span<std::byte const> cookie)
+    void validateAlacCookie(std::span<std::byte const> cookie)
     {
       if (cookie.size() < kAlacConfigOffset + kAlacConfigSize ||
           utility::bytes::stringView(cookie.subspan(4, 4)) != "alac")
       {
-        return makeError(Error::Code::InitFailed, "Malformed ALAC configuration");
+        detail::throwDecoderError(Error::Code::InitFailed, "Malformed ALAC configuration");
       }
 
       auto const frameLength = readBigEndian32(cookie, kAlacConfigOffset);
@@ -73,10 +74,8 @@ namespace ao::audio
       if (frameLength == 0 || frameLength > kMaxAlacFrameLength || compatibleVersion != 0 || !supportedBitDepth ||
           channels == 0 || channels > kMaxAlacChannels || sampleRate == 0 || sampleRate > kMaxAlacSampleRate)
       {
-        return makeError(Error::Code::InitFailed, "Invalid ALAC stream configuration");
+        detail::throwDecoderError(Error::Code::InitFailed, "Invalid ALAC stream configuration");
       }
-
-      return {};
     }
   } // namespace
 
@@ -114,84 +113,87 @@ namespace ao::audio
 
   Result<> AlacDecoderSession::openCodec(std::filesystem::path const& filePath)
   {
-    if (auto const result = _implPtr->packetSource.open(filePath, "alac"); !result)
+    try
     {
-      auto error = result.error();
-
-      if (error.code == Error::Code::FormatRejected)
+      if (auto const result = _implPtr->packetSource.open(filePath, "alac"); !result)
       {
-        error.code = Error::Code::InitFailed;
+        auto error = result.error();
+
+        if (error.code == Error::Code::FormatRejected)
+        {
+          error.code = Error::Code::InitFailed;
+        }
+
+        detail::throwDecoderError(std::move(error));
       }
 
-      return std::unexpected{std::move(error)};
+      auto const cookie = _implPtr->packetSource.magicCookie();
+
+      validateAlacCookie(cookie);
+
+      auto const initStatus =
+        _implPtr->decoderPtr->Init(layout::asLegacyPtr<std::uint8_t>(cookie), layout::size32(cookie));
+
+      if (initStatus != ALAC_noErr)
+      {
+        detail::throwDecoderError(Error::Code::InitFailed, "Failed to initialize ALAC decoder");
+      }
+
+      auto const& config = _implPtr->decoderPtr->mConfig;
+
+      if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
+      {
+        detail::throwDecoderError(Error::Code::InitFailed, "Invalid ALAC stream configuration");
+      }
+
+      _implPtr->info.duration = _implPtr->packetSource.duration(config.sampleRate);
+      _implPtr->info.codec = AudioCodec::Alac;
+
+      _implPtr->info.sourceFormat.channels = config.numChannels;
+      _implPtr->info.sourceFormat.sampleRate = config.sampleRate;
+      _implPtr->info.sourceFormat.bitDepth = config.bitDepth;
+      _implPtr->info.sourceFormat.validBits = config.bitDepth;
+      _implPtr->info.sourceFormat.isInterleaved = true;
+
+      _implPtr->info.outputFormat = _implPtr->info.sourceFormat;
+
+      if (_implPtr->requestedOutput.bitDepth != 0)
+      {
+        _implPtr->info.outputFormat.bitDepth = _implPtr->requestedOutput.bitDepth;
+        _implPtr->info.outputFormat.validBits = (_implPtr->requestedOutput.validBits != 0)
+                                                  ? _implPtr->requestedOutput.validBits
+                                                  : _implPtr->info.sourceFormat.validBits;
+      }
+
+      if (auto const result =
+            detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "ALAC");
+          !result)
+      {
+        detail::throwDecoderError(result.error());
+      }
+
+      auto const sourceBitDepth = _implPtr->info.sourceFormat.bitDepth;
+      auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
+      auto const supportedConversion = sourceBitDepth == outputBitDepth ||
+                                       (sourceBitDepth == 16 && outputBitDepth == 32) ||
+                                       (sourceBitDepth == 24 && outputBitDepth == 32);
+
+      if (_implPtr->requestedOutput.isFloat || !supportedConversion ||
+          _implPtr->info.outputFormat.validBits != sourceBitDepth)
+      {
+        detail::throwDecoderError(Error::Code::NotSupported,
+                                  std::format("Unsupported ALAC conversion: {} -> {}", sourceBitDepth, outputBitDepth));
+      }
+
+      return {};
     }
-
-    auto const cookie = _implPtr->packetSource.magicCookie();
-
-    if (auto const result = validateAlacCookie(cookie); !result)
+    catch (detail::DecoderException const& ex)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{ex.error()};
     }
-
-    auto const initStatus =
-      _implPtr->decoderPtr->Init(layout::asLegacyPtr<std::uint8_t>(cookie), layout::size32(cookie));
-
-    if (initStatus != ALAC_noErr)
-    {
-      return std::unexpected{Error{.code = Error::Code::InitFailed, .message = "Failed to initialize ALAC decoder"}};
-    }
-
-    auto const& config = _implPtr->decoderPtr->mConfig;
-
-    if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
-    {
-      return std::unexpected{Error{.code = Error::Code::InitFailed, .message = "Invalid ALAC stream configuration"}};
-    }
-
-    _implPtr->info.duration = _implPtr->packetSource.duration(config.sampleRate);
-    _implPtr->info.codec = AudioCodec::Alac;
-
-    _implPtr->info.sourceFormat.channels = config.numChannels;
-    _implPtr->info.sourceFormat.sampleRate = config.sampleRate;
-    _implPtr->info.sourceFormat.bitDepth = config.bitDepth;
-    _implPtr->info.sourceFormat.validBits = config.bitDepth;
-    _implPtr->info.sourceFormat.isInterleaved = true;
-
-    _implPtr->info.outputFormat = _implPtr->info.sourceFormat;
-
-    if (_implPtr->requestedOutput.bitDepth != 0)
-    {
-      _implPtr->info.outputFormat.bitDepth = _implPtr->requestedOutput.bitDepth;
-      _implPtr->info.outputFormat.validBits = (_implPtr->requestedOutput.validBits != 0)
-                                                ? _implPtr->requestedOutput.validBits
-                                                : _implPtr->info.sourceFormat.validBits;
-    }
-
-    if (auto const result =
-          detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "ALAC");
-        !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    auto const sourceBitDepth = _implPtr->info.sourceFormat.bitDepth;
-    auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
-    auto const supportedConversion = sourceBitDepth == outputBitDepth ||
-                                     (sourceBitDepth == 16 && outputBitDepth == 32) ||
-                                     (sourceBitDepth == 24 && outputBitDepth == 32);
-
-    if (_implPtr->requestedOutput.isFloat || !supportedConversion ||
-        _implPtr->info.outputFormat.validBits != sourceBitDepth)
-    {
-      return std::unexpected{
-        Error{.code = Error::Code::NotSupported,
-              .message = std::format("Unsupported ALAC conversion: {} -> {}", sourceBitDepth, outputBitDepth)}};
-    }
-
-    return {};
   }
 
-  void AlacDecoderSession::close()
+  void AlacDecoderSession::close() noexcept
   {
     _implPtr->packetSource.close();
     _implPtr->sourcePcm.clear();
@@ -199,16 +201,16 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
-  Result<> AlacDecoderSession::seek(std::chrono::milliseconds offset)
+  Result<> AlacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
     return _implPtr->packetSource.seek(offset, _implPtr->info.sourceFormat.sampleRate);
   }
 
-  void AlacDecoderSession::flush()
+  void AlacDecoderSession::flush() noexcept
   {
   }
 
-  Result<PcmBlock> AlacDecoderSession::readNextBlock()
+  Result<PcmBlock> AlacDecoderSession::readNextBlock() noexcept
   {
     if (_implPtr->packetSource.atEnd())
     {
@@ -323,7 +325,7 @@ namespace ao::audio
     };
   }
 
-  DecodedStreamInfo AlacDecoderSession::streamInfo() const
+  DecodedStreamInfo AlacDecoderSession::streamInfo() const noexcept
   {
     return _implPtr->info;
   }
