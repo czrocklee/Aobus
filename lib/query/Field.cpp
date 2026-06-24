@@ -7,14 +7,15 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/FieldCatalog.h>
+#include <ao/query/detail/FieldCatalog.h>
+#include <ao/query/detail/FieldResolver.h>
 
 #include <format>
 #include <optional>
 #include <string>
 #include <string_view>
 
-namespace ao::query
+namespace ao::query::detail
 {
   Result<Field> resolveVariableField(VariableType type, std::string_view name)
   {
@@ -51,7 +52,7 @@ namespace ao::query
     return resolveVariableField(variable.type, variable.name);
   }
 
-  std::optional<Field> tryResolveVariableField(VariableType type, std::string_view name)
+  std::optional<Field> lookupVariableField(VariableType type, std::string_view name)
   {
     switch (type)
     {
@@ -71,11 +72,14 @@ namespace ao::query
     }
   }
 
-  std::optional<Field> tryResolveVariableField(VariableExpression const& variable)
+  std::optional<Field> lookupVariableField(VariableExpression const& variable)
   {
-    return tryResolveVariableField(variable.type, variable.name);
+    return lookupVariableField(variable.type, variable.name);
   }
+} // namespace ao::query::detail
 
+namespace ao::query
+{
   bool isColdField(Field field)
   {
     switch (field)

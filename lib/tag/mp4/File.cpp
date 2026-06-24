@@ -6,22 +6,22 @@
 #include "../detail/Decoder.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/media/mp4/TrackSelection.h>
+#include <ao/tag/detail/TagError.h>
 #include <ao/utility/ByteView.h>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <limits>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string_view>
 
 namespace ao::tag::mp4
@@ -312,20 +312,25 @@ namespace ao::tag::mp4
       if (auto const* const mdhdNode = track.find(kTrackMdhdPath); mdhdNode != nullptr)
       {
         auto const& view = utility::unsafeDowncast<AtomView const>(*mdhdNode);
-        auto const& layout = view.layout<MdhdAtomLayout>();
 
-        if (auto const timescale = layout.timescale.value(); timescale > 0)
+        if (auto const bytes = view.bytes();
+            bytes.size() >= sizeof(MdhdAtomLayout) && std::to_integer<std::uint8_t>(bytes[sizeof(AtomLayout)]) == 0)
         {
-          builder.property().sampleRate(SampleRate{timescale});
+          auto const& layout = view.layout<MdhdAtomLayout>();
 
-          if (auto const duration = layout.duration.value(); duration > 0)
+          if (auto const timescale = layout.timescale.value(); timescale > 0)
           {
-            auto const trackDuration = std::chrono::milliseconds{
-              (static_cast<std::uint64_t>(duration) * std::chrono::milliseconds::period::den) / timescale};
+            builder.property().sampleRate(SampleRate{timescale});
 
-            if (trackDuration > std::chrono::milliseconds{0})
+            if (auto const duration = layout.duration.value(); duration > 0)
             {
-              builder.property().duration(trackDuration).bitrate(Bitrate{bitrateFromBytes(fileSize, trackDuration)});
+              auto const trackDuration = std::chrono::milliseconds{
+                (static_cast<std::uint64_t>(duration) * std::chrono::milliseconds::period::den) / timescale};
+
+              if (trackDuration > std::chrono::milliseconds{0})
+              {
+                builder.property().duration(trackDuration).bitrate(Bitrate{bitrateFromBytes(fileSize, trackDuration)});
+              }
             }
           }
         }
@@ -398,13 +403,9 @@ namespace ao::tag::mp4
 
       return builder;
     }
-    catch (Exception const& e)
+    catch (detail::TagException const& ex)
     {
-      return makeError(Error::Code::CorruptData, e.what());
-    }
-    catch (std::out_of_range const& e)
-    {
-      return makeError(Error::Code::CorruptData, e.what());
+      return std::unexpected{ex.error()};
     }
   }
 } // namespace ao::tag::mp4

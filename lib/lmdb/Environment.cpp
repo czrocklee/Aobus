@@ -7,6 +7,7 @@
 
 #include <lmdb.h>
 
+#include <expected>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -35,7 +36,7 @@ namespace ao::lmdb
 
     if (auto result = resultFromCode("mdb_env_create", ::mdb_env_create(&handle)); !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     auto envPtr = EnvPtr{handle};
@@ -45,7 +46,7 @@ namespace ao::lmdb
       if (auto result = resultFromCode("mdb_env_set_mapsize", ::mdb_env_set_mapsize(envPtr.get(), options.mapSize));
           !result)
       {
-        return makeError(result.error().code, result.error().message);
+        return std::unexpected{result.error()};
       }
     }
 
@@ -54,7 +55,7 @@ namespace ao::lmdb
       if (auto result = resultFromCode("mdb_env_set_maxdbs", ::mdb_env_set_maxdbs(envPtr.get(), options.maxDatabases));
           !result)
       {
-        return makeError(result.error().code, result.error().message);
+        return std::unexpected{result.error()};
       }
     }
 
@@ -64,7 +65,7 @@ namespace ao::lmdb
             resultFromCode("mdb_env_set_maxreaders", ::mdb_env_set_maxreaders(envPtr.get(), options.maxReaders));
           !result)
       {
-        return makeError(result.error().code, result.error().message);
+        return std::unexpected{result.error()};
       }
     }
 
@@ -72,7 +73,7 @@ namespace ao::lmdb
           resultFromCode("mdb_env_open", ::mdb_env_open(envPtr.get(), path.c_str(), options.flags, options.mode));
         !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     return Environment{std::move(envPtr)};

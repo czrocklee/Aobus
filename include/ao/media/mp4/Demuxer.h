@@ -101,18 +101,18 @@ namespace ao::media::mp4
       std::uint32_t sampleDelta = 0;
     };
 
-    bool parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out);
-    bool parseStsz(std::span<std::byte const> bytes);
-    bool parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
-    bool parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
-    bool parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
-    bool parseSampleTable(Atom const& table,
+    void parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out);
+    void parseStsz(std::span<std::byte const> bytes);
+    void parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
+    void parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+    void parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+    void parseSampleTable(Atom const& table,
                           std::vector<std::uint64_t>& chunkOffsets,
                           std::vector<SampleToChunkEntry>& sampleToChunk,
                           std::vector<TimeToSampleEntry>& timeToSample);
 
-    static bool applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample);
-    static bool buildSampleOffsets(std::vector<SampleEntry>& samples,
+    static void applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample);
+    static void buildSampleOffsets(std::vector<SampleEntry>& samples,
                                    std::span<std::uint64_t const> chunkOffsets,
                                    std::span<SampleToChunkEntry const> sampleToChunk);
 

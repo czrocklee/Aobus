@@ -149,8 +149,8 @@ namespace ao::tag::mpeg
     auto const bitrateIndex = static_cast<std::size_t>(fl.bitrateIndex());
     auto const samplingRateIndex = static_cast<std::size_t>(fl.samplingRateIndex());
 
-    auto const bitrate = kVersionLayerBitrateTable.at(versionId).at(layer).at(bitrateIndex);
-    auto const samplingRate = kVersionSamplingRateTable.at(versionId).at(samplingRateIndex);
+    auto const bitrate = kVersionLayerBitrateTable[versionId][layer][bitrateIndex];
+    auto const samplingRate = kVersionSamplingRateTable[versionId][samplingRateIndex];
 
     if (bitrate == 0 || samplingRate == 0)
     {
@@ -194,8 +194,8 @@ namespace ao::tag::mpeg
   std::uint32_t FrameView::sampleRate() const
   {
     auto const& fl = layout();
-    return kVersionSamplingRateTable.at(static_cast<std::size_t>(fl.versionId()))
-      .at(static_cast<std::size_t>(fl.samplingRateIndex()));
+    return kVersionSamplingRateTable[static_cast<std::size_t>(fl.versionId())]
+                                    [static_cast<std::size_t>(fl.samplingRateIndex())];
   }
 
   std::uint32_t FrameView::bitrate() const
@@ -203,9 +203,8 @@ namespace ao::tag::mpeg
     auto const& fl = layout();
     // Table values are in kbps, convert to bps
     constexpr std::uint32_t kBpsPerKbps = 1000;
-    return kVersionLayerBitrateTable.at(static_cast<std::size_t>(fl.versionId()))
-             .at(static_cast<std::size_t>(fl.layer()))
-             .at(static_cast<std::size_t>(fl.bitrateIndex())) *
+    return kVersionLayerBitrateTable[static_cast<std::size_t>(fl.versionId())][static_cast<std::size_t>(fl.layer())]
+                                    [static_cast<std::size_t>(fl.bitrateIndex())] *
            kBpsPerKbps;
   }
 

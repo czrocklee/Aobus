@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <ao/Exception.h>
+#include <ao/Error.h>
+#include <ao/media/detail/MediaError.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/utility/ByteView.h>
 
@@ -14,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <format>
 #include <functional>
 #include <iterator>
 #include <span>
@@ -32,8 +34,9 @@ namespace ao::media::flac
     {
       if (ptr + sizeof(LengthType) > end)
       {
-        throwException<Exception>(
-          "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
+        ao::media::detail::throwMediaError(
+          Error::Code::CorruptData,
+          std::format("invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType)));
       }
 
       LengthType length;
@@ -50,7 +53,9 @@ namespace ao::media::flac
 
       if (ptr + length > end)
       {
-        throwException<Exception>("invalid flac block, expect available field length {} >= {}", end - ptr, length);
+        ao::media::detail::throwMediaError(
+          Error::Code::CorruptData,
+          std::format("invalid flac block, expect available field length {} >= {}", end - ptr, length));
       }
 
       char const* start = ptr;
@@ -134,8 +139,9 @@ namespace ao::media::flac
 
       if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
       {
-        throwException<Exception>(
-          "invalid flac vorbis_comment block, unexpected content \"{}\"", std::string_view{ptr, sizeLeft});
+        ao::media::detail::throwMediaError(
+          Error::Code::CorruptData,
+          std::format("invalid flac vorbis_comment block, unexpected content \"{}\"", std::string_view{ptr, sizeLeft}));
       }
     }
 

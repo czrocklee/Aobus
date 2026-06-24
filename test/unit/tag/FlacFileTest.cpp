@@ -184,6 +184,25 @@ namespace ao::tag::flac::test
       CHECK(result.error().code == Error::Code::CorruptData);
     }
 
+    SECTION("Last metadata block cannot extend past file boundary")
+    {
+      auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
+
+      addBlockHeader(data, MetadataBlockType::StreamInfo, false, 34);
+      auto si = StreamInfoLayout{};
+      auto const* siAddr = reinterpret_cast<std::uint8_t const*>(&si);
+      data.insert(data.end(), siAddr, siAddr + 34);
+
+      addBlockHeader(data, MetadataBlockType::Padding, true, 1000);
+      data.insert(data.end(), 4, 0);
+
+      auto const temp = TempFile{data};
+      auto const file = File{temp.path};
+      auto result = file.loadTrack();
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
+
     SECTION("Picture block is truncated after picture type")
     {
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};

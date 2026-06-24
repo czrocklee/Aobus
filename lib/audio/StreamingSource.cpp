@@ -76,7 +76,7 @@ namespace ao::audio
       {
         auto const lock = std::scoped_lock{_errorMutex};
         return std::unexpected(_optLastError.value_or(
-          Error{.code = Error::Code::Generic, .message = "Streaming source failed during initialization"}));
+          Error{.code = Error::Code::InvalidState, .message = "Streaming source failed during initialization"}));
       }
 
       return {};
@@ -152,7 +152,7 @@ namespace ao::audio
       {
         auto const lock = std::scoped_lock{_errorMutex};
         return std::unexpected(_optLastError.value_or(
-          Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"}));
+          Error{.code = Error::Code::InvalidState, .message = "Streaming source is in failed state"}));
       }
 
       return {};
@@ -250,8 +250,8 @@ namespace ao::audio
     if (_failed.load(std::memory_order_relaxed))
     {
       auto const lock = std::scoped_lock{_errorMutex};
-      auto const err =
-        _optLastError.value_or(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"});
+      auto const err = _optLastError.value_or(
+        Error{.code = Error::Code::InvalidState, .message = "Streaming source is in failed state"});
       detail::throwDecoderError(err);
     }
   }

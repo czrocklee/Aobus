@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -130,14 +131,14 @@ namespace ao::library
 
       if (!env)
       {
-        return makeError(env.error().code, env.error().message);
+        return std::unexpected{env.error()};
       }
 
       auto setupTxn = lmdb::WriteTransaction::begin(*env);
 
       if (!setupTxn)
       {
-        return makeError(setupTxn.error().code, setupTxn.error().message);
+        return std::unexpected{setupTxn.error()};
       }
 
       auto metaDb = lmdb::Database::open(*setupTxn, "meta");
@@ -150,37 +151,37 @@ namespace ao::library
 
       if (!metaDb)
       {
-        return makeError(metaDb.error().code, metaDb.error().message);
+        return std::unexpected{metaDb.error()};
       }
 
       if (!tracksHotDb)
       {
-        return makeError(tracksHotDb.error().code, tracksHotDb.error().message);
+        return std::unexpected{tracksHotDb.error()};
       }
 
       if (!tracksColdDb)
       {
-        return makeError(tracksColdDb.error().code, tracksColdDb.error().message);
+        return std::unexpected{tracksColdDb.error()};
       }
 
       if (!listsDb)
       {
-        return makeError(listsDb.error().code, listsDb.error().message);
+        return std::unexpected{listsDb.error()};
       }
 
       if (!resourcesDb)
       {
-        return makeError(resourcesDb.error().code, resourcesDb.error().message);
+        return std::unexpected{resourcesDb.error()};
       }
 
       if (!dictionaryDb)
       {
-        return makeError(dictionaryDb.error().code, dictionaryDb.error().message);
+        return std::unexpected{dictionaryDb.error()};
       }
 
       if (!manifestDb)
       {
-        return makeError(manifestDb.error().code, manifestDb.error().message);
+        return std::unexpected{manifestDb.error()};
       }
 
       return std::make_unique<Impl>(std::move(musicRoot),
@@ -215,7 +216,7 @@ namespace ao::library
 
     if (auto result = library.initialize(std::move(musicRoot), std::move(databasePath)); !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     return library;
@@ -230,7 +231,7 @@ namespace ao::library
 
       if (!impl)
       {
-        return makeError(impl.error().code, impl.error().message);
+        return std::unexpected{impl.error()};
       }
 
       _implPtr = std::move(*impl);
@@ -239,14 +240,14 @@ namespace ao::library
 
       if (!headerResult && headerResult.error().code != Error::Code::NotFound)
       {
-        return makeError(headerResult.error().code, headerResult.error().message);
+        return std::unexpected{headerResult.error()};
       }
 
       if (headerResult)
       {
         if (auto result = validateMetaHeader(*headerResult); !result)
         {
-          return makeError(result.error().code, result.error().message);
+          return std::unexpected{result.error()};
         }
 
         _implPtr->metaHeader = *headerResult;
@@ -260,7 +261,7 @@ namespace ao::library
       // Load dictionary entries before first commit
       if (auto result = _implPtr->setupTxn.commit(); !result)
       {
-        return makeError(result.error().code, result.error().message);
+        return std::unexpected{result.error()};
       }
 
       return {};

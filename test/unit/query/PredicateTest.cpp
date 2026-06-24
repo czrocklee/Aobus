@@ -3,7 +3,7 @@
 
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
-#include <ao/query/Predicate.h>
+#include <ao/query/detail/Predicate.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -40,7 +40,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Expression: " << expression)
       {
-        CHECK(isPredicateExpression(parseOk(expression)));
+        CHECK(detail::isPredicateExpression(parseOk(expression)));
       }
     }
   }
@@ -62,7 +62,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Expression: " << expression)
       {
-        CHECK_FALSE(isPredicateExpression(parseOk(expression)));
+        CHECK_FALSE(detail::isPredicateExpression(parseOk(expression)));
       }
     }
   }

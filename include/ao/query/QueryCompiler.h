@@ -66,23 +66,23 @@ namespace ao::query
     // nullopt when the list is not eligible for set compilation.
     std::uint32_t addStringConstant(std::string_view str);
     std::uint32_t addInSet(InSet set);
-    Result<std::uint32_t> compileExpression(Expression const& expr);
-    Result<std::uint32_t> compilePredicate(Expression const& expr);
-    Result<std::uint32_t> compileBinary(BinaryExpression const& binary);
-    Result<std::uint32_t> compileUnary(UnaryExpression const& unary);
-    Result<std::uint32_t> compileExists(Expression const& operand);
-    Result<std::uint32_t> compileVariable(VariableExpression const& var);
-    Result<std::uint32_t> compileConstant(ConstantExpression const& constant);
-    Result<std::uint32_t> compileList(ListExpression const& list);
-    Result<std::uint32_t> compileRange(RangeExpression const& range);
-    Result<std::uint32_t> compileIn(Expression const& lhs, Expression const& rhs);
-    Result<std::uint32_t> compileInWithList(Expression const& lhs, ListExpression const& list);
-    Result<std::uint32_t> compileInRange(Expression const& lhs, RangeExpression const& range);
-    Result<std::optional<std::uint32_t>> compileInSetList(Expression const& lhs, ListExpression const& list);
+    std::uint32_t compileExpression(Expression const& expr);
+    std::uint32_t compilePredicate(Expression const& expr);
+    std::uint32_t compileBinary(BinaryExpression const& binary);
+    std::uint32_t compileUnary(UnaryExpression const& unary);
+    std::uint32_t compileExists(Expression const& operand);
+    std::uint32_t compileVariable(VariableExpression const& var);
+    std::uint32_t compileConstant(ConstantExpression const& constant);
+    std::uint32_t compileList(ListExpression const& list);
+    std::uint32_t compileRange(RangeExpression const& range);
+    std::uint32_t compileIn(Expression const& lhs, Expression const& rhs);
+    std::uint32_t compileInWithList(Expression const& lhs, ListExpression const& list);
+    std::uint32_t compileInRange(Expression const& lhs, RangeExpression const& range);
+    std::optional<std::uint32_t> compileInSetList(Expression const& lhs, ListExpression const& list);
 
     // Resolve string to ID using dictionary (if available)
     std::int64_t resolveStringConstant(std::string const& str, Field field);
-    Result<InSetValueStatus> appendInSetValue(InSet& set, ConstantExpression const& constant, Field field);
+    InSetValueStatus appendInSetValue(InSet& set, ConstantExpression const& constant, Field field);
 
     // Member variables
     ExecutionPlan _plan;

@@ -4,8 +4,9 @@
 #include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/FieldCatalog.h>
 #include <ao/query/Parser.h>
+#include <ao/query/detail/FieldCatalog.h>
+#include <ao/query/detail/FieldResolver.h>
 #include <ao/utility/Log.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -39,7 +40,7 @@ namespace ao::query::test
     }
 
     bool containsMatch(std::span<QueryVariableCompletionMatch const> matches,
-                       QueryVariableCompletionSpec const& spec,
+                       detail::QueryVariableCompletionSpec const& spec,
                        QueryVariableCompletionMatchKind kind)
     {
       return std::ranges::any_of(matches,
@@ -159,7 +160,7 @@ namespace ao::query::test
 
   TEST_CASE("Completion - Lists Query Variable Specs In UI Catalog Order", "[query][unit][completion]")
   {
-    auto const metadata = queryVariableCompletionSpecs(VariableType::Metadata);
+    auto const metadata = detail::queryVariableCompletionSpecs(VariableType::Metadata);
     REQUIRE(metadata.size() == 13);
     CHECK(metadata[0].canonicalName == "title");
     CHECK(metadata[1].canonicalName == "artist");
@@ -167,14 +168,14 @@ namespace ao::query::test
     CHECK(metadata[3].canonicalName == "albumArtist");
     CHECK(metadata[12].canonicalName == "coverArt");
 
-    auto const properties = queryVariableCompletionSpecs(VariableType::Property);
+    auto const properties = detail::queryVariableCompletionSpecs(VariableType::Property);
     REQUIRE(properties.size() == 6);
     CHECK(properties[0].canonicalName == "duration");
     CHECK(properties[1].canonicalName == "bitrate");
     CHECK(properties[5].canonicalName == "codec");
 
-    CHECK(queryVariableCompletionSpecs(VariableType::Tag).empty());
-    CHECK(queryVariableCompletionSpecs(VariableType::Custom).empty());
+    CHECK(detail::queryVariableCompletionSpecs(VariableType::Tag).empty());
+    CHECK(detail::queryVariableCompletionSpecs(VariableType::Custom).empty());
   }
 
   TEST_CASE("Completion - Completes Canonical Query Variables", "[query][unit][completion]")
@@ -220,14 +221,14 @@ namespace ao::query::test
   {
     for (auto const type : {VariableType::Metadata, VariableType::Property})
     {
-      for (auto const& spec : queryVariableCompletionSpecs(type))
+      for (auto const& spec : detail::queryVariableCompletionSpecs(type))
       {
         DYNAMIC_SECTION("Canonical: " << spec.canonicalName)
         {
-          auto const* found = findQueryVariableCompletionSpec(spec.type, spec.canonicalName);
+          auto const* found = detail::findQueryVariableCompletionSpec(spec.type, spec.canonicalName);
           REQUIRE(found != nullptr);
           CHECK(found->field == spec.field);
-          auto const field = resolveVariableField(spec.type, spec.canonicalName);
+          auto const field = detail::resolveVariableField(spec.type, spec.canonicalName);
           REQUIRE(field.has_value());
           CHECK(*field == spec.field);
 
@@ -239,10 +240,10 @@ namespace ao::query::test
         {
           DYNAMIC_SECTION("Alias: " << alias)
           {
-            auto const* found = findQueryVariableCompletionSpec(spec.type, alias);
+            auto const* found = detail::findQueryVariableCompletionSpec(spec.type, alias);
             REQUIRE(found != nullptr);
             CHECK(found->field == spec.field);
-            auto const field = resolveVariableField(spec.type, alias);
+            auto const field = detail::resolveVariableField(spec.type, alias);
             REQUIRE(field.has_value());
             CHECK(*field == spec.field);
 
@@ -256,17 +257,17 @@ namespace ao::query::test
 
   TEST_CASE("Completion - tryResolveVariableField Returns nullopt For Unknown Fields", "[query][unit][completion]")
   {
-    // Known fields resolve identically to the diagnostic resolveVariableField().
-    CHECK(tryResolveVariableField(VariableType::Metadata, "artist") == Field::ArtistId);
-    CHECK(tryResolveVariableField(VariableType::Property, "duration") == Field::Duration);
+    // Known fields resolve identically to the diagnostic detail::resolveVariableField().
+    CHECK(detail::lookupVariableField(VariableType::Metadata, "artist") == Field::ArtistId);
+    CHECK(detail::lookupVariableField(VariableType::Property, "duration") == Field::Duration);
 
     // Tag and Custom variables always resolve to their fixed fields.
-    CHECK(tryResolveVariableField(VariableType::Tag, "anything") == Field::Tag);
-    CHECK(tryResolveVariableField(VariableType::Custom, "anything") == Field::Custom);
+    CHECK(detail::lookupVariableField(VariableType::Tag, "anything") == Field::Tag);
+    CHECK(detail::lookupVariableField(VariableType::Custom, "anything") == Field::Custom);
 
     // Unknown property/metadata names degrade to nullopt instead of throwing.
-    CHECK_FALSE(tryResolveVariableField(VariableType::Metadata, "not_a_field").has_value());
-    CHECK_FALSE(tryResolveVariableField(VariableType::Property, "not_a_field").has_value());
+    CHECK_FALSE(detail::lookupVariableField(VariableType::Metadata, "not_a_field").has_value());
+    CHECK_FALSE(detail::lookupVariableField(VariableType::Property, "not_a_field").has_value());
   }
 
   TEST_CASE("Completion - Query Variable Alias Set Documents Catalog Surface", "[query][unit][completion]")
@@ -362,7 +363,7 @@ namespace ao::query::test
            .aliases = std::span{kNoAliases}},
     };
 
-    auto const assertSpecs = [&](std::span<QueryVariableCompletionSpec const> actual, auto const& expected)
+    auto const assertSpecs = [&](std::span<detail::QueryVariableCompletionSpec const> actual, auto const& expected)
     {
       REQUIRE(actual.size() == expected.size());
 
@@ -381,8 +382,8 @@ namespace ao::query::test
       }
     };
 
-    assertSpecs(queryVariableCompletionSpecs(VariableType::Metadata), expectedMetadata);
-    assertSpecs(queryVariableCompletionSpecs(VariableType::Property), expectedProperties);
+    assertSpecs(detail::queryVariableCompletionSpecs(VariableType::Metadata), expectedMetadata);
+    assertSpecs(detail::queryVariableCompletionSpecs(VariableType::Property), expectedProperties);
   }
 
   TEST_CASE("Completion - Analyzes Operator Context After Query Variables", "[query][unit][completion]")

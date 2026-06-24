@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
+#include <ao/media/detail/MediaError.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/media/mp4/Demuxer.h>
@@ -20,7 +20,6 @@
 #include <optional>
 #include <ranges>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -220,7 +219,7 @@ namespace ao::media::mp4
       return optCookie.value_or(std::vector<std::byte>{});
     }
 
-    Result<TrackTiming> parseTrackTiming(Atom const& track)
+    TrackTiming parseTrackTiming(Atom const& track)
     {
       static constexpr auto kMdhdPath = std::to_array<std::string_view>({
         "trak",
@@ -241,7 +240,7 @@ namespace ao::media::mp4
 
       if (bytes.size() < sizeof(AtomLayout) + sizeof(std::uint32_t))
       {
-        return makeError(Error::Code::FormatRejected, "Malformed mdhd atom");
+        detail::throwMediaError(Error::Code::FormatRejected, "Malformed mdhd atom");
       }
 
       auto const version = std::to_integer<std::uint8_t>(bytes[sizeof(AtomLayout)]);
@@ -250,7 +249,7 @@ namespace ao::media::mp4
       {
         if (bytes.size() < sizeof(MdhdAtomLayout))
         {
-          return makeError(Error::Code::FormatRejected, "Malformed version 0 mdhd atom");
+          detail::throwMediaError(Error::Code::FormatRejected, "Malformed version 0 mdhd atom");
         }
 
         auto const* layout = utility::layout::view<MdhdAtomLayout>(bytes);
@@ -263,7 +262,7 @@ namespace ao::media::mp4
       {
         if (bytes.size() < sizeof(MdhdVersion1PrefixLayout))
         {
-          return makeError(Error::Code::FormatRejected, "Malformed version 1 mdhd atom");
+          detail::throwMediaError(Error::Code::FormatRejected, "Malformed version 1 mdhd atom");
         }
 
         auto const* layout = utility::layout::view<MdhdVersion1PrefixLayout>(bytes);
@@ -272,7 +271,7 @@ namespace ao::media::mp4
         return timing;
       }
 
-      return makeError(Error::Code::FormatRejected, "Unsupported mdhd version");
+      detail::throwMediaError(Error::Code::FormatRejected, "Unsupported mdhd version");
     }
   } // namespace
 
@@ -281,11 +280,11 @@ namespace ao::media::mp4
   {
   }
 
-  bool Demuxer::applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample)
+  void Demuxer::applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample)
   {
     if (samples.empty() || timeToSample.empty())
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Missing MP4 samples or timing entries");
     }
 
     std::size_t sampleIndex = 0;
@@ -295,14 +294,14 @@ namespace ao::media::mp4
     {
       if (entry.sampleCount == 0 || entry.sampleDelta == 0)
       {
-        return false;
+        detail::throwMediaError(Error::Code::FormatRejected, "Invalid MP4 time-to-sample entry");
       }
 
       for (std::uint32_t sample = 0; sample < entry.sampleCount; ++sample)
       {
         if (sampleIndex >= samples.size())
         {
-          return false;
+          detail::throwMediaError(Error::Code::FormatRejected, "MP4 timing table has too many samples");
         }
 
         samples[sampleIndex].startTime = sampleTime;
@@ -312,16 +311,20 @@ namespace ao::media::mp4
       }
     }
 
-    return sampleIndex == samples.size();
+    if (sampleIndex != samples.size())
+    {
+      detail::throwMediaError(Error::Code::FormatRejected, "MP4 timing table does not cover every sample");
+    }
   }
 
-  bool Demuxer::buildSampleOffsets(std::vector<SampleEntry>& samples,
+  void Demuxer::buildSampleOffsets(std::vector<SampleEntry>& samples,
                                    std::span<std::uint64_t const> chunkOffsets,
                                    std::span<SampleToChunkEntry const> sampleToChunk)
   {
     if (samples.empty() || chunkOffsets.empty() || sampleToChunk.empty())
     {
-      return false;
+      detail::throwMediaError(
+        Error::Code::FormatRejected, "Missing MP4 samples, chunk offsets, or sample-to-chunk table");
     }
 
     std::size_t sampleIndex = 0;
@@ -332,14 +335,14 @@ namespace ao::media::mp4
 
       if (entry.firstChunk == 0 || entry.samplesPerChunk == 0 || entry.sampleDescriptionIndex != 1)
       {
-        return false;
+        detail::throwMediaError(Error::Code::FormatRejected, "Invalid MP4 sample-to-chunk entry");
       }
 
       auto const chunkStartIndex = static_cast<std::size_t>(entry.firstChunk - 1);
 
       if ((entryIndex == 0 && entry.firstChunk != 1) || chunkStartIndex >= chunkOffsets.size())
       {
-        return false;
+        detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk entry references an invalid chunk");
       }
 
       std::size_t chunkEndIndex = chunkOffsets.size();
@@ -350,7 +353,7 @@ namespace ao::media::mp4
 
         if (nextFirstChunk <= entry.firstChunk)
         {
-          return false;
+          detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk entries are not ordered");
         }
 
         chunkEndIndex = std::min(chunkEndIndex, static_cast<std::size_t>(nextFirstChunk - 1));
@@ -364,14 +367,14 @@ namespace ao::media::mp4
         {
           if (sampleIndex >= samples.size())
           {
-            return false;
+            detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk table has too many samples");
           }
 
           samples[sampleIndex].offset = sampleOffset;
 
           if (samples[sampleIndex].size > std::numeric_limits<std::uint64_t>::max() - sampleOffset)
           {
-            return false;
+            detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample offset overflow");
           }
 
           sampleOffset += samples[sampleIndex].size;
@@ -380,14 +383,17 @@ namespace ao::media::mp4
       }
     }
 
-    return sampleIndex == samples.size();
+    if (sampleIndex != samples.size())
+    {
+      detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk table does not cover every sample");
+    }
   }
 
-  bool Demuxer::parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out)
+  void Demuxer::parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out)
   {
     if (bytes.size() < sizeof(SttsAtomLayout))
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed stts atom");
     }
 
     auto const* header = utility::layout::view<SttsAtomLayout>(bytes);
@@ -396,7 +402,7 @@ namespace ao::media::mp4
 
     if (!optEntries)
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed stts entry table");
     }
 
     out.resize(count);
@@ -407,15 +413,13 @@ namespace ao::media::mp4
       out[uidx].sampleCount = entry.sampleCount.value();
       out[uidx].sampleDelta = entry.sampleDelta.value();
     }
-
-    return true;
   }
 
-  bool Demuxer::parseStsz(std::span<std::byte const> bytes)
+  void Demuxer::parseStsz(std::span<std::byte const> bytes)
   {
     if (bytes.size() < sizeof(StszAtomLayout))
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed stsz atom");
     }
 
     auto const* header = utility::layout::view<StszAtomLayout>(bytes);
@@ -427,7 +431,7 @@ namespace ao::media::mp4
 
       if (!optEntries)
       {
-        return false;
+        detail::throwMediaError(Error::Code::FormatRejected, "Malformed stsz entry table");
       }
 
       _samples.resize(count);
@@ -441,7 +445,7 @@ namespace ao::media::mp4
     {
       if (bytes.size() != sizeof(StszAtomLayout))
       {
-        return false;
+        detail::throwMediaError(Error::Code::FormatRejected, "Malformed fixed-size stsz atom");
       }
 
       _samples.resize(count);
@@ -451,15 +455,13 @@ namespace ao::media::mp4
         sample.size = sampleSize;
       }
     }
-
-    return true;
   }
 
-  bool Demuxer::parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out)
+  void Demuxer::parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out)
   {
     if (bytes.size() < sizeof(StscAtomLayout))
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed stsc atom");
     }
 
     auto const* header = utility::layout::view<StscAtomLayout>(bytes);
@@ -468,7 +470,7 @@ namespace ao::media::mp4
 
     if (!optEntries)
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed stsc entry table");
     }
 
     out.resize(count);
@@ -480,15 +482,13 @@ namespace ao::media::mp4
       out[uidx].samplesPerChunk = entry.samplesPerChunk.value();
       out[uidx].sampleDescriptionIndex = entry.sampleDescIndex.value();
     }
-
-    return true;
   }
 
-  bool Demuxer::parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out)
+  void Demuxer::parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out)
   {
     if (bytes.size() < sizeof(StcoAtomLayout))
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed stco atom");
     }
 
     auto const* header = utility::layout::view<StcoAtomLayout>(bytes);
@@ -497,7 +497,7 @@ namespace ao::media::mp4
 
     if (!optEntries)
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed stco entry table");
     }
 
     out.resize(count);
@@ -506,15 +506,13 @@ namespace ao::media::mp4
     {
       out[static_cast<std::size_t>(idx)] = entry.chunkOffset.value();
     }
-
-    return true;
   }
 
-  bool Demuxer::parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out)
+  void Demuxer::parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out)
   {
     if (bytes.size() < sizeof(Co64AtomLayout))
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed co64 atom");
     }
 
     auto const* header = utility::layout::view<Co64AtomLayout>(bytes);
@@ -523,7 +521,7 @@ namespace ao::media::mp4
 
     if (!optEntries)
     {
-      return false;
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed co64 entry table");
     }
 
     out.resize(count);
@@ -532,48 +530,42 @@ namespace ao::media::mp4
     {
       out[static_cast<std::size_t>(idx)] = entry.chunkOffset.value();
     }
-
-    return true;
   }
 
-  bool Demuxer::parseSampleTable(Atom const& table,
+  void Demuxer::parseSampleTable(Atom const& table,
                                  std::vector<std::uint64_t>& chunkOffsets,
                                  std::vector<SampleToChunkEntry>& sampleToChunk,
                                  std::vector<TimeToSampleEntry>& timeToSample)
   {
-    bool sampleTableValid = true;
-
     table.visitChildren(
-      [this, &chunkOffsets, &sampleToChunk, &timeToSample, &sampleTableValid](Atom const& atom)
+      [this, &chunkOffsets, &sampleToChunk, &timeToSample](Atom const& atom)
       {
         auto type = atom.type();
         auto const& view = utility::unsafeDowncast<AtomView const>(atom);
 
         if (auto const atomBytes = view.bytes(); type == "stsz")
         {
-          sampleTableValid = parseStsz(atomBytes);
+          parseStsz(atomBytes);
         }
         else if (type == "stts")
         {
-          sampleTableValid = parseStts(atomBytes, timeToSample);
+          parseStts(atomBytes, timeToSample);
         }
         else if (type == "stsc")
         {
-          sampleTableValid = parseStsc(atomBytes, sampleToChunk);
+          parseStsc(atomBytes, sampleToChunk);
         }
         else if (type == "stco")
         {
-          sampleTableValid = parseStco(atomBytes, chunkOffsets);
+          parseStco(atomBytes, chunkOffsets);
         }
         else if (type == "co64")
         {
-          sampleTableValid = parseCo64(atomBytes, chunkOffsets);
+          parseCo64(atomBytes, chunkOffsets);
         }
 
-        return sampleTableValid;
+        return true;
       });
-
-    return sampleTableValid;
   }
 
   Result<> Demuxer::parseTrack(std::string_view targetFormat)
@@ -599,15 +591,9 @@ namespace ao::media::mp4
 
       auto const& track = *optTrack->track;
 
-      if (auto const timing = parseTrackTiming(track); timing)
-      {
-        _timescale = timing->timescale;
-        _duration = timing->duration;
-      }
-      else
-      {
-        return std::unexpected{timing.error()};
-      }
+      auto const timing = parseTrackTiming(track);
+      _timescale = timing.timescale;
+      _duration = timing.duration;
 
       auto const kCookiePath = std::to_array<std::string_view>({
         "trak",
@@ -659,24 +645,18 @@ namespace ao::media::mp4
         return makeError(Error::Code::FormatRejected, "Missing stbl atom");
       }
 
-      if (!parseSampleTable(*stblNode, chunkOffsets, sampleToChunk, timeToSample))
-      {
-        return makeError(Error::Code::FormatRejected, "Malformed MP4 sample table");
-      }
+      parseSampleTable(*stblNode, chunkOffsets, sampleToChunk, timeToSample);
 
       if (_magicCookie.empty() || _samples.empty())
       {
         return makeError(Error::Code::FormatRejected, "Failed to extract track extradata or sample table");
       }
 
-      if (!buildSampleOffsets(_samples, chunkOffsets, sampleToChunk))
-      {
-        return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample offsets");
-      }
+      buildSampleOffsets(_samples, chunkOffsets, sampleToChunk);
 
-      if (!timeToSample.empty() && !applySampleTiming(_samples, timeToSample))
+      if (!timeToSample.empty())
       {
-        return makeError(Error::Code::FormatRejected, "Failed to resolve MP4 sample timing");
+        applySampleTiming(_samples, timeToSample);
       }
 
       return {};
@@ -686,13 +666,9 @@ namespace ao::media::mp4
     {
       return parse();
     }
-    catch (Exception const& e)
+    catch (detail::MediaException const& ex)
     {
-      return makeError(Error::Code::CorruptData, e.what());
-    }
-    catch (std::out_of_range const& e)
-    {
-      return makeError(Error::Code::CorruptData, e.what());
+      return std::unexpected{ex.error()};
     }
   }
 

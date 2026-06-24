@@ -3,11 +3,9 @@
 
 #pragma once
 
-#include <ao/Error.h>
 #include <ao/query/Expression.h>
 
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <string_view>
 
@@ -73,18 +71,6 @@ namespace ao::query
     ColdOnly,    // Only accesses cold data (custom KV)
     HotAndCold   // Mixed access
   };
-
-  Result<Field> resolveVariableField(VariableType type, std::string_view name);
-  Result<Field> resolveVariableField(VariableExpression const& variable);
-
-  /**
-   * Predicate-style variants of resolveVariableField(). Return std::nullopt for
-   * an unknown property/metadata field or an unsupported variable type. Intended
-   * for hot paths (e.g. completion) that only need presence/absence and can
-   * degrade gracefully on partial input.
-   */
-  std::optional<Field> tryResolveVariableField(VariableType type, std::string_view name);
-  std::optional<Field> tryResolveVariableField(VariableExpression const& variable);
 
   bool isColdField(Field field);
   bool isDictionaryField(Field field);

@@ -21,6 +21,7 @@ add_executable(ao_core_test
     unit/query/PlanEvaluatorTest.cpp
     unit/query/ExpressionTest.cpp
     unit/query/SerializerTest.cpp
+    unit/query/QueryErrorTest.cpp
 
     # tag tests
     unit/tag/MpegFrameTest.cpp
@@ -30,6 +31,7 @@ add_executable(ao_core_test
     unit/tag/FlacFileTest.cpp
     unit/tag/TagFileTest.cpp
     unit/tag/DecoderTest.cpp
+    unit/tag/TagErrorTest.cpp
 
     # media tests
     unit/media/mp4/DemuxerTest.cpp
@@ -42,6 +44,7 @@ add_executable(ao_core_test
     unit/library/FileManifestStoreTest.cpp
     unit/library/FileManifestBuilderTest.cpp
     unit/library/TrackBuilderTest.cpp
+    unit/library/LibraryErrorTest.cpp
     unit/library/MetaStoreTest.cpp
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp

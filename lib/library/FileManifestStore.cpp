@@ -11,6 +11,7 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <expected>
 #include <format>
 #include <span>
 #include <string_view>
@@ -63,7 +64,7 @@ namespace ao::library
   {
     if (auto result = validateUri(uri); !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     if (uri.empty())
@@ -108,7 +109,7 @@ namespace ao::library
   {
     if (auto result = validateUri(uri); !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     if (uri.empty())
@@ -138,7 +139,7 @@ namespace ao::library
   {
     if (auto result = validateUri(uri); !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
@@ -151,7 +152,7 @@ namespace ao::library
   {
     if (auto result = validateUri(uri); !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};

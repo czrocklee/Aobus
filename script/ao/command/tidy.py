@@ -56,6 +56,7 @@ STRICT_CHECKS = ",".join(
         "-bugprone-easily-swappable-parameters",  # frequent false positives
         "-cppcoreguidelines-avoid-magic-numbers",  # handled by aobus readability check
         "-cppcoreguidelines-avoid-const-or-ref-data-members",  # common pattern for views
+        "-cppcoreguidelines-pro-bounds-constant-array-index",  # table dispatch is fine
         "-cppcoreguidelines-pro-bounds-pointer-arithmetic",  # common in layout/audio code
         "-misc-no-recursion",  # recursion is idiomatic in some modules
         "-misc-non-private-member-variables-in-classes",  # impl structs use this pattern

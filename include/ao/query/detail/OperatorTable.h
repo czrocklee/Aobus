@@ -12,6 +12,8 @@
 
 #include <ao/query/Expression.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -55,6 +57,8 @@ namespace ao::query::detail
 
   constexpr OperatorInfo const& operatorInfo(Operator op)
   {
-    return kOperatorTable.at(static_cast<std::size_t>(op));
+    auto const index = static_cast<std::size_t>(op);
+    gsl_Expects(index < kOperatorTable.size());
+    return kOperatorTable[index];
   }
 } // namespace ao::query::detail

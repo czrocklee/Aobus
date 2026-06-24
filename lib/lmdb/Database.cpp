@@ -16,6 +16,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <expected>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -69,7 +71,7 @@ namespace ao::lmdb
     if (auto result = resultFromCode("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &dbi));
         !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     return Database{dbi, kind};
@@ -88,7 +90,7 @@ namespace ao::lmdb
     if (auto result = resultFromCode("mdb_dbi_open", ::mdb_dbi_open(txn._txnPtr.get(), name.c_str(), flags, &dbi));
         !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     return Database{dbi, kind};
@@ -306,7 +308,7 @@ namespace ao::lmdb
       if (auto result = resultFromCode("mdb_cursor_put", ::mdb_cursor_put(cursor, &key, &val, flags | MDB_RESERVE));
           !result)
       {
-        return makeError(result.error().code, result.error().message);
+        return std::unexpected{result.error()};
       }
 
       return utility::bytes::view(val.mv_data, val.mv_size);
@@ -337,12 +339,17 @@ namespace ao::lmdb
 
   Result<std::uint32_t> Database::Writer::append(std::span<std::byte const> data)
   {
+    if (_lastId == std::numeric_limits<std::uint32_t>::max())
+    {
+      return makeError(Error::Code::ResourceExhausted, "LMDB integer key space exhausted");
+    }
+
     auto id = ++_lastId;
 
     if (auto result = create(id, data); !result)
     {
       --_lastId;
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     return id;
@@ -350,13 +357,18 @@ namespace ao::lmdb
 
   Result<std::pair<std::uint32_t, std::span<std::byte>>> Database::Writer::append(std::size_t size)
   {
+    if (_lastId == std::numeric_limits<std::uint32_t>::max())
+    {
+      return makeError(Error::Code::ResourceExhausted, "LMDB integer key space exhausted");
+    }
+
     auto id = ++_lastId;
     auto data = create(id, size);
 
     if (!data)
     {
       --_lastId;
-      return makeError(data.error().code, data.error().message);
+      return std::unexpected{data.error()};
     }
 
     return std::pair{id, *data};

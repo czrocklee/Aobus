@@ -3,9 +3,5 @@
 
 #pragma once
 
-#include <ao/query/Expression.h>
-
-namespace ao::query
-{
-  bool isPredicateExpression(Expression const& expr);
-}
+// isPredicateExpression moved to <ao/query/detail/Predicate.h>.
+// It is internal to the query subsystem (ao::query::detail).

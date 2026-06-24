@@ -7,9 +7,11 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/Predicate.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/query/detail/Bytecode.h>
+#include <ao/query/detail/FieldResolver.h>
+#include <ao/query/detail/Predicate.h>
+#include <ao/query/detail/QueryError.h>
 #include <ao/utility/String.h>
 #include <ao/utility/VariantVisitor.h>
 
@@ -21,7 +23,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <format>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -50,23 +51,7 @@ namespace ao::query
     // than repeated field-load/equality expansion even for a one-item list.
     constexpr std::size_t kInSetCompilationThreshold = 1;
 
-    std::unexpected<Error> rejectQuery(std::string_view message)
-    {
-      return makeError(Error::Code::FormatRejected, std::string{message});
-    }
-
-    // Formatting overload mirroring throwException: builds the FormatRejected
-    // message inline so call sites read like the old throw without wrapping every
-    // diagnostic in std::format(...). The sizeof...(Args) > 0 constraint keeps the
-    // no-argument literal case on the cheaper string_view overload above.
-    template<typename... Args>
-      requires(sizeof...(Args) > 0)
-    std::unexpected<Error> rejectQuery(std::format_string<Args...> fmt, Args&&... args)
-    {
-      return makeError(Error::Code::FormatRejected, std::format(fmt, std::forward<Args>(args)...));
-    }
-
-    Result<OpCode> toOpCode(Operator op)
+    OpCode toOpCode(Operator op)
     {
       switch (op)
       {
@@ -80,11 +65,11 @@ namespace ao::query
         case Operator::LessEqual: return OpCode::Le;
         case Operator::Greater: return OpCode::Gt;
         case Operator::GreaterEqual: return OpCode::Ge;
-        case Operator::In: return rejectQuery("operator 'in' requires list compilation");
+        case Operator::In: detail::throwQueryError("operator 'in' requires list compilation");
         case Operator::Add:
-          return rejectQuery("string concatenation is not a query predicate; use it in a format expression");
+          detail::throwQueryError("string concatenation is not a query predicate; use it in a format expression");
         case Operator::Exists: return OpCode::Exists;
-        default: return rejectQuery("unsupported operator");
+        default: detail::throwQueryError("unsupported operator");
       }
     }
 
@@ -305,7 +290,7 @@ namespace ao::query
       return value;
     }
 
-    Result<std::uint64_t> unitMultiplier(Field field, std::string_view unit)
+    std::uint64_t unitMultiplier(Field field, std::string_view unit)
     {
       auto const normalized = utility::toLower(unit);
 
@@ -335,24 +320,24 @@ namespace ao::query
         default: break;
       }
 
-      return rejectQuery("unit '{}' is not supported for {} constants", normalized, fieldDisplayName(field));
+      detail::throwQueryError("unit '{}' is not supported for {} constants", normalized, fieldDisplayName(field));
     }
 
-    Result<std::uint64_t> scaleUnitSegment(std::string_view numberPart,
-                                           std::string_view suffixPart,
-                                           Field field,
-                                           UnitConstantExpression const& constant)
+    std::uint64_t scaleUnitSegment(std::string_view numberPart,
+                                   std::string_view suffixPart,
+                                   Field field,
+                                   UnitConstantExpression const& constant)
     {
       if (numberPart.empty() || suffixPart.empty())
       {
-        return rejectQuery("invalid unit literal '{}'", constant.lexeme);
+        detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const dotPos = numberPart.find('.');
 
       if (dotPos != std::string_view::npos && numberPart.find('.', dotPos + 1) != std::string_view::npos)
       {
-        return rejectQuery("invalid unit literal '{}'", constant.lexeme);
+        detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const wholePart = numberPart.substr(0, dotPos);
@@ -360,7 +345,7 @@ namespace ao::query
 
       if (wholePart.empty() || (dotPos != std::string_view::npos && fractionPart.empty()))
       {
-        return rejectQuery("invalid unit literal '{}'", constant.lexeme);
+        detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const optWhole = parseUnsigned(wholePart);
@@ -370,40 +355,34 @@ namespace ao::query
 
       if (!optWhole || !optFraction || !optDenominator)
       {
-        return rejectQuery("invalid unit literal '{}'", constant.lexeme);
+        detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const optScaledWhole = checkedMul(*optWhole, *optDenominator);
       auto const optNumerator = optScaledWhole ? checkedAdd(*optScaledWhole, *optFraction) : std::nullopt;
       auto const multiplier = unitMultiplier(field, suffixPart);
 
-      if (!multiplier)
-      {
-        return multiplier;
-      }
-
-      auto const optScaledNumerator = optNumerator ? checkedMul(*optNumerator, *multiplier) : std::nullopt;
+      auto const optScaledNumerator = optNumerator ? checkedMul(*optNumerator, multiplier) : std::nullopt;
 
       if (!optScaledNumerator)
       {
-        return rejectQuery("unit literal '{}' is out of range", constant.lexeme);
+        detail::throwQueryError("unit literal '{}' is out of range", constant.lexeme);
       }
 
       if (*optScaledNumerator % *optDenominator != 0)
       {
-        return rejectQuery(
+        detail::throwQueryError(
           "unit literal '{}' does not resolve to an integer {} value", constant.lexeme, fieldDisplayName(field));
       }
 
-      auto const magnitude = *optScaledNumerator / *optDenominator;
-      return magnitude;
+      return *optScaledNumerator / *optDenominator;
     }
 
-    Result<std::int64_t> scaleUnitConstant(UnitConstantExpression const& constant, Field field)
+    std::int64_t scaleUnitConstant(UnitConstantExpression const& constant, Field field)
     {
       if (field == Field::TagBloom)
       {
-        return rejectQuery("unit literal '{}' requires a numeric field context", constant.lexeme);
+        detail::throwQueryError("unit literal '{}' requires a numeric field context", constant.lexeme);
       }
 
       auto lexeme = std::string_view{constant.lexeme};
@@ -425,7 +404,7 @@ namespace ao::query
 
         if (suffixStart == lexeme.end())
         {
-          return rejectQuery("invalid unit literal '{}'", constant.lexeme);
+          detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
         }
 
         auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
@@ -435,18 +414,12 @@ namespace ao::query
           std::ranges::find_if(suffixAndRest, [](unsigned char ch) { return std::isdigit(ch) != 0; });
         auto const suffixSize = static_cast<std::size_t>(std::distance(suffixAndRest.begin(), nextNumber));
         auto const suffixPart = suffixAndRest.substr(0, suffixSize);
-        auto const magnitude = scaleUnitSegment(numberPart, suffixPart, field, constant);
-
-        if (!magnitude)
-        {
-          return std::unexpected{magnitude.error()};
-        }
-
-        auto const optTotal = checkedAdd(total, *magnitude);
+        auto const segmentValue = scaleUnitSegment(numberPart, suffixPart, field, constant);
+        auto const optTotal = checkedAdd(total, segmentValue);
 
         if (!optTotal)
         {
-          return rejectQuery("unit literal '{}' is out of range", constant.lexeme);
+          detail::throwQueryError("unit literal '{}' is out of range", constant.lexeme);
         }
 
         total = *optTotal;
@@ -456,14 +429,14 @@ namespace ao::query
 
       if (segmentCount > 1 && field != Field::Duration)
       {
-        return rejectQuery("compound unit literal '{}' is only supported for duration constants", constant.lexeme);
+        detail::throwQueryError("compound unit literal '{}' is only supported for duration constants", constant.lexeme);
       }
 
       if (!negative)
       {
         if (total > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         {
-          return rejectQuery("unit literal '{}' is out of range", constant.lexeme);
+          detail::throwQueryError("unit literal '{}' is out of range", constant.lexeme);
         }
 
         return static_cast<std::int64_t>(total);
@@ -473,7 +446,7 @@ namespace ao::query
 
       if (total > negativeLimit)
       {
-        return rejectQuery("unit literal '{}' is out of range", constant.lexeme);
+        detail::throwQueryError("unit literal '{}' is out of range", constant.lexeme);
       }
 
       if (total == negativeLimit)
@@ -529,33 +502,33 @@ namespace ao::query
     --_nextReg;
   }
 
-  Result<std::uint32_t> QueryCompiler::compileExpression(Expression const& expr)
+  std::uint32_t QueryCompiler::compileExpression(Expression const& expr)
   {
     return std::visit(
       utility::makeVisitor(
-        [this](std::unique_ptr<BinaryExpression> const& binary) -> Result<std::uint32_t>
+        [this](std::unique_ptr<BinaryExpression> const& binary) -> std::uint32_t
         {
           gsl_Expects(binary != nullptr);
           return compileBinary(*binary);
         },
-        [this](std::unique_ptr<UnaryExpression> const& unary) -> Result<std::uint32_t>
+        [this](std::unique_ptr<UnaryExpression> const& unary) -> std::uint32_t
         {
           gsl_Expects(unary != nullptr);
           return compileUnary(*unary);
         },
-        [this](VariableExpression const& var) -> Result<std::uint32_t> { return compileVariable(var); },
-        [this](ConstantExpression const& constant) -> Result<std::uint32_t> { return compileConstant(constant); },
-        [this](ListExpression const& list) -> Result<std::uint32_t> { return compileList(list); },
-        [this](RangeExpression const& range) -> Result<std::uint32_t> { return compileRange(range); }),
+        [this](VariableExpression const& var) -> std::uint32_t { return compileVariable(var); },
+        [this](ConstantExpression const& constant) -> std::uint32_t { return compileConstant(constant); },
+        [this](ListExpression const& list) -> std::uint32_t { return compileList(list); },
+        [this](RangeExpression const& range) -> std::uint32_t { return compileRange(range); }),
       expr);
   }
 
-  Result<std::uint32_t> QueryCompiler::compilePredicate(Expression const& expr)
+  std::uint32_t QueryCompiler::compilePredicate(Expression const& expr)
   {
     if (auto const* var = bareNonTagVariableInPredicatePosition(expr); var != nullptr)
     {
       auto const name = variableDisplayName(*var);
-      return rejectQuery(
+      detail::throwQueryError(
         "bare field '{}' is not a predicate; use '{}?' for existence, '!{}?' for missing, or compare it "
         "explicitly",
         name,
@@ -563,15 +536,15 @@ namespace ao::query
         name);
     }
 
-    if (!isPredicateExpression(expr))
+    if (!detail::isPredicateExpression(expr))
     {
-      return rejectQuery("query expression is not a predicate");
+      detail::throwQueryError("query expression is not a predicate");
     }
 
     return compileExpression(expr);
   }
 
-  Result<std::uint32_t> QueryCompiler::compileBinary(BinaryExpression const& binary)
+  std::uint32_t QueryCompiler::compileBinary(BinaryExpression const& binary)
   {
     if (!binary.optOperation)
     {
@@ -586,48 +559,26 @@ namespace ao::query
     if (binary.optOperation->op == Operator::And || binary.optOperation->op == Operator::Or)
     {
       auto const leftReg = compilePredicate(binary.operand);
-
-      if (!leftReg)
-      {
-        return std::unexpected{leftReg.error()};
-      }
-
       auto const rightReg = compilePredicate(binary.optOperation->operand);
-
-      if (!rightReg)
-      {
-        return std::unexpected{rightReg.error()};
-      }
-
       auto const opcode = toOpCode(binary.optOperation->op);
-
-      if (!opcode)
-      {
-        return std::unexpected{opcode.error()};
-      }
 
       // And/Or consume the top two results (left immediately below right) and write the
       // result back into the left register.
-      gsl_Expects(*rightReg == *leftReg + 1);
+      gsl_Expects(rightReg == leftReg + 1);
       _plan.instructions.push_back(Instruction{
-        .op = *opcode,
+        .op = opcode,
         .field = 0,
-        .operand = static_cast<std::int32_t>(*rightReg),
+        .operand = static_cast<std::int32_t>(rightReg),
         .constValue = 0,
         .size = 0,
         .data = nullptr,
       });
-      popReg(*rightReg);
-      return *leftReg;
+      popReg(rightReg);
+      return leftReg;
     }
 
     // Comparison (Eq/Ne/Lt/Le/Gt/Ge/Like). Compile the left operand first.
     auto const leftReg = compileExpression(binary.operand);
-
-    if (!leftReg)
-    {
-      return std::unexpected{leftReg.error()};
-    }
 
     // Save the left field (and its Custom dictId) before compiling the right operand,
     // which overwrites _lastField.
@@ -635,24 +586,20 @@ namespace ao::query
     auto const leftCustomId = _lastFieldCustomId;
     auto const opcode = toOpCode(binary.optOperation->op);
 
-    if (!opcode)
+    if (opcode == OpCode::Like && isUnsupportedLikeField(leftField))
     {
-      return std::unexpected{opcode.error()};
-    }
-
-    if (*opcode == OpCode::Like && isUnsupportedLikeField(leftField))
-    {
-      return rejectQuery("LIKE operator not supported for coverArt or tags");
+      detail::throwQueryError("LIKE operator not supported for coverArt or tags");
     }
 
     // Dictionary fields store interned IDs, so an ordered comparison (<, <=, >, >=)
     // must compare the resolved text rather than the ID. Require a string operand
     // and keep it as a string constant (like LIKE) so the evaluator resolves the
     // field's ID back to text at compare time.
-    if (isOrderedComparison(*opcode) && isDictionaryField(leftField) &&
+    if (isOrderedComparison(opcode) && isDictionaryField(leftField) &&
         !isStringConstantOperand(binary.optOperation->operand))
     {
-      return rejectQuery("ordered comparison on the '{}' field requires a string operand", fieldDisplayName(leftField));
+      detail::throwQueryError(
+        "ordered comparison on the '{}' field requires a string operand", fieldDisplayName(leftField));
     }
 
     auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
@@ -660,35 +607,30 @@ namespace ao::query
       gsl_lite::finally([this, previousResolveStringConstantsToIds]
                         { _resolveStringConstantsToIds = previousResolveStringConstantsToIds; });
 
-    if (isDictionaryField(leftField) && (*opcode == OpCode::Like || isOrderedComparison(*opcode)))
+    if (isDictionaryField(leftField) && (opcode == OpCode::Like || isOrderedComparison(opcode)))
     {
       _resolveStringConstantsToIds = false;
     }
 
     auto const rightReg = compileExpression(binary.optOperation->operand);
 
-    if (!rightReg)
-    {
-      return std::unexpected{rightReg.error()};
-    }
-
     // Carry the left field (and its Custom dictId) directly on the comparison so the
     // evaluator resolves the operand's type without scanning back for the LoadField. The
     // comparison consumes the top two results and writes the result into the left register.
-    gsl_Expects(*rightReg == *leftReg + 1);
+    gsl_Expects(rightReg == leftReg + 1);
     _plan.instructions.push_back(Instruction{
-      .op = *opcode,
+      .op = opcode,
       .field = static_cast<std::uint8_t>(leftField),
-      .operand = static_cast<std::int32_t>(*rightReg),
+      .operand = static_cast<std::int32_t>(rightReg),
       .constValue = leftCustomId,
       .size = 0,
       .data = nullptr,
     });
-    popReg(*rightReg);
-    return *leftReg;
+    popReg(rightReg);
+    return leftReg;
   }
 
-  Result<std::uint32_t> QueryCompiler::compileUnary(UnaryExpression const& unary)
+  std::uint32_t QueryCompiler::compileUnary(UnaryExpression const& unary)
   {
     if (unary.op == Operator::Exists)
     {
@@ -699,40 +641,35 @@ namespace ao::query
     {
       auto const reg = compilePredicate(unary.operand);
 
-      if (!reg)
-      {
-        return std::unexpected{reg.error()};
-      }
-
       // Not rewrites its operand in place; the result stays in the same register.
       _plan.instructions.push_back(Instruction{
         .op = OpCode::Not,
         .field = 0,
-        .operand = static_cast<std::int32_t>(*reg),
+        .operand = static_cast<std::int32_t>(reg),
         .constValue = 0,
         .size = 0,
         .data = nullptr,
       });
-      return *reg;
+      return reg;
     }
 
-    return rejectQuery("unsupported unary operator");
+    detail::throwQueryError("unsupported unary operator");
   }
 
-  Result<std::uint32_t> QueryCompiler::compileExists(Expression const& operand)
+  std::uint32_t QueryCompiler::compileExists(Expression const& operand)
   {
     auto const* var = std::get_if<VariableExpression>(&operand);
 
     if (var == nullptr)
     {
-      return rejectQuery("operator '?' requires a field operand");
+      detail::throwQueryError("operator '?' requires a field operand");
     }
 
-    auto const fieldResult = resolveVariableField(*var);
+    auto const fieldResult = detail::resolveVariableField(*var);
 
     if (!fieldResult)
     {
-      return std::unexpected{fieldResult.error()};
+      detail::throwQueryError(fieldResult.error());
     }
 
     auto const field = *fieldResult;
@@ -770,7 +707,7 @@ namespace ao::query
     return reg;
   }
 
-  Result<std::uint32_t> QueryCompiler::compileVariable(VariableExpression const& var)
+  std::uint32_t QueryCompiler::compileVariable(VariableExpression const& var)
   {
     // Tags are hot data
     if (var.type == VariableType::Tag)
@@ -822,11 +759,11 @@ namespace ao::query
       }
     }
 
-    auto const fieldResult = resolveVariableField(var);
+    auto const fieldResult = detail::resolveVariableField(var);
 
     if (!fieldResult)
     {
-      return std::unexpected{fieldResult.error()};
+      detail::throwQueryError(fieldResult.error());
     }
 
     auto const field = *fieldResult;
@@ -875,10 +812,10 @@ namespace ao::query
     return reg;
   }
 
-  Result<std::uint32_t> QueryCompiler::compileConstant(ConstantExpression const& constant)
+  std::uint32_t QueryCompiler::compileConstant(ConstantExpression const& constant)
   {
     return std::visit(utility::makeVisitor(
-                        [this](bool val) -> Result<std::uint32_t>
+                        [this](bool val) -> std::uint32_t
                         {
                           auto const reg = pushReg();
                           _plan.instructions.push_back(Instruction{
@@ -891,7 +828,7 @@ namespace ao::query
                           });
                           return reg;
                         },
-                        [this](std::int64_t val) -> Result<std::uint32_t>
+                        [this](std::int64_t val) -> std::uint32_t
                         {
                           auto const reg = pushReg();
                           _plan.instructions.push_back(Instruction{
@@ -904,27 +841,20 @@ namespace ao::query
                           });
                           return reg;
                         },
-                        [this](UnitConstantExpression const& val) -> Result<std::uint32_t>
+                        [this](UnitConstantExpression const& val) -> std::uint32_t
                         {
-                          auto const scaled = scaleUnitConstant(val, _lastField);
-
-                          if (!scaled)
-                          {
-                            return std::unexpected{scaled.error()};
-                          }
-
                           auto const reg = pushReg();
                           _plan.instructions.push_back(Instruction{
                             .op = OpCode::LoadConstant,
                             .field = 0,
                             .operand = static_cast<std::int32_t>(reg),
-                            .constValue = *scaled,
+                            .constValue = scaleUnitConstant(val, _lastField),
                             .size = 0,
                             .data = nullptr,
                           });
                           return reg;
                         },
-                        [this](std::string const& val) -> Result<std::uint32_t>
+                        [this](std::string const& val) -> std::uint32_t
                         {
                           if (_lastField == Field::Codec)
                           {
@@ -942,7 +872,7 @@ namespace ao::query
                               return reg;
                             }
 
-                            return rejectQuery("unknown audio codec '{}'", val);
+                            detail::throwQueryError("unknown audio codec '{}'", val);
                           }
 
                           // Check if we should resolve this string via dictionary
@@ -968,17 +898,17 @@ namespace ao::query
                       constant);
   }
 
-  Result<std::uint32_t> QueryCompiler::compileList(ListExpression const& /*list*/)
+  std::uint32_t QueryCompiler::compileList(ListExpression const& /*list*/)
   {
-    return rejectQuery("list expressions are only supported as the right operand of 'in'");
+    detail::throwQueryError("list expressions are only supported as the right operand of 'in'");
   }
 
-  Result<std::uint32_t> QueryCompiler::compileRange(RangeExpression const& /*range*/)
+  std::uint32_t QueryCompiler::compileRange(RangeExpression const& /*range*/)
   {
-    return rejectQuery("range expressions are only supported as the right operand of 'in'");
+    detail::throwQueryError("range expressions are only supported as the right operand of 'in'");
   }
 
-  Result<std::uint32_t> QueryCompiler::compileIn(Expression const& lhs, Expression const& rhs)
+  std::uint32_t QueryCompiler::compileIn(Expression const& lhs, Expression const& rhs)
   {
     if (auto const* list = std::get_if<ListExpression>(&rhs); list != nullptr)
     {
@@ -989,31 +919,24 @@ namespace ao::query
 
     if (range == nullptr)
     {
-      return rejectQuery("operator 'in' expects a list or range right operand");
+      detail::throwQueryError("operator 'in' expects a list or range right operand");
     }
 
     return compileInRange(lhs, *range);
   }
 
-  Result<std::uint32_t> QueryCompiler::compileInWithList(Expression const& lhs, ListExpression const& list)
+  std::uint32_t QueryCompiler::compileInWithList(Expression const& lhs, ListExpression const& list)
   {
     if (list.values.empty())
     {
-      return rejectQuery("operator 'in' expects a non-empty list");
+      detail::throwQueryError("operator 'in' expects a non-empty list");
     }
 
     if (list.values.size() >= kInSetCompilationThreshold)
     {
-      auto const compiled = compileInSetList(lhs, list);
-
-      if (!compiled)
+      if (auto const optCompiled = compileInSetList(lhs, list); optCompiled)
       {
-        return std::unexpected{compiled.error()};
-      }
-
-      if (compiled->has_value())
-      {
-        return **compiled;
+        return *optCompiled;
       }
     }
 
@@ -1025,63 +948,48 @@ namespace ao::query
     {
       auto const leftReg = compileExpression(lhs);
 
-      if (!leftReg)
-      {
-        return std::unexpected{leftReg.error()};
-      }
-
       auto const leftField = _lastField;
       auto const leftCustomId = _lastFieldCustomId;
 
       auto const rightReg = compileConstant(value);
 
-      if (!rightReg)
-      {
-        return std::unexpected{rightReg.error()};
-      }
-
-      gsl_Expects(*rightReg == *leftReg + 1);
+      gsl_Expects(rightReg == leftReg + 1);
       _plan.instructions.push_back(Instruction{
         .op = OpCode::Eq,
         .field = static_cast<std::uint8_t>(leftField),
-        .operand = static_cast<std::int32_t>(*rightReg),
+        .operand = static_cast<std::int32_t>(rightReg),
         .constValue = leftCustomId,
         .size = 0,
         .data = nullptr,
       });
-      popReg(*rightReg); // Eq result is now in *leftReg
+      popReg(rightReg); // Eq result is now in leftReg
 
       if (!optAccumReg)
       {
-        optAccumReg = *leftReg;
+        optAccumReg = leftReg;
         continue;
       }
 
       // OR the new comparison (the top register) into the accumulator just below it.
-      gsl_Expects(*leftReg == *optAccumReg + 1);
+      gsl_Expects(leftReg == *optAccumReg + 1);
       _plan.instructions.push_back(Instruction{
         .op = OpCode::Or,
         .field = 0,
-        .operand = static_cast<std::int32_t>(*leftReg),
+        .operand = static_cast<std::int32_t>(leftReg),
         .constValue = 0,
         .size = 0,
         .data = nullptr,
       });
-      popReg(*leftReg); // Or result is now in *optAccumReg
+      popReg(leftReg); // Or result is now in *optAccumReg
     }
 
     gsl_Expects(optAccumReg.has_value()); // non-empty list guarantees at least one comparison
     return *optAccumReg;
   }
 
-  Result<std::uint32_t> QueryCompiler::compileInRange(Expression const& lhs, RangeExpression const& range)
+  std::uint32_t QueryCompiler::compileInRange(Expression const& lhs, RangeExpression const& range)
   {
     auto const lhsLowerReg = compileExpression(lhs);
-
-    if (!lhsLowerReg)
-    {
-      return std::unexpected{lhsLowerReg.error()};
-    }
 
     // A range compiles to Ge/Le bounds, i.e. ordered comparisons. For dictionary
     // fields those must compare resolved text, so require string bounds and keep
@@ -1092,7 +1000,7 @@ namespace ao::query
 
     if (dictionaryBounds && (!isStringConstant(range.lower) || !isStringConstant(range.upper)))
     {
-      return rejectQuery("range over the '{}' field requires string bounds", fieldDisplayName(leftField));
+      detail::throwQueryError("range over the '{}' field requires string bounds", fieldDisplayName(leftField));
     }
 
     auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
@@ -1107,48 +1015,33 @@ namespace ao::query
 
     auto const lowerReg = compileConstant(range.lower);
 
-    if (!lowerReg)
-    {
-      return std::unexpected{lowerReg.error()};
-    }
-
-    gsl_Expects(*lowerReg == *lhsLowerReg + 1);
+    gsl_Expects(lowerReg == lhsLowerReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Ge,
       .field = static_cast<std::uint8_t>(leftField),
-      .operand = static_cast<std::int32_t>(*lowerReg),
+      .operand = static_cast<std::int32_t>(lowerReg),
       .constValue = leftCustomId,
       .size = 0,
       .data = nullptr,
     });
-    popReg(*lowerReg); // Ge result is now in *lhsLowerReg
-    auto const geReg = *lhsLowerReg;
+    popReg(lowerReg); // Ge result is now in lhsLowerReg
+    auto const geReg = lhsLowerReg;
 
     auto const lhsUpperReg = compileExpression(lhs);
 
-    if (!lhsUpperReg)
-    {
-      return std::unexpected{lhsUpperReg.error()};
-    }
-
     auto const upperReg = compileConstant(range.upper);
 
-    if (!upperReg)
-    {
-      return std::unexpected{upperReg.error()};
-    }
-
-    gsl_Expects(*upperReg == *lhsUpperReg + 1);
+    gsl_Expects(upperReg == lhsUpperReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Le,
       .field = static_cast<std::uint8_t>(leftField),
-      .operand = static_cast<std::int32_t>(*upperReg),
+      .operand = static_cast<std::int32_t>(upperReg),
       .constValue = leftCustomId,
       .size = 0,
       .data = nullptr,
     });
-    popReg(*upperReg); // Le result is now in *lhsUpperReg
-    auto const leReg = *lhsUpperReg;
+    popReg(upperReg); // Le result is now in lhsUpperReg
+    auto const leReg = lhsUpperReg;
 
     // AND the two bounds together; the result lands in the Ge register.
     gsl_Expects(leReg == geReg + 1);
@@ -1165,28 +1058,27 @@ namespace ao::query
     return geReg;
   }
 
-  Result<std::optional<std::uint32_t>> QueryCompiler::compileInSetList(Expression const& lhs,
-                                                                       ListExpression const& list)
+  std::optional<std::uint32_t> QueryCompiler::compileInSetList(Expression const& lhs, ListExpression const& list)
   {
     auto const* variable = std::get_if<VariableExpression>(&lhs);
 
     if (variable == nullptr)
     {
-      return std::optional<std::uint32_t>{};
+      return std::nullopt;
     }
 
-    auto const fieldResult = resolveVariableField(*variable);
+    auto const fieldResult = detail::resolveVariableField(*variable);
 
     if (!fieldResult)
     {
-      return std::unexpected{fieldResult.error()};
+      detail::throwQueryError(fieldResult.error());
     }
 
     auto const field = *fieldResult;
 
     if (isTagField(field))
     {
-      return std::optional<std::uint32_t>{};
+      return std::nullopt;
     }
 
     auto set = InSet{};
@@ -1194,25 +1086,13 @@ namespace ao::query
 
     for (auto const& value : list.values)
     {
-      auto const valueResult = appendInSetValue(set, value, field);
-
-      if (!valueResult)
+      if (auto const valueResult = appendInSetValue(set, value, field); valueResult == InSetValueStatus::NotCompatible)
       {
-        return std::unexpected{valueResult.error()};
-      }
-
-      if (*valueResult == InSetValueStatus::NotCompatible)
-      {
-        return std::optional<std::uint32_t>{};
+        return std::nullopt;
       }
     }
 
     auto const leftReg = compileExpression(lhs);
-
-    if (!leftReg)
-    {
-      return std::unexpected{leftReg.error()};
-    }
 
     auto const leftCustomId = _lastFieldCustomId;
     auto const setIndex = addInSet(std::move(set));
@@ -1221,13 +1101,13 @@ namespace ao::query
     _plan.instructions.push_back(Instruction{
       .op = OpCode::InSet,
       .field = static_cast<std::uint8_t>(field),
-      .operand = static_cast<std::int32_t>(*leftReg),
+      .operand = static_cast<std::int32_t>(leftReg),
       .constValue = static_cast<std::int64_t>(setIndex),
       .size = static_cast<std::uint32_t>(leftCustomId),
       .data = nullptr,
     });
 
-    return std::optional<std::uint32_t>{*leftReg};
+    return std::optional<std::uint32_t>{leftReg};
   }
 
   std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)
@@ -1248,12 +1128,12 @@ namespace ao::query
     return static_cast<std::int64_t>(id.raw());
   }
 
-  Result<QueryCompiler::InSetValueStatus> QueryCompiler::appendInSetValue(InSet& set,
-                                                                          ConstantExpression const& constant,
-                                                                          Field field)
+  QueryCompiler::InSetValueStatus QueryCompiler::appendInSetValue(InSet& set,
+                                                                  ConstantExpression const& constant,
+                                                                  Field field)
   {
     return std::visit(utility::makeVisitor(
-                        [&set](bool value) -> Result<InSetValueStatus>
+                        [&set](bool value) -> InSetValueStatus
                         {
                           if (set.stringValues)
                           {
@@ -1263,7 +1143,7 @@ namespace ao::query
                           set.numericValues.insert(value ? 1 : 0);
                           return InSetValueStatus::Appended;
                         },
-                        [&set](std::int64_t value) -> Result<InSetValueStatus>
+                        [&set](std::int64_t value) -> InSetValueStatus
                         {
                           if (set.stringValues)
                           {
@@ -1273,24 +1153,17 @@ namespace ao::query
                           set.numericValues.insert(value);
                           return InSetValueStatus::Appended;
                         },
-                        [&set, field](UnitConstantExpression const& value) -> Result<InSetValueStatus>
+                        [&set, field](UnitConstantExpression const& value) -> InSetValueStatus
                         {
                           if (set.stringValues)
                           {
                             return InSetValueStatus::NotCompatible;
                           }
 
-                          auto const scaled = scaleUnitConstant(value, field);
-
-                          if (!scaled)
-                          {
-                            return std::unexpected{scaled.error()};
-                          }
-
-                          set.numericValues.insert(*scaled);
+                          set.numericValues.insert(scaleUnitConstant(value, field));
                           return InSetValueStatus::Appended;
                         },
-                        [this, &set, field](std::string const& value) -> Result<InSetValueStatus>
+                        [this, &set, field](std::string const& value) -> InSetValueStatus
                         {
                           if (set.stringValues)
                           {
@@ -1306,7 +1179,7 @@ namespace ao::query
                               return InSetValueStatus::Appended;
                             }
 
-                            return rejectQuery("unknown audio codec '{}'", value);
+                            detail::throwQueryError("unknown audio codec '{}'", value);
                           }
 
                           if (!isDictionaryField(field) || _dict == nullptr)
@@ -1322,6 +1195,8 @@ namespace ao::query
   }
 
   Result<ExecutionPlan> QueryCompiler::compile(Expression const& expr)
+
+  try
   {
     _plan = ExecutionPlan{};
     _plan.dictionary = _dict;
@@ -1344,10 +1219,7 @@ namespace ao::query
       }
     }
 
-    if (auto compileResult = compilePredicate(expr); !compileResult)
-    {
-      return std::unexpected{compileResult.error()};
-    }
+    compilePredicate(expr);
 
     // Set access profile based on what data was accessed
     if (_hasHotAccess && _hasColdAccess)
@@ -1364,6 +1236,10 @@ namespace ao::query
     }
 
     return _plan;
+  }
+  catch (detail::QueryException const& ex)
+  {
+    return std::unexpected{ex.error()};
   }
 
   Result<ExecutionPlan> compileQuery(Expression const& expr, library::DictionaryStore* dict)

@@ -9,6 +9,7 @@
 #include <lmdb.h>
 
 #include <cstdint>
+#include <expected>
 #include <utility>
 
 namespace ao::lmdb
@@ -24,7 +25,7 @@ namespace ao::lmdb
 
     if (auto result = resultFromCode("mdb_txn_begin", ::mdb_txn_begin(env, parent, flags, &handle)); !result)
     {
-      return makeError(result.error().code, result.error().message);
+      return std::unexpected{result.error()};
     }
 
     return TxnPtr{handle};
@@ -36,7 +37,7 @@ namespace ao::lmdb
 
     if (!txnPtr)
     {
-      return makeError(txnPtr.error().code, txnPtr.error().message);
+      return std::unexpected{txnPtr.error()};
     }
 
     return ReadTransaction{std::move(*txnPtr)};
@@ -48,7 +49,7 @@ namespace ao::lmdb
 
     if (!txnPtr)
     {
-      return makeError(txnPtr.error().code, txnPtr.error().message);
+      return std::unexpected{txnPtr.error()};
     }
 
     return WriteTransaction{std::move(*txnPtr)};
@@ -60,7 +61,7 @@ namespace ao::lmdb
 
     if (!txnPtr)
     {
-      return makeError(txnPtr.error().code, txnPtr.error().message);
+      return std::unexpected{txnPtr.error()};
     }
 
     return WriteTransaction{std::move(*txnPtr)};

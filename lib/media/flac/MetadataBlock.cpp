@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Exception.h>
+#include <ao/Error.h>
+#include <ao/media/detail/MediaError.h>
 #include <ao/media/flac/MetadataBlock.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/utility/ByteView.h>
@@ -61,27 +62,27 @@ namespace ao::media::flac
   {
     if (size < kStreamInfoBlockSize || _view.type() != MetadataBlockType::StreamInfo)
     {
-      ao::throwException<Exception>("invalid flac metadata blocks, first block must be StreamInfo");
+      ao::media::detail::throwMediaError(
+        Error::Code::CorruptData, "invalid flac metadata blocks, first block must be StreamInfo");
     }
   }
 
   void MetadataBlockViewIterator::increment()
   {
+    auto const currentSize = _view.size();
+
+    // The current block must fit within the remaining bytes; otherwise a
+    // truncated last block would be accepted before advancing.
+    if (currentSize > _sizeLeft)
+    {
+      ao::media::detail::throwMediaError(
+        Error::Code::CorruptData, "invalid flac metadata blocks size, exceeding the file boundary");
+    }
+
     if (_view.layout<MetadataBlockLayout>().isLastBlock)
     {
       _view = MetadataBlockView{nullptr};
       return;
-    }
-
-    auto const currentSize = _view.size();
-
-    // The current block must fit within the remaining bytes; otherwise the
-    // subtraction below would underflow and the cursor would run past the buffer.
-    // Release builds strip the gsl contracts in MetadataBlockView, so this guard is
-    // explicit.
-    if (currentSize > _sizeLeft)
-    {
-      ao::throwException<Exception>("invalid flac metadata blocks size, exceeding the file boundary");
     }
 
     _sizeLeft -= currentSize;
@@ -89,14 +90,16 @@ namespace ao::media::flac
     // The next block header must be fully readable before we interpret it.
     if (_sizeLeft < sizeof(MetadataBlockLayout))
     {
-      ao::throwException<Exception>("invalid flac metadata blocks size, exceeding the file boundary");
+      ao::media::detail::throwMediaError(
+        Error::Code::CorruptData, "invalid flac metadata blocks size, exceeding the file boundary");
     }
 
     _view = MetadataBlockView{static_cast<char const*>(_view.data()) + currentSize};
 
     if (_view.size() > _sizeLeft)
     {
-      ao::throwException<Exception>("invalid flac metadata blocks size, exceeding the file boundary");
+      ao::media::detail::throwMediaError(
+        Error::Code::CorruptData, "invalid flac metadata blocks size, exceeding the file boundary");
     }
   }
 } // namespace ao::media::flac

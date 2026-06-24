@@ -249,9 +249,7 @@ namespace ao::library
 
     private:
       explicit PreparedHot(TrackBuilder const* builder);
-      static Result<PreparedHot> create(TrackBuilder const* builder,
-                                        lmdb::WriteTransaction& txn,
-                                        DictionaryStore& dict);
+      static PreparedHot create(TrackBuilder const* builder, lmdb::WriteTransaction& txn, DictionaryStore& dict);
 
       TrackBuilder const* _builder;
       std::vector<DictionaryId> _tagIds;
@@ -278,10 +276,10 @@ namespace ao::library
 
     private:
       explicit PreparedCold(TrackBuilder const* builder);
-      static Result<PreparedCold> create(TrackBuilder const* builder,
-                                         lmdb::WriteTransaction& txn,
-                                         DictionaryStore& dict,
-                                         ResourceStore& resources);
+      static PreparedCold create(TrackBuilder const* builder,
+                                 lmdb::WriteTransaction& txn,
+                                 DictionaryStore& dict,
+                                 ResourceStore& resources);
 
       TrackBuilder const* _builder;
       std::vector<std::pair<DictionaryId, std::string_view>> _resolvedPairs;

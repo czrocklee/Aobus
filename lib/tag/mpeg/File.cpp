@@ -9,13 +9,13 @@
 #include "id3v2/Reader.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/tag/detail/TagError.h>
 
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <stdexcept>
+#include <expected>
 #include <string_view>
 
 namespace ao::tag::mpeg
@@ -139,13 +139,9 @@ namespace ao::tag::mpeg
 
       return builder;
     }
-    catch (Exception const& e)
+    catch (detail::TagException const& ex)
     {
-      return makeError(Error::Code::CorruptData, e.what());
-    }
-    catch (std::out_of_range const& e)
-    {
-      return makeError(Error::Code::CorruptData, e.what());
+      return std::unexpected{ex.error()};
     }
   }
 } // namespace ao::tag::mpeg

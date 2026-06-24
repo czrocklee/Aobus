@@ -2,15 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/query/Expression.h>
-#include <ao/query/Predicate.h>
 #include <ao/query/detail/OperatorTable.h>
+#include <ao/query/detail/Predicate.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <cstddef>
 #include <memory>
 #include <variant>
 
-namespace ao::query
+namespace ao::query::detail
 {
   namespace
   {
@@ -23,20 +23,20 @@ namespace ao::query
 
       // Synthetic/out-of-range operators (e.g. from hand-built ASTs) are not predicates;
       // guard before the table lookup, which would otherwise throw on an unknown index.
-      if (static_cast<std::size_t>(binary.optOperation->op) >= detail::kOperatorTable.size())
+      if (static_cast<std::size_t>(binary.optOperation->op) >= kOperatorTable.size())
       {
         return false;
       }
 
-      switch (detail::operatorInfo(binary.optOperation->op).cls)
+      switch (operatorInfo(binary.optOperation->op).cls)
       {
-        case detail::OperatorClass::Logical:
+        case OperatorClass::Logical:
           return isPredicateExpression(binary.operand) && isPredicateExpression(binary.optOperation->operand);
 
-        case detail::OperatorClass::Boolean: return true;
+        case OperatorClass::Boolean: return true;
 
-        case detail::OperatorClass::Arithmetic:
-        case detail::OperatorClass::Unary: return false;
+        case OperatorClass::Arithmetic:
+        case OperatorClass::Unary: return false;
       }
 
       return false;
@@ -83,4 +83,4 @@ namespace ao::query
         [](std::unique_ptr<UnaryExpression> const& unary) { return unary != nullptr && isPredicateUnary(*unary); }),
       expr);
   }
-} // namespace ao::query
+} // namespace ao::query::detail

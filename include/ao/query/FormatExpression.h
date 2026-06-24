@@ -48,9 +48,9 @@ namespace ao::query
 
   private:
     std::uint32_t addLiteral(std::string_view value);
-    Result<> compileExpression(Expression const& expr);
-    Result<> compileBinary(BinaryExpression const& binary);
-    Result<> compileVariable(VariableExpression const& variable);
+    void compileExpression(Expression const& expr);
+    void compileBinary(BinaryExpression const& binary);
+    void compileVariable(VariableExpression const& variable);
     void compileConstant(ConstantExpression const& constant);
 
     FormatPlan _plan;

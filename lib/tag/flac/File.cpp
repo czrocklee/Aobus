@@ -6,16 +6,17 @@
 #include "../detail/Decoder.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/media/detail/MediaError.h>
 #include <ao/media/flac/MetadataBlock.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
+#include <ao/tag/detail/TagError.h>
 
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <stdexcept>
+#include <expected>
 #include <string_view>
 
 namespace ao::tag::flac
@@ -147,13 +148,13 @@ namespace ao::tag::flac
 
       return builder;
     }
-    catch (Exception const& e)
+    catch (detail::TagException const& ex)
     {
-      return makeError(Error::Code::CorruptData, e.what());
+      return std::unexpected{ex.error()};
     }
-    catch (std::out_of_range const& e)
+    catch (media::detail::MediaException const& ex)
     {
-      return makeError(Error::Code::CorruptData, e.what());
+      return std::unexpected{ex.error()};
     }
   }
 } // namespace ao::tag::flac

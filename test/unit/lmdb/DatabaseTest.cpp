@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string_view>
 #include <utility>
 
@@ -304,6 +305,30 @@ namespace ao::lmdb::test
     REQUIRE(optData2.has_value());
     REQUIRE(utility::bytes::stringView(*optData1) == std::string(8, 'a'));
     REQUIRE(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
+  }
+
+  TEST_CASE("Database::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
+  {
+    auto const temp = TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "test");
+    auto writer = db.writer(wtxn);
+
+    REQUIRE(writer.create(std::numeric_limits<std::uint32_t>::max(), createStringData("last")));
+    REQUIRE(wtxn.commit());
+
+    auto wtxn2 = beginWriteTransaction(env);
+    auto writer2 = db.writer(wtxn2);
+
+    auto const dataResult = writer2.append(createStringData("overflow"));
+    REQUIRE(!dataResult);
+    CHECK(dataResult.error().code == Error::Code::ResourceExhausted);
+
+    auto const reserveResult = writer2.append(4);
+    REQUIRE(!reserveResult);
+    CHECK(reserveResult.error().code == Error::Code::ResourceExhausted);
   }
 
   TEST_CASE("Database::Writer - update existing record", "[lmdb][unit][database][writer]")

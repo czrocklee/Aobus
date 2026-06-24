@@ -549,6 +549,26 @@ namespace ao::tag::mp4::test
       CHECK(builder.property().channels() == 2);
       CHECK(builder.property().bitDepth() == 16);
     }
+
+    SECTION("Skips malformed media header when deriving optional properties")
+    {
+      auto const stbl = ao::test::mp4::makeSampleTableAtom(ao::test::mp4::makeStsdAtom("mp4a"));
+      auto const shortMdhd = ao::test::mp4::makeAtom("mdhd", {0, 0, 0, 0});
+      auto const track = ao::test::mp4::makeTrackAtomWithMdhd("soun", stbl, shortMdhd);
+
+      auto data = std::vector<std::uint8_t>{};
+      ao::test::mp4::addAtom(data, "moov", track);
+      auto const temp = TempFile{data};
+
+      auto const file = File{temp.path};
+      auto builder = loadTrack(file);
+
+      CHECK(builder.property().codec() == AudioCodec::Aac);
+      CHECK(builder.property().sampleRate() == 44100);
+      CHECK(builder.property().duration() == std::chrono::milliseconds{0});
+      CHECK(builder.property().channels() == 2);
+      CHECK(builder.property().bitDepth() == 16);
+    }
   }
 
   TEST_CASE("MP4 File - handles malformed input", "[tag][unit][mp4][file]")

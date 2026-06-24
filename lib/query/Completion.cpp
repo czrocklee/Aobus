@@ -6,9 +6,10 @@
 #include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/FieldCatalog.h>
 #include <ao/query/Parser.h>
-#include <ao/query/Predicate.h>
+#include <ao/query/detail/FieldCatalog.h>
+#include <ao/query/detail/FieldResolver.h>
+#include <ao/query/detail/Predicate.h>
 
 #include <algorithm>
 #include <array>
@@ -55,11 +56,6 @@ namespace ao::query
       return lhs.size() == rhs.size() && startsWithInsensitive(lhs, rhs);
     }
 
-    constexpr bool isVariableTrigger(char ch)
-    {
-      return detail::isVariableSigil(ch);
-    }
-
     VariableType variableTypeForTrigger(char trigger)
     {
       switch (trigger)
@@ -72,7 +68,7 @@ namespace ao::query
       }
     }
 
-    bool hasExactAlias(QueryVariableCompletionSpec const& spec, std::string_view prefix)
+    bool hasExactAlias(detail::QueryVariableCompletionSpec const& spec, std::string_view prefix)
     {
       return std::ranges::any_of(
         spec.aliases, [prefix](std::string_view alias) { return equalsInsensitive(alias, prefix); });
@@ -194,7 +190,7 @@ namespace ao::query
 
     bool isSimpleVariableCompletionText(std::string_view text)
     {
-      return !text.empty() && isVariableTrigger(text.front()) &&
+      return !text.empty() && detail::isVariableSigil(text.front()) &&
              std::ranges::all_of(text.substr(1), detail::isQueryIdentifierChar);
     }
 
@@ -273,11 +269,6 @@ namespace ao::query
       std::size_t end = 0;
     };
 
-    std::optional<Field> resolveVariable(VariableType type, std::string_view name)
-    {
-      return tryResolveVariableField(type, name);
-    }
-
     std::optional<ParsedVariable> parseVariableEndingAt(std::string_view text,
                                                         std::span<detail::CompletionToken const> tokens,
                                                         std::size_t end)
@@ -292,14 +283,14 @@ namespace ao::query
 
       auto const value = detail::tokenText(text, *token);
 
-      if (value.empty() || !isVariableTrigger(value.front()))
+      if (value.empty() || !detail::isVariableSigil(value.front()))
       {
         return std::nullopt;
       }
 
       auto const type = variableTypeForTrigger(value.front());
       auto const name = isSimpleVariableCompletionText(value) ? value.substr(1) : std::string_view{};
-      auto optField = resolveVariable(type, name);
+      auto optField = detail::lookupVariableField(type, name);
 
       if (!optField)
       {
@@ -415,7 +406,7 @@ namespace ao::query
       // match) leaves parsed empty and degrades to "not a completed expression".
       auto const parsed = parse(expression);
 
-      return parsed.has_value() && isPredicateExpression(*parsed);
+      return parsed.has_value() && detail::isPredicateExpression(*parsed);
     }
 
     bool isOperatorCompletionPrefixToken(std::string_view text, detail::CompletionToken token)
@@ -639,7 +630,7 @@ namespace ao::query
   std::vector<QueryVariableCompletionMatch> completeQueryVariable(VariableType type, std::string_view prefix)
   {
     auto matches = std::vector<QueryVariableCompletionMatch>{};
-    auto const specs = queryVariableCompletionSpecs(type);
+    auto const specs = detail::queryVariableCompletionSpecs(type);
 
     for (auto const& spec : specs)
     {

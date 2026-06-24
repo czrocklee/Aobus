@@ -3,7 +3,6 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
@@ -11,6 +10,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
+#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
 
@@ -22,8 +22,8 @@
 #include <cstdint>
 #include <cstring>
 #include <expected>
+#include <format>
 #include <limits>
-#include <source_location>
 #include <span>
 #include <utility>
 #include <variant>
@@ -413,66 +413,59 @@ namespace ao::library
     return bloom;
   }
 
-  namespace
-  {
-    std::unexpected<Error> serializationError(Exception const& ex,
-                                              std::source_location location = std::source_location::current())
-    {
-      return makeError(Error::Code::ValueTooLarge, ex.what(), location);
-    }
-  }
-
   Result<std::vector<std::byte>> TrackBuilder::serializeHot(lmdb::WriteTransaction& txn, DictionaryStore& dict) const
   {
-    auto preparedResult = prepareHot(txn, dict);
-
-    if (!preparedResult)
+    try
     {
-      return makeError(preparedResult.error().code, preparedResult.error().message);
+      auto const prepared = PreparedHot::create(this, txn, dict);
+      auto result = std::vector<std::byte>(prepared.size());
+
+      prepared.writeTo(result);
+      return result;
     }
-
-    auto const& prepared = *preparedResult;
-    auto result = std::vector<std::byte>(prepared.size());
-
-    prepared.writeTo(result);
-    return result;
+    catch (detail::LibraryException const& ex)
+    {
+      return std::unexpected{ex.error()};
+    }
   }
 
   Result<std::vector<std::byte>> TrackBuilder::serializeCold(lmdb::WriteTransaction& txn,
                                                              DictionaryStore& dict,
                                                              ResourceStore& resources) const
   {
-    auto preparedResult = prepareCold(txn, dict, resources);
-
-    if (!preparedResult)
+    try
     {
-      return makeError(preparedResult.error().code, preparedResult.error().message);
-    }
+      auto const prepared = PreparedCold::create(this, txn, dict, resources);
+      auto result = std::vector<std::byte>(prepared.size());
 
-    auto const& prepared = *preparedResult;
-    auto result = std::vector<std::byte>(prepared.size());
-    prepared.writeTo(result);
-    return result;
+      prepared.writeTo(result);
+      return result;
+    }
+    catch (detail::LibraryException const& ex)
+    {
+      return std::unexpected{ex.error()};
+    }
   }
 
   Result<std::pair<std::vector<std::byte>, std::vector<std::byte>>>
   TrackBuilder::serialize(lmdb::WriteTransaction& txn, DictionaryStore& dict, ResourceStore& resources) const
   {
-    auto hotResult = serializeHot(txn, dict);
-
-    if (!hotResult)
+    try
     {
-      return makeError(hotResult.error().code, hotResult.error().message);
+      auto const hot = PreparedHot::create(this, txn, dict);
+      auto const cold = PreparedCold::create(this, txn, dict, resources);
+
+      auto hotBytes = std::vector<std::byte>(hot.size());
+      auto coldBytes = std::vector<std::byte>(cold.size());
+
+      hot.writeTo(hotBytes);
+      cold.writeTo(coldBytes);
+      return std::pair{std::move(hotBytes), std::move(coldBytes)};
     }
-
-    auto coldResult = serializeCold(txn, dict, resources);
-
-    if (!coldResult)
+    catch (detail::LibraryException const& ex)
     {
-      return makeError(coldResult.error().code, coldResult.error().message);
+      return std::unexpected{ex.error()};
     }
-
-    return std::pair{std::move(*hotResult), std::move(*coldResult)};
   }
 
   //=============================================================================
@@ -484,9 +477,9 @@ namespace ao::library
   {
   }
 
-  Result<TrackBuilder::PreparedHot> TrackBuilder::PreparedHot::create(TrackBuilder const* builder,
-                                                                      lmdb::WriteTransaction& txn,
-                                                                      DictionaryStore& dict)
+  TrackBuilder::PreparedHot TrackBuilder::PreparedHot::create(TrackBuilder const* builder,
+                                                              lmdb::WriteTransaction& txn,
+                                                              DictionaryStore& dict)
   {
     auto prepared = PreparedHot{builder};
 
@@ -499,7 +492,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._tagIds.push_back(*idResult);
@@ -512,7 +505,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._artistId = *idResult;
@@ -524,7 +517,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._albumId = *idResult;
@@ -536,7 +529,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._genreId = *idResult;
@@ -548,7 +541,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._albumArtistId = *idResult;
@@ -560,7 +553,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._composerId = *idResult;
@@ -626,10 +619,10 @@ namespace ao::library
   {
   }
 
-  Result<TrackBuilder::PreparedCold> TrackBuilder::PreparedCold::create(TrackBuilder const* builder,
-                                                                        lmdb::WriteTransaction& txn,
-                                                                        DictionaryStore& dict,
-                                                                        ResourceStore& resources)
+  TrackBuilder::PreparedCold TrackBuilder::PreparedCold::create(TrackBuilder const* builder,
+                                                                lmdb::WriteTransaction& txn,
+                                                                DictionaryStore& dict,
+                                                                ResourceStore& resources)
   {
     auto prepared = PreparedCold{builder};
 
@@ -639,7 +632,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._workId = *idResult;
@@ -651,7 +644,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._movementId = *idResult;
@@ -666,7 +659,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        return std::unexpected{idResult.error()};
+        detail::throwLibraryError(idResult.error());
       }
 
       prepared._resolvedPairs.emplace_back(*idResult, value);
@@ -693,7 +686,7 @@ namespace ao::library
 
           if (!resourceResult)
           {
-            return std::unexpected{resourceResult.error()};
+            detail::throwLibraryError(resourceResult.error());
           }
 
           prepared._coverArt.push_back({.resourceId = *resourceResult, .type = pending.type});
@@ -716,7 +709,8 @@ namespace ao::library
 
       if (len > kU16Max)
       {
-        ao::throwException<Exception>("Custom metadata value length {} exceeds uint16_t", len);
+        detail::throwLibraryError(
+          Error::Code::ValueTooLarge, std::format("Custom metadata value length {} exceeds uint16_t", len));
       }
 
       totalValueSize += len;
@@ -726,17 +720,19 @@ namespace ao::library
 
     if (uriSize > kU16Max)
     {
-      ao::throwException<Exception>("URI length {} exceeds uint16_t", uriSize);
+      detail::throwLibraryError(Error::Code::ValueTooLarge, std::format("URI length {} exceeds uint16_t", uriSize));
     }
 
     if (coverCount > kU16Max)
     {
-      ao::throwException<Exception>("Cover art count {} exceeds uint16_t", coverCount);
+      detail::throwLibraryError(
+        Error::Code::ValueTooLarge, std::format("Cover art count {} exceeds uint16_t", coverCount));
     }
 
     if (entryCount > kU16Max)
     {
-      ao::throwException<Exception>("Custom metadata count {} exceeds uint16_t", entryCount);
+      detail::throwLibraryError(
+        Error::Code::ValueTooLarge, std::format("Custom metadata count {} exceeds uint16_t", entryCount));
     }
 
     prepared._uriLength = static_cast<std::uint16_t>(uriSize);
@@ -747,7 +743,8 @@ namespace ao::library
 
     if (customOffsetValue > kU16Max)
     {
-      ao::throwException<Exception>("Cold record custom offset {} exceeds uint16_t", customOffsetValue);
+      detail::throwLibraryError(
+        Error::Code::ValueTooLarge, std::format("Cold record custom offset {} exceeds uint16_t", customOffsetValue));
     }
 
     prepared._customOffset = static_cast<std::uint16_t>(customOffsetValue);
@@ -757,7 +754,8 @@ namespace ao::library
 
     if (uriOffsetValue > kU16Max)
     {
-      ao::throwException<Exception>("Cold record URI offset {} exceeds uint16_t", uriOffsetValue);
+      detail::throwLibraryError(
+        Error::Code::ValueTooLarge, std::format("Cold record URI offset {} exceeds uint16_t", uriOffsetValue));
     }
 
     prepared._uriOffset = static_cast<std::uint16_t>(uriOffsetValue);
@@ -854,21 +852,14 @@ namespace ao::library
   Result<std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold>>
   TrackBuilder::prepare(lmdb::WriteTransaction& txn, DictionaryStore& dict, ResourceStore& resources) const
   {
-    auto hotResult = prepareHot(txn, dict);
-
-    if (!hotResult)
+    try
     {
-      return makeError(hotResult.error().code, hotResult.error().message);
+      return std::pair{PreparedHot::create(this, txn, dict), PreparedCold::create(this, txn, dict, resources)};
     }
-
-    auto coldResult = prepareCold(txn, dict, resources);
-
-    if (!coldResult)
+    catch (detail::LibraryException const& ex)
     {
-      return makeError(coldResult.error().code, coldResult.error().message);
+      return std::unexpected{ex.error()};
     }
-
-    return std::pair{std::move(*hotResult), std::move(*coldResult)};
   }
 
   Result<TrackBuilder::PreparedHot> TrackBuilder::prepareHot(lmdb::WriteTransaction& txn, DictionaryStore& dict) const
@@ -877,9 +868,9 @@ namespace ao::library
     {
       return PreparedHot::create(this, txn, dict);
     }
-    catch (Exception const& ex)
+    catch (detail::LibraryException const& ex)
     {
-      return serializationError(ex);
+      return std::unexpected{ex.error()};
     }
   }
 
@@ -891,9 +882,9 @@ namespace ao::library
     {
       return PreparedCold::create(this, txn, dict, resources);
     }
-    catch (Exception const& ex)
+    catch (detail::LibraryException const& ex)
     {
-      return serializationError(ex);
+      return std::unexpected{ex.error()};
     }
   }
 } // namespace ao::library

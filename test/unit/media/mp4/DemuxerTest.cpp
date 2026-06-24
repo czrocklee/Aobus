@@ -148,6 +148,7 @@ namespace ao::media::mp4::test
       auto const result = demuxer.parseTrack("alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message == "Invalid MP4 sample-to-chunk entry");
     }
 
     SECTION("First sample-to-chunk entry must start at the first chunk")
@@ -161,6 +162,7 @@ namespace ao::media::mp4::test
       auto const result = demuxer.parseTrack("alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message == "MP4 sample-to-chunk entry references an invalid chunk");
     }
 
     SECTION("Declared sample count must fit the stsz atom")
@@ -177,6 +179,7 @@ namespace ao::media::mp4::test
       auto const result = demuxer.parseTrack("alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message == "Malformed stsz entry table");
     }
 
     SECTION("64-bit chunk offset arithmetic cannot wrap")
@@ -193,6 +196,7 @@ namespace ao::media::mp4::test
       auto const result = demuxer.parseTrack("alac");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message == "MP4 sample offset overflow");
     }
   }
 

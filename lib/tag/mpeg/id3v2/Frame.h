@@ -4,12 +4,14 @@
 #pragma once
 
 #include "Layout.h"
-#include <ao/Exception.h>
+#include <ao/Error.h>
+#include <ao/tag/detail/TagError.h>
 #include <ao/utility/ByteView.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <format>
 #include <iterator>
 #include <span>
 #include <string>
@@ -217,7 +219,9 @@ namespace ao::tag::mpeg::id3v2
     {
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
-        throwException<Exception>("invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
+        detail::throwTagError(
+          Error::Code::CorruptData,
+          std::format("invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize));
       }
     }
 
@@ -237,7 +241,9 @@ namespace ao::tag::mpeg::id3v2
     {
       if (sizeof(Layout) > size())
       {
-        throwException<Exception>("invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
+        detail::throwTagError(
+          Error::Code::CorruptData,
+          std::format("invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size()));
       }
 
       return *static_cast<Layout const*>(_data);

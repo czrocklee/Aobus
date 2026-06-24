@@ -3,14 +3,14 @@
 
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/FieldCatalog.h>
+#include <ao/query/detail/FieldCatalog.h>
 
 #include <algorithm>
 #include <array>
 #include <span>
 #include <string_view>
 
-namespace ao::query
+namespace ao::query::detail
 {
   namespace
   {
@@ -152,4 +152,4 @@ namespace ao::query
 
     return &*iter;
   }
-} // namespace ao::query
+} // namespace ao::query::detail
