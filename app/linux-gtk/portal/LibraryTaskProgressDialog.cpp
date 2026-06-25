@@ -67,6 +67,19 @@ namespace ao::gtk::portal
     _progressLabel.set_text("All items processed.");
     _progressBar.set_fraction(1.0);
 
+    enableOk();
+  }
+
+  void LibraryTaskProgressDialog::failed(std::string const& message)
+  {
+    _titleLabel.set_markup("<b>Task failed</b>");
+    _progressLabel.set_text(message);
+
+    enableOk();
+  }
+
+  void LibraryTaskProgressDialog::enableOk()
+  {
     if (_okButton != nullptr)
     {
       _okButton->set_sensitive(true);

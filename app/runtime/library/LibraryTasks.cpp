@@ -2,8 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/Type.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/library/LibraryScanner.h>
@@ -18,24 +16,14 @@
 
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <filesystem>
-#include <format>
 #include <memory>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::rt
 {
-  namespace
-  {
-    [[noreturn]] void throwTaskError(char const* action, Error const& error)
-    {
-      auto const message = std::format("{}: {}", action, error.message);
-      throwException<Exception>(std::string_view{message}, error.location);
-    }
-  } // namespace
-
   struct LibraryTasks::Impl final
   {
     async::Runtime& asyncRuntime;
@@ -50,35 +38,29 @@ namespace ao::rt
 
   LibraryTasks::~LibraryTasks() = default;
 
-  async::Task<void> LibraryTasks::importLibraryAsync(std::filesystem::path path)
+  async::Task<Result<>> LibraryTasks::importLibraryAsync(std::filesystem::path path)
   {
     co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryImport");
     auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
-
-    if (auto const result = importer.importFromYaml(path); !result)
-    {
-      throwTaskError("Library import failed", result.error());
-    }
+    auto result = importer.importFromYaml(path);
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_return result;
   }
 
-  async::Task<void> LibraryTasks::exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode)
+  async::Task<Result<>> LibraryTasks::exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode)
   {
     co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryExport");
     auto exporter = ao::rt::LibraryYamlExporter{_implPtr->library};
-
-    if (auto const result = exporter.exportToYaml(path, mode); !result)
-    {
-      throwTaskError("Library export failed", result.error());
-    }
+    auto result = exporter.exportToYaml(path, mode);
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_return result;
   }
 
-  async::Task<library::ScanPlan> LibraryTasks::buildScanPlanAsync()
+  async::Task<Result<library::ScanPlan>> LibraryTasks::buildScanPlanAsync()
   {
     co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryScanner");
@@ -104,7 +86,7 @@ namespace ao::rt
       // A scan that could not even begin (missing root, failed walk) is fatal to
       // the whole task. Clear any in-flight progress and report it as a failure.
       _implPtr->changes.notifyLibraryTaskCompleted(0);
-      throwTaskError("Library scan failed", planResult.error());
+      co_return std::unexpected{planResult.error()};
     }
 
     if (planResult->items.empty())
@@ -112,15 +94,15 @@ namespace ao::rt
       _implPtr->changes.notifyLibraryTaskCompleted(0);
     }
 
-    co_return std::move(*planResult);
+    co_return std::move(planResult);
   }
 
-  async::Task<void> LibraryTasks::applyScanPlanAsync(library::ScanPlan plan)
+  async::Task<Result<library::ScanApplyResult>> LibraryTasks::applyScanPlanAsync(library::ScanPlan plan)
   {
     co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("ApplyScanPlan");
 
-    auto resultIds = std::vector<TrackId>{};
+    auto applyResult = Result<library::ScanApplyResult>{};
     auto const totalItems = plan.items.size();
 
     auto executor = ao::library::ScanPlanExecutor{
@@ -157,8 +139,7 @@ namespace ao::rt
 
     try
     {
-      executor.run();
-      resultIds = executor.result().processedIds;
+      applyResult = executor.run();
     }
     catch (...)
     {
@@ -173,11 +154,20 @@ namespace ao::rt
       std::rethrow_exception(exceptionPtr);
     }
 
-    _implPtr->changes.notifyLibraryTaskCompleted(resultIds.size());
-
-    if (!resultIds.empty())
+    if (!applyResult)
     {
-      _implPtr->changes.notifyTracksMutated(resultIds);
+      _implPtr->changes.notifyLibraryTaskCompleted(0);
+      co_return std::unexpected{applyResult.error()};
     }
+
+    auto const& result = *applyResult;
+    _implPtr->changes.notifyLibraryTaskCompleted(result.processedIds.size());
+
+    if (!result.cancelled && !result.processedIds.empty())
+    {
+      _implPtr->changes.notifyTracksMutated(result.processedIds);
+    }
+
+    co_return applyResult;
   }
 } // namespace ao::rt

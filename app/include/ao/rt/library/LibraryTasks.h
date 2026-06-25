@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/library/LibraryScanner.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -12,7 +14,6 @@
 namespace ao::library
 {
   class MusicLibrary;
-  struct ScanPlan;
 }
 
 namespace ao::async
@@ -31,10 +32,10 @@ namespace ao::rt
     LibraryTasks(async::Runtime& asyncRuntime, library::MusicLibrary& library, LibraryChanges& changes);
     ~LibraryTasks();
 
-    async::Task<void> importLibraryAsync(std::filesystem::path path);
-    async::Task<void> exportLibraryAsync(std::filesystem::path path, ExportMode mode);
-    async::Task<library::ScanPlan> buildScanPlanAsync();
-    async::Task<void> applyScanPlanAsync(library::ScanPlan plan);
+    async::Task<Result<>> importLibraryAsync(std::filesystem::path path);
+    async::Task<Result<>> exportLibraryAsync(std::filesystem::path path, ExportMode mode);
+    async::Task<Result<library::ScanPlan>> buildScanPlanAsync();
+    async::Task<Result<library::ScanApplyResult>> applyScanPlanAsync(library::ScanPlan plan);
 
     LibraryTasks(LibraryTasks const&) = delete;
     LibraryTasks& operator=(LibraryTasks const&) = delete;

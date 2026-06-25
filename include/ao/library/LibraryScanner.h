@@ -57,6 +57,20 @@ namespace ao::library
     }
   };
 
+  /**
+   * Result of applying a scan plan after the batch transaction commits.
+   *
+   * Per-item failures are counted here and streamed live through
+   * ScanPlanExecutor::ItemFailureCallback; transaction-level failures use the
+   * Result error channel instead, so this value is only meaningful on success.
+   */
+  struct ScanApplyResult final
+  {
+    std::vector<TrackId> processedIds;
+    std::int32_t failureCount = 0;
+    bool cancelled = false;
+  };
+
   class LibraryScanner final
   {
   public:

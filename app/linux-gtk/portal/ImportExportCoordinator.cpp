@@ -8,6 +8,7 @@
 #include "app/ThemeCoordinator.h"
 #include "layout/LayoutConstants.h"
 #include "portal/LibraryTaskProgressDialog.h"
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
@@ -43,11 +44,25 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::gtk::portal
 {
+  namespace
+  {
+    void logStructuredError(std::string_view action, Error const& error)
+    {
+      APP_LOG_ERROR("{}: code={}, message={}, location={}:{}",
+                    action,
+                    static_cast<int>(error.code),
+                    error.message,
+                    error.location.file_name(),
+                    error.location.line());
+    }
+  } // namespace
+
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
                                                    ImportExportCallbacks callbacks,
@@ -124,12 +139,27 @@ namespace ao::gtk::portal
   {
     try
     {
-      co_return co_await _runtime.library().tasks().buildScanPlanAsync();
+      auto result = co_await _runtime.library().tasks().buildScanPlanAsync();
+
+      if (!result)
+      {
+        logStructuredError("Scan failed", result.error());
+        _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+        co_return std::nullopt;
+      }
+
+      co_return std::move(*result);
+    }
+    catch (ao::Exception const& e)
+    {
+      APP_LOG_CRITICAL("Scan failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
+      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed: Internal error");
+      co_return std::nullopt;
     }
     catch (std::exception const& e)
     {
-      APP_LOG_ERROR("Scan failed: {}", e.what());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+      APP_LOG_CRITICAL("Scan failed (internal error): {}", e.what());
+      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed: Internal error");
       co_return std::nullopt;
     }
   }
@@ -179,14 +209,43 @@ namespace ao::gtk::portal
 
     try
     {
-      co_await _runtime.library().tasks().applyScanPlanAsync(std::move(plan));
-      dialog->ready();
-      onImportFinished();
+      auto result = co_await _runtime.library().tasks().applyScanPlanAsync(std::move(plan));
+
+      if (!result)
+      {
+        logStructuredError("Scan apply failed", result.error());
+        dialog->failed("Scan failed.");
+        _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+      }
+      else
+      {
+        dialog->ready();
+
+        if (result->cancelled)
+        {
+          _runtime.notifications().post(rt::NotificationSeverity::Info, "Scan cancelled");
+        }
+        else if (result->failureCount > 0)
+        {
+          _runtime.notifications().post(rt::NotificationSeverity::Warning, "Scan completed with errors");
+        }
+        else
+        {
+          onImportFinished();
+        }
+      }
+    }
+    catch (ao::Exception const& e)
+    {
+      APP_LOG_CRITICAL("Scan failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
+      dialog->failed("Scan failed: Internal error.");
+      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed: Internal error");
     }
     catch (std::exception const& e)
     {
-      APP_LOG_ERROR("Scan failed: {}", e.what());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+      APP_LOG_CRITICAL("Scan failed (internal error): {}", e.what());
+      dialog->failed("Scan failed: Internal error.");
+      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed: Internal error");
     }
 
     _libraryTaskProgressSub.reset();
@@ -311,7 +370,16 @@ namespace ao::gtk::portal
       {
         try
         {
-          co_await self->_runtime.library().tasks().exportLibraryAsync(std::move(exportPath), exportMode);
+          auto result = co_await self->_runtime.library().tasks().exportLibraryAsync(std::move(exportPath), exportMode);
+
+          if (!result)
+          {
+            logStructuredError("Export failed", result.error());
+            self->_runtime.notifications().post(
+              rt::NotificationSeverity::Error, std::format("Export failed: {}", result.error().message));
+            co_return;
+          }
+
           self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully");
         }
         catch (ao::Exception const& e)
@@ -321,9 +389,8 @@ namespace ao::gtk::portal
         }
         catch (std::exception const& e)
         {
-          APP_LOG_ERROR("Export failed: {}", e.what());
-          self->_runtime.notifications().post(
-            rt::NotificationSeverity::Error, std::format("Export failed: {}", e.what()));
+          APP_LOG_CRITICAL("Export failed (internal error): {}", e.what());
+          self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Export failed: Internal error");
         }
       }(this, std::move(path), mode));
   }
@@ -350,7 +417,15 @@ namespace ao::gtk::portal
   {
     try
     {
-      co_await _runtime.library().tasks().importLibraryAsync(std::move(importPath));
+      auto result = co_await _runtime.library().tasks().importLibraryAsync(std::move(importPath));
+
+      if (!result)
+      {
+        logStructuredError("Import failed", result.error());
+        _runtime.notifications().post(
+          rt::NotificationSeverity::Error, std::format("Import failed: {}", result.error().message));
+        co_return;
+      }
 
       if (_callbacks.onLibraryDataMutated)
       {
@@ -366,8 +441,8 @@ namespace ao::gtk::portal
     }
     catch (std::exception const& e)
     {
-      APP_LOG_ERROR("Import failed: {}", e.what());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, std::format("Import failed: {}", e.what()));
+      APP_LOG_CRITICAL("Import failed (internal error): {}", e.what());
+      _runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: Internal error");
     }
   }
 

@@ -19,21 +19,29 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <utility>
 
 namespace ao::library::test
 {
-  // Counts the failures the executor pushes through its FailureCallback,
-  // replacing the failureCount field the result used to carry.
-  struct FailureCounts final
+  namespace
   {
-    std::int32_t failed = 0;
-
-    ScanPlanExecutor::FailureCallback callback()
+    // Counts the failures the executor pushes through its ItemFailureCallback.
+    struct FailureCounts final
     {
-      return [this](ScanFailure const&) { ++failed; };
+      std::int32_t failed = 0;
+
+      ScanPlanExecutor::ItemFailureCallback callback()
+      {
+        return [this](ScanFailure const&) { ++failed; };
+      }
+    };
+
+    [[noreturn]] void throwUnexpectedProgressFailure()
+    {
+      throw std::runtime_error{"unexpected progress failure"};
     }
-  };
+  } // namespace
 
   TEST_CASE("ScanPlanExecutor - Initial scan processes new files", "[library][unit][scan]")
   {
@@ -54,10 +62,12 @@ namespace ao::library::test
 
     auto counts = FailureCounts{};
     auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
-    executor.run();
+    auto runResult = executor.run();
+    REQUIRE(runResult);
 
-    auto const result = executor.result();
+    auto const& result = *runResult;
     CHECK(result.processedIds.size() == 1);
+    CHECK(result.failureCount == 0);
     CHECK(counts.failed == 0);
 
     auto txn = ml.readTransaction();
@@ -83,7 +93,8 @@ namespace ao::library::test
       auto scanner = LibraryScanner{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
-      executor.run();
+      auto runResult = executor.run();
+      REQUIRE(runResult);
     }
 
     // Second scan should find unchanged file
@@ -94,11 +105,13 @@ namespace ao::library::test
 
     auto counts = FailureCounts{};
     auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
-    executor.run();
+    auto runResult = executor.run();
+    REQUIRE(runResult);
 
-    auto const result = executor.result();
+    auto const& result = *runResult;
     // An unchanged file is skipped silently: nothing processed, nothing reported.
     CHECK(result.processedIds.empty());
+    CHECK(result.failureCount == 0);
     CHECK(counts.failed == 0);
   }
 
@@ -119,7 +132,8 @@ namespace ao::library::test
       auto scanner = LibraryScanner{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
-      executor.run();
+      auto runResult = executor.run();
+      REQUIRE(runResult);
     }
 
     // Modify targetFile and advance mtime
@@ -137,10 +151,12 @@ namespace ao::library::test
 
     auto counts = FailureCounts{};
     auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
-    executor.run();
+    auto runResult = executor.run();
+    REQUIRE(runResult);
 
-    auto const result = executor.result();
+    auto const& result = *runResult;
     CHECK(result.processedIds.size() == 1);
+    CHECK(result.failureCount == 0);
     CHECK(counts.failed == 0);
 
     auto txn = ml.readTransaction();
@@ -170,7 +186,8 @@ namespace ao::library::test
       auto scanner = LibraryScanner{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
-      executor.run();
+      auto runResult = executor.run();
+      REQUIRE(runResult);
     }
 
     // Remove the file
@@ -182,13 +199,15 @@ namespace ao::library::test
     CHECK(plan.items[0].classification == ScanClassification::Missing);
 
     auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, nullptr};
-    executor.run();
+    auto runResult = executor.run();
+    REQUIRE(runResult);
 
     auto txn = ml.readTransaction();
     auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->status() == FileStatus::Missing);
-    CHECK(executor.result().processedIds.empty());
+    CHECK(runResult->processedIds.empty());
+    CHECK(runResult->failureCount == 0);
   }
 
   TEST_CASE("ScanPlanExecutor - Error handling for corrupted files", "[library][unit][scan]")
@@ -210,11 +229,32 @@ namespace ao::library::test
 
     auto counts = FailureCounts{};
     auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
-    executor.run();
+    auto runResult = executor.run();
+    REQUIRE(runResult);
 
-    auto const result = executor.result();
+    auto const& result = *runResult;
     CHECK(counts.failed == 1);
+    CHECK(result.failureCount == 1);
     CHECK(result.processedIds.empty());
+  }
+
+  TEST_CASE("ScanPlanExecutor - Unexpected process exception escapes", "[library][unit][scan]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+
+    auto plan = ScanPlan{};
+    plan.items.push_back(ScanItem{.uri = "bad.flac", .fullPath = musicRoot / "bad.flac"});
+
+    auto counts = FailureCounts{};
+    auto thrower = [](std::filesystem::path const&, std::int32_t) { throwUnexpectedProgressFailure(); };
+    auto executor = ScanPlanExecutor{ml, std::move(plan), std::move(thrower), counts.callback()};
+
+    REQUIRE_THROWS_AS(std::ignore = executor.run(), std::runtime_error);
+    CHECK(counts.failed == 0);
   }
 
   TEST_CASE("ScanPlanExecutor - Non-decodable files are absent from the plan", "[library][unit][scan]")
@@ -239,9 +279,11 @@ namespace ao::library::test
 
     auto counts = FailureCounts{};
     auto executor = ScanPlanExecutor{ml, std::move(plan), nullptr, counts.callback()};
-    executor.run();
+    auto runResult = executor.run();
+    REQUIRE(runResult);
 
-    CHECK(executor.result().processedIds.empty());
+    CHECK(runResult->processedIds.empty());
+    CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 0);
   }
 } // namespace ao::library::test

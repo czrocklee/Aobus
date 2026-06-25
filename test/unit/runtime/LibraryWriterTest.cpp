@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/async/Runtime.h>
@@ -282,51 +283,44 @@ namespace ao::rt::test
     auto changes = LibraryChanges{};
     auto service = LibraryTasks{runtime, testLib.library(), changes};
 
-    SECTION("importLibraryAsync with invalid path throws")
+    SECTION("importLibraryAsync with invalid path returns failure")
     {
       auto future = runtime.spawn(service.importLibraryAsync("/nonexistent_path_123.yaml"));
+      auto const result = future.get();
 
-      try
-      {
-        future.get();
-        FAIL("importLibraryAsync should throw for an unreadable YAML path");
-      }
-      catch (Exception const& e)
-      {
-        CHECK(std::string_view{e.what()}.find("Library import failed") != std::string_view::npos);
-        CHECK(std::string_view{e.location().file_name()}.find("LibraryYamlImporter.cpp") != std::string_view::npos);
-      }
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::IoError);
+      CHECK(result.error().message.find("Failed to read") != std::string::npos);
+      CHECK(std::string_view{result.error().location.file_name()}.find("LibraryYamlImporter.cpp") !=
+            std::string_view::npos);
     }
 
-    SECTION("exportLibraryAsync with invalid path throws")
+    SECTION("exportLibraryAsync with invalid path returns failure")
     {
       auto future = runtime.spawn(service.exportLibraryAsync("/root/nonexistent_path_123.yaml", ExportMode::Full));
-      CHECK_THROWS(future.get());
+      auto const result = future.get();
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::IoError);
     }
 
     SECTION("buildScanPlanAsync executes")
     {
-      auto wrapperTask = [](LibraryTasks* s) -> async::Task<void>
-      {
-        auto plan = co_await s->buildScanPlanAsync();
-        co_return;
-      };
+      auto future = runtime.spawn(service.buildScanPlanAsync());
+      auto const result = future.get();
 
-      auto future = runtime.spawn(wrapperTask(&service));
-      CHECK_NOTHROW(future.get());
+      REQUIRE(result);
     }
 
     SECTION("applyScanPlanAsync executes")
     {
-      auto wrapperTask = [](LibraryTasks* s) -> async::Task<void>
-      {
-        auto plan = library::ScanPlan{};
-        co_await s->applyScanPlanAsync(std::move(plan));
-        co_return;
-      };
+      auto plan = library::ScanPlan{};
+      auto future = runtime.spawn(service.applyScanPlanAsync(std::move(plan)));
+      auto const result = future.get();
 
-      auto future = runtime.spawn(wrapperTask(&service));
-      CHECK_NOTHROW(future.get());
+      REQUIRE(result);
+      CHECK(result->processedIds.empty());
+      CHECK(result->failureCount == 0);
     }
 
     SECTION("applyScanPlanAsync executes and reports progress")
@@ -339,7 +333,7 @@ namespace ao::rt::test
           CHECK(ev.fraction >= 0.0);
         });
 
-      auto wrapperTask = [](LibraryTasks* s) -> async::Task<void>
+      auto wrapperTask = [](LibraryTasks* s) -> async::Task<Result<library::ScanApplyResult>>
       {
         auto plan = library::ScanPlan{};
         auto item = library::ScanItem{};
@@ -347,12 +341,15 @@ namespace ao::rt::test
         item.fullPath = "/fake/path.flac";
         item.classification = library::ScanClassification::New;
         plan.items.push_back(item);
-        co_await s->applyScanPlanAsync(std::move(plan));
-        co_return;
+        co_return co_await s->applyScanPlanAsync(std::move(plan));
       };
 
       auto future = runtime.spawn(wrapperTask(&service));
-      CHECK_NOTHROW(future.get());
+      auto const result = future.get();
+
+      REQUIRE(result);
+      CHECK(result->processedIds.empty());
+      CHECK(result->failureCount == 1);
       CHECK(progressFired);
     }
   }

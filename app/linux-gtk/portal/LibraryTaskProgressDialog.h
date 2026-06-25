@@ -35,9 +35,11 @@ namespace ao::gtk::portal
 
     void updateProgress(std::string const& message, double fraction);
     void ready();
+    void failed(std::string const& message);
 
   private:
     void setupUi(std::int32_t maxItems);
+    void enableOk();
 
     Gtk::Label _titleLabel;
     Gtk::Label _progressLabel;

@@ -61,6 +61,20 @@ namespace ao::gtk::test
       return std::ranges::any_of(
         feed.entries, [&](auto const& entry) { return entry.severity == severity && entry.message == message; });
     }
+
+    bool hasNotificationContaining(GtkRuntimeFixture& fixture,
+                                   rt::NotificationSeverity severity,
+                                   std::string_view messageFragment)
+    {
+      auto const feed = fixture.runtime().notifications().feed();
+
+      return std::ranges::any_of(feed.entries,
+                                 [&](auto const& entry)
+                                 {
+                                   return entry.severity == severity && std::string_view{entry.message}.find(
+                                                                          messageFragment) != std::string_view::npos;
+                                 });
+    }
   } // namespace
 
   TEST_CASE("ImportExportCoordinator - openMusicLibrary routes to the callback", "[gtk][portal][import-export]")
@@ -176,9 +190,12 @@ namespace ao::gtk::test
 
       REQUIRE(drainGtkEventsUntil(
         [&fixture]
-        { return hasNotification(fixture, rt::NotificationSeverity::Error, "Import failed: Internal error"); }));
+        {
+          return hasNotificationContaining(fixture, rt::NotificationSeverity::Error, "Import failed: Failed to read");
+        }));
 
       CHECK(mutationCallbackCount == 0);
+      CHECK_FALSE(hasNotification(fixture, rt::NotificationSeverity::Error, "Import failed: Internal error"));
     }
   }
 } // namespace ao::gtk::test

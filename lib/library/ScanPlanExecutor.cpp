@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -14,7 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <exception>
+#include <expected>
 #include <memory>
 #include <optional>
 #include <span>
@@ -29,27 +30,29 @@ namespace ao::library
   ScanPlanExecutor::ScanPlanExecutor(MusicLibrary& ml,
                                      ScanPlan plan,
                                      ProgressCallback progress,
-                                     FailureCallback failure)
+                                     ItemFailureCallback itemFailure)
     : _ml{ml}
     , _planPtr{std::make_unique<ScanPlan>(std::move(plan))}
     , _progressCallback{std::move(progress)}
-    , _failureCallback{std::move(failure)}
+    , _itemFailureCallback{std::move(itemFailure)}
   {
   }
 
   void ScanPlanExecutor::reportFailure(std::string_view uri, std::string_view stage, std::string_view message)
   {
-    if (_failureCallback)
+    ++_result.failureCount;
+
+    if (_itemFailureCallback)
     {
-      _failureCallback(ScanFailure{.uri = uri, .stage = stage, .message = message});
+      _itemFailureCallback(ScanFailure{.uri = uri, .stage = stage, .message = message});
     }
   }
 
-  void ScanPlanExecutor::run(std::stop_token stopToken)
+  Result<ScanApplyResult> ScanPlanExecutor::run(std::stop_token stopToken)
   {
     if (!_planPtr)
     {
-      return;
+      return _result;
     }
 
     auto txn = _ml.writeTransaction();
@@ -72,8 +75,10 @@ namespace ao::library
     {
       // The transaction did not persist, so nothing was actually processed.
       _result.processedIds.clear();
-      reportFailure({}, "commit scan results", result.error().message);
+      return std::unexpected{result.error()};
     }
+
+    return _result;
   }
 
   void ScanPlanExecutor::processItem(std::size_t itemIndex,
@@ -84,50 +89,43 @@ namespace ao::library
   {
     auto const& item = _planPtr->items[itemIndex];
 
-    try
+    if (_progressCallback)
     {
-      if (_progressCallback)
-      {
-        _progressCallback(item.fullPath, static_cast<std::int32_t>(itemIndex));
-      }
-
-      if (processSkips(item))
-      {
-        return;
-      }
-
-      if (item.classification == ScanClassification::Missing)
-      {
-        processMissing(item, txn, manifestWriter);
-        return;
-      }
-
-      auto optLoad = loadTrackBuilder(item);
-
-      if (!optLoad)
-      {
-        return;
-      }
-
-      auto& [tagFilePtr, builder] = *optLoad;
-      std::ignore = tagFilePtr;
-
-      builder.property().uri(item.uri);
-
-      if (item.classification == ScanClassification::Changed && item.trackId != kInvalidTrackId)
-      {
-        if (processChanged(item, txn, trackWriter, manifestWriter, dict, builder))
-        {
-          return;
-        }
-      }
-
-      processNew(item, txn, trackWriter, manifestWriter, dict, builder);
+      _progressCallback(item.fullPath, static_cast<std::int32_t>(itemIndex));
     }
-    catch (std::exception const& e)
+
+    if (processSkips(item))
     {
-      reportFailure(item.uri, "process", e.what());
+      return;
     }
+
+    if (item.classification == ScanClassification::Missing)
+    {
+      processMissing(item, txn, manifestWriter);
+      return;
+    }
+
+    auto optLoad = loadTrackBuilder(item);
+
+    if (!optLoad)
+    {
+      return;
+    }
+
+    auto& [tagFilePtr, builder] = *optLoad;
+    std::ignore = tagFilePtr;
+
+    builder.property().uri(item.uri);
+
+    if (item.classification == ScanClassification::Changed && item.trackId != kInvalidTrackId)
+    {
+      if (processChanged(item, txn, trackWriter, manifestWriter, dict, builder))
+      {
+        return;
+      }
+    }
+
+    processNew(item, txn, trackWriter, manifestWriter, dict, builder);
   }
 
   bool ScanPlanExecutor::processSkips(ScanItem const& item)

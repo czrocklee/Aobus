@@ -47,6 +47,9 @@ namespace ao
   public:
     using Base = std::expected<T, Error>;
 
+    // clang-tidy misattributes std::expected's inherited forwarding constructors
+    // to this declaration and reports its internal rvalue references as unused.
+    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
     using Base::Base;
 
     Result() = default;

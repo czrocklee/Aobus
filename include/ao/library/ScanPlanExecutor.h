@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/Type.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryScanner.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
@@ -20,7 +22,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::tag
 {
@@ -59,25 +60,12 @@ namespace ao::library
   {
   public:
     using ProgressCallback = std::move_only_function<void(std::filesystem::path const& path, std::int32_t itemIndex)>;
-    using FailureCallback = std::move_only_function<void(ScanFailure const& failure)>;
-    using TrackIdList = std::vector<TrackId>;
-
-    /**
-     * ScanApplyResult - Result of applying a scan plan.
-     *
-     * Carries only bulk/aggregate state. Per-item failures are pushed live
-     * through the FailureCallback, not accumulated here.
-     */
-    struct ScanApplyResult
-    {
-      TrackIdList processedIds; // TrackIds that were newly inserted or updated
-      bool cancelled = false;
-    };
+    using ItemFailureCallback = std::move_only_function<void(ScanFailure const& failure)>;
 
     ScanPlanExecutor(MusicLibrary& ml,
                      ScanPlan plan,
                      ProgressCallback progressCallback,
-                     FailureCallback failureCallback);
+                     ItemFailureCallback itemFailureCallback);
 
     ~ScanPlanExecutor() = default;
 
@@ -88,10 +76,7 @@ namespace ao::library
 
     // Run execution in the current thread - must be called from background thread.
     // Respects cancellation via stop_token.
-    void run(std::stop_token stopToken = {});
-
-    // Get the result after run() completes
-    ScanApplyResult const& result() const { return _result; }
+    Result<ScanApplyResult> run(std::stop_token stopToken = {});
 
     std::size_t fileCount() const;
 
@@ -146,7 +131,7 @@ namespace ao::library
     MusicLibrary& _ml;
     std::unique_ptr<ScanPlan> _planPtr;
     ProgressCallback _progressCallback;
-    FailureCallback _failureCallback;
+    ItemFailureCallback _itemFailureCallback;
 
     ScanApplyResult _result;
   };

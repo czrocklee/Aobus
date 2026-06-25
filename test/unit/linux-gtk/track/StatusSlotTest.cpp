@@ -60,23 +60,6 @@ namespace ao::gtk::test
       }
     }
 
-    void waitForFuture(std::future<void>& future)
-    {
-      for (std::int32_t attempts = 0; attempts < 1000; ++attempts)
-      {
-        iterateOneGtkEvent();
-
-        if (future.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready)
-        {
-          future.get();
-          drainGtkEvents();
-          return;
-        }
-      }
-
-      FAIL("Timed out waiting for library task");
-    }
-
     template<typename T>
     T waitForFuture(std::future<T>& future)
     {
@@ -160,7 +143,10 @@ namespace ao::gtk::test
       CHECK(widgets.message->get_text() == "Scanning: status-slot.flac");
       CHECK(widgets.progress->get_fraction() == 0.0);
 
-      auto const plan = waitForFuture(future);
+      auto planResult = waitForFuture(future);
+      REQUIRE(planResult);
+
+      auto const& plan = *planResult;
       REQUIRE(plan.items.size() == 1);
       CHECK(plan.items[0].classification == library::ScanClassification::New);
     }
@@ -173,7 +159,8 @@ namespace ao::gtk::test
 
       auto plan = library::ScanPlan{};
       auto future = runtime.async().spawn(runtime.library().tasks().applyScanPlanAsync(std::move(plan)));
-      waitForFuture(future);
+      auto result = waitForFuture(future);
+      REQUIRE(result);
 
       CHECK_FALSE(widgets.selection->get_visible());
       CHECK(widgets.message->get_visible());
