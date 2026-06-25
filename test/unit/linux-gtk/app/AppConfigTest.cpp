@@ -4,7 +4,7 @@
 #include "app/AppConfig.h"
 
 #include "app/UIState.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/rt/StateTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -13,11 +13,9 @@
 
 namespace ao::gtk::test
 {
-  using namespace ao::lmdb::test;
-
   TEST_CASE("AppConfig persistence and operations", "[app][unit][config]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
 
     SECTION("Load non-existent config returns default values")

@@ -431,7 +431,7 @@ namespace ao::query::test
 
     SECTION("CustomExistenceCarriesDictionaryId")
     {
-      auto temp = TempDir{};
+      auto temp = ao::test::TempDir{};
       auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
       auto wtxn = lmdb::test::beginWriteTransaction(env);
       auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -688,7 +688,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - LIKE operator works for ArtistId", "[query][unit][execution_plan]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -826,7 +826,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - Future matching for tags not yet in dictionary", "[query][unit][execution_plan]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -869,7 +869,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - Future matching for custom fields not yet in dictionary", "[query][unit][execution_plan]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -1222,7 +1222,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - Tag Bloom Mask Compilation", "[query][unit][execution_plan]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -1261,7 +1261,7 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - Dictionary-Backed Field Resolution", "[query][unit][execution_plan]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};

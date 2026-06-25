@@ -14,7 +14,6 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/listmodel.h>
@@ -22,11 +21,8 @@
 #include <gtkmm/application.h>
 #include <sigc++/functors/mem_fun.h>
 
-#include <algorithm>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -104,54 +100,6 @@ namespace ao::gtk::test
 
     private:
       GtkRuntimeFixture _fixture;
-    };
-
-    class MutableTrackSource final : public rt::TrackSource
-    {
-    public:
-      void addInitial(TrackId id) { _ids.push_back(id); }
-
-      void insert(TrackId id, std::size_t index)
-      {
-        _ids.insert(_ids.begin() + static_cast<std::ptrdiff_t>(index), id);
-        rt::TrackSource::notifyInserted(id, index);
-      }
-
-      void update(TrackId id)
-      {
-        auto const optIndex = indexOf(id);
-        REQUIRE(optIndex.has_value());
-        rt::TrackSource::notifyUpdated(id, *optIndex);
-      }
-
-      void onReset() { rt::TrackSource::notifyReset(); }
-
-      void remove(TrackId id)
-      {
-        auto const optIndex = indexOf(id);
-        REQUIRE(optIndex.has_value());
-        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIndex));
-        rt::TrackSource::notifyRemoved(id, *optIndex);
-      }
-
-      std::size_t size() const override { return _ids.size(); }
-
-      TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
-
-      std::optional<std::size_t> indexOf(TrackId id) const override
-      {
-        auto it = std::ranges::find(_ids, id);
-
-        if (it == _ids.end())
-        {
-          return std::nullopt;
-        }
-
-        return static_cast<std::size_t>(std::ranges::distance(_ids.begin(), it));
-      }
-
-    private:
-      std::vector<TrackId> _ids;
     };
 
     struct ModelSpy final

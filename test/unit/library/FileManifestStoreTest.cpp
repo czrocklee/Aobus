@@ -25,7 +25,7 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - Invalid URI length returns ValueTooLarge", "[library][unit][manifest]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "manifests");
@@ -41,7 +41,7 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - Write and read back manifest", "[library][unit][manifest]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "manifests");
@@ -65,7 +65,7 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - Get non-existent URI returns NotFound", "[library][unit][manifest]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "manifests");
@@ -80,7 +80,7 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - Remove is idempotent", "[library][unit][manifest]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "manifests");
@@ -103,7 +103,7 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - Corrupt entry returns CorruptData", "[library][unit][manifest]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "manifests");

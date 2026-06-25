@@ -3,7 +3,7 @@
 
 #include "app/ShellLayoutComponentStateStore.h"
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
 #include <ao/uimodel/layout/LayoutComponentState.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
@@ -19,7 +19,6 @@
 namespace ao::gtk::test
 {
   using namespace uimodel::layout;
-  using namespace ao::lmdb::test;
 
   namespace
   {
@@ -50,7 +49,7 @@ namespace ao::gtk::test
 
   TEST_CASE("ShellLayoutComponentStateStore persistence and operations", "[gtk][app][layout-state]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
 
     SECTION("load on a missing file returns nullopt")

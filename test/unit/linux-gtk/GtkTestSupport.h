@@ -5,19 +5,23 @@
 
 #include "linux-gtk/app/GtkMainContextExecutor.h"
 #include "test/unit/TestUtils.h"
+#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/source/TrackSource.h>
 
+#include <catch2/catch_test_macros.hpp>
 #include <glib-object.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerfocus.h>
 #include <gtkmm/gestureclick.h>
@@ -27,14 +31,17 @@
 #include <gtkmm/widget.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -678,4 +685,101 @@ namespace ao::gtk::test
     std::move_only_function<void(rt::PlaybackService::RepeatModeChanged const&)> _repeatModeChanged;
     std::move_only_function<void(float)> _volumeChanged;
   };
+
+  /**
+   * MutableTrackSource - In-memory track source implementation for GTK list/view tests.
+   */
+  class MutableTrackSource : public rt::TrackSource
+  {
+  public:
+    void addInitial(TrackId id) { _ids.push_back(id); }
+
+    void insert(TrackId id, std::size_t index)
+    {
+      _ids.insert(_ids.begin() + static_cast<std::ptrdiff_t>(index), id);
+      rt::TrackSource::notifyInserted(id, index);
+    }
+
+    void update(TrackId id)
+    {
+      auto const optIndex = indexOf(id);
+      REQUIRE(optIndex.has_value());
+      rt::TrackSource::notifyUpdated(id, *optIndex);
+    }
+
+    void onReset() { rt::TrackSource::notifyReset(); }
+
+    void remove(TrackId id)
+    {
+      auto const optIndex = indexOf(id);
+      REQUIRE(optIndex.has_value());
+      _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIndex));
+      rt::TrackSource::notifyRemoved(id, *optIndex);
+    }
+
+    std::size_t size() const override { return _ids.size(); }
+
+    TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
+
+    std::optional<std::size_t> indexOf(TrackId id) const override
+    {
+      auto it = std::ranges::find(_ids, id);
+
+      if (it == _ids.end())
+      {
+        return std::nullopt;
+      }
+
+      return static_cast<std::size_t>(std::ranges::distance(_ids.begin(), it));
+    }
+
+  private:
+    std::vector<TrackId> _ids;
+  };
+
+  /**
+   * WidgetMeasure - Holds layout sizes for widget measurements.
+   */
+  struct WidgetMeasure final
+  {
+    std::int32_t minimum = 0;
+    std::int32_t natural = 0;
+    std::int32_t minimumBaseline = -1;
+    std::int32_t naturalBaseline = -1;
+  };
+
+  /**
+   * measureWidget - Helper to measure widget sizes.
+   */
+  inline WidgetMeasure measureWidget(Gtk::Widget& widget, Gtk::Orientation orientation, std::int32_t forSize = -1)
+  {
+    auto result = WidgetMeasure{};
+    widget.measure(
+      orientation, forSize, result.minimum, result.natural, result.minimumBaseline, result.naturalBaseline);
+    return result;
+  }
+
+  /**
+   * drainGtkEventsFor - Iterates default MainContext for a duration.
+   */
+  inline void drainGtkEventsFor(std::chrono::milliseconds duration)
+  {
+    auto const deadline = std::chrono::steady_clock::now() + duration;
+    auto contextPtr = Glib::MainContext::get_default();
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+      while (contextPtr->pending())
+      {
+        contextPtr->iteration(false);
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+
+    while (contextPtr->pending())
+    {
+      contextPtr->iteration(false);
+    }
+  }
 } // namespace ao::gtk::test

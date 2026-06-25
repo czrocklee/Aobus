@@ -133,7 +133,7 @@ namespace ao::query::test
       DictionaryStore& dictionary() { return *_optDict; }
 
     private:
-      TempDir _temp;
+      ao::test::TempDir _temp;
       std::optional<Environment> _optEnv;
       std::optional<DictionaryStore> _optDict;
       std::optional<ResourceStore> _optResources;

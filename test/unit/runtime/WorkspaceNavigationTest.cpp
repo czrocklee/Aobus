@@ -35,7 +35,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - first navigateTo commits", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -50,7 +50,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - second navigateTo makes canGoBack true", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -62,7 +62,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - navigateTo same list dedups", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -78,7 +78,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - navigateTo AllTracks", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -91,7 +91,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - navigateTo with recordHistory false", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -105,7 +105,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - navigateTo query commits filter", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -126,7 +126,7 @@ namespace ao::rt::test
   TEST_CASE("NavigationWorkspace - navigateTo string query uses all tracks as base list",
             "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(
@@ -139,7 +139,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - goBack restores list", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -155,7 +155,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - goBack twice restores first", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -173,7 +173,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - goForward after back", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -189,7 +189,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - goBack at boundary returns false", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -198,7 +198,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - goForward at boundary returns false", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -207,7 +207,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - new navigation after back truncates future", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -228,7 +228,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - back restores presentation", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -243,7 +243,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - close active view then back", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -260,7 +260,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - onNavigationHistoryChanged emits on navigate", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto received = WorkspaceService::NavigationHistoryChanged{};
@@ -275,7 +275,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - onNavigationHistoryChanged emits on back", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -292,7 +292,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - signal not emitted on dedup", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -306,7 +306,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - session restore commits initial point", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
 
     // Save session with one view.
     {
@@ -329,7 +329,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - restore then navigate and back", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
 
     {
       auto runtime = makeRuntime(tempDir);
@@ -349,7 +349,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - back does not grow history", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -368,7 +368,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - setActivePresentation commits", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -385,7 +385,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - setActivePresentation with no active view is safe", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
@@ -396,7 +396,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - setActivePresentation dedups same spec", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
@@ -416,7 +416,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - setActivePresentation with recordHistory false", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -433,7 +433,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - setActivePresentation by string id", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -447,7 +447,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - setActivePresentation unknown id returns empty", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -459,7 +459,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - jumpToAlbum invalid track no-ops", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -473,7 +473,7 @@ namespace ao::rt::test
 
   TEST_CASE("NavigationWorkspace - back after navigate compound returns to source", "[navigation][unit][workspace]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     runtime.workspace().navigateTo(ListId{10});
@@ -490,7 +490,7 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceService - onFocusedViewChanged emits on focus changes", "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto focusedViewId = kInvalidViewId;
@@ -503,7 +503,7 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceService - custom presets management", "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     std::int32_t emitCount = 0;
@@ -542,7 +542,7 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceService - lists deleted causes views to close", "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto listId = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Test List"});
@@ -559,7 +559,7 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceService - jumpToAlbum valid track reveals track", "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto const trackId =
@@ -585,7 +585,7 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceService - session flush error path", "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     // Create a config store using a directory path, which will fail to open as a file
@@ -596,7 +596,7 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceService - session restore error path", "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto const configPath = tempDir.path() / "bad.yaml";
@@ -610,7 +610,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - invalid navigation targets and presentations are handled gracefully",
             "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     // Test invalid target (invalid GlobalViewKind)
@@ -624,7 +624,7 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceService - goBack recreates view if destroyed", "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto const listA = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A"});
@@ -651,7 +651,7 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceService - session restore falls back to front view if active is lost", "[workspace][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto const listId = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A list"});

@@ -8,7 +8,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_approx.hpp>
@@ -28,7 +28,6 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using namespace ao::lmdb::test;
   using ao::gtk::test::makeRuntime;
 
   namespace
@@ -65,7 +64,7 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.playback_image_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};

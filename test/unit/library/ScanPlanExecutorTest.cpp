@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/Type.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
@@ -22,8 +23,6 @@
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb::test;
-
   // Counts the failures the executor pushes through its FailureCallback,
   // replacing the failureCount field the result used to carry.
   struct FailureCounts final
@@ -38,11 +37,11 @@ namespace ao::library::test
 
   TEST_CASE("ScanPlanExecutor - Initial scan processes new files", "[library][unit][scan]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
     std::filesystem::create_directories(musicRoot);
 
-    auto const sourceFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
@@ -69,11 +68,11 @@ namespace ao::library::test
 
   TEST_CASE("ScanPlanExecutor - Unchanged files are skipped", "[library][unit][scan]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
     std::filesystem::create_directories(musicRoot);
 
-    auto const sourceFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
@@ -105,11 +104,11 @@ namespace ao::library::test
 
   TEST_CASE("ScanPlanExecutor - Changed files trigger hot update", "[library][unit][scan]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
     std::filesystem::create_directories(musicRoot);
 
-    auto const sourceFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
@@ -156,11 +155,11 @@ namespace ao::library::test
 
   TEST_CASE("ScanPlanExecutor - Missing files update manifest status", "[library][unit][scan]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
     std::filesystem::create_directories(musicRoot);
 
-    auto const sourceFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
@@ -194,7 +193,7 @@ namespace ao::library::test
 
   TEST_CASE("ScanPlanExecutor - Error handling for corrupted files", "[library][unit][scan]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
     std::filesystem::create_directories(musicRoot);
 
@@ -220,7 +219,7 @@ namespace ao::library::test
 
   TEST_CASE("ScanPlanExecutor - Non-decodable files are absent from the plan", "[library][unit][scan]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
     std::filesystem::create_directories(musicRoot);
 

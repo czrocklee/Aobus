@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "../../lmdb/TestUtils.h"
 #include "../GtkTestSupport.h"
 #include "playback/SeekControl.h"
 #include "playback/TimeLabel.h"
+#include "test/unit/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -15,13 +15,11 @@
 
 namespace ao::gtk::test
 {
-  using namespace ao::lmdb::test;
-
   namespace
   {
     struct TestEnvironment final
     {
-      TempDir tempDir{};
+      ao::test::TempDir tempDir{};
       rt::AppRuntime runtime;
 
       TestEnvironment()

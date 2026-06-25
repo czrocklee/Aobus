@@ -3,6 +3,7 @@
 
 #include "DecoderTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
 
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 namespace ao::audio::test

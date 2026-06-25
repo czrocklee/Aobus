@@ -97,7 +97,7 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - manual list round-trip through ListStore", "[library][unit][list]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -127,7 +127,7 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - smart list round-trip through ListStore", "[library][unit][list]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);

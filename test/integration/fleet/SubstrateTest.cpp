@@ -5,7 +5,7 @@
 
 #include "fleet/Model.h"
 #include "fleet/ProcessRunner.h"
-#include "test/unit/fleet/TestUtils.h"
+#include "test/fleet/FleetTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -18,7 +18,7 @@ namespace ao::fleet::test
 {
   TEST_CASE("Fleet snapshot provider - stale base destination is replaced", "[fleet][integration][substrate]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const repo = tempPath(temp) / "repo";
     std::filesystem::create_directories(repo);
     writeFile(temp, "repo/source.txt", "fresh\n");
@@ -47,7 +47,7 @@ namespace ao::fleet::test
 
   TEST_CASE("Fleet patch extractor - status letters map to scope operations", "[fleet][integration][substrate]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const repo = tempPath(temp) / "repo";
     std::filesystem::create_directories(repo);
     writeFile(temp, "repo/keep.txt", "one\n");

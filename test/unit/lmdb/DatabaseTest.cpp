@@ -21,7 +21,7 @@ namespace ao::lmdb::test
 {
   TEST_CASE("Database - helper opens database", "[lmdb][unit][database]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -35,7 +35,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database - open returns database", "[lmdb][unit][database]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
 
@@ -47,7 +47,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database - read-only open returns NotFound for missing database", "[lmdb][unit][database]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto txn = beginReadTransaction(env);
 
@@ -62,7 +62,7 @@ namespace ao::lmdb::test
   // ============================================================================
   TEST_CASE("Database::Reader::Iterator - reaches end as normal state", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -90,7 +90,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader - empty database", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -104,7 +104,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader - get", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -138,7 +138,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader::Iterator - copy constructor", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -157,7 +157,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader::Iterator - move constructor", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -175,7 +175,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -195,7 +195,7 @@ namespace ao::lmdb::test
   // ============================================================================
   TEST_CASE("Database::Writer - create with id and data", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -214,7 +214,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - create with id and size", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -241,7 +241,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - append with data", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -271,7 +271,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - append with size", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -309,7 +309,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -333,7 +333,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - update existing record", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -361,7 +361,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - delete record", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -397,7 +397,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - delete missing record returns false", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -409,7 +409,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - get within write transaction", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -425,7 +425,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - move constructor", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -443,7 +443,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - create returns Conflict on duplicate id with data", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -460,7 +460,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - create returns Conflict on duplicate id with size", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -477,7 +477,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader - maxKey on empty database", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -491,7 +491,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader - maxKey after append", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -510,7 +510,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader - maxKey after create", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -529,7 +529,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader - maxKey after delete", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -556,7 +556,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader - maxKey after deleting middle element", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -584,7 +584,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database - Blob keys", "[lmdb][unit][database][blob]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -652,7 +652,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Writer - throws when used after commit", "[lmdb][unit][database][writer]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -672,7 +672,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Database::Reader::KeyView - coercion throws on non-uint32 key", "[lmdb][unit][database][reader]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);

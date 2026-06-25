@@ -59,7 +59,7 @@ namespace ao::rt::test
       ListId smartListId{};
     };
 
-    CoreRuntime makeCoreRuntime(TempDir const& tempDir)
+    CoreRuntime makeCoreRuntime(ao::test::TempDir const& tempDir)
     {
       return CoreRuntime{
         std::make_unique<MockExecutor>(), tempDir.path(), std::filesystem::path{tempDir.path()} / ".aobus" / "library"};

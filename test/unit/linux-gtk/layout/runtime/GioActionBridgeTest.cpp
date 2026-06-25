@@ -4,8 +4,8 @@
 #include "layout/runtime/GioActionBridge.h"
 
 #include "layout/runtime/ActionRegistry.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include "test/unit/lmdb/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/ActionTypes.h>
 
@@ -23,7 +23,6 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using namespace ao::lmdb::test;
   using ao::gtk::test::makeRuntime;
 
   namespace
@@ -59,7 +58,7 @@ namespace ao::gtk::layout::test
   TEST_CASE("GioActionBridge", "[layout][action]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test.gio");
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto window = Gtk::Window{};

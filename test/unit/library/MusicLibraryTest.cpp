@@ -22,7 +22,7 @@ namespace ao::library::test
 
   TEST_CASE("MusicLibrary initializes metadata header", "[library][unit]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
 
     auto firstResult = MusicLibrary::open(temp.path(), temp.path());
     REQUIRE(firstResult);
@@ -41,7 +41,7 @@ namespace ao::library::test
 
   TEST_CASE("MusicLibrary reports unsupported library versions as CorruptData", "[library][unit]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
 
     auto txn = lmdb::test::beginWriteTransaction(env);
@@ -61,7 +61,7 @@ namespace ao::library::test
 
   TEST_CASE("MusicLibrary - accessors return valid references", "[library][unit]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const ml = MusicLibrary{temp.path(), temp.path()};
 
     // All store accessors should be callable without crashing
@@ -75,7 +75,7 @@ namespace ao::library::test
 
   TEST_CASE("MusicLibrary - read and write transactions work", "[library][unit]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
 
     auto wtxn = ml.writeTransaction();

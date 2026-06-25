@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "DecoderTestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/AudioCodec.h>
 #include <ao/audio/AacDecoderSession.h>
 #include <ao/audio/DecoderTypes.h>
@@ -20,12 +22,7 @@ namespace ao::audio::test
 {
   TEST_CASE("AacDecoderSession - Happy Path", "[audio][unit][aac]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'basic_metadata.m4a' missing");
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
     auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
     REQUIRE(decoder.open(testFile));
@@ -188,24 +185,18 @@ namespace ao::audio::test
 
     SECTION("Invalid file content")
     {
-      auto const tempFile = std::filesystem::temp_directory_path() / "invalid_aac.m4a";
+      auto const tempFile = ao::test::TempFile{".m4a"};
       {
-        auto ofs = std::ofstream{tempFile, std::ios::binary};
+        auto ofs = std::ofstream{tempFile.path, std::ios::binary};
         ofs << "NOT AN AAC FILE! Random garbage data...";
       }
 
       auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
-      CHECK(!decoder.open(tempFile));
-      std::filesystem::remove(tempFile);
+      CHECK(!decoder.open(tempFile.path));
     }
 
     SECTION("Read after close returns end of stream")
     {
-      if (!std::filesystem::exists(testFile))
-      {
-        SKIP("Test file 'basic_metadata.m4a' missing");
-      }
-
       auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
       REQUIRE(decoder.open(testFile));
 
@@ -228,12 +219,7 @@ namespace ao::audio::test
 
   TEST_CASE("AacDecoderSession - End of stream", "[audio][unit][aac]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'basic_metadata.m4a' missing");
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
     auto decoder = AacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
     REQUIRE(decoder.open(testFile));

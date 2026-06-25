@@ -42,7 +42,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - create and read", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -73,7 +73,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - read by id", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -100,7 +100,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - update", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -132,7 +132,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - delete", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -165,7 +165,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - create multiple tracks unique IDs", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -194,7 +194,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - hot/cold createHotCold", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -233,7 +233,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -288,7 +288,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - hot/cold remove", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -321,7 +321,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - Writer get with LoadMode", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -361,7 +361,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - unified TrackView iteration", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -400,7 +400,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - LoadMode::Hot iteration", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -437,7 +437,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - LoadMode::Cold iteration", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -472,7 +472,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - LoadMode::Both iteration", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -509,7 +509,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - LoadMode::Hot get by id", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -541,7 +541,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - LoadMode::Cold get by id", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -574,7 +574,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - LoadMode::Cold multi-record iteration", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -634,7 +634,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - LoadMode::Cold empty iteration", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -652,7 +652,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - iterator equality across modes", "[library][unit][track]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -692,7 +692,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackStore - read with missing cold data returns NotFound", "[library][unit][track]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
 

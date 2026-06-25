@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
+#include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <glibmm/main.h>
 #include <gtkmm/box.h>
@@ -13,9 +14,7 @@
 #include <gtkmm/revealer.h>
 #include <gtkmm/widget.h>
 
-#include <chrono>
 #include <cstdint>
-#include <thread>
 
 namespace Gtk
 {
@@ -27,20 +26,9 @@ namespace Gtk
 
 namespace ao::gtk::layout::test
 {
-  struct WidgetMeasure final
-  {
-    std::int32_t minimum = 0;
-    std::int32_t natural = 0;
-    std::int32_t minimumBaseline = -1;
-    std::int32_t naturalBaseline = -1;
-  };
-
-  inline WidgetMeasure measureWidget(Gtk::Widget& widget, Gtk::Orientation orientation)
-  {
-    auto result = WidgetMeasure{};
-    widget.measure(orientation, -1, result.minimum, result.natural, result.minimumBaseline, result.naturalBaseline);
-    return result;
-  }
+  using ao::gtk::test::drainGtkEventsFor;
+  using ao::gtk::test::measureWidget;
+  using ao::gtk::test::WidgetMeasure;
 
   inline Gtk::Box* collapsibleSplitBox(ILayoutComponent& component)
   {
@@ -102,27 +90,6 @@ namespace ao::gtk::layout::test
     }
 
     return dynamic_cast<Gtk::Button*>(gutterBox->get_first_child());
-  }
-
-  inline void drainGtkEventsFor(std::chrono::milliseconds duration)
-  {
-    auto const deadline = std::chrono::steady_clock::now() + duration;
-    auto contextPtr = Glib::MainContext::get_default();
-
-    while (std::chrono::steady_clock::now() < deadline)
-    {
-      while (contextPtr->pending())
-      {
-        contextPtr->iteration(false);
-      }
-
-      std::this_thread::sleep_for(std::chrono::milliseconds{5});
-    }
-
-    while (contextPtr->pending())
-    {
-      contextPtr->iteration(false);
-    }
   }
 
   class AllocationHost final : public Gtk::Widget

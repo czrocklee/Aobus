@@ -24,7 +24,7 @@ namespace ao::library::test
 
   TEST_CASE("ResourceStore - create and read", "[library][unit][resource]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -60,7 +60,7 @@ namespace ao::library::test
 
   TEST_CASE("ResourceStore - delete", "[library][unit][resource]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -91,7 +91,7 @@ namespace ao::library::test
 
   TEST_CASE("ResourceStore - deduplication", "[library][unit][resource]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -131,7 +131,7 @@ namespace ao::library::test
 
   TEST_CASE("ResourceStore - zero hash uses a valid ID", "[library][unit][resource]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);

@@ -4,6 +4,7 @@
 #include "CapturingBackend.h"
 #include "ScriptedDecoderSession.h"
 #include "TestUtility.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/DecoderTypes.h>
@@ -14,7 +15,6 @@
 #include <ao/audio/Types.h>
 
 #include <catch2/catch_approx.hpp>
-#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
@@ -154,12 +154,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - Graph Initialization", "[playback][unit][engine][graph]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file not found: " << testFile);
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.flac");
 
     auto spy = SpyBackend<>{};
     auto const device = Device{.id = DeviceId{"test-device"},
@@ -199,13 +194,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][unit][engine][pipewire]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      WARN("Test file not found, skipping PipeWire shared format test");
-      return;
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.flac");
 
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
@@ -247,12 +236,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - AAC playback supports 32-bit padded backend output", "[playback][unit][engine][aac]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'basic_metadata.m4a' missing");
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
     auto backendPtr = std::make_unique<CapturingBackend>();
     auto* const backendRaw = backendPtr.get();
@@ -295,13 +279,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[playback][unit][engine][format]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      WARN("Test file not found, skipping backend sample-rate validation test");
-      return;
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.flac");
 
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();

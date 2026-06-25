@@ -3,6 +3,7 @@
 
 #include "DecoderTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/audio/AlacDecoderSession.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>

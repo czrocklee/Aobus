@@ -1,3 +1,22 @@
+# ao_test_options: shared test compilation settings
+add_library(ao_test_options INTERFACE)
+target_include_directories(ao_test_options INTERFACE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_compile_definitions(ao_test_options INTERFACE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
+target_compile_options(ao_test_options INTERFACE
+  -Wno-array-bounds
+  $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>>:-Wno-mismatched-new-delete>
+)
+
+if(PIPEWIRE_FOUND)
+  target_compile_definitions(ao_test_options INTERFACE PIPEWIRE_FOUND)
+  target_link_libraries(ao_test_options INTERFACE PkgPipeWire)
+endif()
+
+if(ALSA_FOUND)
+  target_compile_definitions(ao_test_options INTERFACE ALSA_FOUND)
+  target_link_libraries(ao_test_options INTERFACE PkgALSA PkgUDEV)
+endif()
+
 # ao_core_test: portable unit + integration tests
 add_executable(ao_core_test
     # utility tests
@@ -55,7 +74,6 @@ add_executable(ao_core_test
     unit/library/ResourceStoreTest.cpp
 
     unit/library/TrackStoreTest.cpp
-    unit/library/ListStoreTest.cpp
     unit/library/ListBuilderTest.cpp
     unit/library/MusicLibraryTest.cpp
 
@@ -162,24 +180,7 @@ add_executable(ao_core_test
     unit/runtime/LibraryExportImportTest.cpp
 )
 
-target_include_directories(ao_core_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_core_test PRIVATE ao ao_audio ao_app_uimodel ao_app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC PkgFDKAAC PkgMPG123)
-
-if(PIPEWIRE_FOUND)
-  target_compile_definitions(ao_core_test PRIVATE PIPEWIRE_FOUND)
-  target_link_libraries(ao_core_test PRIVATE PkgPipeWire)
-endif()
-
-if(ALSA_FOUND)
-  target_compile_definitions(ao_core_test PRIVATE ALSA_FOUND)
-  target_link_libraries(ao_core_test PRIVATE PkgALSA PkgUDEV)
-endif()
-
-target_compile_definitions(ao_core_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
-target_compile_options(ao_core_test PRIVATE
-  -Wno-array-bounds
-  $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>>:-Wno-mismatched-new-delete>
-)
+target_link_libraries(ao_core_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
 # ao_fleet_test: fleet tool unit and integration tests
@@ -207,21 +208,7 @@ add_executable(ao_integration_test
     integration/tag/TagTest.cpp
 )
 
-target_include_directories(ao_integration_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_integration_test PRIVATE ao ao_audio ao_app_uimodel ao_app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC PkgFDKAAC PkgMPG123)
-
-if(PIPEWIRE_FOUND)
-  target_compile_definitions(ao_integration_test PRIVATE PIPEWIRE_FOUND)
-  target_link_libraries(ao_integration_test PRIVATE PkgPipeWire)
-endif()
-
-if(ALSA_FOUND)
-  target_compile_definitions(ao_integration_test PRIVATE ALSA_FOUND)
-  target_link_libraries(ao_integration_test PRIVATE PkgALSA PkgUDEV)
-endif()
-
-target_compile_definitions(ao_integration_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
-target_compile_options(ao_integration_test PRIVATE -Wno-array-bounds)
+target_link_libraries(ao_integration_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 
 # Not using add_test() here to keep it out of default 'ctest' runs, 
 # or use labels/properties if preferred. For now, it's just a manual driver.
@@ -304,7 +291,6 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/PlaybackImageTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp
-      unit/linux-gtk/app/AppConfigTest.cpp
     unit/linux-gtk/playback/AudioPipelinePanelTest.cpp
     unit/linux-gtk/playback/AobusSoulWindowTest.cpp
     unit/linux-gtk/playback/AudioDeviceSelectorTest.cpp
@@ -317,13 +303,10 @@ add_executable(ao_gtk_test
     unit/linux-gtk/playback/TimeLabelTest.cpp
 )
 
-target_include_directories(ao_gtk_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_gtk_test PRIVATE aobus-gtk-lib)
+target_link_libraries(ao_gtk_test PRIVATE aobus-gtk-lib PkgGTKMM ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
 endif()
-
-target_link_libraries(ao_gtk_test PRIVATE ao PkgGTKMM Catch2 FakeIt::FakeIt-catch spdlog::spdlog Catch2::Catch2WithMain)
 add_test(NAME ao_gtk_test COMMAND ao_gtk_test)
 
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
@@ -331,21 +314,7 @@ add_executable(ao_perf_baseline
     unit/runtime/PerformanceBaselineTest.cpp
 )
 
-target_include_directories(ao_perf_baseline PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(ao_perf_baseline PRIVATE ao ao_audio ao_app_uimodel ao_app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog PkgRapidYaml PkgFLAC PkgALAC PkgFDKAAC PkgMPG123)
-
-if(PIPEWIRE_FOUND)
-    target_compile_definitions(ao_perf_baseline PRIVATE PIPEWIRE_FOUND)
-    target_link_libraries(ao_perf_baseline PRIVATE PkgPipeWire)
-endif()
-
-if(ALSA_FOUND)
-    target_compile_definitions(ao_perf_baseline PRIVATE ALSA_FOUND)
-    target_link_libraries(ao_perf_baseline PRIVATE PkgALSA PkgUDEV)
-endif()
-
-target_compile_definitions(ao_perf_baseline PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
-target_compile_options(ao_perf_baseline PRIVATE -Wno-array-bounds)
+target_link_libraries(ao_perf_baseline PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 
 # Compilation database support for custom linter integration fixture
 file(GLOB_RECURSE LINT_FIXTURE_SOURCES "integration/lint/fixture/*.cpp")

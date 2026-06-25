@@ -3,7 +3,7 @@
 
 #include "app/ShellLayoutStore.h"
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 
@@ -15,11 +15,9 @@
 
 namespace ao::gtk::test
 {
-  using namespace ao::lmdb::test;
-
   TEST_CASE("ShellLayoutStore persistence and operations", "[app][unit][layout]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
 
     SECTION("load on a missing file returns nullopt")

@@ -23,7 +23,7 @@ namespace ao::rt::test
 
   TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][unit][runtime][headless]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto const workspaceConfigPath = std::filesystem::path{tempDir.path()} / "workspace.yaml";
     auto runtime = makeRuntime(tempDir);
 

@@ -25,7 +25,7 @@ namespace ao::library::test
 
   TEST_CASE("MetaStore - Invalid metadata header size returns CorruptData", "[library][unit][meta_store]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "meta");
@@ -45,7 +45,7 @@ namespace ao::library::test
 
   TEST_CASE("MetaStore - Create and load header", "[library][unit][meta_store]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "meta");
@@ -69,7 +69,7 @@ namespace ao::library::test
 
   TEST_CASE("MetaStore - Missing header returns NotFound", "[library][unit][meta_store]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "meta");
@@ -84,7 +84,7 @@ namespace ao::library::test
 
   TEST_CASE("MetaStore - Update header overwrites previous values", "[library][unit][meta_store]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "meta");

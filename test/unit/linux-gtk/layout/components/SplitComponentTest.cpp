@@ -6,9 +6,9 @@
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
-#include "test/unit/lmdb/TestUtils.h"
 #include <ao/uimodel/layout/LayoutComponentState.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
@@ -26,13 +26,12 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
   using ao::gtk::test::makeRuntime;
-  using namespace ao::lmdb::test;
 
   TEST_CASE("SplitComponent success states", "[layout][unit][containers][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};

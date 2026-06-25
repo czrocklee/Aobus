@@ -9,7 +9,7 @@
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
@@ -44,7 +44,6 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using namespace ao::lmdb::test;
   using ao::gtk::test::emitActivate;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::emitGesturePressed;
@@ -279,7 +278,7 @@ namespace ao::gtk::layout::test
   TEST_CASE("TrackFieldGrid constrained layout behavior", "[layout][components][constrained][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};

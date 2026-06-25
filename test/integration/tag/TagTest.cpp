@@ -169,9 +169,8 @@ namespace ao::tag::test
     auto& builder = loaded.builder;
 
     // Create temp LMDB environment to test cover art serialization
-    auto const tempDir = fs::temp_directory_path() / "rs_tag_test_XXXXXX";
-    fs::create_directories(tempDir);
-    auto env = lmdb::test::openEnvironment(tempDir, {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto const tempDir = ao::test::TempDir{};
+    auto env = lmdb::test::openEnvironment(tempDir.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
     auto resources = library::ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
@@ -190,9 +189,6 @@ namespace ao::tag::test
       std::string_view{format} == "m4a" ? library::PictureType::FrontCover : library::PictureType::Other;
     CHECK(view.coverArt().at(0).type == expectedType);
     CHECK(view.coverArt().primary().has_value());
-
-    // Cleanup - transaction will abort if not committed
-    fs::remove_all(tempDir);
   }
 
   // ============================================================================

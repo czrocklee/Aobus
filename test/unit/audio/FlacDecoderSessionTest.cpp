@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "DecoderTestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
@@ -23,12 +25,7 @@ namespace ao::audio::test
 {
   TEST_CASE("FlacDecoderSession - Happy Path", "[audio][unit][flac]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.flac";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'hires.flac' missing");
-    }
+    auto const testFile = requireAudioFixture("hires.flac");
 
     auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
     REQUIRE(decoder.open(testFile));
@@ -52,12 +49,7 @@ namespace ao::audio::test
 
   TEST_CASE("FlacDecoderSession - 24-bit", "[audio][unit][flac]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.flac";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'hires.flac' missing");
-    }
+    auto const testFile = requireAudioFixture("hires.flac");
 
     auto decoder = FlacDecoderSession{Format{.bitDepth = 24, .isInterleaved = true}};
     REQUIRE(decoder.open(testFile));
@@ -125,14 +117,13 @@ namespace ao::audio::test
 
     SECTION("Invalid file content")
     {
-      auto const tempFile = std::filesystem::temp_directory_path() / "invalid_flac.flac";
+      auto const tempFile = ao::test::TempFile{".flac"};
       {
-        auto ofs = std::ofstream{tempFile, std::ios::binary};
+        auto ofs = std::ofstream{tempFile.path, std::ios::binary};
         ofs << "NOT A FLAC FILE! Random garbage data...";
       }
 
-      CHECK(!decoder.open(tempFile));
-      std::filesystem::remove(tempFile);
+      CHECK(!decoder.open(tempFile.path));
     }
 
     SECTION("Unsupported fixed output requests fail during open")

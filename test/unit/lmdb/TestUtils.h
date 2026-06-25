@@ -20,8 +20,6 @@
 
 namespace ao::lmdb::test
 {
-  using ao::test::TempDir;
-
   /**
    * Create a vector filled with test data.
    */

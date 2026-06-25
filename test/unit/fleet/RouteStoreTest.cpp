@@ -5,7 +5,7 @@
 
 #include "fleet/Model.h"
 #include "fleet/Serialization.h"
-#include "test/unit/fleet/TestUtils.h"
+#include "test/fleet/FleetTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,7 +17,7 @@ namespace ao::fleet::test
 {
   TEST_CASE("Fleet route store - breaker uses five-result window and reset", "[fleet][unit][route]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto manifest = ReviewManifest{
       .phaseId = "phase-a",
       .mode = OutputMode::Proposal,

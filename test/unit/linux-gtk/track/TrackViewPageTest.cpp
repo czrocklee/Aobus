@@ -19,7 +19,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,42 +26,15 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
-#include <algorithm>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <memory>
-#include <optional>
 #include <string>
-#include <vector>
 
 namespace ao::gtk::test
 {
   namespace
   {
-    class MutableTrackSource final : public rt::TrackSource
-    {
-    public:
-      void addInitial(TrackId id) { _ids.push_back(id); }
-      std::size_t size() const override { return _ids.size(); }
-      TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
-      std::optional<std::size_t> indexOf(TrackId id) const override
-      {
-        auto const it = std::ranges::find(_ids, id);
-
-        if (it == _ids.end())
-        {
-          return std::nullopt;
-        }
-
-        return static_cast<std::size_t>(std::ranges::distance(_ids.begin(), it));
-      }
-
-    private:
-      std::vector<TrackId> _ids;
-    };
-
     TrackId addAlbumTrack(library::MusicLibrary& library, std::string const& album)
     {
       auto txn = library.writeTransaction();

@@ -3,6 +3,7 @@
 
 #include "DecoderTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/Error.h>
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
@@ -11,6 +12,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 namespace ao::audio::test

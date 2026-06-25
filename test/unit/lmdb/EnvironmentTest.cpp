@@ -15,7 +15,7 @@ namespace ao::lmdb::test
 {
   TEST_CASE("Environment - create", "[lmdb][unit][environment]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Verify by starting a transaction
@@ -24,7 +24,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Environment - open returns IoError for missing directory", "[lmdb][unit][environment]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const result = Environment::open(temp.path() / "missing", {.flags = MDB_CREATE, .maxDatabases = 20});
 
     REQUIRE_FALSE(result);
@@ -33,7 +33,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Environment - open returns environment on success", "[lmdb][unit][environment]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = Environment::open(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     REQUIRE(env);
 
@@ -70,7 +70,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Environment - helper opens path", "[lmdb][unit][environment]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Verify we can create transactions.
@@ -80,7 +80,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("Environment - helper uses default options", "[lmdb][unit][environment]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path());
 
     // Verify it opened correctly by starting a transaction.

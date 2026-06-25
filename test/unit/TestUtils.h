@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
 #include <span>
 #include <string>
 #include <string_view>
@@ -104,4 +105,10 @@ namespace ao::test
     TempFile(TempFile&&) = delete;
     TempFile& operator=(TempFile&&) = delete;
   };
+
+  inline std::string readFile(std::filesystem::path const& path)
+  {
+    auto input = std::ifstream{path, std::ios::binary};
+    return {std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
+  }
 } // namespace ao::test

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/utility/AtomicFile.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -13,11 +13,9 @@
 
 namespace ao::utility::test
 {
-  using namespace ao::lmdb::test;
-
   TEST_CASE("AtomicFile writes data atomically with owner-only permissions", "[utility][atomicfile]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "config.yaml";
 
     auto const result = writeAtomically(targetPath, "version: 1\n");
@@ -36,7 +34,7 @@ namespace ao::utility::test
 
   TEST_CASE("AtomicFile overwrites existing file", "[utility][atomicfile]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "state.yaml";
 
     REQUIRE(writeAtomically(targetPath, "old").has_value());
@@ -49,7 +47,7 @@ namespace ao::utility::test
 
   TEST_CASE("AtomicFile fails when parent directory is not writable", "[utility][atomicfile]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const readonlyDir = std::filesystem::path{tempDir.path()} / "readonly";
     std::filesystem::create_directories(readonlyDir);
     std::filesystem::permissions(readonlyDir,
@@ -66,7 +64,7 @@ namespace ao::utility::test
 
   TEST_CASE("AtomicFile fails to overwrite a directory", "[utility][atomicfile]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "dir";
     std::filesystem::create_directories(targetPath);
 

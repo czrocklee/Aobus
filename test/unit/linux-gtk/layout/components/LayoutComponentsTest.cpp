@@ -12,7 +12,7 @@
 #include "layout/document/LayoutDocument.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
 #include <ao/Type.h>
@@ -58,22 +58,14 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using namespace ao::lmdb::test;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::findWidgetByClass;
   using ao::gtk::test::makeRuntime;
+  using ao::gtk::test::measureWidget;
 
   namespace
   {
-    struct WidgetMeasure final
-    {
-      std::int32_t minimum = 0;
-      std::int32_t natural = 0;
-      std::int32_t minimumBaseline = -1;
-      std::int32_t naturalBaseline = -1;
-    };
-
     LayoutContext makeContext(ComponentRegistry& registry,
                               ActionRegistry& actionRegistry,
                               rt::AppRuntime& runtime,
@@ -81,14 +73,6 @@ namespace ao::gtk::layout::test
     {
       return LayoutContext{
         .registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
-    }
-
-    WidgetMeasure measureWidget(Gtk::Widget& widget, Gtk::Orientation orientation, std::int32_t forSize)
-    {
-      auto result = WidgetMeasure{};
-      widget.measure(
-        orientation, forSize, result.minimum, result.natural, result.minimumBaseline, result.naturalBaseline);
-      return result;
     }
 
     class MockDetailScope final : public ITrackDetailScope
@@ -113,7 +97,7 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
@@ -335,7 +319,7 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
@@ -397,7 +381,7 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
@@ -666,7 +650,7 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
@@ -711,7 +695,7 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};

@@ -4,7 +4,7 @@
 #include "fleet/Serialization.h"
 
 #include "fleet/Model.h"
-#include "test/unit/fleet/TestUtils.h"
+#include "test/fleet/FleetTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -71,7 +71,7 @@ namespace ao::fleet::test
 
   TEST_CASE("Fleet registry - invalid references placeholders and search fail statically", "[fleet][unit][yaml]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const production = readFile(std::filesystem::path{AOBUS_SOURCE_DIR} / "config/agent-fleet.yaml");
 
     SECTION("unknown agent reference")
@@ -247,7 +247,7 @@ namespace ao::fleet::test
 
   TEST_CASE("Fleet intent - strict schema and round trip", "[fleet][unit][yaml]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
 
     SECTION("valid intent round trips")
     {
@@ -351,7 +351,7 @@ namespace ao::fleet::test
 
   TEST_CASE("Fleet intent - full override set round trips", "[fleet][unit][yaml]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto intent = loadIntent(writeFile(temp, "base.yaml", intentYaml()));
     REQUIRE(intent);
 
@@ -373,7 +373,7 @@ namespace ao::fleet::test
 
   TEST_CASE("Fleet YAML stream - control bytes in scalars round trip", "[fleet][unit][yaml]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const path = tempPath(temp) / "stream.yaml";
     auto const hostile = std::string{"esc\x1b[31m bell\x07 del\x7f raw\xff end"};
 
@@ -391,7 +391,7 @@ namespace ao::fleet::test
 
   TEST_CASE("Fleet YAML stream - incomplete tail is recoverable", "[fleet][unit][yaml]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const path = tempPath(temp) / "review-outcomes.yaml";
     auto document = std::string{"schema: aobus-fleet-review-outcome/v1\n"
                                 "event: review-recorded\n"

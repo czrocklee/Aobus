@@ -3,6 +3,7 @@
 
 #include "DecoderTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/AudioCodec.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
@@ -22,12 +23,7 @@ namespace ao::audio::test
 {
   TEST_CASE("Mp3DecoderSession - Happy Path", "[audio][unit][mp3]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.mp3";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'hires.mp3' missing");
-    }
+    auto const testFile = requireAudioFixture("hires.mp3");
 
     auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
     REQUIRE(decoder.open(testFile));
@@ -58,12 +54,7 @@ namespace ao::audio::test
 
   TEST_CASE("Mp3DecoderSession - Empty Output Format Probes Native Stream", "[audio][unit][mp3]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.mp3";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'basic_metadata.mp3' missing");
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
     auto decoder = Mp3DecoderSession{Format{.isInterleaved = true}};
     REQUIRE(decoder.open(testFile));
@@ -84,12 +75,7 @@ namespace ao::audio::test
 
   TEST_CASE("Mp3DecoderSession - Floating Point Output", "[audio][unit][mp3]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.mp3";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'hires.mp3' missing");
-    }
+    auto const testFile = requireAudioFixture("hires.mp3");
 
     // Aobus often uses 32-bit float for internal processing
     auto decoder = Mp3DecoderSession{Format{.bitDepth = 32, .isFloat = true, .isInterleaved = true}};
@@ -107,12 +93,7 @@ namespace ao::audio::test
 
   TEST_CASE("Mp3DecoderSession - Re-opening", "[audio][unit][mp3]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.mp3";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'hires.mp3' missing");
-    }
+    auto const testFile = requireAudioFixture("hires.mp3");
 
     auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
 
@@ -128,12 +109,7 @@ namespace ao::audio::test
 
   TEST_CASE("Mp3DecoderSession - Read Until EOF", "[audio][unit][mp3]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.mp3";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'basic_metadata.mp3' missing");
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
     auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
     REQUIRE(decoder.open(testFile));
@@ -198,64 +174,51 @@ namespace ao::audio::test
 
     SECTION("Invalid file content")
     {
-      auto const tempFile = std::filesystem::temp_directory_path() / "invalid_mp3.mp3";
+      auto const tempFile = ao::test::TempFile{".mp3"};
       {
-        auto ofs = std::ofstream{tempFile, std::ios::binary};
+        auto ofs = std::ofstream{tempFile.path, std::ios::binary};
         ofs << "NOT AN MP3 FILE! Random garbage data...";
       }
 
-      auto const result = decoder.open(tempFile);
+      auto const result = decoder.open(tempFile.path);
       REQUIRE_FALSE(result);
       CHECK(result.error().message.contains(":"));
       CHECK(result.error().message != "Failed to get MP3 format: A generic mpg123 error.");
-      std::filesystem::remove(tempFile);
     }
 
     SECTION("Seek way beyond duration")
     {
-      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.mp3";
-
-      if (std::filesystem::exists(testFile))
-      {
-        REQUIRE(decoder.open(testFile));
-        // Seek to 1 hour (much longer than basic_metadata.mp3)
-        CHECK(!decoder.seek(std::chrono::hours{1}));
-      }
+      auto const testFile = requireAudioFixture("basic_metadata.mp3");
+      REQUIRE(decoder.open(testFile));
+      // Seek to 1 hour (much longer than basic_metadata.mp3)
+      CHECK(!decoder.seek(std::chrono::hours{1}));
     }
 
     SECTION("Unsupported 32-bit integer output")
     {
-      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.mp3";
+      auto const testFile = requireAudioFixture("basic_metadata.mp3");
+      auto int32Decoder = Mp3DecoderSession{Format{
+        .sampleRate = 44100,
+        .channels = 2,
+        .bitDepth = 32,
+        .isFloat = false,
+        .isInterleaved = true,
+      }};
 
-      if (std::filesystem::exists(testFile))
-      {
-        auto int32Decoder = Mp3DecoderSession{Format{
-          .sampleRate = 44100,
-          .channels = 2,
-          .bitDepth = 32,
-          .isFloat = false,
-          .isInterleaved = true,
-        }};
-
-        CHECK(!int32Decoder.open(testFile));
-      }
+      CHECK(!int32Decoder.open(testFile));
     }
 
     SECTION("Unsupported sample rate conversion")
     {
-      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.mp3";
+      auto const testFile = requireAudioFixture("hires.mp3");
+      auto resamplingDecoder = Mp3DecoderSession{Format{
+        .sampleRate = 44100,
+        .channels = 2,
+        .bitDepth = 16,
+        .isInterleaved = true,
+      }};
 
-      if (std::filesystem::exists(testFile))
-      {
-        auto resamplingDecoder = Mp3DecoderSession{Format{
-          .sampleRate = 44100,
-          .channels = 2,
-          .bitDepth = 16,
-          .isInterleaved = true,
-        }};
-
-        CHECK(!resamplingDecoder.open(testFile));
-      }
+      CHECK(!resamplingDecoder.open(testFile));
     }
 
     SECTION("Rejects planar output and channel remapping")

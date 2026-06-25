@@ -65,7 +65,7 @@ namespace ao::library::test
       }
 
     private:
-      TempDir _temp;
+      ao::test::TempDir _temp;
       Environment _env;
       WriteTransaction _txn;
       DictionaryStore _dict;
@@ -287,7 +287,7 @@ namespace ao::library::test
     builder.metadata().year(1999);
     builder.property().bitDepth(BitDepth{24});
 
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -348,7 +348,7 @@ namespace ao::library::test
     builder.property().uri("/test");
     builder.tags().add("tag1").add("tag2").add("tag3");
 
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -369,7 +369,7 @@ namespace ao::library::test
     builder.property().uri("/test");
     builder.tags().add("tag42");
 
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -389,7 +389,7 @@ namespace ao::library::test
     builder.property().uri("/test");
     builder.tags().add("tag1").add("tag2").add("tag3").add("tag4").add("tag5");
 
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -409,7 +409,7 @@ namespace ao::library::test
     builder.metadata().trackNumber(5).trackTotal(10).discNumber(1).discTotal(2);
     builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{3});
 
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -433,7 +433,7 @@ namespace ao::library::test
     builder.property().uri("/path/to/file.flac");
     builder.tags().add("tag10").add("tag20");
 
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -456,7 +456,7 @@ namespace ao::library::test
     builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{4});
     builder.customMetadata().add("key1", "value1").add("key2", "value2");
 
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -479,7 +479,7 @@ namespace ao::library::test
     builder.coverArt().add(PictureType::BackCover, ResourceId{41});
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
 
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -509,7 +509,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - fromTrackView", "[library][unit][track]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -538,7 +538,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - TrackView property and metadata getters", "[library][unit][track]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};

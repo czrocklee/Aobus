@@ -4,7 +4,7 @@
 #include "fleet/Engine.h"
 #include "fleet/Model.h"
 #include "fleet/Serialization.h"
-#include "test/unit/fleet/TestUtils.h"
+#include "test/fleet/FleetTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -14,7 +14,7 @@ namespace ao::fleet::test
 {
   TEST_CASE("Fleet scheduler - intent sets reject ambiguous dependency graphs", "[fleet][unit][scheduler]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
 
     SECTION("duplicate phase IDs")
     {

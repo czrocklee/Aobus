@@ -3,7 +3,7 @@
 
 #include "app/GtkLayoutConfig.h"
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
@@ -13,11 +13,9 @@
 
 namespace ao::gtk::test
 {
-  using namespace ao::lmdb::test;
-
   TEST_CASE("GtkLayoutConfig - persistence", "[gtk][app][config]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
 
     SECTION("Load non-existent config returns default")

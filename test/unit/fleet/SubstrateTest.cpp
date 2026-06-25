@@ -5,7 +5,7 @@
 
 #include "fleet/Model.h"
 #include "fleet/ProcessRunner.h"
-#include "test/unit/fleet/TestUtils.h"
+#include "test/fleet/FleetTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -20,7 +20,7 @@ namespace ao::fleet::test
 {
   TEST_CASE("Fleet tree canary - content mode and symlink targets affect the fingerprint", "[fleet][unit][canary]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const file = writeFile(temp, "source.txt", "first\n");
     std::filesystem::create_symlink("source.txt", tempPath(temp) / "link");
     auto first = TreeCanary::fingerprint(tempPath(temp));

@@ -36,7 +36,7 @@ namespace ao::library::test
 
   TEST_CASE("ListStore - create and read", "[library][unit][list]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -63,7 +63,7 @@ namespace ao::library::test
 
   TEST_CASE("ListStore - read by id", "[library][unit][list]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -90,7 +90,7 @@ namespace ao::library::test
 
   TEST_CASE("ListStore - delete", "[library][unit][list]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);

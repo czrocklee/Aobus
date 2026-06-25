@@ -8,7 +8,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
@@ -41,8 +41,6 @@ namespace ao::gtk::layout::editor::test
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findButtonByLabel;
   using ao::gtk::test::makeRuntime;
-
-  using namespace ao::lmdb::test;
 
   TEST_CASE("Component descriptor validation", "[layout][unit][editor]")
   {
@@ -782,7 +780,7 @@ namespace ao::gtk::layout::editor::test
       auto registry = ComponentRegistry{};
       LayoutRuntime::registerStandardComponents(registry);
 
-      auto const tempDir = TempDir{};
+      auto const tempDir = ao::test::TempDir{};
       auto runtime = makeRuntime(tempDir);
 
       auto const appPtr = Gtk::Application::create("io.github.aobus.template_test");
@@ -811,7 +809,7 @@ namespace ao::gtk::layout::editor::test
       auto registry = ComponentRegistry{};
       LayoutRuntime::registerStandardComponents(registry);
 
-      auto const tempDir = TempDir{};
+      auto const tempDir = ao::test::TempDir{};
       auto runtime = makeRuntime(tempDir);
 
       auto const appPtr = Gtk::Application::create("io.github.aobus.recursive_test");
@@ -858,7 +856,7 @@ namespace ao::gtk::layout::editor::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
@@ -916,7 +914,7 @@ namespace ao::gtk::layout::editor::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};

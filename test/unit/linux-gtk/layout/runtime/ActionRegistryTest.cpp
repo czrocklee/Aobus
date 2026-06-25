@@ -3,8 +3,8 @@
 
 #include "layout/runtime/ActionRegistry.h"
 
+#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include "test/unit/lmdb/TestUtils.h"
 #include <ao/uimodel/layout/ActionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -18,7 +18,6 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using namespace ao::lmdb::test;
   using ao::gtk::test::makeRuntime;
 
   TEST_CASE("ActionRegistry", "[layout][action]")
@@ -35,7 +34,7 @@ namespace ao::gtk::layout::test
 
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
     auto window = Gtk::Window{};

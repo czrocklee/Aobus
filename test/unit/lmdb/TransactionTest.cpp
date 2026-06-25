@@ -16,7 +16,7 @@ namespace ao::lmdb::test
 {
   TEST_CASE("ReadTransaction - helper starts transaction", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // First create database with write transaction
@@ -32,7 +32,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("ReadTransaction - begin returns transaction", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto txn = ReadTransaction::begin(env);
@@ -42,7 +42,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create database with write transaction
@@ -64,7 +64,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("ReadTransaction - move", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create database first with write transaction
@@ -84,7 +84,7 @@ namespace ao::lmdb::test
   // ============================================================================
   TEST_CASE("WriteTransaction - helper starts transaction", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto txn = beginWriteTransaction(env);
@@ -95,7 +95,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("WriteTransaction - begin returns transaction", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto txn = WriteTransaction::begin(env);
@@ -105,7 +105,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("WriteTransaction - commit", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create database, write data, commit
@@ -127,7 +127,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create database
@@ -151,7 +151,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("WriteTransaction - move", "[lmdb][unit][transaction]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // First create the database
@@ -172,7 +172,7 @@ namespace ao::lmdb::test
   // ============================================================================
   TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][unit][nested]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create parent write transaction and open database
@@ -199,7 +199,7 @@ namespace ao::lmdb::test
 
   TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][unit][nested]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     // Create parent transaction and open database

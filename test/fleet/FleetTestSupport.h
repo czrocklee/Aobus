@@ -14,7 +14,6 @@
 #include <format>
 #include <fstream>
 #include <ios>
-#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,14 +21,17 @@
 
 namespace ao::fleet::test
 {
+  using ao::test::readFile;
   using ao::test::TempDir;
 
-  inline std::filesystem::path tempPath(TempDir const& temp)
+  inline std::filesystem::path tempPath(ao::test::TempDir const& temp)
   {
     return temp.path();
   }
 
-  inline std::filesystem::path writeFile(TempDir const& temp, std::string const& name, std::string_view content)
+  inline std::filesystem::path writeFile(ao::test::TempDir const& temp,
+                                         std::string const& name,
+                                         std::string_view content)
   {
     auto const result = tempPath(temp) / name;
     std::filesystem::create_directories(result.parent_path());
@@ -58,12 +60,6 @@ body: |
                        id,
                        path,
                        depends);
-  }
-
-  inline std::string readFile(std::filesystem::path const& path)
-  {
-    auto input = std::ifstream{path, std::ios::binary};
-    return {std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
   }
 
   inline void runCommand(IProcessRunner& process, std::filesystem::path const& cwd, std::vector<std::string> argv)

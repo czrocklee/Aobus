@@ -159,7 +159,7 @@ namespace ao::query::test
     private:
       void init(TrackSpec const& spec, DictionaryStore* dict)
       {
-        auto temp = TempDir{};
+        auto temp = ao::test::TempDir{};
         auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
         _optEnv.emplace(openEnvironment(temp.path(), envOpts));
         auto wtxn = beginWriteTransaction(*_optEnv);
@@ -451,7 +451,7 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Artist LIKE resolves DictionaryId strings", "[query][unit][plan_evaluator]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
@@ -479,7 +479,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - OR between artist LIKE and tag does not over-prune on bloom filter",
             "[query][unit][plan_evaluator]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
@@ -954,7 +954,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - Tag Query - With Matching Tag", "[query][unit][plan_evaluator]")
   {
     // Set up DictionaryStore with tag
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
@@ -1212,7 +1212,7 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - Dictionary Field Lexicographic Comparison", "[query][unit][plan_evaluator]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};

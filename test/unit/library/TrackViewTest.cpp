@@ -104,7 +104,7 @@ namespace ao::library::test
         builder.customMetadata().add(key, value);
       }
 
-      auto temp = TempDir{};
+      auto temp = ao::test::TempDir{};
       auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
       auto wtxn = lmdb::test::beginWriteTransaction(env);
       auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -180,7 +180,7 @@ namespace ao::library::test
       .movementNumber(2)
       .movementTotal(4);
 
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
@@ -203,7 +203,7 @@ namespace ao::library::test
     auto builder = TrackBuilder::createNew();
     builder.coverArt().add(PictureType::BackCover, ResourceId{42});
 
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};

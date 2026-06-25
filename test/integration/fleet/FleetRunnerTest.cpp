@@ -4,7 +4,7 @@
 #include "fleet/Engine.h"
 #include "fleet/Model.h"
 #include "fleet/ProcessRunner.h"
-#include "test/unit/fleet/TestUtils.h"
+#include "test/fleet/FleetTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -22,7 +22,7 @@ namespace ao::fleet::test
 {
   TEST_CASE("Fleet runner - mock proposal advisory and full council traces", "[fleet][integration][engine]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const repo = tempPath(temp) / "repo";
     auto const out = tempPath(temp) / "artifacts";
     std::filesystem::create_directories(repo);
@@ -332,7 +332,7 @@ namespace ao::fleet::test
   TEST_CASE("Fleet scheduler - a fatal phase error still joins and audits in-flight phases",
             "[fleet][integration][engine]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const repo = tempPath(temp) / "repo";
     auto const out = tempPath(temp) / "artifacts";
     std::filesystem::create_directories(repo);
@@ -365,7 +365,7 @@ namespace ao::fleet::test
   TEST_CASE("Fleet scheduler - dependency failures cascade through transitive dependents",
             "[fleet][integration][engine]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto const repo = tempPath(temp) / "repo";
     auto const out = tempPath(temp) / "artifacts";
     std::filesystem::create_directories(repo);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryScanner.h>
@@ -16,8 +16,6 @@
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb::test;
-
   namespace
   {
     void createFile(std::filesystem::path const& path)
@@ -29,7 +27,7 @@ namespace ao::library::test
 
   TEST_CASE("LibraryScanner Classification", "[library][unit][scan]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
     auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot);
@@ -103,7 +101,7 @@ namespace ao::library::test
 
   TEST_CASE("LibraryScanner IO Error Handling", "[library][unit][scan][error]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
     auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot / "ok_dir");
@@ -125,7 +123,7 @@ namespace ao::library::test
     auto scanner = LibraryScanner{ml};
     auto const plan = scanner.buildPlan().value();
 
-    // Reset permissions so TempDir can clean up
+    // Reset permissions so ao::test::TempDir can clean up
     std::filesystem::permissions(musicRoot / "restricted_dir", std::filesystem::perms::owner_all);
 
     // We expect:
@@ -163,7 +161,7 @@ namespace ao::library::test
 
   TEST_CASE("LibraryScanner Empty Root Boundary", "[library][unit][scan]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "empty_music";
     std::filesystem::create_directories(musicRoot);
 
@@ -176,7 +174,7 @@ namespace ao::library::test
 
   TEST_CASE("LibraryScanner Missing Root Is Fatal", "[library][unit][scan][error]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     // Point the library at a music root that does not exist. The database still
     // lives under a real directory, so the library itself opens cleanly and only
     // the scan fails - distinguishing "cannot scan" from "scanned an empty root".
@@ -192,7 +190,7 @@ namespace ao::library::test
 
   TEST_CASE("LibraryScanner URI Canonization Edge Cases", "[library][unit][scan][uri]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
     auto const musicRoot = std::filesystem::path{root} / "music";
     std::filesystem::create_directories(musicRoot / "nested" / "dir");
