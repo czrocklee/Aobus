@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
@@ -37,6 +38,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <system_error>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
@@ -45,7 +47,6 @@
 namespace ao::rt::test
 {
   using namespace ao::library;
-  using namespace ao::lmdb::test;
   namespace yaml = ao::yaml;
 
   namespace
@@ -91,11 +92,32 @@ namespace ao::rt::test
       REQUIRE(result);
       return result->first;
     }
+
+    struct DirectoryPermissionRestorer final
+    {
+      explicit DirectoryPermissionRestorer(std::filesystem::path path)
+        : path{std::move(path)}
+      {
+      }
+
+      DirectoryPermissionRestorer(DirectoryPermissionRestorer const&) = delete;
+      DirectoryPermissionRestorer& operator=(DirectoryPermissionRestorer const&) = delete;
+      DirectoryPermissionRestorer(DirectoryPermissionRestorer&&) = delete;
+      DirectoryPermissionRestorer& operator=(DirectoryPermissionRestorer&&) = delete;
+
+      ~DirectoryPermissionRestorer()
+      {
+        auto ec = std::error_code{};
+        std::filesystem::permissions(path, std::filesystem::perms::owner_all, std::filesystem::perm_options::add, ec);
+      }
+
+      std::filesystem::path path;
+    };
   } // namespace
 
   TEST_CASE("Library Export/Import Cycle", "[app][unit][core][yaml]")
   {
-    auto const temp1 = TempDir{};
+    auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
     auto const smartListName = std::string{"Smart List "} + std::string(256, 'S');
     auto const smartFilter = std::string{"@duration > 60 and "} + std::string(256, 'x');
@@ -108,10 +130,10 @@ namespace ao::rt::test
       auto& dict = ml1.dictionary();
 
       auto resWriter = ml1.resources().writer(txn);
-      auto resIdResult = resWriter.create(createTestData(100));
+      auto resIdResult = resWriter.create(lmdb::test::createTestData(100));
       REQUIRE(resIdResult);
       auto const resId = *resIdResult;
-      REQUIRE(resWriter.create(createTestData(64)));
+      REQUIRE(resWriter.create(lmdb::test::createTestData(64)));
 
       auto trackBuilder = TrackBuilder::createNew();
       trackBuilder.property()
@@ -153,7 +175,7 @@ namespace ao::rt::test
     }
 
     // 3. Import into a new library
-    auto const temp2 = TempDir{};
+    auto const temp2 = ao::test::TempDir{};
     auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
 
     // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
@@ -249,7 +271,7 @@ namespace ao::rt::test
 
   TEST_CASE("Library Export/Import Phase 1 Fields", "[app][unit][core][yaml]")
   {
-    auto const temp1 = TempDir{};
+    auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
 
     // 1. Setup initial library with new fields
@@ -286,7 +308,7 @@ namespace ao::rt::test
     REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
 
     // 3. Import into a new library (Restore mode)
-    auto const temp2 = TempDir{};
+    auto const temp2 = ao::test::TempDir{};
     auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
     auto importer = LibraryYamlImporter{ml2};
 
@@ -326,11 +348,11 @@ namespace ao::rt::test
 
   TEST_CASE("Library Export/Import Base64 Cover Art", "[app][unit][core][yaml][base64]")
   {
-    auto const temp1 = TempDir{};
+    auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
 
-    auto const coverData = createTestData(1024);
-    auto const backCoverData = createTestData(257);
+    auto const coverData = lmdb::test::createTestData(1024);
+    auto const backCoverData = lmdb::test::createTestData(257);
     auto resId = kInvalidResourceId;
     auto backResId = kInvalidResourceId;
 
@@ -383,7 +405,7 @@ namespace ao::rt::test
     }
 
     // 4. Import into new library
-    auto const temp2 = TempDir{};
+    auto const temp2 = ao::test::TempDir{};
     auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
     auto importer = LibraryYamlImporter{ml2};
     REQUIRE(importer.importFromYaml(yamlPath));
@@ -427,7 +449,7 @@ namespace ao::rt::test
 
   TEST_CASE("Library Import replaces and removes cover art", "[app][unit][core][yaml][cover]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
     auto const uri = std::string{"song.flac"};
 
@@ -435,10 +457,10 @@ namespace ao::rt::test
       auto txn = ml.writeTransaction();
       auto& dict = ml.dictionary();
       auto resWriter = ml.resources().writer(txn);
-      auto frontIdResult = resWriter.create(createTestData(8));
+      auto frontIdResult = resWriter.create(lmdb::test::createTestData(8));
       REQUIRE(frontIdResult);
       auto const frontId = *frontIdResult;
-      auto backIdResult = resWriter.create(createTestData(9));
+      auto backIdResult = resWriter.create(lmdb::test::createTestData(9));
       REQUIRE(backIdResult);
       auto const backId = *backIdResult;
 
@@ -516,7 +538,7 @@ library:
 
   TEST_CASE("Library Export/Import List Only", "[app][unit][core][yaml][list]")
   {
-    auto const temp1 = TempDir{};
+    auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
 
     auto trackId = kInvalidTrackId;
@@ -559,7 +581,7 @@ library:
     }
 
     // 4. Import into a library that has the SAME track but DIFFERENT TrackId
-    auto const temp2 = TempDir{};
+    auto const temp2 = ao::test::TempDir{};
     auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
 
     auto targetTrackId = kInvalidTrackId;
@@ -610,7 +632,7 @@ library:
 
   TEST_CASE("Library Import Merge Mode", "[app][unit][core][yaml][merge]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
 
     auto const* const uri1 = "track1.flac";
@@ -677,7 +699,7 @@ library:
 
   TEST_CASE("Library import remaps list parents regardless of YAML order", "[core][unit][yaml]")
   {
-    auto temp = TempDir{};
+    auto temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
 
     auto trackId = kInvalidTrackId;
@@ -750,7 +772,7 @@ library:
 
   TEST_CASE("Library Import Validation and Error Handling", "[app][unit][core][yaml][error]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "bad.yaml";
@@ -934,7 +956,7 @@ library:
 
   TEST_CASE("Library Delta Export Mode Edge Cases", "[app][unit][core][yaml][delta]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
 
     auto trackId1 = kInvalidTrackId;
@@ -1001,9 +1023,67 @@ library:
     }
   }
 
+  TEST_CASE("Library delta export reports filesystem inspection errors", "[app][unit][core][yaml][delta][error]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto const blockedDir = std::filesystem::path{temp.path()} / "blocked";
+    std::filesystem::create_directory(blockedDir);
+    auto restorePermissions = DirectoryPermissionRestorer{blockedDir};
+
+    {
+      auto txn = ml.writeTransaction();
+      auto& dict = ml.dictionary();
+
+      auto trackBuilder = TrackBuilder::createNew();
+      trackBuilder.property().uri("blocked/song.flac");
+      trackBuilder.metadata().title("Cannot inspect baseline");
+      auto const [hot, cold] = prepareTrack(trackBuilder, txn, dict, ml.resources());
+      std::ignore = createPreparedTrack(ml.tracks().writer(txn), hot, cold);
+      txn.commit();
+    }
+
+    std::filesystem::permissions(blockedDir, std::filesystem::perms::none, std::filesystem::perm_options::replace);
+
+    auto exporter = LibraryYamlExporter{ml};
+    auto const result = exporter.exportToYaml(std::filesystem::path{temp.path()} / "delta.yaml", ExportMode::Delta);
+
+    REQUIRE(!result);
+    CHECK(result.error().code == Error::Code::IoError);
+  }
+
+  TEST_CASE("Library delta import reports filesystem inspection errors", "[app][unit][core][yaml][delta][error]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto importer = LibraryYamlImporter{ml};
+    auto const yamlPath = std::filesystem::path{temp.path()} / "delta-import.yaml";
+    auto const blockedDir = std::filesystem::path{temp.path()} / "blocked";
+    std::filesystem::create_directory(blockedDir);
+    auto restorePermissions = DirectoryPermissionRestorer{blockedDir};
+
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << "version: 1\n"
+           << "export_mode: delta\n"
+           << "library:\n"
+           << "  tracks:\n"
+           << "    - uri: \"blocked/song.flac\"\n"
+           << "      title: Cannot inspect baseline\n"
+           << "  lists: []\n";
+    }
+
+    std::filesystem::permissions(blockedDir, std::filesystem::perms::none, std::filesystem::perm_options::replace);
+
+    auto const result = importer.importFromYaml(yamlPath);
+
+    REQUIRE(!result);
+    CHECK(result.error().code == Error::Code::IoError);
+  }
+
   TEST_CASE("Library List Integrity Edge Cases", "[app][unit][core][yaml][list]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "list-edges.yaml";
@@ -1056,7 +1136,7 @@ library:
 
   TEST_CASE("Library Import URIs Canonization and FileSize Recovery", "[app][unit][core][yaml][uri]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "canonization.yaml";
@@ -1129,7 +1209,7 @@ library:
 
   TEST_CASE("Library Import Structural Corruptions", "[app][unit][core][yaml][error]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "corrupt.yaml";
@@ -1204,7 +1284,7 @@ library:
 
   TEST_CASE("Library Import Coverage", "[app][unit][core][yaml]")
   {
-    auto const temp = TempDir{};
+    auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "coverage.yaml";

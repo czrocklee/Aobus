@@ -155,7 +155,7 @@ namespace ao::rt::test
 
   TEST_CASE("Library - reads track, dictionary, and resource DTOs", "[runtime][unit][readmodel]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeCoreRuntime(tempDir);
     auto const seeded = seedLibrary(runtime);
     auto const& reads = runtime.library();
@@ -229,7 +229,7 @@ namespace ao::rt::test
 
   TEST_CASE("Library - snapshots list tree DTOs", "[runtime][unit][readmodel]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeCoreRuntime(tempDir);
     auto const seeded = seedLibrary(runtime);
 
@@ -265,7 +265,7 @@ namespace ao::rt::test
 
   TEST_CASE("Library - snapshots tag DTOs", "[runtime][unit][readmodel]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto runtime = makeCoreRuntime(tempDir);
     auto const seeded = seedLibrary(runtime);
     auto const& reads = runtime.library();

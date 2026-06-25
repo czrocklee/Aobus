@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/async/Runtime.h>
@@ -18,12 +19,23 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::rt
 {
+  namespace
+  {
+    [[noreturn]] void throwTaskError(char const* action, Error const& error)
+    {
+      auto const message = std::format("{}: {}", action, error.message);
+      throwException<Exception>(std::string_view{message}, error.location);
+    }
+  } // namespace
+
   struct LibraryTasks::Impl final
   {
     async::Runtime& asyncRuntime;
@@ -46,7 +58,7 @@ namespace ao::rt
 
     if (auto const result = importer.importFromYaml(path); !result)
     {
-      throwException<Exception>("Library import failed: {}", result.error().message);
+      throwTaskError("Library import failed", result.error());
     }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
@@ -60,7 +72,7 @@ namespace ao::rt
 
     if (auto const result = exporter.exportToYaml(path, mode); !result)
     {
-      throwException<Exception>("Library export failed: {}", result.error().message);
+      throwTaskError("Library export failed", result.error());
     }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
@@ -92,7 +104,7 @@ namespace ao::rt
       // A scan that could not even begin (missing root, failed walk) is fatal to
       // the whole task. Clear any in-flight progress and report it as a failure.
       _implPtr->changes.notifyLibraryTaskCompleted(0);
-      throwException<Exception>("Library scan failed: {}", planResult.error().message);
+      throwTaskError("Library scan failed", planResult.error());
     }
 
     if (planResult->items.empty())

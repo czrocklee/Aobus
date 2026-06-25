@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -19,6 +20,7 @@
 #include <iterator>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -147,6 +149,40 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("LibraryWriter - updateMetadata throws on serialization failure", "[app][unit][runtime][mutation]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto const trackId = testLib.addTrack("Track");
+    auto changes = LibraryChanges{};
+    auto service = LibraryWriter{testLib.library(), changes};
+
+    auto mutated = std::vector<TrackId>{};
+    auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
+
+    auto patch = MetadataPatch{};
+    patch.customUpdates["oversized"] = std::string(70'000, 'x');
+
+    try
+    {
+      std::ignore = service.updateMetadata(std::array{trackId}, patch);
+      FAIL("updateMetadata should throw when track serialization fails");
+    }
+    catch (Exception const& e)
+    {
+      auto const message = std::string_view{e.what()};
+      CHECK(message.find("Failed to serialize cold track data") != std::string_view::npos);
+      CHECK(message.find("exceeds uint16_t") != std::string_view::npos);
+    }
+
+    CHECK(mutated.empty());
+
+    auto const txn = testLib.library().readTransaction();
+    auto const optView =
+      testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optView);
+    CHECK(std::ranges::distance(optView->customMetadata()) == 0);
+  }
+
   TEST_CASE("LibraryWriter - editTags full operation", "[app][unit][runtime][mutation]")
   {
     auto testLib = TestMusicLibrary{};
@@ -249,7 +285,17 @@ namespace ao::rt::test
     SECTION("importLibraryAsync with invalid path throws")
     {
       auto future = runtime.spawn(service.importLibraryAsync("/nonexistent_path_123.yaml"));
-      REQUIRE_THROWS(future.get());
+
+      try
+      {
+        future.get();
+        FAIL("importLibraryAsync should throw for an unreadable YAML path");
+      }
+      catch (Exception const& e)
+      {
+        CHECK(std::string_view{e.what()}.find("Library import failed") != std::string_view::npos);
+        CHECK(std::string_view{e.location().file_name()}.find("LibraryYamlImporter.cpp") != std::string_view::npos);
+      }
     }
 
     SECTION("exportLibraryAsync with invalid path throws")

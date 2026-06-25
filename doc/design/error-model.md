@@ -112,6 +112,143 @@ across subsystems (a base invites a too-wide `catch` that re-enables
 cross-subsystem laundering), and do not name it for being "internal" — it carries
 a recoverable `Error`, the opposite of the invariant-failure throws above.
 
+## Runtime Layer (`ao/rt`)
+
+The runtime layer (`ao/rt`) is an orchestration façade between the core
+subsystems and the application frontends (GTK, CLI). Most failures it surfaces
+are *re-classifications*, not originations: every core call it composes has
+already classified its own external-vs-internal outcome and returned `Result<T>`
+or `std::optional<T>`, so at each composition point the runtime's task is not to
+pick a return type but to **re-classify** that inner outcome into one of the
+caller's intents. It does still originate failures at its own boundaries -
+config semantics (a missing or undecodable config file), third-party exception
+translation (ryml, `std::filesystem`), and runtime/UI workflow contract
+violations - but those follow the same channel rules below, so re-classification
+is the dominant discipline rather than the only one. A failure surfaced to a
+runtime caller is exactly one of:
+
+- a normal domain state (absence, no-op, empty result) that the caller treats as
+  ordinary flow, modeled as a **value**: `bool`, `std::optional<T>`, an empty
+  container, a sentinel id, or a named enum, with no error channel;
+- a user-initiated operation failure the caller can report, retry, or cancel,
+  returned as **`Result<T>`** carrying code, message, and location;
+- an unrecoverable fault or broken invariant the caller cannot handle, raised by
+  **throwing `ao::Exception`**.
+
+Which one applies is decided by a single discriminator: does the operation touch
+user-supplied external data (a file path, an import payload, a config file), or
+only our own already-persisted, already-validated internal state?
+
+- **External-data operations** are a genuine external boundary and return
+  `Result<T>`, propagating every error code unchanged: `ConfigStore::ensureLoaded`
+  / `flush`, `LibraryYamlImporter::importFromYaml`, and
+  `LibraryYamlExporter::exportToYaml`. A non-`NotFound` code here is a legitimate
+  external-input failure and stays in the `Result` for the caller to render.
+- **Internal-state operations** read or mutate our own store. For these,
+  `Error::Code::NotFound` is the only code with a value-channel meaning -
+  translated to `std::nullopt`, `false`, or a sentinel - and every other code is
+  a fault that must throw `ao::Exception`. A `CorruptData`, `ValueTooLarge`,
+  `IoError`, `Conflict`, or `ResourceExhausted` returned from our own store while
+  servicing a request is, by construction, neither user-caused nor
+  user-recoverable. This covers `LibraryReader` read models (absence yields
+  `std::optional`/empty, a fault throws) and `LibraryWriter` mutations (a stale
+  `TrackId`/`ListId` or a "nothing changed" pass skips and returns `false` or a
+  sentinel, while serialization, write, manifest, and commit failures throw).
+
+The throw in the internal-state rule is specifically how an inner store `Result`
+collapses when the façade method has *no* `Result` channel to carry it. When the
+enclosing operation does return `Result` - an external-data operation such as
+`exportToYaml` that internally reads our own store - an inner non-`NotFound`
+store failure propagates unchanged through `std::unexpected` and is never thrown
+(`LibraryYamlExporter` forwards a non-`NotFound` manifest read this way). The
+discriminator picks the channel for the *operation*; each inner-`Result` collapse
+then follows that channel.
+
+A single operation may also span both boundaries. `LibraryWriter::createTrackFromFile`
+has an external **input phase** - opening, parsing, and reading file attributes
+(`TagFile::open` / `loadTrack`, `std::filesystem::file_size` /
+`last_write_time`) - whose failure means the file cannot be imported and
+collapses to `std::nullopt`; followed by an internal **mutation phase** -
+`prepare`, `createHotCold`, manifest `put`, `commit` - whose failure is a fault
+that throws. The input-phase filesystem calls must use the `std::error_code`
+overloads so a vanished file folds into the `std::nullopt` contract rather than
+escaping as an unconverted `std::filesystem::filesystem_error`.
+
+Asynchronous tasks use the exception as their failure-transport channel.
+`LibraryTasks::importLibraryAsync` / `exportLibraryAsync`, `buildScanPlanAsync`,
+and `applyScanPlanAsync` return `async::Task<T>`, whose consumer is a task
+coordinator; in a coroutine a throw is how failure crosses the executor hop,
+carried by `std::exception_ptr`. Note the fidelity limit: `ao::Exception`
+preserves the message and a `source_location` but *not* a structured
+`Error::Code` (`include/ao/Exception.h`), so a task that throws conveys the
+category only as text. If the coordinator must branch on a structured
+`Error::Code`, the task returns `Result<T>` (or raises a dedicated failure
+event) instead of throwing; otherwise it throws an `ao::Exception` carrying the
+message and the forwarded `error.location`.
+
+Conversions across these boundaries are lossless and centralized. Do not invent a
+runtime-specific exception type: no downstream catch site branches on the
+structure of an unrecoverable runtime fault, so a plain `ao::Exception` whose
+message and threaded-through `Error::location` reach the log is sufficient, and
+the recoverable channel that *does* need structure already exists as the `Error`
+carried by a `Result`. When converting a store `Result` to a throw, forward the
+original `error.location` (`throw Exception{message, error.location}`) instead of
+recapturing the helper's own call site, so the deepest origin survives for
+diagnostics. The shared `storageValueOrNullopt` helper is the read-side
+embodiment of this rule: `NotFound` becomes `std::nullopt`, any other code
+throws.
+
+Three invariants enforce the model:
+
+1. No runtime `if (!result)` may take the miss branch without inspecting
+   `error().code`. Testing a store `Result<T>` as a plain boolean and treating
+   any failure as absence is forbidden; only `NotFound` is absence.
+2. An *effective* internal-state mutation is atomic-or-throw: a fault abandons
+   the transaction without committing instead of committing the successful
+   subset, so a batch never silently drops a failed item while reporting success.
+   A stale id or a no-effective-change pass is not a mutation and returns
+   `false`/empty/sentinel rather than throwing.
+3. No third-party exception (ryml, `std::filesystem`) crosses a runtime API
+   boundary unconverted: inside an external-data operation it becomes a `Result`;
+   otherwise it is rethrown as `ao::Exception`.
+
+A mutation moves to `Result` only when partial, per-item success is a real
+physical outcome the caller must report item by item. Because internal-state
+mutations are transactional and atomic, that situation does not arise inside a
+single batch command - it is a different operation (validate-then-commit) with
+its own `Result` contract, not a reason to weaken the batch command above.
+
+## UI Model Layer (`ao/uimodel`)
+
+The UI model layer is platform-neutral presentation and interaction policy. It
+does not own durable state and should not invent subsystem-specific exceptions.
+Most APIs are pure value transforms: invalid or absent presentation data becomes
+the narrowest value the widget needs (`false`, empty text, an empty collection, a
+fallback preset), not a recoverable `Error`.
+
+Use `Result<T>` only at explicit user-input parse boundaries where the caller
+must show validation text and keep editing: track-field text parsing returns
+`FormatRejected`, and inline-edit workflow converts that result to a
+`ParseRejected` value outcome. Advisory UI heuristics, such as presentation
+recommendation from a filter expression, may treat parse failure as "no
+recommendation" and choose a fallback because the user action being performed is
+not query execution.
+
+Persistence helpers in this layer are adapters over `rt::ConfigStore`, not owners
+of the file boundary. If the helper returns `Result` (for example layout loading),
+it propagates the config error unchanged. If the caller's contract is explicitly
+best-effort preferences (for example keymap load/save and GTK layout preset
+fallback), the helper may log and return defaults/no-op, but it must inspect the
+inner `Error::Code` before choosing the value path. `NotFound` is a normal
+"defaults only" value; malformed config, IO failures, and flush failures are
+logged diagnostics unless the UI surface has a concrete place to report them.
+
+Internal model invariant failures may throw `ao::Exception` directly through
+`ao::throwException` (for example an invalid shipped default key chord). Ordinary
+coercion of layout values must not use exception control flow: malformed strings
+coerce to the supplied default using non-throwing parsing, while allocation or
+logic faults are left as faults rather than laundered into defaults.
+
 ## Current Migration
 
 The subsystem status below records the intended boundary for areas that recently
@@ -123,7 +260,8 @@ changed or still have local containment rules:
 | `ao/media` byte views | Public decode/tag entry points return `Result`; `mp4::Demuxer::parseTrack` catches `detail::MediaException` and translates it to `Result`. MP4 sample-table/timing helpers raise `FormatRejected` via `throwMediaError` (rather than returning `bool`) to keep specific diagnostics for malformed container data. FLAC block iteration validates the current block size before honoring the last-block marker, so a truncated final block reports `CorruptData`. |
 | `ao/lmdb` | Fallible setup/write factories return `Result`: duplicate create is `Conflict`, exhausted integer append key space is `ResourceExhausted`, other failures are `IoError`. Point reads collapse to their narrowest shape because absence is their only recoverable outcome: `get` returns `std::optional<std::span<...>>` (empty means absent), `maxKey` returns the largest key or `0`, and `Writer::del` returns `bool`. They never surface a recoverable code — a non-`MDB_NOTFOUND` failure throws, because the corruption that would produce `MDB_CORRUPTED` equally surfaces as `SIGBUS` through the mmap, which no `Result` can intercept. Use the factory functions (public constructor bridges are not kept). Cursor EOF is normal; unexpected cursor failures throw, as does writer use after its transaction commits. |
 | `ao/library` persisted views/stores | Read shapes follow the actual failure surface: absence-only lookups return `std::optional<T>` (`ListStore`/`TrackStore`/`ResourceStore::get`); lookups that also validate the persisted record return `Result<T>` (`MetaStore::load`, `FileManifestStore::Reader::get`). Misses are `NotFound`, corrupt or unsupported-version records are `CorruptData`, oversized manifest URIs are `ValueTooLarge`, exhausted resource IDs are `ResourceExhausted`; `MusicLibrary::open` reports setup failures without throwing. Create/update/clear commands return `Result<>`/`Result<T>` (never `.value()`); deletes return `bool` because corruption throws at the LMDB layer and absence is not an error, except idempotent manifest removal (`Result<>`, since URI validation can reject the key first). Once a session is open, `read/writeTransaction()` treat begin failure as severe and throw. `TrackBuilder` serialization raises its `ValueTooLarge` overflow checks via `detail::throwLibraryError`, translated to `Result` at the `prepare*`/`serialize*` boundaries. View constructors and at-style accessors may still throw on internal precondition misuse. `LibraryScanner::buildPlan` returns `Result<ScanPlan>`: per-file problems stay in-band as `ScanClassification::Error` items so the rest of the plan still applies, but a failure that prevents any plan at all - a missing music root (`NotFound`) or a filesystem walk that cannot start (`IoError`) - fails the whole call, so the caller reports it instead of mistaking an unscannable root for an empty, up-to-date library. |
-| `ao/rt` library read models | Runtime read-model helpers may expose `std::optional<T>` or empty snapshots for domain absence, but only after translating `Error::Code::NotFound`. Other storage errors from store `Result<T>` values are either propagated through a `Result<>` operation such as YAML export, or thrown as high-level `ao::Exception` from UI/runtime convenience APIs that cannot report recoverable failures. Do not test a store `Result<T>` as a plain boolean in runtime code unless the non-`NotFound` branch is handled explicitly. |
+| `ao/rt` runtime layer | Governed by [Runtime Layer](#runtime-layer-aort). The runtime *re-classifies* core `Result`/`std::optional` outcomes rather than originating failures. External-data operations (`ConfigStore`, `LibraryYaml{Importer,Exporter}`) return `Result` and propagate every code; internal-state reads (`LibraryReader`) and mutations (`LibraryWriter`) treat only `NotFound` as a value (`std::optional`/`false`/sentinel) and throw `ao::Exception` on every other fault, except when an enclosing `Result` operation can propagate it; async tasks (`LibraryTasks`) transport failure by throwing (message + `error.location`; structured `Error::Code` requires returning `Result` instead). Conversions forward `error.location`; `storageValueOrNullopt` is the read-side helper. |
+| `ao/uimodel` UI model layer | Governed by [UI Model Layer](#ui-model-layer-aouimodel). Pure presentation APIs return values/fallbacks; explicit text-parse boundaries return `Result` with user-facing validation messages; config-backed preference helpers either propagate `rt::ConfigStore` results unchanged or are explicitly best-effort defaults with logging. Internal shipped-policy violations may throw `ao::Exception`; ordinary value coercion uses non-throwing parsing and never catches broad exceptions to produce defaults. |
 | `ao/query` | Parser, query/format compiler, and field-resolution entry points return `Result`, using `FormatRejected` for user-facing diagnostics. Completion-only field probing uses `std::optional<Field>` because absence is the only needed state. The private compile helpers raise `FormatRejected` via `detail::throwQueryError`, translated back to `Result` by a single catch at `QueryCompiler::compile()`/`FormatCompiler::compile()`. `OperatorTable::operatorInfo()` uses `operator[]` with a `gsl_Expects` guard instead of `.at()`, making an out-of-range operator an invariant failure rather than a recoverable `std::out_of_range`. |
 | `ao/audio` | Decoder, source, and backend entry points return `Result` for every external failure (`IDecoderSession::open`/`seek`/`readNextBlock`, `ISource::seek`, `IBackend::open`/`setProperty`/`property`); the layer never throws on external input and never collapses a fault to a codeless `Generic`. The `IDecoderSession` and `ISource::seek` boundary methods are `noexcept`: the contract that this layer never throws to its caller is enforced at compile time (an override that drops `noexcept` is ill-formed) and fail-fast at runtime (an escaping exception such as `std::bad_alloc` terminates instead of being silently reinterpreted as a decode error). Within decoder session implementations (such as `Mp3DecoderSession`), each public method keeps a single internal style: failures are raised with `detail::throwDecoderError` — the helper and the `detail::DecoderException` it throws are an implementation detail, defined in `ao/audio/detail/DecoderError.h` (the `ao::audio::detail` namespace), not part of the public decoder API — and one `try`/`catch (detail::DecoderException const&)` translates them to `Result` at the boundary — a body that calls no throwing helper (such as `AlacDecoderSession::readNextBlock`) stays purely `Result`-returning rather than wrapping a no-op `try`. Errors propagated from an inner `Result` keep their original diagnostic location via `detail::throwDecoderError(Error)`; freshly originated failures capture the call site via `detail::throwDecoderError(code, message)`. The catch is deliberately narrow (only `DecoderException`) so non-domain faults are not laundered into a recoverable code. End of stream is modeled as a value, not an error: `readNextBlock` returns `Result<PcmBlock>` whose `endOfStream` flag marks the final block, and `StreamingSource::decodeNextBlock` returns a `DecodeBlockStatus` enum for its normal success states, signalling decode failure by throwing `DecoderException` to the source's translating boundary. This subsystem uses the media-domain codes from `Error.h`: `InitFailed` for decoder/codec/device initialization, `DecodeFailed` for decode-time payload failures, `SeekFailed` for seek failures, `DeviceNotFound` for an absent device, alongside `NotSupported`/`FormatRejected`/`IoError` for unsupported formats and container IO. `createDecoderSession` returns `Result<std::unique_ptr<IDecoderSession>>` — `NotSupported` for an unsupported extension or unrecognized container codec, `IoError` for an unreadable container — instead of a `nullptr` that conflated "cannot play" with "cannot open". `TrackSession` threads the concrete `Error` through format negotiation and PCM-source creation (`NotSupported` when the device cannot accept the stream format) rather than flattening it to a message-only `bool` out-parameter. `IBackendProvider::shutdown()` is `noexcept` by contract. |
 

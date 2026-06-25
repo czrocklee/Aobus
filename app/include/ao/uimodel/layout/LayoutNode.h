@@ -3,15 +3,16 @@
 
 #pragma once
 
+#include <charconv>
 #include <cstdint>
 #include <format>
 #include <functional>
 #include <map>
 #include <memory>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <variant>
 #include <vector>
@@ -88,18 +89,17 @@ namespace ao::uimodel::layout
           }
           else if constexpr (std::is_same_v<T, std::string>)
           {
-            try
+            std::int64_t parsed = 0;
+            auto const* const begin = val.data();
+            auto const* const end = val.data() + val.size();
+            auto const [ptr, ec] = std::from_chars(begin, end, parsed);
+
+            if (ec == std::errc{} && ptr == end)
             {
-              return std::stoll(val);
+              return parsed;
             }
-            catch (std::invalid_argument const&)
-            {
-              return defaultValue;
-            }
-            catch (std::out_of_range const&)
-            {
-              return defaultValue;
-            }
+
+            return defaultValue;
           }
           else
           {

@@ -21,10 +21,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -155,7 +158,8 @@ namespace ao::rt
 
     void throwStorageError(char const* action, Error const& error)
     {
-      throwException<Exception>("{}: {}", action, error.message);
+      auto const message = std::format("{}: {}", action, error.message);
+      throwException<Exception>(std::string_view{message}, error.location);
     }
 
     template<typename Transaction>
@@ -210,7 +214,7 @@ namespace ao::rt
 
         if (!hotDataResult)
         {
-          continue;
+          throwStorageError("Failed to serialize hot track data", hotDataResult.error());
         }
 
         if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
@@ -225,7 +229,7 @@ namespace ao::rt
 
         if (!coldDataResult)
         {
-          continue;
+          throwStorageError("Failed to serialize cold track data", coldDataResult.error());
         }
 
         if (auto result =
@@ -299,7 +303,7 @@ namespace ao::rt
 
       if (!hotDataResult)
       {
-        continue;
+        throwStorageError("Failed to serialize hot track data", hotDataResult.error());
       }
 
       if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
@@ -452,7 +456,7 @@ namespace ao::rt
 
     if (!preparedResult)
     {
-      return std::nullopt;
+      throwStorageError("Failed to prepare track data", preparedResult.error());
     }
 
     auto& [preparedHot, preparedCold] = *preparedResult;
@@ -467,22 +471,36 @@ namespace ao::rt
 
     if (!createResult)
     {
-      return std::nullopt;
+      throwStorageError("Failed to create track data", createResult.error());
     }
 
     auto const [id, trackView] = *createResult;
 
+    auto fileEc = std::error_code{};
+    auto const fileSize = std::filesystem::file_size(path, fileEc);
+
+    if (fileEc)
+    {
+      return std::nullopt;
+    }
+
+    auto const lastWriteTime = std::filesystem::last_write_time(path, fileEc);
+
+    if (fileEc)
+    {
+      return std::nullopt;
+    }
+
     auto manifestWriter = _implPtr->library.manifest().writer(txn);
     auto manifestBuilder = library::FileManifestBuilder::createNew();
     manifestBuilder.trackId(id)
-      .fileSize(static_cast<std::uint64_t>(std::filesystem::file_size(path)))
+      .fileSize(static_cast<std::uint64_t>(fileSize))
       .mtime(static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch())
-          .count()));
+        std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()));
 
     if (auto putResult = manifestWriter.put(path.string(), manifestBuilder.serialize()); !putResult)
     {
-      return std::nullopt;
+      throwStorageError("Failed to update file manifest", putResult.error());
     }
 
     commitOrThrow(txn, "Failed to commit track creation");

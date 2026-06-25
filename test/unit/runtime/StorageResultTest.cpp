@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <expected>
+#include <source_location>
 #include <string_view>
 #include <tuple>
 
@@ -33,10 +34,14 @@ namespace ao::rt::test
 
     SECTION("throws for storage errors")
     {
+      auto const errorLocation = std::source_location::current();
+
       try
       {
         std::ignore = storageValueOrNullopt(
-          Result<int>{std::unexpected{Error{.code = Error::Code::IoError, .message = "read failed"}}}, "load value");
+          Result<int>{
+            std::unexpected{Error{.code = Error::Code::IoError, .message = "read failed", .location = errorLocation}}},
+          "load value");
         FAIL("storageValueOrNullopt should throw on non-NotFound errors");
       }
       catch (Exception const& e)
@@ -44,6 +49,8 @@ namespace ao::rt::test
         auto const message = std::string_view{e.what()};
         CHECK(message.find("load value") != std::string_view::npos);
         CHECK(message.find("read failed") != std::string_view::npos);
+        CHECK(std::string_view{e.location().file_name()} == errorLocation.file_name());
+        CHECK(e.location().line() == errorLocation.line());
       }
     }
   }

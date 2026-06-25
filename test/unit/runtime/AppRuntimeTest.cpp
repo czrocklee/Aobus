@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/IBackend.h>
@@ -46,7 +47,7 @@ namespace ao::rt::test
 
   TEST_CASE("AppRuntime - Coverage", "[runtime][unit]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
 
     auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
       .executorPtr = std::make_unique<MockExecutor>(),

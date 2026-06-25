@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/utility/StrongType.h>
@@ -22,7 +22,6 @@ namespace ao::rt::test
 {
   namespace
   {
-    using namespace ao::lmdb::test;
     enum class Color : std::uint8_t
     {
       Red,
@@ -112,7 +111,7 @@ namespace ao::rt::test
 
   TEST_CASE("ConfigStore - simple aggregate round-trip", "[app][unit][runtime][config]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
     SECTION("Round-trip preserves all fields")
@@ -183,7 +182,7 @@ namespace ao::rt::test
 
   TEST_CASE("ConfigStore - enum types", "[app][unit][runtime][config]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
     SECTION("All enum values round-trip")
@@ -219,7 +218,7 @@ namespace ao::rt::test
 
   TEST_CASE("ConfigStore - optional fields", "[app][unit][runtime][config]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
     SECTION("All optionals with values")
@@ -283,7 +282,7 @@ namespace ao::rt::test
 
   TEST_CASE("ConfigStore - HasValueMethod types", "[app][unit][runtime][config]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
     SECTION("TaggedInteger round-trip via aggregate")
@@ -347,7 +346,7 @@ namespace ao::rt::test
 
   TEST_CASE("ConfigStore - container types", "[app][unit][runtime][config]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
     SECTION("Empty containers round-trip")
@@ -398,7 +397,7 @@ namespace ao::rt::test
 
   TEST_CASE("ConfigStore - edge cases", "[app][unit][runtime][config]")
   {
-    auto tempDir = TempDir{};
+    auto tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
     SECTION("Loading non-existent key does not modify object")
@@ -431,6 +430,21 @@ namespace ao::rt::test
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::NotFound);
 
+      CHECK(obj.count == 99);
+    }
+
+    SECTION("Failed file inspection is not cached as loaded")
+    {
+      auto failingStore = ConfigStore{std::filesystem::path{tempDir.path()} / std::string(300, 'x')};
+      auto obj = ComplexAggregate{.count = 99};
+
+      auto firstResult = failingStore.load("anything", obj);
+      REQUIRE(!firstResult);
+      CHECK(firstResult.error().code == Error::Code::IoError);
+
+      auto secondResult = failingStore.load("anything", obj);
+      REQUIRE(!secondResult);
+      CHECK(secondResult.error().code == Error::Code::IoError);
       CHECK(obj.count == 99);
     }
 
@@ -539,7 +553,7 @@ namespace ao::rt::test
 
   TEST_CASE("ConfigStore - string lifetime (save-before-flush)", "[app][unit][runtime][config]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
 
     {
@@ -561,7 +575,7 @@ namespace ao::rt::test
 
   TEST_CASE("ConfigStore - ReadOnly mode", "[app][unit][runtime][config]")
   {
-    auto const tempDir = TempDir{};
+    auto const tempDir = ao::test::TempDir{};
     auto configStore =
       ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml", ConfigStore::OpenMode::ReadOnly};
 

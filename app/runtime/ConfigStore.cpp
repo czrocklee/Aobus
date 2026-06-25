@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <format>
 #include <string>
+#include <system_error>
 #include <utility>
 
 namespace ao::rt
@@ -41,9 +42,16 @@ namespace ao::rt
       return {};
     }
 
-    _loaded = true;
+    auto fileEc = std::error_code{};
+    auto const fileExists = std::filesystem::exists(_filePath, fileEc);
 
-    if (!std::filesystem::exists(_filePath))
+    if (fileEc)
+    {
+      return makeError(Error::Code::IoError,
+                       std::format("Failed to inspect config file '{}': {}", _filePath.string(), fileEc.message()));
+    }
+
+    if (!fileExists)
     {
       if (_mode == OpenMode::ReadOnly)
       {
@@ -51,6 +59,7 @@ namespace ao::rt
       }
 
       _root.to_map(0);
+      _loaded = true;
       return {};
     }
 
@@ -67,6 +76,7 @@ namespace ao::rt
         Error::Code::IoError, std::format("Failed to parse config file '{}': {}", _filePath.string(), e.what()));
     }
 
+    _loaded = true;
     return {};
   }
 } // namespace ao::rt

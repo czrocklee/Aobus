@@ -35,6 +35,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -555,7 +556,9 @@ namespace ao::rt
 
     if (mode == ExportMode::Delta)
     {
-      if (auto const fullPath = ml.rootPath() / property.uri(); std::filesystem::exists(fullPath))
+      auto fileEc = std::error_code{};
+
+      if (auto const fullPath = ml.rootPath() / property.uri(); std::filesystem::exists(fullPath, fileEc) && !fileEc)
       {
         auto tagFileResult = tag::TagFile::open(fullPath);
 
@@ -568,6 +571,11 @@ namespace ao::rt
             optBaseline = *baselineResult;
           }
         }
+      }
+      else if (fileEc)
+      {
+        return makeError(
+          Error::Code::IoError, std::format("Failed to inspect file '{}': {}", fullPath.string(), fileEc.message()));
       }
     }
 

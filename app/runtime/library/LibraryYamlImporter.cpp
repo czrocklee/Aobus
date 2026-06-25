@@ -35,6 +35,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -185,10 +186,10 @@ namespace ao::rt
 
     Result<std::vector<std::vector<std::byte>>> importCovers(ryml::ConstNodeRef const& trackNode,
                                                              library::TrackBuilder& builder) const;
-    void applyFileMetadata(ryml::ConstNodeRef const& trackNode,
-                           std::string_view uriStr,
-                           library::FileManifestStore::Reader const& manifestReader,
-                           library::FileManifestBuilder& manifestBuilder) const;
+    Result<> applyFileMetadata(ryml::ConstNodeRef const& trackNode,
+                               std::string_view uriStr,
+                               library::FileManifestStore::Reader const& manifestReader,
+                               library::FileManifestBuilder& manifestBuilder) const;
     Result<TrackId> writeTrackData(library::TrackStore::Writer& trackWriter,
                                    std::optional<TrackId> const& optExistingTrackId,
                                    library::TrackBuilder::PreparedHot const& preparedHot,
@@ -208,10 +209,10 @@ namespace ao::rt
     void overlayCustomData(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
     void overlayTechnicalProperties(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
 
-    void loadFileBaseline(std::string_view uriStr,
-                          ExportMode payloadMode,
-                          std::optional<library::TrackBuilder>& optBuilder,
-                          std::unique_ptr<tag::TagFile>& keepAliveTagFile) const;
+    Result<> loadFileBaseline(std::string_view uriStr,
+                              ExportMode payloadMode,
+                              std::optional<library::TrackBuilder>& optBuilder,
+                              std::unique_ptr<tag::TagFile>& keepAliveTagFile) const;
 
     library::MusicLibrary& ml;
   };
@@ -605,7 +606,11 @@ namespace ao::rt
 
     auto manifestBuilder = library::FileManifestBuilder::createNew();
     manifestBuilder.trackId(targetTrackId);
-    applyFileMetadata(trackNode, uriStr, manifestReader, manifestBuilder);
+
+    if (auto result = applyFileMetadata(trackNode, uriStr, manifestReader, manifestBuilder); !result)
+    {
+      return std::unexpected{result.error()};
+    }
 
     if (auto putResult = manifestWriter.put(uriStr, manifestBuilder.serialize()); !putResult)
     {
@@ -662,22 +667,48 @@ namespace ao::rt
     return decodedCoverBlobs;
   }
 
-  void LibraryYamlImporter::Impl::applyFileMetadata(ryml::ConstNodeRef const& trackNode,
-                                                    std::string_view uriStr,
-                                                    library::FileManifestStore::Reader const& manifestReader,
-                                                    library::FileManifestBuilder& manifestBuilder) const
+  Result<> LibraryYamlImporter::Impl::applyFileMetadata(ryml::ConstNodeRef const& trackNode,
+                                                        std::string_view uriStr,
+                                                        library::FileManifestStore::Reader const& manifestReader,
+                                                        library::FileManifestBuilder& manifestBuilder) const
   {
     if (auto const manifestResult = manifestReader.get(uriStr); manifestResult)
     {
       manifestBuilder.fileSize(manifestResult->fileSize());
       manifestBuilder.mtime(manifestResult->mtime());
     }
-    else if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
+    else
     {
-      manifestBuilder.fileSize(std::filesystem::file_size(fullPath));
-      manifestBuilder.mtime(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                         std::filesystem::last_write_time(fullPath).time_since_epoch())
-                                                         .count()));
+      auto fileEc = std::error_code{};
+
+      if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath, fileEc) && !fileEc)
+      {
+        auto const fileSize = std::filesystem::file_size(fullPath, fileEc);
+
+        if (fileEc)
+        {
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to read file size for '{}': {}", fullPath.string(), fileEc.message()));
+        }
+
+        auto const lastWriteTime = std::filesystem::last_write_time(fullPath, fileEc);
+
+        if (fileEc)
+        {
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to read modification time for '{}': {}", fullPath.string(), fileEc.message()));
+        }
+
+        manifestBuilder.fileSize(fileSize);
+        manifestBuilder.mtime(static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()));
+      }
+      else if (fileEc)
+      {
+        return makeError(
+          Error::Code::IoError, std::format("Failed to inspect file '{}': {}", fullPath.string(), fileEc.message()));
+      }
     }
 
     if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
@@ -689,6 +720,8 @@ namespace ao::rt
     {
       manifestBuilder.mtime(yaml::asInt<uint64_t>(mtimeNode));
     }
+
+    return {};
   }
 
   Result<TrackId> LibraryYamlImporter::Impl::writeTrackData(
@@ -753,84 +786,100 @@ namespace ao::rt
 
     if (payloadMode == ExportMode::Delta || payloadMode == ExportMode::Metadata)
     {
-      loadFileBaseline(uriStr, payloadMode, optBuilder, keepAliveTagFile);
+      if (auto result = loadFileBaseline(uriStr, payloadMode, optBuilder, keepAliveTagFile); !result)
+      {
+        return std::unexpected{result.error()};
+      }
     }
 
     return {};
   }
 
-  void LibraryYamlImporter::Impl::loadFileBaseline(std::string_view uriStr,
-                                                   ExportMode payloadMode,
-                                                   std::optional<library::TrackBuilder>& optBuilder,
-                                                   std::unique_ptr<tag::TagFile>& keepAliveTagFile) const
+  Result<> LibraryYamlImporter::Impl::loadFileBaseline(std::string_view uriStr,
+                                                       ExportMode payloadMode,
+                                                       std::optional<library::TrackBuilder>& optBuilder,
+                                                       std::unique_ptr<tag::TagFile>& keepAliveTagFile) const
   {
-    if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
+    auto fileEc = std::error_code{};
+    auto const fullPath = ml.rootPath() / uriStr;
+    auto const fileExists = std::filesystem::exists(fullPath, fileEc);
+
+    if (fileEc)
     {
-      auto tagFileResult = tag::TagFile::open(fullPath);
+      return makeError(
+        Error::Code::IoError, std::format("Failed to inspect file '{}': {}", fullPath.string(), fileEc.message()));
+    }
 
-      if (tagFileResult)
+    if (!fileExists)
+    {
+      return {};
+    }
+
+    auto tagFileResult = tag::TagFile::open(fullPath);
+
+    if (!tagFileResult)
+    {
+      return {};
+    }
+
+    keepAliveTagFile = std::move(*tagFileResult);
+    auto fileBuilderResult = keepAliveTagFile->loadTrack();
+
+    if (!fileBuilderResult)
+    {
+      return {};
+    }
+
+    if (!optBuilder)
+    {
+      optBuilder = std::move(*fileBuilderResult);
+
+      if (payloadMode == ExportMode::Metadata)
       {
-        keepAliveTagFile = std::move(*tagFileResult);
-        auto fileBuilderResult = keepAliveTagFile->loadTrack();
+        optBuilder->metadata()
+          .title("")
+          .artist("")
+          .album("")
+          .albumArtist("")
+          .composer("")
+          .genre("")
+          .work("")
+          .movement("")
+          .year(0)
+          .trackNumber(0)
+          .trackTotal(0)
+          .discNumber(0)
+          .discTotal(0)
+          .movementNumber(0)
+          .movementTotal(0);
+        optBuilder->tags().clear();
+        optBuilder->customMetadata().clear();
+      }
 
-        if (!fileBuilderResult)
-        {
-          return;
-        }
+      optBuilder->property().uri(uriStr);
+      return {};
+    }
 
-        if (!optBuilder)
-        {
-          optBuilder = std::move(*fileBuilderResult);
+    auto const& fileBuilder = *fileBuilderResult;
+    auto const& props = fileBuilder.property();
+    optBuilder->property()
+      .duration(props.duration())
+      .bitrate(props.bitrate())
+      .sampleRate(props.sampleRate())
+      .codec(props.codec())
+      .channels(props.channels())
+      .bitDepth(props.bitDepth());
 
-          if (payloadMode == ExportMode::Metadata)
-          {
-            optBuilder->metadata()
-              .title("")
-              .artist("")
-              .album("")
-              .albumArtist("")
-              .composer("")
-              .genre("")
-              .work("")
-              .movement("")
-              .year(0)
-              .trackNumber(0)
-              .trackTotal(0)
-              .discNumber(0)
-              .discTotal(0)
-              .movementNumber(0)
-              .movementTotal(0);
-            optBuilder->tags().clear();
-            optBuilder->customMetadata().clear();
-          }
-        }
-        else
-        {
-          auto const& fileBuilder = *fileBuilderResult;
-          auto const& props = fileBuilder.property();
-          optBuilder->property()
-            .duration(props.duration())
-            .bitrate(props.bitrate())
-            .sampleRate(props.sampleRate())
-            .codec(props.codec())
-            .channels(props.channels())
-            .bitDepth(props.bitDepth());
-
-          if (payloadMode == ExportMode::Delta)
-          {
-            if (optBuilder->coverArt().entries().empty())
-            {
-              for (auto const& pending : fileBuilder.coverArt().entries())
-              {
-                std::visit([&](auto source) { optBuilder->coverArt().add(pending.type, source); }, pending.source);
-              }
-            }
-          }
-        }
-
-        optBuilder->property().uri(uriStr);
+    if (payloadMode == ExportMode::Delta && optBuilder->coverArt().entries().empty())
+    {
+      for (auto const& pending : fileBuilder.coverArt().entries())
+      {
+        std::visit([&](auto source) { optBuilder->coverArt().add(pending.type, source); }, pending.source);
       }
     }
+
+    optBuilder->property().uri(uriStr);
+    return {};
   }
 
   void LibraryYamlImporter::Impl::overlayMetadata(library::TrackBuilder& builder,

@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
@@ -32,7 +31,6 @@ namespace ao::rt::test
   namespace
   {
     using namespace ao::library;
-    using namespace ao::lmdb::test;
 
     struct TrackSpec final
     {
@@ -247,12 +245,10 @@ namespace ao::rt::test
       }
 
     private:
-      TempDir _tempDir;
+      ao::test::TempDir _tempDir;
       MusicLibrary _library;
     };
   } // namespace
-
-  using namespace ao::lmdb::test;
 
   TEST_CASE("rt::SmartListEvaluator", "[app][unit][smartlist]")
   {

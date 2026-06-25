@@ -239,6 +239,12 @@ namespace ao::uimodel::layout::test
       CHECK(v.asInt(defaultValue) == defaultValue);
     }
 
+    SECTION("asInt rejects partially numeric string")
+    {
+      auto const v = LayoutValue{std::string{"99px"}};
+      CHECK(v.asInt(7) == 7);
+    }
+
     SECTION("asBool coerces string true/false")
     {
       auto const vt = LayoutValue{std::string{"true"}};
@@ -271,6 +277,12 @@ namespace ao::uimodel::layout::test
       auto const v = LayoutValue{std::string{"abc"}};
       double const defaultValue = 1.0;
       CHECK(v.asDouble(defaultValue) == defaultValue);
+    }
+
+    SECTION("asDouble rejects partially numeric string")
+    {
+      auto const v = LayoutValue{std::string{"3.14px"}};
+      CHECK(v.asDouble(1.0) == 1.0);
     }
 
     SECTION("asDouble coerces int")

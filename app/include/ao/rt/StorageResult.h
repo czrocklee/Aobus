@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/Exception.h>
 
+#include <format>
 #include <optional>
 #include <source_location>
 #include <string_view>
@@ -28,7 +29,9 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    throwException<Exception>("{}: {}", action, result.error().message);
+    auto const& error = result.error();
+    auto const message = std::format("{}: {}", action, error.message);
+    throwException<Exception>(std::string_view{message}, error.location);
   }
 
   // Identity overload for stores whose only recoverable miss is absence: the
