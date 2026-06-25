@@ -97,13 +97,13 @@ namespace ao::audio::test
             return Result<>{};
           });
 
-      engine.setVolume(0.75F);
+      REQUIRE(engine.setVolume(0.75F));
       REQUIRE(lastSetPropertyId == PropertyId::Volume);
       REQUIRE(std::get<float>(lastSetPropertyValue) == Catch::Approx{0.75F});
       REQUIRE(engine.volume() == Catch::Approx{0.75F});
       REQUIRE(engine.status().volume == Catch::Approx{0.75F});
 
-      engine.setMuted(true);
+      REQUIRE(engine.setMuted(true));
       REQUIRE(lastSetPropertyId == PropertyId::Muted);
       REQUIRE(std::get<bool>(lastSetPropertyValue) == true);
       REQUIRE(engine.isMuted() == true);
@@ -663,7 +663,7 @@ namespace ao::audio::test
 
     SECTION("setVolume round-trips through engine and backend")
     {
-      engine.setVolume(0.42F);
+      REQUIRE(engine.setVolume(0.42F));
       REQUIRE(engine.volume() == Catch::Approx{0.42F});
       REQUIRE(engine.status().volume == Catch::Approx{0.42F});
 
@@ -675,7 +675,7 @@ namespace ao::audio::test
 
     SECTION("setMuted round-trips through engine and backend")
     {
-      engine.setMuted(true);
+      REQUIRE(engine.setMuted(true));
       REQUIRE(engine.isMuted() == true);
       REQUIRE(engine.status().muted == true);
 
@@ -687,8 +687,8 @@ namespace ao::audio::test
 
     SECTION("property controls survive backend open")
     {
-      engine.setVolume(0.37F);
-      engine.setMuted(true);
+      REQUIRE(engine.setVolume(0.37F));
+      REQUIRE(engine.setMuted(true));
 
       engine.play(desc);
 
@@ -1088,7 +1088,7 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device};
 
-    auto first = std::async(std::launch::async, [&engine] { engine.setVolume(0.25F); });
+    auto first = std::async(std::launch::async, [&engine] { return engine.setVolume(0.25F); });
     auto const firstEntered = backendRaw->waitForEnteredCalls(1, std::chrono::seconds{1});
 
     if (!firstEntered)
@@ -1104,7 +1104,7 @@ namespace ao::audio::test
                              [&]
                              {
                                secondStartedPromise.set_value();
-                               engine.setMuted(true);
+                               return engine.setMuted(true);
                              });
 
     auto const secondStartedStatus = secondStarted.wait_for(std::chrono::seconds{1});
@@ -1119,6 +1119,8 @@ namespace ao::audio::test
     REQUIRE(secondStartedStatus == std::future_status::ready);
     REQUIRE(first.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
     REQUIRE(second.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+    REQUIRE(first.get());
+    REQUIRE(second.get());
     CHECK(backendRaw->maxActiveCalls() == 1);
   }
 

@@ -63,7 +63,7 @@ namespace ao::gtk::test
       auto const [hot2, cold2] = *serializeResult2;
       trackId2 = ao::test::requireValue(writer.createHotCold(hot2, cold2)).first;
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     // 2. Bind model to a projection

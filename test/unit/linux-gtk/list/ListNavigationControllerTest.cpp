@@ -37,7 +37,7 @@ namespace ao::gtk::test
       auto builder = library::ListBuilder::createNew();
       builder.name(name).parentId(parentId);
       auto const listId = ao::test::requireValue(writer.create(builder.serialize())).first;
-      txn.commit();
+      REQUIRE(txn.commit());
       return listId;
     }
 

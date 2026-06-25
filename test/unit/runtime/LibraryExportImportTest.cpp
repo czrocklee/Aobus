@@ -158,7 +158,7 @@ namespace ao::rt::test
       manualListBuilder.tracks().add(trackId);
       createList(ml1.lists().writer(txn), manualListBuilder.serialize());
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     // 2. Export to YAML
@@ -186,7 +186,7 @@ namespace ao::rt::test
       trackBuilder.property().uri("song.flac"); // technical properties are missing initially
       auto const [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml2.resources());
       createPreparedTrack(ml2.tracks().writer(txn), preparedHot, preparedCold);
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     auto importer = LibraryYamlImporter{ml2};
@@ -297,9 +297,9 @@ namespace ao::rt::test
       auto manifestWriter = ml1.manifest().writer(txn);
       auto builder = FileManifestBuilder::createNew();
       builder.trackId(trackId).mtime(123456789);
-      manifestWriter.put("full-fields.flac", builder.serialize());
+      REQUIRE(manifestWriter.put("full-fields.flac", builder.serialize()));
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     // 2. Export to YAML (Full mode)
@@ -387,13 +387,13 @@ namespace ao::rt::test
       auto const [p2h, p2c] = prepareTrack(trackBuilder2, txn, dict, ml1.resources());
       createPreparedTrack(trackWriter, p2h, p2c);
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     // 2. Export to YAML
     auto const yamlPath = std::filesystem::path{temp1.path()} / "covers.yaml";
     auto exporter = LibraryYamlExporter{ml1};
-    exporter.exportToYaml(yamlPath, ExportMode::Full);
+    REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::Full));
 
     // 3. Verify YAML contains anchor and alias (textual check)
     {
@@ -473,8 +473,8 @@ namespace ao::rt::test
 
       auto manifest = FileManifestBuilder::createNew();
       manifest.trackId(trackId);
-      ml.manifest().writer(txn).put(uri, manifest.serialize());
-      txn.commit();
+      REQUIRE(ml.manifest().writer(txn).put(uri, manifest.serialize()));
+      REQUIRE(txn.commit());
     }
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "covers.yaml";
@@ -557,19 +557,19 @@ library:
       auto manifestWriter = ml1.manifest().writer(txn);
       auto builder = FileManifestBuilder::createNew();
       builder.trackId(trackId);
-      manifestWriter.put(uri, builder.serialize());
+      REQUIRE(manifestWriter.put(uri, builder.serialize()));
 
       auto listBuilder = ListBuilder::createNew().name("My URI List");
       listBuilder.tracks().add(trackId);
       createList(ml1.lists().writer(txn), listBuilder.serialize());
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     // 2. Export in ListOnly mode
     auto const yamlPath = std::filesystem::path{temp1.path()} / "list-only.yaml";
     auto exporter = LibraryYamlExporter{ml1};
-    exporter.exportToYaml(yamlPath, ExportMode::ListOnly);
+    REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::ListOnly));
 
     // 3. Verify YAML content
     {
@@ -600,9 +600,9 @@ library:
       auto manifestWriter = ml2.manifest().writer(txn);
       auto builder = FileManifestBuilder::createNew();
       builder.trackId(targetTrackId);
-      manifestWriter.put(uri, builder.serialize());
+      REQUIRE(manifestWriter.put(uri, builder.serialize()));
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     auto importer = LibraryYamlImporter{ml2};
@@ -649,8 +649,8 @@ library:
       auto [tid, view] = createPreparedTrack(ml.tracks().writer(txn), preparedHot, preparedCold);
       auto builder = FileManifestBuilder::createNew();
       builder.trackId(tid);
-      ml.manifest().writer(txn).put(uri1, builder.serialize());
-      txn.commit();
+      REQUIRE(ml.manifest().writer(txn).put(uri1, builder.serialize()));
+      REQUIRE(txn.commit());
     }
 
     // 2. Prepare YAML with update for track 1 and addition of track 2
@@ -710,7 +710,7 @@ library:
       trackBuilder.property().uri("song.flac");
       auto [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml.resources());
       std::tie(trackId, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), preparedHot, preparedCold);
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";
@@ -992,7 +992,7 @@ library:
       auto const [p4h, p4c] = prepareTrack(trackBuilder4, txn, dict, ml.resources());
       std::tie(trackId4, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p4h, p4c);
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     std::filesystem::copy_file(std::filesystem::current_path() / "test/integration/tag/test_data/with_cover.flac",
@@ -1040,7 +1040,7 @@ library:
       trackBuilder.metadata().title("Cannot inspect baseline");
       auto const [hot, cold] = prepareTrack(trackBuilder, txn, dict, ml.resources());
       std::ignore = createPreparedTrack(ml.tracks().writer(txn), hot, cold);
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     std::filesystem::permissions(blockedDir, std::filesystem::perms::none, std::filesystem::perm_options::replace);

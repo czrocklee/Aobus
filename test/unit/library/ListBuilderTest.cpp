@@ -102,7 +102,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ListStore{openDatabase(wtxn, "lists")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto builder = ListBuilder::createNew().name("RoundTrip Test").description("Testing round-trip");
     builder.tracks().add(TrackId{42});
@@ -111,7 +111,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const optFoundResult = store.reader(rtxn).get(id);
@@ -132,7 +132,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ListStore{openDatabase(wtxn, "lists")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto const payload = ListBuilder::createNew()
                            .name("Smart RoundTrip")
@@ -142,7 +142,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const optFoundResult = store.reader(rtxn).get(id);

@@ -46,12 +46,12 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Store a value
     auto wtxn2 = beginWriteTransaction(env);
     auto const id = requirePut(dict, wtxn2, "test value");
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Get by ID (using in-memory index)
     auto const result = dict.get(id);
@@ -66,7 +66,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     requirePut(dict, wtxn, "artist1");
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Get ID by string
     [[maybe_unused]] auto const id = dict.getId("artist1");
@@ -81,7 +81,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     requirePut(dict, wtxn, "exists");
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     REQUIRE(dict.contains("exists"));
     REQUIRE(!dict.contains("not exists"));
@@ -94,12 +94,12 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Store a value
     auto wtxn2 = beginWriteTransaction(env);
     auto const id1 = requirePut(dict, wtxn2, "first");
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Try to store same string again - returns existing ID
     auto wtxn3 = beginWriteTransaction(env);
@@ -119,7 +119,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     requirePut(dict, wtxn, "first");
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // ID 999 doesn't exist - should throw
     CHECK_THROWS(dict.get(DictionaryId{999}));
@@ -133,7 +133,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     requirePut(dict, wtxn, "exists");
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Non-existent string should throw
     CHECK_THROWS(dict.getId("not exists"));
@@ -147,7 +147,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     auto const id = requirePut(dict, wtxn, "first");
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     REQUIRE(id.raw() == 1);
     auto const result = dict.get(id);
@@ -162,7 +162,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     requirePut(dict, wtxn, "only one");
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // ID 2 is out of bounds (only 1 is valid)
     CHECK_THROWS(dict.get(DictionaryId{2}));
@@ -175,7 +175,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Reserve a non-existent string
     auto const id = dict.getOrIntern("new artist");
@@ -193,7 +193,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     requirePut(dict, wtxn, "existing");
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Reserve an existing string - should return the existing ID
     auto const id = dict.getOrIntern("existing");
@@ -209,7 +209,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Reserve a string (not persisted)
     auto const getOrInterndId = dict.getOrIntern("Bach");
@@ -227,7 +227,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto const id1 = dict.getOrIntern("artist1");
     auto const id2 = dict.getOrIntern("artist2");
@@ -249,13 +249,13 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Simulate scan populating some entries first
     auto wtxn2 = beginWriteTransaction(env);
     requirePut(dict, wtxn2, "artist_one");
     requirePut(dict, wtxn2, "album_one");
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // getOrIntern reserves "fav" (like query compiler does for "#fav" smart list)
     auto const reservedId = dict.getOrIntern("fav");
@@ -264,7 +264,7 @@ namespace ao::library::test
     // put a DIFFERENT string "#fav" — must NOT collide with reserved "fav"
     auto wtxn3 = beginWriteTransaction(env);
     auto const putId = requirePut(dict, wtxn3, "#fav");
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
 
     REQUIRE(putId.raw() != reservedId.raw());
     REQUIRE(putId.raw() == 4); // must skip over reserved ID 3
@@ -284,7 +284,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Reserve a string
     auto const reservedId = dict.getOrIntern("fav");
@@ -293,7 +293,7 @@ namespace ao::library::test
     // Put the SAME string — should reuse the reserved ID and persist it
     auto wtxn2 = beginWriteTransaction(env);
     auto const putId = requirePut(dict, wtxn2, "fav");
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     REQUIRE(putId.raw() == reservedId.raw());
     REQUIRE(dict.get(putId) == "fav");
@@ -312,7 +312,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     auto const id = requirePut(dict, wtxn, "hello");
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     CHECK(dict.getOrDefault(id) == "hello");
     CHECK(dict.getOrDefault(id, "fallback") == "hello");
@@ -325,7 +325,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     CHECK(dict.getOrDefault(kInvalidDictionaryId).empty());
     CHECK(dict.getOrDefault(kInvalidDictionaryId, "fallback") == "fallback");
@@ -343,13 +343,13 @@ namespace ao::library::test
       auto db = openDatabase(wtxn, "dict");
       auto writer = db.writer(wtxn);
 
-      writer.create(1, utility::bytes::view("first"sv));
+      REQUIRE(writer.create(1, utility::bytes::view("first"sv)));
       // SKIP ID 2
-      writer.create(3, utility::bytes::view("third"sv));
+      REQUIRE(writer.create(3, utility::bytes::view("third"sv)));
       // SKIP ID 4
-      writer.create(5, utility::bytes::view("fifth"sv));
+      REQUIRE(writer.create(5, utility::bytes::view("fifth"sv)));
 
-      wtxn.commit();
+      REQUIRE(wtxn.commit());
     }
 
     // Load DictionaryStore which should correctly handle the gaps via resize()
@@ -383,11 +383,11 @@ namespace ao::library::test
       auto db = openDatabase(wtxn, "dict");
       auto writer = db.writer(wtxn);
 
-      writer.create(1, utility::bytes::view("first"sv));
+      REQUIRE(writer.create(1, utility::bytes::view("first"sv)));
       // SKIP ID 2
-      writer.create(3, utility::bytes::view("third"sv));
+      REQUIRE(writer.create(3, utility::bytes::view("third"sv)));
 
-      wtxn.commit();
+      REQUIRE(wtxn.commit());
     }
 
     // Load DictionaryStore which should discover ID 2 as a gap
@@ -406,7 +406,7 @@ namespace ao::library::test
     auto const newId3 = requirePut(dict, wtxn2, "appended_id_5");
     REQUIRE(newId3.raw() == 5);
 
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
   }
 
   TEST_CASE("Dictionary - prevents dangling pointers upon heavy reallocation", "[library][unit][dictionary]")
@@ -416,12 +416,12 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Store the first string, capturing its ID
     auto wtxn2 = beginWriteTransaction(env);
     auto const firstId = requirePut(dict, wtxn2, "very_first_string");
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Insert 10,000 unique short strings to force vector reallocation multiple times
     auto wtxn3 = beginWriteTransaction(env);
@@ -431,7 +431,7 @@ namespace ao::library::test
       requirePut(dict, wtxn3, "string_" + std::to_string(i));
     }
 
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
 
     // After massive reallocation, the old string_view in the transparent index should NOT dangle,
     // because we use DictionaryId in the hash set and vector element direct lookup.
@@ -453,7 +453,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Seed a stable set of entries that readers can always resolve. getOrIntern
     // stays in memory (no write txn), so it is safe to call concurrently.

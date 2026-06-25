@@ -172,11 +172,11 @@ namespace ao::audio::test
     auto executor = async::ImmediateExecutor{};
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
-    player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
+    REQUIRE(player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
 
     SECTION("setOutput same values exits early")
     {
-      player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
+      REQUIRE(player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
       // Success is implicit if no extra provider calls are made (Verify can be used)
       Verify(Method(mockProvider, createBackend)).Once();
     }
@@ -289,14 +289,14 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
     // 1. Call setOutput before devices are available
-    player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared);
+    REQUIRE(player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
 
     // Verify that it's NOT yet active (engine still has null backend/default device)
     auto const snapBefore = player.status();
     REQUIRE(snapBefore.engine.currentDeviceId == "null");
 
     // 1b. Call play while pending - should be ignored
-    player.play(PlaybackInput{.filePath = "song.flac"});
+    CHECK_FALSE(player.play(PlaybackInput{.filePath = "song.flac"}));
     REQUIRE(player.status().engine.transport == Transport::Idle);
 
     // 2. Simulate devices being discovered
@@ -465,7 +465,7 @@ namespace ao::audio::test
     onDevicesChanged({pipeWireDevice()});
     executor.drain();
 
-    player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared);
+    REQUIRE(player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
     auto route = createBaseEngineRoute();
     route.optAnchor = RouteAnchor{.backend = kBackendPipeWire, .id = "mock-stream-id"};
     player.handleRouteChanged(route, player.playbackGeneration());
@@ -508,7 +508,7 @@ namespace ao::audio::test
 
     SECTION("setOutput with non-existent provider")
     {
-      player.setOutput(kBackendAlsa, DeviceId{"alsa-dev"}, kProfileShared);
+      CHECK_FALSE(player.setOutput(kBackendAlsa, DeviceId{"alsa-dev"}, kProfileShared));
       // It should just log an error and return.
       auto const snap = player.status();
       REQUIRE(snap.engine.backendId == kBackendNone);
@@ -524,14 +524,14 @@ namespace ao::audio::test
 
     SECTION("Volume and mute are propagated to engine and status")
     {
-      player.setVolume(0.6F);
+      REQUIRE(player.setVolume(0.6F));
       REQUIRE(player.status().volume == Catch::Approx{0.6F});
       REQUIRE(player.status().engine.volume == Catch::Approx{0.6F});
 
-      player.setMuted(true);
+      REQUIRE(player.setMuted(true));
       REQUIRE(player.status().muted == true);
 
-      player.toggleMute();
+      REQUIRE(player.toggleMute());
       REQUIRE(player.status().muted == false);
     }
   }
@@ -642,7 +642,7 @@ namespace ao::audio::test
       auto executor = async::ImmediateExecutor{};
       auto player = Player{executor};
       player.addProvider(std::make_unique<LifetimeProvider>(events));
-      player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive);
+      REQUIRE(player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive));
     }
 
     // Old (broken) order was: providers.clear() → enginePtr.reset(), which destroyed the provider

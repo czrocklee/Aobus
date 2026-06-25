@@ -52,7 +52,7 @@ namespace ao::library::test
                              .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}},
                              .libraryId = {}};
     metaStore.create(txn, header);
-    txn.commit();
+    REQUIRE(txn.commit());
 
     auto const result = MusicLibrary::open(temp.path(), temp.path());
     REQUIRE_FALSE(result);

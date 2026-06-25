@@ -116,11 +116,14 @@ namespace clang::tidy::modernize
     // Match RAII classes that match the whitelist
     finder->addMatcher(cxxRecordDecl(isDefinition(), isRAII, isWhitelistedRaii).bind("raii_class"), this);
 
+    auto isWhitelistedNodiscard = cxxRecordDecl(hasName("::ao::Result"));
+
     // Match anything else that HAS [[nodiscard]] but is NOT in our RAII whitelist
-    finder->addMatcher(
-      cxxRecordDecl(isDefinition(), hasAttr(attr::WarnUnusedResult), unless(allOf(isRAII, isWhitelistedRaii)))
-        .bind("non_raii_nodiscard"),
-      this);
+    finder->addMatcher(cxxRecordDecl(isDefinition(),
+                                     hasAttr(attr::WarnUnusedResult),
+                                     unless(anyOf(allOf(isRAII, isWhitelistedRaii), isWhitelistedNodiscard)))
+                         .bind("non_raii_nodiscard"),
+                       this);
   }
 
   void NodiscardUsageCheck::check(MatchFinder::MatchResult const& result)

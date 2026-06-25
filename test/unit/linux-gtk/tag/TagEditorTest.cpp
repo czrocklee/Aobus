@@ -125,7 +125,7 @@ namespace ao::gtk::test
       auto [emptyId, _2] = ao::test::requireValue(writer.createHotCold(hot3, cold3));
       emptyTrackId = emptyId;
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     auto editor = TagEditor{};

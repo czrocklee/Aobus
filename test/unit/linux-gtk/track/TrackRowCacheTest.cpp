@@ -87,7 +87,7 @@ namespace ao::gtk::test
         REQUIRE(serializeResult);
         auto const [hotData, coldData] = *serializeResult;
         auto [id, _] = ao::test::requireValue(writer.createHotCold(hotData, coldData));
-        txn.commit();
+        REQUIRE(txn.commit());
         return id;
       }
 

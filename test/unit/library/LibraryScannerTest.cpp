@@ -67,7 +67,7 @@ namespace ao::library::test
       builder3.trackId(TrackId{3});
       REQUIRE(manifestWriter.put(missingUri, builder3.serialize()));
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     auto scanner = LibraryScanner{ml};

@@ -113,7 +113,7 @@ namespace clang::tidy::readability
 
       return name == "std::optional" || name == "std::span" || name == "std::unique_ptr" ||
              name == "llvm::StringSwitch" || name == "std::map" || name == "std::multimap" ||
-             name == "std::unordered_map" || name == "std::unordered_multimap" ||
+             name == "std::unordered_map" || name == "std::unordered_multimap" || name == "ao::Result" ||
              (ref.starts_with("std::") && ref.ends_with("_distribution"));
     }
 

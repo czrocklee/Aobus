@@ -116,7 +116,7 @@ namespace ao::gtk::layout::test
       auto const [hot, cold] = *serializeResult;
       auto const trackId = ao::test::requireValue(writer.createHotCold(hot, cold)).first;
 
-      txn.commit();
+      REQUIRE(txn.commit());
       return trackId;
     }
 
@@ -788,7 +788,7 @@ namespace ao::gtk::layout::test
         auto const [hot2, cold2] = *serializeResult2;
         trackId2 = ao::test::requireValue(writer.createHotCold(hot2, cold2)).first;
 
-        txn.commit();
+        REQUIRE(txn.commit());
       }
 
       REQUIRE(trackId1 != kInvalidTrackId);

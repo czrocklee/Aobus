@@ -1229,7 +1229,7 @@ namespace ao::query::test
 
     auto rockId = ao::test::requireValue(dict.put(wtxn, "rock"));
     auto jazzId = ao::test::requireValue(dict.put(wtxn, "jazz"));
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     std::uint32_t const rockBit = std::uint32_t{1} << (rockId.raw() & 31);
     std::uint32_t const jazzBit = std::uint32_t{1} << (jazzId.raw() & 31);
@@ -1266,7 +1266,7 @@ namespace ao::query::test
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
     auto bachId = ao::test::requireValue(dict.put(wtxn, "Bach"));
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     SECTION("Dictionary-Backed Equality Resolves To NumericId")
     {

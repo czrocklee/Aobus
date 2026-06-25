@@ -44,7 +44,7 @@ namespace ao::gtk::test
       auto [id2, _] = ao::test::requireValue(writer.create(builderB.serialize()));
       idB = id2;
 
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     // 2. Build the model

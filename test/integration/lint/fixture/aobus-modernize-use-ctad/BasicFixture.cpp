@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestHelpers.h"
+#include <ao/Error.h>
 
 #include <array>
 #include <cstddef>
@@ -236,4 +237,7 @@ void ctadNegativeCases()
 
   // NEGATIVE - explicit non-type argument of Declaration kind is not deducible.
   [[maybe_unused]] auto const refKey = RefKey<&g_global>{42};
+
+  // NEGATIVE - explicit template arguments on ao::Result carry semantic value
+  [[maybe_unused]] auto const explicitResult = ao::Result<int>{42};
 }

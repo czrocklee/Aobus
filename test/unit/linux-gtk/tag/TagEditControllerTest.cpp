@@ -42,7 +42,7 @@ namespace ao::gtk::test
       REQUIRE(serializeResult);
       auto const [hotData, coldData] = *serializeResult;
       auto const trackId = ao::test::requireValue(writer.createHotCold(hotData, coldData)).first;
-      txn.commit();
+      REQUIRE(txn.commit());
       return trackId;
     }
 

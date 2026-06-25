@@ -43,7 +43,7 @@ namespace ao::rt::test
       auto coldData = builder.serializeCold(txn, testLib.library().dictionary(), testLib.library().resources());
       REQUIRE(coldData);
       REQUIRE(writer.createHotCold(*hotData, *coldData));
-      txn.commit();
+      REQUIRE(txn.commit());
     }
 
     std::vector<std::string> insertTexts(std::vector<CompletionItem> const& items)

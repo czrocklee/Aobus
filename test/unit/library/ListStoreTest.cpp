@@ -41,7 +41,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ListStore{openDatabase(wtxn, "lists")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a list
     auto header = ListHeader{.trackIdsCount = 5, .nameOffset = 0};
@@ -51,7 +51,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Read the list
     auto rtxn = beginReadTransaction(env);
@@ -68,7 +68,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ListStore{openDatabase(wtxn, "lists")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a list
     auto header = ListHeader{.trackIdsCount = 10, .nameOffset = 0};
@@ -79,7 +79,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Read by ID
     auto rtxn = beginReadTransaction(env);
@@ -95,7 +95,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ListStore{openDatabase(wtxn, "lists")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a list
     auto header = ListHeader{};
@@ -105,12 +105,12 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Delete it
     auto wtxn3 = beginWriteTransaction(env);
     REQUIRE(store.writer(wtxn3).remove(id));
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
 
     // Verify it's gone
     auto rtxn = beginReadTransaction(env);

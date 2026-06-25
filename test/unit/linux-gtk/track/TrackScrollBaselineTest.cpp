@@ -86,7 +86,7 @@ namespace ao::gtk::test
         ids.push_back(ao::test::requireValue(writer.createHotCold(hot, cold)).first);
       }
 
-      txn.commit();
+      REQUIRE(txn.commit());
       return ids;
     }
   } // namespace

@@ -93,7 +93,7 @@ namespace ao::rt::test
 
       auto loaded = SessionState{};
       auto verifyStore = ConfigStore{workspaceConfigPath};
-      verifyStore.load("workspace", loaded);
+      REQUIRE(verifyStore.load("workspace", loaded));
       CHECK(loaded.openViews.size() == 2);
 
       // Create new runtime with same persistence
@@ -123,7 +123,7 @@ namespace ao::rt::test
 
       auto loaded = SessionState{};
       auto verifyStore = ConfigStore{workspaceConfigPath};
-      verifyStore.load("workspace", loaded);
+      REQUIRE(verifyStore.load("workspace", loaded));
       REQUIRE(loaded.openViews.size() == 1);
       CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
 

@@ -94,7 +94,7 @@ namespace ao::gtk::test
         auto coldData = builder.serializeCold(txn, lib.dictionary(), lib.resources());
         REQUIRE(coldData);
         auto [id, _] = ao::test::requireValue(writer.createHotCold(*hotData, *coldData));
-        txn.commit();
+        REQUIRE(txn.commit());
         return id;
       }
 

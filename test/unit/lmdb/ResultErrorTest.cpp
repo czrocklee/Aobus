@@ -38,7 +38,7 @@ namespace ao::lmdb::test
     SECTION("lmdbError captures the caller and classifies the code")
     {
       auto const expectedLine = std::source_location::current().line() + 1;
-      auto const error = Result{lmdbError("mdb_put", MDB_KEYEXIST)};
+      auto const error = Result<>{lmdbError("mdb_put", MDB_KEYEXIST)};
 
       REQUIRE_FALSE(error);
       CHECK(error.error().code == Error::Code::Conflict);

@@ -29,7 +29,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ResourceStore{openDatabase(wtxn, "resources")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a resource
     auto const data = createStringData("hello");
@@ -40,7 +40,7 @@ namespace ao::library::test
     REQUIRE(idResult);
     auto const id = *idResult;
     REQUIRE(id > 0);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Read the resource
     auto rtxn = beginReadTransaction(env);
@@ -65,7 +65,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ResourceStore{openDatabase(wtxn, "resources")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a resource
     auto const data = createStringData("test");
@@ -75,12 +75,12 @@ namespace ao::library::test
     auto idResult = store.writer(wtxn2).create(buffer);
     REQUIRE(idResult);
     auto const id = *idResult;
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Delete it
     auto wtxn3 = beginWriteTransaction(env);
     REQUIRE(store.writer(wtxn3).remove(id));
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
 
     // Verify it's gone
     auto rtxn = beginReadTransaction(env);
@@ -96,7 +96,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ResourceStore{openDatabase(wtxn, "resources")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create first resource
     auto const data = createStringData("samedata");
@@ -106,7 +106,7 @@ namespace ao::library::test
     auto id1Result = store.writer(wtxn2).create(buffer);
     REQUIRE(id1Result);
     auto const id1 = *id1Result;
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Create same content again - should return same ID (deduplication)
     auto wtxn3 = beginWriteTransaction(env);
@@ -114,7 +114,7 @@ namespace ao::library::test
     REQUIRE(id2Result);
     auto const id2 = *id2Result;
     REQUIRE(id2 == id1);
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
 
     // Verify only one resource exists
     auto rtxn = beginReadTransaction(env);
@@ -136,7 +136,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = ResourceStore{openDatabase(wtxn, "resources")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // FNV-1a 32-bit hashes these bytes to zero, which is reserved as the invalid ID.
     constexpr auto kData = std::array{std::byte{0xcc}, std::byte{0x24}, std::byte{0x31}, std::byte{0xc4}};
@@ -151,7 +151,7 @@ namespace ao::library::test
     auto const duplicateId = *duplicateIdResult;
     CHECK(id != kInvalidResourceId);
     CHECK(duplicateId == id);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);

@@ -52,7 +52,7 @@ namespace ao::library::test
     auto const payload = builder.serialize();
 
     REQUIRE(store.writer(wtxn).put("song.flac", payload));
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const viewResult = store.reader(rtxn).get("song.flac");
@@ -70,7 +70,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "manifests");
     auto store = FileManifestStore{db};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const viewResult = store.reader(rtxn).get("nonexistent.flac");
@@ -93,7 +93,7 @@ namespace ao::library::test
     REQUIRE(writer.put("song.flac", builder.serialize()));
     REQUIRE(writer.remove("song.flac"));
     REQUIRE(writer.remove("song.flac"));
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const viewResult = store.reader(rtxn).get("song.flac");
@@ -111,7 +111,7 @@ namespace ao::library::test
     auto invalidPayload = std::vector{std::byte{0x42}};
 
     REQUIRE(store.writer(wtxn).put("song.flac", invalidPayload));
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const result = store.reader(rtxn).get("song.flac");

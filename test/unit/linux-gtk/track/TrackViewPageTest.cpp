@@ -47,7 +47,7 @@ namespace ao::gtk::test
       auto const [hotData, coldData] =
         ao::test::requireValue(builder.serialize(txn, library.dictionary(), library.resources()));
       auto const [id, _] = ao::test::requireValue(writer.createHotCold(hotData, coldData));
-      txn.commit();
+      REQUIRE(txn.commit());
       return id;
     }
   } // namespace

@@ -5,9 +5,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <expected>
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace ao::test
 {
@@ -15,7 +17,7 @@ namespace ao::test
   {
     SECTION("makeError produces correct Error payload")
     {
-      auto const result = Result{makeError(Error::Code::NotFound, "Item not in database")};
+      auto const result = Result<>{makeError(Error::Code::NotFound, "Item not in database")};
 
       REQUIRE_FALSE(result.has_value());
       CHECK(result.error().code == Error::Code::NotFound);
@@ -32,13 +34,37 @@ namespace ao::test
       CHECK(res.error().message == "Bad state");
     }
 
+    SECTION("Result<T> remains expected-compatible")
+    {
+      STATIC_REQUIRE(std::is_base_of_v<std::expected<int, Error>, Result<int>>);
+      STATIC_REQUIRE_FALSE(std::is_same_v<std::expected<int, Error>, Result<int>>);
+
+      auto const fromBase = Result<int>{std::expected<int, Error>{7}};
+      REQUIRE(fromBase);
+      CHECK(*fromBase == 7);
+
+      auto const fromUnexpected = Result<int>{makeError(Error::Code::InvalidInput, "bad value")};
+      REQUIRE_FALSE(fromUnexpected);
+      CHECK(fromUnexpected.error().code == Error::Code::InvalidInput);
+    }
+
+    SECTION("Result<> supports void success and errors")
+    {
+      auto const success = Result<>{std::expected<void, Error>{}};
+      REQUIRE(success);
+
+      auto const failure = Result<>{makeError(Error::Code::IoError, "disk gone")};
+      REQUIRE_FALSE(failure);
+      CHECK(failure.error().message == "disk gone");
+    }
+
     SECTION("Error codes cover external data and storage failures")
     {
-      auto const invalidInput = Result{makeError(Error::Code::InvalidInput, "Invalid user value")};
-      auto const corruptData = Result{makeError(Error::Code::CorruptData, "Corrupt file")};
-      auto const conflict = Result{makeError(Error::Code::Conflict, "Record already exists")};
-      auto const tooLarge = Result{makeError(Error::Code::ValueTooLarge, "Serialized record is too large")};
-      auto const resourceExhausted = Result{makeError(Error::Code::ResourceExhausted, "Resource IDs exhausted")};
+      auto const invalidInput = Result<>{makeError(Error::Code::InvalidInput, "Invalid user value")};
+      auto const corruptData = Result<>{makeError(Error::Code::CorruptData, "Corrupt file")};
+      auto const conflict = Result<>{makeError(Error::Code::Conflict, "Record already exists")};
+      auto const tooLarge = Result<>{makeError(Error::Code::ValueTooLarge, "Serialized record is too large")};
+      auto const resourceExhausted = Result<>{makeError(Error::Code::ResourceExhausted, "Resource IDs exhausted")};
 
       REQUIRE_FALSE(invalidInput);
       REQUIRE_FALSE(corruptData);
@@ -56,7 +82,7 @@ namespace ao::test
     SECTION("makeError captures the caller's source location, not makeError's body")
     {
       auto const expectedLine = std::source_location::current().line() + 1;
-      auto const result = Result{makeError(Error::Code::IoError, "disk gone")};
+      auto const result = Result<>{makeError(Error::Code::IoError, "disk gone")};
 
       auto const& loc = result.error().location;
       CHECK(loc.line() == expectedLine);

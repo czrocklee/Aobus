@@ -39,7 +39,7 @@ namespace ao::gtk::test
     auto idResult = library.resources().writer(txn).create(bytes);
     REQUIRE(idResult);
     auto const id = *idResult;
-    txn.commit();
+    REQUIRE(txn.commit());
     return id;
   }
 

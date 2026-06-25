@@ -78,7 +78,7 @@ namespace ao::gtk::test
         REQUIRE(serializeResult);
         auto const [hot, cold] = *serializeResult;
         trackId = ao::test::requireValue(writer.createHotCold(hot, cold)).first;
-        txn.commit();
+        REQUIRE(txn.commit());
       }
 
       auto sourcePtr = std::make_shared<MutableTrackSource>();

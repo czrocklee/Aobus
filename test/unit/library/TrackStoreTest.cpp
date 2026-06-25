@@ -47,7 +47,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a track with hot+cold
     auto hotHeader = TrackHotHeader{};
@@ -61,7 +61,7 @@ namespace ao::library::test
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
     // If createHotCold() failed, it would throw
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Read the track
     auto rtxn = beginReadTransaction(env);
@@ -78,7 +78,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a track with hot+cold
     auto hotHeader = TrackHotHeader{};
@@ -90,7 +90,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Read by ID
     auto rtxn = beginReadTransaction(env);
@@ -105,7 +105,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a track
     auto hotHeader = TrackHotHeader{};
@@ -117,7 +117,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Update the track
     auto hotHeader2 = TrackHotHeader{};
@@ -127,7 +127,7 @@ namespace ao::library::test
 
     auto wtxn3 = beginWriteTransaction(env);
     REQUIRE(store.writer(wtxn3).updateHot(id, hotData2));
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
   }
 
   TEST_CASE("TrackStore - delete", "[library][unit][track]")
@@ -137,7 +137,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a track
     auto hotHeader = TrackHotHeader{};
@@ -149,12 +149,12 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Delete it
     auto wtxn3 = beginWriteTransaction(env);
     REQUIRE(store.writer(wtxn3).remove(id));
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
 
     // Verify it's gone
     auto rtxn = beginReadTransaction(env);
@@ -170,7 +170,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create multiple tracks - each should get unique ID
     auto hotHeader = TrackHotHeader{};
@@ -184,7 +184,7 @@ namespace ao::library::test
     auto [id1, view1] = requireCreate(store.writer(wtxn2), hotData, coldData);
     auto [id2, view2] = requireCreate(store.writer(wtxn2), hotData, coldData);
     auto [id3, view3] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // All IDs should be unique
     REQUIRE(id1 != id2);
@@ -199,7 +199,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create hot header
     auto hotHeader = TrackHotHeader{};
@@ -220,7 +220,7 @@ namespace ao::library::test
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, hotView] = requireCreate(store.writer(wtxn2), hotData, coldData);
     // REQUIRE(id.raw() >= 0);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Verify hot and cold data
     auto rtxn = beginReadTransaction(env);
@@ -238,7 +238,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create initial hot+cold
     auto hotHeader = TrackHotHeader{};
@@ -253,7 +253,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Update hot only
     auto hotHeader2 = TrackHotHeader{};
@@ -263,7 +263,7 @@ namespace ao::library::test
 
     auto wtxn3 = beginWriteTransaction(env);
     REQUIRE(store.writer(wtxn3).updateHot(id, hotData2));
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
 
     // Update cold only
     auto coldHeader2 = TrackColdHeader{};
@@ -276,7 +276,7 @@ namespace ao::library::test
     auto wtxn4 = beginWriteTransaction(env);
     REQUIRE(store.writer(wtxn4).updateCold(
       id, coldData2.size(), [&](std::span<std::byte> buf) { std::ranges::copy(coldData2, buf.begin()); }));
-    wtxn4.commit();
+    REQUIRE(wtxn4.commit());
 
     // Verify both persisted
     auto rtxn = beginReadTransaction(env);
@@ -293,7 +293,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create hot+cold
     auto hotHeader = TrackHotHeader{};
@@ -306,12 +306,12 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Delete both
     auto wtxn3 = beginWriteTransaction(env);
     REQUIRE(store.writer(wtxn3).remove(id));
-    wtxn3.commit();
+    REQUIRE(wtxn3.commit());
 
     // Verify both are gone
     auto rtxn = beginReadTransaction(env);
@@ -326,7 +326,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create hot+cold
     auto hotHeader = TrackHotHeader{};
@@ -341,7 +341,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Use Writer get with LoadMode (within same transaction context)
     auto wtxn3 = beginWriteTransaction(env);
@@ -366,7 +366,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create multiple tracks
     for (std::int32_t i = 0; i < 3; ++i)
@@ -382,7 +382,7 @@ namespace ao::library::test
 
       auto wtxn2 = beginWriteTransaction(env);
       requireCreate(store.writer(wtxn2), hotData, coldData);
-      wtxn2.commit();
+      REQUIRE(wtxn2.commit());
     }
 
     // Iterate via unified TrackView
@@ -405,7 +405,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create tracks with hot+cold
     auto hotHeader = TrackHotHeader{};
@@ -422,7 +422,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Iterate with Hot mode - should only load hot
     auto rtxn = beginReadTransaction(env);
@@ -442,7 +442,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create tracks with hot+cold
     auto hotHeader = TrackHotHeader{};
@@ -457,7 +457,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Iterate with Cold mode
     auto rtxn = beginReadTransaction(env);
@@ -477,7 +477,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create tracks with hot+cold
     auto hotHeader = TrackHotHeader{};
@@ -492,7 +492,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Iterate with Both mode - should load both
     auto rtxn = beginReadTransaction(env);
@@ -514,7 +514,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create track
     auto hotHeader = TrackHotHeader{};
@@ -528,7 +528,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Get with Hot mode
     auto rtxn = beginReadTransaction(env);
@@ -546,7 +546,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create track
     auto hotHeader = TrackHotHeader{};
@@ -561,7 +561,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     // Get with Cold mode
     auto rtxn = beginReadTransaction(env);
@@ -579,7 +579,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create multiple tracks
     auto ids = std::vector<TrackId>{};
@@ -600,7 +600,7 @@ namespace ao::library::test
       auto wtxn2 = beginWriteTransaction(env);
       auto [id, view] = requireCreate(store.writer(wtxn2), hotData, coldData);
       ids.push_back(id);
-      wtxn2.commit();
+      REQUIRE(wtxn2.commit());
     }
 
     // Iterate with Cold mode and verify all records
@@ -639,7 +639,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Iterate with Cold mode on empty store
     auto rtxn = beginReadTransaction(env);
@@ -657,7 +657,7 @@ namespace ao::library::test
 
     auto wtxn = beginWriteTransaction(env);
     auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Create a track
     auto hotHeader = TrackHotHeader{};
@@ -670,7 +670,7 @@ namespace ao::library::test
 
     auto wtxn2 = beginWriteTransaction(env);
     requireCreate(store.writer(wtxn2), hotData, coldData);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);
@@ -706,7 +706,7 @@ namespace ao::library::test
     // Corrupt the DB by deleting cold data only
     auto coldDb = openDatabase(wtxn, "tracks_cold");
     REQUIRE(coldDb.writer(wtxn).del(id.raw()));
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);

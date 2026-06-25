@@ -484,7 +484,7 @@ namespace ao::query::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     auto aimerId = ao::test::requireValue(dict.put(wtxn, "Aimer"));
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto expr = parseOk(R"($artist ~ "Aimer" or #Aimer)");
     auto compiler = QueryCompiler{&dict};
@@ -960,7 +960,7 @@ namespace ao::query::test
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
     REQUIRE(dict.put(wtxn, "rock")); // Will get ID 1 (DictionaryId starts from 1)
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     // Query for #rock
     auto expr = parseOk("#rock");

@@ -42,7 +42,30 @@ namespace ao
   };
 
   template<typename T = void>
-  using Result = std::expected<T, Error>;
+  class [[nodiscard]] Result : public std::expected<T, Error>
+  {
+  public:
+    using Base = std::expected<T, Error>;
+
+    using Base::Base;
+
+    Result() = default;
+    Result(Result const&) = default;
+    Result(Result&&) = default;
+    Result& operator=(Result const&) = default;
+    Result& operator=(Result&&) = default;
+    ~Result() = default;
+
+    Result(Base const& value)
+      : Base{value}
+    {
+    }
+
+    Result(Base&& value)
+      : Base{std::move(value)}
+    {
+    }
+  };
 
   inline std::unexpected<Error> makeError(Error::Code code,
                                           std::string message = {},

@@ -141,7 +141,7 @@ namespace ao::rt::test
       auto const artistId = library.dictionary().getId("An Artist");
       auto const albumId = library.dictionary().getId("The Album");
 
-      txn.commit();
+      REQUIRE(txn.commit());
 
       return SeededReadModelLibrary{.trackId = trackId,
                                     .otherTrackId = otherTrackId,

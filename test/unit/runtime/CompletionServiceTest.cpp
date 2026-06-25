@@ -76,7 +76,7 @@ namespace ao::rt::test
       auto coldData = builder.serializeCold(txn, testLib.library().dictionary(), testLib.library().resources());
       REQUIRE(coldData);
       auto [id, _] = ao::test::requireValue(writer.createHotCold(*hotData, *coldData));
-      txn.commit();
+      REQUIRE(txn.commit());
       return id;
     }
 

@@ -34,8 +34,8 @@ namespace ao::library::test
     // Write an invalid sized struct (e.g. 1 byte) directly to the DB to simulate corruption or older version
     auto writer = db.writer(wtxn);
     auto invalidData = std::vector{std::byte{0x42}};
-    writer.create(static_cast<std::uint32_t>(MetaRecordId::Header), std::span<std::byte const>{invalidData});
-    wtxn.commit();
+    REQUIRE(writer.create(static_cast<std::uint32_t>(MetaRecordId::Header), std::span<std::byte const>{invalidData}));
+    REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const result = store.load(rtxn);
@@ -57,7 +57,7 @@ namespace ao::library::test
                              .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1234567890}},
                              .libraryId = {}};
     store.create(wtxn, header);
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const loadedResult = store.load(rtxn);
@@ -74,7 +74,7 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "meta");
     auto store = MetaStore{db};
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const result = store.load(rtxn);
@@ -96,12 +96,12 @@ namespace ao::library::test
                              .createdTime = std::chrono::sys_time{std::chrono::milliseconds{100}},
                              .libraryId = {}};
     store.create(wtxn, header);
-    wtxn.commit();
+    REQUIRE(wtxn.commit());
 
     auto wtxn2 = beginWriteTransaction(env);
     header.libraryVersion = 2;
     store.update(wtxn2, header);
-    wtxn2.commit();
+    REQUIRE(wtxn2.commit());
 
     auto rtxn = beginReadTransaction(env);
     auto const loadedResult = store.load(rtxn);

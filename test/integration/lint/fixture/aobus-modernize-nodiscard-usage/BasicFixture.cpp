@@ -104,6 +104,14 @@ namespace ao::tag
   };
 } // namespace ao::tag
 
+namespace ao
+{
+  // NEGATIVE
+  template<typename T = void>
+  class [[nodiscard]] Result
+  {};
+} // namespace ao
+
 // POSITIVE: FIX-TO: class [[nodiscard]] WriteTransaction
 class WriteTransaction
 {
