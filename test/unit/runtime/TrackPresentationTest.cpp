@@ -40,9 +40,9 @@ namespace ao::rt::test
   {
     auto spec = defaultTrackPresentationSpec();
 
-    REQUIRE(spec.id == "songs");
-    REQUIRE(spec.groupBy == TrackGroupKey::None);
-    REQUIRE(spec.redundantFields.empty());
+    CHECK(spec.id == "songs");
+    CHECK(spec.groupBy == TrackGroupKey::None);
+    CHECK(spec.redundantFields.empty());
   }
 
   TEST_CASE("songs preset has correct sort and visible fields", "[runtime][unit][presentation]")
@@ -52,7 +52,7 @@ namespace ao::rt::test
 
     auto const& spec = preset->spec;
 
-    REQUIRE(spec.groupBy == TrackGroupKey::None);
+    CHECK(spec.groupBy == TrackGroupKey::None);
 
     REQUIRE(spec.sortBy.size() == 5);
     CHECK(spec.sortBy[0].field == TrackSortField::Artist);
@@ -79,7 +79,7 @@ namespace ao::rt::test
 
     auto const& spec = preset->spec;
 
-    REQUIRE(spec.groupBy == TrackGroupKey::Album);
+    CHECK(spec.groupBy == TrackGroupKey::Album);
 
     REQUIRE(spec.sortBy.size() == 5);
     CHECK(spec.sortBy[0].field == TrackSortField::AlbumArtist);
@@ -107,7 +107,7 @@ namespace ao::rt::test
 
     auto const& spec = preset->spec;
 
-    REQUIRE(spec.groupBy == TrackGroupKey::Composer);
+    CHECK(spec.groupBy == TrackGroupKey::Composer);
 
     REQUIRE(spec.sortBy.size() == 8);
     CHECK(spec.sortBy[0].field == TrackSortField::Composer);
@@ -139,7 +139,7 @@ namespace ao::rt::test
 
     auto const& spec = preset->spec;
 
-    REQUIRE(spec.groupBy == TrackGroupKey::Work);
+    CHECK(spec.groupBy == TrackGroupKey::Work);
 
     REQUIRE(spec.sortBy.size() == 8);
     CHECK(spec.sortBy[0].field == TrackSortField::Composer);
@@ -171,7 +171,7 @@ namespace ao::rt::test
 
     auto const& spec = preset->spec;
 
-    REQUIRE(spec.groupBy == TrackGroupKey::None);
+    CHECK(spec.groupBy == TrackGroupKey::None);
 
     REQUIRE(spec.visibleFields.size() == 6);
     CHECK(spec.visibleFields[0] == TrackField::Title);

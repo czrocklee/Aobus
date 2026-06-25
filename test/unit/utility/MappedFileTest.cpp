@@ -29,23 +29,23 @@ namespace ao::utility::test
     {
       auto mappedFile = MappedFile{};
 
-      REQUIRE(mappedFile.isMapped() == false);
-      REQUIRE(mappedFile.bytes().empty() == true);
+      CHECK(mappedFile.isMapped() == false);
+      CHECK(mappedFile.bytes().empty() == true);
 
       auto const result = mappedFile.map(testFilePath);
-      REQUIRE(result.has_value());
-      REQUIRE(mappedFile.isMapped() == true);
+      CHECK(result.has_value());
+      CHECK(mappedFile.isMapped() == true);
 
       auto const bytes = mappedFile.bytes();
       REQUIRE(bytes.size() == testContent.size());
 
       auto const mappedStr = std::string_view{reinterpret_cast<char const*>(bytes.data()), bytes.size()};
-      REQUIRE(mappedStr == testContent);
+      CHECK(mappedStr == testContent);
 
       // Unmap
       mappedFile.unmap();
-      REQUIRE(mappedFile.isMapped() == false);
-      REQUIRE(mappedFile.bytes().empty() == true);
+      CHECK(mappedFile.isMapped() == false);
+      CHECK(mappedFile.bytes().empty() == true);
     }
 
     SECTION("Mapping failure for non-existent file")
@@ -53,9 +53,9 @@ namespace ao::utility::test
       auto mappedFile = MappedFile{};
       auto const result = mappedFile.map(tempDir / "non_existent.bin");
 
-      REQUIRE(!result.has_value());
-      REQUIRE(mappedFile.isMapped() == false);
-      REQUIRE(mappedFile.bytes().empty() == true);
+      CHECK(!result.has_value());
+      CHECK(mappedFile.isMapped() == false);
+      CHECK(mappedFile.bytes().empty() == true);
     }
 
     std::filesystem::remove_all(tempDir);

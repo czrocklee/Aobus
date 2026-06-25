@@ -692,14 +692,14 @@ namespace ao::query::test
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
     auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
-    REQUIRE(dict.put(wtxn, "Johann Sebastian Bach"));
+    CHECK(dict.put(wtxn, "Johann Sebastian Bach"));
 
     auto expr = parseOk(R"($artist ~ "Bach")");
     auto compiler = QueryCompiler{&dict};
 
     if (auto const plan = compileOk(compiler, expr); plan.dictionary != nullptr)
     {
-      REQUIRE(plan.dictionary == &dict);
+      CHECK(plan.dictionary == &dict);
       REQUIRE(plan.stringConstants.size() == 1);
       CHECK(plan.stringConstants.front() == "Bach");
       CHECK(plan.instructions.back().op == OpCode::Like);

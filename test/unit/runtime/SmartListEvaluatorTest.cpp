@@ -270,7 +270,7 @@ namespace ao::rt::test
 
       filtered.reload();
 
-      REQUIRE_FALSE(filtered.hasError());
+      CHECK_FALSE(filtered.hasError());
       REQUIRE(filtered.size() == 2);
       // flat_set maintains ID order: [first, second] since first(1) < second(2)
       CHECK(filtered.trackIdAt(0) == first);
@@ -476,9 +476,9 @@ namespace ao::rt::test
       invalidList.setExpression("   ");
       invalidList.reload();
 
-      REQUIRE_FALSE(validList.hasError());
-      REQUIRE(validList.size() == 1);
-      REQUIRE(invalidList.hasError());
+      CHECK_FALSE(validList.hasError());
+      CHECK(validList.size() == 1);
+      CHECK(invalidList.hasError());
       REQUIRE(invalidList.error().has_value());
       CHECK(invalidList.error()->code == Error::Code::FormatRejected);
       CHECK_FALSE(invalidList.error()->message.empty());
@@ -563,7 +563,7 @@ namespace ao::rt::test
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::BatchInserted);
       // t1 should be filtered out
-      REQUIRE(spy.events[0].batchIds.size() == 2);
+      CHECK(spy.events[0].batchIds.size() == 2);
       CHECK(std::ranges::contains(spy.events[0].batchIds, t2));
       CHECK(std::ranges::contains(spy.events[0].batchIds, t3));
       CHECK(list.size() == 2);

@@ -77,8 +77,8 @@ namespace ao::gtk::test
 
     SECTION("Models are created")
     {
-      CHECK(result.treeModelPtr);
-      CHECK(result.selectionModelPtr);
+      REQUIRE(result.treeModelPtr);
+      REQUIRE(result.selectionModelPtr);
       CHECK(result.selectionModelPtr->get_model() == result.treeModelPtr);
       CHECK(result.treeModelPtr->get_model() == result.storePtr);
     }

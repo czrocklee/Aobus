@@ -159,7 +159,7 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
 
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
-      REQUIRE(box != nullptr);
+      CHECK(box != nullptr);
     }
   }
 } // namespace ao::gtk::layout::test

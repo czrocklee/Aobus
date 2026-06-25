@@ -21,7 +21,7 @@ namespace ao::audio::test
   {
     auto const fixture = requireAudioFixture("basic_metadata.flac");
     auto const source = readFileBytes(fixture);
-    REQUIRE(source.size() > 1024);
+    CHECK(source.size() > 1024);
 
     SECTION("Truncated STREAMINFO fails during open")
     {

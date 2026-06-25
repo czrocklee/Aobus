@@ -510,7 +510,7 @@ namespace ao::rt::test
     // does not take effect until the queued task drains.
     h.onDevicesChangedCb(h.status.devices);
     h.executor.drain();
-    REQUIRE(h.playbackService.state().ready);
+    CHECK(h.playbackService.state().ready);
 
     bool startedFired = false;
     auto subStarted = h.playbackService.onStarted([&] { startedFired = true; });

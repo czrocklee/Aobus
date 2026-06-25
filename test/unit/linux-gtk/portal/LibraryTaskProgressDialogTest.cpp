@@ -47,7 +47,7 @@ namespace ao::gtk::test
       REQUIRE(progressBars.size() == 1);
       CHECK(progressBars.front()->get_fraction() == 0.0);
 
-      REQUIRE(findLabelByText(dialog, "Starting...") != nullptr);
+      CHECK(findLabelByText(dialog, "Starting...") != nullptr);
     }
 
     SECTION("updateProgress updates the progress label and fraction")
@@ -62,7 +62,7 @@ namespace ao::gtk::test
       REQUIRE(progressBars.size() == 1);
       CHECK(progressBars.front()->get_fraction() == 0.5);
 
-      REQUIRE(findLabelByText(dialog, "Halfway through") != nullptr);
+      CHECK(findLabelByText(dialog, "Halfway through") != nullptr);
     }
 
     SECTION("ready flips the title and enables the OK button")
@@ -86,7 +86,7 @@ namespace ao::gtk::test
       REQUIRE(progressBars.size() == 1);
       CHECK(progressBars.front()->get_fraction() == 1.0);
 
-      REQUIRE(findLabelByText(dialog, "All items processed.") != nullptr);
+      CHECK(findLabelByText(dialog, "All items processed.") != nullptr);
     }
 
     SECTION("clicking OK emits the response signal")

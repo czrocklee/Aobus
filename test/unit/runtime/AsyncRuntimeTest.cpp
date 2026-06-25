@@ -83,8 +83,8 @@ namespace ao::rt::test
     auto future = runtime.spawn(pingPongTask(&runtime, counter));
     auto const result = future.get();
 
-    REQUIRE(result != std::this_thread::get_id());
-    REQUIRE(counter.get() == 2);
+    CHECK(result != std::this_thread::get_id());
+    CHECK(counter.get() == 2);
 
     runtime.requestStop();
     runtime.join();
@@ -101,11 +101,11 @@ namespace ao::rt::test
       auto const silencer = StderrSilencer{};
 
       // Logging version - should not crash
-      REQUIRE_NOTHROW(runtime.spawnLogged(failingTask(&runtime)));
+      CHECK_NOTHROW(runtime.spawnLogged(failingTask(&runtime)));
 
       // Future version - should throw when getting result
       auto future = runtime.spawn(failingTask(&runtime));
-      REQUIRE_THROWS_AS(future.get(), Exception);
+      CHECK_THROWS_AS(future.get(), Exception);
 
       runtime.requestStop();
       runtime.join();
@@ -131,10 +131,10 @@ namespace ao::rt::test
         order.push_back(2);
       });
 
-    REQUIRE(order == std::vector<int>{1, 2, 3, 4, 5});
+    CHECK(order == std::vector<int>{1, 2, 3, 4, 5});
 
     executor.dispatch([&] { order.push_back(6); });
-    REQUIRE(order.back() == 6);
+    CHECK(order.back() == 6);
   }
 
   TEST_CASE("Immediate executor - a throwing task does not wedge the queue", "[async][unit][runtime]")
@@ -142,18 +142,18 @@ namespace ao::rt::test
     auto executor = ImmediateExecutor{};
     auto order = std::vector<int>{};
 
-    REQUIRE_THROWS_AS(executor.defer(
-                        [&]
-                        {
-                          executor.defer([&] { order.push_back(1); });
-                          throwException<Exception>("boom");
-                        }),
-                      Exception);
+    CHECK_THROWS_AS(executor.defer(
+                      [&]
+                      {
+                        executor.defer([&] { order.push_back(1); });
+                        throwException<Exception>("boom");
+                      }),
+                    Exception);
 
     // The task deferred before the throw stayed queued and runs in the next turn.
-    REQUIRE(order.empty());
+    CHECK(order.empty());
     executor.defer([&] { order.push_back(2); });
-    REQUIRE(order == std::vector<int>{1, 2});
+    CHECK(order == std::vector<int>{1, 2});
   }
 
   TEST_CASE("Signal - re-posting during a posted emission runs after the current emission", "[async][unit][runtime]")
@@ -177,7 +177,7 @@ namespace ao::rt::test
 
     signal.post(executor, 1);
 
-    REQUIRE(order == std::vector<std::int32_t>{1, -1, 2});
+    CHECK(order == std::vector<std::int32_t>{1, -1, 2});
   }
 
   TEST_CASE("Signal - handlers connected during emission join the next emission", "[async][unit][runtime]")
@@ -202,7 +202,7 @@ namespace ao::rt::test
       }));
 
     signal.emit(1);
-    REQUIRE(order == std::vector<std::int32_t>{1});
+    CHECK(order == std::vector<std::int32_t>{1});
 
     signal.emit(2);
     REQUIRE(order.size() == 1 + 1 + 16);

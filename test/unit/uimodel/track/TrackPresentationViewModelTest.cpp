@@ -269,7 +269,7 @@ namespace ao::uimodel::track::test
         .spec = rt::TrackPresentationSpec{.id = "temporary-view"},
       });
 
-      REQUIRE(store.specForId("temporary-view").has_value());
+      CHECK(store.specForId("temporary-view").has_value());
 
       store.removeCustomPresentation("temporary-view");
 

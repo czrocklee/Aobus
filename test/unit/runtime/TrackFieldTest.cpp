@@ -27,7 +27,7 @@ namespace ao::rt::test
   {
     auto const defs = trackFieldDefinitions();
 
-    REQUIRE(defs.size() == kTrackFieldCount);
+    CHECK(defs.size() == kTrackFieldCount);
   }
 
   TEST_CASE("TrackField registry has no duplicate ids", "[runtime][unit][trackfield]")

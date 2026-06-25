@@ -573,7 +573,7 @@ namespace ao::library::test
 
     // DictionaryStore assigns: replaygain->1, isrc->2
     auto const optValue = view.customMetadata().get(DictionaryId{2});
-    CHECK(optValue.has_value() == true);
+    REQUIRE(optValue.has_value());
     CHECK(*optValue == "USSM19999999");
   }
 
@@ -598,7 +598,7 @@ namespace ao::library::test
 
     // "ISRC" is stored at ID 1, looking up by ID 1 returns the value
     auto const optValue = view.customMetadata().get(DictionaryId{1});
-    CHECK(optValue.has_value() == true);
+    REQUIRE(optValue.has_value());
     CHECK(*optValue == "USSM19999999");
   }
 

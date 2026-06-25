@@ -51,7 +51,7 @@ namespace ao::gtk::test
 
     auto statusLabel = NowPlayingStatusLabel{playback};
     auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&statusLabel.widget());
-    REQUIRE(gtkLabel);
+    CHECK(gtkLabel);
 
     // Just verify it wires up and doesn't crash
     auto desc = rt::PlaybackService::PlaybackRequest{

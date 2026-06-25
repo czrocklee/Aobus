@@ -134,7 +134,7 @@ namespace ao::rt::test
       REQUIRE(completed.waitUntil(true));
     }
 
-    REQUIRE(completed.get());
+    CHECK(completed.get());
     runtime.requestStop();
     runtime.join();
   }
@@ -163,7 +163,7 @@ namespace ao::rt::test
       std::this_thread::yield();
     }
 
-    REQUIRE_FALSE(completed.get());
+    CHECK_FALSE(completed.get());
     runtime.requestStop();
     runtime.join();
   }
@@ -182,7 +182,7 @@ namespace ao::rt::test
 
     executor.runQueued();
 
-    REQUIRE_FALSE(completed.get());
+    CHECK_FALSE(completed.get());
     runtime.requestStop();
     runtime.join();
   }
@@ -201,7 +201,7 @@ namespace ao::rt::test
       REQUIRE(completed.waitUntil(1));
     }
 
-    REQUIRE(completed.get() == 1);
+    CHECK(completed.get() == 1);
     runtime.requestStop();
     runtime.join();
   }

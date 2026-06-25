@@ -81,10 +81,10 @@ namespace ao::library::test
   TEST_CASE("ListView - Invalid Data", "[library][unit][list]")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte*>(nullptr), 100};
-    REQUIRE_THROWS_AS(ListView{nullSpan}, Exception);
+    CHECK_THROWS_AS(ListView{nullSpan}, Exception);
 
     auto const smallData = std::vector<std::byte>(10);
-    REQUIRE_THROWS_AS(ListView{smallData}, Exception);
+    CHECK_THROWS_AS(ListView{smallData}, Exception);
   }
 
   TEST_CASE("ListView - isSmart", "[library][unit][list]")

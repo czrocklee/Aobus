@@ -30,9 +30,9 @@ namespace ao::rt::test
       auto const& appLogger = Log::appLogger();
       auto const& audioLogger = Log::audioLogger();
 
-      REQUIRE(Log::isInitialized());
-      REQUIRE(appLogger != nullptr);
-      REQUIRE(audioLogger != nullptr);
+      CHECK(Log::isInitialized());
+      CHECK(appLogger != nullptr);
+      CHECK(audioLogger != nullptr);
 
       // Write a test log
       APP_LOG_DEBUG("Test app debug log");
@@ -43,7 +43,7 @@ namespace ao::rt::test
 
       // Verify log file was created
       auto const logFile = tempDir / "app.log";
-      REQUIRE(std::filesystem::exists(logFile));
+      CHECK(std::filesystem::exists(logFile));
 
       // Verify content (flush should have happened during shutdown)
       auto ifs = std::ifstream{logFile};
@@ -70,9 +70,9 @@ namespace ao::rt::test
 
       Log::init(LogLevel::Warn, "");
 
-      REQUIRE(Log::isInitialized());
-      REQUIRE(std::filesystem::exists(defaultDir));
-      REQUIRE(std::filesystem::exists(defaultDir / "app.log"));
+      CHECK(Log::isInitialized());
+      CHECK(std::filesystem::exists(defaultDir));
+      CHECK(std::filesystem::exists(defaultDir / "app.log"));
 
       // Use toSpdlog directly to cover it
       auto const loc = std::source_location::current();

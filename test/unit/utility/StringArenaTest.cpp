@@ -91,7 +91,7 @@ namespace ao::utility::test
 
     arena.intern("one");
     arena.intern("two");
-    REQUIRE(arena.size() == 2);
+    CHECK(arena.size() == 2);
 
     arena.clear();
     CHECK(arena.empty());

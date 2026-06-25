@@ -126,7 +126,7 @@ namespace ao::rt::test
                                .mtime(987654321)
                                .status(library::FileStatus::Missing)
                                .serialize();
-      REQUIRE(library.manifest().writer(txn).put(kTrackUri, manifestPayload));
+      CHECK(library.manifest().writer(txn).put(kTrackUri, manifestPayload));
 
       auto manualListBuilder = library::ListBuilder::createNew();
       manualListBuilder.name("Manual List").description("Pinned songs").tracks().add(trackId);
@@ -253,7 +253,7 @@ namespace ao::rt::test
     auto const smartIt =
       std::ranges::find_if(nodes, [&](ListNode const& node) { return node.id == seeded.smartListId; });
     REQUIRE(smartIt != nodes.end());
-    REQUIRE(smartIt->parentId != kInvalidListId);
+    CHECK(smartIt->parentId != kInvalidListId);
     CHECK(smartIt->parentId == seeded.manualListId);
     CHECK(smartIt->name == "Smart List");
     CHECK(smartIt->kind == ListNodeKind::Smart);

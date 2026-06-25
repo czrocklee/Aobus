@@ -31,8 +31,8 @@ namespace ao::audio::test
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
-    REQUIRE(info.sourceFormat.sampleRate > 0);
-    REQUIRE(info.duration > std::chrono::milliseconds{0});
+    CHECK(info.sourceFormat.sampleRate > 0);
+    CHECK(info.duration > std::chrono::milliseconds{0});
 
     auto const firstBlock = decoder.readNextBlock();
     REQUIRE(firstBlock);
@@ -53,7 +53,7 @@ namespace ao::audio::test
 
     auto decoder = FlacDecoderSession{Format{.bitDepth = 24, .isInterleaved = true}};
     REQUIRE(decoder.open(testFile));
-    REQUIRE(decoder.readNextBlock());
+    CHECK(decoder.readNextBlock());
 
     auto paddedDecoder = FlacDecoderSession{Format{.bitDepth = 32, .isInterleaved = true}};
     REQUIRE(paddedDecoder.open(testFile));

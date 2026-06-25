@@ -177,6 +177,7 @@ namespace ao::gtk::test
 
       // Text-backed fields share the same stored slot as stringField() — no
       // separate cache, so displayText() returns the identical pointer.
+      REQUIRE(row1Ptr->displayText(rt::TrackField::Artist) != nullptr);
       CHECK(row1Ptr->displayText(rt::TrackField::Artist) == row1Ptr->stringField(rt::TrackField::Artist));
       CHECK(*row1Ptr->displayText(rt::TrackField::Artist) == "New Artist");
       CHECK(row1Ptr->displayText(static_cast<rt::TrackField>(255)) == nullptr);
@@ -249,7 +250,7 @@ namespace ao::gtk::test
       auto provider = TrackRowCache{testLibrary.runtime().library()};
 
       auto const row1Ptr = provider.trackRow(id1);
-      REQUIRE(row1Ptr);
+      CHECK(row1Ptr);
       provider.invalidate(id1);
 
       auto const row1NewPtr = provider.trackRow(id1);

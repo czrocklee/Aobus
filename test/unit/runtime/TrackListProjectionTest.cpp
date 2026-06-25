@@ -302,7 +302,7 @@ namespace ao::rt::test
         auto reader = env.lib.library().tracks().reader(txn);
         auto const optV = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
 
-        CHECK(optV.has_value());
+        REQUIRE(optV.has_value());
         CHECK(optV->metadata().year() == expectedYear);
       }
     };

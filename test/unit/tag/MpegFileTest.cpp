@@ -239,7 +239,7 @@ namespace ao::tag::mpeg::test
     auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
-    REQUIRE(builder.property().duration() >= std::chrono::seconds{1});
+    CHECK(builder.property().duration() >= std::chrono::seconds{1});
     CHECK(builder.property().duration() <= std::chrono::milliseconds{1010});
     CHECK(builder.property().codec() == AudioCodec::Mp3);
     CHECK(builder.property().bitDepth() == 16);

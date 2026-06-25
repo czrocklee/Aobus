@@ -412,52 +412,52 @@ namespace ao::query::test
   {
     SECTION("Empty and Whitespace")
     {
-      REQUIRE(parseFails(""));
-      REQUIRE(parseFails("   "));
+      CHECK(parseFails(""));
+      CHECK(parseFails("   "));
     }
 
     SECTION("Variable Token Rules")
     {
-      REQUIRE(parseFails("$1bad"));
-      REQUIRE(parseFails("$"));
-      REQUIRE(parseFails("@"));
-      REQUIRE(parseFails("#"));
-      REQUIRE(parseFails("%"));
+      CHECK(parseFails("$1bad"));
+      CHECK(parseFails("$"));
+      CHECK(parseFails("@"));
+      CHECK(parseFails("#"));
+      CHECK(parseFails("%"));
     }
 
     SECTION("Unterminated Quotes")
     {
-      REQUIRE(parseFails("'Bach"));
-      REQUIRE(parseFails("\"Bach"));
+      CHECK(parseFails("'Bach"));
+      CHECK(parseFails("\"Bach"));
     }
 
     SECTION("Malformed Parentheses")
     {
-      REQUIRE(parseFails("()"));
-      REQUIRE(parseFails("($artist = Bach"));
+      CHECK(parseFails("()"));
+      CHECK(parseFails("($artist = Bach"));
     }
 
     SECTION("Malformed Lists")
     {
-      REQUIRE(parseFails("$artist in []"));
-      REQUIRE(parseFails("$artist in [Bach,]"));
-      REQUIRE(parseFails("$artist in [Bach Mozart]"));
+      CHECK(parseFails("$artist in []"));
+      CHECK(parseFails("$artist in [Bach,]"));
+      CHECK(parseFails("$artist in [Bach Mozart]"));
     }
 
     SECTION("Malformed Ranges")
     {
-      REQUIRE(parseFails("$year in 1990.."));
-      REQUIRE(parseFails("$year in ..1999"));
-      REQUIRE(parseFails("$year in 1990...1999"));
+      CHECK(parseFails("$year in 1990.."));
+      CHECK(parseFails("$year in ..1999"));
+      CHECK(parseFails("$year in 1990...1999"));
     }
 
     SECTION("Invalid Escape Sequences")
     {
-      REQUIRE(parseFails(R"($title = "a \x")"));
-      REQUIRE(parseFails(R"($title = 'a \x')"));
-      REQUIRE(parseFails(R"($title = "a \u")"));
-      REQUIRE(parseFails(R"(%"bad\")"));
-      REQUIRE(parseFails(R"xy(%"trailing\)xy"));
+      CHECK(parseFails(R"($title = "a \x")"));
+      CHECK(parseFails(R"($title = 'a \x')"));
+      CHECK(parseFails(R"($title = "a \u")"));
+      CHECK(parseFails(R"(%"bad\")"));
+      CHECK(parseFails(R"xy(%"trailing\)xy"));
     }
   }
 

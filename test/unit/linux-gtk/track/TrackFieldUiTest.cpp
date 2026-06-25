@@ -165,7 +165,7 @@ namespace ao::gtk::test
     auto const low = Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(1000)};
     auto const high = Raw{std::in_place_type<std::uint32_t>, static_cast<std::uint32_t>(1999)};
 
-    REQUIRE(def->formatValue(low) == def->formatValue(high));
+    CHECK(def->formatValue(low) == def->formatValue(high));
     CHECK(low != high);
   }
 

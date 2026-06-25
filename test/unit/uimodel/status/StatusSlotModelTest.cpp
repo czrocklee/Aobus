@@ -132,7 +132,7 @@ namespace ao::uimodel::status::test
 
     SECTION("auto dismiss restores selection info")
     {
-      REQUIRE(model.onNotificationPosted(notification(rt::NotificationSeverity::Info, "Saved playlist")));
+      CHECK(model.onNotificationPosted(notification(rt::NotificationSeverity::Info, "Saved playlist")));
 
       auto const state = model.onAutoDismiss();
 

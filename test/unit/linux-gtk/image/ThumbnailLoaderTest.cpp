@@ -88,8 +88,8 @@ namespace ao::gtk::test
       REQUIRE(secondRequest);
 
       REQUIRE(pumpUntil([&] { return firstDone && secondDone; }));
-      REQUIRE(firstPtr);
-      REQUIRE(secondPtr);
+      CHECK(firstPtr);
+      CHECK(secondPtr);
       // Both callbacks receive the very same decoded object: only one decode ran.
       CHECK(firstPtr.get() == secondPtr.get());
     }

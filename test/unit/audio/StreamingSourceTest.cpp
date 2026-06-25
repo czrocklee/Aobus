@@ -43,9 +43,9 @@ namespace ao::audio::test
 
         auto sourcePtr = std::make_unique<StreamingSource>(
           std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-        REQUIRE(sourcePtr->initialize());
-        REQUIRE(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
-        REQUIRE(errorCount.load() == 0);
+        CHECK(sourcePtr->initialize());
+        CHECK(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
+        CHECK(errorCount.load() == 0);
       }
 
       SECTION("EOF during preroll succeeds without thread error")
@@ -56,9 +56,9 @@ namespace ao::audio::test
 
         auto sourcePtr = std::make_unique<StreamingSource>(
           std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-        REQUIRE(sourcePtr->initialize());
-        REQUIRE(sourcePtr->isDrained());
-        REQUIRE(errorCount.load() == 0);
+        CHECK(sourcePtr->initialize());
+        CHECK(sourcePtr->isDrained());
+        CHECK(errorCount.load() == 0);
       }
 
       SECTION("Preroll decode failure returns error")
@@ -69,8 +69,8 @@ namespace ao::audio::test
         auto sourcePtr = std::make_unique<StreamingSource>(
           std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
         auto result = sourcePtr->initialize();
-        REQUIRE_FALSE(result);
-        REQUIRE(errorCount.load() == 1);
+        CHECK_FALSE(result);
+        CHECK(errorCount.load() == 1);
       }
     }
 
@@ -82,13 +82,13 @@ namespace ao::audio::test
 
       auto sourcePtr = std::make_unique<StreamingSource>(
         std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-      REQUIRE(sourcePtr->initialize());
+      CHECK(sourcePtr->initialize());
 
       SECTION("Successful seek clears and re-prerolls")
       {
-        REQUIRE(sourcePtr->seek(std::chrono::milliseconds{50}));
-        REQUIRE(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
-        REQUIRE(errorCount.load() == 0);
+        CHECK(sourcePtr->seek(std::chrono::milliseconds{50}));
+        CHECK(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
+        CHECK(errorCount.load() == 0);
       }
 
       SECTION("Failed seek returns error")
@@ -99,11 +99,11 @@ namespace ao::audio::test
 
         auto source2Ptr = std::make_unique<StreamingSource>(
           std::move(decoder2Ptr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-        REQUIRE(source2Ptr->initialize());
+        CHECK(source2Ptr->initialize());
 
         auto result = source2Ptr->seek(std::chrono::milliseconds{50});
-        REQUIRE_FALSE(result);
-        REQUIRE(errorCount.load() >= 1);
+        CHECK_FALSE(result);
+        CHECK(errorCount.load() >= 1);
       }
     }
 
@@ -118,7 +118,7 @@ namespace ao::audio::test
 
       auto sourcePtr = std::make_unique<StreamingSource>(
         std::move(decoderPtr), info, onError, std::chrono::milliseconds{50}, std::chrono::milliseconds{500});
-      REQUIRE(sourcePtr->initialize());
+      CHECK(sourcePtr->initialize());
 
       // Wait for async failure — polling with timeout, exits as soon as error fires
       auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
@@ -128,7 +128,7 @@ namespace ao::audio::test
         std::this_thread::yield();
       }
 
-      REQUIRE(errorCount.load() == 1);
+      CHECK(errorCount.load() == 1);
     }
 
     SECTION("Buffered duration and isDrained track EOF plus ring exhaustion")
@@ -139,11 +139,11 @@ namespace ao::audio::test
 
       auto sourcePtr = std::make_unique<StreamingSource>(
         std::move(decoderPtr), info, onError, std::chrono::milliseconds{5}, std::chrono::milliseconds{500});
-      REQUIRE(sourcePtr->initialize());
+      CHECK(sourcePtr->initialize());
 
       // Consume data
       auto out = std::vector<std::byte>(20);
-      REQUIRE(sourcePtr->read(out) == 20);
+      CHECK(sourcePtr->read(out) == 20);
 
       // Wait for EOF to be processed — polling with timeout
       auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
@@ -153,8 +153,8 @@ namespace ao::audio::test
         std::this_thread::yield();
       }
 
-      REQUIRE(sourcePtr->isDrained());
-      REQUIRE(sourcePtr->bufferedDuration() == std::chrono::milliseconds{0});
+      CHECK(sourcePtr->isDrained());
+      CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{0});
     }
   }
 } // namespace ao::audio::test

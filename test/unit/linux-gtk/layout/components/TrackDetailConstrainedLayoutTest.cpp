@@ -878,7 +878,7 @@ namespace ao::gtk::layout::test
                     }
                   });
 
-      REQUIRE(editors.size() >= 2);
+      CHECK(editors.size() >= 2);
 
       for (auto* const editor : editors)
       {
@@ -896,7 +896,7 @@ namespace ao::gtk::layout::test
                     }
                   });
 
-      REQUIRE_FALSE(technicalEditors.empty());
+      CHECK_FALSE(technicalEditors.empty());
 
       for (auto* const editor : technicalEditors)
       {

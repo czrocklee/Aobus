@@ -68,7 +68,7 @@ namespace ao::library::test
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
     REQUIRE(it != reader.end());
-    REQUIRE((*it).first == id);
+    CHECK((*it).first == id);
   }
 
   TEST_CASE("TrackStore - read by id", "[library][unit][track]")
@@ -95,7 +95,7 @@ namespace ao::library::test
     // Read by ID
     auto rtxn = beginReadTransaction(env);
     auto optFound = store.reader(rtxn).get(id);
-    REQUIRE(optFound.has_value());
+    CHECK(optFound.has_value());
   }
 
   TEST_CASE("TrackStore - update", "[library][unit][track]")
@@ -160,7 +160,7 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
-    REQUIRE(it == reader.end());
+    CHECK(it == reader.end());
   }
 
   TEST_CASE("TrackStore - create multiple tracks unique IDs", "[library][unit][track]")
@@ -187,9 +187,9 @@ namespace ao::library::test
     REQUIRE(wtxn2.commit());
 
     // All IDs should be unique
-    REQUIRE(id1 != id2);
-    REQUIRE(id2 != id3);
-    REQUIRE(id1 != id3);
+    CHECK(id1 != id2);
+    CHECK(id2 != id3);
+    CHECK(id1 != id3);
   }
 
   TEST_CASE("TrackStore - hot/cold createHotCold", "[library][unit][track]")
@@ -226,9 +226,9 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto optView = store.reader(rtxn).get(id);
     REQUIRE(optView.has_value());
-    REQUIRE(optView->property().duration() == std::chrono::minutes{3});
-    REQUIRE(optView->metadata().trackNumber() == 1);
-    REQUIRE(optView->metadata().trackTotal() == 10);
+    CHECK(optView->property().duration() == std::chrono::minutes{3});
+    CHECK(optView->metadata().trackNumber() == 1);
+    CHECK(optView->metadata().trackTotal() == 10);
   }
 
   TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[library][unit][track]")
@@ -282,8 +282,8 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto optView = store.reader(rtxn).get(id);
     REQUIRE(optView.has_value());
-    REQUIRE(optView->property().duration() == std::chrono::seconds{200});
-    REQUIRE(optView->metadata().trackNumber() == 2);
+    CHECK(optView->property().duration() == std::chrono::seconds{200});
+    CHECK(optView->metadata().trackNumber() == 2);
   }
 
   TEST_CASE("TrackStore - hot/cold remove", "[library][unit][track]")
@@ -316,7 +316,7 @@ namespace ao::library::test
     // Verify both are gone
     auto rtxn = beginReadTransaction(env);
     auto optView = store.reader(rtxn).get(id);
-    REQUIRE_FALSE(optView.has_value());
+    CHECK_FALSE(optView.has_value());
   }
 
   TEST_CASE("TrackStore - Writer get with LoadMode", "[library][unit][track]")
@@ -348,15 +348,15 @@ namespace ao::library::test
     auto writer = store.writer(wtxn3);
     auto optHot = writer.get(id, TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optHot.has_value());
-    REQUIRE(optHot->isHotValid());
-    REQUIRE(!optHot->isColdValid());
+    CHECK(optHot->isHotValid());
+    CHECK(!optHot->isColdValid());
 
     auto optCold = writer.get(id, TrackStore::Reader::LoadMode::Cold);
     REQUIRE(optCold.has_value());
-    REQUIRE(!optCold->isHotValid());
-    REQUIRE(optCold->isColdValid());
-    REQUIRE(optCold->property().duration() == std::chrono::minutes{4});
-    REQUIRE(optCold->coverArt().count() == 0);
+    CHECK(!optCold->isHotValid());
+    CHECK(optCold->isColdValid());
+    CHECK(optCold->property().duration() == std::chrono::minutes{4});
+    CHECK(optCold->coverArt().count() == 0);
   }
 
   TEST_CASE("TrackStore - unified TrackView iteration", "[library][unit][track]")
@@ -395,7 +395,7 @@ namespace ao::library::test
       ++count;
     }
 
-    REQUIRE(count == 3);
+    CHECK(count == 3);
   }
 
   TEST_CASE("TrackStore - LoadMode::Hot iteration", "[library][unit][track]")
@@ -430,9 +430,9 @@ namespace ao::library::test
     auto it = reader.begin(TrackStore::Reader::LoadMode::Hot);
     REQUIRE(it != reader.end());
     auto&& [trackId, trackView] = *it;
-    REQUIRE(trackId == id);
-    REQUIRE(trackView.isHotValid());
-    REQUIRE(!trackView.isColdValid());
+    CHECK(trackId == id);
+    CHECK(trackView.isHotValid());
+    CHECK(!trackView.isColdValid());
   }
 
   TEST_CASE("TrackStore - LoadMode::Cold iteration", "[library][unit][track]")
@@ -465,9 +465,9 @@ namespace ao::library::test
     auto it = reader.begin(TrackStore::Reader::LoadMode::Cold);
     REQUIRE(it != reader.end());
     auto&& [trackId, trackView] = *it;
-    REQUIRE(trackId == id);
-    REQUIRE(!trackView.isHotValid());
-    REQUIRE(trackView.isColdValid());
+    CHECK(trackId == id);
+    CHECK(!trackView.isHotValid());
+    CHECK(trackView.isColdValid());
   }
 
   TEST_CASE("TrackStore - LoadMode::Both iteration", "[library][unit][track]")
@@ -500,11 +500,11 @@ namespace ao::library::test
     auto it = reader.begin(TrackStore::Reader::LoadMode::Both);
     REQUIRE(it != reader.end());
     auto&& [trackId, trackView] = *it;
-    REQUIRE(trackId == id);
-    REQUIRE(trackView.isHotValid());
-    REQUIRE(trackView.isColdValid());
-    REQUIRE(trackView.property().duration() == std::chrono::minutes{5});
-    REQUIRE(trackView.metadata().trackNumber() == 0); // default
+    CHECK(trackId == id);
+    CHECK(trackView.isHotValid());
+    CHECK(trackView.isColdValid());
+    CHECK(trackView.property().duration() == std::chrono::minutes{5});
+    CHECK(trackView.metadata().trackNumber() == 0); // default
   }
 
   TEST_CASE("TrackStore - LoadMode::Hot get by id", "[library][unit][track]")
@@ -534,9 +534,9 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto optView = store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optView.has_value());
-    REQUIRE(optView->isHotValid());
-    REQUIRE(!optView->isColdValid());
-    REQUIRE(optView->metadata().artistId() == DictionaryId{42});
+    CHECK(optView->isHotValid());
+    CHECK(!optView->isColdValid());
+    CHECK(optView->metadata().artistId() == DictionaryId{42});
   }
 
   TEST_CASE("TrackStore - LoadMode::Cold get by id", "[library][unit][track]")
@@ -567,9 +567,9 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto optView = store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Cold);
     REQUIRE(optView.has_value());
-    REQUIRE(!optView->isHotValid());
-    REQUIRE(optView->isColdValid());
-    REQUIRE(optView->property().duration() == std::chrono::minutes{6});
+    CHECK(!optView->isHotValid());
+    CHECK(optView->isColdValid());
+    CHECK(optView->property().duration() == std::chrono::minutes{6});
   }
 
   TEST_CASE("TrackStore - LoadMode::Cold multi-record iteration", "[library][unit][track]")
@@ -616,19 +616,19 @@ namespace ao::library::test
     {
       auto&& [trackId, trackView] = *it;
       collectedIds.push_back(trackId);
-      REQUIRE(!trackView.isHotValid());
-      REQUIRE(trackView.isColdValid());
+      CHECK(!trackView.isHotValid());
+      CHECK(trackView.isColdValid());
       ++it;
       ++count;
     }
 
-    REQUIRE(count == 5);
+    CHECK(count == 5);
     REQUIRE(collectedIds.size() == 5);
 
     // Verify all IDs match
     for (std::int32_t i = 0; i < 5; ++i)
     {
-      REQUIRE(collectedIds[i].raw() == ids[i].raw());
+      CHECK(collectedIds[i].raw() == ids[i].raw());
     }
   }
 
@@ -647,7 +647,7 @@ namespace ao::library::test
     auto it = reader.begin(TrackStore::Reader::LoadMode::Cold);
     auto endIt = reader.end(TrackStore::Reader::LoadMode::Cold);
 
-    REQUIRE(it == endIt);
+    CHECK(it == endIt);
   }
 
   TEST_CASE("TrackStore - iterator equality across modes", "[library][unit][track]")
@@ -680,14 +680,14 @@ namespace ao::library::test
     auto hotBegin = reader.begin(TrackStore::Reader::LoadMode::Hot);
     auto bothBegin = reader.begin(TrackStore::Reader::LoadMode::Both);
 
-    REQUIRE(coldBegin != hotBegin);
-    REQUIRE(hotBegin != bothBegin);
-    REQUIRE(coldBegin != bothBegin);
+    CHECK(coldBegin != hotBegin);
+    CHECK(hotBegin != bothBegin);
+    CHECK(coldBegin != bothBegin);
 
     // end() for different modes must NOT equal begin() of different mode
-    REQUIRE(reader.end() != coldBegin);
-    REQUIRE(reader.end() != hotBegin);
-    REQUIRE(reader.end() != bothBegin);
+    CHECK(reader.end() != coldBegin);
+    CHECK(reader.end() != hotBegin);
+    CHECK(reader.end() != bothBegin);
   }
 
   TEST_CASE("TrackStore - read with missing cold data returns NotFound", "[library][unit][track]")
@@ -713,6 +713,6 @@ namespace ao::library::test
 
     // Should return nullopt because cold data is missing
     auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
-    REQUIRE_FALSE(optView.has_value());
+    CHECK_FALSE(optView.has_value());
   }
 } // namespace ao::library::test

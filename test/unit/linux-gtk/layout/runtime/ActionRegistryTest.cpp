@@ -66,7 +66,7 @@ namespace ao::gtk::layout::test
       REQUIRE_FALSE(registry.registerAction(descriptor1, nullptr));
 
       auto const all = registry.descriptors();
-      REQUIRE(all.size() == 1);
+      CHECK(all.size() == 1);
     }
 
     SECTION("canBind rejects if anchor is required but not provided")

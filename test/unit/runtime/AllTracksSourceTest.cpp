@@ -48,38 +48,38 @@ namespace ao::rt::test
       auto const txn = testLib.library().readTransaction();
       source.reloadFromStore(txn);
 
-      REQUIRE(listener.resets == 1);
-      REQUIRE(source.size() == 2);
+      CHECK(listener.resets == 1);
+      CHECK(source.size() == 2);
 
       auto const optI1 = source.indexOf(t1);
       auto const optI2 = source.indexOf(t2);
 
       REQUIRE(optI1);
       REQUIRE(optI2);
-      REQUIRE(source.trackIdAt(*optI1) == t1);
-      REQUIRE(source.trackIdAt(*optI2) == t2);
+      CHECK(source.trackIdAt(*optI1) == t1);
+      CHECK(source.trackIdAt(*optI2) == t2);
     }
 
     SECTION("notifyInserted adds item and notifies")
     {
       source.notifyInserted(TrackId{10});
       REQUIRE(listener.inserted.size() == 1);
-      REQUIRE(listener.inserted[0] == std::pair{TrackId{10}, std::size_t{0}});
-      REQUIRE(source.size() == 1);
+      CHECK(listener.inserted[0] == std::pair{TrackId{10}, std::size_t{0}});
+      CHECK(source.size() == 1);
 
       source.notifyInserted(TrackId{20});
       REQUIRE(listener.inserted.size() == 2);
-      REQUIRE(listener.inserted[1] == std::pair{TrackId{20}, std::size_t{1}});
-      REQUIRE(source.size() == 2);
+      CHECK(listener.inserted[1] == std::pair{TrackId{20}, std::size_t{1}});
+      CHECK(source.size() == 2);
 
       // Insert smaller id, should be at index 0
       source.notifyInserted(TrackId{5});
       REQUIRE(listener.inserted.size() == 3);
-      REQUIRE(listener.inserted[2] == std::pair{TrackId{5}, std::size_t{0}});
+      CHECK(listener.inserted[2] == std::pair{TrackId{5}, std::size_t{0}});
 
       // Duplicate insert shouldn't trigger
       source.notifyInserted(TrackId{10});
-      REQUIRE(listener.inserted.size() == 3);
+      CHECK(listener.inserted.size() == 3);
     }
 
     SECTION("notifyRemoved removes item and notifies")
@@ -91,14 +91,14 @@ namespace ao::rt::test
 
       source.notifyRemoved(TrackId{10});
       REQUIRE(listener.removed.size() == 1);
-      REQUIRE(listener.removed[0] == std::pair{TrackId{10}, std::size_t{0}});
-      REQUIRE(source.size() == 1);
+      CHECK(listener.removed[0] == std::pair{TrackId{10}, std::size_t{0}});
+      CHECK(source.size() == 1);
 
       // Non-existent remove shouldn't trigger
       source.notifyRemoved(TrackId{99});
-      REQUIRE(listener.removed.size() == 1);
+      CHECK(listener.removed.size() == 1);
 
-      REQUIRE(source.indexOf(TrackId{10}) == std::nullopt);
+      CHECK(source.indexOf(TrackId{10}) == std::nullopt);
     }
 
     SECTION("clear empties the source and resets")
@@ -108,9 +108,9 @@ namespace ao::rt::test
 
       source.clear();
 
-      REQUIRE(source.size() == 0);
-      REQUIRE(listener.resets == 1);
-      REQUIRE(source.indexOf(TrackId{10}) == std::nullopt);
+      CHECK(source.size() == 0);
+      CHECK(listener.resets == 1);
+      CHECK(source.indexOf(TrackId{10}) == std::nullopt);
     }
   }
 } // namespace ao::rt::test

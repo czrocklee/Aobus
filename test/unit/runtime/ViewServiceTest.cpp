@@ -469,8 +469,8 @@ namespace ao::rt::test
       CHECK(snap2.filterExpression == "$year > 2025");
       CHECK(filterStr == "$year > 2025");
       CHECK(projectionChangedCount == 1);
-      CHECK(updatedFilteredProjectionPtr == filteredProjectionPtr);
       REQUIRE(updatedFilteredProjectionPtr != nullptr);
+      CHECK(updatedFilteredProjectionPtr == filteredProjectionPtr);
       CHECK(updatedFilteredProjectionPtr->size() == 0);
 
       // clearing filter removes adHocSource
@@ -480,8 +480,8 @@ namespace ao::rt::test
       CHECK(snap3.filterExpression.empty());
       CHECK(filterStr.empty());
       CHECK(projectionChangedCount == 2);
-      CHECK(unfilteredProjectionPtr != filteredProjectionPtr);
       REQUIRE(unfilteredProjectionPtr != nullptr);
+      CHECK(unfilteredProjectionPtr != filteredProjectionPtr);
       REQUIRE(unfilteredProjectionPtr->size() == 2);
       CHECK(unfilteredProjectionPtr->indexOf(oldTrackId).has_value());
       CHECK(unfilteredProjectionPtr->indexOf(newTrackId).has_value());

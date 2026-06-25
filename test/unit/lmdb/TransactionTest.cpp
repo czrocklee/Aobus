@@ -27,7 +27,7 @@ namespace ao::lmdb::test
     // Then use read transaction
     auto txn = beginReadTransaction(env);
     auto reader = db.reader(txn);
-    REQUIRE(reader.begin() == reader.end()); // Empty DB
+    CHECK(reader.begin() == reader.end()); // Empty DB
   }
 
   TEST_CASE("ReadTransaction - begin returns transaction", "[lmdb][unit][transaction]")
@@ -37,7 +37,7 @@ namespace ao::lmdb::test
 
     auto txn = ReadTransaction::begin(env);
 
-    REQUIRE(txn);
+    CHECK(txn);
   }
 
   TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][unit][transaction]")
@@ -59,7 +59,7 @@ namespace ao::lmdb::test
     // Should be able to start new transaction
     auto txn2 = beginReadTransaction(env);
     auto reader = db.reader(txn2);
-    REQUIRE(reader.begin() == reader.end());
+    CHECK(reader.begin() == reader.end());
   }
 
   TEST_CASE("ReadTransaction - move", "[lmdb][unit][transaction]")
@@ -76,7 +76,7 @@ namespace ao::lmdb::test
     auto txn2 = ReadTransaction{std::move(txn1)};
     // Verify moved transaction is valid by using it
     auto reader = db.reader(txn2);
-    REQUIRE(reader.begin() == reader.end());
+    CHECK(reader.begin() == reader.end());
   }
 
   // ============================================================================
@@ -100,7 +100,7 @@ namespace ao::lmdb::test
 
     auto txn = WriteTransaction::begin(env);
 
-    REQUIRE(txn);
+    CHECK(txn);
   }
 
   TEST_CASE("WriteTransaction - commit", "[lmdb][unit][transaction]")

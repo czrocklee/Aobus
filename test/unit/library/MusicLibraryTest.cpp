@@ -29,14 +29,14 @@ namespace ao::library::test
     auto const& first = *firstResult;
     auto const firstHeader = MetaHeader{first.metaHeader()};
 
-    REQUIRE(firstHeader.magic == kLibraryMetaMagic);
-    REQUIRE(firstHeader.libraryVersion == kLibraryVersion);
+    CHECK(firstHeader.magic == kLibraryMetaMagic);
+    CHECK(firstHeader.libraryVersion == kLibraryVersion);
 
     auto reopenedResult = MusicLibrary::open(temp.path(), temp.path());
     REQUIRE(reopenedResult);
     auto const& reopened = *reopenedResult;
-    REQUIRE(reopened.metaHeader().libraryId == firstHeader.libraryId);
-    REQUIRE(reopened.metaHeader().createdTime == firstHeader.createdTime);
+    CHECK(reopened.metaHeader().libraryId == firstHeader.libraryId);
+    CHECK(reopened.metaHeader().createdTime == firstHeader.createdTime);
   }
 
   TEST_CASE("MusicLibrary reports unsupported library versions as CorruptData", "[library][unit]")

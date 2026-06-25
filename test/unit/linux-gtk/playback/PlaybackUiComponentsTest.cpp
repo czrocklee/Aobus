@@ -44,8 +44,8 @@ namespace ao::gtk::test
       auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
       auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
 
-      REQUIRE(scale != nullptr);
-      REQUIRE(label != nullptr);
+      CHECK(scale != nullptr);
+      CHECK(label != nullptr);
     }
   }
 } // namespace ao::gtk::test

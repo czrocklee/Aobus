@@ -206,7 +206,7 @@ namespace ao::gtk::layout::test
 
     pruneLayoutComponentState(stateDoc, doc);
 
-    REQUIRE(stateDoc.components.size() == 1);
+    CHECK(stateDoc.components.size() == 1);
     CHECK(stateDoc.components.contains("live-split"));
   }
 } // namespace ao::gtk::layout::test

@@ -209,12 +209,12 @@ namespace ao::rt::test
 
       REQUIRE(tracks.size() == 1);
       auto const& view = tracks[0].second;
-      REQUIRE(view.property().uri() == "song.flac");
-      REQUIRE(view.property().sampleRate() == 96000);
-      REQUIRE(view.property().bitDepth() == 24);
-      REQUIRE(view.property().codec() == AudioCodec::Flac);
-      REQUIRE(view.metadata().title() == "Test Title");
-      REQUIRE(dict.get(view.metadata().artistId()) == "Test Artist");
+      CHECK(view.property().uri() == "song.flac");
+      CHECK(view.property().sampleRate() == 96000);
+      CHECK(view.property().bitDepth() == 24);
+      CHECK(view.property().codec() == AudioCodec::Flac);
+      CHECK(view.metadata().title() == "Test Title");
+      CHECK(dict.get(view.metadata().artistId()) == "Test Artist");
 
       // Check tags
       auto const tags = view.tags();
@@ -225,8 +225,8 @@ namespace ao::rt::test
         tagNames.emplace_back(dict.get(tid));
       }
 
-      REQUIRE(std::ranges::contains(tagNames, std::string_view{"rock"}));
-      REQUIRE(std::ranges::contains(tagNames, std::string_view{"favorite"}));
+      CHECK(std::ranges::contains(tagNames, std::string_view{"rock"}));
+      CHECK(std::ranges::contains(tagNames, std::string_view{"favorite"}));
 
       // Check custom
       auto const custom = view.customMetadata();
@@ -240,7 +240,7 @@ namespace ao::rt::test
         }
       }
 
-      REQUIRE(foundMood);
+      CHECK(foundMood);
 
       // Check lists
       std::int32_t smartCount = 0;
@@ -251,21 +251,21 @@ namespace ao::rt::test
         if (lview.isSmart())
         {
           smartCount++;
-          REQUIRE(lview.name() == smartListName);
-          REQUIRE(lview.filter() == smartFilter);
+          CHECK(lview.name() == smartListName);
+          CHECK(lview.filter() == smartFilter);
         }
         else
         {
           manualCount++;
-          REQUIRE(lview.name() == manualListName);
-          REQUIRE(lview.description() == manualListDescription);
+          CHECK(lview.name() == manualListName);
+          CHECK(lview.description() == manualListDescription);
           REQUIRE(lview.tracks().size() == 1);
-          REQUIRE(lview.tracks()[0] == tracks[0].first);
+          CHECK(lview.tracks()[0] == tracks[0].first);
         }
       }
 
-      REQUIRE(smartCount == 1);
-      REQUIRE(manualCount == 1);
+      CHECK(smartCount == 1);
+      CHECK(manualCount == 1);
     }
   }
 
@@ -332,17 +332,17 @@ namespace ao::rt::test
       REQUIRE(tracks.size() == 1);
       auto const& view = tracks[0].second;
 
-      REQUIRE(std::string{view.property().uri()} == "full-fields.flac");
+      CHECK(std::string{view.property().uri()} == "full-fields.flac");
 
-      REQUIRE(view.property().duration() == std::chrono::minutes{4});
+      CHECK(view.property().duration() == std::chrono::minutes{4});
 
-      REQUIRE(std::string{view.metadata().title()} == "Test Title");
-      REQUIRE(std::string{dict.get(view.metadata().artistId())} == "Test Artist");
-      REQUIRE(std::string{dict.get(view.metadata().composerId())} == "Test Composer");
-      REQUIRE(std::string{dict.get(view.metadata().workId())} == "Test Work");
-      REQUIRE(std::string{dict.get(view.metadata().movementId())} == "Test Movement");
-      REQUIRE(view.metadata().movementNumber() == 2);
-      REQUIRE(view.metadata().movementTotal() == 4);
+      CHECK(std::string{view.metadata().title()} == "Test Title");
+      CHECK(std::string{dict.get(view.metadata().artistId())} == "Test Artist");
+      CHECK(std::string{dict.get(view.metadata().composerId())} == "Test Composer");
+      CHECK(std::string{dict.get(view.metadata().workId())} == "Test Work");
+      CHECK(std::string{dict.get(view.metadata().movementId())} == "Test Movement");
+      CHECK(view.metadata().movementNumber() == 2);
+      CHECK(view.metadata().movementTotal() == 4);
     }
   }
 
@@ -431,19 +431,19 @@ namespace ao::rt::test
 
       REQUIRE(optPrimary1);
       REQUIRE(optPrimary2);
-      REQUIRE(optPrimary1->resourceId == optPrimary2->resourceId); // Deduplicated by CAS ResourceStore
+      CHECK(optPrimary1->resourceId == optPrimary2->resourceId); // Deduplicated by CAS ResourceStore
       REQUIRE(track1.coverArt().count() == 2);
       CHECK(track1.coverArt().at(0).type == PictureType::BackCover);
       CHECK(track1.coverArt().at(1).type == PictureType::FrontCover);
 
       auto const optImportedData = resources.reader(txn).get(optPrimary1->resourceId);
       REQUIRE(optImportedData);
-      REQUIRE(optImportedData->size() == coverData.size());
-      REQUIRE(std::ranges::equal(*optImportedData, coverData));
+      CHECK(optImportedData->size() == coverData.size());
+      CHECK(std::ranges::equal(*optImportedData, coverData));
 
       auto const optBackData = resources.reader(txn).get(track1.coverArt().at(0).resourceId);
       REQUIRE(optBackData);
-      REQUIRE(std::ranges::equal(*optBackData, backCoverData));
+      CHECK(std::ranges::equal(*optBackData, backCoverData));
     }
   }
 
@@ -762,11 +762,11 @@ library:
 
       REQUIRE(optParent);
       REQUIRE(optChild);
-      REQUIRE(optParent->parentId() == kInvalidListId);
-      REQUIRE(optChild->parentId() == parentId);
-      REQUIRE(childId != parentId);
+      CHECK(optParent->parentId() == kInvalidListId);
+      CHECK(optChild->parentId() == parentId);
+      CHECK(childId != parentId);
       REQUIRE(optChild->tracks().size() == 1);
-      REQUIRE(optChild->tracks()[0] == trackId);
+      CHECK(optChild->tracks()[0] == trackId);
     }
   }
 

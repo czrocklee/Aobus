@@ -220,7 +220,7 @@ namespace ao::rt::test
 
     auto optLimited = completer.complete("$", 1, 2);
     REQUIRE(optLimited);
-    REQUIRE(optLimited->items.size() == 2);
+    CHECK(optLimited->items.size() == 2);
     CHECK(insertTexts(optLimited->items) == std::vector<std::string>{"$title", "$artist"});
 
     CHECK_FALSE(completer.complete(R"("$artist")", 5));

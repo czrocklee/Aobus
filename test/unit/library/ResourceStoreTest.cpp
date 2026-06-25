@@ -39,7 +39,7 @@ namespace ao::library::test
     auto idResult = store.writer(wtxn2).create(buffer);
     REQUIRE(idResult);
     auto const id = *idResult;
-    REQUIRE(id > 0);
+    CHECK(id > 0);
     REQUIRE(wtxn2.commit());
 
     // Read the resource
@@ -55,7 +55,7 @@ namespace ao::library::test
     auto it = reader.begin();
     STATIC_REQUIRE(std::is_same_v<std::remove_cvref_t<decltype(it->first)>, ResourceId>);
     REQUIRE(it != reader.end());
-    REQUIRE(it->first == id);
+    CHECK(it->first == id);
   }
 
   TEST_CASE("ResourceStore - delete", "[library][unit][resource]")
@@ -86,7 +86,7 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
-    REQUIRE(it == reader.end());
+    CHECK(it == reader.end());
   }
 
   TEST_CASE("ResourceStore - deduplication", "[library][unit][resource]")
@@ -113,7 +113,7 @@ namespace ao::library::test
     auto id2Result = store.writer(wtxn3).create(buffer);
     REQUIRE(id2Result);
     auto const id2 = *id2Result;
-    REQUIRE(id2 == id1);
+    CHECK(id2 == id1);
     REQUIRE(wtxn3.commit());
 
     // Verify only one resource exists
@@ -126,7 +126,7 @@ namespace ao::library::test
       ++count;
     }
 
-    REQUIRE(count == 1);
+    CHECK(count == 1);
   }
 
   TEST_CASE("ResourceStore - zero hash uses a valid ID", "[library][unit][resource]")

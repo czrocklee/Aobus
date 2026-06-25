@@ -51,7 +51,7 @@ namespace ao::test
     SECTION("Result<> supports void success and errors")
     {
       auto const success = Result<>{std::expected<void, Error>{}};
-      REQUIRE(success);
+      CHECK(success);
 
       auto const failure = Result<>{makeError(Error::Code::IoError, "disk gone")};
       REQUIRE_FALSE(failure);

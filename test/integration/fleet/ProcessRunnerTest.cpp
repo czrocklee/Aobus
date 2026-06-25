@@ -72,7 +72,7 @@ namespace ao::fleet::test
 
     CHECK(result.status == ProcessStatus::Exited);
     CHECK(result.exitCode == 0);
-    REQUIRE(::unsetenv("AOBUS_FLEET_SECRET") == 0);
+    CHECK(::unsetenv("AOBUS_FLEET_SECRET") == 0);
   }
 
   TEST_CASE("Fleet process runner - launch and signal outcomes are typed", "[fleet][integration][process]")

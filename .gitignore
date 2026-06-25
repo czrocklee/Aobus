@@ -72,6 +72,7 @@ test/test_results/
 # AI agents
 .gemini
 .claude
+.ai-bridge
 
 # Python
 __pycache__/

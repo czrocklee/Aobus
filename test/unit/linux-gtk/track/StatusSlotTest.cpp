@@ -152,7 +152,7 @@ namespace ao::gtk::test
       std::ofstream{path} << "audio fixture";
 
       auto future = runtime.async().spawn(runtime.library().tasks().buildScanPlanAsync());
-      REQUIRE(waitUntilProgressVisible(widgets, future));
+      CHECK(waitUntilProgressVisible(widgets, future));
 
       CHECK_FALSE(widgets.selection->get_visible());
       CHECK(widgets.message->get_visible());

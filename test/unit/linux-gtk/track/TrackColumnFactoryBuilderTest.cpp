@@ -118,7 +118,7 @@ namespace ao::gtk::test
         drainGtkEvents();
 
         auto rowPtr = cache.trackRow(trackId);
-        REQUIRE(rowPtr);
+        CHECK(rowPtr);
 
         // Realize the cell, then drive an inline edit through the commit handler
         // that is now wired once at setup (not per bind). The slot must resolve
@@ -137,7 +137,7 @@ namespace ao::gtk::test
 
         modelPtr->setPlayingTrackId(trackId);
         drainGtkEvents();
-        REQUIRE(findWidgetByClass<Gtk::Widget>(columnView, "ao-playing-row") != nullptr);
+        CHECK(findWidgetByClass<Gtk::Widget>(columnView, "ao-playing-row") != nullptr);
 
         modelPtr->setPlayingTrackId(kInvalidTrackId);
         drainGtkEvents();

@@ -58,7 +58,7 @@ namespace ao::rt::test
       runtime.workspace().navigateTo(GlobalViewKind::AllTracks);
 
       auto const layout = runtime.workspace().layoutState();
-      REQUIRE(layout.openViews.size() == 2);
+      CHECK(layout.openViews.size() == 2);
       CHECK(layout.activeViewId != filteredView.viewId);
 
       auto const activeState = runtime.views().trackListState(layout.activeViewId);

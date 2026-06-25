@@ -35,7 +35,7 @@ namespace ao::rt::test
     SECTION("Adding a new tag succeeds")
     {
       auto const reply = writer.editTags(std::array{trackId}, favorite, {});
-      REQUIRE_FALSE(reply.mutatedIds.empty());
+      CHECK_FALSE(reply.mutatedIds.empty());
       REQUIRE(mutated.size() == 1);
       CHECK(mutated[0] == trackId);
 
@@ -70,7 +70,7 @@ namespace ao::rt::test
       mutated.clear();
 
       auto const reply = writer.editTags(std::array{trackId}, {}, favorite);
-      REQUIRE_FALSE(reply.mutatedIds.empty());
+      CHECK_FALSE(reply.mutatedIds.empty());
       REQUIRE(mutated.size() == 1);
       CHECK(mutated[0] == trackId);
     }
@@ -104,21 +104,21 @@ namespace ao::rt::test
     SECTION("Deleting an existing track succeeds")
     {
       bool const deleted = writer.deleteTrack(trackId);
-      REQUIRE(deleted);
+      CHECK(deleted);
       REQUIRE(mutated.size() == 1);
       CHECK(mutated[0] == trackId);
 
       auto txn = testLib.library().readTransaction();
       auto const optTrackView =
         testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-      REQUIRE_FALSE(optTrackView.has_value());
+      CHECK_FALSE(optTrackView.has_value());
     }
 
     SECTION("Deleting an invalid track fails")
     {
       bool const deleted = writer.deleteTrack(TrackId{99999});
-      REQUIRE_FALSE(deleted);
-      REQUIRE(mutated.empty());
+      CHECK_FALSE(deleted);
+      CHECK(mutated.empty());
     }
   }
 
@@ -156,7 +156,7 @@ namespace ao::rt::test
       auto txn = testLib.library().readTransaction();
       auto const optTrackView =
         testLib.library().tracks().reader(txn).get(*optNewTrackId, library::TrackStore::Reader::LoadMode::Hot);
-      REQUIRE(optTrackView.has_value());
+      CHECK(optTrackView.has_value());
     }
 
     SECTION("Creating a track from an invalid file fails")
@@ -165,8 +165,8 @@ namespace ao::rt::test
       auto const absInvalidFile = projectRoot / "README.md";
 
       auto const optNewTrackId = writer.createTrackFromFile(absInvalidFile);
-      REQUIRE_FALSE(optNewTrackId.has_value());
-      REQUIRE(mutated.empty());
+      CHECK_FALSE(optNewTrackId.has_value());
+      CHECK(mutated.empty());
     }
   }
 } // namespace ao::rt::test

@@ -149,7 +149,7 @@ namespace ao::rt::test
       CHECK(loaded.items[0].label == "first");
       CHECK(loaded.items[1].value == 2);
       CHECK(loaded.items[1].label == "second");
-      REQUIRE(loaded.scores.size() == 2);
+      CHECK(loaded.scores.size() == 2);
       CHECK(loaded.scores["alpha"] == 10);
       CHECK(loaded.scores["beta"] == 20);
       CHECK(loaded.nested.value == 99);
@@ -404,7 +404,7 @@ namespace ao::rt::test
     {
       auto obj = ComplexAggregate{.count = 42, .name = "unchanged"};
 
-      REQUIRE(configStore.load("nonexistent", obj));
+      CHECK(configStore.load("nonexistent", obj));
 
       CHECK(obj.count == 42);
       CHECK(obj.name == "unchanged");
@@ -415,7 +415,7 @@ namespace ao::rt::test
       auto missingStore = ConfigStore{std::filesystem::path{tempDir.path()} / "does_not_exist.yaml"};
       auto obj = ComplexAggregate{.count = 99};
 
-      REQUIRE(missingStore.load("anything", obj));
+      CHECK(missingStore.load("anything", obj));
 
       CHECK(obj.count == 99);
     }

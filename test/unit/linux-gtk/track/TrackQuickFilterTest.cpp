@@ -80,7 +80,7 @@ namespace ao::gtk::test
 
     filter.setText("artist == 'Muse'");
     drainGtkEvents();
-    REQUIRE(filter.getText() == "artist == 'Muse'");
+    CHECK(filter.getText() == "artist == 'Muse'");
     CHECK(clearButton->get_visible());
 
     emitClicked(*clearButton);
@@ -99,10 +99,10 @@ namespace ao::gtk::test
     auto filter = TrackQuickFilter{runtime};
     CHECK_FALSE(filter.has_css_class("ao-quick-filter-active"));
 
-    REQUIRE(emitFocusEnter(filter));
+    CHECK(emitFocusEnter(filter));
     CHECK(filter.has_css_class("ao-quick-filter-active"));
 
-    REQUIRE(emitFocusLeave(filter));
+    CHECK(emitFocusLeave(filter));
     CHECK_FALSE(filter.has_css_class("ao-quick-filter-active"));
   }
 

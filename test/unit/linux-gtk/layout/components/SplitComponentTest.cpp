@@ -177,7 +177,7 @@ namespace ao::gtk::layout::test
         paned->set_position(400);
       }
 
-      REQUIRE(stateStore.saveCount() == 1);
+      CHECK(stateStore.saveCount() == 1);
       REQUIRE(stateStore.document().components.contains("main-paned"));
       CHECK(stateStore.document().components.at("main-paned").state.at("positionPercent").asDouble() == 0.4);
 

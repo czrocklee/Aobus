@@ -20,9 +20,9 @@ namespace ao::audio::test
 
     SECTION("Empty read and write are no-ops")
     {
-      REQUIRE(buffer.write({}) == 0);
-      REQUIRE(buffer.read({}) == 0);
-      REQUIRE(buffer.size() == 0);
+      CHECK(buffer.write({}) == 0);
+      CHECK(buffer.read({}) == 0);
+      CHECK(buffer.size() == 0);
     }
 
     SECTION("Preserves FIFO order across multiple writes and reads")
@@ -30,21 +30,21 @@ namespace ao::audio::test
       auto dataA = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
       auto dataB = std::vector{std::byte{4}, std::byte{5}};
 
-      REQUIRE(buffer.write(dataA) == 3);
-      REQUIRE(buffer.write(dataB) == 2);
-      REQUIRE(buffer.size() == 5);
+      CHECK(buffer.write(dataA) == 3);
+      CHECK(buffer.write(dataB) == 2);
+      CHECK(buffer.size() == 5);
 
       auto output = std::vector<std::byte>(5);
       REQUIRE(buffer.read(std::span{output}.subspan(0, 2)) == 2);
-      REQUIRE(output[0] == std::byte{1});
-      REQUIRE(output[1] == std::byte{2});
-      REQUIRE(buffer.size() == 3);
+      CHECK(output[0] == std::byte{1});
+      CHECK(output[1] == std::byte{2});
+      CHECK(buffer.size() == 3);
 
       REQUIRE(buffer.read(std::span{output}.subspan(2, 3)) == 3);
-      REQUIRE(output[2] == std::byte{3});
-      REQUIRE(output[3] == std::byte{4});
-      REQUIRE(output[4] == std::byte{5});
-      REQUIRE(buffer.size() == 0);
+      CHECK(output[2] == std::byte{3});
+      CHECK(output[3] == std::byte{4});
+      CHECK(output[4] == std::byte{5});
+      CHECK(buffer.size() == 0);
     }
 
     SECTION("Partial read leaves remaining bytes available")
@@ -68,15 +68,15 @@ namespace ao::audio::test
       REQUIRE(buffer.size() == 10);
 
       buffer.clear();
-      REQUIRE(buffer.size() == 0);
+      CHECK(buffer.size() == 0);
 
       auto output = std::vector<std::byte>(10);
-      REQUIRE(buffer.read(output) == 0);
+      CHECK(buffer.read(output) == 0);
 
       buffer.write(data);
-      REQUIRE(buffer.size() == 10);
+      CHECK(buffer.size() == 10);
       REQUIRE(buffer.read(output) == 10);
-      REQUIRE(output[0] == std::byte{0xBB});
+      CHECK(output[0] == std::byte{0xBB});
     }
   }
 
@@ -92,8 +92,8 @@ namespace ao::audio::test
       auto largeData = std::vector(cap + 64, std::byte{0xCC});
       auto written = buffer.write(largeData);
 
-      REQUIRE(written <= cap);
-      REQUIRE(buffer.size() == written);
+      CHECK(written <= cap);
+      CHECK(buffer.size() == written);
 
       // Fill remaining if any
       auto b = std::byte{0xDD};
@@ -102,7 +102,7 @@ namespace ao::audio::test
       {
       }
 
-      REQUIRE(buffer.write(std::span<std::byte const>{&b, 1}) == 0);
+      CHECK(buffer.write(std::span<std::byte const>{&b, 1}) == 0);
     }
   }
 
@@ -135,7 +135,7 @@ namespace ao::audio::test
                                    {
                                      if (auto b = std::byte{}; buffer.read(std::span{&b, 1}) == 1)
                                      {
-                                       REQUIRE(b == static_cast<std::byte>(count % 256));
+                                       CHECK(b == static_cast<std::byte>(count % 256));
                                        count++;
                                      }
                                      else
@@ -144,7 +144,7 @@ namespace ao::audio::test
                                      }
                                    }
 
-                                   REQUIRE(count == iterations);
+                                   CHECK(count == iterations);
                                  }};
 
     producer.join();

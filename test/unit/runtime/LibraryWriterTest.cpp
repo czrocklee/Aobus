@@ -40,7 +40,7 @@ namespace ao::rt::test
     auto const targetIds = std::array{trackId};
     auto const result = service.updateMetadata(targetIds, MetadataPatch{.optTitle = "New Title"});
 
-    REQUIRE_FALSE(result.mutatedIds.empty());
+    CHECK_FALSE(result.mutatedIds.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
   }
@@ -70,7 +70,7 @@ namespace ao::rt::test
     auto const targetIds = std::array{trackId};
     auto const result = service.updateMetadata(targetIds, MetadataPatch{.optTitle = "Committed Title"});
 
-    REQUIRE_FALSE(result.mutatedIds.empty());
+    CHECK_FALSE(result.mutatedIds.empty());
     CHECK(observedTitle == "Committed Title");
   }
 
@@ -96,7 +96,7 @@ namespace ao::rt::test
                                      .optDiscTotal = 2};
 
     auto const result = service.updateMetadata(targetIds, patch);
-    REQUIRE_FALSE(result.mutatedIds.empty());
+    CHECK_FALSE(result.mutatedIds.empty());
   }
 
   TEST_CASE("LibraryWriter - updateMetadata custom metadata", "[app][unit][runtime][mutation]")
@@ -195,7 +195,7 @@ namespace ao::rt::test
     auto const toRemove = std::array{std::string{"pop"}};
     auto const result = service.editTags(trackIdsArr, toAdd, toRemove);
 
-    REQUIRE_FALSE(result.mutatedIds.empty());
+    CHECK_FALSE(result.mutatedIds.empty());
   }
 
   TEST_CASE("LibraryWriter - editTags missing track continues", "[app][unit][runtime][mutation]")
@@ -223,7 +223,7 @@ namespace ao::rt::test
     draft.trackIds = {t1};
 
     auto const listId = service.createList(draft);
-    REQUIRE(listId != kInvalidListId);
+    CHECK(listId != kInvalidListId);
 
     auto updateDraft = LibraryWriter::ListDraft{};
     updateDraft.listId = listId;
@@ -301,7 +301,7 @@ namespace ao::rt::test
     SECTION("exportLibraryAsync with invalid path throws")
     {
       auto future = runtime.spawn(service.exportLibraryAsync("/root/nonexistent_path_123.yaml", ExportMode::Full));
-      REQUIRE_THROWS(future.get());
+      CHECK_THROWS(future.get());
     }
 
     SECTION("buildScanPlanAsync executes")
@@ -313,7 +313,7 @@ namespace ao::rt::test
       };
 
       auto future = runtime.spawn(wrapperTask(&service));
-      REQUIRE_NOTHROW(future.get());
+      CHECK_NOTHROW(future.get());
     }
 
     SECTION("applyScanPlanAsync executes")
@@ -326,7 +326,7 @@ namespace ao::rt::test
       };
 
       auto future = runtime.spawn(wrapperTask(&service));
-      REQUIRE_NOTHROW(future.get());
+      CHECK_NOTHROW(future.get());
     }
 
     SECTION("applyScanPlanAsync executes and reports progress")
@@ -352,7 +352,7 @@ namespace ao::rt::test
       };
 
       auto future = runtime.spawn(wrapperTask(&service));
-      REQUIRE_NOTHROW(future.get());
+      CHECK_NOTHROW(future.get());
       CHECK(progressFired);
     }
   }

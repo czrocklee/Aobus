@@ -591,7 +591,7 @@ namespace ao::rt::test
     // Create a config store using a directory path, which will fail to open as a file
     auto badConfigStorePtr = std::make_shared<ConfigStore>(tempDir.path());
     // Should not throw, but flush will fail and log an error
-    REQUIRE_NOTHROW(runtime.workspace().saveSession(*badConfigStorePtr));
+    CHECK_NOTHROW(runtime.workspace().saveSession(*badConfigStorePtr));
   }
 
   TEST_CASE("WorkspaceService - session restore error path", "[workspace][unit]")
@@ -604,7 +604,7 @@ namespace ao::rt::test
 
     auto badConfigStorePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     // Should not throw, just return early and log a warning
-    REQUIRE_NOTHROW(runtime.workspace().restoreSession(*badConfigStorePtr));
+    CHECK_NOTHROW(runtime.workspace().restoreSession(*badConfigStorePtr));
   }
 
   TEST_CASE("WorkspaceService - invalid navigation targets and presentations are handled gracefully",

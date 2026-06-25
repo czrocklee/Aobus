@@ -310,8 +310,8 @@ namespace ao::gtk::test
       editor.setup(fixture.runtime().library(), {emptyTrackId});
       drainGtkEvents();
 
-      REQUIRE(countChipsByClass(editor, "ao-tag-chip-current") == 0);
-      REQUIRE(countChipsByClass(editor, "ao-tag-chip-suggested") >= 3);
+      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 0);
+      CHECK(countChipsByClass(editor, "ao-tag-chip-suggested") >= 3);
 
       std::int32_t edMinH = 0;
       std::int32_t edNatH = 0;
@@ -371,7 +371,7 @@ namespace ao::gtk::test
       editor.measure(Gtk::Orientation::HORIZONTAL, -1, minW, classicNat, b1, b2);
 
       auto const seams = countVisibleChildren() - 1;
-      REQUIRE(seams >= 1);
+      CHECK(seams >= 1);
 
       window.add_css_class("ao-theme-modern");
       editor.queue_resize(); // invalidate the cached measurement so the new gap is recomputed

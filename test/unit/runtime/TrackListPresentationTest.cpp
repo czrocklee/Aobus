@@ -33,7 +33,7 @@ namespace ao::rt::test
   {
     auto const* const preset = presetForGroup(TrackGroupKey::None);
     REQUIRE(preset != nullptr);
-    REQUIRE(preset->spec.groupBy == TrackGroupKey::None);
+    CHECK(preset->spec.groupBy == TrackGroupKey::None);
 
     auto const expectedSort = std::vector{TrackSortField::Artist,
                                           TrackSortField::Album,
@@ -55,7 +55,7 @@ namespace ao::rt::test
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Artist);
     REQUIRE(preset != nullptr);
-    REQUIRE(preset->spec.groupBy == TrackGroupKey::Artist);
+    CHECK(preset->spec.groupBy == TrackGroupKey::Artist);
 
     auto const expectedSort = std::vector{TrackSortField::Artist,
                                           TrackSortField::Album,
@@ -100,7 +100,7 @@ namespace ao::rt::test
   {
     auto const* const preset = presetForGroup(TrackGroupKey::AlbumArtist);
     REQUIRE(preset != nullptr);
-    REQUIRE(preset->spec.groupBy == TrackGroupKey::AlbumArtist);
+    CHECK(preset->spec.groupBy == TrackGroupKey::AlbumArtist);
 
     auto const expectedSort = std::vector{TrackSortField::AlbumArtist,
                                           TrackSortField::Album,
@@ -122,7 +122,7 @@ namespace ao::rt::test
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Genre);
     REQUIRE(preset != nullptr);
-    REQUIRE(preset->spec.groupBy == TrackGroupKey::Genre);
+    CHECK(preset->spec.groupBy == TrackGroupKey::Genre);
 
     auto const expectedSort = std::vector{TrackSortField::Genre,
                                           TrackSortField::Artist,
@@ -145,7 +145,7 @@ namespace ao::rt::test
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Composer);
     REQUIRE(preset != nullptr);
-    REQUIRE(preset->spec.groupBy == TrackGroupKey::Composer);
+    CHECK(preset->spec.groupBy == TrackGroupKey::Composer);
 
     auto const expectedSort = std::vector{TrackSortField::Composer,
                                           TrackSortField::Artist,
@@ -168,7 +168,7 @@ namespace ao::rt::test
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Work);
     REQUIRE(preset != nullptr);
-    REQUIRE(preset->spec.groupBy == TrackGroupKey::Work);
+    CHECK(preset->spec.groupBy == TrackGroupKey::Work);
 
     auto const expectedSort = std::vector{TrackSortField::Work,
                                           TrackSortField::Artist,
@@ -191,7 +191,7 @@ namespace ao::rt::test
   {
     auto const* const preset = presetForGroup(TrackGroupKey::Year);
     REQUIRE(preset != nullptr);
-    REQUIRE(preset->spec.groupBy == TrackGroupKey::Year);
+    CHECK(preset->spec.groupBy == TrackGroupKey::Year);
 
     auto const expectedSort = std::vector{TrackSortField::Year,
                                           TrackSortField::Artist,

@@ -435,7 +435,7 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
 
       auto* const menuBar = dynamic_cast<Gtk::PopoverMenuBar*>(&compPtr->widget());
-      REQUIRE(menuBar != nullptr);
+      CHECK(menuBar != nullptr);
     }
 
     SECTION("app.menuButton creates Gtk::MenuButton and sets menu model")
@@ -538,7 +538,7 @@ namespace ao::gtk::layout::test
       CHECK(wideVerticalMeasure.natural == 250);
 
       auto* const imageWidget = widget.get_first_child();
-      REQUIRE(imageWidget != nullptr);
+      CHECK(imageWidget != nullptr);
       window.set_child(widget);
 
       widget.size_allocate(Gtk::Allocation{0, 0, 180, 300}, -1);
@@ -792,7 +792,7 @@ namespace ao::gtk::layout::test
       REQUIRE(box != nullptr);
 
       auto* const child = box->get_first_child();
-      REQUIRE(child != nullptr);
+      CHECK(child != nullptr);
     }
 
     SECTION("minimal listening layout YAML builds without errors")
@@ -824,7 +824,7 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
 
       auto* const outerBox = dynamic_cast<Gtk::Box*>(&compPtr->widget());
-      REQUIRE(outerBox != nullptr);
+      CHECK(outerBox != nullptr);
     }
 
     SECTION("full layout document round-trip then build")
@@ -855,7 +855,7 @@ namespace ao::gtk::layout::test
       auto layoutRuntime = LayoutRuntime{registry};
       auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(compPtr != nullptr);
+      CHECK(compPtr != nullptr);
     }
 
     SECTION("track.selectionDetailPane template round-trip then build")
@@ -877,7 +877,7 @@ namespace ao::gtk::layout::test
       auto layoutRuntime = LayoutRuntime{registry};
       auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(compPtr != nullptr);
+      CHECK(compPtr != nullptr);
     }
   }
 } // namespace ao::gtk::layout::test

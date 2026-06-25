@@ -55,7 +55,7 @@ namespace ao::library::test
 
     // Get by ID (using in-memory index)
     auto const result = dict.get(id);
-    REQUIRE(result == "test value");
+    CHECK(result == "test value");
   }
 
   TEST_CASE("Dictionary - getId", "[library][unit][dictionary]")
@@ -83,8 +83,8 @@ namespace ao::library::test
     requirePut(dict, wtxn, "exists");
     REQUIRE(wtxn.commit());
 
-    REQUIRE(dict.contains("exists"));
-    REQUIRE(!dict.contains("not exists"));
+    CHECK(dict.contains("exists"));
+    CHECK(!dict.contains("not exists"));
   }
 
   TEST_CASE("Dictionary - put duplicate string returns existing ID", "[library][unit][dictionary]")
@@ -104,11 +104,11 @@ namespace ao::library::test
     // Try to store same string again - returns existing ID
     auto wtxn3 = beginWriteTransaction(env);
     auto const id2 = requirePut(dict, wtxn3, "first");
-    REQUIRE(id2 == id1);
+    CHECK(id2 == id1);
 
     // Original value should still exist (using in-memory index)
     auto const result = dict.get(id1);
-    REQUIRE(result == "first");
+    CHECK(result == "first");
   }
 
   TEST_CASE("Dictionary - get throws on invalid ID", "[library][unit][dictionary]")
@@ -149,9 +149,9 @@ namespace ao::library::test
     auto const id = requirePut(dict, wtxn, "first");
     REQUIRE(wtxn.commit());
 
-    REQUIRE(id.raw() == 1);
+    CHECK(id.raw() == 1);
     auto const result = dict.get(id);
-    REQUIRE(result == "first");
+    CHECK(result == "first");
   }
 
   TEST_CASE("Dictionary - get throws on out-of-bounds ID", "[library][unit][dictionary]")
@@ -179,10 +179,10 @@ namespace ao::library::test
 
     // Reserve a non-existent string
     auto const id = dict.getOrIntern("new artist");
-    REQUIRE(id.raw() == 1); // First getOrInternd ID is 0 (same as put)
+    CHECK(id.raw() == 1); // First getOrInternd ID is 0 (same as put)
 
     // contains should now return true (in-memory)
-    REQUIRE(dict.contains("new artist"));
+    CHECK(dict.contains("new artist"));
   }
 
   TEST_CASE("Dictionary - getOrIntern returns existing ID for existent string", "[library][unit][dictionary]")
@@ -197,9 +197,9 @@ namespace ao::library::test
 
     // Reserve an existing string - should return the existing ID
     auto const id = dict.getOrIntern("existing");
-    REQUIRE(id.raw() == 1); // First put uses ID 0
+    CHECK(id.raw() == 1); // First put uses ID 0
 
-    REQUIRE(dict.contains("existing"));
+    CHECK(dict.contains("existing"));
   }
 
   TEST_CASE("Dictionary - getOrIntern then put returns same ID", "[library][unit][dictionary]")
@@ -217,7 +217,7 @@ namespace ao::library::test
     // put() should return the same ID
     auto wtxn2 = beginWriteTransaction(env);
     auto const putId = requirePut(dict, wtxn2, "Bach");
-    REQUIRE(putId == getOrInterndId);
+    CHECK(putId == getOrInterndId);
   }
 
   TEST_CASE("Dictionary - getOrIntern multiple strings", "[library][unit][dictionary]")
@@ -233,13 +233,13 @@ namespace ao::library::test
     auto const id2 = dict.getOrIntern("artist2");
     auto const id3 = dict.getOrIntern("artist3");
 
-    REQUIRE(id1 != id2);
-    REQUIRE(id2 != id3);
-    REQUIRE(id3 != id1);
+    CHECK(id1 != id2);
+    CHECK(id2 != id3);
+    CHECK(id3 != id1);
 
-    REQUIRE(dict.contains("artist1"));
-    REQUIRE(dict.contains("artist2"));
-    REQUIRE(dict.contains("artist3"));
+    CHECK(dict.contains("artist1"));
+    CHECK(dict.contains("artist2"));
+    CHECK(dict.contains("artist3"));
   }
 
   TEST_CASE("Dictionary - put different string after getOrIntern does not collide", "[library][unit][dictionary]")
@@ -259,21 +259,21 @@ namespace ao::library::test
 
     // getOrIntern reserves "fav" (like query compiler does for "#fav" smart list)
     auto const reservedId = dict.getOrIntern("fav");
-    REQUIRE(reservedId.raw() == 3); // after 2 puts, next is 3
+    CHECK(reservedId.raw() == 3); // after 2 puts, next is 3
 
     // put a DIFFERENT string "#fav" — must NOT collide with reserved "fav"
     auto wtxn3 = beginWriteTransaction(env);
     auto const putId = requirePut(dict, wtxn3, "#fav");
     REQUIRE(wtxn3.commit());
 
-    REQUIRE(putId.raw() != reservedId.raw());
-    REQUIRE(putId.raw() == 4); // must skip over reserved ID 3
+    CHECK(putId.raw() != reservedId.raw());
+    CHECK(putId.raw() == 4); // must skip over reserved ID 3
 
     // Both strings should be independently resolvable
-    REQUIRE(dict.get(reservedId) == "fav");
-    REQUIRE(dict.get(putId) == "#fav");
-    REQUIRE(dict.getId("fav").raw() == 3);
-    REQUIRE(dict.getId("#fav").raw() == 4);
+    CHECK(dict.get(reservedId) == "fav");
+    CHECK(dict.get(putId) == "#fav");
+    CHECK(dict.getId("fav").raw() == 3);
+    CHECK(dict.getId("#fav").raw() == 4);
   }
 
   TEST_CASE("Dictionary - put same string as getOrIntern returns reserved ID and persists",
@@ -288,20 +288,20 @@ namespace ao::library::test
 
     // Reserve a string
     auto const reservedId = dict.getOrIntern("fav");
-    REQUIRE(reservedId.raw() == 1);
+    CHECK(reservedId.raw() == 1);
 
     // Put the SAME string — should reuse the reserved ID and persist it
     auto wtxn2 = beginWriteTransaction(env);
     auto const putId = requirePut(dict, wtxn2, "fav");
     REQUIRE(wtxn2.commit());
 
-    REQUIRE(putId.raw() == reservedId.raw());
-    REQUIRE(dict.get(putId) == "fav");
+    CHECK(putId.raw() == reservedId.raw());
+    CHECK(dict.get(putId) == "fav");
 
     // After restart simulation: reload dictionary from DB
     auto rtxn = beginReadTransaction(env);
     auto dict2 = DictionaryStore{openDatabase(rtxn, "dict"), rtxn};
-    REQUIRE(dict2.get(putId) == "fav");
+    CHECK(dict2.get(putId) == "fav");
   }
 
   TEST_CASE("Dictionary - getOrDefault returns value for valid ID", "[library][unit][dictionary]")
@@ -356,7 +356,7 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto dict = DictionaryStore{openDatabase(rtxn, "dict"), rtxn};
 
-    REQUIRE(dict.size() == 3);
+    CHECK(dict.size() == 3);
 
     // Valid entries
     CHECK(dict.get(DictionaryId{1}) == "first");
@@ -396,15 +396,15 @@ namespace ao::library::test
 
     // Inserting a new string should RECYCLE ID 2 instead of appending to 4
     auto const newId1 = requirePut(dict, wtxn2, "recycled_id_2");
-    REQUIRE(newId1.raw() == 2);
+    CHECK(newId1.raw() == 2);
 
     // Inserting another new string should go to 4 since gaps are exhausted
     auto const newId2 = dict.getOrIntern("appended_id_4");
-    REQUIRE(newId2.raw() == 4);
+    CHECK(newId2.raw() == 4);
 
     // Inserting another should go to 5
     auto const newId3 = requirePut(dict, wtxn2, "appended_id_5");
-    REQUIRE(newId3.raw() == 5);
+    CHECK(newId3.raw() == 5);
 
     REQUIRE(wtxn2.commit());
   }
@@ -437,10 +437,10 @@ namespace ao::library::test
     // because we use DictionaryId in the hash set and vector element direct lookup.
     // So looking up "very_first_string" should succeed and return the correct ID.
     REQUIRE_NOTHROW(dict.getId("very_first_string"));
-    REQUIRE(dict.getId("very_first_string") == firstId);
+    CHECK(dict.getId("very_first_string") == firstId);
 
     // And get() should resolve correctly
-    REQUIRE(dict.get(firstId) == "very_first_string");
+    CHECK(dict.get(firstId) == "very_first_string");
   }
 
   // Run under TSan (./ao test --tsan) to verify the shared_mutex guards every
@@ -527,6 +527,6 @@ namespace ao::library::test
       writer.join();
     }
 
-    REQUIRE(!failed.load());
+    CHECK(!failed.load());
   }
 } // namespace ao::library::test

@@ -30,12 +30,12 @@ namespace ao::audio::test
 
     auto const info = decoder.streamInfo();
     CHECK(info.codec == AudioCodec::Mp3);
-    REQUIRE(info.sourceFormat.sampleRate == 48000);
-    REQUIRE(info.sourceFormat.channels == 2);
-    REQUIRE(info.outputFormat.sampleRate == info.sourceFormat.sampleRate);
-    REQUIRE(info.outputFormat.channels == info.sourceFormat.channels);
-    REQUIRE(info.outputFormat.bitDepth == 16);
-    REQUIRE(info.duration > std::chrono::milliseconds{0});
+    CHECK(info.sourceFormat.sampleRate == 48000);
+    CHECK(info.sourceFormat.channels == 2);
+    CHECK(info.outputFormat.sampleRate == info.sourceFormat.sampleRate);
+    CHECK(info.outputFormat.channels == info.sourceFormat.channels);
+    CHECK(info.outputFormat.bitDepth == 16);
+    CHECK(info.duration > std::chrono::milliseconds{0});
 
     auto const firstBlock = decoder.readNextBlock();
     REQUIRE(firstBlock);
@@ -98,7 +98,7 @@ namespace ao::audio::test
     auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
 
     REQUIRE(decoder.open(testFile));
-    REQUIRE(decoder.readNextBlock());
+    CHECK(decoder.readNextBlock());
 
     // Open same file again
     REQUIRE(decoder.open(testFile));

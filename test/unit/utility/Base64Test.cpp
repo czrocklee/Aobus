@@ -62,7 +62,7 @@ namespace ao::utility::test
       auto const encoded = base64Encode(data);
       auto const optDecoded = base64Decode(encoded);
       REQUIRE(optDecoded.has_value());
-      REQUIRE(optDecoded->size() == data.size());
+      CHECK(optDecoded->size() == data.size());
       CHECK(optDecoded == data);
     }
 

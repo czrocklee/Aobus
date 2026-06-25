@@ -29,7 +29,7 @@ namespace ao::uimodel::playback::test
     {
       model.applyViewState(std::chrono::seconds{20}, true);
 
-      REQUIRE(model.beginPointerInteraction());
+      CHECK(model.beginPointerInteraction());
       auto preview = model.valueChanged(std::chrono::seconds{7});
 
       CHECK(preview.action == SeekSliderAction::Preview);
@@ -68,7 +68,7 @@ namespace ao::uimodel::playback::test
     SECTION("reset clears state")
     {
       model.applyViewState(std::chrono::seconds{20}, true);
-      REQUIRE(model.beginPointerInteraction());
+      CHECK(model.beginPointerInteraction());
       std::ignore = model.valueChanged(std::chrono::seconds{3});
 
       model.reset();

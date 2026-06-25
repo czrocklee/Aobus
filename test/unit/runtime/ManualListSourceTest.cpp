@@ -623,7 +623,7 @@ namespace ao::rt::test
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::BatchUpdated);
-      REQUIRE(spy.events[0].batchIds.size() == 2);
+      CHECK(spy.events[0].batchIds.size() == 2);
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
 
@@ -685,7 +685,7 @@ namespace ao::rt::test
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::BatchUpdated);
-      REQUIRE(spy.events[0].batchIds.size() == 3);
+      CHECK(spy.events[0].batchIds.size() == 3);
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{3}));
@@ -790,7 +790,7 @@ namespace ao::rt::test
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::BatchRemoved);
-      REQUIRE(spy.events[0].batchIds.size() == 2);
+      CHECK(spy.events[0].batchIds.size() == 2);
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{4}));
       REQUIRE(mls.size() == 2);
@@ -856,7 +856,7 @@ namespace ao::rt::test
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::BatchRemoved);
-      REQUIRE(spy.events[0].batchIds.size() == 3);
+      CHECK(spy.events[0].batchIds.size() == 3);
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
       CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{3}));

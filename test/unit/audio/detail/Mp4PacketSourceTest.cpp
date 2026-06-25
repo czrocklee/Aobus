@@ -80,7 +80,7 @@ namespace ao::audio::detail::test
       CHECK(source.duration() == std::chrono::milliseconds{0});
       CHECK(source.duration(44100) == std::chrono::seconds{2});
       CHECK(!source.seek(std::chrono::seconds{1}));
-      REQUIRE(source.seek(std::chrono::seconds{1}, 44100));
+      CHECK(source.seek(std::chrono::seconds{1}, 44100));
       CHECK(source.atEnd());
     }
   }

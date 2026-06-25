@@ -43,7 +43,7 @@ namespace ao::audio::test
       CHECK(stableBlock->bytes.empty());
 
       auto const info = decoder.streamInfo();
-      REQUIRE(info.duration > std::chrono::milliseconds{0});
+      CHECK(info.duration > std::chrono::milliseconds{0});
       REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
 
       auto const restartedBlock = decoder.readNextBlock();

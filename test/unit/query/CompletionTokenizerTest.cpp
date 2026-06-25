@@ -331,7 +331,7 @@ namespace ao::query::detail::test
         }
 
         auto const significant = significantTokens(tokens);
-        REQUIRE_FALSE(significant.empty());
+        CHECK_FALSE(significant.empty());
 
         for (std::size_t idx = 0; idx + 1 < significant.size(); ++idx)
         {

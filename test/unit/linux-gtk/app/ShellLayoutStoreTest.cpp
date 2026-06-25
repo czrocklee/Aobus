@@ -74,7 +74,7 @@ namespace ao::gtk::test
       CHECK(!std::filesystem::exists(layoutsDir / "classic.yaml"));
 
       // Remove again should not throw or fail
-      REQUIRE_NOTHROW(store.remove("classic"));
+      CHECK_NOTHROW(store.remove("classic"));
     }
 
     SECTION("filePath throws Exception on path traversal or empty presetId")

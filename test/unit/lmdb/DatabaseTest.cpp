@@ -30,7 +30,7 @@ namespace ao::lmdb::test
 
     auto const txn = beginReadTransaction(env);
     auto const reader = db.reader(txn);
-    REQUIRE(reader.begin() == reader.end());
+    CHECK(reader.begin() == reader.end());
   }
 
   TEST_CASE("Database - open returns database", "[lmdb][unit][database]")
@@ -41,7 +41,7 @@ namespace ao::lmdb::test
 
     auto db = Database::open(wtxn, "newdb");
 
-    REQUIRE(db);
+    CHECK(db);
     REQUIRE(wtxn.commit());
   }
 
@@ -53,7 +53,7 @@ namespace ao::lmdb::test
 
     auto db = Database::open(txn, "missing");
 
-    REQUIRE_FALSE(db);
+    CHECK_FALSE(db);
     CHECK(db.error().code == Error::Code::NotFound);
   }
 
@@ -85,7 +85,7 @@ namespace ao::lmdb::test
     REQUIRE(it->first == 2);
 
     REQUIRE_NOTHROW(++it);
-    REQUIRE(it == reader.end());
+    CHECK(it == reader.end());
   }
 
   TEST_CASE("Database::Reader - empty database", "[lmdb][unit][database][reader]")
@@ -99,7 +99,7 @@ namespace ao::lmdb::test
 
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
-    REQUIRE(reader.begin() == reader.end());
+    CHECK(reader.begin() == reader.end());
   }
 
   TEST_CASE("Database::Reader - get", "[lmdb][unit][database][reader]")
@@ -187,7 +187,7 @@ namespace ao::lmdb::test
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
     auto const it = reader.begin();
-    REQUIRE(utility::bytes::stringView(it->second) == "value");
+    CHECK(utility::bytes::stringView(it->second) == "value");
   }
 
   // ============================================================================
@@ -265,8 +265,8 @@ namespace ao::lmdb::test
     auto const optData2 = reader.get(2);
     REQUIRE(optData1.has_value());
     REQUIRE(optData2.has_value());
-    REQUIRE(utility::bytes::stringView(*optData1) == "first");
-    REQUIRE(utility::bytes::stringView(*optData2) == "second");
+    CHECK(utility::bytes::stringView(*optData1) == "first");
+    CHECK(utility::bytes::stringView(*optData2) == "second");
   }
 
   TEST_CASE("Database::Writer - append with size", "[lmdb][unit][database][writer]")
@@ -281,7 +281,7 @@ namespace ao::lmdb::test
     auto appendResult1 = writer.append(8);
     REQUIRE(appendResult1);
     auto const& [id1, result1] = *appendResult1;
-    REQUIRE(id1 == 1);
+    CHECK(id1 == 1);
     REQUIRE(!result1.empty());
     REQUIRE(result1.size() == 8);
     std::memset(result1.data(), 'a', 8);
@@ -289,7 +289,7 @@ namespace ao::lmdb::test
     auto appendResult2 = writer.append(12);
     REQUIRE(appendResult2);
     auto const& [id2, result2] = *appendResult2;
-    REQUIRE(id2 == 2);
+    CHECK(id2 == 2);
     REQUIRE(!result2.empty());
     REQUIRE(result2.size() == 12);
     std::memset(result2.data(), 'b', 12);
@@ -303,8 +303,8 @@ namespace ao::lmdb::test
     auto const optData2 = reader.get(2);
     REQUIRE(optData1.has_value());
     REQUIRE(optData2.has_value());
-    REQUIRE(utility::bytes::stringView(*optData1) == std::string(8, 'a'));
-    REQUIRE(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
+    CHECK(utility::bytes::stringView(*optData1) == std::string(8, 'a'));
+    CHECK(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
   }
 
   TEST_CASE("Database::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
@@ -355,8 +355,8 @@ namespace ao::lmdb::test
     auto const reader = db.reader(rtxn);
     auto const optData = reader.get(1);
     REQUIRE(optData.has_value());
-    REQUIRE(optData->size() == 7);
-    REQUIRE(utility::bytes::stringView(*optData) == "updated");
+    CHECK(optData->size() == 7);
+    CHECK(utility::bytes::stringView(*optData) == "updated");
   }
 
   TEST_CASE("Database::Writer - delete record", "[lmdb][unit][database][writer]")
@@ -419,8 +419,8 @@ namespace ao::lmdb::test
     REQUIRE(writer.create(42, createStringData("answer")));
     auto const optDataResult = writer.get(42);
     REQUIRE(optDataResult);
-    REQUIRE(optDataResult->size() == 6);
-    REQUIRE(utility::bytes::stringView(*optDataResult) == "answer");
+    CHECK(optDataResult->size() == 6);
+    CHECK(utility::bytes::stringView(*optDataResult) == "answer");
   }
 
   TEST_CASE("Database::Writer - move constructor", "[lmdb][unit][database][writer]")
@@ -486,7 +486,7 @@ namespace ao::lmdb::test
 
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
-    REQUIRE(reader.maxKey() == 0);
+    CHECK(reader.maxKey() == 0);
   }
 
   TEST_CASE("Database::Reader - maxKey after append", "[lmdb][unit][database][reader]")
@@ -505,7 +505,7 @@ namespace ao::lmdb::test
 
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
-    REQUIRE(reader.maxKey() == *id2);
+    CHECK(reader.maxKey() == *id2);
   }
 
   TEST_CASE("Database::Reader - maxKey after create", "[lmdb][unit][database][reader]")
@@ -524,7 +524,7 @@ namespace ao::lmdb::test
 
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
-    REQUIRE(reader.maxKey() == 10);
+    CHECK(reader.maxKey() == 10);
   }
 
   TEST_CASE("Database::Reader - maxKey after delete", "[lmdb][unit][database][reader]")
@@ -551,7 +551,7 @@ namespace ao::lmdb::test
 
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
-    REQUIRE(reader.maxKey() == 2);
+    CHECK(reader.maxKey() == 2);
   }
 
   TEST_CASE("Database::Reader - maxKey after deleting middle element", "[lmdb][unit][database][reader]")
@@ -579,7 +579,7 @@ namespace ao::lmdb::test
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
     // maxKey should still be 3 (the max wasn't deleted)
-    REQUIRE(reader.maxKey() == 3);
+    CHECK(reader.maxKey() == 3);
   }
 
   TEST_CASE("Database - Blob keys", "[lmdb][unit][database][blob]")
@@ -619,13 +619,13 @@ namespace ao::lmdb::test
       auto it = reader.begin();
       REQUIRE(it != reader.end());
       // LMDB sorts lexicographically
-      REQUIRE(utility::bytes::stringView(it->first) == "another_key");
-      REQUIRE(utility::bytes::stringView(it->second) == "value2");
+      CHECK(utility::bytes::stringView(it->first) == "another_key");
+      CHECK(utility::bytes::stringView(it->second) == "value2");
 
       ++it;
       REQUIRE(it != reader.end());
-      REQUIRE(utility::bytes::stringView(it->first) == "key1");
-      REQUIRE(utility::bytes::stringView(it->second) == "value1");
+      CHECK(utility::bytes::stringView(it->first) == "key1");
+      CHECK(utility::bytes::stringView(it->second) == "value1");
 
       ++it;
       REQUIRE(it == reader.end());

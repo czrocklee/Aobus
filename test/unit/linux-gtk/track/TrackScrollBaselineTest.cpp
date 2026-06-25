@@ -101,7 +101,7 @@ namespace ao::gtk::test
     constexpr std::size_t kReScrollPasses = 20;
 
     auto const ids = seedLibrary(library, kRowCount);
-    REQUIRE(ids.size() == kRowCount);
+    CHECK(ids.size() == kRowCount);
 
     auto cache = TrackRowCache{fixture.runtime().library()};
 

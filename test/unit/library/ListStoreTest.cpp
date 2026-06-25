@@ -58,7 +58,7 @@ namespace ao::library::test
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
     REQUIRE(it != reader.end());
-    REQUIRE((*it).first == id);
+    CHECK((*it).first == id);
   }
 
   TEST_CASE("ListStore - read by id", "[library][unit][list]")
@@ -85,7 +85,7 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto const optFound = store.reader(rtxn).get(id);
     REQUIRE(optFound.has_value());
-    REQUIRE(optFound->tracks().size() == 10);
+    CHECK(optFound->tracks().size() == 10);
   }
 
   TEST_CASE("ListStore - delete", "[library][unit][list]")
@@ -116,6 +116,6 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
-    REQUIRE(it == reader.end());
+    CHECK(it == reader.end());
   }
 } // namespace ao::library::test

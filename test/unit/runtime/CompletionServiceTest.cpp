@@ -192,7 +192,7 @@ namespace ao::rt::test
       addCompletionTrack(testLib, CompletionTrackSpec{.track = TrackSpec{.title = "Two"}, .tags = {"Jazz"}});
     // addCompletionTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
-    REQUIRE_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
+    CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"Jazz", 1},
@@ -229,7 +229,7 @@ namespace ao::rt::test
                             TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"}});
     // addCompletionTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
-    REQUIRE_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
+    CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 1},
@@ -277,7 +277,7 @@ namespace ao::rt::test
                             TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"}});
     // addCompletionTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
-    REQUIRE_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
+    CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                           {"Etudes", 1},

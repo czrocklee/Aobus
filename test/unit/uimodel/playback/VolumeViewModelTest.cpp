@@ -33,7 +33,7 @@ namespace ao::uimodel::playback::test
 
     SECTION("Initial render")
     {
-      REQUIRE(!log.empty());
+      CHECK(!log.empty());
     }
 
     SECTION("handleVolumeChanged delegates to playback")

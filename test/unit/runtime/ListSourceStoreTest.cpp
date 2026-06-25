@@ -30,7 +30,7 @@ namespace ao::rt::test
     SECTION("sourceFor kInvalidListId returns allTracks")
     {
       auto& source = store.sourceFor(kInvalidListId);
-      REQUIRE(&source == &store.allTracks());
+      CHECK(&source == &store.allTracks());
     }
 
     SECTION("sourceFor creates manual list source")
@@ -45,11 +45,11 @@ namespace ao::rt::test
       }
 
       auto& source = store.sourceFor(listId);
-      REQUIRE(dynamic_cast<ManualListSource*>(&source) != nullptr);
+      CHECK(dynamic_cast<ManualListSource*>(&source) != nullptr);
 
       // Subsequent calls should return the same instance
       auto& source2 = store.sourceFor(listId);
-      REQUIRE(&source == &source2);
+      CHECK(&source == &source2);
     }
 
     SECTION("sourceFor creates smart list source")
@@ -65,13 +65,13 @@ namespace ao::rt::test
       }
 
       auto& source = store.sourceFor(listId);
-      REQUIRE(dynamic_cast<SmartListSource*>(&source) != nullptr);
+      CHECK(dynamic_cast<SmartListSource*>(&source) != nullptr);
     }
 
     SECTION("sourceFor missing list returns allTracks")
     {
       auto& source = store.sourceFor(ListId{999});
-      REQUIRE(&source == &store.allTracks());
+      CHECK(&source == &store.allTracks());
     }
 
     SECTION("reloadAllTracks updates allTracks source")
@@ -80,7 +80,7 @@ namespace ao::rt::test
       testLib.addTrack("Track 2");
 
       store.reloadAllTracks();
-      REQUIRE(store.allTracks().size() == 2);
+      CHECK(store.allTracks().size() == 2);
     }
 
     SECTION("refreshList updates manual list source")
@@ -95,7 +95,7 @@ namespace ao::rt::test
       }
 
       auto& source = store.sourceFor(listId);
-      REQUIRE(source.size() == 0);
+      CHECK(source.size() == 0);
 
       auto t1 = testLib.addTrack("A");
       store.reloadAllTracks(); // ensure parent source has it
@@ -105,7 +105,7 @@ namespace ao::rt::test
         auto optView = testLib.library().lists().reader(txn).get(listId);
         auto builder = ListBuilder::fromView(*optView);
         builder.tracks().add(t1);
-        REQUIRE(testLib.library().lists().writer(txn).update(listId, builder.serialize()));
+        CHECK(testLib.library().lists().writer(txn).update(listId, builder.serialize()));
         REQUIRE(txn.commit());
       }
 
@@ -127,7 +127,7 @@ namespace ao::rt::test
       }
 
       auto& source = store.sourceFor(listId);
-      REQUIRE(source.size() == 0);
+      CHECK(source.size() == 0);
 
       testLib.addTrack("B");
       testLib.addTrack("A");
@@ -135,7 +135,7 @@ namespace ao::rt::test
       store.reloadAllTracks();
 
       store.refreshList(listId);
-      REQUIRE(source.size() == 2);
+      CHECK(source.size() == 2);
     }
 
     SECTION("refreshList invalid ID returns early")
@@ -168,7 +168,7 @@ namespace ao::rt::test
 
       // now sourceFor should fallback to allTracks because it was erased
       auto& fallbackSource = store.sourceFor(listId);
-      REQUIRE(&fallbackSource == &store.allTracks());
+      CHECK(&fallbackSource == &store.allTracks());
     }
 
     SECTION("eraseList removes list and its children")
@@ -214,9 +214,9 @@ namespace ao::rt::test
       store.eraseList(parentId);
 
       // All three should fallback to allTracks
-      REQUIRE(&store.sourceFor(parentId) == &store.allTracks());
-      REQUIRE(&store.sourceFor(childId) == &store.allTracks());
-      REQUIRE(&store.sourceFor(grandchildId) == &store.allTracks());
+      CHECK(&store.sourceFor(parentId) == &store.allTracks());
+      CHECK(&store.sourceFor(childId) == &store.allTracks());
+      CHECK(&store.sourceFor(grandchildId) == &store.allTracks());
     }
 
     SECTION("LibraryWriter integration")
@@ -234,7 +234,7 @@ namespace ao::rt::test
 
       writer.deleteList(listId);
 
-      REQUIRE(&store.sourceFor(listId) == &store.allTracks());
+      CHECK(&store.sourceFor(listId) == &store.allTracks());
     }
   }
 } // namespace ao::rt::test

@@ -60,14 +60,14 @@ namespace ao::gtk::layout::test
       host.setLayout(ctx, createDefaultLayout());
 
       auto* const first = host.get_first_child();
-      REQUIRE(first != nullptr);
+      CHECK(first != nullptr);
 
       auto newDoc = LayoutDocument{};
       newDoc.root.type = "spacer";
       host.setLayout(ctx, newDoc);
 
       auto* const second = host.get_first_child();
-      REQUIRE(second != nullptr);
+      CHECK(second != nullptr);
       CHECK(second != first);
     }
 

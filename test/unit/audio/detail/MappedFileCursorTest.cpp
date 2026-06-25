@@ -33,11 +33,11 @@ namespace ao::audio::detail::test
     CHECK(output[2] == std::byte{30});
     CHECK(cursor.position() == 3);
 
-    REQUIRE(cursor.seek(-2, SeekOrigin::Current));
+    CHECK(cursor.seek(-2, SeekOrigin::Current));
     CHECK(cursor.position() == 1);
-    REQUIRE(cursor.seek(-1, SeekOrigin::End));
+    CHECK(cursor.seek(-1, SeekOrigin::End));
     CHECK(cursor.position() == 4);
-    REQUIRE(cursor.seek(0, SeekOrigin::Begin));
+    CHECK(cursor.seek(0, SeekOrigin::Begin));
     CHECK(cursor.position() == 0);
   }
 
@@ -52,7 +52,7 @@ namespace ao::audio::detail::test
     CHECK(!cursor.seek(1, SeekOrigin::End));
     CHECK(!cursor.seek(std::numeric_limits<std::int64_t>::max(), SeekOrigin::End));
 
-    REQUIRE(cursor.seek(0, SeekOrigin::End));
+    CHECK(cursor.seek(0, SeekOrigin::End));
     CHECK(cursor.atEnd());
 
     auto output = std::array<std::byte, 2>{};

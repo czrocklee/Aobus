@@ -80,7 +80,7 @@ namespace ao::audio::test
       Verify(Method(mockBackend, close)).AtLeastOnce();
 
       auto snap = engine.status();
-      REQUIRE(snap.transport == Transport::Idle);
+      CHECK(snap.transport == Transport::Idle);
     }
 
     SECTION("Volume and mute controls pass through to backend and update status")
@@ -97,20 +97,20 @@ namespace ao::audio::test
             return Result<>{};
           });
 
-      REQUIRE(engine.setVolume(0.75F));
-      REQUIRE(lastSetPropertyId == PropertyId::Volume);
-      REQUIRE(std::get<float>(lastSetPropertyValue) == Catch::Approx{0.75F});
-      REQUIRE(engine.volume() == Catch::Approx{0.75F});
-      REQUIRE(engine.status().volume == Catch::Approx{0.75F});
+      CHECK(engine.setVolume(0.75F));
+      CHECK(lastSetPropertyId == PropertyId::Volume);
+      CHECK(std::get<float>(lastSetPropertyValue) == Catch::Approx{0.75F});
+      CHECK(engine.volume() == Catch::Approx{0.75F});
+      CHECK(engine.status().volume == Catch::Approx{0.75F});
 
-      REQUIRE(engine.setMuted(true));
-      REQUIRE(lastSetPropertyId == PropertyId::Muted);
-      REQUIRE(std::get<bool>(lastSetPropertyValue) == true);
-      REQUIRE(engine.isMuted() == true);
-      REQUIRE(engine.status().muted == true);
+      CHECK(engine.setMuted(true));
+      CHECK(lastSetPropertyId == PropertyId::Muted);
+      CHECK(std::get<bool>(lastSetPropertyValue) == true);
+      CHECK(engine.isMuted() == true);
+      CHECK(engine.status().muted == true);
 
-      REQUIRE(engine.isVolumeAvailable() == true);
-      REQUIRE(engine.status().volumeAvailable == true);
+      CHECK(engine.isVolumeAvailable() == true);
+      CHECK(engine.status().volumeAvailable == true);
     }
   }
 
@@ -147,8 +147,8 @@ namespace ao::audio::test
       Verify(Method(mockBackend1, close)).Once();
 
       auto const snap = engine.status();
-      REQUIRE(snap.backendId == kBackendAlsa);
-      REQUIRE(snap.currentDeviceId == "dev2");
+      CHECK(snap.backendId == kBackendAlsa);
+      CHECK(snap.currentDeviceId == "dev2");
     }
   }
 
@@ -254,7 +254,7 @@ namespace ao::audio::test
     engine.play(descriptor);
 
     auto const snap = engine.status();
-    REQUIRE(snap.transport == Transport::Playing);
+    CHECK(snap.transport == Transport::Playing);
 
     auto const events = backendRaw->events();
     REQUIRE(!events.empty());
@@ -312,9 +312,9 @@ namespace ao::audio::test
     engine.play(descriptor);
 
     auto const snap = engine.status();
-    REQUIRE(snap.transport == Transport::Error);
+    CHECK(snap.transport == Transport::Error);
     CHECK(snap.statusText.find("no resampler yet") != std::string::npos);
-    REQUIRE(openedFormats.empty());
+    CHECK(openedFormats.empty());
   }
 
   TEST_CASE("Engine - Play failure matrix", "[playback][unit][engine][error]")
@@ -332,8 +332,8 @@ namespace ao::audio::test
 
       engine.play(desc);
 
-      REQUIRE(engine.status().transport == Transport::Error);
-      REQUIRE(engine.status().statusText.find("Unsupported audio file extension") != std::string::npos);
+      CHECK(engine.status().transport == Transport::Error);
+      CHECK(engine.status().statusText.find("Unsupported audio file extension") != std::string::npos);
     }
 
     SECTION("Decoder open failure")
@@ -352,8 +352,8 @@ namespace ao::audio::test
 
       engine.play(desc);
 
-      REQUIRE(engine.status().transport == Transport::Error);
-      REQUIRE(engine.status().statusText == "open failed");
+      CHECK(engine.status().transport == Transport::Error);
+      CHECK(engine.status().statusText == "open failed");
     }
 
     SECTION("Backend open failure")
@@ -379,8 +379,8 @@ namespace ao::audio::test
 
       engine.play(desc);
 
-      REQUIRE(engine.status().transport == Transport::Error);
-      REQUIRE(engine.status().statusText == "hw init failed");
+      CHECK(engine.status().transport == Transport::Error);
+      CHECK(engine.status().statusText == "hw init failed");
     }
   }
 
@@ -411,13 +411,13 @@ namespace ao::audio::test
     auto const desc = PlaybackInput{.filePath = "song.flac"};
 
     engine.play(desc);
-    REQUIRE(engine.status().transport == Transport::Playing);
+    CHECK(engine.status().transport == Transport::Playing);
 
     SECTION("Pause from Playing")
     {
       engine.pause();
-      REQUIRE(engine.status().transport == Transport::Paused);
-      REQUIRE(backendRaw->events().back().name == "pause");
+      CHECK(engine.status().transport == Transport::Paused);
+      CHECK(backendRaw->events().back().name == "pause");
     }
 
     SECTION("Resume from Paused")
@@ -425,8 +425,8 @@ namespace ao::audio::test
       engine.pause();
       backendRaw->clearEvents();
       engine.resume();
-      REQUIRE(engine.status().transport == Transport::Playing);
-      REQUIRE(backendRaw->events().back().name == "resume");
+      CHECK(engine.status().transport == Transport::Playing);
+      CHECK(backendRaw->events().back().name == "resume");
     }
   }
 
@@ -456,15 +456,15 @@ namespace ao::audio::test
     SECTION("Seek before play is no-op")
     {
       engine.seek(std::chrono::milliseconds{100});
-      REQUIRE(engine.status().elapsed == std::chrono::milliseconds{0});
+      CHECK(engine.status().elapsed == std::chrono::milliseconds{0});
     }
 
     SECTION("Active seek success")
     {
       engine.play(desc);
       engine.seek(std::chrono::milliseconds{50});
-      REQUIRE(engine.status().elapsed == std::chrono::milliseconds{50});
-      REQUIRE(engine.status().transport == Transport::Playing);
+      CHECK(engine.status().elapsed == std::chrono::milliseconds{50});
+      CHECK(engine.status().transport == Transport::Playing);
     }
   }
 
@@ -503,13 +503,13 @@ namespace ao::audio::test
 
     target->readPcm(buffer); // Read all 20 bytes
 
-    REQUIRE(target->isSourceDrained());
+    CHECK(target->isSourceDrained());
 
     SECTION("onDrainComplete resets to idle and fires track ended")
     {
       backendRaw->fireDrainComplete();
-      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Idle; }));
-      REQUIRE(waitUntil([&] { return trackEnded.load(std::memory_order_acquire); }));
+      CHECK(waitUntil([&] { return engine.status().transport == Transport::Idle; }));
+      CHECK(waitUntil([&] { return trackEnded.load(std::memory_order_acquire); }));
     }
 
     SECTION("onDrainComplete without pending drain is ignored")
@@ -517,14 +517,13 @@ namespace ao::audio::test
       engine.stop(); // resets everything
       trackEnded.store(false, std::memory_order_release);
       backendRaw->fireDrainComplete();
-      REQUIRE_FALSE(
-        waitUntil([&] { return trackEnded.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
+      CHECK_FALSE(waitUntil([&] { return trackEnded.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
     }
 
     SECTION("onBackendError stops playback")
     {
       backendRaw->fireBackendError("lost device");
-      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Error; }));
+      CHECK(waitUntil([&] { return engine.status().transport == Transport::Error; }));
       CHECK(engine.status().statusText == "lost device");
     }
   }
@@ -556,10 +555,10 @@ namespace ao::audio::test
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
       auto const info = backendRaw->queryProperty(kUnknownId);
 
-      REQUIRE(info.canRead == false);
-      REQUIRE(info.canWrite == false);
-      REQUIRE(info.isAvailable == false);
-      REQUIRE(info.emitsChangeNotifications == false);
+      CHECK(info.canRead == false);
+      CHECK(info.canWrite == false);
+      CHECK(info.isAvailable == false);
+      CHECK(info.emitsChangeNotifications == false);
     }
 
     SECTION("queryProperty returns valid info for Volume")
@@ -575,10 +574,10 @@ namespace ao::audio::test
 
       auto const info = backendRaw->queryProperty(PropertyId::Volume);
 
-      REQUIRE(info.canRead == true);
-      REQUIRE(info.canWrite == true);
-      REQUIRE(info.isAvailable == true);
-      REQUIRE(info.isHardwareAssisted == true);
+      CHECK(info.canRead == true);
+      CHECK(info.canWrite == true);
+      CHECK(info.isAvailable == true);
+      CHECK(info.isHardwareAssisted == true);
     }
 
     SECTION("setProperty returns error for unknown PropertyId")
@@ -587,7 +586,7 @@ namespace ao::audio::test
       auto const result = backendRaw->setProperty(kUnknownId, PropertyValue{0.5F});
 
       REQUIRE(!result);
-      REQUIRE(result.error().code == Error::Code::NotSupported);
+      CHECK(result.error().code == Error::Code::NotSupported);
     }
 
     SECTION("property returns error for unknown PropertyId")
@@ -596,7 +595,7 @@ namespace ao::audio::test
       auto const result = backendRaw->property(kUnknownId);
 
       REQUIRE(!result);
-      REQUIRE(result.error().code == Error::Code::NotSupported);
+      CHECK(result.error().code == Error::Code::NotSupported);
     }
 
     SECTION("onPropertyChanged callback updates engine volume status")
@@ -615,11 +614,11 @@ namespace ao::audio::test
 
       backendRaw->firePropertyChanged(PropertyId::Volume);
 
-      REQUIRE(waitUntil([&] { return engine.status().volumeAvailable; }));
-      REQUIRE(engine.status().volume == Catch::Approx{1.0F});
-      REQUIRE(engine.volume() == Catch::Approx{1.0F});
-      REQUIRE(engine.status().volumeAvailable == true);
-      REQUIRE(engine.status().volumeIsHardwareAssisted == true);
+      CHECK(waitUntil([&] { return engine.status().volumeAvailable; }));
+      CHECK(engine.status().volume == Catch::Approx{1.0F});
+      CHECK(engine.volume() == Catch::Approx{1.0F});
+      CHECK(engine.status().volumeAvailable == true);
+      CHECK(engine.status().volumeIsHardwareAssisted == true);
     }
 
     SECTION("onPropertyChanged handles backend read errors gracefully")
@@ -628,18 +627,18 @@ namespace ao::audio::test
       backendRaw->firePropertyChanged(PropertyId::Volume);
       backendRaw->firePropertyChanged(PropertyId::Muted);
 
-      REQUIRE(waitUntil([&] { return engine.status().volumeAvailable; }));
-      REQUIRE(engine.status().volume == Catch::Approx{1.0F});
-      REQUIRE(engine.status().muted == false);
+      CHECK(waitUntil([&] { return engine.status().volumeAvailable; }));
+      CHECK(engine.status().volume == Catch::Approx{1.0F});
+      CHECK(engine.status().muted == false);
     }
 
     SECTION("onPropertyChanged callback updates engine mute status")
     {
       backendRaw->firePropertyChanged(PropertyId::Muted);
 
-      REQUIRE(waitUntil([&] { return engine.status().volumeAvailable; }));
-      REQUIRE(engine.status().muted == false);
-      REQUIRE(engine.isMuted() == false);
+      CHECK(waitUntil([&] { return engine.status().volumeAvailable; }));
+      CHECK(engine.status().muted == false);
+      CHECK(engine.isMuted() == false);
     }
 
     SECTION("onPropertyChanged callback for unknown property is ignored")
@@ -652,7 +651,7 @@ namespace ao::audio::test
     {
       engine.play(desc);
       backendRaw->fireBackendError("hardware failed");
-      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Error; }));
+      CHECK(waitUntil([&] { return engine.status().transport == Transport::Error; }));
 
       engine.play(desc);
       auto routeChanged = std::atomic<bool>{false};
@@ -663,32 +662,32 @@ namespace ao::audio::test
 
     SECTION("setVolume round-trips through engine and backend")
     {
-      REQUIRE(engine.setVolume(0.42F));
-      REQUIRE(engine.volume() == Catch::Approx{0.42F});
-      REQUIRE(engine.status().volume == Catch::Approx{0.42F});
+      CHECK(engine.setVolume(0.42F));
+      CHECK(engine.volume() == Catch::Approx{0.42F});
+      CHECK(engine.status().volume == Catch::Approx{0.42F});
 
       auto const backendVol = backendRaw->property(PropertyId::Volume);
 
       REQUIRE(backendVol);
-      REQUIRE(std::get<float>(*backendVol) == Catch::Approx{0.42F});
+      CHECK(std::get<float>(*backendVol) == Catch::Approx{0.42F});
     }
 
     SECTION("setMuted round-trips through engine and backend")
     {
-      REQUIRE(engine.setMuted(true));
-      REQUIRE(engine.isMuted() == true);
-      REQUIRE(engine.status().muted == true);
+      CHECK(engine.setMuted(true));
+      CHECK(engine.isMuted() == true);
+      CHECK(engine.status().muted == true);
 
       auto const backendMuted = backendRaw->property(PropertyId::Muted);
 
       REQUIRE(backendMuted);
-      REQUIRE(std::get<bool>(*backendMuted) == true);
+      CHECK(std::get<bool>(*backendMuted) == true);
     }
 
     SECTION("property controls survive backend open")
     {
-      REQUIRE(engine.setVolume(0.37F));
-      REQUIRE(engine.setMuted(true));
+      CHECK(engine.setVolume(0.37F));
+      CHECK(engine.setMuted(true));
 
       engine.play(desc);
 
@@ -738,11 +737,11 @@ namespace ao::audio::test
 
       target->onBackendError("Hardware failure");
 
-      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Error; }));
+      CHECK(waitUntil([&] { return engine.status().transport == Transport::Error; }));
       auto const snap = engine.status();
 
-      REQUIRE(snap.transport == Transport::Error);
-      REQUIRE(snap.statusText == "Hardware failure");
+      CHECK(snap.transport == Transport::Error);
+      CHECK(snap.statusText == "Hardware failure");
     }
 
     SECTION("Route ready updates snapshot")
@@ -763,11 +762,11 @@ namespace ao::audio::test
 
       REQUIRE(callbackThread.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
       CHECK(callbackThread.get() != callerThread);
-      REQUIRE(waitUntil([&] { return engine.routeStatus().optAnchor.has_value(); }));
+      CHECK(waitUntil([&] { return engine.routeStatus().optAnchor.has_value(); }));
       auto const route = engine.routeStatus();
 
       REQUIRE(route.optAnchor);
-      REQUIRE(route.optAnchor->id == "anchor-123");
+      CHECK(route.optAnchor->id == "anchor-123");
     }
 
     SECTION("Playback status callbacks update engine internals")
@@ -787,7 +786,7 @@ namespace ao::audio::test
 
       target->onPropertyChanged(PropertyId::Volume);
 
-      REQUIRE(waitUntil([&] { return engine.status().routeState.engineOutputFormat.sampleRate == 48000; }));
+      CHECK(waitUntil([&] { return engine.status().routeState.engineOutputFormat.sampleRate == 48000; }));
     }
 
     SECTION("close drops the retired render session target")
@@ -796,7 +795,7 @@ namespace ao::audio::test
 
       engine.play(desc);
       auto* const target = backendRaw->target();
-      REQUIRE(target != nullptr);
+      CHECK(target != nullptr);
 
       engine.stop();
 
@@ -829,7 +828,7 @@ namespace ao::audio::test
 
       REQUIRE(callbackThread.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
       CHECK(callbackThread.get() != backendCallbackThread);
-      REQUIRE(waitUntil([&] { return engine.status().transport == Transport::Idle; }));
+      CHECK(waitUntil([&] { return engine.status().transport == Transport::Idle; }));
     }
 
     SECTION("queued render event from retired session is ignored")
@@ -947,18 +946,18 @@ namespace ao::audio::test
                                        { routeChanged.store(true, std::memory_order_release); });
 
       blockingEngine.play(PlaybackInput{.filePath = "song.flac"});
-      REQUIRE(blockingEngine.status().transport == Transport::Playing);
+      CHECK(blockingEngine.status().transport == Transport::Playing);
 
       blockingBackendRaw->blockStop();
       auto stopFuture = std::async(std::launch::async, [&] { blockingEngine.stop(); });
-      REQUIRE(blockingBackendRaw->waitForStopEntered(std::chrono::seconds{1}));
+      CHECK(blockingBackendRaw->waitForStopEntered(std::chrono::seconds{1}));
 
       blockingBackendRaw->fireRouteReady("stale-anchor");
       CHECK_FALSE(
         waitUntil([&] { return routeChanged.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
 
       blockingBackendRaw->releaseStop();
-      REQUIRE(stopFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+      CHECK(stopFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
 
       CHECK_FALSE(
         waitUntil([&] { return routeChanged.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
@@ -970,7 +969,7 @@ namespace ao::audio::test
     {
       auto const desc = PlaybackInput{.filePath = "test.flac"};
       engine.play(desc);
-      REQUIRE(engine.status().transport == Transport::Playing);
+      CHECK(engine.status().transport == Transport::Playing);
 
       auto newBackendPtr = std::make_unique<CapturingBackend>();
       auto const newDevice = Device{.id = DeviceId{"new-device"},
@@ -981,23 +980,23 @@ namespace ao::audio::test
       engine.setBackend(std::move(newBackendPtr), newDevice);
 
       auto const snap = engine.status();
-      REQUIRE(snap.transport == Transport::Playing);
-      REQUIRE(snap.currentDeviceId == "new-device");
+      CHECK(snap.transport == Transport::Playing);
+      CHECK(snap.currentDeviceId == "new-device");
     }
 
     SECTION("Engine::resume on already playing engine does nothing")
     {
       engine.play(PlaybackInput{.filePath = "test.flac"});
-      REQUIRE(engine.status().transport == Transport::Playing);
+      CHECK(engine.status().transport == Transport::Playing);
       engine.resume();
-      REQUIRE(engine.status().transport == Transport::Playing);
+      CHECK(engine.status().transport == Transport::Playing);
     }
 
     SECTION("Engine::pause on Idle engine does nothing")
     {
       engine.stop();
       engine.pause();
-      REQUIRE(engine.status().transport == Transport::Idle);
+      CHECK(engine.status().transport == Transport::Idle);
     }
   }
 
@@ -1096,7 +1095,7 @@ namespace ao::audio::test
       backendRaw->releaseCalls();
     }
 
-    REQUIRE(firstEntered);
+    CHECK(firstEntered);
 
     auto secondStartedPromise = std::promise<void>{};
     auto secondStarted = secondStartedPromise.get_future();
@@ -1116,11 +1115,11 @@ namespace ao::audio::test
 
     backendRaw->releaseCalls();
 
-    REQUIRE(secondStartedStatus == std::future_status::ready);
+    CHECK(secondStartedStatus == std::future_status::ready);
     REQUIRE(first.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
     REQUIRE(second.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
-    REQUIRE(first.get());
-    REQUIRE(second.get());
+    CHECK(first.get());
+    CHECK(second.get());
     CHECK(backendRaw->maxActiveCalls() == 1);
   }
 
@@ -1159,12 +1158,12 @@ namespace ao::audio::test
     // The StreamingSource decode loop runs in a background thread.
     // It should hit the error and call handleSourceError, which now
     // fires onTrackEnded so we can synchronize without polling.
-    REQUIRE(waitUntil([&] { return errorFuture.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready; },
-                      std::chrono::seconds{15}));
+    CHECK(waitUntil([&] { return errorFuture.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready; },
+                    std::chrono::seconds{15}));
 
     auto const snap = engine.status();
-    REQUIRE(snap.transport == Transport::Error);
-    REQUIRE(snap.statusText == "decode failed");
+    CHECK(snap.transport == Transport::Error);
+    CHECK(snap.statusText == "decode failed");
   }
 
   // A backend that faithfully models a real render thread: start() spawns a
@@ -1300,6 +1299,6 @@ namespace ao::audio::test
       poller.join();
     }
 
-    REQUIRE(engine.status().transport == Transport::Idle);
+    CHECK(engine.status().transport == Transport::Idle);
   }
 } // namespace ao::audio::test

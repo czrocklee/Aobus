@@ -46,7 +46,7 @@ namespace ao::gtk::test
     SECTION("clearing the selection restores empty text")
     {
       runtime.views().setSelection(reply.viewId, {TrackId{1}, TrackId{2}});
-      REQUIRE(text.get_text() == "2 items selected");
+      CHECK(text.get_text() == "2 items selected");
 
       runtime.views().setSelection(reply.viewId, {});
       CHECK(text.get_text().empty());

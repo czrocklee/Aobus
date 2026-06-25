@@ -149,7 +149,7 @@ namespace ao::uimodel::input::test
 
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
     auto const overrides = model.toOverrides();
-    REQUIRE(overrides.size() == 1);
+    CHECK(overrides.size() == 1);
     REQUIRE(overrides.count("playback.next") == 1);
     CHECK(overrides.at("playback.next") == std::vector<std::string>{"Ctrl+N"});
   }

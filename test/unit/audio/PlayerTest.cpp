@@ -172,11 +172,11 @@ namespace ao::audio::test
     auto executor = async::ImmediateExecutor{};
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
-    REQUIRE(player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
+    CHECK(player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
 
     SECTION("setOutput same values exits early")
     {
-      REQUIRE(player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
+      CHECK(player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
       // Success is implicit if no extra provider calls are made (Verify can be used)
       Verify(Method(mockProvider, createBackend)).Once();
     }
@@ -192,7 +192,7 @@ namespace ao::audio::test
 
       // If it was ignored, status should be empty or default (because _cachedEngineRoute wasn't updated)
       auto const snap = player.status();
-      REQUIRE(snap.flow.nodes.empty());
+      CHECK(snap.flow.nodes.empty());
     }
 
     SECTION("Valid callbacks update player status and graph")
@@ -210,7 +210,7 @@ namespace ao::audio::test
       onGraphChanged(flow::Graph{});
 
       auto const snap = player.status();
-      REQUIRE(qualityChangedFired == true);
+      CHECK(qualityChangedFired == true);
     }
 
     SECTION("Merged graph with no system stream node")
@@ -224,7 +224,7 @@ namespace ao::audio::test
 
       auto const snap = player.status();
       // Should still work, but no connection from engine to system
-      REQUIRE(snap.flow.nodes.size() == 4); // Source, Decoder, Engine, Sink
+      CHECK(snap.flow.nodes.size() == 4); // Source, Decoder, Engine, Sink
 
       // The source node is labelled with the detected codec.
       auto const srcIt = std::ranges::find(snap.flow.nodes, std::string_view{"ao-source"}, &flow::Node::id);
@@ -236,7 +236,7 @@ namespace ao::audio::test
     {
       auto engineSnap = createBaseEngineRoute();
       player.handleRouteChanged(engineSnap, player.playbackGeneration() - 1);
-      REQUIRE(player.status().flow.nodes.empty());
+      CHECK(player.status().flow.nodes.empty());
     }
 
     SECTION("System graph change with stale generation is ignored")
@@ -255,7 +255,7 @@ namespace ao::audio::test
       onGraphChanged(flow::Graph{});
 
       auto const snap = player.status();
-      REQUIRE(snap.flow.nodes.empty());
+      CHECK(snap.flow.nodes.empty());
     }
   }
 
@@ -289,15 +289,15 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
     // 1. Call setOutput before devices are available
-    REQUIRE(player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
+    CHECK(player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
 
     // Verify that it's NOT yet active (engine still has null backend/default device)
     auto const snapBefore = player.status();
-    REQUIRE(snapBefore.engine.currentDeviceId == "null");
+    CHECK(snapBefore.engine.currentDeviceId == "null");
 
     // 1b. Call play while pending - should be ignored
     CHECK_FALSE(player.play(PlaybackInput{.filePath = "song.flac"}));
-    REQUIRE(player.status().engine.transport == Transport::Idle);
+    CHECK(player.status().engine.transport == Transport::Idle);
 
     // 2. Simulate devices being discovered
     REQUIRE(onDevicesChanged);
@@ -309,9 +309,9 @@ namespace ao::audio::test
 
     // 3. Verify that the output was automatically restored
     auto const snapAfter = player.status();
-    REQUIRE(snapAfter.engine.currentDeviceId == "system-default");
-    REQUIRE(snapAfter.engine.backendId == kBackendPipeWire);
-    REQUIRE(player.isReady() == true);
+    CHECK(snapAfter.engine.currentDeviceId == "system-default");
+    CHECK(snapAfter.engine.backendId == kBackendPipeWire);
+    CHECK(player.isReady() == true);
 
     // 4. Simulate SECOND devices change to trigger updateDevice for active device
     onDevicesChanged({Device{.id = DeviceId{"system-default"},
@@ -465,7 +465,7 @@ namespace ao::audio::test
     onDevicesChanged({pipeWireDevice()});
     executor.drain();
 
-    REQUIRE(player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
+    CHECK(player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
     auto route = createBaseEngineRoute();
     route.optAnchor = RouteAnchor{.backend = kBackendPipeWire, .id = "mock-stream-id"};
     player.handleRouteChanged(route, player.playbackGeneration());
@@ -511,7 +511,7 @@ namespace ao::audio::test
       CHECK_FALSE(player.setOutput(kBackendAlsa, DeviceId{"alsa-dev"}, kProfileShared));
       // It should just log an error and return.
       auto const snap = player.status();
-      REQUIRE(snap.engine.backendId == kBackendNone);
+      CHECK(snap.engine.backendId == kBackendNone);
     }
 
     SECTION("Seek is propagated to engine")
@@ -519,20 +519,20 @@ namespace ao::audio::test
       // Even with NullBackend, elapsed should be updated in Engine status
       // wait, Engine::seek returns early if no source.
       player.seek(std::chrono::seconds{1});
-      REQUIRE(player.status().engine.elapsed == std::chrono::milliseconds{0});
+      CHECK(player.status().engine.elapsed == std::chrono::milliseconds{0});
     }
 
     SECTION("Volume and mute are propagated to engine and status")
     {
-      REQUIRE(player.setVolume(0.6F));
-      REQUIRE(player.status().volume == Catch::Approx{0.6F});
-      REQUIRE(player.status().engine.volume == Catch::Approx{0.6F});
+      CHECK(player.setVolume(0.6F));
+      CHECK(player.status().volume == Catch::Approx{0.6F});
+      CHECK(player.status().engine.volume == Catch::Approx{0.6F});
 
-      REQUIRE(player.setMuted(true));
-      REQUIRE(player.status().muted == true);
+      CHECK(player.setMuted(true));
+      CHECK(player.status().muted == true);
 
-      REQUIRE(player.toggleMute());
-      REQUIRE(player.status().muted == false);
+      CHECK(player.toggleMute());
+      CHECK(player.status().muted == false);
     }
   }
 
@@ -545,7 +545,7 @@ namespace ao::audio::test
       auto tempSub = std::move(sub);
     }
 
-    REQUIRE(called == true);
+    CHECK(called == true);
   }
 
   TEST_CASE("Player - Provider state outlives backend shutdown", "[playback][unit][player][lifecycle]")
@@ -642,13 +642,13 @@ namespace ao::audio::test
       auto executor = async::ImmediateExecutor{};
       auto player = Player{executor};
       player.addProvider(std::make_unique<LifetimeProvider>(events));
-      REQUIRE(player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive));
+      CHECK(player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive));
     }
 
     // Old (broken) order was: providers.clear() → enginePtr.reset(), which destroyed the provider
     // before the engine had a chance to close the backend — backends that touch provider-owned state
     // (e.g. AlsaGraphRegistry) during close() would access a destroyed object.
     // Correct order: provider shutdown → engine destroy (backend close) → provider destroy.
-    REQUIRE(events.values == std::vector<std::string>{"provider shutdown", "backend close", "provider destroy"});
+    CHECK(events.values == std::vector<std::string>{"provider shutdown", "backend close", "provider destroy"});
   }
 } // namespace ao::audio::test

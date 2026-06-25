@@ -51,7 +51,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("all 26 component types have descriptors")
     {
-      REQUIRE(descriptors.size() >= 26);
+      CHECK(descriptors.size() >= 26);
     }
 
     SECTION("all descriptors have non-empty type")
@@ -101,7 +101,7 @@ namespace ao::gtk::layout::editor::test
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->minChildren == 2);
-      CHECK(optDesc->optMaxChildren.has_value());
+      REQUIRE(optDesc->optMaxChildren.has_value());
       CHECK(*optDesc->optMaxChildren == 2);
     }
 
@@ -111,7 +111,7 @@ namespace ao::gtk::layout::editor::test
 
       REQUIRE(optDesc.has_value());
       CHECK(optDesc->minChildren == 1);
-      CHECK(optDesc->optMaxChildren.has_value());
+      REQUIRE(optDesc->optMaxChildren.has_value());
       CHECK(*optDesc->optMaxChildren == 1);
     }
 
@@ -801,7 +801,7 @@ namespace ao::gtk::layout::editor::test
       REQUIRE(compPtr != nullptr);
 
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
-      REQUIRE(box != nullptr);
+      CHECK(box != nullptr);
     }
 
     SECTION("recursive template reference produces error")
@@ -885,7 +885,7 @@ namespace ao::gtk::layout::editor::test
       auto layoutRuntime = LayoutRuntime{registry};
       auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(compPtr != nullptr);
+      CHECK(compPtr != nullptr);
     }
 
     SECTION("absoluteCanvas with positioned child")
@@ -906,7 +906,7 @@ namespace ao::gtk::layout::editor::test
       auto layoutRuntime = LayoutRuntime{registry};
       auto const compPtr = layoutRuntime.build(ctx, doc);
 
-      REQUIRE(compPtr != nullptr);
+      CHECK(compPtr != nullptr);
     }
   }
 

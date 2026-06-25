@@ -13,17 +13,17 @@ namespace ao::audio::backend::detail::test
   {
     SECTION("parseUintProperty strictness")
     {
-      REQUIRE(parseUintProperty(nullptr) == std::nullopt);
-      REQUIRE(parseUintProperty("") == std::nullopt);
-      REQUIRE(parseUintProperty("abc") == std::nullopt);
-      REQUIRE(parseUintProperty("12abc") == std::nullopt);
-      REQUIRE(parseUintProperty("abc12") == std::nullopt);
-      REQUIRE(parseUintProperty(" 12") == std::nullopt);
-      REQUIRE(parseUintProperty("4294967296") == std::nullopt);
+      CHECK(parseUintProperty(nullptr) == std::nullopt);
+      CHECK(parseUintProperty("") == std::nullopt);
+      CHECK(parseUintProperty("abc") == std::nullopt);
+      CHECK(parseUintProperty("12abc") == std::nullopt);
+      CHECK(parseUintProperty("abc12") == std::nullopt);
+      CHECK(parseUintProperty(" 12") == std::nullopt);
+      CHECK(parseUintProperty("4294967296") == std::nullopt);
 
-      REQUIRE(parseUintProperty("42") == 42);
-      REQUIRE(parseUintProperty("0") == 0);
-      REQUIRE(parseUintProperty("4294967295") == 4294967295U);
+      CHECK(parseUintProperty("42") == 42);
+      CHECK(parseUintProperty("0") == 0);
+      CHECK(parseUintProperty("4294967295") == 4294967295U);
     }
   }
 } // namespace ao::audio::backend::detail::test

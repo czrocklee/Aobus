@@ -23,7 +23,7 @@ namespace ao::audio::test
     {
       auto runtime = createDecoderSession("song.flac", format);
       REQUIRE(runtime);
-      REQUIRE(*runtime != nullptr);
+      CHECK(*runtime != nullptr);
     }
 
     SECTION("Creates ALAC runtime for MP4 containers with alac sample entries")
@@ -33,11 +33,11 @@ namespace ao::audio::test
 
       auto session1 = createDecoderSession(m4a.path, format);
       REQUIRE(session1);
-      REQUIRE(*session1 != nullptr);
+      CHECK(*session1 != nullptr);
 
       auto session2 = createDecoderSession(mp4.path, format);
       REQUIRE(session2);
-      REQUIRE(*session2 != nullptr);
+      CHECK(*session2 != nullptr);
     }
 
     SECTION("Creates ALAC runtime when a video track appears before the audio track")
@@ -54,7 +54,7 @@ namespace ao::audio::test
 
       auto session = createDecoderSession(m4a.path, format);
       REQUIRE(session);
-      REQUIRE(*session != nullptr);
+      CHECK(*session != nullptr);
     }
 
     SECTION("Creates AAC runtime for MP4 containers with AAC sample entries")
@@ -63,14 +63,14 @@ namespace ao::audio::test
 
       auto session = createDecoderSession(m4a.path, format);
       REQUIRE(session);
-      REQUIRE(*session != nullptr);
+      CHECK(*session != nullptr);
     }
 
     SECTION("Creates MP3 runtime for .mp3")
     {
       auto session = createDecoderSession("song.mp3", format);
       REQUIRE(session);
-      REQUIRE(*session != nullptr);
+      CHECK(*session != nullptr);
     }
 
     SECTION("Reports NotSupported for unsupported extensions")

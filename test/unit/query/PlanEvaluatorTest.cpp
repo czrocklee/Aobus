@@ -848,7 +848,7 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    REQUIRE(plan.accessProfile == AccessProfile::ColdOnly);
+    CHECK(plan.accessProfile == AccessProfile::ColdOnly);
 
     auto track = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
     CHECK(evaluator.evaluateFull(plan, track.coldOnlyView()) == true);
@@ -861,7 +861,7 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    REQUIRE(plan.accessProfile == AccessProfile::HotAndCold);
+    CHECK(plan.accessProfile == AccessProfile::HotAndCold);
 
     auto track = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
     CHECK(evaluator.evaluateFull(plan, track.hotOnlyView()) == false);
@@ -959,7 +959,7 @@ namespace ao::query::test
 
     auto wtxn = beginWriteTransaction(env);
     auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    REQUIRE(dict.put(wtxn, "rock")); // Will get ID 1 (DictionaryId starts from 1)
+    CHECK(dict.put(wtxn, "rock")); // Will get ID 1 (DictionaryId starts from 1)
     REQUIRE(wtxn.commit());
 
     // Query for #rock
@@ -1150,7 +1150,7 @@ namespace ao::query::test
     {
       auto plan = compileOk(compiler, parseOk("$year in [1984, 1985, 1986, 1987, 1988, 1989, 1990, 1991]"));
 
-      REQUIRE(plan.inSets.size() == 1);
+      CHECK(plan.inSets.size() == 1);
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
@@ -1159,7 +1159,7 @@ namespace ao::query::test
       auto plan = compileOk(
         compiler, parseOk(R"($artist in ["Adams", "Bach", "Chopin", "Debussy", "Elgar", "Faure", "Glass", "Haydn"])"));
 
-      REQUIRE(plan.inSets.size() == 1);
+      CHECK(plan.inSets.size() == 1);
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
@@ -1168,7 +1168,7 @@ namespace ao::query::test
       auto plan = compileOk(
         compiler, parseOk(R"(%mood in ["ambient", "deep", "focus", "late", "mix", "quiet", "study", "warm"])"));
 
-      REQUIRE(plan.inSets.size() == 1);
+      CHECK(plan.inSets.size() == 1);
       CHECK(evaluator.evaluateFull(plan, track.view()));
     }
 
@@ -1176,7 +1176,7 @@ namespace ao::query::test
     {
       auto plan = compileOk(compiler, parseOk("$year in [1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987]"));
 
-      REQUIRE(plan.inSets.size() == 1);
+      CHECK(plan.inSets.size() == 1);
       CHECK_FALSE(evaluator.evaluateFull(plan, track.view()));
     }
   }

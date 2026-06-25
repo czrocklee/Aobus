@@ -35,10 +35,10 @@ namespace ao::lmdb::test
   {
     auto temp = ao::test::TempDir{};
     auto env = Environment::open(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    REQUIRE(env);
+    CHECK(env);
 
     auto txn = WriteTransaction::begin(*env);
-    REQUIRE(txn);
+    CHECK(txn);
   }
 
   TEST_CASE("Environment - move constructor", "[lmdb][unit][environment]")

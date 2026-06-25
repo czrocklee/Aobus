@@ -19,7 +19,7 @@ namespace ao::utility::test
     auto const targetPath = std::filesystem::path{tempDir.path()} / "config.yaml";
 
     auto const result = writeAtomically(targetPath, "version: 1\n");
-    REQUIRE(result.has_value());
+    CHECK(result.has_value());
 
     REQUIRE(std::filesystem::exists(targetPath));
 
@@ -37,8 +37,8 @@ namespace ao::utility::test
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "state.yaml";
 
-    REQUIRE(writeAtomically(targetPath, "old").has_value());
-    REQUIRE(writeAtomically(targetPath, "new").has_value());
+    CHECK(writeAtomically(targetPath, "old").has_value());
+    CHECK(writeAtomically(targetPath, "new").has_value());
 
     auto in = std::ifstream{targetPath};
     auto const content = std::string{std::istreambuf_iterator{in}, std::istreambuf_iterator<char>{}};

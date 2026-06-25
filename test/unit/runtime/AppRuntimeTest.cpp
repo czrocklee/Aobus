@@ -68,7 +68,7 @@ namespace ao::rt::test
     appPtr->addAudioProvider(std::make_unique<DummyAudioProvider>());
 
     // reloadAllTracks
-    REQUIRE_NOTHROW(appPtr->reloadAllTracks());
+    CHECK_NOTHROW(appPtr->reloadAllTracks());
 
     // playSelectionInFocusedView (with no focused view)
     CHECK(appPtr->playSelectionInFocusedView() == kInvalidTrackId);

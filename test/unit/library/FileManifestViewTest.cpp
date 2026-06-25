@@ -34,6 +34,6 @@ namespace ao::library::test
   {
     auto buffer = std::array<std::byte, 10>{};
 
-    REQUIRE_THROWS(FileManifestView{buffer});
+    CHECK_THROWS(FileManifestView{buffer});
   }
 } // namespace ao::library::test

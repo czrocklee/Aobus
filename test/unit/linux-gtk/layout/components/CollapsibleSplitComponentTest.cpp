@@ -357,7 +357,7 @@ namespace ao::gtk::layout::test
 
       emitClicked(*handleButton);
 
-      REQUIRE(stateStore.saveCount() == 1);
+      CHECK(stateStore.saveCount() == 1);
       REQUIRE(stateStore.document().components.contains("detail-split"));
       auto const& entry = stateStore.document().components.at("detail-split");
       CHECK(entry.type == "collapsibleSplit");

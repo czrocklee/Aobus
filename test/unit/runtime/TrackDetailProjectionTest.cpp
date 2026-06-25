@@ -83,7 +83,7 @@ namespace ao::rt::test
     auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
 
     auto snap = projPtr->snapshot();
-    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    CHECK(snap.selectionKind == SelectionKind::Single);
     auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
     REQUIRE(titleAgg.optValue.has_value());
     CHECK(getString(titleAgg) == "Before");
@@ -136,7 +136,7 @@ namespace ao::rt::test
     auto const projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
 
-    REQUIRE(snap.selectionKind == SelectionKind::Multiple);
+    CHECK(snap.selectionKind == SelectionKind::Multiple);
 
     // Titles differ
     CHECK(snap.fields[static_cast<std::size_t>(F::Title)].mixed);
@@ -158,7 +158,7 @@ namespace ao::rt::test
     auto const projPtr =
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
-    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    CHECK(snap.selectionKind == SelectionKind::Single);
     CHECK(getString(snap.fields[static_cast<std::size_t>(F::Title)]) == "Song A");
   }
 
@@ -210,7 +210,7 @@ namespace ao::rt::test
     auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
 
-    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    CHECK(snap.selectionKind == SelectionKind::Single);
     auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
     REQUIRE(titleAgg.optValue.has_value());
     CHECK(getString(titleAgg) == "Already Selected");
@@ -222,7 +222,7 @@ namespace ao::rt::test
     auto const projPtr =
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
-    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    CHECK(snap.selectionKind == SelectionKind::Single);
     CHECK_FALSE(snap.fields[static_cast<std::size_t>(F::Title)].optValue.has_value());
   }
 
@@ -239,7 +239,7 @@ namespace ao::rt::test
     auto const projPtr =
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
-    REQUIRE(snap.selectionKind == SelectionKind::Single);
+    CHECK(snap.selectionKind == SelectionKind::Single);
     CHECK(snap.commonTagIds.size() == 1);
   }
 
@@ -272,7 +272,7 @@ namespace ao::rt::test
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1, id2}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
 
-    REQUIRE(snap.customMetadata.size() == 4); // Key1, Key2, Shared, Mixed (sorted by key)
+    CHECK(snap.customMetadata.size() == 4); // Key1, Key2, Shared, Mixed (sorted by key)
 
     auto const findCustom = [&](std::string_view key) -> CustomMetadataItem const*
     {

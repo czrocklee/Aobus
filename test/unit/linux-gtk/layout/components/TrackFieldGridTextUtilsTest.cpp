@@ -143,7 +143,7 @@ namespace ao::gtk::layout::track_field_grid::test
     auto snap = makeSnap();
     auto const* uiDef = trackFieldUiDefinition(TrackField::Quality);
     REQUIRE(uiDef != nullptr);
-    REQUIRE(uiDef->formatValue == nullptr);
+    CHECK(uiDef->formatValue == nullptr);
 
     rt::trackFieldArrayAt(snap.fields, TrackField::Quality).optValue = std::string{"anything"};
 
