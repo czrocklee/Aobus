@@ -5,9 +5,8 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "track/StatusSlot.h"
+#include "track/SelectionInfoLabel.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/library/Library.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
@@ -20,30 +19,31 @@ namespace ao::gtk::layout
   using namespace uimodel::layout;
   namespace
   {
-    class StatusSlotComponent final : public ILayoutComponent
+    class SelectionInfoComponent final : public ILayoutComponent
     {
     public:
-      StatusSlotComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime.library().changes(), ctx.runtime.notifications(), ctx.runtime.views()}
+      SelectionInfoComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.runtime.views()}
       {
+        _widget.widget().add_css_class("ao-selection-info-modern");
       }
 
       Gtk::Widget& widget() override { return _widget.widget(); }
 
     private:
-      StatusSlot _widget;
+      SelectionInfoLabel _widget;
     };
 
-    std::unique_ptr<ILayoutComponent> createStatusSlot(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createSelectionInfo(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<StatusSlotComponent>(ctx, node);
+      return std::make_unique<SelectionInfoComponent>(ctx, node);
     }
   } // namespace
 
-  void registerStatusSlotComponent(ComponentRegistry& registry)
+  void registerSelectionInfoComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.statusSlot", .displayName = "Status Slot", .category = ComponentCategory::Status},
-      createStatusSlot);
+      {.type = "status.selectionInfo", .displayName = "Selection Info", .category = ComponentCategory::Status},
+      createSelectionInfo);
   }
 } // namespace ao::gtk::layout

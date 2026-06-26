@@ -82,6 +82,7 @@ namespace ao::rt
       .message = std::move(request.message),
       .sticky = request.sticky,
       .optTimeout = request.optTimeout,
+      .activityPresentation = request.activityPresentation,
       .content = std::move(request.content),
     };
 

@@ -138,7 +138,7 @@ add_executable(ao_core_test
     unit/uimodel/playback/SeekViewModelTest.cpp
     unit/uimodel/playback/TransportViewModelTest.cpp
     unit/uimodel/playback/VolumeViewModelTest.cpp
-    unit/uimodel/status/StatusSlotModelTest.cpp
+    unit/uimodel/status/ActivityStatusModelTest.cpp
     unit/uimodel/tag/TagEditWorkflowTest.cpp
     unit/uimodel/track/TrackFilterViewModelTest.cpp
     unit/uimodel/track/TrackFilterResolverTest.cpp
@@ -262,7 +262,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/track/TrackRowCacheTest.cpp
     unit/linux-gtk/track/TrackScrollBaselineTest.cpp
     unit/linux-gtk/track/SelectionInfoLabelTest.cpp
-    unit/linux-gtk/track/StatusSlotTest.cpp
+    unit/linux-gtk/status/ActivityStatusTest.cpp
     unit/linux-gtk/portal/LibraryTaskProgressDialogTest.cpp
     unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
     unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp

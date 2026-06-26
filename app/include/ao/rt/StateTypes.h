@@ -148,12 +148,20 @@ namespace ao::rt
     std::optional<NotificationProgressState> optProgress{};
   };
 
+  enum class NotificationActivityPresentation : std::uint8_t
+  {
+    Default,
+    DetailOnly,
+    Hidden,
+  };
+
   struct NotificationRequest final
   {
     NotificationSeverity severity = NotificationSeverity::Info;
     std::string message{};
     bool sticky = false;
     std::optional<std::chrono::milliseconds> optTimeout{};
+    NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;
     NotificationContentState content{};
   };
 
@@ -164,6 +172,7 @@ namespace ao::rt
     std::string message{};
     bool sticky = false;
     std::optional<std::chrono::milliseconds> optTimeout{};
+    NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;
     NotificationContentState content{};
   };
 

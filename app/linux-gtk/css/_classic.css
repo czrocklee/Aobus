@@ -57,6 +57,80 @@
   padding: 0 12px; /* Remove extra vertical padding. */
 }
 
+.ao-theme-classic .ao-activity-status-classic-inline {
+  min-width: var(--ao-activity-status-classic-reserve-width);
+  min-height: 22px;
+  padding: 0 var(--ao-spacing-sm);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: @theme_fg_color;
+}
+
+.ao-theme-classic .ao-activity-status-classic-inline label {
+  font-size: 0.82rem;
+}
+
+.ao-theme-classic .ao-activity-status-trigger {
+  border-radius: 0;
+}
+
+.ao-theme-classic .ao-activity-status-warning {
+  color: @warning_color;
+  background: alpha(@warning_color, 0.06);
+}
+
+.ao-theme-classic .ao-activity-status-error {
+  color: @error_color;
+  background: alpha(@error_color, 0.06);
+}
+
+.ao-theme-classic .ao-activity-status-dismiss {
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 0;
+}
+
+.ao-theme-classic .ao-activity-status-progress trough {
+  min-height: 3px;
+  border-radius: 0;
+}
+
+.ao-theme-classic .ao-activity-status-progress progress {
+  border-radius: 0;
+}
+
+.ao-theme-classic .ao-activity-detail {
+  min-width: 240px;
+  padding: var(--ao-spacing-sm);
+}
+
+.ao-theme-classic .ao-activity-detail-row {
+  padding: 1px var(--ao-spacing-sm);
+  border-radius: 0;
+  border-left: 2px solid alpha(currentColor, 0.35);
+}
+
+.ao-theme-classic .ao-activity-detail-title {
+  font-weight: 600;
+}
+
+.ao-theme-classic .ao-activity-detail-message {
+  opacity: 0.78;
+}
+
+.ao-theme-classic .ao-activity-detail-dismiss {
+  min-width: 18px;
+  min-height: 18px;
+  border-radius: 0;
+}
+
+.ao-theme-classic .ao-activity-detail-action {
+  min-height: 20px;
+  padding: 0 var(--ao-spacing-sm);
+  border-radius: 0;
+}
+
 /* Keep classic separators as strict 1px solid lines. */
 .ao-theme-classic separator {
   background-color: alpha(currentColor, 0.12); /* Matches the previous hardcoded border color. */
@@ -66,6 +140,11 @@
   min-height: 1px;
   margin: 0;
   padding: 0;
+}
+
+.ao-theme-classic separator.ao-status-separator {
+  margin-left: var(--ao-spacing-md);
+  margin-right: var(--ao-spacing-md);
 }
 
 /* Track Controls Bar */

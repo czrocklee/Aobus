@@ -65,7 +65,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/SeekViewModel.cpp
     uimodel/playback/TransportViewModel.cpp
     uimodel/playback/VolumeViewModel.cpp
-    uimodel/status/StatusSlotModel.cpp
+    uimodel/status/ActivityStatusModel.cpp
     uimodel/track/TrackCustomViewEditorModel.cpp
     uimodel/track/TrackPageRoute.cpp
     uimodel/track/TrackFilterViewModel.cpp

@@ -175,7 +175,16 @@ templates:
       - type: spacer
         layout:
           hexpand: true
-      - type: status.statusSlot
+      - type: status.activityStatus
+        props:
+          variant: classicInline
+          idleBehavior: hidden
+          maxTextChars: 42
+        layout:
+          valign: center
+      - type: status.selectionInfo
+        layout:
+          valign: center
       - type: separator
         props:
           orientation: vertical

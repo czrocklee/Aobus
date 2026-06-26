@@ -54,11 +54,21 @@ root:
                         halign: center
                         hexpand: true
                         cssClasses: ao-search-pill-modern
-                    - type: status.trackCount
+                    - type: box
+                      props:
+                        orientation: horizontal
+                        spacing: 12
                       layout:
                         slot: end
                         halign: end
                         cssClasses: ao-header-stats-modern
+                      children:
+                        - type: status.selectionInfo
+                          layout:
+                            valign: center
+                        - type: status.trackCount
+                          layout:
+                            valign: center
             - id: main-workspace-split
               type: collapsibleSplit
               props:
@@ -215,20 +225,17 @@ templates:
               slot: end
               valign: center
             children:
-              - type: status.statusSlot
+              - type: status.activityStatus
+                props:
+                  variant: ambient
+                  idleBehavior: hidden
+                  maxTextChars: 34
                 layout:
                   halign: end
                   valign: center
               - type: playback.qualityIndicator
                 layout:
                   valign: center
-              - type: separator
-                props:
-                  orientation: vertical
-                layout:
-                  heightRequest: 24
-                  valign: center
-                  cssClasses: ao-separator-subtle
               - type: app.menuButton
                 props:
                   icon: open-menu-symbolic

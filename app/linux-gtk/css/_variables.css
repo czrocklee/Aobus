@@ -41,6 +41,8 @@
 
   /* Progress Bar */
   --ao-seek-trough-height: 6px;
+  --ao-activity-status-progress-width: 76px;
+  --ao-activity-status-classic-reserve-width: 96px;
   --ao-seek-slider-size: 14px;
 
   /* Font Size */

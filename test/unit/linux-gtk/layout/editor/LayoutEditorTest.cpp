@@ -783,16 +783,55 @@ namespace ao::gtk::layout::editor::test
       CHECK(bar.children[2].getLayout<std::string>("cssClasses", "") == "ao-grouping-region");
     }
 
-    SECTION("status.defaultBar template contains 7 children")
+    SECTION("status.defaultBar template preserves right-side status order")
     {
       auto const templates = getBuiltInTemplates();
       auto const& bar = templates.at("status.defaultBar");
 
       CHECK(bar.type == "box");
 
-      // 7 children: playbackDetails, spacer, nowPlaying, spacer, statusSlot, separator, trackCount
-      int const expectedChildren = 7;
+      // 8 children: playbackDetails, spacer, nowPlaying, spacer, activityStatus,
+      // selectionInfo, separator, trackCount.
+      int const expectedChildren = 8;
       CHECK(bar.children.size() == expectedChildren);
+      REQUIRE(bar.children.size() >= 8);
+      CHECK(bar.children[4].type == "status.activityStatus");
+      CHECK(bar.children[5].type == "status.selectionInfo");
+      CHECK(bar.children[6].type == "separator");
+      CHECK(bar.children[7].type == "status.trackCount");
+      CHECK(bar.children[4].getProp<std::string>("variant", "") == "classicInline");
+      CHECK(bar.children[4].getProp<std::string>("idleBehavior", "") == "hidden");
+    }
+
+    SECTION("modern layout keeps selection counts in header and activity in bottom bar")
+    {
+      auto const doc = createBuiltInLayout(LayoutPresetId::Modern);
+      REQUIRE(doc.root.children.size() >= 2);
+
+      auto const& mainPaned = doc.root.children[0];
+      REQUIRE(mainPaned.children.size() == 2);
+      auto const& contentShell = mainPaned.children[1];
+      REQUIRE(!contentShell.children.empty());
+      auto const& responsiveHeader = contentShell.children[0];
+      REQUIRE(!responsiveHeader.children.empty());
+      auto const& header = responsiveHeader.children[0];
+      REQUIRE(header.children.size() >= 3);
+      auto const& headerStats = header.children[2];
+
+      REQUIRE(headerStats.children.size() == 2);
+      CHECK(headerStats.children[0].type == "status.selectionInfo");
+      CHECK(headerStats.children[1].type == "status.trackCount");
+
+      auto const& modernBar = doc.templates.at("playback.modernBar");
+      REQUIRE(modernBar.children.size() >= 2);
+      auto const& bottomContent = modernBar.children[1];
+      REQUIRE(bottomContent.children.size() >= 3);
+      auto const& bottomEnd = bottomContent.children[2];
+
+      REQUIRE(!bottomEnd.children.empty());
+      CHECK(bottomEnd.children[0].type == "status.activityStatus");
+      CHECK(bottomEnd.children[0].getProp<std::string>("variant", "") == "ambient");
+      CHECK(bottomEnd.children[0].getProp<std::string>("idleBehavior", "") == "hidden");
     }
 
     SECTION("track.selectionDetailPane contains field grid")

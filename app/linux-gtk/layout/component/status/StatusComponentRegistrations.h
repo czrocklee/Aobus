@@ -9,7 +9,8 @@ namespace ao::gtk::layout
 
   void registerPlaybackDetailsComponent(ComponentRegistry& registry);
   void registerNowPlayingStatusComponent(ComponentRegistry& registry);
-  void registerStatusSlotComponent(ComponentRegistry& registry);
+  void registerActivityStatusComponent(ComponentRegistry& registry);
+  void registerSelectionInfoComponent(ComponentRegistry& registry);
   void registerLibraryTrackCountComponent(ComponentRegistry& registry);
   void registerStatusMessageLabelComponent(ComponentRegistry& registry);
 } // namespace ao::gtk::layout

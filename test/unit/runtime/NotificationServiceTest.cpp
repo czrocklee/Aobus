@@ -64,6 +64,7 @@ namespace ao::rt::test
       .severity = NotificationSeverity::Info,
       .message = "Importing library",
       .sticky = true,
+      .activityPresentation = NotificationActivityPresentation::DetailOnly,
       .content =
         NotificationContentState{
           .templateId = "notification.import-progress",
@@ -86,6 +87,7 @@ namespace ao::rt::test
     CHECK(entry.id == id);
     CHECK(entry.message == "Importing library");
     CHECK(entry.sticky);
+    CHECK(entry.activityPresentation == NotificationActivityPresentation::DetailOnly);
     CHECK(entry.content.templateId == "notification.import-progress");
     CHECK(entry.content.title == "Library import");
     CHECK(entry.content.iconName == "document-open-symbolic");

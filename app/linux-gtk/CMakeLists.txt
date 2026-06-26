@@ -45,7 +45,6 @@ add_library(aobus-gtk-lib STATIC
 
     track/LibraryTrackCountLabel.cpp
     track/SelectionInfoLabel.cpp
-    track/StatusSlot.cpp
     track/TrackPageHost.cpp
     track/TrackViewPage.cpp
     track/TrackColumnController.cpp
@@ -155,10 +154,12 @@ add_library(aobus-gtk-lib STATIC
     layout/component/container/SplitComponent.cpp
     layout/component/status/LibraryTrackCountComponent.cpp
     layout/component/status/NowPlayingStatusComponent.cpp
+    layout/component/status/ActivityStatusComponent.cpp
     layout/component/status/PlaybackDetailsComponent.cpp
+    layout/component/status/SelectionInfoComponent.cpp
     layout/component/status/StatusMessageLabelComponent.cpp
     layout/component/status/StatusRegistry.cpp
-    layout/component/status/StatusSlotComponent.cpp
+    status/ActivityStatus.cpp
     layout/editor/LayoutEditorDialog.cpp
 )
 

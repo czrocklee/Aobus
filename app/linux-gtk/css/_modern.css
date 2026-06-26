@@ -161,6 +161,108 @@
   border: none;
 }
 
+.ao-theme-modern .ao-selection-info-modern {
+  opacity: 0.72;
+}
+
+.ao-theme-modern .ao-activity-status {
+  padding: var(--ao-spacing-xs) var(--ao-spacing-lg);
+  border-radius: var(--ao-control-radius);
+  color: alpha(@theme_fg_color, 0.68);
+  transition: color var(--ao-transition-base), background var(--ao-transition-base), opacity var(--ao-transition-base);
+}
+
+.ao-theme-modern .ao-activity-status-ambient {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  opacity: 0.88;
+}
+
+.ao-theme-modern .ao-activity-status-processing {
+  color: alpha(@theme_fg_color, 0.74);
+}
+
+.ao-theme-modern .ao-activity-status-success {
+  color: alpha(@theme_fg_color, 0.62);
+}
+
+.ao-theme-modern .ao-activity-status-info {
+  color: alpha(@theme_fg_color, 0.72);
+}
+
+.ao-theme-modern .ao-activity-status-warning {
+  color: var(--ao-quality-intervention);
+  background: alpha(currentColor, 0.06);
+}
+
+.ao-theme-modern .ao-activity-status-error {
+  color: var(--ao-quality-clipped);
+  background: alpha(currentColor, 0.07);
+}
+
+.ao-theme-modern .ao-activity-status-openable label {
+  text-decoration-color: alpha(currentColor, 0.45);
+}
+
+.ao-theme-modern .ao-activity-status-dismiss {
+  min-width: var(--ao-list-row-min-height);
+  min-height: var(--ao-list-row-min-height);
+  padding: 0;
+  border-radius: var(--ao-control-radius);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: alpha(currentColor, var(--ao-opacity-dim));
+  margin: 0;
+}
+
+.ao-theme-modern .ao-activity-status-dismiss:hover {
+  background: alpha(currentColor, 0.10);
+  color: currentColor;
+}
+
+.ao-theme-modern .ao-activity-status-dismiss image {
+  -gtk-icon-size: 12px;
+  margin: 0;
+  padding: 0;
+}
+
+.ao-theme-modern .ao-activity-status-progress trough {
+  min-height: var(--ao-seek-trough-height);
+  border-radius: var(--ao-control-radius);
+  background: alpha(currentColor, 0.14);
+}
+
+.ao-theme-modern .ao-activity-status-progress progress {
+  border-radius: var(--ao-control-radius);
+  background: @accent_bg_color;
+}
+
+.ao-theme-modern .ao-activity-detail {
+  min-width: 280px;
+  padding: var(--ao-spacing-lg);
+}
+
+.ao-theme-modern .ao-activity-detail-row {
+  padding: var(--ao-spacing-sm) var(--ao-spacing-lg);
+  border-radius: var(--ao-radius-md);
+  background: alpha(currentColor, 0.025);
+}
+
+.ao-theme-modern .ao-activity-detail-title {
+  font-weight: 600;
+}
+
+.ao-theme-modern .ao-activity-detail-message {
+  opacity: 0.62;
+}
+
+.ao-theme-modern .ao-activity-detail-action,
+.ao-theme-modern .ao-activity-detail-dismiss {
+  border-radius: var(--ao-control-radius);
+}
+
 /* Ensure components inside popovers don't block the glassmorphism */
 .ao-theme-modern popover scrolledwindow,
 .ao-theme-modern popover scrolledwindow>viewport,

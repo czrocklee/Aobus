@@ -13,6 +13,7 @@
 #include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
 #include "platform/AudioBackendBootstrap.h"
+#include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinator.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
@@ -214,7 +215,11 @@ namespace ao::gtk
         rebuildListPages(txn);
       });
 
-    _runtime.notifications().post(rt::NotificationSeverity::Info, "Aobus Ready");
+    _runtime.notifications().post(rt::NotificationRequest{
+      .severity = rt::NotificationSeverity::Info,
+      .message = "Aobus Ready",
+      .activityPresentation = rt::NotificationActivityPresentation::Hidden,
+    });
 
     auto const txn = _runtime.musicLibrary().readTransaction();
     rebuildListPages(txn);
