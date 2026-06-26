@@ -20,7 +20,9 @@
 #include "playback/AobusSoulWindow.h"
 #include "playback/AudioDeviceSelector.h"
 #include "tag/TagEditController.h"
+#include <ao/Exception.h>
 #include <ao/Type.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Types.h>
@@ -45,7 +47,9 @@
 
 #include <array>
 #include <cstdint>
+#include <exception>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -445,21 +449,84 @@ namespace ao::gtk
                                 APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
                                 auto* const asyncRuntime = &self->_context.runtime.async();
-                                co_await asyncRuntime->resumeOnWorker();
-                                APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
+                                auto optResult = std::optional<LayoutLoadResult>{};
+                                auto exceptionPtr = std::exception_ptr{};
 
-                                if (storePtr && configPtr)
+                                try
                                 {
-                                  auto result = loadLayoutOnWorker(*storePtr, componentStateStorePtr.get(), *configPtr);
+                                  co_await asyncRuntime->resumeOnWorker();
+                                  APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
 
-                                  co_await asyncRuntime->resumeOnCallbackExecutor();
-                                  APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-
-                                  self->applyLoadedLayout(std::move(result.presetId),
-                                                          std::move(result.document),
-                                                          std::move(result.componentState));
+                                  if (storePtr && configPtr)
+                                  {
+                                    optResult = loadLayoutOnWorker(*storePtr, componentStateStorePtr.get(), *configPtr);
+                                  }
                                 }
+                                catch (std::exception const& e)
+                                {
+                                  async::rethrowIfOperationCancelled(e);
+                                  exceptionPtr = std::current_exception();
+                                }
+
+                                co_await asyncRuntime->resumeOnCallbackExecutor();
+
+                                if (exceptionPtr)
+                                {
+                                  self->logLayoutLoadFailure(exceptionPtr);
+                                  co_return;
+                                }
+
+                                if (!optResult)
+                                {
+                                  co_return;
+                                }
+
+                                APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
+                                self->applyLoadedLayoutWithFailureLogging(std::move(optResult->presetId),
+                                                                          std::move(optResult->document),
+                                                                          std::move(optResult->componentState));
                               }(this, _layoutStorePtr, _componentStateStorePtr, _configPtr));
+  }
+
+  void ShellLayoutController::logLayoutLoadFailure(std::exception_ptr exceptionPtr)
+  {
+    try
+    {
+      std::rethrow_exception(exceptionPtr);
+    }
+    catch (ao::Exception const& e)
+    {
+      APP_LOG_CRITICAL(
+        "ShellLayoutController: layout load failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
+    }
+    catch (std::exception const& e)
+    {
+      async::rethrowIfOperationCancelled(e);
+
+      APP_LOG_CRITICAL("ShellLayoutController: layout load failed (internal error): {}", e.what());
+    }
+  }
+
+  void ShellLayoutController::applyLoadedLayoutWithFailureLogging(
+    std::string presetId,
+    uimodel::layout::LayoutDocument document,
+    uimodel::layout::LayoutComponentStateDocument componentState)
+  {
+    try
+    {
+      applyLoadedLayout(std::move(presetId), std::move(document), std::move(componentState));
+    }
+    catch (ao::Exception const& e)
+    {
+      APP_LOG_CRITICAL(
+        "ShellLayoutController: layout apply failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
+    }
+    catch (std::exception const& e)
+    {
+      async::rethrowIfOperationCancelled(e);
+
+      APP_LOG_CRITICAL("ShellLayoutController: layout apply failed (internal error): {}", e.what());
+    }
   }
 
   void ShellLayoutController::applyLoadedLayout(std::string presetId,
@@ -507,7 +574,10 @@ namespace ao::gtk
     {
       if (storePtr)
       {
-        return storePtr->load(id).value_or(layout::createBuiltInLayout(layout::presetIdFromString(id)));
+        if (auto optDoc = storePtr->load(id); optDoc)
+        {
+          return std::move(*optDoc);
+        }
       }
 
       return layout::createBuiltInLayout(layout::presetIdFromString(id));

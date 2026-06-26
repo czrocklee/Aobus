@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/library/LibraryScanner.h>
@@ -143,6 +144,7 @@ namespace ao::rt
     }
     catch (...)
     {
+      async::rethrowIfOperationCancelled();
       exceptionPtr = std::current_exception();
     }
 

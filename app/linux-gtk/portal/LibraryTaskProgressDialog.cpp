@@ -31,28 +31,35 @@ namespace ao::gtk::portal
 
   void LibraryTaskProgressDialog::setupUi(std::int32_t /*maxItems*/)
   {
-    auto* const okButton = addPrimaryAction("OK", Gtk::ResponseType::OK);
-    okButton->set_sensitive(false);
-    // Store the button in a property if I need to access it later,
-    // but AppDialog doesn't expose them. I'll add a member to LibraryTaskProgressDialog.
-    _okButton = okButton;
+    _okButton = addPrimaryAction("OK", Gtk::ResponseType::OK);
 
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kSpacingMedium);
 
-    _titleLabel.set_markup("<b>Processing library...</b>");
     _titleLabel.set_halign(Gtk::Align::START);
     box->append(_titleLabel);
 
-    _progressLabel.set_text("Starting...");
     _progressLabel.set_halign(Gtk::Align::START);
     _progressLabel.set_ellipsize(Pango::EllipsizeMode::END);
     box->append(_progressLabel);
 
     _progressBar.set_show_text(true);
-    _progressBar.set_fraction(0.0);
     box->append(_progressBar);
 
     setContentWidget(*box);
+
+    beginTask();
+  }
+
+  void LibraryTaskProgressDialog::beginTask()
+  {
+    _titleLabel.set_markup("<b>Processing library...</b>");
+    _progressLabel.set_text("Starting...");
+    _progressBar.set_fraction(0.0);
+
+    if (_okButton != nullptr)
+    {
+      _okButton->set_sensitive(false);
+    }
   }
 
   void LibraryTaskProgressDialog::updateProgress(std::string const& message, double fraction)

@@ -32,6 +32,9 @@ namespace ao::rt
     LibraryTasks(async::Runtime& asyncRuntime, library::MusicLibrary& library, LibraryChanges& changes);
     ~LibraryTasks();
 
+    // Returning a Result, including an error Result, resumes the caller on the callback executor.
+    // Unexpected exceptions may still propagate from the executor where they occur; UI callers should
+    // present them through a boundary that returns to the callback executor first.
     async::Task<Result<>> importLibraryAsync(std::filesystem::path path);
     async::Task<Result<>> exportLibraryAsync(std::filesystem::path path, ExportMode mode);
     async::Task<Result<library::ScanPlan>> buildScanPlanAsync();

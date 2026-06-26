@@ -11,6 +11,7 @@ add_definitions(${LLVM_DEFINITIONS})
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
 
 add_library(AobusLintPlugin MODULE
+  check/AsyncCancellationGuardCheck.cpp
   check/CApiGlobalQualificationCheck.cpp
   check/ConcreteFinalCheck.cpp
   check/ControlBlockSpacingCheck.cpp

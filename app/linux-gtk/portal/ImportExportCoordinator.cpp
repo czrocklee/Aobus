@@ -7,20 +7,8 @@
 #include "app/FormBuilder.h"
 #include "app/ThemeCoordinator.h"
 #include "layout/LayoutConstants.h"
-#include "portal/LibraryTaskProgressDialog.h"
-#include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/async/LifetimeScope.h>
-#include <ao/async/Runtime.h>
-#include <ao/async/Task.h>
-#include <ao/library/LibraryScanner.h>
-#include <ao/rt/AppRuntime.h>
+#include "portal/ImportExportCallbacks.h"
 #include <ao/rt/Log.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/StateTypes.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryTasks.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <giomm/asyncresult.h>
@@ -39,39 +27,22 @@
 #include <gtkmm/window.h>
 
 #include <cstdint>
-#include <exception>
 #include <filesystem>
-#include <format>
 #include <memory>
-#include <optional>
-#include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk::portal
 {
-  namespace
-  {
-    void logStructuredError(std::string_view action, Error const& error)
-    {
-      APP_LOG_ERROR("{}: code={}, message={}, location={}:{}",
-                    action,
-                    static_cast<int>(error.code),
-                    error.message,
-                    error.location.file_name(),
-                    error.location.line());
-    }
-  } // namespace
-
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
                                                    ImportExportCallbacks callbacks,
                                                    ThemeCoordinator& themeController)
-    : _parent{parent}, _runtime{runtime}, _callbacks{std::move(callbacks)}, _themeController{themeController}
+    : _parent{parent}
+    , _callbacks{std::move(callbacks)}
+    , _themeController{themeController}
+    , _workflow{parent, runtime, _callbacks, themeController}
   {
   }
-
-  ImportExportCoordinator::~ImportExportCoordinator() = default;
 
   void ImportExportCoordinator::openLibrary()
   {
@@ -108,152 +79,7 @@ namespace ao::gtk::portal
 
   void ImportExportCoordinator::scanLibrary()
   {
-    APP_LOG_INFO("Starting library scan...");
-
-    _runtime.async().spawnWithLifetime(&_tasks,
-                                       [](ImportExportCoordinator* self) -> async::Task<void>
-                                       {
-                                         auto optPlan = co_await self->buildScanPlanOrReportFailure();
-
-                                         if (!optPlan)
-                                         {
-                                           co_return;
-                                         }
-
-                                         if (self->reportIfNoActionableWork(*optPlan))
-                                         {
-                                           co_return;
-                                         }
-
-                                         APP_LOG_INFO("Scan plan: {} new, {} changed, {} missing, {} errors",
-                                                      optPlan->count(library::ScanClassification::New),
-                                                      optPlan->count(library::ScanClassification::Changed),
-                                                      optPlan->count(library::ScanClassification::Missing),
-                                                      optPlan->count(library::ScanClassification::Error));
-
-                                         co_await self->applyScanPlanWithProgress(std::move(*optPlan));
-                                       }(this));
-  }
-
-  async::Task<std::optional<library::ScanPlan>> ImportExportCoordinator::buildScanPlanOrReportFailure()
-  {
-    try
-    {
-      auto result = co_await _runtime.library().tasks().buildScanPlanAsync();
-
-      if (!result)
-      {
-        logStructuredError("Scan failed", result.error());
-        _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
-        co_return std::nullopt;
-      }
-
-      co_return std::move(*result);
-    }
-    catch (ao::Exception const& e)
-    {
-      APP_LOG_CRITICAL("Scan failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed: Internal error");
-      co_return std::nullopt;
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_CRITICAL("Scan failed (internal error): {}", e.what());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed: Internal error");
-      co_return std::nullopt;
-    }
-  }
-
-  bool ImportExportCoordinator::reportIfNoActionableWork(library::ScanPlan const& plan)
-  {
-    if (plan.count(library::ScanClassification::New) != 0 || plan.count(library::ScanClassification::Changed) != 0 ||
-        plan.count(library::ScanClassification::Missing) != 0)
-    {
-      return false;
-    }
-
-    if (plan.count(library::ScanClassification::Error) == 0)
-    {
-      _runtime.notifications().post(rt::NotificationSeverity::Info, "Library is up to date");
-      return true;
-    }
-
-    for (auto const& item : plan.items)
-    {
-      if (item.classification == library::ScanClassification::Error)
-      {
-        APP_LOG_ERROR("Failed to scan {}: {}", item.uri, item.errorMessage);
-      }
-    }
-
-    _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
-    return true;
-  }
-
-  async::Task<void> ImportExportCoordinator::applyScanPlanWithProgress(library::ScanPlan plan)
-  {
-    if (_libraryTaskDialogPtr == nullptr)
-    {
-      _libraryTaskDialogPtr =
-        std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), _parent);
-      _optLibraryTaskThemeToken = _themeController.registerToplevel(*_libraryTaskDialogPtr);
-    }
-
-    auto* const dialog = _libraryTaskDialogPtr.get();
-    _libraryTaskDialogPtr->signal_response().connect([dialog](std::int32_t /*responseId*/) { dialog->close(); });
-
-    _libraryTaskProgressSub = _runtime.library().changes().onLibraryTaskProgress(
-      [dialog](auto const& ev) { dialog->updateProgress(ev.message, ev.fraction); });
-
-    _libraryTaskDialogPtr->show();
-
-    try
-    {
-      auto result = co_await _runtime.library().tasks().applyScanPlanAsync(std::move(plan));
-
-      if (!result)
-      {
-        logStructuredError("Scan apply failed", result.error());
-        dialog->failed("Scan failed.");
-        _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
-      }
-      else
-      {
-        dialog->ready();
-
-        if (result->cancelled)
-        {
-          _runtime.notifications().post(rt::NotificationSeverity::Info, "Scan cancelled");
-        }
-        else if (result->failureCount > 0)
-        {
-          _runtime.notifications().post(rt::NotificationSeverity::Warning, "Scan completed with errors");
-        }
-        else
-        {
-          onImportFinished();
-        }
-      }
-    }
-    catch (ao::Exception const& e)
-    {
-      APP_LOG_CRITICAL("Scan failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
-      dialog->failed("Scan failed: Internal error.");
-      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed: Internal error");
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_CRITICAL("Scan failed (internal error): {}", e.what());
-      dialog->failed("Scan failed: Internal error.");
-      _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed: Internal error");
-    }
-
-    _libraryTaskProgressSub.reset();
-  }
-
-  void ImportExportCoordinator::onImportFinished() const
-  {
-    _runtime.notifications().post(rt::NotificationSeverity::Info, "Library scan complete");
+    _workflow.scan();
   }
 
   void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path) const
@@ -363,36 +189,7 @@ namespace ao::gtk::portal
 
   void ImportExportCoordinator::exportLibraryTo(std::filesystem::path path, rt::ExportMode mode)
   {
-    _runtime.async().spawnWithLifetime(
-      &_tasks,
-      [](
-        ImportExportCoordinator* self, std::filesystem::path exportPath, rt::ExportMode exportMode) -> async::Task<void>
-      {
-        try
-        {
-          auto result = co_await self->_runtime.library().tasks().exportLibraryAsync(std::move(exportPath), exportMode);
-
-          if (!result)
-          {
-            logStructuredError("Export failed", result.error());
-            self->_runtime.notifications().post(
-              rt::NotificationSeverity::Error, std::format("Export failed: {}", result.error().message));
-            co_return;
-          }
-
-          self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully");
-        }
-        catch (ao::Exception const& e)
-        {
-          APP_LOG_CRITICAL("Export failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
-          self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Export failed: Internal error");
-        }
-        catch (std::exception const& e)
-        {
-          APP_LOG_CRITICAL("Export failed (internal error): {}", e.what());
-          self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Export failed: Internal error");
-        }
-      }(this, std::move(path), mode));
+    _workflow.exportTo(std::move(path), mode);
   }
 
   void ImportExportCoordinator::importLibrary()
@@ -413,45 +210,9 @@ namespace ao::gtk::portal
                         { onLibraryImportSelected(result, fileDialogPtr); });
   }
 
-  async::Task<void> ImportExportCoordinator::importLibraryTask(std::filesystem::path importPath)
-  {
-    try
-    {
-      auto result = co_await _runtime.library().tasks().importLibraryAsync(std::move(importPath));
-
-      if (!result)
-      {
-        logStructuredError("Import failed", result.error());
-        _runtime.notifications().post(
-          rt::NotificationSeverity::Error, std::format("Import failed: {}", result.error().message));
-        co_return;
-      }
-
-      if (_callbacks.onLibraryDataMutated)
-      {
-        _callbacks.onLibraryDataMutated();
-      }
-
-      _runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
-    }
-    catch (ao::Exception const& e)
-    {
-      APP_LOG_CRITICAL("Import failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: Internal error");
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_CRITICAL("Import failed (internal error): {}", e.what());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: Internal error");
-    }
-  }
-
   void ImportExportCoordinator::importLibraryFrom(std::filesystem::path path)
   {
-    _runtime.async().spawnWithLifetime(
-      &_tasks,
-      [](ImportExportCoordinator* self, std::filesystem::path importPath) -> async::Task<void>
-      { co_await self->importLibraryTask(std::move(importPath)); }(this, std::move(path)));
+    _workflow.importFrom(std::move(path));
   }
 
   void ImportExportCoordinator::onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result,

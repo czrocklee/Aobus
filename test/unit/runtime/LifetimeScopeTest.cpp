@@ -5,16 +5,21 @@
 #include <ao/async/Executor.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/async/LifetimeScope.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
+#include <boost/asio/error.hpp>
+#include <boost/system/system_error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <exception>
 #include <functional>
 #include <mutex>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 
@@ -185,6 +190,87 @@ namespace ao::rt::test
     CHECK_FALSE(completed.get());
     runtime.requestStop();
     runtime.join();
+  }
+
+  TEST_CASE("Runtime - Cancellation checkpoint throws OperationCancelled", "[async][unit][runtime]")
+  {
+    auto executor = QueuedExecutor{};
+    auto runtime = Runtime{executor};
+    auto completed = AsyncTestState<bool>::create(false);
+    auto sawCancellation = AsyncTestState<bool>::create(false);
+    auto signal = CancellationSignal{};
+
+    runtime.spawn(pendingControlResumeTask(&runtime, completed),
+                  signal.slot(),
+                  [sawCancellation](std::exception_ptr exPtr) mutable
+                  {
+                    try
+                    {
+                      if (exPtr)
+                      {
+                        std::rethrow_exception(exPtr);
+                      }
+                    }
+                    catch (OperationCancelled const&)
+                    {
+                      sawCancellation.set(true);
+                    }
+                  });
+
+    REQUIRE(executor.waitUntilQueued());
+    signal.emit(CancellationType::all);
+    executor.runQueued();
+
+    REQUIRE(sawCancellation.waitUntil(true));
+    CHECK_FALSE(completed.get());
+
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("OperationCancelled - current exception guard recognizes cancellation", "[async][unit][runtime]")
+  {
+    CHECK_THROWS_AS(
+      []
+      {
+        try
+        {
+          std::rethrow_exception(std::make_exception_ptr(OperationCancelled{}));
+        }
+        catch (...)
+        {
+          rethrowIfOperationCancelled();
+        }
+      }(),
+      OperationCancelled);
+
+    CHECK_THROWS_AS(
+      []
+      {
+        try
+        {
+          std::rethrow_exception(
+            std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted}));
+        }
+        catch (...)
+        {
+          rethrowIfOperationCancelled();
+        }
+      }(),
+      OperationCancelled);
+
+    CHECK_NOTHROW(
+      []
+      {
+        try
+        {
+          std::rethrow_exception(std::make_exception_ptr(std::runtime_error{"not cancellation"}));
+        }
+        catch (...)
+        {
+          rethrowIfOperationCancelled();
+        }
+      }());
   }
 
   TEST_CASE("LifetimeScope - Member task lifecycle", "[async][unit][runtime]")

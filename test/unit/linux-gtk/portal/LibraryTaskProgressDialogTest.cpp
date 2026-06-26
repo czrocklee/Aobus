@@ -89,6 +89,36 @@ namespace ao::gtk::test
       CHECK(findLabelByText(dialog, "All items processed.") != nullptr);
     }
 
+    SECTION("beginTask restores the in-progress state so the dialog can be reused")
+    {
+      auto dialog = LibraryTaskProgressDialog{42, parent};
+      drainGtkEvents();
+
+      dialog.updateProgress("Updating: foo", 0.5);
+      dialog.ready();
+      drainGtkEvents();
+
+      auto* const titlebar = dialog.get_titlebar();
+      REQUIRE(titlebar != nullptr);
+      auto* const headerBar = dynamic_cast<Gtk::HeaderBar*>(titlebar);
+      REQUIRE(headerBar != nullptr);
+      auto* const okButton = findButtonByLabel(*headerBar, "OK");
+      REQUIRE(okButton != nullptr);
+      REQUIRE(okButton->get_sensitive());
+
+      dialog.beginTask();
+      drainGtkEvents();
+
+      CHECK_FALSE(okButton->get_sensitive());
+
+      auto progressBars = collectAll<Gtk::ProgressBar>(dialog);
+      REQUIRE(progressBars.size() == 1);
+      CHECK(progressBars.front()->get_fraction() == 0.0);
+
+      CHECK(findLabelByText(dialog, "Starting...") != nullptr);
+      CHECK(findLabelByText(dialog, "All items processed.") == nullptr);
+    }
+
     SECTION("clicking OK emits the response signal")
     {
       auto dialog = LibraryTaskProgressDialog{42, parent};

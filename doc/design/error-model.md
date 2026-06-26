@@ -184,22 +184,36 @@ transport: if an invariant failure escapes the worker side, the task carries it
 with `std::exception_ptr` and rethrows it on the callback executor, where the UI
 logs it as an internal error.
 
+Lifetime-bound coroutine cancellation is neither a recoverable failure nor an
+internal fault. `ao::async::OperationCancelled` is the async layer's control-flow
+exception for cancelled work; it exists to unwind the coroutine frame so code
+after a cancellation checkpoint cannot touch captured objects whose lifetime is
+no longer guaranteed. The async layer also recognizes Boost.Asio's bare
+`operation_aborted` exception as cancellation, but application code must not
+branch on Boost error codes directly. Business code must let cancellation
+propagate. A broad `catch (std::exception)` or `catch (...)` inside a coroutine
+must first call `ao::async::rethrowIfOperationCancelled(...)`; only the
+`LifetimeScope` completion boundary may silently consume cancellation. Cleanup
+for a cancelled UI operation belongs to the cancellation initiator or owner
+teardown path, not to the cancelled coroutine.
+
 `linux-gtk` is an application leaf: it consumes lower-layer `Result`, value, and
 exception contracts into notifications, dialogs, and logs. It does not convert a
 recoverable `Result` into `ao::Exception` merely because the operation crossed an
 async boundary.
 
 Conversions across these boundaries are lossless and centralized. Do not invent a
-runtime-specific exception type: no downstream catch site branches on the
-structure of an unrecoverable runtime fault, so a plain `ao::Exception` whose
-message and threaded-through `Error::location` reach the log is sufficient, and
-the recoverable channel that *does* need structure already exists as the `Error`
-carried by a `Result`. When converting a store `Result` to a throw, forward the
-original `error.location` (`throw Exception{message, error.location}`) instead of
-recapturing the helper's own call site, so the deepest origin survives for
-diagnostics. The shared `storageValueOrNullopt` helper is the read-side
-embodiment of this rule: `NotFound` becomes `std::nullopt`, any other code
-throws.
+runtime-specific exception type for domain failure: no downstream catch site
+branches on the structure of an unrecoverable runtime fault, so a plain
+`ao::Exception` whose message and threaded-through `Error::location` reach the
+log is sufficient, and the recoverable channel that *does* need structure already
+exists as the `Error` carried by a `Result`. `OperationCancelled` is separate
+async control-flow, not a domain error transport. When converting a store
+`Result` to a throw, forward the original `error.location` (`throw
+Exception{message, error.location}`) instead of recapturing the helper's own call
+site, so the deepest origin survives for diagnostics. The shared
+`storageValueOrNullopt` helper is the read-side embodiment of this rule:
+`NotFound` becomes `std::nullopt`, any other code throws.
 
 Three invariants enforce the model:
 

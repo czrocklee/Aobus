@@ -93,6 +93,7 @@ add_library(aobus-gtk-lib STATIC
     tag/TrackPropertiesDialog.cpp
 
     portal/ImportExportCoordinator.cpp
+    portal/LibraryImportExportWorkflow.cpp
     portal/LibraryTaskProgressDialog.cpp
 
     layout/document/GtkLayoutPresets.cpp

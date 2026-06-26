@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/async/Executor.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
@@ -49,6 +50,16 @@ namespace ao::async
         std::println(stderr, "Unhandled unknown exception in {} coroutine", context);
       }
     }
+
+    [[noreturn]] void translateBoostCancellation(boost::system::system_error const& error)
+    {
+      if (error.code() == boost::asio::error::operation_aborted)
+      {
+        throwOperationCancelled();
+      }
+
+      throw;
+    }
   } // namespace
 
   Runtime::Runtime(IExecutor& callbackExecutor)
@@ -89,9 +100,16 @@ namespace ao::async
 
   Task<void> Runtime::resumeOnCallbackExecutor()
   {
-    co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
-      [this](auto handler) { callbackExecutor().dispatch([cb = std::move(handler)] mutable { cb(); }); },
-      boost::asio::use_awaitable);
+    try
+    {
+      co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
+        [this](auto handler) { callbackExecutor().dispatch([cb = std::move(handler)] mutable { cb(); }); },
+        boost::asio::use_awaitable);
+    }
+    catch (boost::system::system_error const& e)
+    {
+      translateBoostCancellation(e);
+    }
 
     // Single cancellation checkpoint, after the executor hop. cancellation_state
     // is monotonic (a latched terminal signal never clears), so this post-resume
@@ -101,20 +119,27 @@ namespace ao::async
 
     if (state.cancelled() != boost::asio::cancellation_type::none)
     {
-      throw boost::system::system_error{boost::asio::error::operation_aborted};
+      throwOperationCancelled();
     }
   }
 
   Task<void> Runtime::resumeOnWorker()
   {
-    co_await boost::asio::post(workerPool(), boost::asio::use_awaitable);
+    try
+    {
+      co_await boost::asio::post(workerPool(), boost::asio::use_awaitable);
+    }
+    catch (boost::system::system_error const& e)
+    {
+      translateBoostCancellation(e);
+    }
 
     // See resumeOnCallbackExecutor: one checkpoint after the hop is sufficient.
     auto const state = co_await boost::asio::this_coro::cancellation_state;
 
     if (state.cancelled() != boost::asio::cancellation_type::none)
     {
-      throw boost::system::system_error{boost::asio::error::operation_aborted};
+      throwOperationCancelled();
     }
   }
 

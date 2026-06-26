@@ -1,5 +1,6 @@
 # ao_async: coroutine runtime primitives shared by app services and tools.
 add_library(ao_async STATIC
+    OperationCancelled.cpp
     Runtime.cpp
     LifetimeScope.cpp
 )

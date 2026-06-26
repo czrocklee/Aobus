@@ -2,11 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/async/LifetimeScope.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-
-#include <boost/asio/error.hpp>
-#include <boost/system/system_error.hpp>
 
 #include <exception>
 #include <memory>
@@ -66,15 +64,13 @@ namespace ao::async
       {
         std::rethrow_exception(exPtr);
       }
-      catch (boost::system::system_error const& se)
-      {
-        if (se.code() != boost::asio::error::operation_aborted)
-        {
-          std::println(stderr, "Unhandled system error in lifetime-bound coroutine: {}", se.what());
-        }
-      }
       catch (std::exception const& ex)
       {
+        if (isOperationCancelled(ex))
+        {
+          return;
+        }
+
         std::println(stderr, "Unhandled exception in lifetime-bound coroutine: {}", ex.what());
       }
       catch (...)

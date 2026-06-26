@@ -672,6 +672,52 @@ namespace ao::gtk::layout::editor::test
 
       dialog.close();
     }
+
+    SECTION("Reset default ignores a missing active preset")
+    {
+      auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
+
+      auto const collectCombos = [](auto& self, Gtk::Widget& widget, std::vector<Gtk::ComboBoxText*>& combos) -> void
+      {
+        if (auto* const combo = dynamic_cast<Gtk::ComboBoxText*>(&widget); combo != nullptr)
+        {
+          combos.push_back(combo);
+        }
+
+        for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+        {
+          self(self, *child, combos);
+        }
+      };
+
+      auto combos = std::vector<Gtk::ComboBoxText*>{};
+      collectCombos(collectCombos, dialog, combos);
+      REQUIRE(combos.size() == 2);
+
+      auto* const combo = combos[0]->get_active_id() == "classic" ? combos[0] : combos[1];
+      REQUIRE(combo != nullptr);
+      combo->set_active(-1);
+
+      auto* const resetButton = findButtonByLabel(dialog.headerBar(), "Reset Default");
+      REQUIRE(resetButton != nullptr);
+      emitClicked(*resetButton);
+
+      auto saveResult = LayoutSaveResult{};
+      std::int32_t saveCount = 0;
+      dialog.signalSaveRequest().connect(
+        [&](LayoutSaveResult const& res)
+        {
+          saveResult = res;
+          ++saveCount;
+        });
+
+      dialog.response(Gtk::ResponseType::OK);
+      CHECK(saveCount == 1);
+      CHECK(saveResult.resets.empty());
+      CHECK(saveResult.modified.empty());
+
+      dialog.close();
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@
 #include "image/ImageCache.h"
 #include <ao/Type.h>
 #include <ao/async/LifetimeScope.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/library/Library.h>
@@ -20,6 +21,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -33,7 +35,10 @@ namespace ao::gtk
   {
   }
 
-  ThumbnailLoader::~ThumbnailLoader() = default;
+  ThumbnailLoader::~ThumbnailLoader()
+  {
+    _scopePtr->cancelAll();
+  }
 
   std::size_t ThumbnailLoader::RequestKeyHash::operator()(RequestKey const& key) const noexcept
   {
@@ -151,64 +156,77 @@ namespace ao::gtk
     // State the coroutine needs is passed by value into the frame; the loader
     // destruction cancels its decode scope, and the post-dispatch cancellation
     // check prevents this loader from being touched after destruction.
-    _runtime.spawnWithLifetime(_scopePtr.get(),
-                               [](ThumbnailLoader* self,
-                                  async::Runtime* runtime,
-                                  rt::Library const* reads,
-                                  RequestKey requestKey) -> async::Task<void>
-                               {
-                                 auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+    _runtime.spawnWithLifetime(
+      _scopePtr.get(),
+      [](ThumbnailLoader* self, async::Runtime* runtime, rt::Library const* reads, RequestKey requestKey)
+        -> async::Task<void>
+      {
+        auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+        auto exceptionPtr = std::exception_ptr{};
 
-                                 co_await runtime->resumeOnWorker();
+        co_await runtime->resumeOnWorker();
 
-                                 try
-                                 {
-                                   auto optData = std::optional<std::vector<std::byte>>{};
+        try
+        {
+          auto optData = std::optional<std::vector<std::byte>>{};
 
-                                   {
-                                     auto scope = reads->reader();
-                                     optData = scope.loadResource(requestKey.id);
-                                   }
+          {
+            auto scope = reads->reader();
+            optData = scope.loadResource(requestKey.id);
+          }
 
-                                   if (optData)
-                                   {
-                                     auto const memStreamPtr = Gio::MemoryInputStream::create();
-                                     memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
-                                     decodedPtr = Gdk::Pixbuf::create_from_stream_at_scale(
-                                       memStreamPtr, requestKey.physicalPixelSize, requestKey.physicalPixelSize, true);
-                                   }
-                                 }
-                                 catch (...)
-                                 {
-                                   decodedPtr.reset();
-                                 }
+          if (optData)
+          {
+            try
+            {
+              auto const memStreamPtr = Gio::MemoryInputStream::create();
+              memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
+              decodedPtr = Gdk::Pixbuf::create_from_stream_at_scale(
+                memStreamPtr, requestKey.physicalPixelSize, requestKey.physicalPixelSize, true);
+            }
+            catch (Glib::Error const&)
+            {
+              decodedPtr.reset();
+            }
+          }
+        }
+        catch (...)
+        {
+          async::rethrowIfOperationCancelled();
+          exceptionPtr = std::current_exception();
+        }
 
-                                 // Throws operation_aborted (unwinding the frame) if the loader's scope was
-                                 // cancelled, so `self` is safe to touch past this point.
-                                 co_await runtime->resumeOnCallbackExecutor();
+        // Throws OperationCancelled (unwinding the frame) if the loader's scope was
+        // cancelled, so `self` is safe to touch past this point.
+        co_await runtime->resumeOnCallbackExecutor();
 
-                                 // Salvage: a successful decode populates the shared cache even if every
-                                 // requester has since moved on.
-                                 if (decodedPtr && !self->get(requestKey.id, requestKey.physicalPixelSize))
-                                 {
-                                   self->_cache.put(requestKey.id, decodedPtr);
-                                 }
+        // Salvage: a successful decode populates the shared cache even if every
+        // requester has since moved on.
+        if (decodedPtr && !self->get(requestKey.id, requestKey.physicalPixelSize))
+        {
+          self->_cache.put(requestKey.id, decodedPtr);
+        }
 
-                                 auto waiters = std::vector<RequestWaiter>{};
+        auto waiters = std::vector<RequestWaiter>{};
 
-                                 if (auto const it = self->_inFlight.find(requestKey); it != self->_inFlight.end())
-                                 {
-                                   waiters = std::move(it->second);
-                                   self->_inFlight.erase(it);
-                                 }
+        if (auto const it = self->_inFlight.find(requestKey); it != self->_inFlight.end())
+        {
+          waiters = std::move(it->second);
+          self->_inFlight.erase(it);
+        }
 
-                                 for (auto const& waiter : waiters)
-                                 {
-                                   if (waiter.statePtr->active.load(std::memory_order_relaxed))
-                                   {
-                                     waiter.onReady(decodedPtr);
-                                   }
-                                 }
-                               }(this, &_runtime, &_reads, key));
+        for (auto const& waiter : waiters)
+        {
+          if (waiter.statePtr->active.load(std::memory_order_relaxed))
+          {
+            waiter.onReady(decodedPtr);
+          }
+        }
+
+        if (exceptionPtr)
+        {
+          std::rethrow_exception(exceptionPtr);
+        }
+      }(this, &_runtime, &_reads, key));
   }
 } // namespace ao::gtk

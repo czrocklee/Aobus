@@ -217,6 +217,7 @@ target_link_libraries(ao_integration_test PRIVATE ao_app_uimodel ao_test_options
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_gtk_test
     unit/linux-gtk/common/DismissControllerTest.cpp
+    unit/linux-gtk/common/UiWorkflowTest.cpp
     unit/linux-gtk/completion/EntryCompletionControllerTest.cpp
     unit/linux-gtk/list/ListModelTest.cpp
     unit/linux-gtk/list/ListTreeModelBuilderTest.cpp

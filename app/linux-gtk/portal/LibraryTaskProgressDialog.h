@@ -33,6 +33,9 @@ namespace ao::gtk::portal
     LibraryTaskProgressDialog(LibraryTaskProgressDialog&&) = delete;
     LibraryTaskProgressDialog& operator=(LibraryTaskProgressDialog&&) = delete;
 
+    // Restores the in-progress state (running title, "Starting...", 0% progress, disabled OK) so the dialog can be
+    // reused for a new operation without showing the previous run's terminal state.
+    void beginTask();
     void updateProgress(std::string const& message, double fraction);
     void ready();
     void failed(std::string const& message);

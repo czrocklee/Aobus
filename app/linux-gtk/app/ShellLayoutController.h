@@ -19,6 +19,7 @@
 
 #include <gtkmm/window.h>
 
+#include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -96,6 +97,10 @@ namespace ao::gtk
     void applyLoadedLayout(std::string presetId,
                            uimodel::layout::LayoutDocument document,
                            uimodel::layout::LayoutComponentStateDocument componentState);
+    void logLayoutLoadFailure(std::exception_ptr exceptionPtr);
+    void applyLoadedLayoutWithFailureLogging(std::string presetId,
+                                             uimodel::layout::LayoutDocument document,
+                                             uimodel::layout::LayoutComponentStateDocument componentState);
 
     void onEditorSaveRequest(layout::editor::LayoutSaveResult const& result);
 

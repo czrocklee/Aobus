@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "check/AsyncCancellationGuardCheck.h"
 #include "check/BracedInitializationCheck.h"
 #include "check/CApiGlobalQualificationCheck.h"
 #include "check/ChronoNamingConventionCheck.h"
@@ -46,6 +47,7 @@ namespace clang::tidy::readability
     void addCheckFactories(ClangTidyCheckFactories& checkFactories) override
     {
       checkFactories.registerCheck<CApiGlobalQualificationCheck>("aobus-readability-c-api-global-qualification");
+      checkFactories.registerCheck<AsyncCancellationGuardCheck>("aobus-async-cancellation-guard");
       checkFactories.registerCheck<ConcreteFinalCheck>("aobus-modernize-concrete-final");
       checkFactories.registerCheck<ControlBlockSpacingCheck>("aobus-readability-control-block-spacing");
       checkFactories.registerCheck<modernize::NodiscardUsageCheck>("aobus-modernize-nodiscard-usage");

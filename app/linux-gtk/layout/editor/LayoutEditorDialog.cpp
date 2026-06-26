@@ -580,6 +580,12 @@ namespace ao::gtk::layout::editor
   void LayoutEditorDialog::onResetDefault()
   {
     auto const presetId = _comboPresets.get_active_id();
+
+    if (presetId.empty())
+    {
+      return;
+    }
+
     auto const presetEnum = presetIdFromString(presetId.raw());
     _document = createBuiltInLayout(presetEnum);
 
