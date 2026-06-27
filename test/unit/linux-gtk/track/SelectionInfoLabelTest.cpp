@@ -16,7 +16,7 @@ namespace ao::gtk::test
   // SelectionInfoLabel self-subscribes to ViewService selection changes and renders the count.
   // The observable contract is the label text: empty when nothing is selected, singular vs plural
   // noun otherwise. We drive real selection changes and read the rendered text back.
-  TEST_CASE("SelectionInfoLabel - renders selection count text", "[gtk][track][selection]")
+  TEST_CASE("SelectionInfoLabel renders selection count text", "[gtk][unit][track][selection]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

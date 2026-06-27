@@ -55,7 +55,7 @@ namespace ao::gtk::layout::test
     };
   } // namespace
 
-  TEST_CASE("GioActionBridge", "[layout][action]")
+  TEST_CASE("GioActionBridge exports layout actions to Gio action maps", "[gtk][unit][layout][action]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test.gio");
     auto const tempDir = ao::test::TempDir{};

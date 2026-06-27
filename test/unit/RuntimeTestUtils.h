@@ -18,6 +18,7 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackService.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -26,6 +27,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -286,6 +288,80 @@ namespace ao::rt::test
     bool _released{false};
     std::mutex _mutex;
     std::condition_variable _cv;
+  };
+
+  class ManualExecutor final : public async::IExecutor
+  {
+  public:
+    bool isCurrent() const noexcept override { return true; }
+
+    void dispatch(std::move_only_function<void()> task) override
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _tasks.push_back(std::move(task));
+    }
+
+    void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
+
+    bool runOne()
+    {
+      auto task = std::move_only_function<void()>{};
+
+      {
+        auto const lock = std::scoped_lock{_mutex};
+
+        if (_tasks.empty())
+        {
+          return false;
+        }
+
+        task = std::move(_tasks.front());
+        _tasks.pop_front();
+      }
+
+      task();
+      return true;
+    }
+
+    void runUntilIdle()
+    {
+      while (runOne())
+      {
+      }
+    }
+
+    std::size_t queuedCount() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      return _tasks.size();
+    }
+
+    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::milliseconds{500}) const
+    {
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+      while (std::chrono::steady_clock::now() < deadline)
+      {
+        if (queuedCount() != 0)
+        {
+          return true;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+      }
+
+      return queuedCount() != 0;
+    }
+
+    void expectQueued(std::chrono::milliseconds timeout = std::chrono::milliseconds{500}) const
+    {
+      INFO("Timed out waiting for queued executor task");
+      REQUIRE(waitUntilQueued(timeout));
+    }
+
+  private:
+    mutable std::mutex _mutex;
+    std::deque<std::move_only_function<void()>> _tasks;
   };
 
   /**

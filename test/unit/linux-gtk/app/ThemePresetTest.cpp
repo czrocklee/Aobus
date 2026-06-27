@@ -9,7 +9,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ThemePreset - string and CSS class mappings", "[gtk][app][theme]")
+  TEST_CASE("ThemePreset maps strings and CSS classes for each preset", "[gtk][unit][app][theme]")
   {
     CHECK(themePresetToString(rt::ThemePresetId::Classic) == "classic");
     CHECK(themePresetToString(rt::ThemePresetId::Modern) == "modern");

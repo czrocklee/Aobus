@@ -22,7 +22,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackPageHost - lifecycle", "[gtk][track][host]")
+  TEST_CASE("TrackPageHost binds runtime pages to the GTK stack", "[gtk][unit][track][host]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

@@ -116,60 +116,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("ImageWidget - rendering math", "[gtk][image]")
-  {
-    SECTION("fitSourceIntoTarget - aspect ratio and upscaling")
-    {
-      // Source 1000x500 (landscape), target 200x200 -> 200x100
-      CHECK(fitSourceIntoTarget({1000, 500}, {200, 200}).width == 200);
-      CHECK(fitSourceIntoTarget({1000, 500}, {200, 200}).height == 100);
-
-      // Source 500x1000 (portrait), target 200x200 -> 100x200
-      CHECK(fitSourceIntoTarget({500, 1000}, {200, 200}).width == 100);
-      CHECK(fitSourceIntoTarget({500, 1000}, {200, 200}).height == 200);
-
-      // Source 40x40 (small), target 80x80 -> 40x40 (no upscale)
-      CHECK(fitSourceIntoTarget({40, 40}, {80, 80}).width == 40);
-      CHECK(fitSourceIntoTarget({40, 40}, {80, 80}).height == 40);
-
-      // Source 100x100 (square), target 50x50 -> 50x50
-      CHECK(fitSourceIntoTarget({100, 100}, {50, 50}).width == 50);
-      CHECK(fitSourceIntoTarget({100, 100}, {50, 50}).height == 50);
-    }
-
-    SECTION("shouldRefresh - thresholds")
-    {
-      auto const current = RenderTarget{.width = 100, .height = 100};
-
-      // No change
-      CHECK_FALSE(shouldRefresh(current, {100, 100}));
-
-      // 4px jitter (below 5% threshold which is 5px for 100px)
-      CHECK_FALSE(shouldRefresh(current, {104, 100}));
-      CHECK_FALSE(shouldRefresh(current, {100, 104}));
-
-      // 5px change (at 5% threshold)
-      CHECK(shouldRefresh(current, {105, 100}));
-      CHECK(shouldRefresh(current, {100, 105}));
-
-      // Small widget (20x20, 5% is 1px, floor is 2px)
-      auto const small = RenderTarget{.width = 20, .height = 20};
-      CHECK_FALSE(shouldRefresh(small, {21, 20}));
-      CHECK(shouldRefresh(small, {22, 20}));
-
-      // Larger widget (400x400, 5% is 20)
-      auto const large = RenderTarget{.width = 400, .height = 400};
-      CHECK_FALSE(shouldRefresh(large, {419, 419}));
-      CHECK(shouldRefresh(large, {420, 400}));
-
-      // Non-round 5% uses the ceiling so changes below 5% do not refresh.
-      auto const odd = RenderTarget{.width = 101, .height = 101};
-      CHECK_FALSE(shouldRefresh(odd, {106, 101}));
-      CHECK(shouldRefresh(odd, {107, 101}));
-    }
-  }
-
-  TEST_CASE("ImageWidget - basic functionality", "[gtk][image]")
+  TEST_CASE("ImageWidget renders pixbufs at target and allocated sizes", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = ImageWidget{};
@@ -373,7 +320,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ResourceImageController", "[gtk][image]")
+  TEST_CASE("ResourceImageController binds placeholder and loaded image states", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -420,7 +367,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ResourceImageController - async thumbnail mode", "[gtk][image]")
+  TEST_CASE("ResourceImageController - async thumbnail mode updates the widget image", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

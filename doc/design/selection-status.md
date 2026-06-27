@@ -109,6 +109,6 @@ with the existing GTK-side `TrackSelectionController::selectedTracksDuration()`.
 - Widget smoke: `test/unit/linux-gtk/track/SelectionInfoLabelTest.cpp` covers the
   count text; duration correctness is proven at the layers above rather than
   re-proven through the widget.
-- Runtime activity status: `test/unit/uimodel/status/ActivityStatusModelTest.cpp`
+- Runtime activity status: `test/unit/uimodel/status/ActivityStatusModel*Test.cpp`
   covers progress priority, transient completion, warning/error persistence, and
   compact dismissal semantics.

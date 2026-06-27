@@ -4,6 +4,7 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
+#include "layout/component/track/TrackFieldGridPolicy.h"
 #include "layout/component/track/TrackFieldGridRows.h"
 #include "layout/component/track/TrackFieldGridTextUtils.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
@@ -259,35 +260,25 @@ namespace ao::gtk::layout
 
       bool shouldShowRow(BuiltInRow const& row, rt::TrackDetailSnapshot const& snap) const
       {
-        if (!_metadataExpanded)
-        {
-          return false;
-        }
-
-        if (row.valueEditor.getEditing() || _showEmptyMetadata)
-        {
-          return true;
-        }
-
         auto const text = displayTextForField(row.field, snap, kMultipleValuesText, true);
-        return !text.empty();
+        return shouldShowMetadataFieldRow(MetadataFieldVisibility{.metadataExpanded = _metadataExpanded,
+                                                                  .showEmptyMetadata = _showEmptyMetadata,
+                                                                  .editorEditing = row.valueEditor.getEditing(),
+                                                                  .hasDisplayText = !text.empty()});
       }
 
       bool shouldShowCompositeRow(CompositeBuiltInRow const& row, rt::TrackDetailSnapshot const& snap) const
       {
-        if (!_metadataExpanded)
-        {
-          return false;
-        }
-
-        if (row.primaryEditor.getEditing() || row.secondaryEditor.getEditing() || _showEmptyMetadata)
-        {
-          return true;
-        }
-
         auto const primText = displayTextForField(row.primaryField, snap, kCompositeMixedText, false);
         auto const secText = displayTextForField(row.secondaryField, snap, kCompositeMixedText, false);
-        return !primText.empty() || !secText.empty();
+        return shouldShowCompositeMetadataRow(CompositeMetadataFieldVisibility{
+          .metadataExpanded = _metadataExpanded,
+          .showEmptyMetadata = _showEmptyMetadata,
+          .primaryEditorEditing = row.primaryEditor.getEditing(),
+          .secondaryEditorEditing = row.secondaryEditor.getEditing(),
+          .hasPrimaryDisplayText = !primText.empty(),
+          .hasSecondaryDisplayText = !secText.empty(),
+        });
       }
 
       void updateHeaderLabels(rt::TrackDetailSnapshot const& snap)
@@ -947,9 +938,13 @@ namespace ao::gtk::layout
         _grid.attach(_keyColumnWidthAnchor, 0, 0, 1, 1);
         _grid.attach(_valueColumnWidthAnchor, 1, 0, kValueColWidth, 1);
 
-        bool const hasMetadata = !_metadataRows.empty() || !_compositeRows.empty();
+        auto const sectionAvailability = SectionAvailability{
+          .hasMetadataFields = !_metadataRows.empty() || !_compositeRows.empty(),
+          .hasSelectedTracks = (_scope != nullptr && !_scope->snapshot().trackIds.empty()),
+          .hasTechnicalFields = !_technicalRows.empty(),
+        };
 
-        if (hasMetadata)
+        if (shouldRenderMetadataSection(sectionAvailability))
         {
           _metadataHeader.setExpanded(_metadataExpanded);
           _grid.attach(_metadataHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
@@ -967,9 +962,7 @@ namespace ao::gtk::layout
           _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
         }
 
-        bool const tracksSelected = (_scope != nullptr && !_scope->snapshot().trackIds.empty());
-
-        if (tracksSelected)
+        if (shouldRenderCustomSection(sectionAvailability))
         {
           _customHeader.setExpanded(_customExpanded);
           _grid.attach(_customHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
@@ -988,7 +981,7 @@ namespace ao::gtk::layout
           _addPropertyRow.valueSlot().set_visible(_customExpanded);
         }
 
-        if (!_technicalRows.empty())
+        if (shouldRenderTechnicalSection(sectionAvailability))
         {
           _technicalHeader.setExpanded(_technicalExpanded);
           _grid.attach(_technicalHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);

@@ -105,7 +105,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("AudioDeviceSelector - lifecycle", "[gtk][playback][output]")
+  TEST_CASE("AudioDeviceSelector renders devices and routes selected output changes", "[gtk][unit][playback][output]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

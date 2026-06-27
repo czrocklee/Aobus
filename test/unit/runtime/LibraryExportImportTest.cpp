@@ -115,7 +115,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("Library Export/Import Cycle", "[app][unit][core][yaml]")
+  TEST_CASE("LibraryYaml round trip preserves tracks, covers, and lists", "[runtime][workflow][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
@@ -269,7 +269,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Library Export/Import Phase 1 Fields", "[app][unit][core][yaml]")
+  TEST_CASE("LibraryYaml restore preserves classical metadata fields", "[runtime][workflow][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
@@ -346,7 +346,8 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Library Export/Import Base64 Cover Art", "[app][unit][core][yaml][base64]")
+  TEST_CASE("LibraryYaml round trip deduplicates shared cover art resources",
+            "[runtime][workflow][import-export][yaml][cover]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
@@ -447,7 +448,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Library Import replaces and removes cover art", "[app][unit][core][yaml][cover]")
+  TEST_CASE("LibraryYaml merge replaces and removes cover art", "[runtime][workflow][import-export][yaml][cover]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -536,7 +537,8 @@ library:
     }
   }
 
-  TEST_CASE("Library Export/Import List Only", "[app][unit][core][yaml][list]")
+  TEST_CASE("LibraryYaml list-only export restores lists by track URI",
+            "[runtime][workflow][import-export][yaml][list]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
@@ -630,7 +632,8 @@ library:
     }
   }
 
-  TEST_CASE("Library Import Merge Mode", "[app][unit][core][yaml][merge]")
+  TEST_CASE("LibraryYaml merge updates existing tracks and adds new tracks",
+            "[runtime][workflow][import-export][yaml][merge]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -697,7 +700,8 @@ library:
     }
   }
 
-  TEST_CASE("Library import remaps list parents regardless of YAML order", "[core][unit][yaml]")
+  TEST_CASE("LibraryYaml import remaps list parents regardless of YAML order",
+            "[runtime][workflow][import-export][yaml][list][regression]")
   {
     auto temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -770,7 +774,7 @@ library:
     }
   }
 
-  TEST_CASE("Library Import Validation and Error Handling", "[app][unit][core][yaml][error]")
+  TEST_CASE("LibraryYaml import reports invalid input errors", "[runtime][workflow][import-export][yaml][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -954,7 +958,8 @@ library:
     }
   }
 
-  TEST_CASE("Library Delta Export Mode Edge Cases", "[app][unit][core][yaml][delta]")
+  TEST_CASE("LibraryYaml delta export writes changed and unreadable tracks",
+            "[runtime][workflow][import-export][yaml][delta]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -1023,7 +1028,8 @@ library:
     }
   }
 
-  TEST_CASE("Library delta export reports filesystem inspection errors", "[app][unit][core][yaml][delta][error]")
+  TEST_CASE("LibraryYaml delta export reports filesystem inspection errors",
+            "[runtime][workflow][import-export][yaml][delta][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -1052,7 +1058,8 @@ library:
     CHECK(result.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("Library delta import reports filesystem inspection errors", "[app][unit][core][yaml][delta][error]")
+  TEST_CASE("LibraryYaml delta import reports filesystem inspection errors",
+            "[runtime][workflow][import-export][yaml][delta][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -1081,7 +1088,7 @@ library:
     CHECK(result.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("Library List Integrity Edge Cases", "[app][unit][core][yaml][list]")
+  TEST_CASE("LibraryYaml import drops dangling list references", "[runtime][workflow][import-export][yaml][list]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -1134,7 +1141,8 @@ library:
     CHECK(listCount == 2);
   }
 
-  TEST_CASE("Library Import URIs Canonization and FileSize Recovery", "[app][unit][core][yaml][uri]")
+  TEST_CASE("LibraryYaml import canonicalizes track URIs and recovers file sizes",
+            "[runtime][workflow][import-export][yaml][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -1207,7 +1215,7 @@ library:
     REQUIRE(optList->tracks().size() == 3);
   }
 
-  TEST_CASE("Library Import Structural Corruptions", "[app][unit][core][yaml][error]")
+  TEST_CASE("LibraryYaml import handles structural corruption cases", "[runtime][workflow][import-export][yaml][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -1282,7 +1290,8 @@ library:
     }
   }
 
-  TEST_CASE("Library Import Coverage", "[app][unit][core][yaml]")
+  TEST_CASE("LibraryYaml import accepts metadata and delta-mode YAML examples",
+            "[runtime][workflow][import-export][yaml]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};

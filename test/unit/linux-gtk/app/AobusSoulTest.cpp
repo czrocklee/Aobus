@@ -14,36 +14,46 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("AobusSoul - basic functionality", "[gtk][app]")
+  TEST_CASE("AobusSoul renders widget state and applies presentation setters", "[gtk][unit][app][soul]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto soul = AobusSoul{};
 
-    SECTION("initial state")
+    SECTION("initial widget state")
     {
       CHECK(soul.get_visible() == true);
+      CHECK(soul.has_css_class("ao-soul"));
+      CHECK_FALSE(soul.isBreathing());
+      CHECK_FALSE(soul.showFullLogo());
     }
 
-    SECTION("breathe toggles animation")
+    SECTION("breathe toggles animation state")
     {
       soul.breathe(true);
+      CHECK(soul.isBreathing());
+
       soul.breathe(false);
+      CHECK_FALSE(soul.isBreathing());
     }
 
     SECTION("setAura updates color")
     {
       auto color = Gdk::RGBA{"#ff0000"};
       soul.setAura(color);
+      CHECK(soul.aura() == color);
     }
 
-    SECTION("setShowFullLogo updates state")
+    SECTION("setShowFullLogo updates render state")
     {
       soul.setShowFullLogo(true);
+      CHECK(soul.showFullLogo());
+
       soul.setShowFullLogo(false);
+      CHECK_FALSE(soul.showFullLogo());
     }
 
-    SECTION("Gtk::Widget vfuncs")
+    SECTION("Gtk::Widget sizing contract")
     {
       std::int32_t min = -1;
       std::int32_t nat = -1;

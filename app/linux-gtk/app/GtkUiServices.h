@@ -14,7 +14,7 @@ namespace ao::gtk
   class TagEditController;
   namespace portal
   {
-    class ImportExportCoordinator;
+    class ImportExportActions;
   }
   class TrackPageHost;
   class ListNavigationController;
@@ -36,7 +36,7 @@ namespace ao::gtk
     ImageCache* imageCache = nullptr;
     uimodel::playback::PlaybackQueueModel* playbackQueueModel = nullptr;
     TagEditController* tagEditController = nullptr;
-    portal::ImportExportCoordinator* importExportCoordinator = nullptr;
+    portal::ImportExportActions* importExportCoordinator = nullptr;
     TrackPageHost* trackPageHost = nullptr;
     uimodel::track::TrackPresentationViewModel* trackPresentationStore = nullptr;
     ListNavigationController* listNavigationController = nullptr;

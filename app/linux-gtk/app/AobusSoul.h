@@ -46,6 +46,10 @@ namespace ao::gtk
     void setAura(Gdk::RGBA const& aura);
     void setShowFullLogo(bool show);
 
+    bool isBreathing() const;
+    bool showFullLogo() const;
+    Gdk::RGBA aura() const;
+
     static Gdk::RGBA mapAuraColor(uimodel::playback::AuraColor color);
 
     static constexpr double kGoldenRatio = std::numbers::phi;
@@ -61,8 +65,6 @@ namespace ao::gtk
                        int& naturalBaseline) const override;
 
   private:
-    friend class AobusSoulTestPeer;
-
     struct Impl;
 
     static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;

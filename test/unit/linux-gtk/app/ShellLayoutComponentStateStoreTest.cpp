@@ -47,7 +47,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ShellLayoutComponentStateStore persistence and operations", "[gtk][app][layout-state]")
+  TEST_CASE("ShellLayoutComponentStateStore persists component state by layout id", "[gtk][unit][app][layout-state]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";

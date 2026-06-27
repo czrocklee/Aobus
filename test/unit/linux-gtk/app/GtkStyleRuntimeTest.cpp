@@ -10,11 +10,9 @@
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/label.h>
 
-#include <cstdint>
-
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkStyleRuntime - initialization and reloading", "[gtk][app][style]")
+  TEST_CASE("GtkStyleRuntime initializes providers and emits reload notifications", "[gtk][unit][app][style]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -27,8 +25,8 @@ namespace ao::gtk::test
 
     SECTION("initialize is idempotent")
     {
-      manager.initialize();
-      manager.initialize();
+      CHECK_NOTHROW(manager.initialize());
+      CHECK_NOTHROW(manager.initialize());
     }
 
     SECTION("reload triggers signal after debounce")
@@ -38,20 +36,7 @@ namespace ao::gtk::test
 
       manager.reload();
 
-      // Debounce is 150ms. We wait a bit more.
-      for (std::int32_t i = 0; i < 20; ++i)
-      {
-        drainGtkEvents();
-
-        if (refreshed)
-        {
-          break;
-        }
-
-        ::g_usleep(10000); // 10ms
-      }
-
-      CHECK(refreshed == true);
+      CHECK(pumpGtkEventsUntil([&] { return refreshed; }));
       conn.disconnect();
     }
 
@@ -60,8 +45,8 @@ namespace ao::gtk::test
       auto label = Gtk::Label{"Styled Label"};
       auto providerPtr = Gtk::CssProvider::create();
 
-      manager.addProviderForDisplayOf(label, providerPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-      manager.removeProviderForDisplayOf(label, providerPtr);
+      CHECK_NOTHROW(manager.addProviderForDisplayOf(label, providerPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION));
+      CHECK_NOTHROW(manager.removeProviderForDisplayOf(label, providerPtr));
     }
   }
 } // namespace ao::gtk::test

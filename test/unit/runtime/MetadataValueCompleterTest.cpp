@@ -2,9 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
-#include <ao/Type.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -25,25 +23,12 @@ namespace ao::rt::test
   {
     void addMetadataValueTrack(TestMusicLibrary& testLib, std::string artist, std::string album)
     {
-      auto txn = testLib.library().writeTransaction();
-      auto writer = testLib.library().tracks().writer(txn);
-      auto builder = library::TrackBuilder::createNew();
-
-      builder.metadata().title("Metadata Value Track").artist(std::move(artist)).album(std::move(album));
-      builder.property()
-        .uri("/tmp/metadata-value-completion.flac")
-        .duration(std::chrono::seconds{120})
-        .bitrate(Bitrate{320000})
-        .sampleRate(SampleRate{44100})
-        .channels(Channels{2})
-        .bitDepth(BitDepth{16});
-
-      auto hotData = builder.serializeHot(txn, testLib.library().dictionary());
-      REQUIRE(hotData);
-      auto coldData = builder.serializeCold(txn, testLib.library().dictionary(), testLib.library().resources());
-      REQUIRE(coldData);
-      REQUIRE(writer.createHotCold(*hotData, *coldData));
-      REQUIRE(txn.commit());
+      library::test::addTrack(testLib.library(),
+                              library::test::TrackSpec{.title = "Metadata Value Track",
+                                                       .artist = std::move(artist),
+                                                       .album = std::move(album),
+                                                       .uri = "/tmp/metadata-value-completion.flac",
+                                                       .duration = std::chrono::seconds{120}});
     }
 
     std::vector<std::string> insertTexts(std::vector<CompletionItem> const& items)

@@ -23,7 +23,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findWidgetByClass;
 
-  TEST_CASE("Status bar components register descriptors", "[gtk][unit][shell]")
+  TEST_CASE("Status bar components register status descriptors", "[gtk][unit][layout][status]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.status_test");
 
@@ -42,7 +42,8 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(registry.descriptor("status.notificationCenter").has_value());
   }
 
-  TEST_CASE("status.activityStatus routes notification actions through ActionRegistry", "[gtk][status][activity]")
+  TEST_CASE("status.activityStatus routes notification actions through ActionRegistry",
+            "[gtk][unit][layout][status][activity]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
@@ -99,7 +100,8 @@ namespace ao::gtk::layout::test
     window.unset_child();
   }
 
-  TEST_CASE("status.activityStatus validates notification actions before rendering", "[gtk][status][activity]")
+  TEST_CASE("status.activityStatus validates notification actions before rendering",
+            "[gtk][unit][layout][status][activity]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};

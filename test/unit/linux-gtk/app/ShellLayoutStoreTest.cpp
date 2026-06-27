@@ -15,7 +15,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ShellLayoutStore persistence and operations", "[app][unit][layout]")
+  TEST_CASE("ShellLayoutStore persists layout documents and default selection", "[gtk][unit][app][layout]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";

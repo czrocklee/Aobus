@@ -85,7 +85,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TagEditor - chip interaction", "[gtk][tag][geometry]")
+  TEST_CASE("TagEditor lays out tag chips and routes chip interactions", "[gtk][unit][tag][geometry]")
   {
     constexpr auto kLongTag = "AnExtremelyLongTagNameForNarrowLayouts";
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();

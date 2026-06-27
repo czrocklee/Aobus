@@ -4,6 +4,7 @@
 #include "layout/runtime/LayoutContext.h"
 
 #include "app/GtkUiServices.h"
+#include "portal/ImportExportActions.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -21,7 +22,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("bindServices - copies each service into its subsystem context", "[layout][runtime]")
+  TEST_CASE("bindServices copies each service into its subsystem context", "[gtk][unit][layout][runtime]")
   {
     auto track = TrackUiContext{};
     auto list = ListUiContext{};
@@ -36,7 +37,7 @@ namespace ao::gtk::layout::test
       .imageCache = sentinelPtr<ImageCache>(0x2000),
       .playbackQueueModel = sentinelPtr<uimodel::playback::PlaybackQueueModel>(0x3000),
       .tagEditController = sentinelPtr<TagEditController>(0x4000),
-      .importExportCoordinator = sentinelPtr<portal::ImportExportCoordinator>(0x5000),
+      .importExportCoordinator = sentinelPtr<portal::ImportExportActions>(0x5000),
       .trackPageHost = sentinelPtr<TrackPageHost>(0x6000),
       .trackPresentationStore = sentinelPtr<uimodel::track::TrackPresentationViewModel>(0x7000),
       .listNavigationController = sentinelPtr<ListNavigationController>(0x8000),
@@ -52,7 +53,7 @@ namespace ao::gtk::layout::test
     CHECK(playback.queueModel == sentinelPtr<uimodel::playback::PlaybackQueueModel>(0x3000));
     CHECK(detail.imageCache == sentinelPtr<ImageCache>(0x2000));
     CHECK(tag.editController == sentinelPtr<TagEditController>(0x4000));
-    CHECK(portal.coordinator == sentinelPtr<portal::ImportExportCoordinator>(0x5000));
+    CHECK(portal.coordinator == sentinelPtr<portal::ImportExportActions>(0x5000));
     CHECK(theme.themeController == sentinelPtr<ThemeCoordinator>(0x9000));
   }
 } // namespace ao::gtk::layout::test

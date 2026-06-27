@@ -2,10 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/TestUtils.h"
-#include <ao/Type.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
@@ -25,40 +22,18 @@ namespace ao::rt::test
 {
   namespace
   {
-    TrackId addCompletionTrack(TestMusicLibrary& testLib,
-                               std::span<std::string const> tags,
-                               std::span<std::pair<std::string, std::string> const> custom)
+    void addCompletionTrack(TestMusicLibrary& testLib,
+                            std::span<std::string const> tags,
+                            std::span<std::pair<std::string, std::string> const> custom)
     {
-      auto txn = testLib.library().writeTransaction();
-      auto writer = testLib.library().tracks().writer(txn);
-      auto builder = library::TrackBuilder::createNew();
-
-      builder.metadata().title("Completion Track").artist("Artist").album("Album");
-      builder.property()
-        .uri("/tmp/query-completion.flac")
-        .duration(std::chrono::seconds{120})
-        .bitrate(Bitrate{320000})
-        .sampleRate(SampleRate{44100})
-        .channels(Channels{2})
-        .bitDepth(BitDepth{16});
-
-      for (auto const& tag : tags)
-      {
-        builder.tags().add(tag);
-      }
-
-      for (auto const& [key, value] : custom)
-      {
-        builder.customMetadata().add(key, value);
-      }
-
-      auto hotData = builder.serializeHot(txn, testLib.library().dictionary());
-      REQUIRE(hotData);
-      auto coldData = builder.serializeCold(txn, testLib.library().dictionary(), testLib.library().resources());
-      REQUIRE(coldData);
-      auto [id, _] = ao::test::requireValue(writer.createHotCold(*hotData, *coldData));
-      REQUIRE(txn.commit());
-      return id;
+      library::test::addTrack(testLib.library(),
+                              library::test::TrackSpec{.title = "Completion Track",
+                                                       .artist = "Artist",
+                                                       .album = "Album",
+                                                       .uri = "/tmp/query-completion.flac",
+                                                       .tags = {tags.begin(), tags.end()},
+                                                       .customMetadata = {custom.begin(), custom.end()},
+                                                       .duration = std::chrono::seconds{120}});
     }
 
     QueryExpressionCompleter makeCompleter(TestMusicLibrary& testLib,

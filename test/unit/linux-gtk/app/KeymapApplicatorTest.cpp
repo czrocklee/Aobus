@@ -23,7 +23,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("applyKeymapAccelerators installs accelerators for bound actions", "[gtk][app][accel]")
+  TEST_CASE("applyKeymapAccelerators installs accelerators for bound actions", "[gtk][unit][app][accel]")
   {
     auto const appPtr = ensureGtkApplication();
 
@@ -33,7 +33,7 @@ namespace ao::gtk::test
     CHECK_FALSE(appPtr->get_accels_for_action("win.applicator.install").empty());
   }
 
-  TEST_CASE("applyKeymapAccelerators clears accelerators dropped from the keymap", "[gtk][app][accel]")
+  TEST_CASE("applyKeymapAccelerators clears accelerators dropped from the keymap", "[gtk][unit][app][accel]")
   {
     auto const appPtr = ensureGtkApplication();
 
@@ -50,7 +50,7 @@ namespace ao::gtk::test
     CHECK(appPtr->get_accels_for_action("win.applicator.drop").empty());
   }
 
-  TEST_CASE("applyKeymapAccelerators clears an explicitly unbound action", "[gtk][app][accel]")
+  TEST_CASE("applyKeymapAccelerators clears an explicitly unbound action", "[gtk][unit][app][accel]")
   {
     auto const appPtr = ensureGtkApplication();
 

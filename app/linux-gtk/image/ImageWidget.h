@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "image/ImageRenderPolicy.h"
+
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/picture.h>
@@ -12,15 +14,6 @@
 
 namespace ao::gtk
 {
-  struct RenderTarget final
-  {
-    std::int32_t width;
-    std::int32_t height;
-  };
-
-  RenderTarget fitSourceIntoTarget(RenderTarget source, RenderTarget target);
-  bool shouldRefresh(RenderTarget current, RenderTarget next);
-
   class ImageWidget final : public Gtk::Picture
   {
   public:

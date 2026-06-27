@@ -3,9 +3,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
-#include <ao/Type.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -14,11 +12,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -26,60 +22,6 @@ namespace ao::rt::test
 {
   namespace
   {
-    struct CompletionTrackSpec final
-    {
-      TrackSpec track;
-      std::vector<std::string> tags{};
-      std::vector<std::pair<std::string, std::string>> custom{};
-    };
-
-    TrackId addCompletionTrack(TestMusicLibrary& testLib, CompletionTrackSpec const& spec)
-    {
-      auto txn = testLib.library().writeTransaction();
-      auto writer = testLib.library().tracks().writer(txn);
-      auto builder = library::TrackBuilder::createNew();
-
-      builder.metadata()
-        .title(spec.track.title)
-        .artist(spec.track.artist)
-        .album(spec.track.album)
-        .albumArtist(spec.track.albumArtist)
-        .genre(spec.track.genre)
-        .composer(spec.track.composer)
-        .work(spec.track.work)
-        .movement(spec.track.movement)
-        .year(spec.track.year)
-        .discNumber(spec.track.discNumber)
-        .trackNumber(spec.track.trackNumber)
-        .movementNumber(spec.track.movementNumber)
-        .movementTotal(spec.track.movementTotal);
-      builder.property()
-        .uri("/tmp/completion.flac")
-        .duration(spec.track.duration)
-        .bitrate(Bitrate{320000})
-        .sampleRate(SampleRate{44100})
-        .channels(Channels{2})
-        .bitDepth(BitDepth{16});
-
-      for (auto const& tag : spec.tags)
-      {
-        builder.tags().add(tag);
-      }
-
-      for (auto const& [key, value] : spec.custom)
-      {
-        builder.customMetadata().add(key, value);
-      }
-
-      auto hotData = builder.serializeHot(txn, testLib.library().dictionary());
-      REQUIRE(hotData);
-      auto coldData = builder.serializeCold(txn, testLib.library().dictionary(), testLib.library().resources());
-      REQUIRE(coldData);
-      auto [id, _] = ao::test::requireValue(writer.createHotCold(*hotData, *coldData));
-      REQUIRE(txn.commit());
-      return id;
-    }
-
     std::vector<std::pair<std::string, std::uint32_t>> pairs(std::span<VocabularyEntry const> entries)
     {
       auto result = std::vector<std::pair<std::string, std::uint32_t>>{};
@@ -96,18 +38,13 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - Builds Tag And Custom Key Vocabularies", "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    addCompletionTrack(testLib,
-                       CompletionTrackSpec{
-                         .track = TrackSpec{.title = "One"},
-                         .tags = {"Rock", "Favorite"},
-                         .custom = {{"Mood", "Bright"}, {"ReplayGain", "-6"}},
-                       });
-    addCompletionTrack(testLib,
-                       CompletionTrackSpec{
-                         .track = TrackSpec{.title = "Two"},
-                         .tags = {"Rock", "Live"},
-                         .custom = {{"Mood", "Dark"}},
-                       });
+    library::test::addTrack(
+      testLib.library(),
+      library::test::TrackSpec{
+        .title = "One", .tags = {"Rock", "Favorite"}, .customMetadata = {{"Mood", "Bright"}, {"ReplayGain", "-6"}}});
+    library::test::addTrack(
+      testLib.library(),
+      library::test::TrackSpec{.title = "Two", .tags = {"Rock", "Live"}, .customMetadata = {{"Mood", "Dark"}}});
 
     auto changes = LibraryChanges{};
     auto service = CompletionService{testLib.library(), changes};
@@ -127,30 +64,30 @@ namespace ao::rt::test
             "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    addCompletionTrack(testLib,
-                       CompletionTrackSpec{.track = TrackSpec{.title = "One",
-                                                              .artist = "Bach",
-                                                              .album = "Goldberg",
-                                                              .albumArtist = "Glenn Gould",
-                                                              .genre = "Classical",
-                                                              .composer = "Bach",
-                                                              .work = "Variations"}});
-    addCompletionTrack(testLib,
-                       CompletionTrackSpec{.track = TrackSpec{.title = "Two",
-                                                              .artist = "Bach",
-                                                              .album = "Cello Suites",
-                                                              .albumArtist = "Yo-Yo Ma",
-                                                              .genre = "Classical",
-                                                              .composer = "Bach",
-                                                              .work = "Suites"}});
-    addCompletionTrack(testLib,
-                       CompletionTrackSpec{.track = TrackSpec{.title = "Three",
-                                                              .artist = "Glass",
-                                                              .album = "Glassworks",
-                                                              .albumArtist = "Philip Glass",
-                                                              .genre = "Minimal",
-                                                              .composer = "Glass",
-                                                              .work = "Glassworks"}});
+    library::test::addTrack(testLib.library(),
+                            library::test::TrackSpec{.title = "One",
+                                                     .artist = "Bach",
+                                                     .album = "Goldberg",
+                                                     .albumArtist = "Glenn Gould",
+                                                     .genre = "Classical",
+                                                     .composer = "Bach",
+                                                     .work = "Variations"});
+    library::test::addTrack(testLib.library(),
+                            library::test::TrackSpec{.title = "Two",
+                                                     .artist = "Bach",
+                                                     .album = "Cello Suites",
+                                                     .albumArtist = "Yo-Yo Ma",
+                                                     .genre = "Classical",
+                                                     .composer = "Bach",
+                                                     .work = "Suites"});
+    library::test::addTrack(testLib.library(),
+                            library::test::TrackSpec{.title = "Three",
+                                                     .artist = "Glass",
+                                                     .album = "Glassworks",
+                                                     .albumArtist = "Philip Glass",
+                                                     .genre = "Minimal",
+                                                     .composer = "Glass",
+                                                     .work = "Glassworks"});
 
     auto changes = LibraryChanges{};
     auto service = CompletionService{testLib.library(), changes};
@@ -180,7 +117,7 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - Invalidates Snapshots On Track Mutation", "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    addCompletionTrack(testLib, CompletionTrackSpec{.track = TrackSpec{.title = "One"}, .tags = {"Rock"}});
+    library::test::addTrack(testLib.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
 
     auto changes = LibraryChanges{};
     auto writer = LibraryWriter{testLib.library(), changes};
@@ -189,8 +126,8 @@ namespace ao::rt::test
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Rock", 1}});
 
     auto const trackId =
-      addCompletionTrack(testLib, CompletionTrackSpec{.track = TrackSpec{.title = "Two"}, .tags = {"Jazz"}});
-    // addCompletionTrack writes directly; drive a writer mutation so the change
+      library::test::addTrack(testLib.library(), library::test::TrackSpec{.title = "Two", .tags = {"Jazz"}});
+    // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
     CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 
@@ -204,10 +141,9 @@ namespace ao::rt::test
             "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    addCompletionTrack(
-      testLib,
-      CompletionTrackSpec{.track =
-                            TrackSpec{.title = "One", .artist = "Bach", .album = "Goldberg", .work = "Variations"}});
+    library::test::addTrack(
+      testLib.library(),
+      library::test::TrackSpec{.title = "One", .artist = "Bach", .album = "Goldberg", .work = "Variations"});
 
     auto changes = LibraryChanges{};
     auto writer = LibraryWriter{testLib.library(), changes};
@@ -223,11 +159,10 @@ namespace ao::rt::test
                                                           {"Variations", 1},
                                                         });
 
-    auto const trackId = addCompletionTrack(
-      testLib,
-      CompletionTrackSpec{.track =
-                            TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"}});
-    // addCompletionTrack writes directly; drive a writer mutation so the change
+    auto const trackId = library::test::addTrack(
+      testLib.library(),
+      library::test::TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"});
+    // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
     CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 
@@ -248,11 +183,10 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - Lazily Rebuilds Dirty Value Vocabularies", "[runtime][unit][completion]")
   {
     auto testLib = TestMusicLibrary{};
-    addCompletionTrack(
-      testLib,
-      CompletionTrackSpec{
-        .track = TrackSpec{
-          .title = "One", .artist = "Bach", .album = "Goldberg", .genre = "Classical", .work = "Variations"}});
+    library::test::addTrack(
+      testLib.library(),
+      library::test::TrackSpec{
+        .title = "One", .artist = "Bach", .album = "Goldberg", .genre = "Classical", .work = "Variations"});
 
     auto changes = LibraryChanges{};
     auto writer = LibraryWriter{testLib.library(), changes};
@@ -271,11 +205,10 @@ namespace ao::rt::test
                                                           {"Variations", 1},
                                                         });
 
-    auto const trackId = addCompletionTrack(
-      testLib,
-      CompletionTrackSpec{.track =
-                            TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"}});
-    // addCompletionTrack writes directly; drive a writer mutation so the change
+    auto const trackId = library::test::addTrack(
+      testLib.library(),
+      library::test::TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"});
+    // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
     CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
 

@@ -3,57 +3,36 @@
 
 #include "playback/NowPlayingStatusLabel.h"
 
+#include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IBackendProvider.h>
-#include <ao/audio/NullBackend.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
 
-#include <memory>
-#include <string_view>
+#include <chrono>
+#include <optional>
 
 namespace ao::gtk::test
 {
-  namespace
-  {
-    class DummyAudioProvider final : public audio::IBackendProvider
-    {
-    public:
-      void shutdown() noexcept override {}
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback /*callback*/) override { return {}; }
-      std::unique_ptr<audio::IBackend> createBackend(audio::Device const& /*device*/,
-                                                     audio::ProfileId const& /*profileId*/) override
-      {
-        return std::make_unique<audio::NullBackend>();
-      }
-      Status status() const override { return Status{.metadata = {.id = audio::kBackendPipeWire}}; }
-      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
-      {
-        return {};
-      }
-    };
-  } // namespace
-
-  TEST_CASE("NowPlayingStatusLabel - smoke test", "[gtk][playback][viewmodel]")
+  TEST_CASE("NowPlayingStatusLabel renders status text and reveals the playing track", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
 
-    fixture.runtime().addAudioProvider(std::make_unique<DummyAudioProvider>());
-
     auto& playback = fixture.runtime().playback();
+    rt::test::addReadyAudioProvider(playback);
+    drainGtkEvents();
 
     auto statusLabel = NowPlayingStatusLabel{playback};
     auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&statusLabel.widget());
-    CHECK(gtkLabel);
+    REQUIRE(gtkLabel);
+    CHECK(gtkLabel->get_text().empty());
+    CHECK(gtkLabel->has_css_class("ao-nowplaying"));
+    CHECK(gtkLabel->has_css_class("ao-clickable"));
+    CHECK(gtkLabel->get_tooltip_text() == "Click to show playing list");
 
-    // Just verify it wires up and doesn't crash
     auto desc = rt::PlaybackService::PlaybackRequest{
       .trackId = TrackId{1},
       .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
@@ -63,5 +42,16 @@ namespace ao::gtk::test
 
     playback.play(desc, ListId{1});
     drainGtkEvents();
+    CHECK(gtkLabel->get_text() == "Artist - Song");
+
+    auto optRequest = std::optional<rt::PlaybackService::RevealTrackRequested>{};
+    auto sub = playback.onRevealTrackRequested([&](auto const& ev) { optRequest = ev; });
+
+    REQUIRE(emitGesturePressed(*gtkLabel));
+    drainGtkEvents();
+
+    REQUIRE(optRequest);
+    CHECK(optRequest->trackId == TrackId{1});
+    CHECK(optRequest->preferredListId == ListId{1});
   }
 } // namespace ao::gtk::test

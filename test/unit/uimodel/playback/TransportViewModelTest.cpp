@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <functional>
+#include <memory>
 #include <vector>
 
 namespace ao::uimodel::playback::test
@@ -326,5 +327,36 @@ namespace ao::uimodel::playback::test
 
       CHECK(log.states.size() > initialCount);
     }
+  }
+
+  TEST_CASE("TransportViewModel stops rendering after destruction", "[unit][uimodel][playback]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto executor = MockExecutor{};
+    auto changes = LibraryChanges{};
+    auto listSourceStore = ListSourceStore{testLib.library(), changes};
+    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto playback = PlaybackService{executor, viewService, testLib.library()};
+
+    auto log = RenderLog<TransportViewState>{};
+    auto viewModelPtr = std::make_unique<TransportViewModel>(playback,
+                                                             nullptr,
+                                                             TransportAction::Shuffle,
+                                                             std::function<void()>{},
+                                                             false,
+                                                             [&log](auto const& view) { log.render(view); });
+
+    REQUIRE(!log.empty());
+    log.clear();
+
+    playback.setShuffleMode(rt::ShuffleMode::On);
+    REQUIRE(log.states.size() == 1);
+    CHECK(log.last().engaged == true);
+
+    log.clear();
+    viewModelPtr.reset();
+
+    playback.setShuffleMode(rt::ShuffleMode::Off);
+    CHECK(log.empty());
   }
 } // namespace ao::uimodel::playback::test

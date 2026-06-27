@@ -3,6 +3,7 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
+#include "layout/component/track/TrackSelectionRegionPolicy.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
@@ -52,28 +53,10 @@ namespace ao::gtk::layout
     private:
       void updateVisibility(rt::TrackDetailSnapshot const& snap)
       {
-        auto const hasSelection = snap.selectionKind != rt::SelectionKind::None;
-        bool visible = false;
-
-        if (_showWhen == "none")
-        {
-          visible = (snap.selectionKind == rt::SelectionKind::None);
-        }
-        else if (_showWhen == "single")
-        {
-          visible = (snap.selectionKind == rt::SelectionKind::Single);
-        }
-        else if (_showWhen == "multiple")
-        {
-          visible = (snap.selectionKind == rt::SelectionKind::Multiple);
-        }
-        else if (_showWhen == "any")
-        {
-          visible = hasSelection || _showPlaceholder;
-        }
-
-        _box.set_visible(visible);
-        _box.set_sensitive(hasSelection || !_showPlaceholder);
+        auto const presentation =
+          track_selection_region::presentationForSelection(snap.selectionKind, _showWhen, _showPlaceholder);
+        _box.set_visible(presentation.visible);
+        _box.set_sensitive(presentation.sensitive);
       }
 
       Gtk::Box _box;

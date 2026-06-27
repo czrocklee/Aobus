@@ -13,7 +13,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
 
-  TEST_CASE("ComponentRegistry action descriptor injection", "[layout][unit][runtime]")
+  TEST_CASE("ComponentRegistry injects declared action descriptors", "[gtk][unit][layout][runtime]")
   {
     auto registry = ComponentRegistry{};
 

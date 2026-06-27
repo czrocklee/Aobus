@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "../../GtkTestSupport.h"
 #include "app/linux-gtk/image/ImageCache.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_approx.hpp>
@@ -19,7 +15,7 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/picture.h>
 #include <gtkmm/popover.h>
-#include <gtkmm/window.h>
+#include <gtkmm/widget.h>
 
 #include <cstdint>
 #include <memory>
@@ -28,7 +24,6 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using ao::gtk::test::makeRuntime;
 
   namespace
   {
@@ -60,29 +55,17 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("playback.image declarative properties", "[layout][unit][components][geometry]")
+  TEST_CASE("playback.image applies declarative image properties", "[gtk][unit][layout][components][geometry]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.playback_image_test");
-
-    auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
-
-    auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
-
-    auto window = Gtk::Window{};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.playback_image_test"};
     auto imageCachePtr = std::make_unique<ImageCache>(10);
-    auto const actionRegistry = ActionRegistry{};
-    auto ctx = LayoutContext{.registry = registry,
-                             .actionRegistry = actionRegistry,
-                             .runtime = runtime,
-                             .parentWindow = window,
-                             .detail = {.imageCache = imageCachePtr.get()}};
+    auto& ctx = fixture.context();
+    ctx.detail.imageCache = imageCachePtr.get();
 
     SECTION("default image has no extra styling")
     {
       auto const node = LayoutNode{.type = "playback.image"};
-      auto const compPtr = registry.create(ctx, node);
+      auto const compPtr = fixture.components().create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
       auto& widget = compPtr->widget();
@@ -107,7 +90,7 @@ namespace ao::gtk::layout::test
       node.props["targetSize"] = LayoutValue{static_cast<std::int64_t>(60)};
       node.props["forceSquare"] = LayoutValue{true};
       node.props["opacity"] = LayoutValue{std::string{"0.5"}};
-      auto const compPtr = registry.create(ctx, node);
+      auto const compPtr = fixture.components().create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
       auto& widget = compPtr->widget();
@@ -155,7 +138,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("ComponentTooltipController copies only popover shell classes", "[layout][unit][components]")
+  TEST_CASE("ComponentTooltipController copies only popover shell classes", "[gtk][unit][layout][components]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.tooltip_controller_test");
 

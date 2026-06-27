@@ -28,7 +28,7 @@ namespace ao::gtk::test
   // availableOutputs regardless of whether a daemon or hardware is present. The
   // PIPEWIRE_FOUND/ALSA_FOUND macros reach this TU through ao_audio's PUBLIC
   // definitions.
-  TEST_CASE("registerPlatformAudioBackends - registers the compiled-in backends", "[gtk][platform][audio]")
+  TEST_CASE("registerPlatformAudioBackends registers the compiled-in audio backends", "[gtk][unit][platform][audio]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

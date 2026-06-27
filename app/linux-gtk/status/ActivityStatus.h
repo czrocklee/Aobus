@@ -30,6 +30,11 @@ namespace ao::rt
 
 namespace ao::gtk
 {
+  namespace test
+  {
+    class ActivityStatusTestPeer;
+  }
+
   inline constexpr std::int32_t kDefaultMaxTextChars = 36;
 
   enum class ActivityStatusVariant : std::uint8_t
@@ -75,6 +80,7 @@ namespace ao::gtk
   class ActivityStatus final
   {
   public:
+    friend class test::ActivityStatusTestPeer;
     explicit ActivityStatus(ActivityStatusDependencies dependencies);
     ~ActivityStatus();
 

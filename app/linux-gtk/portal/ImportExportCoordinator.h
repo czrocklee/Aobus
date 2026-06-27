@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/ThemeCoordinator.h"
+#include "portal/ImportExportActions.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include <ao/rt/library/LibraryYamlExporter.h>
@@ -42,7 +43,7 @@ namespace ao::gtk::portal
    * ImportExportCoordinator owns the file/folder/mode chooser dialogs for library import/export and, once a
    * concrete path (and export mode) is resolved, delegates the background work to LibraryImportExportWorkflow.
    */
-  class ImportExportCoordinator final
+  class ImportExportCoordinator final : public ImportExportActions
   {
   public:
     ImportExportCoordinator(Gtk::Window& parent,
@@ -55,14 +56,14 @@ namespace ao::gtk::portal
     ImportExportCoordinator& operator=(ImportExportCoordinator const&) = delete;
     ImportExportCoordinator(ImportExportCoordinator&&) = delete;
     ImportExportCoordinator& operator=(ImportExportCoordinator&&) = delete;
-    ~ImportExportCoordinator() = default;
+    ~ImportExportCoordinator() override = default;
 
     ImportExportCallbacks& callbacks() { return _callbacks; }
 
-    void openLibrary();
-    void scanLibrary();
-    void importLibrary(); // YAML import
-    void exportLibrary(); // YAML export
+    void openLibrary() override;
+    void scanLibrary() override;
+    void importLibrary() override; // YAML import
+    void exportLibrary() override; // YAML export
 
     void openMusicLibrary(std::filesystem::path const& path, bool scanAfterOpen = false) const;
     void importLibraryFrom(std::filesystem::path path);

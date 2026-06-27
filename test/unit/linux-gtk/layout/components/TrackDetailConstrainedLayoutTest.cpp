@@ -3,17 +3,15 @@
 
 #include "../../../TestUtils.h"
 #include "../../GtkTestSupport.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/LayoutNode.h>
@@ -29,9 +27,9 @@
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
-#include <sigc++/signal.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -49,31 +47,10 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::emitGesturePressed;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::hasController;
-  using ao::gtk::test::makeRuntime;
   using ao::gtk::test::walkWidgets;
 
   namespace
   {
-    class FakeTrackDetailScope final : public ITrackDetailScope
-    {
-    public:
-      explicit FakeTrackDetailScope(rt::TrackDetailSnapshot snap)
-        : _snap{std::move(snap)}
-      {
-      }
-
-      rt::TrackDetailSnapshot const& snapshot() const override { return _snap; }
-
-      sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() override
-      {
-        return _signalSnapshotChanged;
-      }
-
-    private:
-      rt::TrackDetailSnapshot _snap;
-      sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;
-    };
-
     Gtk::Widget* findAncestorWithClass(Gtk::Widget* widget, std::string_view const className)
     {
       for (auto* current = widget; current != nullptr; current = current->get_parent())
@@ -221,7 +198,8 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetail cover art sizing", "[layout][components][geometry]")
+  TEST_CASE("TrackDetail cover art keeps square sizing under constrained width",
+            "[gtk][unit][layout][components][geometry]")
   {
     int const targetSize = 250;
 
@@ -233,7 +211,7 @@ namespace ao::gtk::layout::test
     CHECK(coverArtSideForWidth(180, 0) == 0);
   }
 
-  TEST_CASE("DetailFieldEditor coordinates edit sessions", "[layout][unit][components][track]")
+  TEST_CASE("DetailFieldEditor coordinates edit sessions", "[gtk][unit][layout][components][track]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.detail_editor_test");
     auto window = Gtk::Window{};
@@ -275,19 +253,14 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(secondEntry->get_child_visible());
   }
 
-  TEST_CASE("TrackFieldGrid constrained layout behavior", "[layout][components][constrained][geometry]")
+  TEST_CASE("TrackFieldGrid maintains constrained value-column geometry",
+            "[gtk][unit][layout][components][constrained][geometry]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
-    auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
-
-    auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
-
-    auto window = Gtk::Window{};
-    auto actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto fixture = LayoutRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& registry = fixture.components();
+    auto& window = fixture.window();
+    auto& ctx = fixture.context();
 
     auto const node = LayoutNode{.type = "track.fieldGrid"};
     auto const compPtr = registry.create(ctx, node);
@@ -738,13 +711,8 @@ namespace ao::gtk::layout::test
         .presentOnAny = true,
       });
 
-      auto scope = FakeTrackDetailScope{std::move(snap)};
-      auto scopedCtx = LayoutContext{.registry = registry,
-                                     .actionRegistry = actionRegistry,
-                                     .runtime = runtime,
-                                     .parentWindow = window,
-                                     .track = {.detailScope = &scope}};
-      auto const scopedCompPtr = registry.create(scopedCtx, node);
+      fixture.attachTrackDetailScope(std::move(snap));
+      auto const scopedCompPtr = registry.create(ctx, node);
 
       REQUIRE(scopedCompPtr != nullptr);
       auto& scopedRoot = scopedCompPtr->widget();
@@ -914,13 +882,8 @@ namespace ao::gtk::layout::test
         .presentOnAny = true,
       });
 
-      auto scope = FakeTrackDetailScope{std::move(snap)};
-      auto scopedCtx = LayoutContext{.registry = registry,
-                                     .actionRegistry = actionRegistry,
-                                     .runtime = runtime,
-                                     .parentWindow = window,
-                                     .track = {.detailScope = &scope}};
-      auto const scopedCompPtr = registry.create(scopedCtx, node);
+      fixture.attachTrackDetailScope(std::move(snap));
+      auto const scopedCompPtr = registry.create(ctx, node);
 
       REQUIRE(scopedCompPtr != nullptr);
 
@@ -968,13 +931,8 @@ namespace ao::gtk::layout::test
         .presentOnAny = true,
       });
 
-      auto scope = FakeTrackDetailScope{std::move(snap)};
-      auto scopedCtx = LayoutContext{.registry = registry,
-                                     .actionRegistry = actionRegistry,
-                                     .runtime = runtime,
-                                     .parentWindow = window,
-                                     .track = {.detailScope = &scope}};
-      auto const scopedCompPtr = registry.create(scopedCtx, node);
+      fixture.attachTrackDetailScope(std::move(snap));
+      auto const scopedCompPtr = registry.create(ctx, node);
 
       REQUIRE(scopedCompPtr != nullptr);
 
@@ -1025,13 +983,8 @@ namespace ao::gtk::layout::test
       rt::trackFieldArrayAt(snap.fields, rt::TrackField::TrackTotal).optValue =
         rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, 12};
 
-      auto scope = FakeTrackDetailScope{std::move(snap)};
-      auto scopedCtx = LayoutContext{.registry = registry,
-                                     .actionRegistry = actionRegistry,
-                                     .runtime = runtime,
-                                     .parentWindow = window,
-                                     .track = {.detailScope = &scope}};
-      auto const scopedCompPtr = registry.create(scopedCtx, node);
+      fixture.attachTrackDetailScope(std::move(snap));
+      auto const scopedCompPtr = registry.create(ctx, node);
 
       REQUIRE(scopedCompPtr != nullptr);
 
@@ -1069,13 +1022,8 @@ namespace ao::gtk::layout::test
         .presentOnAny = true,
       });
 
-      auto scope = FakeTrackDetailScope{std::move(snap)};
-      auto scopedCtx = LayoutContext{.registry = registry,
-                                     .actionRegistry = actionRegistry,
-                                     .runtime = runtime,
-                                     .parentWindow = window,
-                                     .track = {.detailScope = &scope}};
-      auto const scopedCompPtr = registry.create(scopedCtx, node);
+      fixture.attachTrackDetailScope(std::move(snap));
+      auto const scopedCompPtr = registry.create(ctx, node);
 
       REQUIRE(scopedCompPtr != nullptr);
 

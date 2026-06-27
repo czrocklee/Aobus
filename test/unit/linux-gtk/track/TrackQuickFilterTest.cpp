@@ -21,7 +21,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackQuickFilter - smoke test", "[gtk][track][viewmodel]")
+  TEST_CASE("TrackQuickFilter renders action buttons and follows focused view", "[gtk][unit][track][quick-filter]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -38,7 +38,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackQuickFilter - typing does not overwrite presentation", "[gtk][track][viewmodel]")
+  TEST_CASE("TrackQuickFilter - typing does not overwrite presentation", "[gtk][unit][track][quick-filter]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -59,16 +59,19 @@ namespace ao::gtk::test
     filter.activate();
     drainGtkEvents();
 
-    // Wait for debounce timer (200ms)
-    ::g_usleep(static_cast<gulong>(250) * 1000);
-    drainGtkEvents();
+    CHECK(pumpGtkEventsUntil(
+      [&runtime, reply]
+      {
+        auto const state = runtime.views().trackListState(reply.viewId);
+        return state.filterExpression == "artist == 'Muse'";
+      }));
 
     auto const state = runtime.views().trackListState(reply.viewId);
     CHECK(state.filterExpression == "artist == 'Muse'");
     CHECK(state.presentation.id == "custom"); // Should remain unchanged
   }
 
-  TEST_CASE("TrackQuickFilter - clear button clears current filter text", "[gtk][track][viewmodel]")
+  TEST_CASE("TrackQuickFilter - clear button clears current filter text", "[gtk][unit][track][quick-filter]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -90,7 +93,8 @@ namespace ao::gtk::test
     CHECK_FALSE(clearButton->get_visible());
   }
 
-  TEST_CASE("TrackQuickFilter - active class follows focus within the compound control", "[gtk][track][viewmodel]")
+  TEST_CASE("TrackQuickFilter - active class follows focus within the compound control",
+            "[gtk][unit][track][quick-filter]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -106,7 +110,7 @@ namespace ao::gtk::test
     CHECK_FALSE(filter.has_css_class("ao-quick-filter-active"));
   }
 
-  TEST_CASE("TrackQuickFilter - accepts query completion trigger text", "[gtk][track][completion]")
+  TEST_CASE("TrackQuickFilter - accepts query completion trigger text", "[gtk][unit][track][completion]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

@@ -18,7 +18,7 @@ namespace ao::gtk
 {
   namespace portal
   {
-    class ImportExportCoordinator;
+    class ImportExportActions;
   }
 
   // Owns the main menu model and binds its window actions to the injected callbacks. The menu
@@ -28,7 +28,7 @@ namespace ao::gtk
   class MenuController final
   {
   public:
-    MenuController(portal::ImportExportCoordinator& importExport,
+    MenuController(portal::ImportExportActions& importExport,
                    std::function<void()> onEditLayout,
                    std::function<void()> onResetRuntimeLayoutState,
                    std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults,
@@ -39,7 +39,7 @@ namespace ao::gtk
     Glib::RefPtr<Gio::MenuModel> menuModel() const { return _menuModelPtr; }
 
   private:
-    portal::ImportExportCoordinator& _importExport;
+    portal::ImportExportActions& _importExport;
     std::function<void()> _onEditLayout;
     std::function<void()> _onResetRuntimeLayoutState;
     std::function<void()> _onSaveCurrentPanelSizesAsLayoutDefaults;

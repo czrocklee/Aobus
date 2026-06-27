@@ -3,15 +3,13 @@
 
 #include "track/TrackListModel.h"
 
-#include "../../TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/runtime/TrackSourceTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
@@ -33,29 +31,19 @@ namespace ao::gtk::test
 {
   namespace
   {
-    struct TrackSpec final
+    library::test::TrackSpec makeTrackSpec(std::string_view title,
+                                           std::string_view artist,
+                                           std::string_view album,
+                                           std::uint16_t year = 2020)
     {
-      std::string title = "Title";
-      std::string artist = "Artist";
-      std::string album = "Album";
-      std::string albumArtist = "AlbumArtist";
-      std::string genre = "Genre";
-      std::uint16_t year = 2020;
-      std::uint16_t trackNumber = 1;
-      std::uint16_t discNumber = 1;
-      std::chrono::milliseconds duration = std::chrono::minutes{3};
-    };
-
-    TrackSpec makeTrackSpec(std::string_view title,
-                            std::string_view artist,
-                            std::string_view album,
-                            std::uint16_t year = 2020)
-    {
-      auto spec = TrackSpec{};
+      auto spec = library::test::TrackSpec{};
       spec.title = title;
       spec.artist = artist;
       spec.album = album;
+      spec.albumArtist = "AlbumArtist";
+      spec.genre = "Genre";
       spec.year = year;
+      spec.duration = std::chrono::minutes{3};
       return spec;
     }
 
@@ -64,39 +52,6 @@ namespace ao::gtk::test
     public:
       library::MusicLibrary& library() { return _fixture.runtime().musicLibrary(); }
       rt::AppRuntime& runtime() { return _fixture.runtime(); }
-
-      TrackId addTrack(TrackSpec const& spec)
-      {
-        auto& lib = library();
-        auto txn = lib.writeTransaction();
-        auto writer = lib.tracks().writer(txn);
-
-        auto builder = library::TrackBuilder::createNew();
-        builder.metadata()
-          .title(spec.title)
-          .artist(spec.artist)
-          .album(spec.album)
-          .albumArtist(spec.albumArtist)
-          .genre(spec.genre)
-          .year(spec.year)
-          .trackNumber(spec.trackNumber)
-          .discNumber(spec.discNumber);
-        builder.property()
-          .uri("/tmp/test.flac")
-          .duration(spec.duration)
-          .bitrate(Bitrate{320000})
-          .sampleRate(SampleRate{44100})
-          .channels(Channels{2})
-          .bitDepth(BitDepth{16});
-
-        auto hotData = builder.serializeHot(txn, lib.dictionary());
-        REQUIRE(hotData);
-        auto coldData = builder.serializeCold(txn, lib.dictionary(), lib.resources());
-        REQUIRE(coldData);
-        auto [id, _] = ao::test::requireValue(writer.createHotCold(*hotData, *coldData));
-        REQUIRE(txn.commit());
-        return id;
-      }
 
     private:
       GtkRuntimeFixture _fixture;
@@ -122,15 +77,17 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("TrackListModel", "[app][unit][adapter]")
+  TEST_CASE("TrackListModel exposes projection rows and emits playing-track updates", "[gtk][unit][track][adapter]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.list_model_test");
     auto testLibrary = TestMusicLibrary{};
 
-    auto const id1 = testLibrary.addTrack(makeTrackSpec("Song A", "Artist A", "Album A", 2020));
-    auto const id2 = testLibrary.addTrack(makeTrackSpec("Song B", "Artist B", "Album B", 2021));
+    auto const id1 =
+      library::test::addTrack(testLibrary.library(), makeTrackSpec("Song A", "Artist A", "Album A", 2020));
+    auto const id2 =
+      library::test::addTrack(testLibrary.library(), makeTrackSpec("Song B", "Artist B", "Album B", 2021));
 
-    auto source = MutableTrackSource{};
+    auto source = rt::test::MutableTrackSource{};
     source.addInitial(id1);
     source.addInitial(id2);
 
@@ -241,7 +198,8 @@ namespace ao::gtk::test
 
     SECTION("Delta batch notifications - Insert")
     {
-      auto const id3 = testLibrary.addTrack(makeTrackSpec("Song C", "Artist C", "Album C", 2022));
+      auto const id3 =
+        library::test::addTrack(testLibrary.library(), makeTrackSpec("Song C", "Artist C", "Album C", 2022));
       source.insert(id3, 0);
 
       REQUIRE(spy.events.size() == 1);

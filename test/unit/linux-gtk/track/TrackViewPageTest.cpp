@@ -3,18 +3,16 @@
 
 #include "track/TrackViewPage.h"
 
-#include "../../TestUtils.h"
 #include "image/ImageCache.h"
 #include "image/ThumbnailLoader.h"
 #include "layout/LayoutConstants.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/runtime/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -37,22 +35,18 @@ namespace ao::gtk::test
   {
     TrackId addAlbumTrack(library::MusicLibrary& library, std::string const& album)
     {
-      auto txn = library.writeTransaction();
-      auto writer = library.tracks().writer(txn);
-
-      auto builder = library::TrackBuilder::createNew();
-      builder.metadata().title("Track").artist("Artist").album(album).albumArtist("Album Artist").trackNumber(1);
-      builder.property().uri("/tmp/track.flac").duration(std::chrono::minutes{3});
-
-      auto const [hotData, coldData] =
-        ao::test::requireValue(builder.serialize(txn, library.dictionary(), library.resources()));
-      auto const [id, _] = ao::test::requireValue(writer.createHotCold(hotData, coldData));
-      REQUIRE(txn.commit());
-      return id;
+      return library::test::addTrack(library,
+                                     library::test::TrackSpec{.title = "Track",
+                                                              .artist = "Artist",
+                                                              .album = album,
+                                                              .albumArtist = "Album Artist",
+                                                              .uri = "/tmp/track.flac",
+                                                              .trackNumber = 1,
+                                                              .duration = std::chrono::minutes{3}});
     }
   } // namespace
 
-  TEST_CASE("TrackViewPage - initialization", "[gtk][track][page]")
+  TEST_CASE("TrackViewPage initializes list controls and geometry", "[gtk][unit][track][page][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -87,7 +81,7 @@ namespace ao::gtk::test
 
     SECTION("album grouped section header reserves a fixed cover slot")
     {
-      auto source = MutableTrackSource{};
+      auto source = rt::test::MutableTrackSource{};
       source.addInitial(addAlbumTrack(runtime.musicLibrary(), "Album"));
 
       auto projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, source, runtime.musicLibrary());

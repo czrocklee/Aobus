@@ -42,7 +42,7 @@ namespace ao::gtk::layout::editor::test
   using ao::gtk::test::findButtonByLabel;
   using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("Component descriptor validation", "[layout][unit][editor]")
+  TEST_CASE("Component descriptor validation covers all standard layout components", "[gtk][unit][layout][editor]")
   {
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -236,7 +236,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // LayoutEditorDialog
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutEditorDialog", "[layout][unit][editor]")
+  TEST_CASE("LayoutEditorDialog renders and edits the current layout document", "[gtk][unit][layout][editor]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_test");
 
@@ -723,7 +723,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // Template system
   // ---------------------------------------------------------------------------
-  TEST_CASE("Template system", "[layout][unit][editor]")
+  TEST_CASE("Built-in layout templates expose expected component structure", "[gtk][unit][layout][editor]")
   {
     SECTION("getBuiltInTemplates returns all 8 built-ins")
     {
@@ -937,7 +937,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // absoluteCanvas
   // ---------------------------------------------------------------------------
-  TEST_CASE("absoluteCanvas component", "[layout][unit][editor]")
+  TEST_CASE("absoluteCanvas component builds positioned child containers", "[gtk][unit][layout][editor]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
 
@@ -995,7 +995,8 @@ namespace ao::gtk::layout::editor::test
     }
   }
 
-  TEST_CASE("absoluteCanvas geometry", "[layout][unit][editor][geometry]")
+  TEST_CASE("absoluteCanvas geometry allocates children at configured coordinates",
+            "[gtk][unit][layout][editor][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
 

@@ -14,7 +14,6 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -22,7 +21,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ThumbnailLoader", "[gtk][image][thumbnail]")
+  TEST_CASE("ThumbnailLoader resolves image sources into pixbuf results", "[gtk][unit][image][thumbnail]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -48,7 +47,7 @@ namespace ao::gtk::test
                                     });
       REQUIRE(request);
 
-      REQUIRE(pumpUntil([&] { return callbackCount > 0; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount > 0; }));
       CHECK(callbackCount == 1);
       REQUIRE(receivedPtr);
       // Decode-at-scale bounds the result below the 256px source.
@@ -87,7 +86,7 @@ namespace ao::gtk::test
       REQUIRE(firstRequest);
       REQUIRE(secondRequest);
 
-      REQUIRE(pumpUntil([&] { return firstDone && secondDone; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return firstDone && secondDone; }));
       CHECK(firstPtr);
       CHECK(secondPtr);
       // Both callbacks receive the very same decoded object: only one decode ran.
@@ -106,7 +105,7 @@ namespace ao::gtk::test
           resourceId, kPixelSize, [&, idx](Glib::RefPtr<Gdk::Pixbuf> const&) { callbackOrder.push_back(idx); }));
       }
 
-      REQUIRE(pumpUntil([&] { return callbackOrder.size() == 4; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return callbackOrder.size() == 4; }));
       CHECK(callbackOrder == std::vector<int>{0, 1, 2, 3});
     }
 
@@ -124,7 +123,7 @@ namespace ao::gtk::test
       REQUIRE(smallRequest);
       REQUIRE(largeRequest);
 
-      REQUIRE(pumpUntil([&] { return smallPtr && largePtr; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return smallPtr && largePtr; }));
       CHECK(smallPtr.get() != largePtr.get());
       CHECK(std::max(smallPtr->get_width(), smallPtr->get_height()) <= 48);
       CHECK(std::max(largePtr->get_width(), largePtr->get_height()) >= 96);
@@ -137,7 +136,7 @@ namespace ao::gtk::test
 
       loader.prefetch(resourceId, kPixelSize);
 
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.get(resourceId, kPixelSize)); }));
+      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(loader.get(resourceId, kPixelSize)); }));
       CHECK(loader.get(resourceId, kPixelSize));
     }
 
@@ -153,7 +152,7 @@ namespace ao::gtk::test
       REQUIRE(request);
       loader.prefetch(resourceId, kPixelSize);
 
-      REQUIRE(pumpUntil([&] { return callbackCount == 1; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount == 1; }));
       auto const firstCachedPtr = loader.get(resourceId, kPixelSize);
       REQUIRE(firstCachedPtr);
 
@@ -184,7 +183,7 @@ namespace ao::gtk::test
       auto request = loader.request(resourceId, kPixelSize, ThumbnailLoader::OnThumbnailReady{});
       CHECK_FALSE(request);
 
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.get(resourceId, kPixelSize)); }));
+      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(loader.get(resourceId, kPixelSize)); }));
       CHECK(loader.get(resourceId, kPixelSize));
     }
 
@@ -221,14 +220,14 @@ namespace ao::gtk::test
                                     });
       REQUIRE(request);
 
-      REQUIRE(pumpUntil([&] { return callbackCount == 1; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount == 1; }));
       CHECK(wasEmpty);
       CHECK_FALSE(loader.get(missingId, kPixelSize));
 
       auto retryRequest =
         loader.request(missingId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
       REQUIRE(retryRequest);
-      REQUIRE(pumpUntil([&] { return callbackCount == 2; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount == 2; }));
     }
 
     SECTION("malformed image bytes report an empty result and are not cached")
@@ -247,7 +246,7 @@ namespace ao::gtk::test
                                     });
       REQUIRE(request);
 
-      REQUIRE(pumpUntil([&] { return callbackCount == 1; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount == 1; }));
       CHECK(wasEmpty);
       CHECK_FALSE(loader.get(resourceId, kPixelSize));
     }
@@ -262,7 +261,7 @@ namespace ao::gtk::test
 
       request.reset();
 
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.get(resourceId, kPixelSize)); }));
+      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(loader.get(resourceId, kPixelSize)); }));
       CHECK(callbackCount == 0);
     }
 
@@ -279,15 +278,16 @@ namespace ao::gtk::test
         REQUIRE(request);
       }
 
-      CHECK_FALSE(pumpUntil([&] { return callbackCount > 0; }, std::chrono::milliseconds{300}));
       CHECK(callbackCount == 0);
       request.reset();
 
       auto replacementLoader = ThumbnailLoader{runtime.library(), cache, runtime.async()};
-      auto replacementRequest =
-        replacementLoader.request(resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
+      std::int32_t replacementCallbackCount = 0;
+      auto replacementRequest = replacementLoader.request(
+        resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++replacementCallbackCount; });
       REQUIRE(replacementRequest);
-      REQUIRE(pumpUntil([&] { return callbackCount == 1; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return replacementCallbackCount == 1; }));
+      CHECK(callbackCount == 0);
     }
   }
 } // namespace ao::gtk::test

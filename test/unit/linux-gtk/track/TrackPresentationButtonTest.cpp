@@ -21,7 +21,8 @@ namespace ao::gtk::test
   // Menu population semantics (which presets appear, ordering, active marker) are covered by
   // TrackPresentationViewModel's tests. The widget keeps a single smoke: it binds its store and
   // rebuilds its menu on a focus change.
-  TEST_CASE("TrackPresentationButton - constructs and rebuilds on focus change", "[gtk][track][presentation]")
+  TEST_CASE("TrackPresentationButton rebuilds presentation actions when focus changes",
+            "[gtk][unit][track][presentation]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

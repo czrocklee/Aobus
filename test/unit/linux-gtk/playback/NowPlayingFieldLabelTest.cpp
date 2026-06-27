@@ -40,7 +40,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("NowPlayingFieldLabel - renders now playing fields", "[gtk][playback][viewmodel]")
+  TEST_CASE("NowPlayingFieldLabel renders now playing field values", "[gtk][unit][playback][field-label]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -101,7 +101,8 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("NowPlayingFieldLabel - clickable actions route through runtime services", "[gtk][playback][viewmodel]")
+  TEST_CASE("NowPlayingFieldLabel - clickable actions route through runtime services",
+            "[gtk][unit][playback][field-label]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

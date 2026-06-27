@@ -16,7 +16,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("PlaybackShortcutPolicy - preserves space for text editing widgets", "[gtk][app][shortcut]")
+  TEST_CASE("PlaybackShortcutPolicy preserves space for text editing widgets", "[gtk][unit][app][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

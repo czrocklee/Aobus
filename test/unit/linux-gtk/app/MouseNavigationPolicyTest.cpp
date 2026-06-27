@@ -7,7 +7,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("mouseButtonNavigation - maps thumb buttons to history navigation", "[gtk][app][navigation]")
+  TEST_CASE("mouseButtonNavigation maps thumb buttons to history navigation", "[gtk][unit][app][navigation]")
   {
     SECTION("button 8 navigates back")
     {

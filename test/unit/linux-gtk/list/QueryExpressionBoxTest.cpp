@@ -13,7 +13,7 @@ namespace ao::gtk::test
   // Wiring smoke only. Completion routing (text change -> provider -> popup) is
   // covered by EntryCompletionControllerTest; the completer logic by
   // CompletionServiceTest.
-  TEST_CASE("QueryExpressionBox - wires the entry into the box", "[gtk][list][query]")
+  TEST_CASE("QueryExpressionBox wires the query entry into the box", "[gtk][unit][list][query]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

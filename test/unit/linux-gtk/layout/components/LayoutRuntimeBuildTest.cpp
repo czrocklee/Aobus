@@ -3,25 +3,19 @@
 
 #include "ContainerTestHelpers.h"
 #include "app/linux-gtk/app/GtkStyleRuntime.h"
-#include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
-#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/menubutton.h>
-#include <gtkmm/window.h>
 
 #include <memory>
 #include <string>
@@ -29,26 +23,16 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("LayoutRuntime building", "[layout][unit][containers]")
+  TEST_CASE("LayoutRuntime builds documents into GTK widget trees", "[gtk][unit][layout][containers]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
+    auto fixture = LayoutRuntimeFixture{};
+    auto& ctx = fixture.context();
+    auto& registry = fixture.components();
+    auto& window = fixture.window();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
-    auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
-
-    auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
-
-    auto window = Gtk::Window{};
-    auto const actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
-
-    auto layoutRuntime = LayoutRuntime{registry};
-
-    SECTION("Build default layout")
+    SECTION("default layout builds a box root")
     {
       auto const doc = createDefaultLayout();
       auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
@@ -59,7 +43,7 @@ namespace ao::gtk::layout::test
       CHECK(dynamic_cast<Gtk::Box*>(&widget) != nullptr);
     }
 
-    SECTION("Build nested layout")
+    SECTION("nested layout preserves root orientation")
     {
       auto doc = LayoutDocument{};
       doc.root.type = "box";
@@ -84,7 +68,7 @@ namespace ao::gtk::layout::test
       CHECK(box->get_orientation() == Gtk::Orientation::HORIZONTAL);
     }
 
-    SECTION("Unknown component type produces error label")
+    SECTION("unknown component type produces error label")
     {
       auto doc = LayoutDocument{};
       doc.root.type = "nonexistent.component";

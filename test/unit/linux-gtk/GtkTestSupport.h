@@ -5,16 +5,13 @@
 
 #include "linux-gtk/app/GtkMainContextExecutor.h"
 #include "test/unit/TestUtils.h"
-#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/rt/source/TrackSource.h>
 
-#include <catch2/catch_test_macros.hpp>
 #include <glib-object.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -29,6 +26,7 @@
 #include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
+#include <gtkmm/window.h>
 
 #include <algorithm>
 #include <chrono>
@@ -36,7 +34,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -422,6 +419,64 @@ namespace ao::gtk::test
   }
 
   /**
+   * GtkWindowFixture - Owns GTK application/window plumbing for widget tests.
+   */
+  class GtkWindowFixture final
+  {
+  public:
+    GtkWindowFixture()
+      : _appPtr{ensureGtkApplication()}
+    {
+    }
+
+    GtkWindowFixture(GtkWindowFixture const&) = delete;
+    GtkWindowFixture& operator=(GtkWindowFixture const&) = delete;
+    GtkWindowFixture(GtkWindowFixture&&) = delete;
+    GtkWindowFixture& operator=(GtkWindowFixture&&) = delete;
+
+    ~GtkWindowFixture()
+    {
+      if (_mounted)
+      {
+        _window.unset_child();
+        drainGtkEvents();
+      }
+    }
+
+    Gtk::Window& window() { return _window; }
+
+    void mount(Gtk::Widget& widget)
+    {
+      _window.set_child(widget);
+      _mounted = true;
+    }
+
+    void present()
+    {
+      _window.present();
+      drain();
+    }
+
+    void unmount()
+    {
+      if (_mounted)
+      {
+        _window.unset_child();
+        _mounted = false;
+      }
+
+      drain();
+    }
+
+    void drain() { drainGtkEvents(); }
+
+  private:
+    Glib::RefPtr<Gtk::Application> _appPtr;
+    Gtk::Window _window;
+    bool _mounted = false;
+  };
+
+  /**
    * GtkRuntimeFixture - RAII fixture for AppRuntime with temporary storage.
    */
   class GtkRuntimeFixture
@@ -687,57 +742,6 @@ namespace ao::gtk::test
   };
 
   /**
-   * MutableTrackSource - In-memory track source implementation for GTK list/view tests.
-   */
-  class MutableTrackSource : public rt::TrackSource
-  {
-  public:
-    void addInitial(TrackId id) { _ids.push_back(id); }
-
-    void insert(TrackId id, std::size_t index)
-    {
-      _ids.insert(_ids.begin() + static_cast<std::ptrdiff_t>(index), id);
-      rt::TrackSource::notifyInserted(id, index);
-    }
-
-    void update(TrackId id)
-    {
-      auto const optIndex = indexOf(id);
-      REQUIRE(optIndex.has_value());
-      rt::TrackSource::notifyUpdated(id, *optIndex);
-    }
-
-    void onReset() { rt::TrackSource::notifyReset(); }
-
-    void remove(TrackId id)
-    {
-      auto const optIndex = indexOf(id);
-      REQUIRE(optIndex.has_value());
-      _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIndex));
-      rt::TrackSource::notifyRemoved(id, *optIndex);
-    }
-
-    std::size_t size() const override { return _ids.size(); }
-
-    TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
-
-    std::optional<std::size_t> indexOf(TrackId id) const override
-    {
-      auto it = std::ranges::find(_ids, id);
-
-      if (it == _ids.end())
-      {
-        return std::nullopt;
-      }
-
-      return static_cast<std::size_t>(std::ranges::distance(_ids.begin(), it));
-    }
-
-  private:
-    std::vector<TrackId> _ids;
-  };
-
-  /**
    * WidgetMeasure - Holds layout sizes for widget measurements.
    */
   struct WidgetMeasure final
@@ -781,5 +785,35 @@ namespace ao::gtk::test
     {
       contextPtr->iteration(false);
     }
+  }
+
+  template<typename Predicate>
+  bool pumpGtkEventsUntil(Predicate const& predicate,
+                          std::chrono::milliseconds timeout = std::chrono::milliseconds{500})
+  {
+    auto const deadline = std::chrono::steady_clock::now() + timeout;
+    auto contextPtr = Glib::MainContext::get_default();
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+      while (contextPtr->pending())
+      {
+        contextPtr->iteration(false);
+      }
+
+      if (predicate())
+      {
+        return true;
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    while (contextPtr->pending())
+    {
+      contextPtr->iteration(false);
+    }
+
+    return predicate();
   }
 } // namespace ao::gtk::test

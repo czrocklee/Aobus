@@ -77,23 +77,31 @@ namespace ao::gtk
 
   ThemeRegistrationToken ThemeCoordinator::registerToplevel(Gtk::Window& window)
   {
-    if (!std::ranges::contains(_registeredWindows, &window))
-    {
-      _registeredWindows.push_back(&window);
-      applyThemeClass(window, _activePreset);
-    }
+    _registeredWindows.push_back(&window);
+    applyThemeClass(window, _activePreset);
 
     return ThemeRegistrationToken{this, &window};
   }
 
   void ThemeCoordinator::unregisterToplevel(Gtk::Window& window)
   {
-    std::erase(_registeredWindows, &window);
-    removeThemeClass(window, _activePreset);
+    auto const position = std::ranges::find(_registeredWindows, &window);
+
+    if (position != _registeredWindows.end())
+    {
+      _registeredWindows.erase(position);
+    }
+
+    if (!std::ranges::contains(_registeredWindows, &window))
+    {
+      removeThemeClass(window, _activePreset);
+    }
   }
 
   void ThemeCoordinator::applyThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const
   {
+    removeThemeClass(widget, rt::ThemePresetId::Classic);
+    removeThemeClass(widget, rt::ThemePresetId::Modern);
     widget.add_css_class(std::string{themeCssClass(preset)});
   }
 

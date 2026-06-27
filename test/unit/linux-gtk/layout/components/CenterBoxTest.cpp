@@ -1,42 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/application.h>
 #include <gtkmm/centerbox.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/window.h>
 
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("CenterBox component", "[layout][unit][containers]")
+  TEST_CASE("CenterBox component places start, center, and end children", "[gtk][unit][layout][containers]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
-
-    auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
-
-    auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
-
-    auto window = Gtk::Window{};
-    auto const actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
-
-    auto layoutRuntime = LayoutRuntime{registry};
+    auto fixture = LayoutRuntimeFixture{};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
     auto doc = LayoutDocument{};
     doc.root.type = "centerBox";

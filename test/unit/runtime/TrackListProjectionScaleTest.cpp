@@ -2,12 +2,12 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/runtime/TrackSourceTestSupport.h"
 #include <ao/Type.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -16,46 +16,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <optional>
-#include <span>
-#include <utility>
 #include <variant>
 #include <vector>
 
 namespace ao::rt::test
 {
-  namespace
-  {
-    class LargeTrackSource final : public TrackSource
-    {
-    public:
-      void setIds(std::vector<TrackId> ids) { _ids = std::move(ids); }
-      void batchInsert(std::span<TrackId const> ids)
-      {
-        _ids.insert(_ids.end(), ids.begin(), ids.end());
-        notifyInserted(ids);
-      }
-
-      std::size_t size() const override { return _ids.size(); }
-      TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
-      std::optional<std::size_t> indexOf(TrackId id) const override
-      {
-        for (std::size_t idx = 0; idx < _ids.size(); ++idx)
-        {
-          if (_ids[idx] == id)
-          {
-            return idx;
-          }
-        }
-
-        return std::nullopt;
-      }
-
-    private:
-      std::vector<TrackId> _ids;
-    };
-  } // namespace
-
   TEST_CASE("TrackListProjection - 10k Scale Performance", "[app][unit][runtime][projection][scale]")
   {
     auto env = TestMusicLibrary{};
@@ -72,8 +37,8 @@ namespace ao::rt::test
                                            .album = std::format("Album {:03d}", idx % 500)}));
     }
 
-    auto source = LargeTrackSource{};
-    source.setIds(ids);
+    auto source = MutableTrackSource{};
+    source.setInitial(ids);
 
     auto const start = std::chrono::steady_clock::now();
     auto proj = TrackListProjection{ViewId{1}, source, lib};

@@ -13,7 +13,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("AppConfig persistence and operations", "[app][unit][config]")
+  TEST_CASE("AppConfig persists session, theme, and library preferences", "[gtk][unit][app][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";

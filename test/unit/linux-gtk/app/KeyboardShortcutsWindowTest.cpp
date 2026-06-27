@@ -60,7 +60,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("KeyboardShortcutsWindow lists only shortcut-eligible actions", "[gtk][app][shortcuts]")
+  TEST_CASE("KeyboardShortcutsWindow lists only shortcut-eligible actions", "[gtk][unit][app][shortcuts]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -74,7 +74,7 @@ namespace ao::gtk::test
     CHECK_FALSE(contains(ids, "track.editTags"));
   }
 
-  TEST_CASE("KeyboardShortcutsWindow renders the effective chords for each action", "[gtk][app][shortcuts]")
+  TEST_CASE("KeyboardShortcutsWindow renders the effective chords for each action", "[gtk][unit][app][shortcuts]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -87,7 +87,8 @@ namespace ao::gtk::test
     CHECK(findLabelByText(window, "Play/Pause") != nullptr);
   }
 
-  TEST_CASE("KeyboardShortcutsWindow edits notify and re-render", "[gtk][app][shortcuts]")
+  TEST_CASE("KeyboardShortcutsWindow edits notify subscribers and refresh rendered shortcuts",
+            "[gtk][unit][app][shortcuts]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -153,7 +154,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("KeyboardShortcutsWindow confirms reassignment of an in-use chord", "[gtk][app][shortcuts]")
+  TEST_CASE("KeyboardShortcutsWindow confirms reassignment of an in-use chord", "[gtk][unit][app][shortcuts]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

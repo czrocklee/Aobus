@@ -1,5 +1,8 @@
 # Developer Test Suites
 
+For test authoring standards, layer placement, tags, assertion quality, and
+helper boundaries, see `doc/design/testing-guidelines.md`.
+
 The `./ao test` command exposes individual suites and two suite groups:
 
 - `core`: core library Catch2 tests (`ao_core_test`).

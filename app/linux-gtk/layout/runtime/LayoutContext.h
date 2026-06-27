@@ -10,7 +10,10 @@
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/window.h>
+#include <sigc++/connection.h>
+#include <sigc++/functors/slot.h>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -28,7 +31,7 @@ namespace ao::gtk
 
   namespace portal
   {
-    class ImportExportCoordinator;
+    class ImportExportActions;
   }
 
   class TrackPageHost;
@@ -97,7 +100,7 @@ namespace ao::gtk::layout
 
   struct PortalContext final
   {
-    portal::ImportExportCoordinator* coordinator = nullptr;
+    portal::ImportExportActions* coordinator = nullptr;
   };
 
   struct ThemeUiContext final
@@ -167,6 +170,7 @@ namespace ao::gtk::layout
     PortalContext portal{};
     ThemeUiContext theme{};
 
+    std::function<sigc::connection(std::chrono::milliseconds, sigc::slot<bool()>)> timeoutScheduler{};
     std::function<void(std::string const& nodeId, std::int32_t posX, std::int32_t posY)> onNodeMoved{};
     bool editMode = false;
 

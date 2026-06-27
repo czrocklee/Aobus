@@ -7,13 +7,13 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("LibraryWindowPolicy - fallback empty library is replaced", "[gtk][app][library-window]")
+  TEST_CASE("LibraryWindowPolicy - fallback empty library is replaced", "[gtk][unit][app][library-window]")
   {
     CHECK(openLibraryWindowModeFor(LibraryWindowKind::FallbackEmptyLibrary) ==
           OpenLibraryWindowMode::ReplaceSourceWindow);
   }
 
-  TEST_CASE("LibraryWindowPolicy - real library opens additional window", "[gtk][app][library-window]")
+  TEST_CASE("LibraryWindowPolicy - real library opens additional window", "[gtk][unit][app][library-window]")
   {
     CHECK(openLibraryWindowModeFor(LibraryWindowKind::Library) == OpenLibraryWindowMode::AddWindow);
   }

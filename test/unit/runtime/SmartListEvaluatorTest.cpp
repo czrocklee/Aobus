@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/runtime/TrackSourceTestSupport.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
@@ -18,7 +19,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <span>
@@ -53,74 +53,6 @@ namespace ao::rt::test
       spec.duration = duration;
       return spec;
     }
-
-    class MutableTrackSource final : public TrackSource
-    {
-    public:
-      void addInitial(TrackId id) { _ids.push_back(id); }
-
-      void insert(TrackId id, std::size_t index)
-      {
-        _ids.insert(_ids.begin() + static_cast<std::ptrdiff_t>(index), id);
-        notifyInserted(id, index);
-      }
-
-      void update(TrackId id)
-      {
-        auto const optIndex = indexOf(id);
-        REQUIRE(optIndex.has_value());
-        notifyUpdated(id, *optIndex);
-      }
-
-      void remove(TrackId id)
-      {
-        auto const optIndex = indexOf(id);
-        REQUIRE(optIndex.has_value());
-        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIndex));
-        notifyRemoved(id, *optIndex);
-      }
-
-      void batchInsert(std::span<TrackId const> ids)
-      {
-        _ids.insert(_ids.end(), ids.begin(), ids.end());
-        notifyInserted(ids);
-      }
-
-      void batchUpdate(std::span<TrackId const> ids) { notifyUpdated(ids); }
-
-      void batchRemove(std::span<TrackId const> ids)
-      {
-        auto actualRemoved = std::vector<TrackId>{};
-
-        for (auto id : ids)
-        {
-          if (auto it = std::ranges::find(_ids, id); it != _ids.end())
-          {
-            _ids.erase(it);
-            actualRemoved.push_back(id);
-          }
-        }
-
-        notifyRemoved(actualRemoved);
-      }
-
-      std::size_t size() const override { return _ids.size(); }
-
-      TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
-
-      std::optional<std::size_t> indexOf(TrackId id) const override
-      {
-        if (auto it = std::ranges::find(_ids, id); it != _ids.end())
-        {
-          return static_cast<std::size_t>(std::ranges::distance(_ids.begin(), it));
-        }
-
-        return std::nullopt;
-      }
-
-    private:
-      std::vector<TrackId> _ids;
-    };
 
     struct ObserverSpy final : public TrackSourceObserver
     {
@@ -529,7 +461,7 @@ namespace ao::rt::test
       filteredPtr->attach(&spy);
 
       // Destroy source while filtered list is still alive
-      sourcePtr.reset();
+      sourcePtr = nullptr;
 
       // Filtered list should be notified of reset (source is gone)
       REQUIRE(spy.events.size() == 1);

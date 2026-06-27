@@ -13,11 +13,15 @@
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/eventcontrollerfocus.h>
+#include <sigc++/connection.h>
+#include <sigc++/functors/slot.h>
 #include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -36,8 +40,9 @@ namespace ao::gtk
   {
   public:
     using CreateSmartListSignal = sigc::signal<void(std::string)>;
+    using DebounceScheduler = std::function<sigc::connection(std::chrono::milliseconds, sigc::slot<bool()>)>;
 
-    explicit TrackQuickFilter(rt::AppRuntime& runtime);
+    explicit TrackQuickFilter(rt::AppRuntime& runtime, DebounceScheduler debounceScheduler = {});
     ~TrackQuickFilter() override;
 
     TrackQuickFilter(TrackQuickFilter const&) = delete;
@@ -74,6 +79,7 @@ namespace ao::gtk
     std::string _resolvedExpression;
     rt::QueryExpressionCompleter _completer;
     EntryCompletionController _completionController;
+    DebounceScheduler _debounceScheduler;
 
     sigc::scoped_connection _textChangedConn;
     sigc::scoped_connection _debounceTimer;

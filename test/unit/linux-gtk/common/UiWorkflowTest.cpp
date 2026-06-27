@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <deque>
 #include <exception>
 #include <functional>
@@ -33,8 +34,12 @@ namespace ao::gtk::test
 
       void dispatch(std::move_only_function<void()> task) override
       {
-        auto const lock = std::scoped_lock{_mutex};
-        _tasks.push_back(std::move(task));
+        {
+          auto const lock = std::scoped_lock{_mutex};
+          _tasks.push_back(std::move(task));
+        }
+
+        _cv.notify_all();
       }
 
       void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
@@ -59,8 +64,22 @@ namespace ao::gtk::test
         return true;
       }
 
+      void runUntilIdle()
+      {
+        while (runOne())
+        {
+        }
+      }
+
+      bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
+      {
+        auto lock = std::unique_lock{_mutex};
+        return _cv.wait_for(lock, timeout, [this] { return !_tasks.empty(); });
+      }
+
     private:
       mutable std::mutex _mutex;
+      mutable std::condition_variable _cv;
       std::deque<std::move_only_function<void()>> _tasks;
     };
 
@@ -71,6 +90,20 @@ namespace ao::gtk::test
       std::atomic<int> handlerCalls{0};
       std::atomic<bool> sawAoException{false};
       std::atomic<std::thread::id> handlerThread{};
+      std::mutex mutex;
+      std::condition_variable cv;
+
+      void markBodyFinished()
+      {
+        bodyFinished = true;
+        cv.notify_all();
+      }
+
+      bool waitBodyFinished(std::chrono::milliseconds timeout = std::chrono::seconds{2})
+      {
+        auto lock = std::unique_lock{mutex};
+        return cv.wait_for(lock, timeout, [this] { return bodyFinished.load(); });
+      }
     };
 
     // Worker-side bodies live as free coroutines (taking the runtime by pointer) so the spawn-site lambdas stay
@@ -87,40 +120,25 @@ namespace ao::gtk::test
     {
       owner->bodyEntered = true;
       co_await runtime->resumeOnWorker();
-      owner->bodyFinished = true;
+      owner->markBodyFinished();
     }
 
-    // Pumps the callback executor on the test thread until the predicate holds or the deadline passes.
+    // Pumps the callback executor on the test thread until the predicate holds.
     template<typename Predicate>
-    bool pumpUntil(QueuedExecutor& executor,
-                   Predicate const& predicate,
-                   std::chrono::milliseconds timeout = std::chrono::seconds{2})
+    bool pumpUntil(QueuedExecutor& executor, Predicate const& predicate)
     {
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-      while (std::chrono::steady_clock::now() < deadline)
+      while (!predicate())
       {
-        while (executor.runOne())
-        {
-        }
-
-        if (predicate())
-        {
-          return true;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        REQUIRE(executor.waitUntilQueued());
+        executor.runUntilIdle();
       }
 
-      while (executor.runOne())
-      {
-      }
-
-      return predicate();
+      return true;
     }
   } // namespace
 
-  TEST_CASE("UiWorkflow - internal failure invokes the handler on the callback executor", "[gtk][common][uiworkflow]")
+  TEST_CASE("UiWorkflow - internal failure invokes the handler on the callback executor",
+            "[gtk][unit][common][uiworkflow]")
   {
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
@@ -161,7 +179,7 @@ namespace ao::gtk::test
     runtime.join();
   }
 
-  TEST_CASE("UiWorkflow - successful body does not invoke the exception handler", "[gtk][common][uiworkflow]")
+  TEST_CASE("UiWorkflow - successful body does not invoke the exception handler", "[gtk][unit][common][uiworkflow]")
   {
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
@@ -175,11 +193,12 @@ namespace ao::gtk::test
       [&runtime](WorkflowOwner* self) { return succeedingWorkflowBody(&runtime, self); },
       [](WorkflowOwner* self, std::exception_ptr /*exceptionPtr*/) { ++self->handlerCalls; });
 
-    REQUIRE(pumpUntil(executor, [&owner] { return owner.bodyFinished.load(); }));
+    REQUIRE(executor.waitUntilQueued());
+    executor.runUntilIdle();
+    REQUIRE(owner.waitBodyFinished());
 
-    // Drain any residual callback-executor work so a late handler dispatch would still be observed.
-    REQUIRE_FALSE(
-      pumpUntil(executor, [&owner] { return owner.handlerCalls.load() > 0; }, std::chrono::milliseconds{200}));
+    // Drain residual callback-executor work so a same-turn handler dispatch would still be observed.
+    executor.runUntilIdle();
 
     CHECK(owner.bodyEntered.load());
     CHECK(owner.handlerCalls.load() == 0);

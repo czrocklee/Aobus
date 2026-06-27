@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/runtime/TrackSourceTestSupport.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -16,12 +17,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <span>
@@ -37,69 +36,6 @@ namespace ao::rt::test
   {
     using namespace ao::library;
     using namespace ao::test;
-
-    class MutableTrackSource final : public TrackSource
-    {
-    public:
-      void addInitial(TrackId id) { _ids.push_back(id); }
-      void batchInsert(std::span<TrackId const> ids)
-      {
-        _ids.insert(_ids.end(), ids.begin(), ids.end());
-        notifyInserted(ids);
-      }
-
-      void batchRemove(std::span<TrackId const> ids)
-      {
-        for (auto id : ids)
-        {
-          std::erase(_ids, id);
-        }
-
-        notifyRemoved(ids);
-      }
-
-      void batchUpdate(std::span<TrackId const> ids) { notifyUpdated(ids); }
-
-      void singleInsert(TrackId id)
-      {
-        _ids.push_back(id);
-        notifyInserted(id, _ids.size() - 1);
-      }
-
-      void singleRemove(TrackId id)
-      {
-        if (auto it = std::ranges::find(_ids, id); it != _ids.end())
-        {
-          auto index = std::distance(_ids.begin(), it);
-          _ids.erase(it);
-          notifyRemoved(id, static_cast<std::size_t>(index));
-        }
-      }
-
-      void singleUpdate(TrackId id)
-      {
-        if (auto it = std::ranges::find(_ids, id); it != _ids.end())
-        {
-          auto index = std::distance(_ids.begin(), it);
-          notifyUpdated(id, static_cast<std::size_t>(index));
-        }
-      }
-
-      std::size_t size() const override { return _ids.size(); }
-      TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
-      std::optional<std::size_t> indexOf(TrackId id) const override
-      {
-        if (auto it = std::ranges::find(_ids, id); it != _ids.end())
-        {
-          return static_cast<std::size_t>(std::ranges::distance(_ids.begin(), it));
-        }
-
-        return std::nullopt;
-      }
-
-    private:
-      std::vector<TrackId> _ids;
-    };
 
     struct TestEnv final
     {

@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
-#include <ao/async/Executor.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/OperationCancelled.h>
@@ -13,14 +12,8 @@
 #include <boost/system/system_error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
-#include <cstdint>
-#include <deque>
 #include <exception>
-#include <functional>
-#include <mutex>
 #include <stdexcept>
-#include <thread>
 #include <utility>
 
 namespace ao::rt::test
@@ -47,68 +40,37 @@ namespace ao::rt::test
       AsyncTestState<int> completed;
     };
 
-    class QueuedExecutor final : public IExecutor
+    struct TaskExitObserver final
     {
-    public:
-      bool isCurrent() const noexcept override { return true; }
+      AsyncTestState<bool> exited;
 
-      void dispatch(std::move_only_function<void()> task) override
+      explicit TaskExitObserver(AsyncTestState<bool> exited)
+        : exited{std::move(exited)}
       {
-        auto const lock = std::scoped_lock{_mutex};
-        _tasks.push_back(std::move(task));
       }
 
-      void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
+      ~TaskExitObserver() { exited.set(true); }
 
-      void runQueued()
-      {
-        auto tasks = std::deque<std::move_only_function<void()>>{};
-
-        {
-          auto const lock = std::scoped_lock{_mutex};
-          tasks.swap(_tasks);
-        }
-
-        while (!tasks.empty())
-        {
-          auto task = std::move(tasks.front());
-          tasks.pop_front();
-          task();
-        }
-      }
-
-      bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::milliseconds{500})
-      {
-        auto const start = std::chrono::steady_clock::now();
-
-        while (std::chrono::steady_clock::now() - start < timeout)
-        {
-          {
-            auto const lock = std::scoped_lock{_mutex};
-
-            if (!_tasks.empty())
-            {
-              return true;
-            }
-          }
-
-          std::this_thread::sleep_for(std::chrono::milliseconds{1});
-        }
-
-        auto const lock = std::scoped_lock{_mutex};
-        return !_tasks.empty();
-      }
-
-    private:
-      std::deque<std::move_only_function<void()>> _tasks;
-      std::mutex _mutex;
+      TaskExitObserver(TaskExitObserver const&) = delete;
+      TaskExitObserver(TaskExitObserver&&) = delete;
+      TaskExitObserver& operator=(TaskExitObserver const&) = delete;
+      TaskExitObserver& operator=(TaskExitObserver&&) = delete;
     };
 
-    Task<void> longRunningTask(Runtime* runtime, AsyncBarrier* barrier, AsyncTestState<bool> completed)
+    Task<void> longRunningTask(Runtime* runtime,
+                               AsyncBarrier* barrier,
+                               AsyncTestState<bool> reachedBarrierWait,
+                               AsyncTestState<bool> reachedCallbackHop,
+                               AsyncTestState<bool> completed,
+                               AsyncTestState<bool> taskExited)
     {
+      auto exitObserver = TaskExitObserver{taskExited};
+
       co_await runtime->resumeOnWorker();
+      reachedBarrierWait.set(true);
       barrier->wait(); // deterministic wait point (blocks worker thread)
 
+      reachedCallbackHop.set(true);
       co_await runtime->resumeOnCallbackExecutor();
       // If cancelled, this line should never be reached.
       completed.set(true);
@@ -124,19 +86,29 @@ namespace ao::rt::test
 
   TEST_CASE("LifetimeScope - Completion without cancellation", "[async][unit][runtime]")
   {
-    auto executor = ImmediateExecutor{};
+    auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
     auto barrier = AsyncBarrier{};
+    auto reachedBarrierWait = AsyncTestState<bool>::create(false);
+    auto reachedCallbackHop = AsyncTestState<bool>::create(false);
     auto completed = AsyncTestState<bool>::create(false);
+    auto taskExited = AsyncTestState<bool>::create(false);
 
     {
       auto scope = LifetimeScope{};
-      runtime.spawnWithLifetime(&scope, longRunningTask(&runtime, &barrier, completed));
+      runtime.spawnWithLifetime(
+        &scope, longRunningTask(&runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited));
 
+      REQUIRE(reachedBarrierWait.waitUntil(true));
       barrier.release();
+      executor.expectQueued();
+      CHECK(reachedCallbackHop.get());
+      CHECK_FALSE(completed.get());
+      CHECK_FALSE(taskExited.get());
 
-      // Wait for it to complete on the worker thread/ImmediateExecutor
-      REQUIRE(completed.waitUntil(true));
+      executor.runUntilIdle();
+      CHECK(completed.get());
+      CHECK(taskExited.get());
     }
 
     CHECK(completed.get());
@@ -146,27 +118,26 @@ namespace ao::rt::test
 
   TEST_CASE("LifetimeScope - Automatic cancellation", "[async][unit][runtime]")
   {
-    auto executor = ImmediateExecutor{};
+    auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
     auto barrier = AsyncBarrier{};
+    auto reachedBarrierWait = AsyncTestState<bool>::create(false);
+    auto reachedCallbackHop = AsyncTestState<bool>::create(false);
     auto completed = AsyncTestState<bool>::create(false);
+    auto taskExited = AsyncTestState<bool>::create(false);
 
     {
       auto scope = LifetimeScope{};
-      runtime.spawnWithLifetime(&scope, longRunningTask(&runtime, &barrier, completed));
+      runtime.spawnWithLifetime(
+        &scope, longRunningTask(&runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited));
 
-      // Destroy scope while task is blocked at the barrier
+      REQUIRE(reachedBarrierWait.waitUntil(true));
+      // Destroy scope while task is blocked at the barrier.
     }
 
-    // Now release the barrier - task should resume but be cancelled at resumeOnCallbackExecutor
     barrier.release();
-
-    // Yield a bounded number of times to let the worker thread process the cancellation.
-    // The barrier already guarantees ordering; yield merely assists thread scheduling.
-    for (std::int32_t i = 0; i < 32; ++i)
-    {
-      std::this_thread::yield();
-    }
+    REQUIRE(reachedCallbackHop.waitUntil(true));
+    REQUIRE(taskExited.waitUntil(true));
 
     CHECK_FALSE(completed.get());
     runtime.requestStop();
@@ -175,17 +146,17 @@ namespace ao::rt::test
 
   TEST_CASE("LifetimeScope - Cancellation before queued control resume", "[async][unit][runtime]")
   {
-    auto executor = QueuedExecutor{};
+    auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
     auto completed = AsyncTestState<bool>::create(false);
 
     {
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(&scope, pendingControlResumeTask(&runtime, completed));
-      REQUIRE(executor.waitUntilQueued());
+      executor.expectQueued();
     }
 
-    executor.runQueued();
+    executor.runUntilIdle();
 
     CHECK_FALSE(completed.get());
     runtime.requestStop();
@@ -194,7 +165,7 @@ namespace ao::rt::test
 
   TEST_CASE("Runtime - Cancellation checkpoint throws OperationCancelled", "[async][unit][runtime]")
   {
-    auto executor = QueuedExecutor{};
+    auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
     auto completed = AsyncTestState<bool>::create(false);
     auto sawCancellation = AsyncTestState<bool>::create(false);
@@ -217,9 +188,9 @@ namespace ao::rt::test
                     }
                   });
 
-    REQUIRE(executor.waitUntilQueued());
+    executor.expectQueued();
     signal.emit(CancellationType::all);
-    executor.runQueued();
+    executor.runUntilIdle();
 
     REQUIRE(sawCancellation.waitUntil(true));
     CHECK_FALSE(completed.get());

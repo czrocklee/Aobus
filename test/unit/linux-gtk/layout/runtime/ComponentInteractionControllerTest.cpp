@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/gesturelongpress.h>
 #include <gtkmm/window.h>
 
 namespace ao::gtk::layout::test
@@ -22,7 +23,8 @@ namespace ao::gtk::layout::test
   using namespace uimodel::layout;
   using namespace ao::gtk::test;
 
-  TEST_CASE("ComponentInteractionController - unit", "[layout][unit][runtime]")
+  TEST_CASE("ComponentInteractionController routes configured gestures to layout actions",
+            "[gtk][unit][layout][runtime]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -76,7 +78,7 @@ namespace ao::gtk::layout::test
       CHECK(primaryClicked);
     }
 
-    SECTION("gesture signal emission (basic coverage)")
+    SECTION("secondary and long-press gestures dispatch configured actions")
     {
       auto box = Gtk::Box{};
       auto node = uimodel::layout::LayoutNode{.type = "box"};
@@ -88,10 +90,14 @@ namespace ao::gtk::layout::test
       auto controller = ComponentInteractionController{};
       controller.attach(ctx, node, box, uimodel::layout::kAllExternalActions);
 
-      // Verify that the gestures were created and added to the widget
-      // We simulate the gesture signals using the underlying controller's signals if possible,
-      // but in unit tests we mainly verify the attachment and the binder logic.
-      // Full event simulation is best handled in integration tests.
+      REQUIRE(emitGestureReleased(box));
+      CHECK(secondaryClicked);
+      CHECK_FALSE(primaryLongPressed);
+
+      auto const longPressPtr = findController<Gtk::GestureLongPress>(box);
+      REQUIRE(longPressPtr);
+      ::g_signal_emit_by_name(longPressPtr->gobj(), "pressed", 1.0, 1.0);
+      CHECK(primaryLongPressed);
     }
 
     SECTION("respects policy and ignores disallowed slots")

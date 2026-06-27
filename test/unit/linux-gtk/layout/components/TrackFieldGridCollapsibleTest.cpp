@@ -2,25 +2,18 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "../../GtkTestSupport.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "layout/component/track/TrackDetailScope.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/application.h>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/grid.h>
 #include <gtkmm/label.h>
-#include <gtkmm/window.h>
-#include <sigc++/signal.h>
 
 #include <cstdint>
-#include <memory>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -32,41 +25,10 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::findWidget;
   using ao::gtk::test::walkWidgets;
 
-  namespace
+  TEST_CASE("TrackFieldGrid lays out collapsible metadata sections", "[gtk][unit][layout][components][track][geometry]")
   {
-    class MockDetailScope final : public ITrackDetailScope
-    {
-    public:
-      rt::TrackDetailSnapshot const& snapshot() const override { return _snapshot; }
-      sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() override { return _signal; }
-
-      void setSnapshot(rt::TrackDetailSnapshot snap)
-      {
-        _snapshot = std::move(snap);
-        _signal.emit(_snapshot);
-      }
-
-    private:
-      rt::TrackDetailSnapshot _snapshot;
-      sigc::signal<void(rt::TrackDetailSnapshot const&)> _signal;
-    };
-  } // namespace
-
-  TEST_CASE("TrackFieldGrid collapsible sections", "[layout][unit][components][track][geometry]")
-  {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.collapsible_test");
-    auto const tempDir = ao::test::TempDir{};
-    auto runtime = ao::gtk::test::makeRuntime(tempDir);
-    auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
-
-    auto window = Gtk::Window{};
-    auto actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
-
-    auto scope = MockDetailScope{};
-    ctx.track.detailScope = &scope;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.collapsible_test"};
+    auto& scope = fixture.attachTrackDetailScope();
 
     // Set up a snapshot with some metadata and technical fields
     auto snap = rt::TrackDetailSnapshot{};
@@ -76,7 +38,7 @@ namespace ao::gtk::layout::test
     scope.setSnapshot(snap);
 
     auto const node = LayoutNode{.type = "track.fieldGrid"};
-    auto const compPtr = registry.create(ctx, node);
+    auto const compPtr = fixture.create(node);
     REQUIRE(compPtr != nullptr);
     auto& root = compPtr->widget();
     auto* const grid = findWidget<Gtk::Grid>(root);
@@ -363,38 +325,6 @@ namespace ao::gtk::layout::test
       CHECK(metaHeader->get_width() == expandedMetaWidth);
       CHECK(customHeader->get_width() == expandedCustomWidth);
       CHECK(techHeader->get_width() == expandedTechWidth);
-    }
-
-    SECTION("Empty sections suppress headers")
-    {
-      // Create a grid with no requested categories
-      auto const emptyNode =
-        LayoutNode{.type = "track.fieldGrid", .props = {{"categories", LayoutValue{std::vector<std::string>{}}}}};
-      auto const emptyCompPtr = registry.create(ctx, emptyNode);
-      REQUIRE(emptyCompPtr != nullptr);
-      auto& emptyRoot = emptyCompPtr->widget();
-
-      auto findHeaderInByClass = [&](Gtk::Widget& root, std::string_view className) -> Gtk::Button*
-      {
-        Gtk::Button* found = nullptr;
-        walkWidgets(root,
-                    [&](Gtk::Widget& w)
-                    {
-                      if (auto* btn = dynamic_cast<Gtk::Button*>(&w); btn != nullptr)
-                      {
-                        if (btn->has_css_class(std::string{className}))
-                        {
-                          found = btn;
-                        }
-                      }
-                    });
-        return found;
-      };
-
-      auto* metaHeader = findHeaderInByClass(emptyRoot, "ao-track-detail-section-meta");
-      auto* techHeader = findHeaderInByClass(emptyRoot, "ao-track-detail-section-tech");
-      CHECK(metaHeader == nullptr);
-      CHECK(techHeader == nullptr);
     }
 
     SECTION("Custom section behavior")

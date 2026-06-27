@@ -28,35 +28,35 @@ namespace ao::gtk::layout::track_field_grid::test
     }
   } // namespace
 
-  TEST_CASE("validUtf8Text returns empty for empty input", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("validUtf8Text returns empty for empty input", "[gtk][unit][layout][track-field-grid-text]")
   {
     CHECK(validUtf8Text("").empty());
   }
 
-  TEST_CASE("validUtf8Text passes valid ASCII through unchanged", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("validUtf8Text passes valid ASCII through unchanged", "[gtk][unit][layout][track-field-grid-text]")
   {
     CHECK(validUtf8Text("hello world") == "hello world");
   }
 
-  TEST_CASE("validUtf8Text preserves 2-byte UTF-8 sequences", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("validUtf8Text preserves 2-byte UTF-8 sequences", "[gtk][unit][layout][track-field-grid-text]")
   {
     auto const input = "caf\xC3\xA9"s; // "café"
     CHECK(validUtf8Text(input) == input);
   }
 
-  TEST_CASE("validUtf8Text preserves 3-byte UTF-8 sequences", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("validUtf8Text preserves 3-byte UTF-8 sequences", "[gtk][unit][layout][track-field-grid-text]")
   {
     auto const input = "\xE4\xB8\xAD\xE6\x96\x87"s; // "中文"
     CHECK(validUtf8Text(input) == input);
   }
 
-  TEST_CASE("validUtf8Text preserves 4-byte UTF-8 sequences", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("validUtf8Text preserves 4-byte UTF-8 sequences", "[gtk][unit][layout][track-field-grid-text]")
   {
     auto const input = "\xF0\x9D\x95\x8F"s; // U+1D54F "𝕏"
     CHECK(validUtf8Text(input) == input);
   }
 
-  TEST_CASE("validUtf8Text replaces invalid bytes with substitution", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("validUtf8Text replaces invalid bytes with substitution", "[gtk][unit][layout][track-field-grid-text]")
   {
     std::string const input = std::string{"before"} + '\xFF' + '\xFE' + "after";
 
@@ -67,7 +67,7 @@ namespace ao::gtk::layout::track_field_grid::test
     CHECK(result.size() > std::string{"before"}.size() + std::string{"after"}.size());
   }
 
-  TEST_CASE("validUtf8Text replaces lone continuation byte", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("validUtf8Text replaces lone continuation byte", "[gtk][unit][layout][track-field-grid-text]")
   {
     std::string const input = std::string{"a"} + '\x80' + "b";
 
@@ -77,7 +77,8 @@ namespace ao::gtk::layout::track_field_grid::test
     CHECK(result.ends_with("b"));
   }
 
-  TEST_CASE("displayTextForField returns mixedText when aggregate is mixed", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("displayTextForField returns mixedText when aggregate is mixed",
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Title).mixed = true;
@@ -88,7 +89,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("displayTextForField returns 'Unknown' for unset Technical field when requested",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     auto const& def = *rt::trackFieldDefinition(TrackField::Codec);
@@ -100,7 +101,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("displayTextForField returns empty for unset Technical field when not requested",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
 
@@ -109,7 +110,8 @@ namespace ao::gtk::layout::track_field_grid::test
     CHECK(result.empty());
   }
 
-  TEST_CASE("displayTextForField returns empty for unset non-Technical field", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("displayTextForField returns empty for unset non-Technical field",
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
 
@@ -118,7 +120,7 @@ namespace ao::gtk::layout::track_field_grid::test
     CHECK(result.empty());
   }
 
-  TEST_CASE("displayTextForField formats a populated text field", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("displayTextForField formats a populated text field", "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Title).optValue = std::string{"Hello"};
@@ -128,7 +130,7 @@ namespace ao::gtk::layout::track_field_grid::test
     CHECK(result == "Hello");
   }
 
-  TEST_CASE("displayTextForField formats a populated numeric field", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("displayTextForField formats a populated numeric field", "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Year).optValue = std::uint16_t{2024};
@@ -138,7 +140,8 @@ namespace ao::gtk::layout::track_field_grid::test
     CHECK(result == "2024");
   }
 
-  TEST_CASE("displayTextForField returns empty for field with no formatter", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("displayTextForField returns empty for field with no formatter",
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     auto const* uiDef = trackFieldUiDefinition(TrackField::Quality);
@@ -153,7 +156,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("isProtectedFieldEditValue always protects the multi-value sentinel",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
 
@@ -161,7 +164,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("isProtectedFieldEditValue protects the multi-value sentinel even when not mixed",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Title).optValue = std::string{"single"};
@@ -170,7 +173,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("isProtectedFieldEditValue protects composite mixed when protection is enabled",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Title).mixed = true;
@@ -179,7 +182,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("isProtectedFieldEditValue does not protect composite mixed when protection is disabled",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Title).mixed = true;
@@ -188,7 +191,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("isProtectedFieldEditValue returns false for non-sentinel text on mixed aggregate",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Title).mixed = true;
@@ -197,7 +200,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("isProtectedFieldEditValue returns false for composite mixed when aggregate is not mixed",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Title).optValue = std::string{"single"};
@@ -206,7 +209,7 @@ namespace ao::gtk::layout::track_field_grid::test
   }
 
   TEST_CASE("isProtectedFieldEditValue returns false for ordinary text on a single-value field",
-            "[gtk][unit][trackfieldgridtextutils]")
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
     rt::trackFieldArrayAt(snap.fields, TrackField::Title).optValue = std::string{"single"};
@@ -214,7 +217,8 @@ namespace ao::gtk::layout::track_field_grid::test
     CHECK_FALSE(isProtectedFieldEditValue(TrackField::Title, snap, "edit", true));
   }
 
-  TEST_CASE("isProtectedFieldEditValue returns false for empty edit value", "[gtk][unit][trackfieldgridtextutils]")
+  TEST_CASE("isProtectedFieldEditValue returns false for empty edit value",
+            "[gtk][unit][layout][track-field-grid-text]")
   {
     auto snap = makeSnap();
 

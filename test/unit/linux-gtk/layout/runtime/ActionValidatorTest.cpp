@@ -16,7 +16,8 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
 
-  TEST_CASE("ActionValidator", "[layout][unit][runtime]")
+  TEST_CASE("ActionValidator validates component action bindings against the GTK action registry",
+            "[gtk][unit][layout][runtime]")
   {
     auto registry = ActionRegistry{};
     auto compRegistry = ComponentRegistry{};

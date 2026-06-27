@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/LayoutNodeId.h>
 #include <ao/uimodel/layout/LayoutYaml.h> // NOLINT(misc-include-cleaner)
 #include <ao/yaml/Utils.h>
 
@@ -346,6 +347,127 @@ namespace ao::uimodel::layout::test
     {
       CHECK(node.getLayout<bool>("vexpand", true) == true);
       CHECK(node.getLayout<std::int64_t>("spacing", 10) == 10);
+    }
+  }
+
+  TEST_CASE("Layout stateful node ids reject ambiguous runtime keys", "[layout][unit][model]")
+  {
+    SECTION("duplicate stateful ids are errors")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.id = "shared-split", .type = "split"},
+        LayoutNode{.id = "shared-split", .type = "collapsibleSplit"},
+      };
+
+      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
+
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
+      CHECK(diagnostics[0].componentId == "shared-split");
+      CHECK(hasLayoutNodeIdErrors(diagnostics));
+    }
+
+    SECTION("anonymous stateful nodes warn but remain valid")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "split";
+
+      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
+
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Warning);
+      CHECK(diagnostics[0].componentType == "split");
+      CHECK_FALSE(hasLayoutNodeIdErrors(diagnostics));
+    }
+
+    SECTION("non-stateful duplicate ids do not create ambiguous runtime state keys")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.id = "same", .type = "spacer"},
+        LayoutNode{.id = "same", .type = "separator"},
+      };
+
+      CHECK(validateStatefulLayoutNodeIds(doc).empty());
+    }
+
+    SECTION("template expansion participates in duplicate detection")
+    {
+      auto doc = LayoutDocument{};
+      doc.templates["pane"] = LayoutNode{.id = "templated-split", .type = "split"};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"pane"}}}}},
+        LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"pane"}}}}},
+      };
+
+      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
+
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].componentId == "templated-split");
+      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
+    }
+
+    SECTION("duplicate stateful ids are errors even when the type matches")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.id = "shared", .type = "split"},
+        LayoutNode{.id = "shared", .type = "split"},
+      };
+
+      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
+      REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
+      CHECK(diagnostics[0].componentId == "shared");
+      CHECK(hasLayoutNodeIdErrors(diagnostics));
+    }
+
+    SECTION("anonymous non-stateful duplicates do not warn")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.type = "spacer"},
+        LayoutNode{.type = "spacer"},
+      };
+
+      CHECK(validateStatefulLayoutNodeIds(doc).empty());
+    }
+  }
+
+  TEST_CASE("Layout stateful node id generation avoids existing document ids", "[layout][unit][model]")
+  {
+    SECTION("new stateful ids are stable and unique across root and templates")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.children = {LayoutNode{.id = "split-new", .type = "split"}};
+      doc.templates["copy"] = LayoutNode{.id = "split-new-2", .type = "split"};
+
+      CHECK(makeUniqueLayoutNodeId(doc, "split", "new") == "split-new-3");
+    }
+
+    SECTION("freshening a copied stateful subtree replaces ids recursively")
+    {
+      auto owner = LayoutDocument{};
+      owner.root.type = "box";
+      owner.root.children = {LayoutNode{.id = "split-original", .type = "split"}};
+
+      auto copy = LayoutNode{.id = "split-original", .type = "split"};
+      copy.children = {LayoutNode{.id = "child", .type = "spacer"}, LayoutNode{.type = "collapsibleSplit"}};
+
+      freshenLayoutNodeIds(copy, owner);
+
+      CHECK(copy.id != "split-original");
+      CHECK(copy.id == "split-split-original");
+      REQUIRE(copy.children.size() == 2);
+      CHECK(copy.children[0].id == "spacer-child");
+      CHECK(copy.children[1].id == "collapsiblesplit-copy");
     }
   }
 } // namespace ao::uimodel::layout::test

@@ -91,7 +91,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("Track scroll bind-path baseline", "[baseline][gtk][track]")
+  TEST_CASE("Track scroll bind path stays within baseline latency", "[gtk][regression][track][baseline]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

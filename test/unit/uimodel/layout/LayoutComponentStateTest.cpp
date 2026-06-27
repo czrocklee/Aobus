@@ -11,9 +11,8 @@
 #include <string>
 #include <utility>
 
-namespace ao::gtk::layout::test
+namespace ao::uimodel::layout::test
 {
-  using namespace uimodel::layout;
   namespace yaml = ao::yaml;
 
   namespace
@@ -209,4 +208,4 @@ namespace ao::gtk::layout::test
     CHECK(stateDoc.components.size() == 1);
     CHECK(stateDoc.components.contains("live-split"));
   }
-} // namespace ao::gtk::layout::test
+} // namespace ao::uimodel::layout::test

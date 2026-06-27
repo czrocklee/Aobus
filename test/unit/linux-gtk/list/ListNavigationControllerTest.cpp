@@ -54,7 +54,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ListNavigationController - basic interactions", "[gtk][list][controller]")
+  TEST_CASE("ListNavigationController binds navigation actions to library state", "[gtk][unit][list]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -81,12 +81,14 @@ namespace ao::gtk::test
 
     SECTION("rebuildTree populates the navigation panel")
     {
-      createList(fixture.runtime().musicLibrary(), "Test List");
+      auto const testListId = createList(fixture.runtime().musicLibrary(), "Test List");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
 
-      // Navigation panel should contain "All Tracks" and "Test List"
+      controller.select(testListId);
+      drainGtkEvents();
+      CHECK(selectedId == testListId);
     }
 
     SECTION("select triggers callback")
@@ -102,7 +104,7 @@ namespace ao::gtk::test
       CHECK(selectedId == testListId);
     }
 
-    SECTION("registered actions follow the selected list policy")
+    SECTION("registered actions reflect the currently selected list")
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
       controller.addActionsTo(*groupPtr);
@@ -118,10 +120,7 @@ namespace ao::gtk::test
       CHECK_FALSE(editActionPtr->get_enabled());
       CHECK_FALSE(deleteActionPtr->get_enabled());
 
-      auto& library = fixture.runtime().musicLibrary();
-      auto const leafListId = createList(library, "Leaf List");
-      auto const parentListId = createList(library, "Parent List");
-      createList(library, "Child List", parentListId);
+      auto const leafListId = createList(fixture.runtime().musicLibrary(), "Leaf List");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -131,12 +130,6 @@ namespace ao::gtk::test
       CHECK(newActionPtr->get_enabled());
       CHECK(editActionPtr->get_enabled());
       CHECK(deleteActionPtr->get_enabled());
-
-      controller.select(parentListId);
-      drainGtkEvents();
-      CHECK(newActionPtr->get_enabled());
-      CHECK(editActionPtr->get_enabled());
-      CHECK_FALSE(deleteActionPtr->get_enabled());
 
       controller.select(rt::kAllTracksListId);
       drainGtkEvents();

@@ -2,47 +2,27 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "ContainerTestHelpers.h"
-#include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
 #include <ao/uimodel/layout/LayoutComponentState.h>
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/application.h>
 #include <gtkmm/paned.h>
-#include <gtkmm/window.h>
 
-#include <chrono>
 #include <cstdint>
 #include <string>
 
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("SplitComponent success states", "[layout][unit][containers][geometry]")
+  TEST_CASE("SplitComponent applies sizing and persists panel state", "[gtk][unit][layout][containers][geometry]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
-
-    auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
-
-    auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
-
-    auto window = Gtk::Window{};
-    auto const actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
-
-    auto layoutRuntime = LayoutRuntime{registry};
+    auto fixture = LayoutRuntimeFixture{};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
     SECTION("split with 2 children builds Gtk::Paned")
     {
@@ -217,7 +197,6 @@ namespace ao::gtk::layout::test
       auto allocationHost = AllocationHost{compPtr->widget()};
       allocationHost.allocateChild(1000, 400);
       paned->set_position(500);
-      drainGtkEventsFor(std::chrono::milliseconds{250});
 
       CHECK(stateStore.saveCount() == 0);
       CHECK(stateStore.document().components.empty());
@@ -252,7 +231,6 @@ namespace ao::gtk::layout::test
         ++ctx.componentStateGeneration;
       }
 
-      drainGtkEventsFor(std::chrono::milliseconds{250});
       CHECK(stateStore.saveCount() == 0);
       CHECK(stateStore.document().components.empty());
     }

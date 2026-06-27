@@ -7,7 +7,6 @@
 #include <ao/uimodel/layout/LayoutNodeId.h>
 #include <ao/uimodel/layout/LayoutYaml.h>
 #include <ao/uimodel/layout/StatefulLayoutComponentType.h>
-#include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -24,7 +23,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel::layout;
   namespace yaml = ao::yaml;
 
-  TEST_CASE("Layout model GTK serialization", "[layout][unit][gtk][model]")
+  TEST_CASE("GTK built-in layout documents define stable preset contracts", "[gtk][unit][layout][model]")
   {
     SECTION("LayoutDocument round-trip via createDefaultLayout")
     {
@@ -110,121 +109,6 @@ namespace ao::gtk::layout::test
       }
     }
 
-    SECTION("duplicate stateful ids are errors after template expansion")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "box";
-      doc.root.children = {
-        LayoutNode{.id = "shared-split", .type = "split"},
-        LayoutNode{.id = "shared-split", .type = "collapsibleSplit"},
-      };
-
-      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
-
-      REQUIRE(diagnostics.size() == 1);
-      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
-      CHECK(diagnostics[0].componentId == "shared-split");
-      CHECK(hasLayoutNodeIdErrors(diagnostics));
-    }
-
-    SECTION("anonymous stateful nodes warn but remain valid")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "split";
-
-      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
-
-      REQUIRE(diagnostics.size() == 1);
-      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Warning);
-      CHECK(diagnostics[0].componentType == "split");
-      CHECK_FALSE(hasLayoutNodeIdErrors(diagnostics));
-    }
-
-    SECTION("non-stateful duplicate ids do not create ambiguous runtime state keys")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "box";
-      doc.root.children = {
-        LayoutNode{.id = "same", .type = "spacer"},
-        LayoutNode{.id = "same", .type = "separator"},
-      };
-
-      CHECK(validateStatefulLayoutNodeIds(doc).empty());
-    }
-
-    SECTION("template expansion participates in duplicate detection")
-    {
-      auto doc = LayoutDocument{};
-      doc.templates["pane"] = LayoutNode{.id = "templated-split", .type = "split"};
-      doc.root.type = "box";
-      doc.root.children = {
-        LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"pane"}}}}},
-        LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"pane"}}}}},
-      };
-
-      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
-
-      REQUIRE(diagnostics.size() == 1);
-      CHECK(diagnostics[0].componentId == "templated-split");
-      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
-    }
-
-    SECTION("duplicate stateful ids are errors even when the type matches")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "box";
-      doc.root.children = {
-        LayoutNode{.id = "shared", .type = "split"},
-        LayoutNode{.id = "shared", .type = "split"},
-      };
-
-      auto const diagnostics = validateStatefulLayoutNodeIds(doc);
-      REQUIRE(diagnostics.size() == 1);
-      CHECK(diagnostics[0].severity == LayoutNodeIdDiagnosticSeverity::Error);
-      CHECK(diagnostics[0].componentId == "shared");
-      CHECK(hasLayoutNodeIdErrors(diagnostics));
-    }
-
-    SECTION("anonymous non-stateful duplicates do not warn")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "box";
-      doc.root.children = {
-        LayoutNode{.type = "spacer"},
-        LayoutNode{.type = "spacer"},
-      };
-
-      CHECK(validateStatefulLayoutNodeIds(doc).empty());
-    }
-
-    SECTION("new stateful ids are stable and unique across root and templates")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "box";
-      doc.root.children = {LayoutNode{.id = "split-new", .type = "split"}};
-      doc.templates["copy"] = LayoutNode{.id = "split-new-2", .type = "split"};
-
-      CHECK(makeUniqueLayoutNodeId(doc, "split", "new") == "split-new-3");
-    }
-
-    SECTION("freshening a copied stateful subtree replaces ids recursively")
-    {
-      auto owner = LayoutDocument{};
-      owner.root.type = "box";
-      owner.root.children = {LayoutNode{.id = "split-original", .type = "split"}};
-
-      auto copy = LayoutNode{.id = "split-original", .type = "split"};
-      copy.children = {LayoutNode{.id = "child", .type = "spacer"}, LayoutNode{.type = "collapsibleSplit"}};
-
-      freshenLayoutNodeIds(copy, owner);
-
-      CHECK(copy.id != "split-original");
-      CHECK(copy.id == "split-split-original");
-      REQUIRE(copy.children.size() == 2);
-      CHECK(copy.children[0].id == "spacer-child");
-      CHECK(copy.children[1].id == "collapsiblesplit-copy");
-    }
-
     SECTION("modern bottom bar artwork follows the transport row height")
     {
       auto const doc = createBuiltInLayout(LayoutPresetId::Modern);
@@ -276,83 +160,12 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(search.layout.contains("widthRequest"));
       CHECK(search.getLayout<bool>("hexpand", false) == true);
     }
-
-    SECTION("LayoutDocument round-trip preserves layout props and child order")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "box";
-      doc.root.id = "root";
-
-      auto c1 = LayoutNode{};
-      c1.type = "spacer";
-      c1.layout["hexpand"] = LayoutValue{true};
-      c1.layout["vexpand"] = LayoutValue{true};
-      doc.root.children.push_back(c1);
-
-      auto c2 = LayoutNode{};
-      c2.type = "scroll";
-      c2.id = "scroller";
-      c2.layout["vexpand"] = LayoutValue{true};
-      c2.props["hscrollPolicy"] = LayoutValue{std::string{"never"}};
-      doc.root.children.push_back(c2);
-
-      auto tree = ryml::Tree{};
-      yaml::write(tree.rootref(), doc);
-
-      auto decoded = LayoutDocument{};
-      REQUIRE(yaml::read(tree.rootref(), decoded));
-
-      REQUIRE(decoded.root.children.size() == 2);
-      CHECK(decoded.root.children[0].type == "spacer");
-      CHECK(decoded.root.children[0].layout.at("hexpand").asBool() == true);
-      CHECK(decoded.root.children[0].layout.at("vexpand").asBool() == true);
-      CHECK(decoded.root.children[1].type == "scroll");
-      CHECK(decoded.root.children[1].id == "scroller");
-      CHECK(decoded.root.children[1].layout.at("vexpand").asBool() == true);
-      CHECK(decoded.root.children[1].props.at("hscrollPolicy").asString() == "never");
-    }
-
-    SECTION("YAML decode tolerates missing optional fields")
-    {
-      auto const* yaml = R"(
-      version: 1
-      root:
-        type: box
-    )";
-      auto tree = ryml::Tree{yaml::callbacks()};
-      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
-
-      auto decoded = LayoutDocument{};
-      REQUIRE(yaml::read(tree.rootref(), decoded));
-      CHECK(decoded.version == 1);
-      CHECK(decoded.root.type == "box");
-      CHECK(decoded.root.id.empty());
-      CHECK(decoded.root.children.empty());
-      CHECK(decoded.root.props.empty());
-    }
-
-    SECTION("YAML decode tolerates fields set to empty string")
-    {
-      auto const* yaml = R"(
-      version: 1
-      root:
-        id: ""
-        type: spacer
-    )";
-      auto tree = ryml::Tree{yaml::callbacks()};
-      ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
-
-      auto decoded = LayoutDocument{};
-      REQUIRE(yaml::read(tree.rootref(), decoded));
-      CHECK(decoded.root.type == "spacer");
-      CHECK(decoded.root.id.empty());
-    }
   }
 
   // ---------------------------------------------------------------------------
   // Built-in Presets
   // ---------------------------------------------------------------------------
-  TEST_CASE("Built-in preset validation", "[layout][presets]")
+  TEST_CASE("Built-in layout presets preserve preset-specific root classes", "[gtk][unit][layout][presets]")
   {
     SECTION("Classic preset is the default and has no modern classes")
     {

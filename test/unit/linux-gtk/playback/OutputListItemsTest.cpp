@@ -10,7 +10,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("OutputListItems - data models", "[gtk][playback][output]")
+  TEST_CASE("OutputListItems expose output device identity and display labels", "[gtk][unit][playback][output]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

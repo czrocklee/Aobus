@@ -19,7 +19,9 @@
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerfocus.h>
+#include <sigc++/connection.h>
 #include <sigc++/functors/mem_fun.h>
+#include <sigc++/functors/slot.h>
 
 #include <chrono>
 #include <cstddef>
@@ -27,20 +29,27 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::gtk
 {
   namespace
   {
     constexpr auto kFilterDebounceInterval = std::chrono::milliseconds{200};
+
+    sigc::connection scheduleDefaultDebounce(std::chrono::milliseconds interval, sigc::slot<bool()> callback)
+    {
+      return Glib::signal_timeout().connect(std::move(callback), interval.count());
+    }
   }
 
-  TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime)
+  TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime, DebounceScheduler debounceScheduler)
     : Gtk::Box{Gtk::Orientation::HORIZONTAL, 0}
     , _runtime{runtime}
     , _completer{_runtime.completion()}
     , _completionController{_entry,
                             [this](std::string_view text, std::size_t cursor) { return complete(text, cursor); }}
+    , _debounceScheduler{std::move(debounceScheduler)}
     , _textChangedConn{_entry.signal_changed().connect(sigc::mem_fun(*this, &TrackQuickFilter::onFilterTextChanged))}
     , _controller{_runtime.views(),
                   _runtime.workspace(),
@@ -135,13 +144,14 @@ namespace ao::gtk
   {
     updateClearButton();
     _debounceTimer.disconnect();
-    _debounceTimer = Glib::signal_timeout().connect(
-      [this]
-      {
-        _controller.updateFilter(_entry.get_text().raw());
-        return false;
-      },
-      kFilterDebounceInterval.count());
+    auto callback = sigc::slot<bool()>{[this]
+                                       {
+                                         _controller.updateFilter(_entry.get_text().raw());
+                                         return false;
+                                       }};
+
+    _debounceTimer = _debounceScheduler ? _debounceScheduler(kFilterDebounceInterval, std::move(callback))
+                                        : scheduleDefaultDebounce(kFilterDebounceInterval, std::move(callback));
   }
 
   void TrackQuickFilter::onClearClicked()

@@ -3,14 +3,13 @@
 
 #pragma once
 
+#include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/pixbuf.h>
-#include <glib.h>
-#include <glibmm/main.h>
 #include <glibmm/refptr.h>
 
 #include <chrono>
@@ -19,7 +18,6 @@
 #include <functional>
 #include <memory>
 #include <span>
-#include <thread>
 
 namespace ao::gtk::test
 {
@@ -63,15 +61,6 @@ namespace ao::gtk::test
   inline bool pumpUntil(std::function<bool()> const& predicate,
                         std::chrono::milliseconds timeout = std::chrono::seconds{5})
   {
-    auto const contextPtr = Glib::MainContext::get_default();
-    auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-    while (!predicate() && std::chrono::steady_clock::now() < deadline)
-    {
-      contextPtr->iteration(false);
-      std::this_thread::sleep_for(std::chrono::milliseconds{1});
-    }
-
-    return predicate();
+    return pumpGtkEventsUntil(predicate, timeout);
   }
 } // namespace ao::gtk::test

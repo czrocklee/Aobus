@@ -17,7 +17,7 @@ namespace ao::gtk::test
   // isWidgetWithinAny is the pure decision behind DismissController: it walks the widget-tree
   // ancestry, no geometry. The geometric hit-test (Gtk::Window::pick) lives at the call site and is
   // intentionally not exercised here.
-  TEST_CASE("isWidgetWithinAny - ancestry membership", "[gtk][common][dismiss]")
+  TEST_CASE("isWidgetWithinAny returns true for descendants of candidate roots", "[gtk][unit][common][dismiss]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

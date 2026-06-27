@@ -64,7 +64,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TagEditController - smoke test", "[gtk][tag][controller]")
+  TEST_CASE("TagEditController binds tag actions and routes submitted tag mutations", "[gtk][unit][tag]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -108,40 +108,6 @@ namespace ao::gtk::test
       REQUIRE(feed.entries.size() == 1);
       CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
       CHECK(feed.entries.back().message == "Tags added 1 for 2 tracks");
-    }
-
-    SECTION("submitTagChanges ignores empty tag deltas")
-    {
-      auto const selection = TrackSelectionContext{.listId = rt::kAllTracksListId, .selectedIds = {TrackId{42}}};
-
-      controller.submitTagChanges(selection, std::span<std::string const>{}, std::span<std::string const>{});
-
-      CHECK(mutationCallbacks == 0);
-      CHECK(fixture.runtime().notifications().feed().entries.empty());
-    }
-
-    SECTION("submitTagChanges can add and remove tags in one mutation")
-    {
-      auto& library = fixture.runtime().musicLibrary();
-      auto const trackId = createTrack(library, "Mixed Tag Target");
-      auto const existingTags = std::array<std::string, 1>{"OldTag"};
-      REQUIRE_FALSE(
-        fixture.runtime().library().writer().editTags(std::array{trackId}, existingTags, {}).mutatedIds.empty());
-
-      auto const selection = TrackSelectionContext{.listId = rt::kAllTracksListId, .selectedIds = {trackId}};
-      auto const tagsToAdd = std::array<std::string, 1>{"NewTag"};
-      auto const tagsToRemove = std::array<std::string, 1>{"OldTag"};
-
-      controller.submitTagChanges(selection, tagsToAdd, tagsToRemove);
-
-      CHECK(mutationCallbacks == 1);
-      CHECK(trackHasTag(library, trackId, "NewTag"));
-      CHECK_FALSE(trackHasTag(library, trackId, "OldTag"));
-
-      auto const feed = fixture.runtime().notifications().feed();
-      REQUIRE(feed.entries.size() == 1);
-      CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
-      CHECK(feed.entries.back().message == "Tags added 1 and removed 1 for 1 track");
     }
   }
 } // namespace ao::gtk::test

@@ -22,7 +22,9 @@ namespace ao::uimodel::track::test
     CHECK(formatDuration(milliseconds{0}).empty());
     CHECK(formatDuration(std::chrono::seconds{1}) == "0:01");
     CHECK(formatDuration(std::chrono::seconds{61}) == "1:01");
+    CHECK(formatDuration(std::chrono::seconds{225}) == "3:45");
     CHECK(formatDuration(std::chrono::minutes{60}) == "1:0:00"); // 60 minutes
+    CHECK(formatDuration(std::chrono::seconds{3723}) == "1:2:03");
   }
 
   TEST_CASE("TrackFieldFormatter - uint16 formatting", "[uimodel][track][formatter]")
@@ -38,6 +40,7 @@ namespace ao::uimodel::track::test
     CHECK(formatFileSize(512) == "0.5 KB");
     CHECK(formatFileSize(1024) == "1.0 KB");
     CHECK(formatFileSize(1048576) == "1.0 MB");
+    CHECK(formatFileSize(5242880) == "5.0 MB");
   }
 
   TEST_CASE("TrackFieldFormatter - sample rate formatting", "[uimodel][track][formatter]")
@@ -59,6 +62,8 @@ namespace ao::uimodel::track::test
   TEST_CASE("TrackFieldFormatter - bitrate formatting", "[uimodel][track][formatter]")
   {
     CHECK(formatBitrate(0).empty());
+    CHECK(formatBitrate(1000) == "1 kbps");
+    CHECK(formatBitrate(1999) == "1 kbps");
     CHECK(formatBitrate(320000) == "320 kbps");
     CHECK(formatBitrate(1411000) == "1411 kbps");
   }
@@ -94,6 +99,12 @@ namespace ao::uimodel::track::test
     auto const* str = std::get_if<std::string>(&editVal);
     REQUIRE(str != nullptr);
     CHECK(*str == " Test "); // Keeps whitespace for generic text
+
+    auto const parsed = parseTextEditValue("New Title");
+    REQUIRE(parsed.has_value());
+    auto const* parsedText = std::get_if<std::string>(&*parsed);
+    REQUIRE(parsedText != nullptr);
+    CHECK(*parsedText == "New Title");
   }
 
   TEST_CASE("TrackFieldFormatter - uint16 parsing", "[uimodel][track][formatter]")

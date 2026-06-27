@@ -25,7 +25,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackPropertiesDialog - lifecycle", "[gtk][tag][dialog]")
+  TEST_CASE("TrackPropertiesDialog renders metadata fields for the selected tracks", "[gtk][unit][tag][dialog]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

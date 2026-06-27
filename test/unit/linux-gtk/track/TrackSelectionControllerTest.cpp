@@ -3,15 +3,12 @@
 
 #include "track/TrackSelectionController.h"
 
-#include "../../TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/runtime/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -29,7 +26,7 @@ namespace ao::gtk::test
   {
   } // namespace
 
-  TEST_CASE("TrackSelectionController - selection management", "[gtk][track][selection]")
+  TEST_CASE("TrackSelectionController synchronizes GTK selection with runtime views", "[gtk][unit][track][selection]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -39,35 +36,12 @@ namespace ao::gtk::test
     auto modelPtr = TrackListModel::create(cache);
     auto selectionModelPtr = Gtk::MultiSelection::create(modelPtr);
 
-    auto trackId1 = TrackId{kInvalidTrackId};
-    auto trackId2 = TrackId{kInvalidTrackId};
+    auto const trackId1 = library::test::addTrack(
+      library, library::test::TrackSpec{.title = "Track 1", .duration = std::chrono::minutes{2}});
+    auto const trackId2 = library::test::addTrack(
+      library, library::test::TrackSpec{.title = "Track 2", .duration = std::chrono::minutes{3}});
 
-    // 1. Add tracks
-    {
-      auto txn = library.writeTransaction();
-      auto writer = library.tracks().writer(txn);
-
-      auto builder1 = library::TrackBuilder::createNew();
-      builder1.metadata().title("Track 1");
-      builder1.property().duration(std::chrono::minutes{2});
-      auto serializeResult1 = builder1.serialize(txn, library.dictionary(), library.resources());
-      REQUIRE(serializeResult1);
-      auto const [hot1, cold1] = *serializeResult1;
-      trackId1 = ao::test::requireValue(writer.createHotCold(hot1, cold1)).first;
-
-      auto builder2 = library::TrackBuilder::createNew();
-      builder2.metadata().title("Track 2");
-      builder2.property().duration(std::chrono::minutes{3});
-      auto serializeResult2 = builder2.serialize(txn, library.dictionary(), library.resources());
-      REQUIRE(serializeResult2);
-      auto const [hot2, cold2] = *serializeResult2;
-      trackId2 = ao::test::requireValue(writer.createHotCold(hot2, cold2)).first;
-
-      REQUIRE(txn.commit());
-    }
-
-    // 2. Bind model to a projection
-    auto sourcePtr = std::make_shared<MutableTrackSource>();
+    auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
     sourcePtr->addInitial(trackId1);
     sourcePtr->addInitial(trackId2);
     auto projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, *sourcePtr, library);

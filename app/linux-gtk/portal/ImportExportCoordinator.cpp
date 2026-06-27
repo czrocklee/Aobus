@@ -8,6 +8,7 @@
 #include "app/ThemeCoordinator.h"
 #include "layout/LayoutConstants.h"
 #include "portal/ImportExportCallbacks.h"
+#include "portal/ImportExportCoordinatorPolicy.h"
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 
@@ -58,8 +59,7 @@ namespace ao::gtk::portal
                                  {
                                    auto const path = std::filesystem::path{folderPtr->get_path()};
 
-                                   auto const scanAfterOpen = !std::filesystem::exists(path / "data.mdb");
-                                   openMusicLibrary(path, scanAfterOpen);
+                                   openMusicLibrary(path, shouldScanAfterOpen(path));
                                  }
                                }
                                catch (Glib::Error const& e)
@@ -127,21 +127,7 @@ namespace ao::gtk::portal
       return;
     }
 
-    int constexpr kDeltaIndex = 0;
-    int constexpr kMetadataIndex = 1;
-    int constexpr kFullIndex = 2;
-    int constexpr kListOnlyIndex = 3;
-
-    auto mode = rt::ExportMode::Metadata;
-
-    switch (modeCombo->get_selected())
-    {
-      case kDeltaIndex: mode = rt::ExportMode::Delta; break;
-      case kMetadataIndex: mode = rt::ExportMode::Metadata; break;
-      case kFullIndex: mode = rt::ExportMode::Full; break;
-      case kListOnlyIndex: mode = rt::ExportMode::ListOnly; break;
-      default: break;
-    }
+    auto const mode = exportModeForSelection(modeCombo->get_selected());
 
     dialog->close();
 

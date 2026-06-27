@@ -19,7 +19,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel::layout;
   using namespace ao::gtk::test;
 
-  TEST_CASE("ActionBinder - unit", "[layout][unit][runtime]")
+  TEST_CASE("ActionBinder binds layout action properties to activation callbacks", "[gtk][unit][layout][runtime]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

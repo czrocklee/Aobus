@@ -48,7 +48,7 @@ namespace ao::gtk
 
 namespace ao::gtk::test
 {
-  TEST_CASE("AudioPipelinePanel - Empty State", "[linux-gtk][playback]")
+  TEST_CASE("AudioPipelinePanel renders no rows for an empty pipeline", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{};
@@ -60,7 +60,7 @@ namespace ao::gtk::test
     CHECK(peer.getChildCount() == 0);
   }
 
-  TEST_CASE("AudioPipelinePanel - Pipeline Render", "[linux-gtk][playback]")
+  TEST_CASE("AudioPipelinePanel renders pipeline nodes with header and conclusion", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{};
@@ -76,7 +76,7 @@ namespace ao::gtk::test
     CHECK(peer.getChildCount() == 5);
   }
 
-  TEST_CASE("AudioPipelinePanel - Variant Styling", "[linux-gtk][playback]")
+  TEST_CASE("AudioPipelinePanel replaces variant CSS classes", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{AudioPipelinePanelVariant::Inline};

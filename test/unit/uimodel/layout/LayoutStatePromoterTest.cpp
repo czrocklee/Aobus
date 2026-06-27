@@ -12,9 +12,8 @@
 #include <string>
 #include <utility>
 
-namespace ao::gtk::layout::test
+namespace ao::uimodel::layout::test
 {
-  using namespace uimodel::layout;
   namespace
   {
     LayoutNode splitNode(std::string id)
@@ -165,4 +164,4 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(result.changed);
     CHECK(result.promotedCount == 0);
   }
-} // namespace ao::gtk::layout::test
+} // namespace ao::uimodel::layout::test

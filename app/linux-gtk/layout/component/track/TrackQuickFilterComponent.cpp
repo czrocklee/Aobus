@@ -32,7 +32,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackQuickFilterComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.runtime}
+        : _widget{ctx.runtime, ctx.timeoutScheduler}
       {
         if (ctx.track.pageHost == nullptr)
         {

@@ -3,17 +3,14 @@
 
 #include "track/TrackColumnFactoryBuilder.h"
 
-#include "../../TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/runtime/TrackSourceTestSupport.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
@@ -55,7 +52,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackColumnFactoryBuilder - factory lifecycle", "[gtk][track][column]")
+  TEST_CASE("TrackColumnFactoryBuilder binds column factories to track row widgets", "[gtk][unit][track][column]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -67,21 +64,11 @@ namespace ao::gtk::test
       auto columnView = Gtk::ColumnView{};
       window.set_child(columnView);
 
-      auto trackId = TrackId{kInvalidTrackId};
-      {
-        auto txn = library.writeTransaction();
-        auto writer = library.tracks().writer(txn);
-        auto builder = library::TrackBuilder::createNew();
-        builder.metadata().title("Test Title").artist("Test Artist");
-        builder.property().duration(std::chrono::minutes{2});
-        auto serializeResult = builder.serialize(txn, library.dictionary(), library.resources());
-        REQUIRE(serializeResult);
-        auto const [hot, cold] = *serializeResult;
-        trackId = ao::test::requireValue(writer.createHotCold(hot, cold)).first;
-        REQUIRE(txn.commit());
-      }
+      auto const trackId = library::test::addTrack(
+        library,
+        library::test::TrackSpec{.title = "Test Title", .artist = "Test Artist", .duration = std::chrono::minutes{2}});
 
-      auto sourcePtr = std::make_shared<MutableTrackSource>();
+      auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
       sourcePtr->addInitial(trackId);
       auto projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, *sourcePtr, library);
       auto modelPtr = TrackListModel::create(cache);
@@ -170,6 +157,10 @@ namespace ao::gtk::test
         }
 
         drainGtkEvents();
+
+        auto const columnsPtr = columnView.get_columns();
+        REQUIRE(columnsPtr);
+        CHECK(columnsPtr->get_n_items() == static_cast<guint>(rt::trackFieldDefinitions().size()));
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
         drainGtkEvents();

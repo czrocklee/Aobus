@@ -16,11 +16,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/applicationwindow.h>
 
-#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string_view>
-#include <thread>
 
 namespace ao::gtk::test
 {
@@ -85,30 +83,9 @@ namespace ao::gtk::test
 
       return nullptr;
     }
-
-    template<typename Predicate>
-    bool drainGtkEventsUntil(Predicate const& predicate)
-    {
-      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
-
-      while (std::chrono::steady_clock::now() < deadline)
-      {
-        drainGtkEvents();
-
-        if (predicate())
-        {
-          return true;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds{5});
-      }
-
-      drainGtkEvents();
-      return predicate();
-    }
   } // namespace
 
-  TEST_CASE("ShellLayoutController - lifecycle", "[gtk][app][shell]")
+  TEST_CASE("ShellLayoutController attaches layout shell and persists panel state", "[gtk][unit][app][shell]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -123,12 +100,6 @@ namespace ao::gtk::test
     auto themeController = ThemeCoordinator{};
     auto controller =
       ShellLayoutController{runtime, window, configPtr, storePtr, componentStateStorePtr, themeController};
-
-    SECTION("initial state")
-    {
-      // Registry should have standard components
-      // We don't have public way to check count without peering
-    }
 
     SECTION("attachToWindow sets child")
     {
@@ -180,8 +151,8 @@ namespace ao::gtk::test
       componentStateStorePtr->save("classic", stateDoc);
 
       controller.loadLayout(*configPtr);
-      REQUIRE(drainGtkEventsUntil([&controller]
-                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
       REQUIRE(controller.context().componentState.components.contains("main-paned"));
 
       controller.resetRuntimeLayoutState();
@@ -209,8 +180,8 @@ namespace ao::gtk::test
       componentStateStorePtr->save("classic", stateDoc);
 
       controller.loadLayout(*configPtr);
-      REQUIRE(drainGtkEventsUntil([&controller]
-                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
       controller.setConfirmPromotionCallback(
         [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(false); });
@@ -255,8 +226,8 @@ namespace ao::gtk::test
       componentStateStorePtr->save("classic", stateDoc);
 
       controller.loadLayout(*configPtr);
-      REQUIRE(drainGtkEventsUntil([&controller]
-                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
       controller.setConfirmPromotionCallback(
         [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(true); });

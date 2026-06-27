@@ -25,7 +25,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkAccelTranslator maps neutral chords to GTK accelerators", "[gtk][app][accel]")
+  TEST_CASE("GtkAccelTranslator maps neutral chords to GTK accelerators", "[gtk][unit][app][accel]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -57,7 +57,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkAccelTranslator parses GTK accelerators back to neutral chords", "[gtk][app][accel]")
+  TEST_CASE("GtkAccelTranslator parses GTK accelerators back to neutral chords", "[gtk][unit][app][accel]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -67,7 +67,7 @@ namespace ao::gtk::test
     CHECK(fromGtkAccel("not-an-accel").has_value() == false);
   }
 
-  TEST_CASE("GtkAccelTranslator converts live key presses to chords", "[gtk][app][accel]")
+  TEST_CASE("GtkAccelTranslator converts live key presses to chords", "[gtk][unit][app][accel]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -100,7 +100,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkAccelTranslator round-trips the default keymap", "[gtk][app][accel]")
+  TEST_CASE("GtkAccelTranslator round-trips the default keymap", "[gtk][unit][app][accel]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

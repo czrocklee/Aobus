@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/runtime/TrackSourceTestSupport.h"
 #include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListView.h>
@@ -13,89 +14,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <optional>
 #include <span>
-#include <utility>
 #include <vector>
 
 namespace ao::rt::test
 {
   namespace
   {
-    class MutableTrackSource final : public TrackSource
-    {
-    public:
-      void addInitial(TrackId id) { _ids.push_back(id); }
-
-      void insert(TrackId id, std::size_t index)
-      {
-        _ids.insert(_ids.begin() + static_cast<std::ptrdiff_t>(index), id);
-        notifyInserted(id, index);
-      }
-
-      void update(TrackId id)
-      {
-        auto const optIdx = indexOf(id);
-        REQUIRE(optIdx.has_value());
-        notifyUpdated(id, *optIdx);
-      }
-
-      void remove(TrackId id)
-      {
-        auto const optIdx = indexOf(id);
-        REQUIRE(optIdx.has_value());
-        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIdx));
-        notifyRemoved(id, *optIdx);
-      }
-
-      void resetTo(std::vector<TrackId> ids)
-      {
-        _ids = std::move(ids);
-        notifyReset();
-      }
-
-      void batchInsert(std::span<TrackId const> ids)
-      {
-        _ids.insert(_ids.end(), ids.begin(), ids.end());
-        notifyInserted(ids);
-      }
-
-      void batchUpdate(std::span<TrackId const> ids) { notifyUpdated(ids); }
-
-      void batchRemove(std::span<TrackId const> ids)
-      {
-        auto removed = std::vector<TrackId>{};
-
-        for (auto id : ids)
-        {
-          if (auto it = std::ranges::find(_ids, id); it != _ids.end())
-          {
-            _ids.erase(it);
-            removed.push_back(id);
-          }
-        }
-
-        notifyRemoved(removed);
-      }
-
-      std::size_t size() const override { return _ids.size(); }
-      TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
-
-      std::optional<std::size_t> indexOf(TrackId id) const override
-      {
-        if (auto it = std::ranges::find(_ids, id); it != _ids.end())
-        {
-          return static_cast<std::size_t>(std::ranges::distance(_ids.begin(), it));
-        }
-
-        return std::nullopt;
-      }
-
-    private:
-      std::vector<TrackId> _ids;
-    };
-
     struct ObserverSpy final : public TrackSourceObserver
     {
       enum class EventKind : std::uint8_t
@@ -451,7 +377,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      source.resetTo({TrackId{1}, TrackId{3}});
+      source.reset({{TrackId{1}, TrackId{3}}});
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::Reset);
@@ -474,7 +400,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      source.resetTo({});
+      source.reset();
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::Reset);
@@ -497,7 +423,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      source.resetTo({TrackId{1}, TrackId{2}, TrackId{3}});
+      source.reset({{TrackId{1}, TrackId{2}, TrackId{3}}});
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::Reset);
@@ -1003,7 +929,7 @@ namespace ao::rt::test
     source.insert(TrackId{2}, 1);
     source.update(TrackId{1});
     source.remove(TrackId{1});
-    source.resetTo({TrackId{3}});
+    source.reset({{TrackId{3}}});
   }
 
   // =============================================================================
@@ -1113,7 +1039,7 @@ namespace ao::rt::test
       auto outerSpy = ObserverSpy{};
       outer.attach(&outerSpy);
 
-      source.resetTo({TrackId{3}});
+      source.reset({{TrackId{3}}});
 
       REQUIRE(inner.size() == 1);
       CHECK(inner.trackIdAt(0) == TrackId{3});

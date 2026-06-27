@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -143,5 +144,35 @@ namespace ao::uimodel::playback::test
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
       CHECK(cmd.navigateQuery == "$title = 'A \"Song\"'");
     }
+  }
+
+  TEST_CASE("NowPlayingViewModel refreshes from playback events until destroyed", "[unit][uimodel][playback]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto executor = MockExecutor{};
+    auto changes = LibraryChanges{};
+    auto listSourceStore = ListSourceStore{testLib.library(), changes};
+    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    addReadyAudioProvider(playback);
+
+    auto log = RenderLog<NowPlayingViewState>{};
+    auto viewModelPtr = std::make_unique<NowPlayingViewModel>(playback, [&log](auto const& view) { log.render(view); });
+
+    REQUIRE(!log.empty());
+    log.clear();
+
+    auto const trackId = testLib.addTrack({.title = "Event Song", .artist = "Event Artist", .album = "Event Album"});
+    playback.play(playbackRequest(trackId, "Event Song", "Event Artist"), ListId{1});
+
+    REQUIRE(!log.empty());
+    CHECK(log.last().title == "Event Song");
+    CHECK(log.last().combinedStatus == "Event Artist - Event Song");
+
+    log.clear();
+    viewModelPtr.reset();
+
+    playback.play(playbackRequest(trackId, "After Destroy", "Event Artist"), ListId{1});
+    CHECK(log.empty());
   }
 } // namespace ao::uimodel::playback::test

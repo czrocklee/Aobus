@@ -37,7 +37,14 @@ add_executable(ao_core_test
     unit/query/PredicateTest.cpp
     unit/query/ExecutionPlanTest.cpp
     unit/query/FormatExpressionTest.cpp
-    unit/query/PlanEvaluatorTest.cpp
+    unit/query/PlanEvaluatorCollectionTest.cpp
+    unit/query/PlanEvaluatorComparisonTest.cpp
+    unit/query/PlanEvaluatorDictionaryTest.cpp
+    unit/query/PlanEvaluatorExecutionTest.cpp
+    unit/query/PlanEvaluatorLogicalTest.cpp
+    unit/query/PlanEvaluatorMediaPropertyTest.cpp
+    unit/query/PlanEvaluatorStringTest.cpp
+    unit/query/PlanEvaluatorTagTest.cpp
     unit/query/ExpressionTest.cpp
     unit/query/SerializerTest.cpp
     unit/query/QueryErrorTest.cpp
@@ -74,6 +81,7 @@ add_executable(ao_core_test
     unit/library/ResourceStoreTest.cpp
 
     unit/library/TrackStoreTest.cpp
+    unit/library/TrackStoreRawLayoutTest.cpp
     unit/library/ListBuilderTest.cpp
     unit/library/MusicLibraryTest.cpp
 
@@ -123,6 +131,8 @@ add_executable(ao_core_test
     unit/uimodel/layout/ActionValidatorTest.cpp
     unit/uimodel/layout/ComponentCatalogTest.cpp
     unit/uimodel/layout/LayoutModelTest.cpp
+    unit/uimodel/layout/LayoutComponentStateTest.cpp
+    unit/uimodel/layout/LayoutStatePromoterTest.cpp
     unit/uimodel/layout/ShellLayoutSessionModelTest.cpp
     unit/uimodel/layout/LayoutTemplateExpanderTest.cpp
     unit/uimodel/list/ListActionPolicyTest.cpp
@@ -138,7 +148,10 @@ add_executable(ao_core_test
     unit/uimodel/playback/SeekViewModelTest.cpp
     unit/uimodel/playback/TransportViewModelTest.cpp
     unit/uimodel/playback/VolumeViewModelTest.cpp
-    unit/uimodel/status/ActivityStatusModelTest.cpp
+    unit/uimodel/status/ActivityStatusModelCompactTest.cpp
+    unit/uimodel/status/ActivityStatusModelDetailTest.cpp
+    unit/uimodel/status/ActivityStatusModelNotificationTest.cpp
+    unit/uimodel/status/ActivityStatusModelPresentationTest.cpp
     unit/uimodel/tag/TagEditWorkflowTest.cpp
     unit/uimodel/track/TrackFilterViewModelTest.cpp
     unit/uimodel/track/TrackFilterResolverTest.cpp
@@ -228,6 +241,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/tag/TagEditControllerTest.cpp
     unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp
     unit/linux-gtk/image/ImageWidgetTest.cpp
+    unit/linux-gtk/image/ImageRenderPolicyTest.cpp
     unit/linux-gtk/image/ImageCacheTest.cpp
     unit/linux-gtk/image/ThumbnailLoaderTest.cpp
     unit/linux-gtk/app/AppDialogTest.cpp
@@ -265,6 +279,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/track/SelectionInfoLabelTest.cpp
     unit/linux-gtk/status/ActivityStatusTest.cpp
     unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
+    unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
     unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
@@ -274,8 +289,6 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/runtime/ComponentInteractionControllerTest.cpp
       unit/linux-gtk/layout/runtime/ComponentRegistryInjectionTest.cpp
       unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp
-      unit/linux-gtk/layout/state/LayoutComponentStateTest.cpp
-      unit/linux-gtk/layout/state/LayoutStatePromoterTest.cpp
       unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp
       unit/linux-gtk/layout/components/ContainerErrorStatesTest.cpp
       unit/linux-gtk/layout/components/SplitComponentTest.cpp
@@ -288,6 +301,8 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp
       unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp
+      unit/linux-gtk/layout/components/TrackFieldGridPolicyTest.cpp
+      unit/linux-gtk/layout/components/TrackSelectionRegionPolicyTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridTextUtilsTest.cpp
       unit/linux-gtk/layout/components/PlaybackImageTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
@@ -301,7 +316,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/playback/NowPlayingStatusLabelTest.cpp
     unit/linux-gtk/playback/OutputListItemsTest.cpp
     unit/linux-gtk/playback/TransportButtonTest.cpp
-    unit/linux-gtk/playback/TimeLabelTest.cpp
+    unit/linux-gtk/playback/VolumeControlTest.cpp
 )
 
 target_link_libraries(ao_gtk_test PRIVATE aobus-gtk-lib PkgGTKMM ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)

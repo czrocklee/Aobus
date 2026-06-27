@@ -3,7 +3,7 @@
 
 #include "app/MenuController.h"
 
-#include "portal/ImportExportCoordinator.h"
+#include "portal/ImportExportActions.h"
 
 #include <giomm/menu.h>
 #include <giomm/simpleaction.h>
@@ -15,7 +15,7 @@
 
 namespace ao::gtk
 {
-  MenuController::MenuController(portal::ImportExportCoordinator& importExport,
+  MenuController::MenuController(portal::ImportExportActions& importExport,
                                  std::function<void()> onEditLayout,
                                  std::function<void()> onResetRuntimeLayoutState,
                                  std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults,

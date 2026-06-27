@@ -1,44 +1,37 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "playback/PlaybackDetailsWidget.h"
+
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/rt/StateTypes.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/box.h>
+#include <gtkmm/image.h>
+#include <gtkmm/label.h>
 
-#include <memory>
+#include <vector>
 
 namespace ao::gtk::test
 {
-  TEST_CASE("NowPlayingViewModel - wiring and lifetime", "[gtk][playback][viewmodel]")
+  TEST_CASE("PlaybackDetailsWidget renders idle stream status", "[gtk][unit][playback]")
   {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto log = RenderLog<uimodel::playback::NowPlayingViewState>{};
+    auto widget = PlaybackDetailsWidget{fixture.runtime().playback()};
 
-    SECTION("Subscriptions and refresh")
-    {
-      auto controllerPtr = std::make_unique<uimodel::playback::NowPlayingViewModel>(
-        fixture.runtime().playback(), [&](auto const& view) { log.render(view); });
+    auto* const root = dynamic_cast<Gtk::Box*>(&widget.widget());
+    REQUIRE(root != nullptr);
+    CHECK(root->has_css_class("ao-playback-details"));
 
-      // Initial render on construction
-      CHECK(!log.empty());
-      log.clear();
+    auto const labels = collectAll<Gtk::Label>(*root);
+    REQUIRE(labels.size() == 1);
+    CHECK(labels[0]->get_text() == "Connecting to audio engine...");
+    CHECK(labels[0]->has_css_class("dim-label"));
 
-      // Event triggers render
-      fixture.runtime().playback().setShuffleMode(rt::ShuffleMode::On);
-
-      fixture.runtime().playback().stop(); // Trigger onStopped (emitted synchronously on the executor thread)
-      drainGtkEvents();                    // flush any executor-deferred async Player state callbacks
-      CHECK(!log.states.empty());
-
-      log.clear();
-
-      // Destroying controller disconnects events
-      controllerPtr.reset();
-      fixture.runtime().playback().stop();
-      drainGtkEvents();
-      CHECK(log.empty());
-    }
+    auto const icons = collectAll<Gtk::Image>(*root);
+    REQUIRE(icons.size() == 1);
+    CHECK(icons[0]->get_icon_name() == "media-record-symbolic");
+    CHECK_FALSE(icons[0]->get_visible());
   }
 } // namespace ao::gtk::test

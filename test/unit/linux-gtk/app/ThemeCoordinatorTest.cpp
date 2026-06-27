@@ -14,7 +14,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ThemeCoordinator - applies active theme to registered windows", "[gtk][app][theme]")
+  TEST_CASE("ThemeCoordinator - applies active theme to registered windows", "[gtk][unit][app][theme]")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -28,7 +28,7 @@ namespace ao::gtk::test
     CHECK(window.has_css_class("ao-theme-modern"));
   }
 
-  TEST_CASE("ThemeCoordinator - unregisters on token destruction", "[gtk][app][theme]")
+  TEST_CASE("ThemeCoordinator - unregisters on token destruction", "[gtk][unit][app][theme]")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -49,7 +49,7 @@ namespace ao::gtk::test
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
   }
 
-  TEST_CASE("ThemeCoordinator - move and reset tokens", "[gtk][app][theme]")
+  TEST_CASE("ThemeCoordinator - move and reset tokens", "[gtk][unit][app][theme]")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -69,7 +69,48 @@ namespace ao::gtk::test
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
   }
 
-  TEST_CASE("ThemeCoordinator - loads and saves app prefs", "[gtk][app][theme]")
+  TEST_CASE("ThemeCoordinator - duplicate tokens keep window registered until final reset", "[gtk][unit][app][theme]")
+  {
+    auto const appPtr = ensureGtkApplication();
+    auto coordinator = ThemeCoordinator{};
+    auto window = Gtk::Window{};
+
+    auto firstToken = coordinator.registerToplevel(window);
+    auto secondToken = coordinator.registerToplevel(window);
+    CHECK(window.has_css_class("ao-theme-classic"));
+
+    firstToken.reset();
+    CHECK(window.has_css_class("ao-theme-classic"));
+
+    coordinator.setTheme(rt::ThemePresetId::Modern);
+    CHECK_FALSE(window.has_css_class("ao-theme-classic"));
+    CHECK(window.has_css_class("ao-theme-modern"));
+
+    secondToken.reset();
+    CHECK_FALSE(window.has_css_class("ao-theme-modern"));
+  }
+
+  TEST_CASE("ThemeCoordinator - applyTo replaces stale theme classes", "[gtk][unit][app][theme]")
+  {
+    auto const appPtr = ensureGtkApplication();
+    auto coordinator = ThemeCoordinator{};
+    auto window = Gtk::Window{};
+
+    coordinator.applyTo(window);
+    CHECK(window.has_css_class("ao-theme-classic"));
+
+    coordinator.setTheme(rt::ThemePresetId::Modern);
+    coordinator.applyTo(window);
+
+    CHECK_FALSE(window.has_css_class("ao-theme-classic"));
+    CHECK(window.has_css_class("ao-theme-modern"));
+
+    coordinator.applyTo(window);
+    CHECK_FALSE(window.has_css_class("ao-theme-classic"));
+    CHECK(window.has_css_class("ao-theme-modern"));
+  }
+
+  TEST_CASE("ThemeCoordinator - loads and saves app prefs", "[gtk][unit][app][theme]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto config = AppConfig{std::filesystem::path{tempDir.path()} / "config.yaml"};

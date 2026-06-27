@@ -1,23 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/LayoutDocument.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/stack.h>
-#include <gtkmm/window.h>
 
 #include <cstdint>
 #include <string>
@@ -25,24 +18,13 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("Scroll, separator, and tabs components", "[layout][unit][containers][geometry]")
+  TEST_CASE("Scroll, separator, and tabs components render container geometry",
+            "[gtk][unit][layout][containers][geometry]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
-
-    auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
-
-    auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(registry);
-
-    auto window = Gtk::Window{};
-    auto const actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
-
-    auto layoutRuntime = LayoutRuntime{registry};
+    auto fixture = LayoutRuntimeFixture{};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
     SECTION("scroll with 1 child builds Gtk::ScrolledWindow")
     {

@@ -45,10 +45,12 @@
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/functors/slot.h>
 #include <sigc++/signal.h>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -93,7 +95,7 @@ namespace ao::gtk::layout::test
     };
   } // namespace
 
-  TEST_CASE("Playback component instantiation", "[layout][unit][components]")
+  TEST_CASE("Playback layout components render idle GTK widgets", "[gtk][unit][layout][components]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -315,7 +317,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Semantic components — error states
   // ---------------------------------------------------------------------------
-  TEST_CASE("Semantic component error states", "[layout][unit][components]")
+  TEST_CASE("Semantic layout components render missing-service errors", "[gtk][unit][layout][components]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -375,9 +377,9 @@ namespace ao::gtk::layout::test
   }
 
   // ---------------------------------------------------------------------------
-  // Semantic components — success states
+  // Semantic components — configured GTK widgets
   // ---------------------------------------------------------------------------
-  TEST_CASE("Semantic component success states", "[layout][unit][components]")
+  TEST_CASE("Semantic layout components render configured GTK widgets", "[gtk][unit][layout][components]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -583,7 +585,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("track.quickFilter component wires create smart list action", "[layout][unit][components]")
+  TEST_CASE("track.quickFilter component wires create smart list action", "[gtk][unit][layout][components]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
@@ -614,6 +616,13 @@ namespace ao::gtk::layout::test
     auto actionRegistry = ActionRegistry{};
     auto ctx = makeContext(registry, actionRegistry, runtime, window);
     ctx.track.pageHost = &pageHost;
+    auto pendingDebounce = sigc::slot<bool()>{};
+    ctx.timeoutScheduler = [&](std::chrono::milliseconds interval, sigc::slot<bool()> callback)
+    {
+      CHECK(interval == std::chrono::milliseconds{200});
+      pendingDebounce = std::move(callback);
+      return sigc::connection{};
+    };
     auto capturedParentId = kInvalidListId;
     auto capturedExpression = std::string{};
     ctx.list.createSmartListFromExpression = [&](ListId parentListId, std::string expression)
@@ -630,7 +639,8 @@ namespace ao::gtk::layout::test
     REQUIRE(filter != nullptr);
 
     filter->setText(R"($artist = "Muse")");
-    ::g_usleep(static_cast<gulong>(250) * 1000);
+    REQUIRE(!pendingDebounce.empty());
+    CHECK(pendingDebounce() == false);
     ao::gtk::test::drainGtkEvents();
 
     auto* const createButton = findWidgetByClass<Gtk::Button>(*filter, "ao-quick-filter-create");
@@ -646,7 +656,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // All types registration
   // ---------------------------------------------------------------------------
-  TEST_CASE("All component types register and instantiate", "[layout][unit][components]")
+  TEST_CASE("Standard layout registry creates status and semantic components", "[gtk][unit][layout][components]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -691,7 +701,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // YAML round-trip with semantic components
   // ---------------------------------------------------------------------------
-  TEST_CASE("YAML layout with semantic components", "[layout][unit][components]")
+  TEST_CASE("YAML semantic layout documents build GTK components", "[gtk][unit][layout][components]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 

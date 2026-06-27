@@ -13,6 +13,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <functional>
 
 namespace ao::uimodel::playback::test
@@ -59,6 +60,26 @@ namespace ao::uimodel::playback::test
       log.clear();
       playback.seek(std::chrono::seconds{10}, PlaybackService::SeekMode::Preview);
       REQUIRE(!log.empty());
+    }
+  }
+
+  TEST_CASE("PlaybackTimeViewModel formats display text for each label mode", "[unit][uimodel][playback]")
+  {
+    SECTION("template text reserves the widest idle label")
+    {
+      CHECK(PlaybackTimeViewModel::describeTimeTemplate(PlaybackTimeMode::Elapsed) == "00:00");
+      CHECK(PlaybackTimeViewModel::describeTimeTemplate(PlaybackTimeMode::Duration) == "00:00");
+      CHECK(PlaybackTimeViewModel::describeTimeTemplate(PlaybackTimeMode::Default) == "00:00 / 00:00");
+    }
+
+    SECTION("playback time text matches selected label mode")
+    {
+      auto const elapsed = std::chrono::seconds{65};
+      auto const duration = std::chrono::hours{1} + std::chrono::minutes{1} + std::chrono::seconds{1};
+
+      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Elapsed, elapsed, duration) == "1:05");
+      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Duration, elapsed, duration) == "61:01");
+      CHECK(PlaybackTimeViewModel::formatPlaybackTime(PlaybackTimeMode::Default, elapsed, duration) == "1:05 / 61:01");
     }
   }
 } // namespace ao::uimodel::playback::test

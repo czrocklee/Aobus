@@ -173,6 +173,21 @@ namespace ao::gtk
     }
   }
 
+  bool AobusSoul::isBreathing() const
+  {
+    return _implPtr->isBreathing;
+  }
+
+  bool AobusSoul::showFullLogo() const
+  {
+    return _implPtr->showFullLogo;
+  }
+
+  Gdk::RGBA AobusSoul::aura() const
+  {
+    return _implPtr->aura;
+  }
+
   void AobusSoul::breathe(bool const breathing)
   {
     if (_implPtr->isBreathing == breathing)
