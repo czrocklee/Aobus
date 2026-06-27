@@ -3,20 +3,15 @@
 
 #pragma once
 
-#include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCallbacks.h"
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Task.h>
 #include <ao/library/LibraryScanner.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
-
-#include <gtkmm/window.h>
 
 #include <exception>
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -28,11 +23,9 @@ namespace ao::rt
 
 namespace ao::gtk::portal
 {
-  class LibraryTaskProgressDialog;
-
   /**
    * LibraryImportExportWorkflow owns the background scan/import/export operations and their UI presentation:
-   * the progress dialog lifecycle, progress subscriptions, result notifications, and internal-error reporting.
+   * progress events, result notifications, and internal-error reporting.
    *
    * It does not own any file/folder chooser dialogs; callers resolve a concrete path (and export mode) first and
    * then drive the workflow. All public entry points start on the callback executor and are lifetime-bound, so the
@@ -41,10 +34,7 @@ namespace ao::gtk::portal
   class LibraryImportExportWorkflow final
   {
   public:
-    LibraryImportExportWorkflow(Gtk::Window& parent,
-                                rt::AppRuntime& runtime,
-                                ImportExportCallbacks const& callbacks,
-                                ThemeCoordinator& themeController);
+    LibraryImportExportWorkflow(rt::AppRuntime& runtime, ImportExportCallbacks const& callbacks);
     ~LibraryImportExportWorkflow();
 
     LibraryImportExportWorkflow(LibraryImportExportWorkflow const&) = delete;
@@ -75,14 +65,9 @@ namespace ao::gtk::portal
                                std::string_view notificationMessage,
                                std::exception_ptr exceptionPtr);
 
-    Gtk::Window& _parent;
     rt::AppRuntime& _runtime;
     ImportExportCallbacks const& _callbacks;
-    ThemeCoordinator& _themeController;
 
-    std::optional<ThemeRegistrationToken> _optLibraryTaskThemeToken;
-    rt::Subscription _libraryTaskProgressSub;
     async::LifetimeScope _tasks;
-    std::unique_ptr<LibraryTaskProgressDialog> _libraryTaskDialogPtr;
   };
 } // namespace ao::gtk::portal

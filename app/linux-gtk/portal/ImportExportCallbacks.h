@@ -14,7 +14,7 @@ namespace ao::gtk::portal
    */
   struct ImportExportCallbacks final
   {
-    std::function<void(std::filesystem::path const&)> onOpenNewLibrary;
+    std::function<void(std::filesystem::path const&, bool scanAfterOpen)> onOpenNewLibrary;
     std::function<void()> onLibraryDataMutated;
     std::function<void(std::string const&)> onTitleChanged;
   };

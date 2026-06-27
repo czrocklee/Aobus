@@ -238,6 +238,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
     unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
     unit/linux-gtk/app/KeymapApplicatorTest.cpp
+    unit/linux-gtk/app/LibraryWindowPolicyTest.cpp
     unit/linux-gtk/app/KeyboardShortcutsWindowTest.cpp
     unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
@@ -263,7 +264,6 @@ add_executable(ao_gtk_test
     unit/linux-gtk/track/TrackScrollBaselineTest.cpp
     unit/linux-gtk/track/SelectionInfoLabelTest.cpp
     unit/linux-gtk/status/ActivityStatusTest.cpp
-    unit/linux-gtk/portal/LibraryTaskProgressDialogTest.cpp
     unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
     unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp

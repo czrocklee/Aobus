@@ -40,7 +40,7 @@ namespace ao::gtk::portal
     : _parent{parent}
     , _callbacks{std::move(callbacks)}
     , _themeController{themeController}
-    , _workflow{parent, runtime, _callbacks, themeController}
+    , _workflow{runtime, _callbacks}
   {
   }
 
@@ -58,16 +58,8 @@ namespace ao::gtk::portal
                                  {
                                    auto const path = std::filesystem::path{folderPtr->get_path()};
 
-                                   if (auto const libPath = path / "data.mdb"; std::filesystem::exists(libPath))
-                                   {
-                                     openMusicLibrary(path);
-                                   }
-                                   else
-                                   {
-                                     // Initial scan for new library
-                                     openMusicLibrary(path);
-                                     scanLibrary();
-                                   }
+                                   auto const scanAfterOpen = !std::filesystem::exists(path / "data.mdb");
+                                   openMusicLibrary(path, scanAfterOpen);
                                  }
                                }
                                catch (Glib::Error const& e)
@@ -82,11 +74,11 @@ namespace ao::gtk::portal
     _workflow.scan();
   }
 
-  void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path) const
+  void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path, bool const scanAfterOpen) const
   {
     if (_callbacks.onOpenNewLibrary)
     {
-      _callbacks.onOpenNewLibrary(path);
+      _callbacks.onOpenNewLibrary(path, scanAfterOpen);
     }
   }
 

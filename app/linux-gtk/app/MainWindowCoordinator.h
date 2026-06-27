@@ -86,7 +86,6 @@ namespace ao::gtk
     std::optional<ThemeRegistrationToken> _optThemeToken;
 
     rt::Subscription _tracksMutatedSubscription;
-    rt::Subscription _libraryTaskProgressSubscription;
     rt::Subscription _libraryTaskCompletedSubscription;
     rt::Subscription _listsMutatedSubscription;
     rt::Subscription _trackPresentationChangedSubscription;

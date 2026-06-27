@@ -5,6 +5,7 @@
 #include "app/GtkMainContextExecutor.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/KeymapApplicator.h"
+#include "app/LibraryWindowPolicy.h"
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
@@ -28,6 +29,7 @@
 #include <gtkmm/alertdialog.h>
 #include <gtkmm/application.h>
 
+#include <algorithm>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -50,6 +52,7 @@ namespace
   {
     std::filesystem::path musicRoot;
     std::filesystem::path databasePath;
+    LibraryWindowKind windowKind = LibraryWindowKind::Library;
   };
 
   LibraryPaths resolveLibraryPaths(AppConfig const& config)
@@ -63,13 +66,17 @@ namespace
 
       if (std::filesystem::exists(musicRoot))
       {
-        return {.musicRoot = musicRoot, .databasePath = musicRoot / ".aobus" / "library"};
+        return {.musicRoot = musicRoot,
+                .databasePath = musicRoot / ".aobus" / "library",
+                .windowKind = LibraryWindowKind::Library};
       }
     }
 
     auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
     std::filesystem::create_directories(emptyPath);
-    return {.musicRoot = emptyPath, .databasePath = emptyPath / ".aobus" / "library"};
+    return {.musicRoot = emptyPath,
+            .databasePath = emptyPath / ".aobus" / "library",
+            .windowKind = LibraryWindowKind::FallbackEmptyLibrary};
   }
 
   Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app,
@@ -170,21 +177,106 @@ namespace
     return options;
   }
 
+  void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
+                                    LibraryWindowKind sourceKind,
+                                    Glib::RefPtr<Gtk::Application> const& app,
+                                    std::vector<Glib::RefPtr<MainWindow>>& windows,
+                                    std::shared_ptr<AppConfig> appConfigPtr,
+                                    std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+                                    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr);
+
+  void closeAndRemoveWindow(Glib::RefPtr<Gtk::Application> const& app,
+                            std::vector<Glib::RefPtr<MainWindow>>& windows,
+                            MainWindow* const windowObj)
+  {
+    if (windowObj == nullptr)
+    {
+      return;
+    }
+
+    if (auto const it = std::ranges::find_if(
+          windows, [windowObj](auto const& candidatePtr) { return candidatePtr.get() == windowObj; });
+        it != windows.end())
+    {
+      (*it)->close();
+      app->remove_window(**it);
+      windows.erase(it);
+      return;
+    }
+
+    windowObj->close();
+    app->remove_window(*windowObj);
+  }
+
   void handleOpenNewLibrary(std::filesystem::path const& path,
                             Glib::RefPtr<Gtk::Application> const& app,
                             std::vector<Glib::RefPtr<MainWindow>>& windows,
                             std::shared_ptr<AppConfig> appConfigPtr,
                             std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-                            std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
+                            std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+                            MainWindow* const sourceWindowObj,
+                            OpenLibraryWindowMode const mode,
+                            bool const scanAfterOpen)
   {
-    if (std::filesystem::is_directory(path))
+    if (!std::filesystem::is_directory(path))
     {
-      windows.push_back(createWindow(*app,
-                                     {.musicRoot = path, .databasePath = path / ".aobus" / "library"},
-                                     appConfigPtr,
-                                     shellLayoutStorePtr,
-                                     componentStateStorePtr));
+      return;
     }
+
+    auto newWindowPtr = createWindow(
+      *app,
+      {.musicRoot = path, .databasePath = path / ".aobus" / "library", .windowKind = LibraryWindowKind::Library},
+      appConfigPtr,
+      shellLayoutStorePtr,
+      componentStateStorePtr);
+    configureOpenLibraryCallback(newWindowPtr,
+                                 LibraryWindowKind::Library,
+                                 app,
+                                 windows,
+                                 appConfigPtr,
+                                 shellLayoutStorePtr,
+                                 componentStateStorePtr);
+
+    if (scanAfterOpen)
+    {
+      newWindowPtr->importExportCoordinator().scanLibrary();
+    }
+
+    windows.push_back(std::move(newWindowPtr));
+
+    if (mode == OpenLibraryWindowMode::ReplaceSourceWindow)
+    {
+      closeAndRemoveWindow(app, windows, sourceWindowObj);
+    }
+  }
+
+  void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
+                                    LibraryWindowKind const sourceKind,
+                                    Glib::RefPtr<Gtk::Application> const& app,
+                                    std::vector<Glib::RefPtr<MainWindow>>& windows,
+                                    std::shared_ptr<AppConfig> appConfigPtr,
+                                    std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
+                                    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
+  {
+    windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary =
+      [app,
+       &windows,
+       appConfigPtr,
+       shellLayoutStorePtr,
+       componentStateStorePtr,
+       sourceWindowObj = windowPtr.get(),
+       mode = openLibraryWindowModeFor(sourceKind)](std::filesystem::path const& path, bool const scanAfterOpen)
+    {
+      handleOpenNewLibrary(path,
+                           app,
+                           windows,
+                           appConfigPtr,
+                           shellLayoutStorePtr,
+                           componentStateStorePtr,
+                           sourceWindowObj,
+                           mode,
+                           scanAfterOpen);
+    };
   }
 
   void releaseWindows(Gtk::Application& app, std::vector<Glib::RefPtr<MainWindow>>& windows)
@@ -265,11 +357,10 @@ namespace
 
     auto paths = resolveLibraryPaths(*appConfigPtr);
 
+    auto const windowKind = paths.windowKind;
     auto windowPtr = createWindow(*app, std::move(paths), appConfigPtr, shellLayoutStorePtr, componentStateStorePtr);
-
-    windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary =
-      [&app, &windows, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr](std::filesystem::path const& path)
-    { handleOpenNewLibrary(path, app, windows, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr); };
+    configureOpenLibraryCallback(
+      windowPtr, windowKind, app, windows, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr);
 
     windows.push_back(std::move(windowPtr));
   }

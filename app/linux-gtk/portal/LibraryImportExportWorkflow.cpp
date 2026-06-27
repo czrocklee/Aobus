@@ -3,10 +3,8 @@
 
 #include "portal/LibraryImportExportWorkflow.h"
 
-#include "app/ThemeCoordinator.h"
 #include "common/UiWorkflow.h"
 #include "portal/ImportExportCallbacks.h"
-#include "portal/LibraryTaskProgressDialog.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/async/OperationCancelled.h>
@@ -21,13 +19,9 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTasks.h>
 
-#include <gtkmm/window.h>
-
-#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <format>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -48,24 +42,15 @@ namespace ao::gtk::portal
     }
   } // namespace
 
-  LibraryImportExportWorkflow::LibraryImportExportWorkflow(Gtk::Window& parent,
-                                                           rt::AppRuntime& runtime,
-                                                           ImportExportCallbacks const& callbacks,
-                                                           ThemeCoordinator& themeController)
-    : _parent{parent}, _runtime{runtime}, _callbacks{callbacks}, _themeController{themeController}
+  LibraryImportExportWorkflow::LibraryImportExportWorkflow(rt::AppRuntime& runtime,
+                                                           ImportExportCallbacks const& callbacks)
+    : _runtime{runtime}, _callbacks{callbacks}
   {
   }
 
   LibraryImportExportWorkflow::~LibraryImportExportWorkflow()
   {
-    // Stop in-flight operations first: their coroutine frames hold a raw pointer to the progress dialog.
     _tasks.cancelAll();
-
-    // Tear down everything that references the progress dialog before the dialog itself is destroyed by member
-    // teardown. The theme token's destructor calls back into the dialog window (remove_css_class), and the progress
-    // subscription's callback captures the dialog by raw pointer; both must die first regardless of declaration order.
-    _libraryTaskProgressSub.reset();
-    _optLibraryTaskThemeToken.reset();
   }
 
   void LibraryImportExportWorkflow::scan()
@@ -202,25 +187,6 @@ namespace ao::gtk::portal
 
   async::Task<void> LibraryImportExportWorkflow::applyScanPlanWithProgress(library::ScanPlan plan)
   {
-    if (_libraryTaskDialogPtr == nullptr)
-    {
-      _libraryTaskDialogPtr =
-        std::make_unique<LibraryTaskProgressDialog>(static_cast<std::int32_t>(plan.items.size()), _parent);
-      _optLibraryTaskThemeToken = _themeController.registerToplevel(*_libraryTaskDialogPtr);
-
-      auto* const dialog = _libraryTaskDialogPtr.get();
-      _libraryTaskDialogPtr->signal_response().connect([dialog](std::int32_t /*responseId*/) { dialog->close(); });
-    }
-
-    auto* const dialog = _libraryTaskDialogPtr.get();
-
-    _libraryTaskProgressSub = _runtime.library().changes().onLibraryTaskProgress(
-      [dialog](auto const& ev) { dialog->updateProgress(ev.message, ev.fraction); });
-
-    // Reset any terminal state left by a previous scan before re-showing the reused dialog.
-    dialog->beginTask();
-    _libraryTaskDialogPtr->show();
-
     try
     {
       auto result = co_await _runtime.library().tasks().applyScanPlanAsync(std::move(plan));
@@ -228,11 +194,13 @@ namespace ao::gtk::portal
       if (!result)
       {
         presentFailure("Scan apply failed", "Scan failed", result.error());
-        dialog->failed("Scan failed.");
       }
       else
       {
-        dialog->ready();
+        if (!result->cancelled && !result->processedIds.empty() && _callbacks.onLibraryDataMutated)
+        {
+          _callbacks.onLibraryDataMutated();
+        }
 
         if (result->cancelled)
         {
@@ -252,11 +220,8 @@ namespace ao::gtk::portal
     {
       async::rethrowIfOperationCancelled();
 
-      dialog->failed("Scan failed: Internal error.");
       reportInternalFailure("Scan failed", "Scan failed: Internal error", std::current_exception());
     }
-
-    _libraryTaskProgressSub.reset();
   }
 
   void LibraryImportExportWorkflow::presentFailure(std::string_view action,

@@ -24,7 +24,6 @@
 #include <cstdint>
 #include <deque>
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -154,9 +153,15 @@ namespace ao::gtk::test
     auto theme = ThemeCoordinator{};
 
     auto receivedPath = std::filesystem::path{};
+    bool receivedScanAfterOpen = false;
     std::int32_t mutationCallbackCount = 0;
     auto callbacks = ImportExportCallbacks{
-      .onOpenNewLibrary = [&receivedPath](std::filesystem::path const& path) { receivedPath = path; },
+      .onOpenNewLibrary =
+        [&receivedPath, &receivedScanAfterOpen](std::filesystem::path const& path, bool const scanAfterOpen)
+      {
+        receivedPath = path;
+        receivedScanAfterOpen = scanAfterOpen;
+      },
       .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },
       .onTitleChanged = {},
     };
@@ -168,6 +173,15 @@ namespace ao::gtk::test
       auto const target = std::filesystem::path{fixture.tempDir().path() / "new_library"};
       coordinator.openMusicLibrary(target);
       CHECK(receivedPath == target);
+      CHECK_FALSE(receivedScanAfterOpen);
+    }
+
+    SECTION("openMusicLibrary forwards the initial scan request")
+    {
+      auto const target = std::filesystem::path{fixture.tempDir().path() / "new_library"};
+      coordinator.openMusicLibrary(target, true);
+      CHECK(receivedPath == target);
+      CHECK(receivedScanAfterOpen);
     }
 
     SECTION("scanLibrary reports an up-to-date empty library")
@@ -187,6 +201,45 @@ namespace ao::gtk::test
       REQUIRE(feed.entries.size() == 1);
       CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
       CHECK(feed.entries.back().message == "Library is up to date");
+    }
+
+    SECTION("scanLibrary completes after scanning unchanged files")
+    {
+      auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+      std::filesystem::copy_file(sourceFile, fixture.runtime().musicRoot() / "song.flac");
+
+      auto optCompletedCount = std::optional<std::size_t>{};
+      bool progressFired = false;
+      auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
+        [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
+      auto progressSub = fixture.runtime().library().changes().onLibraryTaskProgress([&progressFired](auto const&)
+                                                                                     { progressFired = true; });
+
+      coordinator.scanLibrary();
+      REQUIRE(drainGtkEventsUntil(
+        [&fixture, &mutationCallbackCount, &optCompletedCount]
+        {
+          return optCompletedCount.has_value() && mutationCallbackCount == 1 &&
+                 hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
+        }));
+      CHECK(optCompletedCount == 1U);
+      CHECK(mutationCallbackCount == 1);
+
+      optCompletedCount.reset();
+      progressFired = false;
+      fixture.runtime().notifications().dismissAll();
+
+      coordinator.scanLibrary();
+
+      REQUIRE(drainGtkEventsUntil(
+        [&fixture, &optCompletedCount, &progressFired]
+        {
+          return progressFired && optCompletedCount.has_value() &&
+                 hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date");
+        }));
+
+      CHECK(optCompletedCount == 0U);
+      CHECK(mutationCallbackCount == 1);
     }
 
     SECTION("scanLibrary reports an error-only plan instead of up to date")
@@ -303,40 +356,5 @@ namespace ao::gtk::test
     }
 
     CHECK(runtime.notifications().feed().entries.empty());
-  }
-
-  TEST_CASE("ImportExportCoordinator - destroying after a scan opened the progress dialog is clean",
-            "[gtk][portal][import-export]")
-  {
-    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-
-    // A file with a supported extension is planned as New without being decoded, which drives the scan far
-    // enough to create the progress dialog and its theme-registration token.
-    auto const trackPath = fixture.runtime().musicRoot() / "garbage.mp3";
-    {
-      std::ofstream{trackPath} << "not really audio";
-    }
-
-    auto parent = Gtk::Window{};
-    auto theme = ThemeCoordinator{};
-    auto callbacks = ImportExportCallbacks{};
-
-    auto optCompleted = std::optional<std::size_t>{};
-    auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted([&optCompleted](std::size_t count)
-                                                                                     { optCompleted = count; });
-
-    auto coordinatorPtr = std::make_unique<ImportExportCoordinator>(parent, fixture.runtime(), callbacks, theme);
-    coordinatorPtr->scanLibrary();
-
-    // Completion only fires from the apply phase, so by here the progress dialog has been created.
-    REQUIRE(drainGtkEventsUntil([&optCompleted] { return optCompleted.has_value(); }));
-
-    // Destruction must tear the theme token (whose destructor touches the dialog window) and the progress
-    // subscription down before the dialog itself; otherwise this is a use-after-free under ASan.
-    coordinatorPtr.reset();
-    drainGtkEvents();
-
-    SUCCEED("coordinator destroyed without touching a freed progress dialog");
   }
 } // namespace ao::gtk::test

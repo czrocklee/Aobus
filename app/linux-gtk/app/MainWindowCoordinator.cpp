@@ -91,7 +91,7 @@ namespace ao::gtk
       , importExportCoordinator{window,
                                 runtime,
                                 portal::ImportExportCallbacks{
-                                  .onOpenNewLibrary = [](std::filesystem::path const&) {},
+                                  .onOpenNewLibrary = [](std::filesystem::path const&, bool) {},
                                   .onLibraryDataMutated =
                                     [coordinator, &runtime, this]
                                   {
@@ -173,7 +173,6 @@ namespace ao::gtk
   MainWindowCoordinator::~MainWindowCoordinator()
   {
     _tracksMutatedSubscription.reset();
-    _libraryTaskProgressSubscription.reset();
     _libraryTaskCompletedSubscription.reset();
     _listsMutatedSubscription.reset();
     _trackPresentationChangedSubscription.reset();

@@ -64,7 +64,7 @@ namespace ao::gtk::portal
     void importLibrary(); // YAML import
     void exportLibrary(); // YAML export
 
-    void openMusicLibrary(std::filesystem::path const& path) const;
+    void openMusicLibrary(std::filesystem::path const& path, bool scanAfterOpen = false) const;
     void importLibraryFrom(std::filesystem::path path);
     void exportLibraryTo(std::filesystem::path path, rt::ExportMode mode);
 
