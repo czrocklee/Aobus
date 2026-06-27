@@ -133,10 +133,28 @@ namespace ao::gtk::layout
         _fieldScroll.set_propagate_natural_width(false);
         _fieldScroll.set_propagate_natural_height(false);
         _fieldScroll.set_child(_wrapper);
+
         _fieldViewport.set_vexpand(true);
         _mainBox.append(_fieldViewport);
         _undoBar.signalUndoRequested().connect([this] { onUndo(); });
         _mainBox.append(_undoBar.widget());
+
+        _showAllFieldsButton.set_has_frame(false);
+        _showAllFieldsButton.add_css_class("ao-detail-show-all-button");
+        _showAllFieldsButton.add_css_class("ao-clickable");
+        _showAllFieldsButton.set_halign(Gtk::Align::START);
+        _showAllFieldsButton.set_size_request(0, -1);
+
+        if (auto* const labelWidget = _showAllFieldsButton.get_child(); labelWidget != nullptr)
+        {
+          if (auto* const label = dynamic_cast<Gtk::Label*>(labelWidget); label != nullptr)
+          {
+            label->set_ellipsize(Pango::EllipsizeMode::END);
+            label->set_size_request(0, -1);
+          }
+        }
+
+        _showAllFieldsButton.signal_clicked().connect([this] { onToggleShowEmptyMetadata(); });
 
         _metadataHeader.button.signal_clicked().connect([this] { onToggleMetadata(); });
         _customHeader.button.signal_clicked().connect([this] { onToggleCustom(); });
@@ -239,12 +257,120 @@ namespace ao::gtk::layout
       static constexpr std::int32_t kGridViewportHeight =
         (kVisibleFieldRows * kFieldRowHeight) + ((kVisibleFieldRows - 1) * kGridRowSpacing);
 
-      void onToggleMetadata()
+      bool shouldShowRow(BuiltInRow const& row, rt::TrackDetailSnapshot const& snap) const
       {
-        _metadataExpanded = !_metadataExpanded;
-        _metadataHeader.setExpanded(_metadataExpanded);
-        updateHeaderStyles();
+        if (!_metadataExpanded)
+        {
+          return false;
+        }
 
+        if (row.valueEditor.getEditing() || _showEmptyMetadata)
+        {
+          return true;
+        }
+
+        auto const text = displayTextForField(row.field, snap, kMultipleValuesText, true);
+        return !text.empty();
+      }
+
+      bool shouldShowCompositeRow(CompositeBuiltInRow const& row, rt::TrackDetailSnapshot const& snap) const
+      {
+        if (!_metadataExpanded)
+        {
+          return false;
+        }
+
+        if (row.primaryEditor.getEditing() || row.secondaryEditor.getEditing() || _showEmptyMetadata)
+        {
+          return true;
+        }
+
+        auto const primText = displayTextForField(row.primaryField, snap, kCompositeMixedText, false);
+        auto const secText = displayTextForField(row.secondaryField, snap, kCompositeMixedText, false);
+        return !primText.empty() || !secText.empty();
+      }
+
+      void updateHeaderLabels(rt::TrackDetailSnapshot const& snap)
+      {
+        if (_metadataExpanded)
+        {
+          _metadataHeader.label.set_text("Metadata");
+        }
+        else
+        {
+          auto const titleText =
+            validUtf8Text(displayTextForField(rt::TrackField::Title, snap, kMultipleValuesText, true));
+          auto const artistText =
+            validUtf8Text(displayTextForField(rt::TrackField::Artist, snap, kMultipleValuesText, true));
+
+          auto summary = std::string{};
+
+          if (!titleText.empty())
+          {
+            summary += titleText;
+          }
+
+          if (!artistText.empty())
+          {
+            if (!summary.empty())
+            {
+              summary += " — ";
+            }
+
+            summary += artistText;
+          }
+
+          if (!summary.empty())
+          {
+            _metadataHeader.label.set_text(summary);
+          }
+          else
+          {
+            _metadataHeader.label.set_text("Metadata");
+          }
+        }
+
+        if (_technicalExpanded)
+        {
+          _technicalHeader.label.set_text("Audio Properties");
+        }
+        else
+        {
+          auto const codec = validUtf8Text(displayTextForField(rt::TrackField::Codec, snap, "", false));
+          auto const sampleRate = validUtf8Text(displayTextForField(rt::TrackField::SampleRate, snap, "", false));
+          auto const bitDepth = validUtf8Text(displayTextForField(rt::TrackField::BitDepth, snap, "", false));
+
+          auto summary = std::string{};
+          auto addPart = [&summary](std::string const& val)
+          {
+            if (!val.empty())
+            {
+              if (!summary.empty())
+              {
+                summary += " · ";
+              }
+
+              summary += val;
+            }
+          };
+
+          addPart(codec);
+          addPart(sampleRate);
+          addPart(bitDepth);
+
+          if (!summary.empty())
+          {
+            _technicalHeader.label.set_text(summary);
+          }
+          else
+          {
+            _technicalHeader.label.set_text("Audio Properties");
+          }
+        }
+      }
+
+      void updateMetadataVisibility()
+      {
         for (auto& row : _metadataRows)
         {
           row.labelSlot.set_visible(_metadataExpanded);
@@ -255,6 +381,61 @@ namespace ao::gtk::layout
         {
           row.labelSlot.set_visible(_metadataExpanded);
           row.valueSlot.set_visible(_metadataExpanded);
+        }
+
+        _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
+        _metadataHeader.label.set_text("Metadata");
+      }
+
+      void updateMetadataVisibility(rt::TrackDetailSnapshot const& snap)
+      {
+        for (auto& row : _metadataRows)
+        {
+          bool const show = shouldShowRow(row, snap);
+          row.labelSlot.set_visible(show);
+          row.valueSlot.set_visible(show);
+        }
+
+        for (auto& row : _compositeRows)
+        {
+          bool const show = shouldShowCompositeRow(row, snap);
+          row.labelSlot.set_visible(show);
+          row.valueSlot.set_visible(show);
+        }
+
+        _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
+
+        updateHeaderLabels(snap);
+      }
+
+      void onToggleShowEmptyMetadata()
+      {
+        _showEmptyMetadata = !_showEmptyMetadata;
+        _showAllFieldsButton.set_label(_showEmptyMetadata ? "Hide empty fields" : "Show empty fields");
+
+        if (_scope != nullptr)
+        {
+          updateMetadataVisibility(_scope->snapshot());
+        }
+        else
+        {
+          updateMetadataVisibility();
+        }
+      }
+
+      void onToggleMetadata()
+      {
+        _metadataExpanded = !_metadataExpanded;
+        _metadataHeader.setExpanded(_metadataExpanded);
+        updateHeaderStyles();
+
+        if (_scope != nullptr)
+        {
+          updateMetadataVisibility(_scope->snapshot());
+        }
+        else
+        {
+          updateMetadataVisibility();
         }
       }
 
@@ -279,6 +460,11 @@ namespace ao::gtk::layout
         _technicalExpanded = !_technicalExpanded;
         _technicalHeader.setExpanded(_technicalExpanded);
         updateHeaderStyles();
+
+        if (_scope != nullptr)
+        {
+          updateHeaderLabels(_scope->snapshot());
+        }
 
         for (auto& row : _technicalRows)
         {
@@ -339,6 +525,7 @@ namespace ao::gtk::layout
         }
 
         updateCustomRows(snap);
+        updateMetadataVisibility(snap);
       }
 
       void setupBuiltInRow(BuiltInRow& row, bool isTechnical = false)
@@ -775,6 +962,9 @@ namespace ao::gtk::layout
             row.labelSlot.set_visible(_metadataExpanded);
             row.valueSlot.set_visible(_metadataExpanded);
           }
+
+          _grid.attach(_showAllFieldsButtonSlot, 0, rowIdx++, 1 + kValueColWidth, 1);
+          _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
         }
 
         bool const tracksSelected = (_scope != nullptr && !_scope->snapshot().trackIds.empty());
@@ -978,6 +1168,10 @@ namespace ao::gtk::layout
       SectionHeaderRow _metadataHeader{"Metadata"};
       SectionHeaderRow _customHeader{"Custom Properties"};
       SectionHeaderRow _technicalHeader{"Audio Properties"};
+
+      Gtk::Button _showAllFieldsButton{"Show empty fields"};
+      FixedHeightWidgetSlot _showAllFieldsButtonSlot{_showAllFieldsButton, false, false, kFieldRowHeight};
+      bool _showEmptyMetadata = false;
 
       Gtk::Box _mainBox;
       CustomPropertyUndoBar _undoBar;

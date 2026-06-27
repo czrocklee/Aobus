@@ -12,6 +12,7 @@
 #include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/enums.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/window.h>
 
@@ -39,12 +40,17 @@ namespace ao::gtk::test
     auto* const menuButton = findWidget<Gtk::MenuButton>(button);
     REQUIRE(menuButton != nullptr);
     CHECK(menuButton->get_sensitive());
+    CHECK(button.get_valign() == Gtk::Align::CENTER);
+    CHECK(menuButton->get_valign() == Gtk::Align::CENTER);
+    CHECK(hasCssClass(*menuButton, "ao-presentation-trigger"));
 
     auto* const popover = menuButton->get_popover();
     REQUIRE(popover != nullptr);
 
     auto* const albumsButton = findButtonByLabel(*popover, "Albums");
     REQUIRE(albumsButton != nullptr);
+    CHECK(hasCssClass(*albumsButton, "ao-presentation-menu-item"));
+    CHECK_FALSE(hasCssClass(*albumsButton, "ao-presentation-trigger"));
 
     emitClicked(*albumsButton);
     drainGtkEvents();

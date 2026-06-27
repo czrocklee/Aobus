@@ -90,7 +90,9 @@ namespace ao::rt
       co_return std::unexpected{planResult.error()};
     }
 
-    if (planResult->items.empty())
+    if (planResult->count(library::ScanClassification::New) == 0 &&
+        planResult->count(library::ScanClassification::Changed) == 0 &&
+        planResult->count(library::ScanClassification::Missing) == 0)
     {
       _implPtr->changes.notifyLibraryTaskCompleted(0);
     }

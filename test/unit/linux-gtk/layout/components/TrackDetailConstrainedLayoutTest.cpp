@@ -364,6 +364,75 @@ namespace ao::gtk::layout::test
       return minWidth;
     };
 
+    auto findButtonByLabel = [&](std::string_view labelText) -> Gtk::Button*
+    {
+      Gtk::Button* found = nullptr;
+      walkWidgets(*grid,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (found != nullptr)
+                    {
+                      return;
+                    }
+
+                    auto* const button = dynamic_cast<Gtk::Button*>(&widget);
+
+                    if (button == nullptr)
+                    {
+                      return;
+                    }
+
+                    if (auto const label = button->get_label().raw();
+                        std::string_view{label.data(), label.size()} == labelText)
+                    {
+                      found = button;
+                    }
+                  });
+      return found;
+    };
+
+    auto findHeaderByClass = [&](std::string_view className) -> Gtk::Button*
+    {
+      Gtk::Button* found = nullptr;
+      walkWidgets(*grid,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (auto* const button = dynamic_cast<Gtk::Button*>(&widget);
+                        button != nullptr && button->has_css_class(std::string{className}))
+                    {
+                      found = button;
+                    }
+                  });
+      return found;
+    };
+
+    auto findPropertySlot = [&](std::string_view labelText) -> Gtk::Widget*
+    {
+      Gtk::Widget* found = nullptr;
+      walkWidgets(*grid,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (found != nullptr)
+                    {
+                      return;
+                    }
+
+                    auto* const label = dynamic_cast<Gtk::Label*>(&widget);
+
+                    if (label == nullptr || !label->has_css_class("ao-property-label"))
+                    {
+                      return;
+                    }
+
+                    if (auto const text = label->get_text().raw();
+                        std::string_view{text.data(), text.size()} == labelText)
+                    {
+                      found = label->get_parent();
+                    }
+                  });
+      return found;
+    };
+
     SECTION("Horizontal measure is clamped to panel allocation")
     {
       CHECK(root.get_request_mode() == Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH);
@@ -403,6 +472,7 @@ namespace ao::gtk::layout::test
 
       Gtk::Widget* line = nullptr;
       Gtk::Image* chevron = nullptr;
+      Gtk::Label* headerLabel = nullptr;
 
       walkWidgets(*headerButton,
                   [&](Gtk::Widget& widget)
@@ -416,10 +486,16 @@ namespace ao::gtk::layout::test
                     {
                       chevron = dynamic_cast<Gtk::Image*>(&widget);
                     }
+
+                    if (headerLabel == nullptr)
+                    {
+                      headerLabel = dynamic_cast<Gtk::Label*>(&widget);
+                    }
                   });
 
       REQUIRE(line != nullptr);
       REQUIRE(chevron != nullptr);
+      REQUIRE(headerLabel != nullptr);
 
       // The chevron is an overlay child, so it must not push the rule rightward: the line
       // begins at or before the chevron and spans the full header width. A regression that
@@ -430,6 +506,40 @@ namespace ao::gtk::layout::test
       REQUIRE(optChevronPoint);
       CHECK(optLinePoint->get_x() <= optChevronPoint->get_x());
       CHECK(line->get_width() > chevron->get_width());
+      CHECK(headerButton->get_height() >= headerLabel->get_height());
+    }
+
+    SECTION("Metadata collapse works without a detail scope")
+    {
+      auto* const metaHeader = findHeaderByClass("ao-track-detail-section-meta");
+      auto* const titleSlot = findPropertySlot("Title");
+      REQUIRE(metaHeader != nullptr);
+      REQUIRE(titleSlot != nullptr);
+      CHECK(titleSlot->get_visible());
+
+      emitClicked(*metaHeader);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK_FALSE(titleSlot->get_visible());
+
+      emitClicked(*metaHeader);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK(titleSlot->get_visible());
+    }
+
+    SECTION("Show empty fields control uses a fixed-height row slot")
+    {
+      auto* const showButton = findButtonByLabel("Show empty fields");
+      REQUIRE(showButton != nullptr);
+      auto* const showSlot = showButton->get_parent();
+      REQUIRE(showSlot != nullptr);
+      CHECK(dynamic_cast<Gtk::Button*>(showSlot) == nullptr);
+      CHECK(showSlot->get_overflow() == Gtk::Overflow::HIDDEN);
+
+      allocate(320, 2000);
+
+      CHECK(showSlot->get_height() == 28);
     }
 
     SECTION("Inner grid can be allocated to the panel width")

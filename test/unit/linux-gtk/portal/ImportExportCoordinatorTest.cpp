@@ -5,6 +5,7 @@
 
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCallbacks.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/async/Executor.h>
 #include <ao/rt/AppRuntime.h>

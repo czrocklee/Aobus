@@ -77,6 +77,7 @@ namespace ao::gtk::layout::track_field_grid
   {
     Gtk::Button button{};
     Gtk::Overlay overlay{};
+    Gtk::Label label{};
     Gtk::Box line{Gtk::Orientation::HORIZONTAL, 0};
     Gtk::Image icon{};
 

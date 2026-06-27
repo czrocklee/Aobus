@@ -30,6 +30,11 @@ The grid is driven by the `TrackDetailSnapshot`, which aggregates field values a
   widget tree in place without moving the panel contents.
 - **Mixed Values**: When selected tracks have different values for a field, the grid displays `<Multiple Values>`.
 - **Unknown Values**: For technical fields, missing data is displayed as `Unknown`. For metadata fields, missing data is displayed as an empty string.
+- **Empty Metadata**: Metadata rows whose current display value is empty are
+  hidden by default. Mixed values and any non-empty formatted value remain
+  visible. The Metadata section includes a fixed-height "Show empty fields"
+  control that reveals empty rows for editing and toggles back to "Hide empty
+  fields" while they are visible.
 
 ### Editing and Interaction
 
@@ -96,15 +101,20 @@ audio properties are collapsed by default. Collapsing a section hides its field
 rows but keeps the section header in the grid, so users can restore the section
 without changing the surrounding layout.
 
-A section header is a borderless full-width button that, at rest, renders only a
-single full-bleed hairline rule spanning the row — the panel is dense, so no
-section title text is shown. The disclosure chevron (`pan-down` when expanded,
-`pan-end` when collapsed) is overlaid on the leading end of the rule rather than
-placed before it, so it never displaces the line; it stays fully transparent at
-rest and fades in only on hover or keyboard focus, at which point the whole
-header strip also highlights. This keeps the divider clean and consistently
-aligned while still surfacing the collapse affordance and current state on
-demand.
+A section header is a borderless full-width button with a full-bleed hairline
+rule, an overlaid text label, and a disclosure chevron (`pan-down` when
+expanded, `pan-end` when collapsed). The chevron is overlaid on the leading end
+of the rule rather than placed before it, so it never displaces the line; it
+stays fully transparent at rest and fades in only on hover or keyboard focus, at
+which point the whole header strip also highlights. Expanded headers show their
+section title. Collapsed Metadata summarizes the selected title and artist when
+available, while collapsed Audio Properties summarizes codec, sample rate, and
+bit depth when available.
+
+Section header and empty-field control styling is theme-aware. Classic keeps
+the controls dense, square, and high-contrast like a data panel; Modern uses the
+same widget structure with more breathing room, uppercase micro-labels, softer
+rules, and accent-colored link affordances.
 
 Every grid cell is hosted by a clipped fixed-height slot. Row height is stable
 across field values and font metrics; if a child widget internally asks for more

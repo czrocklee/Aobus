@@ -133,7 +133,7 @@
 
 button.ao-track-detail-section-header {
   padding: 0;
-  min-height: 12px;
+  min-height: var(--ao-detail-section-header-min-height);
   background: transparent;
   border: none;
   border-radius: var(--ao-radius-sm);
@@ -154,6 +154,10 @@ button.ao-track-detail-section-header image {
   transition: opacity var(--ao-transition-base);
 }
 
+button.ao-track-detail-section-header label {
+  margin-left: var(--ao-detail-section-label-margin-left);
+}
+
 button.ao-track-detail-section-header:hover image,
 button.ao-track-detail-section-header:focus-within image {
   opacity: 0.7;
@@ -162,6 +166,12 @@ button.ao-track-detail-section-header:focus-within image {
 .ao-track-detail-section-line {
   min-height: 1px;
   background-color: alpha(currentColor, 0.4);
+}
+
+.ao-detail-show-all-button {
+  margin-left: var(--ao-detail-empty-field-margin-left);
+  margin-top: var(--ao-detail-empty-field-margin-top);
+  margin-bottom: var(--ao-detail-empty-field-margin-bottom);
 }
 
 /* Visual Differentiation between sections */

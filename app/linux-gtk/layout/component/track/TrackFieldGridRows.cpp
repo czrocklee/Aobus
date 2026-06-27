@@ -7,6 +7,8 @@
 #include "track/TrackFieldUi.h"
 #include <ao/rt/TrackField.h>
 
+#include <pangomm/layout.h>
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -69,7 +71,7 @@ namespace ao::gtk::layout::track_field_grid
     valueBox.append(deleteButton);
   }
 
-  SectionHeaderRow::SectionHeaderRow([[maybe_unused]] std::string_view title)
+  SectionHeaderRow::SectionHeaderRow(std::string_view title)
   {
     button.set_has_frame(false);
     button.set_halign(Gtk::Align::FILL);
@@ -89,11 +91,21 @@ namespace ao::gtk::layout::track_field_grid
     icon.set_margin_start(2);
     icon.add_css_class("ao-track-detail-section-chevron");
 
+    label.set_text(std::string{title});
+    label.set_halign(Gtk::Align::FILL);
+    label.set_valign(Gtk::Align::CENTER);
+    label.set_hexpand(true);
+    label.set_xalign(0.0F);
+    label.set_ellipsize(Pango::EllipsizeMode::END);
+    label.set_size_request(0, -1);
+
     overlay.set_hexpand(true);
     overlay.set_halign(Gtk::Align::FILL);
     overlay.set_child(line);
     overlay.add_overlay(icon);
+    overlay.add_overlay(label);
     overlay.set_measure_overlay(icon, true);
+    overlay.set_measure_overlay(label, false);
 
     button.set_child(overlay);
     setExpanded(true);

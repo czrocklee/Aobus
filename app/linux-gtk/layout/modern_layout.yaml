@@ -47,6 +47,7 @@ root:
                       layout:
                         slot: start
                         halign: start
+                        valign: center
                         cssClasses: ao-section-title-modern-button
                     - type: track.quickFilter
                       layout:

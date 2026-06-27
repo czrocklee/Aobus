@@ -8,6 +8,12 @@
   --ao-list-row-min-height: 24px;
   --ao-row-radius: 0px;
 
+  --ao-detail-section-header-min-height: 20px;
+  --ao-detail-section-label-margin-left: var(--ao-spacing-lg);
+  --ao-detail-empty-field-margin-left: var(--ao-spacing-lg);
+  --ao-detail-empty-field-margin-top: 1px;
+  --ao-detail-empty-field-margin-bottom: 1px;
+
   /* Crisp control edges. */
   --ao-control-radius: 2px;
   --ao-surface-border-color: alpha(currentColor, 0.18);
@@ -279,6 +285,49 @@
 .ao-theme-classic .ao-detail-field-value.ao-detail-field-editable:hover,
 .ao-theme-classic .ao-detail-field-value.ao-detail-field-editable:focus-within {
   background: alpha(@theme_selected_bg_color, 0.18);
+}
+
+/* Section headers stay dense and data-panel-like in classic. */
+.ao-theme-classic .ao-track-detail-section-header {
+  border-radius: 0;
+  opacity: 0.7;
+}
+
+.ao-theme-classic .ao-track-detail-section-header:hover,
+.ao-theme-classic .ao-track-detail-section-header:focus-within {
+  opacity: 1.0;
+  background-color: alpha(@theme_selected_bg_color, 0.08);
+}
+
+.ao-theme-classic .ao-track-detail-section-header label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  opacity: 0.85;
+  text-transform: none;
+}
+
+.ao-theme-classic .ao-track-detail-section-line {
+  background-color: alpha(currentColor, 0.18);
+}
+
+.ao-theme-classic .ao-detail-show-all-button {
+  padding: 1px 4px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  color: alpha(@theme_fg_color, 0.82);
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.ao-theme-classic .ao-detail-show-all-button:hover,
+.ao-theme-classic .ao-detail-show-all-button:focus-visible {
+  opacity: 1.0;
+  background: alpha(@theme_selected_bg_color, 0.12);
+  color: @theme_fg_color;
+  text-decoration: none;
 }
 
 /* ===== Query Completion (Classic) ===== */

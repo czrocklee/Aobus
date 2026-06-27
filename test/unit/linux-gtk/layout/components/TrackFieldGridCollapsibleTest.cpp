@@ -110,6 +110,60 @@ namespace ao::gtk::layout::test
       return found;
     };
 
+    auto findButtonByLabel = [&](std::string_view labelText) -> Gtk::Button*
+    {
+      Gtk::Button* found = nullptr;
+      walkWidgets(*grid,
+                  [&](Gtk::Widget& w)
+                  {
+                    if (found != nullptr)
+                    {
+                      return;
+                    }
+
+                    auto* const button = dynamic_cast<Gtk::Button*>(&w);
+
+                    if (button == nullptr)
+                    {
+                      return;
+                    }
+
+                    if (auto const label = button->get_label().raw();
+                        std::string_view{label.data(), label.size()} == labelText)
+                    {
+                      found = button;
+                    }
+                  });
+      return found;
+    };
+
+    auto findPropertySlot = [&](std::string_view labelText) -> Gtk::Widget*
+    {
+      Gtk::Widget* found = nullptr;
+      walkWidgets(*grid,
+                  [&](Gtk::Widget& w)
+                  {
+                    if (found != nullptr)
+                    {
+                      return;
+                    }
+
+                    auto* const label = dynamic_cast<Gtk::Label*>(&w);
+
+                    if (label == nullptr || !label->has_css_class("ao-property-label"))
+                    {
+                      return;
+                    }
+
+                    if (auto const text = label->get_text().raw();
+                        std::string_view{text.data(), text.size()} == labelText)
+                    {
+                      found = label->get_parent();
+                    }
+                  });
+      return found;
+    };
+
     SECTION("Default states: Metadata expanded, Technical collapsed")
     {
       auto* metaHeader = findHeaderByClass("ao-track-detail-section-meta");
@@ -141,6 +195,35 @@ namespace ao::gtk::layout::test
 
       CHECK(foundVisibleMeta);
       CHECK(foundHiddenTech);
+    }
+
+    SECTION("Empty metadata rows are hidden until requested")
+    {
+      auto* const genreSlot = findPropertySlot("Genre");
+      auto* const albumSlot = findPropertySlot("Album");
+      auto* const showButton = findButtonByLabel("Show empty fields");
+      REQUIRE(genreSlot != nullptr);
+      REQUIRE(albumSlot != nullptr);
+      REQUIRE(showButton != nullptr);
+      REQUIRE(showButton->get_parent() != nullptr);
+
+      CHECK_FALSE(genreSlot->get_visible());
+      CHECK_FALSE(albumSlot->get_visible());
+      CHECK(showButton->get_parent()->get_visible());
+
+      emitClicked(*showButton);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK(genreSlot->get_visible());
+      CHECK(albumSlot->get_visible());
+      CHECK(showButton->get_label() == "Hide empty fields");
+
+      emitClicked(*showButton);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK_FALSE(genreSlot->get_visible());
+      CHECK_FALSE(albumSlot->get_visible());
+      CHECK(showButton->get_label() == "Show empty fields");
     }
 
     SECTION("Toggling sections changes visibility")

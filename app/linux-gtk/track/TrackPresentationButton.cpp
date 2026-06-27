@@ -31,8 +31,14 @@ namespace ao::gtk
   TrackPresentationButton::TrackPresentationButton(rt::AppRuntime& runtime)
     : _runtime{runtime}
   {
-    _button.set_has_frame(true);
+    set_valign(Gtk::Align::CENTER);
+
+    _button.set_has_frame(false);
+    _button.add_css_class("flat");
+    _button.set_valign(Gtk::Align::CENTER);
+    _button.add_css_class("ao-presentation-trigger");
     _popover.set_has_arrow(false);
+    _popover.add_css_class("ao-presentation-popover");
     _popover.set_child(_menuBox);
     _button.set_popover(_popover);
 

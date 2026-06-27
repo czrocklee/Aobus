@@ -62,6 +62,12 @@
   --ao-row-hover-bg: alpha(currentColor, 0.04);
   --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.2);
 
+  --ao-detail-section-header-min-height: 20px;
+  --ao-detail-section-label-margin-left: var(--ao-spacing-lg);
+  --ao-detail-empty-field-margin-left: var(--ao-spacing-lg);
+  --ao-detail-empty-field-margin-top: 1px;
+  --ao-detail-empty-field-margin-bottom: 1px;
+
   --ao-control-radius: 4px;
   --ao-control-hover-scale: 1.0;
   

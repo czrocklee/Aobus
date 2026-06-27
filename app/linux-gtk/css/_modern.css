@@ -19,6 +19,12 @@
   --ao-row-hover-bg: alpha(currentColor, 0.04);
   --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.1);
 
+  --ao-detail-section-header-min-height: 24px;
+  --ao-detail-section-label-margin-left: 16px;
+  --ao-detail-empty-field-margin-left: 16px;
+  --ao-detail-empty-field-margin-top: 4px;
+  --ao-detail-empty-field-margin-bottom: 4px;
+
   --ao-control-radius: 100px;
   --ao-control-hover-scale: 1.05;
 }
@@ -366,36 +372,73 @@
 }
 
 /* Dynamic Presentation Title Button */
-.ao-section-title-modern-button button {
+.ao-section-title-modern-button button.ao-presentation-trigger,
+.ao-section-title-modern-button button.ao-presentation-trigger:hover,
+.ao-section-title-modern-button button.ao-presentation-trigger:active,
+.ao-section-title-modern-button button.ao-presentation-trigger:checked,
+.ao-section-title-modern-button button.ao-presentation-trigger:focus {
   padding: 0;
   margin: 0;
   background: transparent;
+  background-color: transparent;
+  background-image: none;
   border: none;
+  outline: none;
   box-shadow: none;
-  font-size: 2rem;
+  font-size: 1.55rem;
   font-weight: 800;
   letter-spacing: 0;
-  color: @theme_fg_color;
+  color: alpha(@theme_selected_bg_color, 0.82);
   opacity: 0.9;
   transition: opacity 200ms ease, color 200ms ease;
 }
 
-.ao-section-title-modern-button button:hover {
+.ao-section-title-modern-button button.ao-presentation-trigger:hover {
   opacity: 1.0;
   color: @theme_selected_bg_color;
   background: transparent;
 }
 
-/* Hide the arrow icon on the title variant */
-.ao-variant-title button>box>image {
-  opacity: 0;
-  min-width: 0;
-  min-height: 0;
+.ao-variant-title button.ao-presentation-trigger>box>image {
+  -gtk-icon-size: 14px;
+  color: alpha(currentColor, 0.72);
+  margin-left: 4px;
+  opacity: 0.9;
 }
 
-.ao-variant-title button>box {
+.ao-variant-title button.ao-presentation-trigger>box {
   padding: 0;
   margin: 0;
+}
+
+.ao-theme-modern .ao-presentation-popover>contents {
+  border-radius: 14px;
+}
+
+.ao-theme-modern .ao-presentation-menu-box {
+  padding: 6px;
+  min-width: 220px;
+}
+
+.ao-theme-modern .ao-presentation-menu-item {
+  min-height: 30px;
+  padding: 6px 12px;
+  margin: 1px 0;
+  border-radius: 10px;
+  color: alpha(@theme_fg_color, 0.78);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.ao-theme-modern .ao-presentation-menu-item:hover {
+  background: alpha(@theme_selected_bg_color, 0.10);
+  color: @theme_selected_bg_color;
+}
+
+.ao-theme-modern .ao-presentation-menu-separator {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  opacity: 0.12;
 }
 
 /* Elastic Search Pill (The precision tool) */
@@ -433,8 +476,8 @@
   padding: 12px 10px 8px 10px;
 }
 
-.ao-theme-modern .ao-width-compact .ao-section-title-modern-button button {
-  font-size: 1.1rem;
+.ao-theme-modern .ao-width-compact .ao-section-title-modern-button button.ao-presentation-trigger {
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -572,12 +615,14 @@
 /* Hover handled by token */
 
 .ao-theme-modern columnview>listview>row:selected {
+  background-image: none;
+  background-color: alpha(@theme_fg_color, 0.08);
   border-color: alpha(@theme_selected_bg_color, 0.05);
   color: inherit;
 }
 
 .ao-theme-modern columnview>listview>row:selected:hover {
-  background-color: alpha(@theme_selected_bg_color, 0.14);
+  background-color: alpha(@theme_fg_color, 0.12);
 }
 
 .ao-theme-modern columnview>listview>row:selected label {
@@ -588,17 +633,30 @@
 /* Specific styling for the playing row in Modern mode */
 .ao-theme-modern columnview row.ao-playing-row {
   background-image: none;
-  background-color: alpha(@warning_bg_color, 0.08);
-  /* Very low-opacity ambient highlight. */
+  background-color: transparent;
+  box-shadow: inset 3px 0 0 @accent_bg_color;
   border-color: transparent;
-  /* Keep the transparent border so row geometry does not jump. */
   border-radius: 8px;
-  /* Match the full modern pill radius. */
+}
+
+.ao-theme-modern columnview row.ao-playing-row:selected {
+  background-color: alpha(@accent_bg_color, 0.12);
 }
 
 .ao-theme-modern .ao-playing-title {
-  color: @warning_bg_color;
+  color: @accent_color;
   font-weight: 800;
+}
+
+/* Table body text contrast */
+.ao-theme-modern columnview label {
+  color: alpha(@theme_fg_color, 0.88);
+}
+
+/* Table header contrast */
+.ao-theme-modern columnview header label {
+  color: alpha(@theme_fg_color, 0.70);
+  font-weight: 700;
 }
 
 /* Modern Track Section (Album) separation */
@@ -873,13 +931,25 @@ listview>row:first-child .ao-track-section-box {
 }
 
 .ao-theme-modern .ao-track-detail-section-header label {
-  font-weight: 800;
-  letter-spacing: 0.25em;
-  opacity: 0.8;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.62;
+  text-transform: uppercase;
 }
 
 .ao-theme-modern .ao-track-detail-section-line {
-  background-color: alpha(currentColor, 0.15);
+  background-color: alpha(currentColor, 0.08);
+}
+
+/* Right-side Detail pane property contrast */
+.ao-theme-modern .ao-property-value,
+.ao-theme-modern .ao-detail-field-value {
+  color: alpha(@theme_fg_color, 0.84);
+}
+
+.ao-theme-modern .ao-property-label,
+.ao-theme-modern .ao-inline-editor-label {
+  color: alpha(@theme_fg_color, 0.52);
 }
 
 /* ===== Query Completion (Modern) ===== */
@@ -923,4 +993,75 @@ listview>row:first-child .ao-track-section-box {
 .ao-theme-modern .ao-query-completion-popover listview > row:selected .ao-query-completion-row-title {
   color: @theme_selected_bg_color;
   font-weight: 600;
+}
+
+/* Modern hover feedback for clickable elements */
+.ao-theme-modern .ao-clickable:hover {
+  color: @accent_color;
+  text-decoration-line: underline;
+  text-decoration-color: alpha(currentColor, 0.35);
+  opacity: 1.0;
+}
+
+.ao-theme-modern .ao-detail-show-all-button {
+  font-size: var(--ao-font-size-sm);
+  font-weight: 600;
+  color: @accent_color;
+  opacity: 0.7;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.ao-theme-modern .ao-detail-show-all-button:hover {
+  opacity: 1.0;
+  text-decoration: underline;
+}
+
+/* Ensure the last column cells are padded inward to stay inside the row pill rounded corners */
+.ao-theme-modern columnview cell:last-child label {
+  margin-right: 16px;
+}
+
+/* Highlight the Title column in modern track tables */
+.ao-theme-modern .ao-track-title-cell {
+  color: alpha(@theme_fg_color, 0.94);
+  font-weight: 600;
+}
+
+.ao-theme-modern columnview row.ao-playing-row .ao-track-title-cell {
+  color: @accent_color;
+  font-weight: 700;
+}
+
+.ao-theme-modern columnview>listview>row:selected .ao-track-title-cell {
+  color: @theme_selected_bg_color;
+  font-weight: 700;
+}
+
+
+
+/* Brighten bottom player Now Playing text */
+.ao-theme-modern .ao-nowplaying-title {
+  font-weight: 700;
+  color: alpha(@theme_fg_color, 0.94);
+}
+
+.ao-theme-modern .ao-nowplaying-artist {
+  color: alpha(@theme_fg_color, 0.55);
+}
+
+/* Brighten bottom player duration and elapsed labels */
+.ao-theme-modern .ao-time-label {
+  color: alpha(@theme_fg_color, 0.70);
+}
+
+/* Playback controls visibility before hover */
+.ao-theme-modern .ao-playback-button {
+  color: alpha(@theme_fg_color, 0.65);
+}
+
+.ao-theme-modern .ao-playback-button:hover {
+  color: @accent_color;
 }

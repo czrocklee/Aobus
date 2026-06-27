@@ -50,7 +50,7 @@ namespace ao::gtk
     set_hexpand(true);
 
     _entry.add_css_class("ao-quick-filter-entry");
-    _entry.set_placeholder_text("Quick filter or expression...");
+    _entry.set_placeholder_text("Search songs, artists, albums, tags...");
     _entry.set_hexpand(true);
     _entry.set_icon_from_icon_name("system-search-symbolic", Gtk::Entry::IconPosition::PRIMARY);
     _entry.set_icon_sensitive(Gtk::Entry::IconPosition::PRIMARY, false);

@@ -43,13 +43,24 @@ namespace ao::gtk
       sigc::scoped_connection playingChangedConnection; // now-playing highlight
     };
 
-    void configureTrackCellLabel(Gtk::Label& label)
+    void configureTrackCellLabel(Gtk::Label& label, rt::TrackField field)
     {
-      label.set_halign(Gtk::Align::START);
+      if (field == rt::TrackField::Duration || field == rt::TrackField::Year || field == rt::TrackField::TrackNumber ||
+          field == rt::TrackField::DiscNumber)
+      {
+        label.set_halign(Gtk::Align::END);
+        label.set_xalign(1.0F);
+        label.set_margin_end(8);
+      }
+      else
+      {
+        label.set_halign(Gtk::Align::START);
+        label.set_xalign(0.0F);
+      }
+
       label.set_ellipsize(Pango::EllipsizeMode::END);
       label.set_single_line_mode(true);
       label.set_lines(1);
-      label.set_xalign(0);
     }
 
     void updatePlayingStyles(Gtk::ListItem& listItem, rt::TrackField field, bool playing)
@@ -133,7 +144,9 @@ namespace ao::gtk
         // and computed fields, so this bind copies straight into the label with no
         // intermediate ustring materialization.
         auto const* const text = row->displayText(field);
-        label->set_text(text != nullptr ? *text : Glib::ustring{});
+        auto const& displayText = text != nullptr ? *text : Glib::ustring{};
+        label->set_text(displayText);
+        label->set_tooltip_text(displayText);
       }
     }
 
@@ -191,6 +204,7 @@ namespace ao::gtk
             auto const* const text = rowPtr->displayText(field);
             auto const& displayText = text != nullptr ? *text : Glib::ustring{};
             label->set_text(displayText);
+            label->set_tooltip_text(displayText);
             entry->set_text(displayText);
           }
         }
@@ -231,7 +245,12 @@ namespace ao::gtk
         if (!editable)
         {
           auto* const label = Gtk::make_managed<Gtk::Label>("");
-          configureTrackCellLabel(*label);
+          configureTrackCellLabel(*label, field);
+
+          if (field == rt::TrackField::Title)
+          {
+            label->add_css_class("ao-track-title-cell");
+          }
 
           if (field == rt::TrackField::Duration || field == rt::TrackField::Year)
           {
@@ -255,7 +274,13 @@ namespace ao::gtk
 
           auto* const label = Gtk::make_managed<Gtk::Label>("");
           label->add_css_class("ao-inline-editor-label");
-          configureTrackCellLabel(*label);
+          configureTrackCellLabel(*label, field);
+
+          if (field == rt::TrackField::Title)
+          {
+            label->add_css_class("ao-track-title-cell");
+          }
+
           stack->add(*label, "display");
 
           auto* const entry = Gtk::make_managed<Gtk::Entry>();
