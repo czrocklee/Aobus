@@ -78,7 +78,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("QualityAnalyzer - Bitwise Perfect", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - unchanged playback path is bitwise perfect", "[audio][unit][quality]")
   {
     auto const graph = buildBaseMergedGraph();
     auto const result = analyzeAudioQuality(graph);
@@ -93,7 +93,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - Lossy Source", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - lossy source marks source as worst quality", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[0].isLossySource = true; // ao-source
@@ -106,7 +106,7 @@ namespace ao::audio::test
     CHECK(src->worstQuality == Quality::LossySource);
   }
 
-  TEST_CASE("QualityAnalyzer - Resampling", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - resampling marks engine as linear intervention", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     // Modify Engine output format to trigger resampling at Decoder -> Engine
@@ -120,7 +120,7 @@ namespace ao::audio::test
     CHECK(eng->worstQuality == Quality::LinearIntervention);
   }
 
-  TEST_CASE("QualityAnalyzer - Software Volume Modification", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - software volume change marks linear intervention", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[2].softwareVolumeNotUnity = true;
@@ -133,7 +133,7 @@ namespace ao::audio::test
     CHECK(eng->worstQuality == Quality::LinearIntervention);
   }
 
-  TEST_CASE("QualityAnalyzer - Hardware Volume Modification", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - hardware volume change keeps bitwise quality", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[2].hardwareVolumeNotUnity = true;
@@ -146,7 +146,7 @@ namespace ao::audio::test
     CHECK(eng->worstQuality == Quality::BitwisePerfect);
   }
 
-  TEST_CASE("QualityAnalyzer - Unclassified Volume Modification", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - unclassified volume change marks linear intervention", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[2].unclassifiedVolumeNotUnity = true;
@@ -159,7 +159,7 @@ namespace ao::audio::test
     CHECK(eng->worstQuality == Quality::LinearIntervention);
   }
 
-  TEST_CASE("QualityAnalyzer - Mixed Hardware and Software Volume", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - mixed hardware and software volume keeps both findings", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[2].hardwareVolumeNotUnity = true;
@@ -175,7 +175,7 @@ namespace ao::audio::test
     CHECK(eng->worstQuality == Quality::LinearIntervention);
   }
 
-  TEST_CASE("QualityAnalyzer - Mute Detected", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - muted stream marks linear intervention", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[3].isMuted = true;
@@ -188,7 +188,7 @@ namespace ao::audio::test
     CHECK(strm->worstQuality == Quality::LinearIntervention);
   }
 
-  TEST_CASE("QualityAnalyzer - External Mixing", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - external mixing reports shared applications", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
 
@@ -210,7 +210,7 @@ namespace ao::audio::test
     CHECK(std::ranges::contains(findingIt->sharedApps, std::string{"Firefox"}));
   }
 
-  TEST_CASE("QualityAnalyzer - Lossless Bit-Depth Extension", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - lossless bit-depth extension reports padded quality", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     // decoder 16b -> engine 24b -> stream 24b -> sink 24b
@@ -252,7 +252,7 @@ namespace ao::audio::test
     CHECK(hasFinding(src, QualityFindingKind::BitPerfect));
   }
 
-  TEST_CASE("QualityAnalyzer - Empty Graph", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - empty graph has unknown quality", "[audio][unit][quality]")
   {
     auto const graph = flow::Graph{};
     auto const result = analyzeAudioQuality(graph);
@@ -260,7 +260,7 @@ namespace ao::audio::test
     CHECK(result.assessments.empty());
   }
 
-  TEST_CASE("QualityAnalyzer - Missing Playback Path", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - missing playback path has unknown quality", "[audio][unit][quality]")
   {
     auto graph = flow::Graph{};
     graph.nodes.push_back(flow::Node{.id = "external-app", .type = flow::NodeType::ExternalSource, .name = "Firefox"});
@@ -270,7 +270,7 @@ namespace ao::audio::test
     CHECK(result.assessments.empty());
   }
 
-  TEST_CASE("QualityAnalyzer - Float Conversions", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - float conversions distinguish lossless and lossy paths", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
 

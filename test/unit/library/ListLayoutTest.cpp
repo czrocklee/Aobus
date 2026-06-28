@@ -9,13 +9,13 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("ListHeader - Size and Alignment", "[library][unit][list]")
+  TEST_CASE("ListHeader - has stable size and alignment", "[library][unit][list]")
   {
     CHECK(sizeof(ListHeader) == 20);
     CHECK(alignof(ListHeader) == 4);
   }
 
-  TEST_CASE("ListHeader - Field Offsets", "[library][unit][list]")
+  TEST_CASE("ListHeader - stores fields at stable offsets", "[library][unit][list]")
   {
     CHECK(offsetof(ListHeader, trackIdsCount) == 0);
     CHECK(offsetof(ListHeader, nameOffset) == 4);

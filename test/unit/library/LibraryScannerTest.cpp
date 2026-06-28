@@ -25,7 +25,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryScanner Classification", "[library][unit][scan]")
+  TEST_CASE("LibraryScanner - classifies supported and hidden entries", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -99,7 +99,7 @@ namespace ao::library::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("LibraryScanner IO Error Handling", "[library][unit][scan][error]")
+  TEST_CASE("LibraryScanner - reports IO errors while scanning", "[library][unit][scan][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -159,7 +159,7 @@ namespace ao::library::test
     CHECK(foundRestricted);
   }
 
-  TEST_CASE("LibraryScanner Empty Root Boundary", "[library][unit][scan]")
+  TEST_CASE("LibraryScanner - handles empty roots", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "empty_music";
@@ -172,7 +172,7 @@ namespace ao::library::test
     CHECK(plan.items.empty());
   }
 
-  TEST_CASE("LibraryScanner Missing Root Is Fatal", "[library][unit][scan][error]")
+  TEST_CASE("LibraryScanner - treats missing roots as fatal", "[library][unit][scan][error]")
   {
     auto const temp = ao::test::TempDir{};
     // Point the library at a music root that does not exist. The database still
@@ -188,7 +188,7 @@ namespace ao::library::test
     CHECK(result.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("LibraryScanner URI Canonization Edge Cases", "[library][unit][scan][uri]")
+  TEST_CASE("LibraryScanner - canonicalizes URI edge cases", "[library][unit][scan][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();

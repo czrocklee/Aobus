@@ -26,13 +26,13 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("Serializer - Serializes System Variable Prefixes", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes system variable prefixes", "[query][unit][serializer]")
   {
     CHECK(serialize(VariableExpression{.type = VariableType::Metadata, .name = "artist"}) == "$artist");
     CHECK(serialize(VariableExpression{.type = VariableType::Property, .name = "duration"}) == "@duration");
   }
 
-  TEST_CASE("Serializer - Serializes User Variable Names", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes user variable names", "[query][unit][serializer]")
   {
     SECTION("Simple names stay bare")
     {
@@ -63,24 +63,24 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - Serializes Boolean Constant", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes boolean constants", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{true}) == "true");
     CHECK(serialize(ConstantExpression{false}) == "false");
   }
 
-  TEST_CASE("Serializer - Serializes Integer Constant", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes integer constants", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{std::int64_t{123}}) == "123");
     CHECK(serialize(ConstantExpression{std::int64_t{-7}}) == "-7");
   }
 
-  TEST_CASE("Serializer - Serializes Unit Constant", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes unit constants", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{UnitConstantExpression{"44.1k"}}) == "44.1k");
   }
 
-  TEST_CASE("Serializer - Serializes String Constant With Quotes", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes string constants with quotes", "[query][unit][serializer]")
   {
     CHECK(serialize(ConstantExpression{std::string{"Bach"}}) == "\"Bach\"");
     CHECK(serialize(ConstantExpression{std::string{"quote\"and\\slash"}}) == R"("quote\"and\\slash")");
@@ -90,7 +90,7 @@ namespace ao::query::test
     CHECK(serialize(ConstantExpression{std::string{"has'apostrophe"}}) == R"("has'apostrophe")");
   }
 
-  TEST_CASE("Serializer - String Constants With Control Characters Round-Trip", "[query][unit][serializer]")
+  TEST_CASE("Serializer - round-trips string constants with control characters", "[query][unit][serializer]")
   {
     auto const original = std::string{"quote\"\n\t\r\\slash"};
     auto const expr = ConstantExpression{original};
@@ -105,7 +105,7 @@ namespace ao::query::test
     CHECK(*value == original);
   }
 
-  TEST_CASE("Serializer - Serializes Unary Not", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes unary not", "[query][unit][serializer]")
   {
     auto unaryPtr = std::make_unique<UnaryExpression>();
     unaryPtr->op = Operator::Not;
@@ -113,7 +113,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(unaryPtr)}) == "not $artist");
   }
 
-  TEST_CASE("Serializer - Serializes Existence Tests", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes existence tests", "[query][unit][serializer]")
   {
     CHECK(serialize(parseOk("$year?")) == "$year?");
     CHECK(serialize(parseOk("!$year?")) == "not $year?");
@@ -133,7 +133,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(unaryPtr)}) == "($year = 1990)?");
   }
 
-  TEST_CASE("Serializer - Serializes Each Binary Operator Token", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes each binary operator token", "[query][unit][serializer]")
   {
     struct Case final
     {
@@ -163,7 +163,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - Parenthesizes Nested Binary Expressions", "[query][unit][serializer]")
+  TEST_CASE("Serializer - parenthesizes nested binary expressions", "[query][unit][serializer]")
   {
     // ($artist = "Bach") and ($year >= 2020)
     auto lhsPtr = std::make_unique<BinaryExpression>();
@@ -182,7 +182,7 @@ namespace ao::query::test
     CHECK(result == "($artist = \"Bach\") and ($year >= 2020)");
   }
 
-  TEST_CASE("Serializer - Does Not Parenthesize Root Binary Expression", "[query][unit][serializer]")
+  TEST_CASE("Serializer - omits parentheses around root binary expressions", "[query][unit][serializer]")
   {
     auto binPtr = std::make_unique<BinaryExpression>();
     binPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
@@ -190,7 +190,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(binPtr)}) == "$a = 1");
   }
 
-  TEST_CASE("Serializer - Serializes In Lists", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes in lists", "[query][unit][serializer]")
   {
     auto binPtr = std::make_unique<BinaryExpression>();
     binPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
@@ -200,7 +200,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(binPtr)}) == R"($artist in ["Bach", "Mozart"])");
   }
 
-  TEST_CASE("Serializer - Serializes In Ranges", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes in ranges", "[query][unit][serializer]")
   {
     auto binPtr = std::make_unique<BinaryExpression>();
     binPtr->operand = VariableExpression{.type = VariableType::Property, .name = "duration"};
@@ -211,7 +211,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(binPtr)}) == "@duration in 2m30s..5m");
   }
 
-  TEST_CASE("Serializer - RoundTrip ParseSerializeParse Preserves Canonical Shape", "[query][unit][serializer]")
+  TEST_CASE("Serializer - preserves canonical shape across parse serialize parse", "[query][unit][serializer]")
   {
     auto queries = {R"($artist = "Bach" and $year >= 2020)",
                     "not ($year = 2020)",
@@ -234,7 +234,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - Handles Empty Or Incomplete Expressions Defensively", "[query][unit][serializer]")
+  TEST_CASE("Serializer - handles empty or incomplete expressions defensively", "[query][unit][serializer]")
   {
     SECTION("Empty Expression")
     {

@@ -11,150 +11,175 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <expected>
 #include <memory>
-#include <thread>
+#include <mutex>
 #include <utility>
 #include <vector>
 
 namespace ao::audio::test
 {
-  TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
+  namespace
   {
-    auto const format =
-      Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
-    auto const info =
-      DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .duration = std::chrono::seconds{1}};
+    DecodedStreamInfo testStreamInfo()
+    {
+      auto const format =
+        Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
+      return DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .duration = std::chrono::seconds{1}};
+    }
 
+    std::vector<std::byte> silenceBlock(std::size_t byteCount)
+    {
+      return std::vector(byteCount, std::byte{0});
+    }
+  } // namespace
+
+  TEST_CASE("StreamingSource - initialize starts decode thread after successful preroll",
+            "[audio][unit][streaming_source]")
+  {
+    auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
 
-    // NOTE: StreamingSource contains a ~2MB inline ring buffer. Under ASAN, the
-    // stack frame for this test function would be ~14MB which exceeds the 8MB
-    // default stack. All source instances are heap-allocated for this reason.
-    SECTION("Initialize matrix")
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto block = silenceBlock(400); // 200ms
+    decoderPtr->setReadScript({{block, false}, {{}, true}});
+
+    // StreamingSource contains a ~2MB inline ring buffer; heap allocation keeps
+    // ASAN stack usage below the default 8MB limit.
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
+    CHECK(sourcePtr->initialize());
+    CHECK(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
+    CHECK(errorCount.load() == 0);
+  }
+
+  TEST_CASE("StreamingSource - initialize accepts EOF during preroll without reporting an error",
+            "[audio][unit][streaming_source]")
+  {
+    auto const info = testStreamInfo();
+    auto errorCount = std::atomic{0};
+    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto block = silenceBlock(20); // 10ms
+    decoderPtr->setReadScript({{block, true}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
+    CHECK(sourcePtr->initialize());
+    CHECK(sourcePtr->isDrained());
+    CHECK(errorCount.load() == 0);
+  }
+
+  TEST_CASE("StreamingSource - initialize reports preroll decode failure", "[audio][unit][streaming_source]")
+  {
+    auto const info = testStreamInfo();
+    auto errorCount = std::atomic{0};
+    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    decoderPtr->setReadScript({{{}, false, std::unexpected(Error{.message = "fail"})}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
+    auto result = sourcePtr->initialize();
+    CHECK_FALSE(result);
+    CHECK(errorCount.load() == 1);
+  }
+
+  TEST_CASE("StreamingSource - seek clears buffered data and prerolls the requested offset",
+            "[audio][unit][streaming_source]")
+  {
+    auto const info = testStreamInfo();
+    auto errorCount = std::atomic{0};
+    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+    auto block = silenceBlock(400);
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto* const decoderRaw = decoderPtr.get();
+    decoderPtr->setReadScript({{block, false}, {block, false}, {{}, true}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
+    CHECK(sourcePtr->initialize());
+
+    CHECK(sourcePtr->seek(std::chrono::milliseconds{50}));
+    CHECK(decoderRaw->lastSeekOffset() == std::chrono::milliseconds{50});
+    CHECK(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
+    CHECK(errorCount.load() == 0);
+  }
+
+  TEST_CASE("StreamingSource - seek reports decoder failure", "[audio][unit][streaming_source]")
+  {
+    auto const info = testStreamInfo();
+    auto errorCount = std::atomic{0};
+    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+    auto block = silenceBlock(400);
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    decoderPtr->setSeekResult(std::unexpected(Error{.message = "seek fail"}));
+    decoderPtr->setReadScript({{block, false}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
+    CHECK(sourcePtr->initialize());
+
+    auto result = sourcePtr->seek(std::chrono::milliseconds{50});
+    CHECK_FALSE(result);
+    CHECK(errorCount.load() == 1);
+  }
+
+  TEST_CASE("StreamingSource - background decode failure notifies error callback", "[audio][unit][streaming_source]")
+  {
+    auto const info = testStreamInfo();
+    auto errorCount = std::atomic{0};
+    auto errorMutex = std::mutex{};
+    auto errorCv = std::condition_variable{};
+    auto onError = [&](Error const&)
     {
-      SECTION("Preroll success starts thread")
-      {
-        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
-        auto block = std::vector(400, std::byte{0}); // 200ms
-        decoderPtr->setReadScript({{block, false}, {{}, true}});
+      errorCount.fetch_add(1);
+      errorCv.notify_one();
+    };
 
-        auto sourcePtr = std::make_unique<StreamingSource>(
-          std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-        CHECK(sourcePtr->initialize());
-        CHECK(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
-        CHECK(errorCount.load() == 0);
-      }
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto block = silenceBlock(200); // 100ms
+    decoderPtr->setReadScript({
+      {block, false},                                              // first block for preroll
+      {{}, false, std::unexpected(Error{.message = "async fail"})} // second block fails
+    });
 
-      SECTION("EOF during preroll succeeds without thread error")
-      {
-        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
-        auto block = std::vector(20, std::byte{0}); // 10ms
-        decoderPtr->setReadScript({{block, true}}); // EOF immediately
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, onError, std::chrono::milliseconds{50}, std::chrono::milliseconds{500});
+    CHECK(sourcePtr->initialize());
 
-        auto sourcePtr = std::make_unique<StreamingSource>(
-          std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-        CHECK(sourcePtr->initialize());
-        CHECK(sourcePtr->isDrained());
-        CHECK(errorCount.load() == 0);
-      }
+    auto lock = std::unique_lock{errorMutex};
+    REQUIRE(errorCv.wait_for(lock, std::chrono::seconds{5}, [&] { return errorCount.load() == 1; }));
+    CHECK(errorCount.load() == 1);
+  }
 
-      SECTION("Preroll decode failure returns error")
-      {
-        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
-        decoderPtr->setReadScript({{{}, false, std::unexpected(Error{.message = "fail"})}});
+  TEST_CASE("StreamingSource - read drains source after EOF is reached", "[audio][unit][streaming_source]")
+  {
+    auto const info = testStreamInfo();
+    auto errorCount = std::atomic{0};
+    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
 
-        auto sourcePtr = std::make_unique<StreamingSource>(
-          std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-        auto result = sourcePtr->initialize();
-        CHECK_FALSE(result);
-        CHECK(errorCount.load() == 1);
-      }
-    }
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto block = silenceBlock(20); // 10ms
+    decoderPtr->setReadScript({{block, false}, {{}, true}});
 
-    SECTION("Seek matrix")
-    {
-      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
-      auto block = std::vector(400, std::byte{0});
-      decoderPtr->setReadScript({{block, false}, {block, false}, {{}, true}});
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, onError, std::chrono::milliseconds{20}, std::chrono::milliseconds{500});
+    CHECK(sourcePtr->initialize());
+    CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{10});
 
-      auto sourcePtr = std::make_unique<StreamingSource>(
-        std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-      CHECK(sourcePtr->initialize());
+    auto out = std::vector<std::byte>(20);
+    CHECK(sourcePtr->read(out) == 20);
 
-      SECTION("Successful seek clears and re-prerolls")
-      {
-        CHECK(sourcePtr->seek(std::chrono::milliseconds{50}));
-        CHECK(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
-        CHECK(errorCount.load() == 0);
-      }
-
-      SECTION("Failed seek returns error")
-      {
-        auto decoder2Ptr = std::make_unique<ScriptedDecoderSession>(info);
-        decoder2Ptr->setSeekResult(std::unexpected(Error{.message = "seek fail"}));
-        decoder2Ptr->setReadScript({{block, false}});
-
-        auto source2Ptr = std::make_unique<StreamingSource>(
-          std::move(decoder2Ptr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-        CHECK(source2Ptr->initialize());
-
-        auto result = source2Ptr->seek(std::chrono::milliseconds{50});
-        CHECK_FALSE(result);
-        CHECK(errorCount.load() >= 1);
-      }
-    }
-
-    SECTION("Background decode failure marks source failed")
-    {
-      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
-      auto block = std::vector(200, std::byte{0}); // 100ms
-      decoderPtr->setReadScript({
-        {block, false},                                              // first block for preroll
-        {{}, false, std::unexpected(Error{.message = "async fail"})} // second block fails
-      });
-
-      auto sourcePtr = std::make_unique<StreamingSource>(
-        std::move(decoderPtr), info, onError, std::chrono::milliseconds{50}, std::chrono::milliseconds{500});
-      CHECK(sourcePtr->initialize());
-
-      // Wait for async failure — polling with timeout, exits as soon as error fires
-      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
-
-      while (errorCount.load() == 0 && std::chrono::steady_clock::now() < deadline)
-      {
-        std::this_thread::yield();
-      }
-
-      CHECK(errorCount.load() == 1);
-    }
-
-    SECTION("Buffered duration and isDrained track EOF plus ring exhaustion")
-    {
-      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
-      auto block = std::vector(20, std::byte{0}); // 10ms
-      decoderPtr->setReadScript({{block, false}, {{}, true}});
-
-      auto sourcePtr = std::make_unique<StreamingSource>(
-        std::move(decoderPtr), info, onError, std::chrono::milliseconds{5}, std::chrono::milliseconds{500});
-      CHECK(sourcePtr->initialize());
-
-      // Consume data
-      auto out = std::vector<std::byte>(20);
-      CHECK(sourcePtr->read(out) == 20);
-
-      // Wait for EOF to be processed — polling with timeout
-      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
-
-      while (!sourcePtr->isDrained() && std::chrono::steady_clock::now() < deadline)
-      {
-        std::this_thread::yield();
-      }
-
-      CHECK(sourcePtr->isDrained());
-      CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{0});
-    }
+    CHECK(sourcePtr->isDrained());
+    CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{0});
+    CHECK(errorCount.load() == 0);
   }
 } // namespace ao::audio::test

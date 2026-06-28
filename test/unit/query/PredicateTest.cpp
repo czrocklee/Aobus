@@ -23,7 +23,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("Predicate - Identifies Boolean Query Predicates", "[query][unit][predicate]")
+  TEST_CASE("Predicate - identifies boolean query predicates", "[query][unit][predicate]")
   {
     auto const predicates = std::array{
       std::string_view{"#rock"},
@@ -45,7 +45,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Predicate - Rejects Non-Predicate Expressions", "[query][unit][predicate]")
+  TEST_CASE("Predicate - rejects non-predicate expressions", "[query][unit][predicate]")
   {
     auto const expressions = std::array{
       std::string_view{"$title"},

@@ -13,7 +13,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("Environment - create", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - openEnvironment creates usable environments", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -41,7 +41,7 @@ namespace ao::lmdb::test
     CHECK(txn);
   }
 
-  TEST_CASE("Environment - move constructor", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - move constructor transfers ownership", "[lmdb][unit][environment]")
   {
     auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_test";
     std::filesystem::create_directory(path);
@@ -55,7 +55,7 @@ namespace ao::lmdb::test
     std::filesystem::remove_all(path);
   }
 
-  TEST_CASE("Environment - move assignment", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - move assignment transfers ownership", "[lmdb][unit][environment]")
   {
     auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_assign_test";
     std::filesystem::create_directory(path);

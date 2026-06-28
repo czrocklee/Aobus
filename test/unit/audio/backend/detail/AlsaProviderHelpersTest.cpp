@@ -8,7 +8,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("AlsaProviderHelpers - Logic", "[audio][unit][alsa][monitor]")
+  TEST_CASE("AlsaProviderHelpers - addSampleFormatCapability keeps unique formats", "[audio][unit][alsa][monitor]")
   {
     SECTION("addSampleFormatCapability - Unique")
     {

@@ -14,14 +14,14 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("ListView - Construct from Data", "[library][unit][list]")
+  TEST_CASE("ListView - constructs from serialized data", "[library][unit][list]")
   {
     auto const payload = ListBuilder::createNew().serialize();
     auto const view = ListView{payload};
     CHECK(view.tracks().empty());
   }
 
-  TEST_CASE("ListView - Field Accessors", "[library][unit][list]")
+  TEST_CASE("ListView - returns serialized field values", "[library][unit][list]")
   {
     auto const payload = ListBuilder::createNew().name("Test").description("Desc").parentId(ListId{9}).serialize();
     auto const view = ListView{payload};
@@ -35,7 +35,7 @@ namespace ao::library::test
     CHECK(view.isRootParent() == false);
   }
 
-  TEST_CASE("ListView - Manual List with TrackIds", "[library][unit][list]")
+  TEST_CASE("ListView - returns track IDs for manual lists", "[library][unit][list]")
   {
     auto builder = ListBuilder::createNew().name("My List").description("Description");
     builder.tracks().add(TrackId{100});
@@ -54,7 +54,7 @@ namespace ao::library::test
     CHECK(view.tracks()[2] == TrackId{300});
   }
 
-  TEST_CASE("ListView - Smart List with Filter", "[library][unit][list]")
+  TEST_CASE("ListView - returns filters for smart lists", "[library][unit][list]")
   {
     auto const payload =
       ListBuilder::createNew().name("Smart List").description("A smart list").filter("@year > 2020").serialize();
@@ -67,7 +67,7 @@ namespace ao::library::test
     CHECK(view.isSmart() == true);
   }
 
-  TEST_CASE("ListView - Empty Strings", "[library][unit][list]")
+  TEST_CASE("ListView - returns empty strings when lengths are zero", "[library][unit][list]")
   {
     auto const payload = ListBuilder::createNew().serialize();
     auto const view = ListView{payload};
@@ -78,7 +78,7 @@ namespace ao::library::test
     CHECK(view.isRootParent() == true);
   }
 
-  TEST_CASE("ListView - Invalid Data", "[library][unit][list]")
+  TEST_CASE("ListView - rejects invalid serialized data", "[library][unit][list]")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte*>(nullptr), 100};
     CHECK_THROWS_AS(ListView{nullSpan}, Exception);
@@ -98,7 +98,7 @@ namespace ao::library::test
     CHECK(smartView.isSmart() == true);
   }
 
-  TEST_CASE("ListView - Large trackIds Count", "[library][unit][list]")
+  TEST_CASE("ListView - returns large track ID counts", "[library][unit][list]")
   {
     auto const payload = ListBuilder::createNew().name("Test").serialize();
     auto const view = ListView{payload};

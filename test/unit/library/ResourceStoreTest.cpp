@@ -22,7 +22,7 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("ResourceStore - create and read", "[library][unit][resource]")
+  TEST_CASE("ResourceStore - creates and reads resources", "[library][unit][resource]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -58,7 +58,7 @@ namespace ao::library::test
     CHECK(it->first == id);
   }
 
-  TEST_CASE("ResourceStore - delete", "[library][unit][resource]")
+  TEST_CASE("ResourceStore - deletes resources", "[library][unit][resource]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -89,7 +89,7 @@ namespace ao::library::test
     CHECK(it == reader.end());
   }
 
-  TEST_CASE("ResourceStore - deduplication", "[library][unit][resource]")
+  TEST_CASE("ResourceStore - deduplicates matching resource data", "[library][unit][resource]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

@@ -31,11 +31,20 @@ add_executable(ao_core_test
     unit/core/ErrorTest.cpp
 
     # query tests
-    unit/query/CompletionTest.cpp
+    unit/query/CompletionBaselineTest.cpp
+    unit/query/CompletionLogicalOperatorTest.cpp
+    unit/query/CompletionOperatorTest.cpp
+    unit/query/CompletionValueTest.cpp
+    unit/query/CompletionVariableTest.cpp
     unit/query/CompletionTokenizerTest.cpp
     unit/query/ParserTest.cpp
     unit/query/PredicateTest.cpp
+    unit/query/ExecutionPlanAccessProfileTest.cpp
+    unit/query/ExecutionPlanCompileTest.cpp
+    unit/query/ExecutionPlanDictionaryTest.cpp
+    unit/query/ExecutionPlanTagBloomTest.cpp
     unit/query/ExecutionPlanTest.cpp
+    unit/query/ExecutionPlanUnitLiteralTest.cpp
     unit/query/FormatExpressionTest.cpp
     unit/query/PlanEvaluatorCollectionTest.cpp
     unit/query/PlanEvaluatorComparisonTest.cpp
@@ -233,11 +242,13 @@ add_test(NAME ao_core_test COMMAND ao_core_test)
 # ao_fleet_test: fleet tool unit and integration tests
 add_executable(ao_fleet_test
     unit/fleet/ModelTest.cpp
+    unit/fleet/IntentSerializationTest.cpp
     unit/fleet/PatchGuardTest.cpp
+    unit/fleet/RegistrySerializationTest.cpp
     unit/fleet/RouteStoreTest.cpp
     unit/fleet/SchedulerTest.cpp
-    unit/fleet/SerializationTest.cpp
     unit/fleet/SubstrateTest.cpp
+    unit/fleet/YamlStreamSerializationTest.cpp
     integration/fleet/FleetRunnerTest.cpp
     integration/fleet/ProcessRunnerTest.cpp
     integration/fleet/SubstrateTest.cpp

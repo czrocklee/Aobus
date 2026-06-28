@@ -43,7 +43,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("ScanPlanExecutor - Initial scan processes new files", "[library][unit][scan]")
+  TEST_CASE("ScanPlanExecutor - initial scans process new files", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -76,7 +76,7 @@ namespace ao::library::test
     CHECK(optView->metadata().title() == "Test Title");
   }
 
-  TEST_CASE("ScanPlanExecutor - Unchanged files are skipped", "[library][unit][scan]")
+  TEST_CASE("ScanPlanExecutor - skips unchanged files", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -115,7 +115,7 @@ namespace ao::library::test
     CHECK(counts.failed == 0);
   }
 
-  TEST_CASE("ScanPlanExecutor - Changed files trigger hot update", "[library][unit][scan]")
+  TEST_CASE("ScanPlanExecutor - updates changed files", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -169,7 +169,7 @@ namespace ao::library::test
     CHECK(manifestResult->mtime() == actualMtime);
   }
 
-  TEST_CASE("ScanPlanExecutor - Missing files update manifest status", "[library][unit][scan]")
+  TEST_CASE("ScanPlanExecutor - updates manifest status for missing files", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -210,7 +210,7 @@ namespace ao::library::test
     CHECK(runResult->failureCount == 0);
   }
 
-  TEST_CASE("ScanPlanExecutor - Error handling for corrupted files", "[library][unit][scan]")
+  TEST_CASE("ScanPlanExecutor - reports corrupted file failures", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -238,7 +238,7 @@ namespace ao::library::test
     CHECK(result.processedIds.empty());
   }
 
-  TEST_CASE("ScanPlanExecutor - Unexpected process exception escapes", "[library][unit][scan]")
+  TEST_CASE("ScanPlanExecutor - propagates unexpected process exceptions", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -257,7 +257,7 @@ namespace ao::library::test
     CHECK(counts.failed == 0);
   }
 
-  TEST_CASE("ScanPlanExecutor - Non-decodable files are absent from the plan", "[library][unit][scan]")
+  TEST_CASE("ScanPlanExecutor - ignores non-decodable files omitted from the plan", "[library][unit][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";

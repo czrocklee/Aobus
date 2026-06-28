@@ -61,7 +61,7 @@ namespace ao::audio::test
 
   using namespace fakeit;
 
-  TEST_CASE("Engine - Basic Orchestration", "[playback][unit][engine]")
+  TEST_CASE("Engine - stop closes backend and leaves transport idle", "[audio][unit][engine]")
   {
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
@@ -73,48 +73,54 @@ namespace ao::audio::test
 
     auto engine = Engine{spy.makeProxy(), device};
 
-    SECTION("Stop correctly cleans up backend")
-    {
-      engine.stop();
-      Verify(Method(mockBackend, stop)).AtLeastOnce();
-      Verify(Method(mockBackend, close)).AtLeastOnce();
+    engine.stop();
+    Verify(Method(mockBackend, stop)).AtLeastOnce();
+    Verify(Method(mockBackend, close)).AtLeastOnce();
 
-      auto snap = engine.status();
-      CHECK(snap.transport == Transport::Idle);
-    }
-
-    SECTION("Volume and mute controls pass through to backend and update status")
-    {
-      auto lastSetPropertyId = PropertyId{};
-      auto lastSetPropertyValue = PropertyValue{false};
-
-      When(Method(mockBackend, setProperty))
-        .AlwaysDo(
-          [&](PropertyId id, PropertyValue const& value) -> Result<>
-          {
-            lastSetPropertyId = id;
-            lastSetPropertyValue = value;
-            return Result<>{};
-          });
-
-      CHECK(engine.setVolume(0.75F));
-      CHECK(lastSetPropertyId == PropertyId::Volume);
-      CHECK(std::get<float>(lastSetPropertyValue) == Catch::Approx{0.75F});
-      CHECK(engine.volume() == Catch::Approx{0.75F});
-      CHECK(engine.status().volume == Catch::Approx{0.75F});
-
-      CHECK(engine.setMuted(true));
-      CHECK(lastSetPropertyId == PropertyId::Muted);
-      CHECK(std::get<bool>(lastSetPropertyValue) == true);
-      CHECK(engine.isMuted() == true);
-      CHECK(engine.status().muted == true);
-
-      CHECK(engine.isVolumeAvailable() == true);
-      CHECK(engine.status().volumeAvailable == true);
-    }
+    auto snap = engine.status();
+    CHECK(snap.transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - Backend Swapping", "[playback][unit][engine][hot-swap]")
+  TEST_CASE("Engine - volume and mute controls update backend and status", "[audio][unit][engine][property]")
+  {
+    auto spy = SpyBackend<>{};
+    auto& mockBackend = spy.mock();
+    auto const device = Device{.id = DeviceId{"test-device"},
+                               .displayName = "Test",
+                               .description = "Test",
+                               .isDefault = false,
+                               .backendId = kBackendNone};
+
+    auto engine = Engine{spy.makeProxy(), device};
+    auto lastSetPropertyId = PropertyId{};
+    auto lastSetPropertyValue = PropertyValue{false};
+
+    When(Method(mockBackend, setProperty))
+      .AlwaysDo(
+        [&](PropertyId id, PropertyValue const& value) -> Result<>
+        {
+          lastSetPropertyId = id;
+          lastSetPropertyValue = value;
+          return Result<>{};
+        });
+
+    CHECK(engine.setVolume(0.75F));
+    CHECK(lastSetPropertyId == PropertyId::Volume);
+    CHECK(std::get<float>(lastSetPropertyValue) == Catch::Approx{0.75F});
+    CHECK(engine.volume() == Catch::Approx{0.75F});
+    CHECK(engine.status().volume == Catch::Approx{0.75F});
+
+    CHECK(engine.setMuted(true));
+    CHECK(lastSetPropertyId == PropertyId::Muted);
+    CHECK(std::get<bool>(lastSetPropertyValue) == true);
+    CHECK(engine.isMuted() == true);
+    CHECK(engine.status().muted == true);
+
+    CHECK(engine.isVolumeAvailable() == true);
+    CHECK(engine.status().volumeAvailable == true);
+  }
+
+  TEST_CASE("Engine - Backend Swapping", "[audio][unit][engine][hot-swap]")
   {
     auto spy1 = SpyBackend<>{};
     auto spy2 = SpyBackend<>{};
@@ -152,7 +158,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Graph Initialization", "[playback][unit][engine][graph]")
+  TEST_CASE("Engine - Graph Initialization", "[audio][unit][engine][graph]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -192,7 +198,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][unit][engine][pipewire]")
+  TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[audio][unit][engine][pipewire]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -234,7 +240,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - AAC playback supports 32-bit padded backend output", "[playback][unit][engine][aac]")
+  TEST_CASE("Engine - AAC playback supports 32-bit padded backend output", "[audio][unit][engine][aac]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -277,7 +283,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[playback][unit][engine][format]")
+  TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[audio][unit][engine][format]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -317,7 +323,7 @@ namespace ao::audio::test
     CHECK(openedFormats.empty());
   }
 
-  TEST_CASE("Engine - Play failure matrix", "[playback][unit][engine][error]")
+  TEST_CASE("Engine - play reports decoder and backend setup failures", "[audio][unit][engine][error]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -384,7 +390,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Pause and resume matrix", "[playback][unit][engine][transport]")
+  TEST_CASE("Engine - pause and resume update backend transport", "[audio][unit][engine][transport]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -430,7 +436,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Seek matrix", "[playback][unit][engine][seek]")
+  TEST_CASE("Engine - seek updates elapsed time only after playback starts", "[audio][unit][engine][seek]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -468,7 +474,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Drain and callback matrix", "[playback][unit][engine][drain]")
+  TEST_CASE("Engine - drain transitions idle and notifies track end", "[audio][unit][engine][drain]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -528,7 +534,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Property API", "[playback][unit][engine][property]")
+  TEST_CASE("Engine - Property API", "[audio][unit][engine][property]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -704,7 +710,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Backend callback simulation", "[playback][unit][engine][callback]")
+  TEST_CASE("Engine - Backend callback simulation", "[audio][unit][engine][callback]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -1076,7 +1082,7 @@ namespace ao::audio::test
     bool _releaseCalls = false;
   };
 
-  TEST_CASE("Engine - concurrent control commands are serialized", "[playback][unit][engine][concurrency]")
+  TEST_CASE("Engine - concurrent control commands are serialized", "[audio][unit][engine][concurrency]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -1123,7 +1129,7 @@ namespace ao::audio::test
     CHECK(backendRaw->maxActiveCalls() == 1);
   }
 
-  TEST_CASE("Engine - Source Error Propagation", "[playback][unit][engine][error]")
+  TEST_CASE("Engine - Source Error Propagation", "[audio][unit][engine][error]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -1255,7 +1261,7 @@ namespace ao::audio::test
   // lock-free RenderSourceSlot pointer and a poller reads status() through the
   // source slot owner. TSan verifies the publish/retire happens-before chain
   // holds.
-  TEST_CASE("Engine - concurrent source swap is race-free", "[playback][unit][engine][concurrency]")
+  TEST_CASE("Engine - concurrent source swap is race-free", "[audio][unit][engine][concurrency]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",

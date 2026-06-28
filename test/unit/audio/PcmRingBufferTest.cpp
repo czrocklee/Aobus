@@ -14,7 +14,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("PcmRingBuffer - Core Contract", "[audio][unit][ring_buffer]")
+  TEST_CASE("PcmRingBuffer - reads preserve FIFO bytes and clear resets state", "[audio][unit][ring_buffer]")
   {
     auto buffer = PcmRingBuffer{};
 
@@ -80,7 +80,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmRingBuffer - Capacity Limits", "[audio][unit][ring_buffer]")
+  TEST_CASE("PcmRingBuffer - capacity limit causes short write instead of overflow", "[audio][unit][ring_buffer]")
   {
     auto buffer = PcmRingBuffer{};
     std::size_t const cap = buffer.capacity();
@@ -106,7 +106,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmRingBuffer - Concurrency", "[audio][unit][ring_buffer]")
+  TEST_CASE("PcmRingBuffer - single producer and consumer preserve byte order", "[audio][unit][ring_buffer]")
   {
     auto buffer = PcmRingBuffer{};
     int const iterations = 10000;

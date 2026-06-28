@@ -12,7 +12,7 @@
 
 using namespace ao::audio::backend::detail;
 
-TEST_CASE("AlsaPcmVolume: S16 unity gain", "[audio][alsa]")
+TEST_CASE("AlsaPcmVolume - S16 unity gain preserves samples", "[audio][unit][alsa]")
 {
   auto samples = std::vector<std::int16_t>{1000, -1000, 0, 32767, -32768};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int16_t)};
@@ -26,7 +26,7 @@ TEST_CASE("AlsaPcmVolume: S16 unity gain", "[audio][alsa]")
   CHECK(samples[4] == -32768);
 }
 
-TEST_CASE("AlsaPcmVolume: S16 half gain", "[audio][alsa]")
+TEST_CASE("AlsaPcmVolume - S16 half gain scales samples", "[audio][unit][alsa]")
 {
   auto samples = std::vector<std::int16_t>{1000, -1000, 0, 32766, -32766};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int16_t)};
@@ -40,7 +40,7 @@ TEST_CASE("AlsaPcmVolume: S16 half gain", "[audio][alsa]")
   CHECK(samples[4] == -16383);
 }
 
-TEST_CASE("AlsaPcmVolume: S16 mute", "[audio][alsa]")
+TEST_CASE("AlsaPcmVolume - S16 zero gain mutes samples", "[audio][unit][alsa]")
 {
   auto samples = std::vector<std::int16_t>{1000, -1000};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int16_t)};
@@ -51,7 +51,7 @@ TEST_CASE("AlsaPcmVolume: S16 mute", "[audio][alsa]")
   CHECK(samples[1] == 0);
 }
 
-TEST_CASE("AlsaPcmVolume: S32 half gain", "[audio][alsa]")
+TEST_CASE("AlsaPcmVolume - S32 half gain scales samples", "[audio][unit][alsa]")
 {
   auto samples = std::vector<std::int32_t>{2000000, -2000000};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int32_t)};
@@ -62,7 +62,7 @@ TEST_CASE("AlsaPcmVolume: S32 half gain", "[audio][alsa]")
   CHECK(samples[1] == -1000000);
 }
 
-TEST_CASE("AlsaPcmVolume: S24-in-S32 half gain", "[audio][alsa]")
+TEST_CASE("AlsaPcmVolume - S24 in S32 half gain scales valid bits", "[audio][unit][alsa]")
 {
   // 2^23 = 8388608
   auto samples = std::vector<std::int32_t>{4000000, -4000000, 8388607, -8388608};
@@ -76,7 +76,7 @@ TEST_CASE("AlsaPcmVolume: S24-in-S32 half gain", "[audio][alsa]")
   CHECK(samples[3] == -4194304);
 }
 
-TEST_CASE("AlsaPcmVolume: S24_3LE half gain", "[audio][alsa]")
+TEST_CASE("AlsaPcmVolume - packed S24 half gain scales sign-extended samples", "[audio][unit][alsa]")
 {
   // 0x7FFFFF = 8388607
   // 0x800000 = -8388608

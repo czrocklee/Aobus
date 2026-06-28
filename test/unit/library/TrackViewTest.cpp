@@ -121,21 +121,21 @@ namespace ao::library::test
   } // namespace
 
   // === Metadata Tests ===
-  TEST_CASE("TrackView - Hot Title", "[library][unit][track]")
+  TEST_CASE("TrackView - returns title from hot data", "[library][unit][track]")
   {
     auto const data = createTrackWithStrings("Test Title");
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title() == "Test Title");
   }
 
-  TEST_CASE("TrackView - Hot Title Empty", "[library][unit][track]")
+  TEST_CASE("TrackView - returns empty title when hot title length is zero", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title().empty());
   }
 
-  TEST_CASE("TrackView - Hot Dictionary IDs", "[library][unit][track]")
+  TEST_CASE("TrackView - returns dictionary IDs from hot data", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -147,14 +147,14 @@ namespace ao::library::test
     CHECK(view.metadata().composerId() == kInvalidDictionaryId);
   }
 
-  TEST_CASE("TrackView - Hot Year", "[library][unit][track]")
+  TEST_CASE("TrackView - returns year from hot data", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().year() == 2020);
   }
 
-  TEST_CASE("TrackView - Cold Track Info", "[library][unit][track]")
+  TEST_CASE("TrackView - returns track numbering from cold data", "[library][unit][track]")
   {
     auto header = TrackColdHeader{};
     header.trackNumber = 5;
@@ -171,7 +171,7 @@ namespace ao::library::test
     CHECK(view.metadata().discTotal() == 2);
   }
 
-  TEST_CASE("TrackView - Cold Work and Movement", "[library][unit][track]")
+  TEST_CASE("TrackView - returns work and movement IDs from cold data", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata()
@@ -198,7 +198,7 @@ namespace ao::library::test
     CHECK(view.metadata().movementTotal() == 4);
   }
 
-  TEST_CASE("TrackView - Cold Cover Art", "[library][unit][track]")
+  TEST_CASE("TrackView - returns cover art entries from cold data", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.coverArt().add(PictureType::BackCover, ResourceId{42});
@@ -221,7 +221,7 @@ namespace ao::library::test
     CHECK(view.coverArt().primary()->type == PictureType::BackCover);
   }
 
-  TEST_CASE("TrackView - Cold Uri", "[library][unit][track]")
+  TEST_CASE("TrackView - returns URI from cold data", "[library][unit][track]")
   {
     auto const data = createColdData({}, {}, "/path/to/file.flac");
     auto const view = makeColdView(data);
@@ -230,7 +230,7 @@ namespace ao::library::test
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackView - Cold Uri Empty", "[library][unit][track]")
+  TEST_CASE("TrackView - returns empty URI when cold URI length is zero", "[library][unit][track]")
   {
     auto const data = createColdData({}, {}, "");
     auto const view = makeColdView(data);
@@ -239,7 +239,7 @@ namespace ao::library::test
   }
 
   // === Property Tests ===
-  TEST_CASE("TrackView - Hot Codec and BitDepth", "[library][unit][track]")
+  TEST_CASE("TrackView - returns codec and bit depth from hot data", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.codec = AudioCodec::Flac;
@@ -253,14 +253,14 @@ namespace ao::library::test
     CHECK(view.property().sampleRate() == 96000);
   }
 
-  TEST_CASE("TrackView - Cold File Size and Mtime", "[library][unit][track]")
+  TEST_CASE("TrackView - returns file size and modification time from cold data", "[library][unit][track]")
   {
     auto const data = createColdData({}, {}, "");
     auto const view = makeColdView(data);
     CHECK(view.isColdValid());
   }
 
-  TEST_CASE("TrackView - Cold Audio Format", "[library][unit][track]")
+  TEST_CASE("TrackView - returns audio format from cold data", "[library][unit][track]")
   {
     auto header = TrackColdHeader{};
     header.duration = std::chrono::minutes{3};
@@ -276,7 +276,7 @@ namespace ao::library::test
   }
 
   // === Tag Tests ===
-  TEST_CASE("TrackView - Bloom Filter", "[library][unit][track]")
+  TEST_CASE("TrackView - exposes tag bloom filters", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0xCAFE;
@@ -286,7 +286,7 @@ namespace ao::library::test
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
-  TEST_CASE("TrackView - Tag Count Zero", "[library][unit][track]")
+  TEST_CASE("TrackView - returns zero tag count without tags", "[library][unit][track]")
   {
     auto const data = createTrackWithStrings("Test");
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -294,7 +294,7 @@ namespace ao::library::test
     CHECK(view.tags().count() == 0);
   }
 
-  TEST_CASE("TrackView - Tag Iterator Empty", "[library][unit][track]")
+  TEST_CASE("TrackView - iterates no tags when tag data is empty", "[library][unit][track]")
   {
     auto const data = createTrackWithStrings("Test");
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -302,7 +302,7 @@ namespace ao::library::test
     CHECK(view.tags().begin() == view.tags().end());
   }
 
-  TEST_CASE("TrackView - Tag Count With Tags", "[library][unit][track]")
+  TEST_CASE("TrackView - returns tag count with tags", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -332,7 +332,7 @@ namespace ao::library::test
     CHECK(view.tags().count() == 2);
   }
 
-  TEST_CASE("TrackView - Tag Iterator", "[library][unit][track]")
+  TEST_CASE("TrackView - iterates tag IDs", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -366,7 +366,7 @@ namespace ao::library::test
     CHECK(ids[1] == DictionaryId{20});
   }
 
-  TEST_CASE("TrackView - Tag Has", "[library][unit][track]")
+  TEST_CASE("TrackView - reports whether tag IDs exist", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -393,7 +393,7 @@ namespace ao::library::test
     CHECK(view.tags().has(DictionaryId{30}) == false);
   }
 
-  TEST_CASE("TrackView - Tag Id Accessor", "[library][unit][track]")
+  TEST_CASE("TrackView - returns tag IDs by index", "[library][unit][track]")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -420,7 +420,7 @@ namespace ao::library::test
   }
 
   // === Custom Tests ===
-  TEST_CASE("TrackView - Custom Roundtrip Empty", "[library][unit][track]")
+  TEST_CASE("TrackView - round-trips empty custom metadata", "[library][unit][track]")
   {
     auto const data = createColdData();
     auto const view = makeColdView(data);
@@ -435,7 +435,7 @@ namespace ao::library::test
     CHECK(count == 0);
   }
 
-  TEST_CASE("TrackView - Custom Roundtrip Single Pair", "[library][unit][track]")
+  TEST_CASE("TrackView - round-trips one custom metadata pair", "[library][unit][track]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"key1", "value1"}};
     auto const data = createColdData({}, pairs, "/path/to/file.flac");
@@ -454,7 +454,7 @@ namespace ao::library::test
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackView - Custom Roundtrip Multiple Pairs", "[library][unit][track]")
+  TEST_CASE("TrackView - round-trips multiple custom metadata pairs", "[library][unit][track]")
   {
     auto const key1 = std::string{"replaygain_track_gain_db"};
     auto const key2 = std::string{"isrc"};
@@ -487,7 +487,7 @@ namespace ao::library::test
     CHECK(result[2].second == "remaster");
   }
 
-  TEST_CASE("TrackView - Custom Iterator Empty", "[library][unit][track]")
+  TEST_CASE("TrackView - iterates no custom metadata when empty", "[library][unit][track]")
   {
     auto const data = createColdData({}, {}, "");
     auto const view = makeColdView(data);
@@ -502,7 +502,7 @@ namespace ao::library::test
     CHECK(count == 0);
   }
 
-  TEST_CASE("TrackView - Custom Iterator Single Pair", "[library][unit][track]")
+  TEST_CASE("TrackView - iterates one custom metadata pair", "[library][unit][track]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"key1", "value1"}};
 
@@ -521,7 +521,7 @@ namespace ao::library::test
     CHECK(count == 1);
   }
 
-  TEST_CASE("TrackView - Custom Iterator Special Characters", "[library][unit][track]")
+  TEST_CASE("TrackView - iterates custom metadata with special characters", "[library][unit][track]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"comment", "Hello, World! 你好"}};
 
@@ -535,7 +535,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackView - Custom Iterator Multiple Pairs", "[library][unit][track]")
+  TEST_CASE("TrackView - iterates multiple custom metadata pairs", "[library][unit][track]")
   {
     auto const key1 = std::string{"replaygain_track_gain_db"};
     auto const key2 = std::string{"isrc"};
@@ -563,7 +563,7 @@ namespace ao::library::test
     CHECK(result[2].second == "remaster");
   }
 
-  TEST_CASE("TrackView - Custom Get Found", "[library][unit][track]")
+  TEST_CASE("TrackView - finds custom metadata by key", "[library][unit][track]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"},
                                    std::pair<std::string, std::string>{"isrc", "USSM19999999"}};
@@ -577,7 +577,7 @@ namespace ao::library::test
     CHECK(*optValue == "USSM19999999");
   }
 
-  TEST_CASE("TrackView - Custom Get Not Found", "[library][unit][track]")
+  TEST_CASE("TrackView - returns empty custom metadata for missing keys", "[library][unit][track]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"}};
 
@@ -589,7 +589,7 @@ namespace ao::library::test
     CHECK(optValue.has_value() == false);
   }
 
-  TEST_CASE("TrackView - Custom Get Case Sensitive", "[library][unit][track]")
+  TEST_CASE("TrackView - finds custom metadata keys case sensitively", "[library][unit][track]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"ISRC", "USSM19999999"}};
 
@@ -602,7 +602,7 @@ namespace ao::library::test
     CHECK(*optValue == "USSM19999999");
   }
 
-  TEST_CASE("TrackView - Custom Get Binary Search Path (64+ entries)", "[library][unit][track]")
+  TEST_CASE("TrackView - finds custom metadata through binary search", "[library][unit][track]")
   {
     // Create 100 entries to force binary search path
     auto pairs = std::vector<std::pair<std::string, std::string>>{};
@@ -632,7 +632,7 @@ namespace ao::library::test
     CHECK(view.customMetadata().get(kInvalidDictionaryId).has_value() == false);
   }
 
-  TEST_CASE("TrackView - Custom Empty Key And Value", "[library][unit][track]")
+  TEST_CASE("TrackView - preserves empty custom metadata keys and values", "[library][unit][track]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"", ""}};
 
@@ -651,7 +651,7 @@ namespace ao::library::test
     CHECK(count == 1);
   }
 
-  TEST_CASE("TrackView - Custom Special Characters In Value", "[library][unit][track]")
+  TEST_CASE("TrackView - preserves special characters in custom metadata values", "[library][unit][track]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"comment", "Hello, World! 你好"}};
 
@@ -666,42 +666,42 @@ namespace ao::library::test
   }
 
   // === View Validity Tests ===
-  TEST_CASE("TrackView - Hot Valid", "[library][unit][track]")
+  TEST_CASE("TrackView - validates hot buffers", "[library][unit][track]")
   {
     auto const data = createMinimalHotData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == true);
   }
 
-  TEST_CASE("TrackView - Hot Invalid Null Data", "[library][unit][track]")
+  TEST_CASE("TrackView - rejects null hot data", "[library][unit][track]")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
     auto const nullView = TrackView{nullSpan, std::span<std::byte const>{}};
     CHECK(nullView.isHotValid() == false);
   }
 
-  TEST_CASE("TrackView - Hot Invalid Too Small", "[library][unit][track]")
+  TEST_CASE("TrackView - rejects undersized hot data", "[library][unit][track]")
   {
     auto const smallData = std::array<char, 10>{};
     auto const smallView = TrackView{utility::bytes::view(smallData), std::span<std::byte const>{}};
     CHECK(smallView.isHotValid() == false);
   }
 
-  TEST_CASE("TrackView - Cold Valid", "[library][unit][track]")
+  TEST_CASE("TrackView - validates cold buffers", "[library][unit][track]")
   {
     auto const data = createColdData();
     auto const view = TrackView{std::span<std::byte const>{}, data};
     CHECK(view.isColdValid() == true);
   }
 
-  TEST_CASE("TrackView - Cold Invalid Null Data", "[library][unit][track]")
+  TEST_CASE("TrackView - rejects null cold data", "[library][unit][track]")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
     auto const nullView = TrackView{std::span<std::byte const>{}, nullSpan};
     CHECK(nullView.isColdValid() == false);
   }
 
-  TEST_CASE("TrackView - Cold Invalid Too Small", "[library][unit][track]")
+  TEST_CASE("TrackView - rejects undersized cold data", "[library][unit][track]")
   {
     auto const smallData = std::array<char, 10>{};
     auto const smallView = TrackView{std::span<std::byte const>{}, utility::bytes::view(smallData)};

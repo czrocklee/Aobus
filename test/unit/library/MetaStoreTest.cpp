@@ -23,7 +23,7 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("MetaStore - Invalid metadata header size returns CorruptData", "[library][unit][meta_store]")
+  TEST_CASE("MetaStore - load returns CorruptData for invalid metadata header size", "[library][unit][meta_store]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -43,7 +43,7 @@ namespace ao::library::test
     CHECK(result.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("MetaStore - Create and load header", "[library][unit][meta_store]")
+  TEST_CASE("MetaStore - creates and loads metadata header", "[library][unit][meta_store]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -67,7 +67,7 @@ namespace ao::library::test
     CHECK(loadedResult->createdTime.time_since_epoch().count() == 1234567890);
   }
 
-  TEST_CASE("MetaStore - Missing header returns NotFound", "[library][unit][meta_store]")
+  TEST_CASE("MetaStore - load returns NotFound for missing header", "[library][unit][meta_store]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -82,7 +82,7 @@ namespace ao::library::test
     CHECK(result.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("MetaStore - Update header overwrites previous values", "[library][unit][meta_store]")
+  TEST_CASE("MetaStore - update overwrites previous header values", "[library][unit][meta_store]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

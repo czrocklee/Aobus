@@ -20,7 +20,7 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("MusicLibrary initializes metadata header", "[library][unit]")
+  TEST_CASE("MusicLibrary - initializes metadata header", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -39,7 +39,7 @@ namespace ao::library::test
     CHECK(reopened.metaHeader().createdTime == firstHeader.createdTime);
   }
 
-  TEST_CASE("MusicLibrary reports unsupported library versions as CorruptData", "[library][unit]")
+  TEST_CASE("MusicLibrary - reports unsupported library versions as CorruptData", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
@@ -59,7 +59,7 @@ namespace ao::library::test
     CHECK(result.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("MusicLibrary - accessors return valid references", "[library][unit]")
+  TEST_CASE("MusicLibrary - accessors return valid references", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     auto const ml = MusicLibrary{temp.path(), temp.path()};
@@ -73,7 +73,7 @@ namespace ao::library::test
     CHECK(ml.rootPath() == temp.path());
   }
 
-  TEST_CASE("MusicLibrary - read and write transactions work", "[library][unit]")
+  TEST_CASE("MusicLibrary - read and write transactions work", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};

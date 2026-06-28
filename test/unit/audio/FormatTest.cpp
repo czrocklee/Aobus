@@ -17,7 +17,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Format - bytesPerSample maps bit depth onto container width", "[playback][unit][format]")
+  TEST_CASE("Format - bytesPerSample maps bit depth onto container width", "[audio][unit][format]")
   {
     CHECK(bytesPerSample(makeFormat(44100, 2, 8)) == 2U);
     CHECK(bytesPerSample(makeFormat(44100, 2, 16)) == 2U);
@@ -29,7 +29,7 @@ namespace ao::audio::test
     CHECK(bytesPerSample(makeFormat(44100, 2, 17)) == 4U);
   }
 
-  TEST_CASE("Format - frameBytes accounts for channel count", "[playback][unit][format]")
+  TEST_CASE("Format - frameBytes accounts for channel count", "[audio][unit][format]")
   {
     CHECK(frameBytes(makeFormat(44100, 2, 16)) == 4U);
     CHECK(frameBytes(makeFormat(44100, 1, 16)) == 2U);
@@ -37,7 +37,7 @@ namespace ao::audio::test
     CHECK(frameBytes(makeFormat(48000, 6, 32)) == 24U);
   }
 
-  TEST_CASE("Format - frameBytes/bytesPerSecond return 0 for unconfigured formats", "[playback][unit][format]")
+  TEST_CASE("Format - frameBytes/bytesPerSecond return 0 for unconfigured formats", "[audio][unit][format]")
   {
     CHECK(frameBytes(makeFormat(44100, 0, 16)) == 0U);
     CHECK(frameBytes(makeFormat(44100, 2, 0)) == 0U);
@@ -47,7 +47,7 @@ namespace ao::audio::test
     CHECK(bytesPerSecond(makeFormat(44100, 2, 0)) == 0U);
   }
 
-  TEST_CASE("Format - bytesPerSecond is sampleRate * frameBytes", "[playback][unit][format]")
+  TEST_CASE("Format - bytesPerSecond is sampleRate * frameBytes", "[audio][unit][format]")
   {
     CHECK(bytesPerSecond(makeFormat(44100, 2, 16)) == static_cast<std::uint64_t>(44100) * 4U);
     CHECK(bytesPerSecond(makeFormat(48000, 2, 24)) == static_cast<std::uint64_t>(48000) * 6U);

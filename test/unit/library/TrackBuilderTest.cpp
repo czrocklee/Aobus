@@ -79,7 +79,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackBuilder - Default Constructor via createNew", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - createNew returns an empty builder", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -97,7 +97,7 @@ namespace ao::library::test
     CHECK(builder.customMetadata().pairs().empty());
   }
 
-  TEST_CASE("TrackBuilder - CoverArtBuilder edits ordered entries", "[library][unit][track][cover]")
+  TEST_CASE("TrackBuilder - cover art builder edits ordered entries", "[library][unit][track][cover]")
   {
     auto builder = TrackBuilder::createNew();
     auto const data = std::array{std::byte{0x12}, std::byte{0x34}};
@@ -123,7 +123,7 @@ namespace ao::library::test
     CHECK(builder.coverArt().entries().empty());
   }
 
-  TEST_CASE("TrackBuilder - MetadataBuilder fluent setters", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - metadata builder fluent setters update fields", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata()
@@ -167,7 +167,7 @@ namespace ao::library::test
     CHECK(builder.coverArt().entries().empty());
   }
 
-  TEST_CASE("TrackBuilder - PropertyBuilder fluent setters", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - property builder fluent setters update fields", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.property()
@@ -188,7 +188,7 @@ namespace ao::library::test
     CHECK(builder.property().bitDepth() == 16);
   }
 
-  TEST_CASE("TrackBuilder - TagsBuilder add/remove/clear", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - tags builder adds removes and clears names", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -212,7 +212,7 @@ namespace ao::library::test
     CHECK(builder.tags().names().empty());
   }
 
-  TEST_CASE("TrackBuilder - CustomMetadataBuilder add/remove/clear", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - custom metadata builder adds removes and clears pairs", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -233,7 +233,7 @@ namespace ao::library::test
     CHECK(builder.customMetadata().pairs().empty());
   }
 
-  TEST_CASE("TrackBuilder - Chained API", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - chained API updates builder state", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -250,7 +250,7 @@ namespace ao::library::test
     CHECK(builder.customMetadata().pairs().size() == 1);
   }
 
-  TEST_CASE("TrackBuilder - Serialize Empty Builder", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serializes empty builders", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     auto const [hotData, coldData] = serializeTestTrack(builder);
@@ -259,7 +259,7 @@ namespace ao::library::test
     CHECK(!hotData.empty());
   }
 
-  TEST_CASE("TrackBuilder - Serialize With Strings", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serializes strings into hot payloads", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Hello World").year(2021);
@@ -281,7 +281,7 @@ namespace ao::library::test
     CHECK(std::strncmp(payloadStart, "Hello World", 11) == 0);
   }
 
-  TEST_CASE("TrackBuilder - buildHotHeader Method", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serialize writes hot header fields", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().year(1999);
@@ -302,7 +302,7 @@ namespace ao::library::test
     CHECK(header->bitDepth == 24);
   }
 
-  TEST_CASE("TrackBuilder - Serialize With Special Characters", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serializes strings with special characters", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     auto const* title = "Test: \"Quotes\" & 'Apostrophes'";
@@ -314,7 +314,7 @@ namespace ao::library::test
     CHECK(header->titleLength == std::strlen(title));
   }
 
-  TEST_CASE("TrackBuilder - Serialize Preserves Data", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serialization is stable across repeated calls", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -328,7 +328,7 @@ namespace ao::library::test
     CHECK(hotData1 == hotData2);
   }
 
-  TEST_CASE("TrackBuilder - Tag Serialization - Empty Tags", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serializes empty tag data", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -341,7 +341,7 @@ namespace ao::library::test
     CHECK(header->tagBloom == 0);
   }
 
-  TEST_CASE("TrackBuilder - Tag Serialization - With Tags", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serializes multiple tags", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -362,7 +362,7 @@ namespace ao::library::test
     CHECK(header->tagBloom != 0);   // Bloom should be computed from tag IDs
   }
 
-  TEST_CASE("TrackBuilder - Tag Serialization - Single Tag", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serializes one tag", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -382,7 +382,7 @@ namespace ao::library::test
     CHECK(header->tagLength == 4); // 1 tag * 4 bytes
   }
 
-  TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - computes tag bloom filters with tags", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -403,7 +403,7 @@ namespace ao::library::test
     CHECK(header->tagBloom != 0);
   }
 
-  TEST_CASE("TrackBuilder - buildColdHeader", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serialize writes cold header fields", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(5).trackTotal(10).discNumber(1).discTotal(2);
@@ -426,7 +426,7 @@ namespace ao::library::test
     CHECK(header->discTotal == 2);
   }
 
-  TEST_CASE("TrackBuilder - serializeHot", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serializeHot writes tag header data", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test Title");
@@ -449,7 +449,7 @@ namespace ao::library::test
     CHECK(header->tagBloom != 0);
   }
 
-  TEST_CASE("TrackBuilder - serializeCold", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serializeCold writes cold view data", "[library][unit][track]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(3);
@@ -507,7 +507,7 @@ namespace ao::library::test
     CHECK(iterated[1].resourceId == ResourceId{42});
   }
 
-  TEST_CASE("TrackBuilder - fromTrackView", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - fromView reconstructs builder fields", "[library][unit][track]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -536,7 +536,7 @@ namespace ao::library::test
     CHECK(constBuilder.tags().names().empty());
   }
 
-  TEST_CASE("TrackBuilder - TrackView property and metadata getters", "[library][unit][track]")
+  TEST_CASE("TrackBuilder - serialized views expose property and metadata fields", "[library][unit][track]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

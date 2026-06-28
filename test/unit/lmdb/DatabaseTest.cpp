@@ -88,7 +88,7 @@ namespace ao::lmdb::test
     CHECK(it == reader.end());
   }
 
-  TEST_CASE("Database::Reader - empty database", "[lmdb][unit][database][reader]")
+  TEST_CASE("Database::Reader - iterates no records for empty databases", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -102,7 +102,7 @@ namespace ao::lmdb::test
     CHECK(reader.begin() == reader.end());
   }
 
-  TEST_CASE("Database::Reader - get", "[lmdb][unit][database][reader]")
+  TEST_CASE("Database::Reader - get returns records by integer key", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -475,7 +475,7 @@ namespace ao::lmdb::test
     REQUIRE(wtxn.commit());
   }
 
-  TEST_CASE("Database::Reader - maxKey on empty database", "[lmdb][unit][database][reader]")
+  TEST_CASE("Database::Reader - maxKey returns zero for empty databases", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -508,7 +508,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == *id2);
   }
 
-  TEST_CASE("Database::Reader - maxKey after create", "[lmdb][unit][database][reader]")
+  TEST_CASE("Database::Reader - maxKey tracks explicitly created keys", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -582,7 +582,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 3);
   }
 
-  TEST_CASE("Database - Blob keys", "[lmdb][unit][database][blob]")
+  TEST_CASE("Database - supports blob keys for reader and writer operations", "[lmdb][unit][database][blob]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

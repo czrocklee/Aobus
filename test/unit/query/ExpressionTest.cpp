@@ -125,7 +125,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("Expression - Normalize Collapses Binary Node Without Operation", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize collapses binary nodes without operations", "[query][unit][expression]")
   {
     // Input: (a) where (a) is a BinaryExpression with no optOperation
     auto binaryPtr = std::make_unique<BinaryExpression>();
@@ -139,21 +139,21 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "a");
   }
 
-  TEST_CASE("Expression - Normalize Leaves Constant Unchanged", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize leaves constants unchanged", "[query][unit][expression]")
   {
     auto expr = Expression{ConstantExpression{true}};
     normalize(expr);
     CHECK(canonicalize(expr) == "true");
   }
 
-  TEST_CASE("Expression - Normalize Leaves Variable Unchanged", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize leaves variables unchanged", "[query][unit][expression]")
   {
     auto expr = Expression{VariableExpression{.type = VariableType::Metadata, .name = "artist"}};
     normalize(expr);
     CHECK(canonicalize(expr) == "artist");
   }
 
-  TEST_CASE("Expression - Normalize Reassociates Right Nested Add Chain", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize reassociates right-nested add chains", "[query][unit][expression]")
   {
     // Input: a + (b + c)
     auto innerPtr = std::make_unique<BinaryExpression>();
@@ -171,7 +171,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "((a + b) + c)");
   }
 
-  TEST_CASE("Expression - Normalize Reassociates Four Term Add Chain", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize reassociates four-term add chains", "[query][unit][expression]")
   {
     // Input: a + (b + (c + d))
     auto innermostPtr = std::make_unique<BinaryExpression>();
@@ -193,7 +193,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "(((a + b) + c) + d)");
   }
 
-  TEST_CASE("Expression - Normalize Does Not Touch NonAdd Binary", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize does not touch non-add binary expressions", "[query][unit][expression]")
   {
     // Input: a and (b and c)
     auto innerPtr = std::make_unique<BinaryExpression>();
@@ -211,7 +211,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "(a and (b and c))");
   }
 
-  TEST_CASE("Expression - Normalize Stops When Right Operand Is Not Binary", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize stops when the right operand is not binary", "[query][unit][expression]")
   {
     // Input: a + 1
     auto rootPtr = std::make_unique<BinaryExpression>();
@@ -225,7 +225,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "(a + 1)");
   }
 
-  TEST_CASE("Expression - Normalize Stops When Right Binary Is Not Add", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize stops when the right binary expression is not add", "[query][unit][expression]")
   {
     // Input: a + (b and c)
     auto innerPtr = std::make_unique<BinaryExpression>();
@@ -243,7 +243,7 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "(a + (b and c))");
   }
 
-  TEST_CASE("Expression - Normalize Unary Recurses Into Operand", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize recurses into unary operands", "[query][unit][expression]")
   {
     // Input: not (a + (b + c))
     auto innerPtr = std::make_unique<BinaryExpression>();
@@ -265,14 +265,14 @@ namespace ao::query::test
     CHECK(canonicalize(expr) == "not ((a + b) + c)");
   }
 
-  TEST_CASE("Expression - Normalize Null Unary Pointer Is Safe", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize tolerates null unary pointers", "[query][unit][expression]")
   {
     auto expr = Expression{std::unique_ptr<UnaryExpression>{}};
     normalize(expr);
     CHECK(canonicalize(expr) == "null");
   }
 
-  TEST_CASE("Expression - Normalize Null Binary Pointer Is Safe", "[query][unit][expression]")
+  TEST_CASE("Expression - normalize tolerates null binary pointers", "[query][unit][expression]")
   {
     auto expr = Expression{std::unique_ptr<BinaryExpression>{}};
     normalize(expr);

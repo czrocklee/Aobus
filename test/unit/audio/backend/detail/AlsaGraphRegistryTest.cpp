@@ -12,7 +12,7 @@
 using namespace ao::audio::backend::detail;
 using namespace ao::audio::flow;
 
-TEST_CASE("AlsaGraphRegistry: Initial subscription receives neutral graph", "[audio][alsa]")
+TEST_CASE("AlsaGraphRegistry - initial subscription receives neutral graph", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -34,7 +34,7 @@ TEST_CASE("AlsaGraphRegistry: Initial subscription receives neutral graph", "[au
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry: Hardware volume publish updates subscribers", "[audio][alsa]")
+TEST_CASE("AlsaGraphRegistry - hardware volume publish updates subscribers", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -50,7 +50,7 @@ TEST_CASE("AlsaGraphRegistry: Hardware volume publish updates subscribers", "[au
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry: Software volume publish updates subscribers", "[audio][alsa]")
+TEST_CASE("AlsaGraphRegistry - software volume publish updates subscribers", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -66,7 +66,7 @@ TEST_CASE("AlsaGraphRegistry: Software volume publish updates subscribers", "[au
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry: Mute publish updates subscribers", "[audio][alsa]")
+TEST_CASE("AlsaGraphRegistry - mute publish updates subscribers", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -81,7 +81,7 @@ TEST_CASE("AlsaGraphRegistry: Mute publish updates subscribers", "[audio][alsa]"
   CHECK(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry: Unavailable mode with non-unity volume emits unclassified volume", "[audio][alsa]")
+TEST_CASE("AlsaGraphRegistry - unavailable mode with non-unity volume emits unclassified volume", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -98,7 +98,7 @@ TEST_CASE("AlsaGraphRegistry: Unavailable mode with non-unity volume emits uncla
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry: Clear emits empty graph", "[audio][alsa]")
+TEST_CASE("AlsaGraphRegistry - clear emits empty graph", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -115,7 +115,7 @@ TEST_CASE("AlsaGraphRegistry: Clear emits empty graph", "[audio][alsa]")
   CHECK(receivedGraph.connections.empty());
 }
 
-TEST_CASE("AlsaGraphRegistry: Subscriber only receives updates for its anchor", "[audio][alsa]")
+TEST_CASE("AlsaGraphRegistry - subscriber only receives updates for its anchor", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   std::int32_t callCountA = 0;
@@ -137,7 +137,7 @@ TEST_CASE("AlsaGraphRegistry: Subscriber only receives updates for its anchor", 
   CHECK(callCountB == 2);
 }
 
-TEST_CASE("AlsaGraphRegistry: Subscription reset stops updates", "[audio][alsa]")
+TEST_CASE("AlsaGraphRegistry - subscription reset stops updates", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   std::int32_t callCount = 0;

@@ -9,7 +9,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("PipeWireShared - Property Parsing", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireShared - parseUintProperty rejects malformed unsigned integers", "[audio][unit][pipewire]")
   {
     SECTION("parseUintProperty strictness")
     {

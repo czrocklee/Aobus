@@ -128,7 +128,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][unit][player][lifecycle]")
+  TEST_CASE("Player - lifecycle ignores stale route and graph updates", "[audio][unit][player][lifecycle]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -259,7 +259,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Player - Pending Output", "[playback][unit][player][pending]")
+  TEST_CASE("Player - pending output activates when matching device appears", "[audio][unit][player][pending]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -322,7 +322,7 @@ namespace ao::audio::test
     // This should hit line 126 in Player.cpp
   }
 
-  TEST_CASE("Player - setOutput rejects unknown backend", "[playback][unit][player][output]")
+  TEST_CASE("Player - setOutput rejects unknown backend", "[audio][unit][player][output]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -342,7 +342,7 @@ namespace ao::audio::test
     CHECK(player.status().engine.currentDeviceId == "null");
   }
 
-  TEST_CASE("Player - provider callbacks are marshalled onto the executor", "[playback][unit][player][executor]")
+  TEST_CASE("Player - provider callbacks are marshalled onto the executor", "[audio][unit][player][executor]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -394,7 +394,7 @@ namespace ao::audio::test
     CHECK(observedStatuses.front().devices.front().id == DeviceId{"system-default"});
   }
 
-  TEST_CASE("Player - queued provider callback is ignored after teardown", "[playback][unit][player][executor]")
+  TEST_CASE("Player - queued provider callback is ignored after teardown", "[audio][unit][player][executor]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -430,7 +430,7 @@ namespace ao::audio::test
     CHECK(deviceSignals == 0);
   }
 
-  TEST_CASE("Player - graph callbacks are marshalled onto the executor", "[playback][unit][player][executor]")
+  TEST_CASE("Player - graph callbacks are marshalled onto the executor", "[audio][unit][player][executor]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -495,7 +495,7 @@ namespace ao::audio::test
     CHECK(qualitySignals == 1);
   }
 
-  TEST_CASE("Player - Basic Control Propagation", "[playback][unit][player][control]")
+  TEST_CASE("Player - controls update engine-backed status", "[audio][unit][player][control]")
   {
     auto executor = async::ImmediateExecutor{};
     auto player = Player{executor};
@@ -548,7 +548,7 @@ namespace ao::audio::test
     CHECK(called == true);
   }
 
-  TEST_CASE("Player - Provider state outlives backend shutdown", "[playback][unit][player][lifecycle]")
+  TEST_CASE("Player - provider state outlives backend shutdown", "[audio][unit][player][lifecycle]")
   {
     struct Events final
     {

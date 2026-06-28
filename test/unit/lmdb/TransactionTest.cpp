@@ -62,7 +62,7 @@ namespace ao::lmdb::test
     CHECK(reader.begin() == reader.end());
   }
 
-  TEST_CASE("ReadTransaction - move", "[lmdb][unit][transaction]")
+  TEST_CASE("ReadTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -103,7 +103,7 @@ namespace ao::lmdb::test
     CHECK(txn);
   }
 
-  TEST_CASE("WriteTransaction - commit", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - commit persists written data", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -149,7 +149,7 @@ namespace ao::lmdb::test
     REQUIRE_FALSE(reader.get(1).has_value());
   }
 
-  TEST_CASE("WriteTransaction - move", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

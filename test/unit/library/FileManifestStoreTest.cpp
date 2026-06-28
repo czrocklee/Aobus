@@ -23,7 +23,7 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("FileManifestStore - Invalid URI length returns ValueTooLarge", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - create returns ValueTooLarge for invalid URI length", "[library][unit][manifest]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -39,7 +39,7 @@ namespace ao::library::test
     CHECK(result.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("FileManifestStore - Write and read back manifest", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - writes and reads back manifests", "[library][unit][manifest]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -63,7 +63,7 @@ namespace ao::library::test
     CHECK(viewResult->status() == FileStatus::Available);
   }
 
-  TEST_CASE("FileManifestStore - Get non-existent URI returns NotFound", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - get returns NotFound for missing URI", "[library][unit][manifest]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -78,7 +78,7 @@ namespace ao::library::test
     CHECK(viewResult.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("FileManifestStore - Remove is idempotent", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - remove is idempotent", "[library][unit][manifest]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -101,7 +101,7 @@ namespace ao::library::test
     CHECK(viewResult.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("FileManifestStore - Corrupt entry returns CorruptData", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - read returns CorruptData for corrupt entries", "[library][unit][manifest]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

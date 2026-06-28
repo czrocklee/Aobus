@@ -23,137 +23,158 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("TrackFilterViewModel - initial state and filter interactions", "[unit][uimodel][track]")
+  namespace
   {
-    auto testLib = TestMusicLibrary{};
-    auto executor = MockExecutor{};
-    auto changes = LibraryChanges{};
-    auto listSourceStore = ListSourceStore{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
-    auto workspaceService = WorkspaceService{viewService, playback, changes, testLib.library()};
-
-    auto renderLog = RenderLog<TrackFilterViewState>{};
-    auto viewModel =
-      TrackFilterViewModel{viewService, workspaceService, [&renderLog](auto const& view) { renderLog.render(view); }};
-
-    SECTION("Initial render produces enabled view state")
+    struct TrackFilterFixture final
     {
-      REQUIRE(!renderLog.empty());
-      CHECK(renderLog.last().enabled == false);
-      CHECK(renderLog.last().entryText.empty());
-    }
+      TestMusicLibrary testLib;
+      MockExecutor executor;
+      LibraryChanges changes;
+      ListSourceStore listSourceStore{testLib.library(), changes};
+      ViewService viewService{executor, testLib.library(), listSourceStore};
+      PlaybackService playback{executor, viewService, testLib.library()};
+      WorkspaceService workspaceService{viewService, playback, changes, testLib.library()};
+      RenderLog<TrackFilterViewState> renderLog;
+      TrackFilterViewModel viewModel{viewService,
+                                     workspaceService,
+                                     [this](auto const& view) { renderLog.render(view); }};
 
-    SECTION("updateFilter with empty text")
-    {
-      viewModel.updateFilter("");
+      rt::ViewId focusAllTracksView()
+      {
+        auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+        workspaceService.setFocusedView(reply.viewId);
+        return reply.viewId;
+      }
+    };
+  } // namespace
 
-      CHECK(renderLog.last().enabled == false);
-      CHECK(renderLog.last().entryText.empty());
-      CHECK(renderLog.last().resolvedExpression.empty());
-      CHECK(renderLog.last().pending == false);
-      CHECK(renderLog.last().canCreateSmartList == false);
-    }
+  TEST_CASE("TrackFilterViewModel - initial render produces disabled state", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
 
-    SECTION("updateFilter with expression syntax")
-    {
-      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
-      workspaceService.setFocusedView(reply.viewId);
+    REQUIRE(!fixture.renderLog.empty());
+    CHECK(fixture.renderLog.last().enabled == false);
+    CHECK(fixture.renderLog.last().entryText.empty());
+  }
 
-      viewModel.updateFilter("$artist ~ 'Beatles'");
+  TEST_CASE("TrackFilterViewModel - empty filter text keeps creation disabled", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
 
-      CHECK(renderLog.last().enabled == true);
-      CHECK(renderLog.last().entryText == "$artist ~ 'Beatles'");
-      CHECK(renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
-      CHECK(renderLog.last().pending == false);
-      CHECK(renderLog.last().hasError == false);
-      CHECK(renderLog.last().canCreateSmartList == true);
-    }
+    fixture.viewModel.updateFilter("");
 
-    SECTION("updateFilter with plain text uses Quick search resolver")
-    {
-      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
-      workspaceService.setFocusedView(reply.viewId);
+    CHECK(fixture.renderLog.last().enabled == false);
+    CHECK(fixture.renderLog.last().entryText.empty());
+    CHECK(fixture.renderLog.last().resolvedExpression.empty());
+    CHECK(fixture.renderLog.last().pending == false);
+    CHECK(fixture.renderLog.last().canCreateSmartList == false);
+  }
 
-      viewModel.updateFilter("Beatles");
-      CHECK(renderLog.last().entryText == "Beatles");
-      CHECK(renderLog.last().resolvedExpression.contains("$title ~ \"Beatles\""));
-      CHECK(renderLog.last().resolvedExpression.contains("$artist ~ \"Beatles\""));
-      CHECK(renderLog.last().canCreateSmartList == true);
-    }
+  TEST_CASE("TrackFilterViewModel - expression syntax becomes the resolved expression", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    fixture.focusAllTracksView();
 
-    SECTION("updateFilter with multiple terms creates AND expression")
-    {
-      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
-      workspaceService.setFocusedView(reply.viewId);
+    fixture.viewModel.updateFilter("$artist ~ 'Beatles'");
 
-      viewModel.updateFilter("Beatles help");
-      CHECK(renderLog.last().entryText == "Beatles help");
-      CHECK(renderLog.last().resolvedExpression.contains(") and ("));
-      CHECK(renderLog.last().canCreateSmartList == true);
-    }
+    CHECK(fixture.renderLog.last().enabled == true);
+    CHECK(fixture.renderLog.last().entryText == "$artist ~ 'Beatles'");
+    CHECK(fixture.renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
+    CHECK(fixture.renderLog.last().pending == false);
+    CHECK(fixture.renderLog.last().hasError == false);
+    CHECK(fixture.renderLog.last().canCreateSmartList == true);
+  }
 
-    SECTION("Focus on a view enables filter")
-    {
-      auto config = rt::TrackListViewConfig{
-        .listId = rt::kAllTracksListId, .filterExpression = {}, .groupBy = rt::TrackGroupKey::None};
-      auto reply = viewService.createView(config);
-      workspaceService.setFocusedView(reply.viewId);
+  TEST_CASE("TrackFilterViewModel - plain text resolves to quick search expression", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    fixture.focusAllTracksView();
 
-      REQUIRE(!renderLog.empty());
-      CHECK(renderLog.last().enabled == true);
-    }
+    fixture.viewModel.updateFilter("Beatles");
 
-    SECTION("updateFilter with view focused sets expression")
-    {
-      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
-      workspaceService.setFocusedView(reply.viewId);
+    CHECK(fixture.renderLog.last().entryText == "Beatles");
+    CHECK(fixture.renderLog.last().resolvedExpression.contains("$title ~ \"Beatles\""));
+    CHECK(fixture.renderLog.last().resolvedExpression.contains("$artist ~ \"Beatles\""));
+    CHECK(fixture.renderLog.last().canCreateSmartList == true);
+  }
 
-      viewModel.updateFilter("$artist ~ 'Beatles'");
-      CHECK(renderLog.last().entryText == "$artist ~ 'Beatles'");
-      CHECK(renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
-      CHECK(renderLog.last().pending == false);
-      CHECK(renderLog.last().hasError == false);
-      CHECK(renderLog.last().canCreateSmartList == true);
-    }
+  TEST_CASE("TrackFilterViewModel - multiple plain text terms resolve to conjunction", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    fixture.focusAllTracksView();
 
-    SECTION("updateFilter preserves the focused view presentation")
-    {
-      auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
-      config.optPresentation = rt::defaultTrackPresentationSpec();
-      config.optPresentation->id = "custom";
-      auto reply = viewService.createView(config);
-      workspaceService.setFocusedView(reply.viewId);
+    fixture.viewModel.updateFilter("Beatles help");
 
-      viewModel.updateFilter("artist == 'Muse'");
+    CHECK(fixture.renderLog.last().entryText == "Beatles help");
+    CHECK(fixture.renderLog.last().resolvedExpression.contains(") and ("));
+    CHECK(fixture.renderLog.last().canCreateSmartList == true);
+  }
 
-      auto const state = viewService.trackListState(reply.viewId);
-      CHECK(state.filterExpression == "artist == 'Muse'");
-      CHECK(state.presentation.id == "custom");
-      CHECK(renderLog.last().entryText == "artist == 'Muse'");
-      CHECK(renderLog.last().resolvedExpression == "artist == 'Muse'");
-    }
+  TEST_CASE("TrackFilterViewModel - focused track view enables filtering", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    auto config = rt::TrackListViewConfig{
+      .listId = rt::kAllTracksListId, .filterExpression = {}, .groupBy = rt::TrackGroupKey::None};
 
-    SECTION("updateFilter with quotes handles escaping")
-    {
-      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
-      workspaceService.setFocusedView(reply.viewId);
+    auto reply = fixture.viewService.createView(config);
+    fixture.workspaceService.setFocusedView(reply.viewId);
 
-      viewModel.updateFilter("\"A Song Name\"");
-      CHECK(renderLog.last().entryText == "\"A Song Name\"");
-      CHECK(renderLog.last().resolvedExpression.contains("\"A Song Name\""));
-      CHECK(renderLog.last().canCreateSmartList == true);
-    }
+    REQUIRE(!fixture.renderLog.empty());
+    CHECK(fixture.renderLog.last().enabled == true);
+  }
 
-    SECTION("Focus lost clears filter state")
-    {
-      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
-      workspaceService.setFocusedView(reply.viewId);
-      viewModel.updateFilter("Beatles");
+  TEST_CASE("TrackFilterViewModel - filter edits update the focused view", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    fixture.focusAllTracksView();
 
-      workspaceService.setFocusedView(rt::kInvalidViewId);
-      CHECK(renderLog.last().enabled == false);
-      CHECK(renderLog.last().entryText.empty());
-    }
+    fixture.viewModel.updateFilter("$artist ~ 'Beatles'");
+
+    CHECK(fixture.renderLog.last().entryText == "$artist ~ 'Beatles'");
+    CHECK(fixture.renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
+    CHECK(fixture.renderLog.last().pending == false);
+    CHECK(fixture.renderLog.last().hasError == false);
+    CHECK(fixture.renderLog.last().canCreateSmartList == true);
+  }
+
+  TEST_CASE("TrackFilterViewModel - filter edits preserve focused view presentation", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
+    config.optPresentation = rt::defaultTrackPresentationSpec();
+    config.optPresentation->id = "custom";
+    auto reply = fixture.viewService.createView(config);
+    fixture.workspaceService.setFocusedView(reply.viewId);
+
+    fixture.viewModel.updateFilter("artist == 'Muse'");
+
+    auto const state = fixture.viewService.trackListState(reply.viewId);
+    CHECK(state.filterExpression == "artist == 'Muse'");
+    CHECK(state.presentation.id == "custom");
+    CHECK(fixture.renderLog.last().entryText == "artist == 'Muse'");
+    CHECK(fixture.renderLog.last().resolvedExpression == "artist == 'Muse'");
+  }
+
+  TEST_CASE("TrackFilterViewModel - quoted plain text is escaped in quick search", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    fixture.focusAllTracksView();
+
+    fixture.viewModel.updateFilter("\"A Song Name\"");
+
+    CHECK(fixture.renderLog.last().entryText == "\"A Song Name\"");
+    CHECK(fixture.renderLog.last().resolvedExpression.contains("\"A Song Name\""));
+    CHECK(fixture.renderLog.last().canCreateSmartList == true);
+  }
+
+  TEST_CASE("TrackFilterViewModel - losing focus clears filter state", "[uimodel][unit][track_filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    fixture.focusAllTracksView();
+    fixture.viewModel.updateFilter("Beatles");
+
+    fixture.workspaceService.setFocusedView(rt::kInvalidViewId);
+    CHECK(fixture.renderLog.last().enabled == false);
+    CHECK(fixture.renderLog.last().entryText.empty());
   }
 } // namespace ao::uimodel::test
