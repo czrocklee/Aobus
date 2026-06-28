@@ -3,6 +3,11 @@
 
 #include "check/IncludeConventionCheck.h"
 
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclBase.h>
+#include <clang/AST/DeclCXX.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/FileEntry.h>
 #include <clang/Basic/LLVM.h>
@@ -16,10 +21,18 @@
 
 #include <memory>
 
+using namespace clang::ast_matchers;
+
 namespace clang::tidy::readability
 {
   namespace
   {
+    bool isGeneratedDispatchHeader(StringRef fileName)
+    {
+      return fileName == "tag/flac/VorbisCommentDispatch.h" || fileName == "tag/mp4/AtomDispatch.h" ||
+             fileName == "tag/mpeg/id3v2/FrameDispatch.h";
+    }
+
     class IncludeConventionPPCallbacks final : public PPCallbacks
     {
     public:
@@ -28,7 +41,7 @@ namespace clang::tidy::readability
       {
       }
 
-      void InclusionDirective(SourceLocation /*hashLoc*/,
+      void InclusionDirective(SourceLocation hashLoc,
                               Token const& /*includeTok*/,
                               StringRef fileName,
                               bool isAngled,
@@ -40,7 +53,7 @@ namespace clang::tidy::readability
                               bool /*moduleImported*/,
                               SrcMgr::CharacteristicKind fileType) override
       {
-        _check.checkInclude(isAngled, fileName, filenameRange, fileType, _sm);
+        _check.checkInclude(hashLoc, isAngled, fileName, filenameRange, fileType, _sm);
       }
 
     private:
@@ -56,12 +69,68 @@ namespace clang::tidy::readability
     pp->addPPCallbacks(std::make_unique<IncludeConventionPPCallbacks>(*this, sm));
   }
 
-  void IncludeConventionCheck::checkInclude(bool isAngled,
+  void IncludeConventionCheck::registerMatchers(MatchFinder* finder)
+  {
+    finder->addMatcher(decl(isExpansionInMainFile()).bind("decl"), this);
+  }
+
+  void IncludeConventionCheck::check(MatchFinder::MatchResult const& result)
+  {
+    auto const* decl = result.Nodes.getNodeAs<Decl>("decl");
+
+    if (decl == nullptr || isa<TranslationUnitDecl>(decl) || isa<LinkageSpecDecl>(decl) || decl->isImplicit())
+    {
+      return;
+    }
+
+    SourceManager const& sm = *result.SourceManager;
+    _sm = &sm;
+
+    SourceLocation const loc = sm.getExpansionLoc(decl->getLocation());
+
+    if (loc.isInvalid() || !sm.isWrittenInMainFile(loc))
+    {
+      return;
+    }
+
+    if (_firstMainFileDeclarationLoc.isInvalid() || sm.isBeforeInTranslationUnit(loc, _firstMainFileDeclarationLoc))
+    {
+      _firstMainFileDeclarationLoc = loc;
+    }
+  }
+
+  void IncludeConventionCheck::onEndOfTranslationUnit()
+  {
+    if (_sm != nullptr && _firstMainFileDeclarationLoc.isValid())
+    {
+      for (SourceLocation const includeLoc : _mainFileIncludeLocs)
+      {
+        if (_sm->isBeforeInTranslationUnit(_firstMainFileDeclarationLoc, includeLoc))
+        {
+          diag(includeLoc, "#include directive appears after a C++ declaration; keep all includes before declarations");
+        }
+      }
+    }
+
+    _mainFileIncludeLocs.clear();
+    _firstMainFileDeclarationLoc = SourceLocation{};
+    _sm = nullptr;
+  }
+
+  void IncludeConventionCheck::checkInclude(SourceLocation hashLoc,
+                                            bool isAngled,
                                             StringRef fileName,
                                             CharSourceRange filenameRange,
                                             SrcMgr::CharacteristicKind fileType,
                                             SourceManager const& sm)
   {
+    SourceLocation const includeLoc = sm.getExpansionLoc(hashLoc);
+
+    if (includeLoc.isValid() && sm.isWrittenInMainFile(includeLoc) && !isGeneratedDispatchHeader(fileName))
+    {
+      _mainFileIncludeLocs.push_back(includeLoc);
+    }
+
     if (filenameRange.isInvalid())
     {
       return;

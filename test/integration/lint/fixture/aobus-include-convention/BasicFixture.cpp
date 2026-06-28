@@ -13,6 +13,20 @@
 // NEGATIVE
 #include <vector>
 
+extern "C"
+{
+// NEGATIVE
+#include <stdint.h>
+}
+
+namespace include_convention_fixture
+{
+  class ForwardDeclared;
+}
+
+// POSITIVE
+#include <array>
+
 int main()
 {
   (void)"ao/Error.h";

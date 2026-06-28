@@ -5,9 +5,12 @@
 
 #include <clang-tidy/ClangTidyCheck.h>
 #include <clang-tidy/ClangTidyDiagnosticConsumer.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
+
+#include <vector>
 
 namespace clang
 {
@@ -28,11 +31,20 @@ namespace clang::tidy::readability
     }
 
     void registerPPCallbacks(SourceManager const& sm, Preprocessor* pp, Preprocessor* moduleExpanderPP) override;
+    void registerMatchers(ast_matchers::MatchFinder* finder) override;
+    void check(ast_matchers::MatchFinder::MatchResult const& result) override;
+    void onEndOfTranslationUnit() override;
 
-    void checkInclude(bool isAngled,
+    void checkInclude(SourceLocation hashLoc,
+                      bool isAngled,
                       StringRef fileName,
                       CharSourceRange filenameRange,
                       SrcMgr::CharacteristicKind fileType,
                       SourceManager const& sm);
+
+  private:
+    std::vector<SourceLocation> _mainFileIncludeLocs;
+    SourceLocation _firstMainFileDeclarationLoc;
+    SourceManager const* _sm = nullptr;
   };
 } // namespace clang::tidy::readability
